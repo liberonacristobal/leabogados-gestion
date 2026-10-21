@@ -15,6 +15,7 @@ import {
 } from './supabase'
 import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
+import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
@@ -37183,37 +37184,12 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // Candidatas dentro de ±TOL del monto. Refuerzo para asesorías recurrentes (mismo monto cada mes): se EXCLUYE
   // toda factura emitida en un mes POSTERIOR al pago (no se paga hoy una factura del próximo mes) y se ordena por
   // cercanía de fecha (la del mes del pago primero) → así el pago de mayo calza la factura de mayo, no la de junio.
-  const candidatos = (mov, exclude, amount) => { const amt = amount==null?(mov.monto||0):amount
-    if(!esConciliable(mov)) return []
-    const pr=crNormRut(mov.rut_contraparte)
-    const payT = mov.fecha ? new Date(mov.fecha+'T12:00').getTime() : null
-    // delta = días entre la EMISIÓN de la factura y el pago (positivo = pago DESPUÉS de emitir).
-    const deltaDias = iso => (payT&&iso) ? (payT - new Date(iso.slice(0,10)+'T12:00').getTime())/86400000 : null
-    let xs = facturasParaMov(mov).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(b=>({b,saldo:saldoFactura(b),delta:deltaDias(b.issued_at)}))
-      // Ventana AMPLIA porque hay pagos MUY tardíos (clientes que pagan facturas de meses/años atrás): la factura se emite
-      // ANTES del pago. El candado real es monto EXACTO + RUT; la fecha solo acota (evita calzar con una factura del mismo
-      // monto de una época totalmente distinta) y luego desempata. -60 días = anticipo; +1095 días = hasta 36 meses tarde.
-      .filter(x=> x.saldo>0 && Math.abs(x.saldo-amt)<=TOL && (x.delta===null || (x.delta>=-60 && x.delta<=1095)))
-    // Calce EXACTO en pesos (no hay comisiones bancarias → TOL=0): solo facturas con el monto idéntico.
-    const exactos = xs.filter(x=> x.saldo===amt); if(exactos.length) xs=exactos
-    return xs.sort((a,b)=>   // 1) RS del pagador, 2) FIFO: la MÁS ANTIGUA sin pagar (emisión asc), 3) monto
-        ((pr&&crNormRut(b.b.receptor_rut)===pr?1:0)-(pr&&crNormRut(a.b.receptor_rut)===pr?1:0))
-        || ((a.b.issued_at||'').localeCompare(b.b.issued_at||''))
-        || (Math.abs(a.saldo-amt)-Math.abs(b.saldo-amt)))
-      .map(x=>x.b) }
-  // Mejor candidato para el AUTO: exacto+único; si hay varios del mismo monto, desempata por RS del pagador y luego mes del pago.
-  // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"). Si ese folio calza con una candidata (ya exacta en monto), es LA factura.
-  const folioGlosa = m => { const mt=String(m?.descripcion||'').match(/\b(?:factura|fact|fac|fra|f[°ºn])\s*[°ºn.\-:]*\s*(\d{2,7})\b/i); return mt?mt[1]:null }
-  const mejorCandidato = (mov, exclude) => { const cs=candidatos(mov,exclude); if(!cs.length) return null
-    const fg=folioGlosa(mov); if(fg){ const byFolio=cs.find(c=>String(folioN(c.invoice_no))===String(fg)); if(byFolio) return byFolio }   // el banco nombra el folio → preferirlo
-    const pm=(mov.fecha||'').slice(0,7), pr=crNormRut(mov.rut_contraparte)
-    if(cs.length===1){ const d=mesDiff((cs[0].issued_at||'').slice(0,7),pm); return (d==null||d>=-2)?cs[0]:null }
-    let pool=cs
-    if(pr){ const r=pool.filter(f=>crNormRut(f.receptor_rut)===pr); if(r.length) pool=r }
-    if(pool.length===1) return pool[0]
-    // FIFO: entre facturas del MISMO monto exacto (y mismo RUT si aplica), el pago se aplica a la MÁS ANTIGUA sin pagar. El saldo total del cliente baja igual; solo cambia cuál queda vencida. pool ya viene ordenado oldest-first.
-    return pool[0] }
+  // Reglas de calce: fuente única en supabase/functions/_shared/conciliacionReglas.js (las mismas que usa el servidor en conciliacion-auto).
+  const _poolMov = (mov, exclude) => facturasParaMov(mov).filter(b=> !(exclude&&exclude.has(b.id))).map(b=>({b,saldo:saldoFactura(b)}))
+  const candidatos = (mov, exclude, amount) => esConciliable(mov) ? candidatosFactura(mov, _poolMov(mov,exclude), amount) : []
+  // Señal premium: el banco escribe el folio en la glosa ("PAGO FACTURA 412", "F°412"); el aviso del banco trae el mensaje del cliente.
+  const folioGlosa = m => folioEnTexto(m?.descripcion)
+  const mejorCandidato = (mov, exclude) => esConciliable(mov) ? elegirFactura(mov, _poolMov(mov,exclude), [mov.descripcion, mov.detalle_aviso].filter(Boolean).join(' ')) : null
   // Candidatas para MOSTRAR/CONFIRMAR (no auto): facturas del cliente/RUT cuyo saldo calza EXACTO con el pago, SIN la ventana
   // de fecha del auto. Motivo: la firma a veces emite la factura DESPUÉS de recibir el pago (emisión tardía) o el pago llega
   // meses antes/después; si el monto calza exacto y es del cliente, se OFRECE sí o sí (el usuario confirma). El auto
@@ -37355,23 +37331,10 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     // 3 facturas que sumen el abono (solo si no hubo par; cap para no explotar)
     if(fs.length<=45){ for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++) for(let k=j+1;k<fs.length;k++){ const d=Math.abs(fs[i].saldo+fs[j].saldo+fs[k].saldo-target); if(d<=TOL&&d<bestD){ bestD=d; best=[fs[i].f,fs[j].f,fs[k].f] } } }
     return best }
-  // Combo EXACTO para el AUTO: par ÚNICO de facturas (no futuras) cuyos saldos suman EXACTO el monto del abono.
-  const comboExacto = (mov, exclude) => { if(!esConciliable(mov)) return null
-    const pm=(mov.fecha||'').slice(0,7)
-    const fs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(f=>({f,saldo:saldoFactura(f),d:mesDiff((f.issued_at||'').slice(0,7),pm)})).filter(x=>x.saldo>0&&(x.d==null||x.d<=0))
-    const pares=[]
-    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++){ if(fs[i].saldo+fs[j].saldo===(mov.monto||0)) pares.push([fs[i].f,fs[j].f]) }
-    return pares.length===1 ? pares[0] : null }
-  // Combo EXACTO de 3 facturas (suma == monto, único) — para el auto. Límite anti-explosión O(n^3).
-  const comboExacto3 = (mov, exclude) => { if(!esConciliable(mov)) return null
-    const pm=(mov.fecha||'').slice(0,7)
-    const fs = facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id)))
-      .map(f=>({f,saldo:saldoFactura(f),d:mesDiff((f.issued_at||'').slice(0,7),pm)})).filter(x=>x.saldo>0&&(x.d==null||x.d<=0))
-    if(fs.length>45) return null
-    const trios=[]
-    for(let i=0;i<fs.length;i++) for(let j=i+1;j<fs.length;j++) for(let k=j+1;k<fs.length;k++){ if(fs[i].saldo+fs[j].saldo+fs[k].saldo===(mov.monto||0)) trios.push([fs[i].f,fs[j].f,fs[k].f]) }
-    return trios.length===1 ? trios[0] : null }
+  // Combo EXACTO para el AUTO (fuente única elegirCombo): 2 o 3 facturas no futuras cuyos saldos suman el monto, si es única o
+  // si todas las combinaciones son de los mismos montos (cuotas idénticas → las más antiguas); o N cuotas idénticas.
+  const comboExacto = (mov, exclude) => esConciliable(mov) ? elegirCombo(mov, facturasCliente(mov.cliente_id).filter(b=> !(exclude&&exclude.has(b.id))).map(f=>({b:f,saldo:saldoFactura(f)}))) : null
+  const comboExacto3 = () => null   // incluido en comboExacto (elegirCombo prueba pares, tríos y cuotas idénticas)
   // Gasto ya reembolsado vía conciliación (filas tipo_destino='gasto'), por cliente — para no re-sugerir lo ya cubierto.
   const cidByMov = useMemo(()=>{ const m={}; movs.forEach(x=>m[x.id]=x.cliente_id); return m },[movs])
   const reembGastoByCliente = useMemo(()=>{ const m={}; conc.forEach(c=>{ if(c.tipo_destino==='gasto'){ const cid=cidByMov[c.movimiento_id]; if(cid) m[cid]=(m[cid]||0)+(c.monto_aplicado||0) } }); return m },[conc,cidByMov])

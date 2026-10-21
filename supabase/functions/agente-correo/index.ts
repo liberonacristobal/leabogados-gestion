@@ -334,7 +334,10 @@ Deno.serve(async (req) => {
     }
     if (!dryRun && out.procesados) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "agente.correos_procesados", table_name: "agente_bandeja", detail: JSON.stringify({ title: `${out.procesados} correos revisados`, ...out.por_estado }) }) }).catch(() => null);
     if (!dryRun && avStats.calzados) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "agente.avisos_banco_unidos", table_name: "cartola_movimientos", detail: JSON.stringify({ title: `${avStats.calzados} avisos del banco unidos a su movimiento`, calces }) }) }).catch(() => null);
-    return json({ ok: true, dryRun, ...out, segunda_revision: reRev, avisos_banco: avStats, ...(dryRun ? { calces } : {}) });
+    // Con los avisos ya unidos (mensaje del cliente y RUT en el movimiento), concilia lo inequívoco (conciliacion-auto).
+    let concAuto: unknown = null;
+    if (!dryRun) { try { const r = await fetch(`${SB_URL}/functions/v1/conciliacion-auto`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: CRON_SECRET }) }); concAuto = await r.json(); } catch (e) { concAuto = { error: String((e as Error).message || e) }; } }
+    return json({ ok: true, dryRun, ...out, segunda_revision: reRev, avisos_banco: avStats, conciliacion_auto: concAuto, ...(dryRun ? { calces } : {}) });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
