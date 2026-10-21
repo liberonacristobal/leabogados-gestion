@@ -9607,6 +9607,7 @@ function ProcesosView({isDesktop, onBack, origen}){
 // Al abrir, la propia página confirma lo que ya se hizo por otra vía (depósito conciliado, liquidación cargada) y lo cierra sola.
 const _DEMO_BANDEJA = [
   {id:'d1',recibido_at:'2026-10-20T10:05:57Z',de:'genesis.garcia@sbschile.com',de_nombre:'Génesis Garcia',asunto:'Re: Solicitud de fondos por rendir Proyecto Villarica',cuerpo:'Adjunto comprobante de pago solicitado.\n\nEl lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@leabogados.cl>) escribió:\n> ... por un total de $1.200.000.-',adjuntos:[{nombre:'Comprobante Operación Express.pdf',mime:'application/pdf'}],tipo:'comprobante',cliente_nombre:'Alejandro Lee',abogado:'Erasmo',estado:'pendiente',motivo:'Por recibir · cartola al 19-10-2026',propuesta:{accion:'registrar_solicitud',titulo:'Registrar la solicitud de fondos',montos:[1200000],montos_cand:[1200000]},evidencia:[{texto:'Solicitud citada en el correo',monto:1200000,fuente:'correo'}]},
+  {id:'dr1',recibido_at:'2026-10-20T15:17:28Z',de:'usuario@notariarapanui.cl',de_nombre:'Notaría Rapa Nui',asunto:'RE: Consulta solicitud de documentos',tipo:'respaldo_gasto',cliente_nombre:'Notaría Rapa Nui',estado:'pendiente',motivo:'2 gastos por el mismo monto',adjuntos:[{nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',mime:'application/pdf'}],propuesta:{accion:'adjuntar_respaldo',titulo:'Adjuntar el respaldo al gasto',path:'demo/boleta.pdf',nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',candidatos:[{id:'e-demo-1',fecha:'2026-10-20',monto:20000,cliente:'Viñedos del Maipo Ltda',concepto:'Certificado de vigencia'},{id:'e-demo-2',fecha:'2026-10-09',monto:20000,cliente:'Comercial Andes SpA',concepto:'Gastos notariales'}]},evidencia:[{texto:'Monto del documento',monto:20000,fuente:'PDF'}]},
   {id:'df1',gmail_id:'fondo:demo-av1',recibido_at:'2026-10-20T10:07:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Reorganización societaria',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av1'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «provisión reorganización»',monto:1200000,fuente:'Banco de Chile'}]},
   {id:'df2',gmail_id:'fondo:demo-av2',recibido_at:'2026-10-20T10:04:00Z',de:'Inversiones Ríofrío Ltda',de_nombre:'Inversiones Ríofrío Ltda',asunto:'Fondo por registrar',tipo:'fondo_por_registrar',cliente_id:'c2',estado:'pendiente',motivo:'El mensaje de la transferencia indica un fondo',propuesta:{accion:'registrar_fondo',titulo:'Registrar el fondo',monto:1200000,fecha:'2026-10-20',proyecto:'Due diligence adquisición',concepto:null,fuente:'mensaje',movimiento_id:null,aviso_gmail:'demo-av2'},evidencia:[{texto:'Transferencia de Inversiones Ríofrío Ltda · «viáticos due diligence»',monto:1200000,fuente:'Banco de Chile'}]},
   {id:'d2',recibido_at:'2026-10-18T00:35:16Z',de:'ccoquelet@gmail.com',de_nombre:'Catalina Coquelet',asunto:'Re: Reserva sitio El Maqui',cuerpo:'Hola Cristobal,\nAdjunto promesa firmada\nSaludos',adjuntos:[{nombre:'Promesa firmada.pdf',mime:'application/pdf'}],tipo:'pedido_cliente',cliente_nombre:'Catalina Coquelett',abogado:'Cristóbal',estado:'pendiente',motivo:'Cliente reconocido por el nombre',propuesta:{accion:'crear_tarea',titulo:'Crear tarea a Cristóbal: Revisar la promesa firmada',tarea:'Revisar la promesa firmada',asignado:'Cristóbal',aprender_email:'ccoquelet@gmail.com'},evidencia:[]},
@@ -9615,7 +9616,7 @@ const _DEMO_BANDEJA = [
   {id:'d5',recibido_at:'2026-10-09T14:29:00Z',de:'adquisiciones@bastro.cl',de_nombre:'Bastro',asunto:'COMPROBANTE DE PAGO',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Eduardo Barra',abogado:'Erasmo',estado:'registrado',motivo:'Depósito del 09-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 09-10-2026',monto:1369907,fuente:'cartola'}]},
   {id:'d6',recibido_at:'2026-10-16T12:00:00Z',de:'noticias@legalnews.cl',de_nombre:'Legal News',asunto:'Boletín semanal',cuerpo:'',adjuntos:[],tipo:'spam',estado:'sin_accion',motivo:'Publicidad o notificación',propuesta:{},evidencia:[]},
 ]
-const BANDEJA_BTN = {registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
+const BANDEJA_BTN = {adjuntar_respaldo:'Adjuntar al gasto',registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
 // Fondo por registrar (conciliacion-auto lo propone desde el aviso del banco o la cartola, con señal de fondo): una persona
 // lo confirma desde Gastos › Revisar o la Bandeja. Nunca dos veces: si el depósito ya se concilió en Banco, solo se cierra; si
 // el cliente ya tiene un fondo igual sin respaldo del banco (±10 días), se vincula ese en vez de crear otro. Con el movimiento
@@ -9658,6 +9659,7 @@ function solicitudCitada(cuerpo){
 }
 const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
 function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado}){
+  const [elegido,setElegido]=useState({})   // adjuntar_respaldo: gasto elegido por tarjeta
   const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
   const cliPorId=useMemo(()=>new Map((clients||[]).map(c=>[String(c.id),c])),[clients])
   const yo=user?.name||'Oficina'
@@ -9688,7 +9690,14 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
     if(a==='cargar_notaria'){ onCargarNotaria&&onCargarNotaria(p.path?{path:p.path,nombre:p.nombre||'Liquidación notaría.xlsx'}:null); return }
     setBusy(r.id)
     try{
-      if(a==='registrar_fondo'){
+      if(a==='adjuntar_respaldo'){
+        const cs=p.candidatos||[], gid=elegido[r.id]||(cs.length===1?cs[0].id:null), g=cs.find(x=>String(x.id)===String(gid))
+        if(!g) throw new Error(cs.length?'Elige el gasto.':'Aún no hay un gasto por ese monto.')
+        if(!p.path) throw new Error('El documento no quedó guardado.')
+        if(!DEMO){ const {data:ya}=await supabase.from('expense_attachments').select('id').eq('expense_id',g.id).eq('storage_path',p.path).limit(1)
+          if(!ya?.length){ const {error}=await supabase.from('expense_attachments').insert({expense_id:g.id,name:p.nombre||'Respaldo.pdf',storage_path:p.path,uploaded_by:yo}); if(error) throw error } }
+        await hecho(r,{estado:'resuelto',motivo:`Respaldo adjuntado al gasto de ${g.cliente} ${fmt(g.monto)} del ${fmtFechaDMY(g.fecha)}`},'respaldo_adjuntado')
+      } else if(a==='registrar_fondo'){
         const c=await registrarFondoPropuesto(r,{proyecto:p.proyecto||null,yo,sales,expenses,onFondo:onFondoRegistrado})
         setRows(q=>(q||[]).map(x=>x.id===r.id?{...x,...c}:x))
       } else if(a==='registrar_solicitud'){
@@ -9755,6 +9764,11 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
         {ev.map((x,i)=>lineaDato(x.texto,x.monto!=null?fmt(x.monto):x.valor,i))}
         {montos.length>1&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
         {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.motivo}</div>}
+        {p.accion==='adjuntar_respaldo'&&(p.candidatos||[]).length>0&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
+          <select value={elegido[r.id]||((p.candidatos||[]).length===1?p.candidatos[0].id:'')} onChange={e=>setElegido(o=>({...o,[r.id]:e.target.value}))} style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface}}>
+            {(p.candidatos||[]).length>1&&<option value=''>Elige el gasto</option>}
+            {(p.candidatos||[]).map(g=><option key={g.id} value={g.id}>{fmtFechaDMY(g.fecha)} · {g.cliente} · {fmt(g.monto)} · {g.concepto}</option>)}
+          </select></div>}
         {p.guardar_cuenta&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
       </div>
       {adjuntos(r)}
@@ -29329,8 +29343,9 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
     setBusy(false)
   }
   const del = async(a) => {
-    if(!await appConfirm('¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
+    if(!await appConfirm(a.storage_path?'¿Quitar este respaldo del gasto?':'¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
     try{
+      if(a.storage_path){ await supabase.from(table).delete().eq('id',a.id); setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a); return }
       const token = await driveToken()
       if(token && a.drive_file_id){ try{ await driveTrash(token, a.drive_file_id) }catch(err){ if(err instanceof DriveAuthError){ reconnect(); return } } }
       await supabase.from(table).delete().eq('id',a.id)
@@ -29340,8 +29355,11 @@ function Attachments({table, idField, entityId, ensureEntityId, folderKind, name
   const fileRow = a => (
     <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
       <span style={{flexShrink:0}}>Adjunto</span>
-      <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
-      <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a>
+      {a.storage_path   // respaldo que adjuntó el agente desde el correo (bucket privado, no Drive)
+        ?<><span onClick={()=>abrirDocumento(a.storage_path)} style={{flex:1,fontSize:12,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</span>
+          <span onClick={()=>abrirDocumento(a.storage_path)} style={{fontSize:10,color:C.muted,cursor:'pointer',flexShrink:0}}>Abrir</span></>
+        :<><a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
+          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a></>}
       <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}><Gl n='x'/></button>
     </div>
   )
