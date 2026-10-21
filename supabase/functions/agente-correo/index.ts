@@ -32,8 +32,10 @@ function solicitudCitada(cuerpo: string) {
   if (!m) return null;
   const mes = _MES_ES[m[2].toLowerCase().slice(0, 4)] ?? _MES_ES[m[2].toLowerCase().slice(0, 3)];
   const p2 = (n: number | string) => String(n).padStart(2, "0");
-  const fecha = mes == null ? null : new Date(`${m[3]}-${p2(mes + 1)}-${p2(m[1])}T${p2(m[4])}:${m[5]}:00-03:00`);
-  return { fecha: fecha && !isNaN(fecha.getTime()) ? fecha.toISOString() : null, autor: m[6].trim().split(/\s+/)[0] || null };
+  // Hora citada = hora de Chile: se prueba −03:00 y, si en Santiago no da esa hora (invierno, −04:00), se corrige.
+  let fecha = mes == null ? null : new Date(`${m[3]}-${p2(mes + 1)}-${p2(m[1])}T${p2(m[4])}:${m[5]}:00-03:00`);
+  if (fecha && !isNaN(fecha.getTime())) { const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Santiago", hour: "2-digit", hourCycle: "h23" }).format(fecha)); if (h !== Number(m[4])) fecha = new Date(fecha.getTime() + (Number(m[4]) - h) * 3600000); }
+  return { fecha: fecha && !isNaN(fecha.getTime()) ? fecha.toISOString() : null, autor: m[6].trim().split(/\s+/)[0] || null, email: m[7].toLowerCase() };
 }
 const GENERICOS = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|msn|googlemail)\./i;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -230,11 +232,12 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const respaldoFila = async (c: { montos: number[]; cands: any[]; seguro: any }, r0: { nombre: string; path?: string }, recibido: Date, dry: boolean): Promise<any> => {
       const base = { path: r0.path || null, nombre: r0.nombre };
-      if (c.seguro) {
+      if (c.seguro && r0.path) {
         const g = descG(c.seguro);
         if (!dry && r0.path) await rest("expense_attachments", { method: "POST", body: JSON.stringify({ expense_id: g.id, name: r0.nombre, storage_path: r0.path, uploaded_by: "Agente (correo)" }) });
         return { estado: "registrado", motivo: `Respaldo adjuntado al gasto de ${g.cliente} ${"$" + Math.round(g.monto).toLocaleString("es-CL")} del ${dmy(g.fecha)}`, propuesta: { ...base, expense_id: g.id }, evidencia: [{ texto: `${g.cliente} · ${g.concepto}`, monto: g.monto, fuente: "gasto" }] };
       }
+      if (c.seguro && !r0.path) return { estado: "pendiente", motivo: "El documento no quedó guardado: adjúntalo a mano al gasto", propuesta: { accion: "revisar", titulo: "Adjuntar el respaldo al gasto" }, evidencia: [{ texto: `${descG(c.seguro).cliente} · ${descG(c.seguro).concepto}`, monto: descG(c.seguro).monto, fuente: "gasto" }] };
       if (c.cands.length) return { estado: "pendiente", motivo: c.cands.length > 1 ? `${c.cands.length} gastos por el mismo monto` : "Calza por monto y fecha", propuesta: { accion: "adjuntar_respaldo", titulo: "Adjuntar el respaldo al gasto", ...base, candidatos: c.cands.slice(0, 8).map(descG) }, evidencia: c.montos.slice(0, 2).map((m) => ({ texto: "Monto del documento", monto: m, fuente: "PDF" })) };
       return { estado: "espera", motivo: c.montos.length ? "Sin gasto por ese monto · se vuelve a revisar" : "No se pudo leer el monto del documento", propuesta: { accion: "adjuntar_respaldo", titulo: "Adjuntar el respaldo al gasto", ...base, candidatos: [], montos: c.montos }, evidencia: c.montos.slice(0, 2).map((m) => ({ texto: "Monto del documento", monto: m, fuente: "PDF" })) };
     };
@@ -327,28 +330,38 @@ Deno.serve(async (req) => {
         // Boleta de honorarios emitida al estudio (la copia del SII o la que manda el emisor): se registra y se asigna a sus
         // comisiones con la misma regla que bhe-correo (elegirComisionesBHE). Nunca marca pagos: eso lo hace el banco.
         fila.tipo = "boleta_honorarios";
-        const { bhe, path } = bheDe[0];
-        const prov = (provsBoleta || []).find((p: { rut: string }) => nRutB(p.rut) === nRutB(bhe.emisor_rut));
-        const ev = [{ texto: `Boleta N° ${bhe.folio} del ${dmy(bhe.fecha)} · ${bhe.emisor_nombre}`, monto: bhe.bruto, fuente: "boleta" }, { texto: "Retención", monto: bhe.retencion, fuente: "boleta" }, { texto: "Líquido", monto: bhe.liquido, fuente: "boleta" }];
-        fila.evidencia = ev;
-        if (!prov) { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: `Boleta de ${bhe.emisor_nombre}: no está como proveedor que emite boleta` }; fila.motivo = "Emisor sin ficha de proveedor"; }
-        else {
-          const ya = await rest(`boletas_honorarios?select=id&emisor_rut=eq.${encodeURIComponent(bhe.emisor_rut)}&folio=eq.${bhe.folio}&limit=1`);
-          if (ya?.length) { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} ya registrada`; }
-          else if (!dryRun) {
-            const ins = (await rest("boletas_honorarios", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ proveedor_id: prov.id, emisor_rut: bhe.emisor_rut, emisor_nombre: bhe.emisor_nombre, folio: bhe.folio, fecha: bhe.fecha, bruto: bhe.bruto, retencion: bhe.retencion, liquido: bhe.liquido, tasa: bhe.tasa, glosa: bhe.glosa, storage_path: path || null, created_by: "correo contacto@" }) }))?.[0];
-            const ts = await rest(`terceros_pagos?select=id,monto,liquido,retencion,estado,billing_id,bhe_id&proveedor_id=eq.${prov.id}&bhe_id=is.null`);
-            const bids = [...new Set((ts || []).map((t: { billing_id: string }) => t.billing_id).filter(Boolean))];
-            const bs = bids.length ? await rest(`billing?select=id,status&id=in.(${bids.map((x) => `"${x}"`).join(",")})`) : [];
-            const st: Record<string, string> = {}; (bs || []).forEach((b: { id: string; status: string }) => { st[b.id] = b.status; });
-            const sel = elegirComisionesBHE((ts || []).map((t: { billing_id: string }) => ({ ...t, billing_status: st[t.billing_id] })), bhe);
-            for (const c of sel || []) await rest(`terceros_pagos?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ bhe_id: ins.id, monto: c.monto, retencion: c.retencion, liquido: c.liquido, factura_numero: String(bhe.folio), factura_fecha: bhe.fecha }) });
-            const n = sel?.length || 0;
-            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "boletas.leida_correo", table_name: "boletas_honorarios", record_id: ins.id, detail: JSON.stringify({ folio: bhe.folio, name: prov.nombre, monto: bhe.bruto, title: n ? `asignada a ${n} comisi${n === 1 ? "ón" : "ones"}` : "sin asignar" }) }) }).catch(() => null);
-            if (n) { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} registrada · asignada a ${n} comisi${n === 1 ? "ón" : "ones"}`; }
-            else { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Asignar la boleta a sus comisiones" }; fila.motivo = `Boleta N° ${bhe.folio} registrada · el líquido no calza con una sola comisión`; }
-          } else { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} por registrar (prueba)`; }
+        // Un correo puede traer varias boletas: cada una se registra; la fila queda pendiente si alguna lo requiere.
+        // deno-lint-ignore no-explicit-any
+        const partes: any[] = [];
+        for (const { bhe, path } of bheDe) {
+          // deno-lint-ignore no-explicit-any
+          const f: any = { evidencia: [] };
+          const prov = (provsBoleta || []).find((p: { rut: string }) => nRutB(p.rut) === nRutB(bhe.emisor_rut));
+          const ev = [{ texto: `Boleta N° ${bhe.folio} del ${dmy(bhe.fecha)} · ${bhe.emisor_nombre}`, monto: bhe.bruto, fuente: "boleta" }, { texto: "Retención", monto: bhe.retencion, fuente: "boleta" }, { texto: "Líquido", monto: bhe.liquido, fuente: "boleta" }];
+          f.evidencia = ev;
+          if (!prov) { f.estado = "pendiente"; f.propuesta = { accion: "revisar", titulo: `Boleta de ${bhe.emisor_nombre}: no está como proveedor que emite boleta` }; f.motivo = "Emisor sin ficha de proveedor"; }
+          else {
+            const ya = await rest(`boletas_honorarios?select=id&emisor_rut=eq.${encodeURIComponent(bhe.emisor_rut)}&folio=eq.${bhe.folio}&limit=1`);
+            if (ya?.length) { f.estado = "registrado"; f.motivo = `Boleta N° ${bhe.folio} ya registrada`; }
+            else if (!dryRun) {
+              const ins = (await rest("boletas_honorarios", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ proveedor_id: prov.id, emisor_rut: bhe.emisor_rut, emisor_nombre: bhe.emisor_nombre, folio: bhe.folio, fecha: bhe.fecha, bruto: bhe.bruto, retencion: bhe.retencion, liquido: bhe.liquido, tasa: bhe.tasa, glosa: bhe.glosa, storage_path: path || null, created_by: "correo contacto@" }) }))?.[0];
+              const ts = await rest(`terceros_pagos?select=id,monto,liquido,retencion,estado,billing_id,bhe_id&proveedor_id=eq.${prov.id}&bhe_id=is.null`);
+              const bids = [...new Set((ts || []).map((t: { billing_id: string }) => t.billing_id).filter(Boolean))];
+              const bs = bids.length ? await rest(`billing?select=id,status&id=in.(${bids.map((x) => `"${x}"`).join(",")})`) : [];
+              const st: Record<string, string> = {}; (bs || []).forEach((b: { id: string; status: string }) => { st[b.id] = b.status; });
+              const sel = elegirComisionesBHE((ts || []).map((t: { billing_id: string }) => ({ ...t, billing_status: st[t.billing_id] })), bhe);
+              for (const c of sel || []) await rest(`terceros_pagos?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ bhe_id: ins.id, monto: c.monto, retencion: c.retencion, liquido: c.liquido, factura_numero: String(bhe.folio), factura_fecha: bhe.fecha }) });
+              const n = sel?.length || 0;
+              await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente-correo", action: "boletas.leida_correo", table_name: "boletas_honorarios", record_id: ins.id, detail: JSON.stringify({ folio: bhe.folio, name: prov.nombre, monto: bhe.bruto, title: n ? `asignada a ${n} comisi${n === 1 ? "ón" : "ones"}` : "sin asignar" }) }) }).catch(() => null);
+              if (n) { f.estado = "registrado"; f.motivo = `Boleta N° ${bhe.folio} registrada · asignada a ${n} comisi${n === 1 ? "ón" : "ones"}`; }
+              else { f.estado = "pendiente"; f.propuesta = { accion: "revisar", titulo: "Asignar la boleta a sus comisiones" }; f.motivo = `Boleta N° ${bhe.folio} registrada · el líquido no calza con una sola comisión`; }
+            } else { f.estado = "registrado"; f.motivo = `Boleta N° ${bhe.folio} por registrar (prueba)`; }
+          }
+          partes.push(f);
         }
+        const pend = partes.find((p) => p.estado === "pendiente");
+        fila.estado = pend ? "pendiente" : "registrado"; fila.propuesta = pend?.propuesta || {};
+        fila.motivo = partes.map((p) => p.motivo).filter(Boolean).join(" · ") || null; fila.evidencia = partes.flatMap((p) => p.evidencia || []);
       }
       else if (/(^|\.)uber\.com$/i.test(dom) && /^\s*\[business\]/i.test(asunto)) {
         // Viaje de la cuenta Uber Business (la usan solo los socios; se paga con la tarjeta de la oficina): cada viaje es un gasto de
@@ -389,9 +402,12 @@ Deno.serve(async (req) => {
           fila.evidencia = montos.map((v) => ({ texto: "Monto solicitado", monto: v, fuente: "correo" }));
           if (ya.length) { fila.estado = "registrado"; fila.motivo = "Solicitud ya registrada"; }
           else if (montos.length === 1) {
-            if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify({ client_id: cids[0], monto: montos[0], asunto: asu, para: dest.join(", "), enviada_por: quien, enviada_at: recibido.toISOString(), n_adjuntos: adj.length }) });
+            const nueva = { client_id: cids[0], monto: montos[0], asunto: asu, para: dest.join(", "), enviada_por: quien, enviada_at: recibido.toISOString(), n_adjuntos: adj.length };
+            if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify(nueva) });
+            (fondosReq || []).push(nueva);   // la respuesta del cliente en el mismo lote ya la ve (no se registra dos veces)
             fila.estado = "registrado"; fila.motivo = "Solicitud de fondos registrada · por recibir";
-          } else { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: montos.length ? `Registrar la solicitud de fondos (${montos.length} montos en el correo)` : "Registrar la solicitud de fondos: el monto no se pudo leer", montos, para: dest.join(", ") }; }
+          } else if (montos.length) { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: `Registrar la solicitud de fondos (${montos.length} montos en el correo)`, montos, para: dest.join(", ") }; }
+          else { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Solicitud de fondos: el monto no se pudo leer" }; }
         }
       }
       else if (esInterno) { fila.motivo = "Correo interno de la oficina"; }
@@ -445,9 +461,17 @@ Deno.serve(async (req) => {
           // Con ella, el depósito que llegue por ese monto queda propuesto como fondo (conciliacion-auto › pareceFondo).
           if (pedidos.length > 1 && !yaPedido.length) { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: `Registrar ${pedidos.length} solicitudes de fondos`, montos: pedidos }; fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" })); }
           else if (pedidos.length === 1 && !yaPedido.length) {
+            // Solo sola si lo citado es NUESTRA solicitud de fondos (autor de la oficina y asunto de fondos o rendición); una respuesta
+            // a una factura («Re: Factura N°…, por un total de $X») también cita montos y no es una solicitud → la confirma una persona.
             const cit = solicitudCitada(cuerpo), asu = asunto.replace(/^((re|rv|fw|fwd)\s*:\s*)+/i, "").trim() || "Solicitud de fondos";
-            if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify(pedidos.map((v) => ({ client_id: cid, monto: v, asunto: asu, para: de, enviada_por: cit?.autor || abogado || null, enviada_at: cit?.fecha || recibido.toISOString(), n_adjuntos: 0 }))) });
-            fila.estado = "espera"; fila.motivo = "Solicitud registrada · por recibir"; fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" }));
+            const esNuestra = !!cit?.email && !!domOficina && cit.email.endsWith("@" + domOficina) && /(solicitud|provisi[oó]n) de fondos|rendici[oó]n de gastos/i.test(asu);
+            if (esNuestra) {
+              const nueva = { client_id: cid, monto: pedidos[0], asunto: asu, para: de, enviada_por: cit?.autor || abogado || null, enviada_at: cit?.fecha || recibido.toISOString(), n_adjuntos: 0 };
+              if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify(nueva) });
+              (fondosReq || []).push(nueva);
+              fila.estado = "espera"; fila.motivo = "Solicitud registrada · por recibir";
+            } else { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: "Registrar la solicitud de fondos", montos: pedidos }; }
+            fila.evidencia = pedidos.map((v) => ({ texto: "Solicitud citada en el correo", monto: v, fuente: "correo" }));
           }
           else { fila.estado = "espera"; if (yaPedido.length) fila.motivo = "Solicitud registrada · por recibir"; fila.evidencia = montosPdf.map((v) => ({ texto: "Monto del comprobante", monto: v, fuente: "comprobante PDF" })); }
           fila.propuesta.montos_cand = cand;
