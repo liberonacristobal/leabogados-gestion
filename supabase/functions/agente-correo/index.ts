@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1"),
     ]);
     // deno-lint-ignore no-explicit-any
-    const [provsBoleta, estRow]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1")]);
+    const [provsBoleta, estRow, miembrosNom]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1"), rest("miembros?select=email,nombre")]);
     const rutEstudio = nRutB(estRow?.[0]?.rut || "");
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
     const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
@@ -349,6 +349,29 @@ Deno.serve(async (req) => {
           } else { fila.estado = "registrado"; fila.motivo = `Boleta N° ${bhe.folio} por registrar (prueba)`; }
         }
       }
+      else if (esInterno && /(solicitud|provisi[oó]n) de fondos/i.test(asunto) && !/^\s*((re|rv|fw|fwd)\s*:)/i.test(asunto)) {
+        // Solicitud de fondos que sale de la casilla de un socio o del equipo (copia a contacto@ por la regla de Workspace): se
+        // registra al enviarla, sin esperar la respuesta del cliente. Cliente = el de los destinatarios; monto = el del correo
+        // (el que sigue a «total», o el único). Con varios montos, una persona confirma cuáles. Nunca dos veces (mismo asunto y monto).
+        fila.tipo = "solicitud_fondos";
+        const dest = [...String(`${m.to || ""},${m.cc || ""}`).matchAll(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g)].map((x) => x[0].toLowerCase()).filter((e) => !domOficina || !e.endsWith("@" + domOficina));
+        const cids = [...new Set(dest.map((e) => cliPorEmail.get(e) || (() => { const d = e.split("@")[1]; return d && !GENERICOS.test(d) && cliPorDominio.get(d)?.size === 1 ? [...cliPorDominio.get(d)!][0] : null; })()).filter(Boolean))] as string[];
+        const propio = cuerpo.split(/\n>|\nEl .{5,80} escribi[oó]:/)[0];
+        const tot = [...propio.matchAll(/total[^$\d]{0,30}\$\s?(\d{1,3}(?:\.\d{3})+)/gi)].map((x) => Number(x[1].replace(/\./g, "")));
+        const montos = tot.length ? [...new Set(tot)] : montosEn(propio);
+        const asu = asunto.trim(), quien = (miembrosNom || []).find((x: { email: string }) => String(x.email).toLowerCase() === de)?.nombre || nombreDe(m.from).split(" ")[0];
+        fila.cliente_id = cids.length === 1 ? cids[0] : null; fila.abogado = quien;
+        if (cids.length !== 1) { fila.estado = "pendiente"; fila.propuesta = { accion: "revisar", titulo: "Solicitud de fondos: no se pudo identificar al cliente" }; fila.motivo = cids.length ? "Destinatarios de varios clientes" : "Destinatario sin cliente en la app"; }
+        else {
+          const ya = (fondosReq || []).filter((r: { client_id: string; monto: number; asunto?: string }) => r.client_id === cids[0] && montos.includes(Math.round(Number(r.monto))) && norm(r.asunto || "") === norm(asu));
+          fila.evidencia = montos.map((v) => ({ texto: "Monto solicitado", monto: v, fuente: "correo" }));
+          if (ya.length) { fila.estado = "registrado"; fila.motivo = "Solicitud ya registrada"; }
+          else if (montos.length === 1) {
+            if (!dryRun) await rest("fund_requests", { method: "POST", body: JSON.stringify({ client_id: cids[0], monto: montos[0], asunto: asu, para: dest.join(", "), enviada_por: quien, enviada_at: recibido.toISOString(), n_adjuntos: adj.length }) });
+            fila.estado = "registrado"; fila.motivo = "Solicitud de fondos registrada · por recibir";
+          } else { fila.estado = "pendiente"; fila.propuesta = { accion: "registrar_solicitud", titulo: montos.length ? `Registrar la solicitud de fondos (${montos.length} montos en el correo)` : "Registrar la solicitud de fondos: el monto no se pudo leer", montos, para: dest.join(", ") }; }
+        }
+      }
       else if (esInterno) { fila.motivo = "Correo interno de la oficina"; }
       else if (ia?.pide_cambio_cuenta || (cta && conoc && conoc.cuenta !== cta.cuenta)) {
         fila.estado = "sospechoso"; fila.tipo = "cuenta_bancaria";
@@ -414,7 +437,7 @@ Deno.serve(async (req) => {
       if (!dryRun) await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(fila) });
       out.procesados++; out.por_estado[fila.estado] = (out.por_estado[fila.estado] || 0) + 1;
       // deno-lint-ignore no-explicit-any
-      if (dryRun) (out as any).filas = [...((out as any).filas || []), { gmail_id: gid, estado: fila.estado, tipo: fila.tipo, cliente: cid ? (cliPorId.get(cid) as { name?: string })?.name : null, abogado, propuesta: fila.propuesta, evidencia: fila.evidencia, motivo: fila.motivo, resumen: fila.resumen }];
+      if (dryRun) (out as any).filas = [...((out as any).filas || []), { gmail_id: gid, estado: fila.estado, tipo: fila.tipo, cliente: fila.cliente_id ? (cliPorId.get(fila.cliente_id) as { name?: string })?.name : null, abogado: fila.abogado, propuesta: fila.propuesta, evidencia: fila.evidencia, motivo: fila.motivo, resumen: fila.resumen }];
     }
     // Avisos de bancos: los que llegaron antes de esta función (se leen de la bandeja) y los nuevos, unidos a su movimiento.
     const avStats = { nuevos: 0, calzados: 0, ambiguos: 0, por_calzar: 0 };

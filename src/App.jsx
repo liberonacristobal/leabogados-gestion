@@ -9707,7 +9707,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
           // Nunca dos veces: si ya existe una solicitud del cliente con el mismo monto y asunto, no se vuelve a registrar.
           const {data:ya}=await supabase.from('fund_requests').select('id,monto,asunto').eq('client_id',r.cliente_id).gte('enviada_at',new Date(Date.now()-60*86400000).toISOString())
           const nuevos=montos.filter(m=>!(ya||[]).some(f=>Math.round(Number(f.monto))===m&&String(f.asunto||'').trim().toLowerCase()===asu.toLowerCase()))
-          if(nuevos.length){ const {error}=await supabase.from('fund_requests').insert(nuevos.map(m=>({client_id:r.cliente_id,monto:m,asunto:asu,para:r.de,enviada_por:cit?.autor||r.abogado||yo,enviada_at:cit?.fecha||r.recibido_at,n_adjuntos:0}))); if(error) throw error }
+          if(nuevos.length){ const {error}=await supabase.from('fund_requests').insert(nuevos.map(m=>({client_id:r.cliente_id,monto:m,asunto:asu,para:p.para||r.de,enviada_por:cit?.autor||r.abogado||yo,enviada_at:cit?.fecha||r.recibido_at,n_adjuntos:0}))); if(error) throw error }
         }
         await hecho(r,{estado:'espera',motivo:'Solicitud registrada · por recibir'},'solicitud_registrada')
       } else if(a==='crear_tarea'){
