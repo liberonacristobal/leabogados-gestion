@@ -31,7 +31,9 @@ const lindo = (s: string) => { const p = s.split("-"); const d = new Date(s + "T
 // deno-lint-ignore no-explicit-any
 async function sb(path: string): Promise<any[]> {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
-  return r.ok ? await r.json() : [];
+  // Una lectura que falla NO es «sin datos»: con la cobertura vacía saldrían ~20 días como faltantes y se darían por avisados.
+  if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
+  return await r.json();
 }
 
 Deno.serve(async (req) => {
@@ -98,7 +100,9 @@ Deno.serve(async (req) => {
   // Recordar los días avisados (solo los que siguen en la ventana) para no repetir el correo por el mismo salto.
   const val = JSON.stringify([...new Set([...avisados.filter((s) => gap.includes(s)), ...gap])].sort());
   const hdr = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" };
-  if (cfgAv?.[0]?.id) await fetch(`${SB_URL}/rest/v1/learnings?id=eq.${cfgAv[0].id}`, { method: "PATCH", headers: hdr, body: JSON.stringify({ value: val }) });
-  else await fetch(`${SB_URL}/rest/v1/learnings`, { method: "POST", headers: hdr, body: JSON.stringify({ kind: "config", key: "alerta_cartola_avisados", value: val, estudio_id: "lea" }) });
+  const g = cfgAv?.[0]?.id ? await fetch(`${SB_URL}/rest/v1/learnings?id=eq.${cfgAv[0].id}`, { method: "PATCH", headers: hdr, body: JSON.stringify({ value: val }) })
+    : await fetch(`${SB_URL}/rest/v1/learnings`, { method: "POST", headers: hdr, body: JSON.stringify({ kind: "config", key: "alerta_cartola_avisados", value: val, estudio_id: "lea" }) });
+  // Correo enviado pero sin guardar los días: queda como error para que la vigilancia lo vea (si no, se reenviaría cada día).
+  if (!g.ok) return json({ ok: false, enviado: true, error: `Aviso enviado, pero no se guardaron los días avisados (${g.status})`, dias: gap }, 500);
   return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: true });
 });
