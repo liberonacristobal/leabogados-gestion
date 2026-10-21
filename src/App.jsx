@@ -1254,7 +1254,9 @@ function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, va
 
 // Último registro de una bitácora (activity_log por prefijo) → render(row|null). Para tarjetas-resumen que abren la bitácora completa.
 // Toca una vez, al montar, el botón que calza con el selector (p. ej. «Analizar» de la liquidación que llegó por correo).
-function AutoClick({sel}){ const hecho=useRef(false); useEffect(()=>{ if(hecho.current) return; hecho.current=true; const b=document.querySelector(sel); if(b) b.click() },[sel]); return null }
+// Clic automático una sola vez por clave (no por montaje): si el paso falla y el componente se vuelve a montar, no repite el clic en bucle.
+const _autoClickHechos = new Set()
+function AutoClick({sel, clave}){ useEffect(()=>{ const k=clave||sel; if(_autoClickHechos.has(k)) return; _autoClickHechos.add(k); const b=document.querySelector(sel); if(b) b.click() },[sel,clave]); return null }
 // Pedidos de liquidación a la notaría (edge notaria-pedir-liquidacion + agente-correo): cada pedido con su recorrido
 // (envío, tarea de seguimiento, seguimiento, respuesta). Fuente única para la tarjeta de Notaría y la vista Pedidos.
 const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion','notaria.aviso_liquidacion','notaria.aviso_liquidacion_fallido']
@@ -9623,24 +9625,44 @@ async function registrarFondoPropuesto(r, {proyecto, yo, sales, expenses, onFond
   const fondoBase={client_id:cid, ...(ps.project?ps:proyecto?{project:proyecto}:{}), type:'fondo', amount:monto, date:fecha,
     concept:(p.concepto||`Provisión de fondos${proyecto?` · ${proyecto}`:''}`).slice(0,200), category:'Fondo', created_by:yo}
   if(DEMO){ const data={...fondoBase,id:'demo-f-'+Date.now(),created_at:new Date().toISOString()}; onFondo&&onFondo(data); return {estado:'registrado',motivo:`Fondo registrado por ${yo}`,...cierre,propuesta:{...p,proyecto,fondo_id:data.id}} }
-  const {data:act}=await supabase.from('agente_bandeja').select('estado').eq('id',r.id).single()
-  if(act&&act.estado!=='pendiente') return {estado:act.estado}
-  let mov=null
-  if(p.movimiento_id){ const {data:m}=await supabase.from('cartola_movimientos').select('id,estado,monto,monto_conciliado,fecha').eq('id',p.movimiento_id).single(); mov=m||null
-    if(mov&&(mov.estado!=='pendiente'||Number(mov.monto_conciliado)>0)){ const c={estado:'registrado',motivo:'El depósito ya está conciliado en Banco',...cierre}; await supabase.from('agente_bandeja').update(c).eq('id',r.id); return c } }
-  const t0=new Date(fecha+'T12:00').getTime()
-  const {data:ligados}=await supabase.from('conciliacion').select('gasto_id').eq('tipo_destino','fondo').not('gasto_id','is',null)
-  const lig=new Set((ligados||[]).map(x=>String(x.gasto_id)))
-  let fondo=(expenses||[]).find(e=>!e.deleted_at&&e.type==='fondo'&&String(e.client_id)===String(cid)&&Math.round(Number(e.amount)||0)===monto&&e.date&&Math.abs(new Date(String(e.date).slice(0,10)+'T12:00').getTime()-t0)<=10*86400000&&!lig.has(String(e.id)))||null
-  const vinculado=!!fondo
-  if(!fondo){ const {data,error}=await supabase.from('expenses').insert(fondoBase).select().single(); if(error) throw error; fondo=data; onFondo&&onFondo(data) }
-  if(mov){ const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id,tipo_destino:'fondo',gasto_id:fondo.id,monto_aplicado:monto,origen:'manual'}).select().single()
-    if(!ic.error){ const {error:me}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:monto}).eq('id',mov.id); if(me) await supabase.from('conciliacion').delete().eq('id',ic.data.id) } }
-  if(p.solicitud_id) await supabase.from('fund_requests').update({recibido_at:new Date(fecha+'T12:00').toISOString(),movimiento_id:mov?.id||null,estado:'recibida'}).eq('id',p.solicitud_id).is('recibido_at',null)
-  const c={estado:'registrado',motivo:vinculado?`Fondo vinculado por ${yo}`:`Fondo registrado por ${yo}`,...cierre,propuesta:{...p,proyecto:proyecto||null,fondo_id:fondo.id}}
-  await supabase.from('agente_bandeja').update(c).eq('id',r.id)
-  logActividad('fondos.registrado_desde_banco',{tabla:'expenses',id:fondo.id,detalle:{title:`${vinculado?'Fondo vinculado':'Fondo registrado'}: ${fmt(monto)} del ${fmtFechaDMY(fecha)}${proyecto?` · ${proyecto}`:''}`,bandeja:r.id,movimiento:mov?.id||null}})
-  return c
+  // Reclamar la propuesta: si dos personas la registran a la vez, solo una sigue (la otra ve el estado nuevo).
+  const {data:mia}=await supabase.from('agente_bandeja').update({estado:'procesando'}).eq('id',r.id).eq('estado','pendiente').select('id')
+  if(!mia?.length){ const {data:act}=await supabase.from('agente_bandeja').select('estado,motivo').eq('id',r.id).single(); return {estado:act?.estado||'registrado',motivo:act?.motivo||null} }
+  let fondo=null, creado=false
+  try{
+    // Movimiento del depósito: el de la propuesta o, si nació del aviso, el que ese aviso ya tenga unido.
+    let movId=p.movimiento_id||null
+    if(!movId&&p.aviso_gmail){ const {data:av}=await supabase.from('avisos_banco').select('movimiento_id').eq('gmail_id',p.aviso_gmail).maybeSingle(); movId=av?.movimiento_id||null }
+    let mov=null
+    if(movId){ const {data:m}=await supabase.from('cartola_movimientos').select('id,estado,monto,monto_conciliado,fecha').eq('id',movId).single(); mov=m||null
+      if(mov&&(mov.estado!=='pendiente'||Number(mov.monto_conciliado)>0)){ const c={estado:'registrado',motivo:'El depósito ya está conciliado en Banco',...cierre}; await supabase.from('agente_bandeja').update(c).eq('id',r.id); return c } }
+    // Fondos del cliente por ese monto (±10 días) en la BASE (no en lo cargado en pantalla, que puede estar atrasado).
+    const d=x=>new Date(new Date(fecha+'T12:00').getTime()+x*86400000).toISOString().slice(0,10)
+    const {data:iguales}=await supabase.from('expenses').select('id,amount,date,concept,project').eq('type','fondo').eq('client_id',cid).eq('amount',monto).is('deleted_at',null).gte('date',d(-10)).lte('date',d(10))
+    const ids=(iguales||[]).map(x=>x.id)
+    const {data:lig}=ids.length?await supabase.from('conciliacion').select('gasto_id').eq('tipo_destino','fondo').in('gasto_id',ids):{data:[]}
+    const ligSet=new Set((lig||[]).map(x=>String(x.gasto_id)))
+    // Sin movimiento a la vista y con un fondo igual YA conciliado al banco: ese es el de este depósito (lo registró otra vía).
+    if(!mov&&(iguales||[]).some(x=>ligSet.has(String(x.id)))){ const c={estado:'registrado',motivo:'El fondo ya está registrado y conciliado en Banco',...cierre}; await supabase.from('agente_bandeja').update(c).eq('id',r.id); return c }
+    fondo=(iguales||[]).find(x=>!ligSet.has(String(x.id)))||null
+    const vinculado=!!fondo
+    if(!fondo){ const {data,error}=await supabase.from('expenses').insert(fondoBase).select().single(); if(error) throw error; fondo=data; creado=true; onFondo&&onFondo(data) }
+    let sinConciliar=false
+    if(mov){ const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id,tipo_destino:'fondo',gasto_id:fondo.id,monto_aplicado:monto,origen:'manual'}).select().single()
+      if(ic.error) sinConciliar=true
+      else{ const total=Number(mov.monto)||monto; const {error:me}=await supabase.from('cartola_movimientos').update({estado:monto>=total?'conciliado':'parcial',monto_conciliado:monto}).eq('id',mov.id); if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); sinConciliar=true } } }
+    if(p.solicitud_id) await supabase.from('fund_requests').update({recibido_at:new Date(fecha+'T12:00').toISOString(),movimiento_id:mov?.id||null,estado:'recibida'}).eq('id',p.solicitud_id).is('recibido_at',null)
+    const c={estado:'registrado',motivo:`${vinculado?'Fondo vinculado':'Fondo registrado'} por ${yo}${sinConciliar?' · el depósito no quedó conciliado: concílialo en Banco':''}`,...cierre,propuesta:{...p,proyecto:proyecto||null,fondo_id:fondo.id}}
+    await supabase.from('agente_bandeja').update(c).eq('id',r.id)
+    logActividad('fondos.registrado_desde_banco',{tabla:'expenses',id:fondo.id,detalle:{title:`${vinculado?'Fondo vinculado':'Fondo registrado'}: ${fmt(monto)} del ${fmtFechaDMY(fecha)}${proyecto?` · ${proyecto}`:''}`,bandeja:r.id,movimiento:mov?.id||null}})
+    if(sinConciliar) appAlert(`El fondo quedó registrado, pero el depósito no quedó conciliado. Concílialo en Banco.`)
+    return c
+  }catch(e){
+    // Sin fondo creado: la propuesta vuelve a pendiente. Con el fondo ya creado, se cierra igual (el fondo existe) y se informa.
+    if(!creado) await supabase.from('agente_bandeja').update({estado:'pendiente'}).eq('id',r.id)
+    else await supabase.from('agente_bandeja').update({estado:'registrado',motivo:`Fondo registrado por ${yo} · revisar en Banco`,...cierre,propuesta:{...p,fondo_id:fondo?.id||null}}).eq('id',r.id)
+    throw e
+  }
 }
 const _MES_ES = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,sept:8,set:8,oct:9,nov:10,dic:11}
 // Fecha y autor de nuestra solicitud citada bajo la respuesta («El lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@…>) escribió:»).
@@ -19457,7 +19479,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {/* Paso 1: tipo + subir archivo */}
       {!rows&&(
         <>
-          {notaria&&archivoCorreo&&!cargando&&!rows&&<AutoClick sel="[data-analizar-correo='1']"/>}
+          {notaria&&archivoCorreo&&!cargando&&!rows&&<AutoClick sel="[data-analizar-correo='1']" clave={`analizar:${archivoCorreo.path||archivoCorreo.nombre||''}`}/>}
           {notaria&&archivoCorreo&&!cargando&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:12,border:`1px solid ${C.border}`,background:C.card,marginBottom:10}}>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Liquidación recibida por correo</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{archivoCorreo.nombre}</div></div>
             <button data-analizar-correo='1' onClick={async()=>{ try{ const {data,error}=await supabase.storage.from('documentos').download(archivoCorreo.path); if(error||!data) throw (error||new Error('sin archivo')); await onFile({target:{files:[new File([data],archivoCorreo.nombre,{type:data.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}}) }catch(e){ appAlert('No se pudo abrir el archivo del correo: '+(e.message||e)) } }} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Analizar</button>
@@ -38049,7 +38071,11 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         const b=await supabase.from('conciliacion').insert({movimiento_id:cargo.id,tipo_destino:'devolucion',devuelve_mov_id:abono.id,monto_aplicado:monto,origen:'manual'}).select().single(); if(b.error){ await supabase.from('conciliacion').delete().eq('id',ca.id); throw b.error } cc=b.data
         marcaQuien(ca.id); marcaQuien(cc.id) }
       const upd=x=>{ const ap=(x.monto_conciliado||0)+monto; return {...x,monto_conciliado:ap,estado:((x.monto||0)-ap)<=TOL?'conciliado':'parcial'} }
-      if(!DEMO) for(const x of [abono,cargo]){ const u=upd(x); const {error}=await supabase.from('cartola_movimientos').update({estado:u.estado,monto_conciliado:u.monto_conciliado}).eq('id',x.id); if(error) throw error }
+      // Si falla un movimiento a medias, se deshace todo (las dos filas y el movimiento ya actualizado).
+      if(!DEMO){ const hechos=[]
+        for(const x of [abono,cargo]){ const u=upd(x); const {error}=await supabase.from('cartola_movimientos').update({estado:u.estado,monto_conciliado:u.monto_conciliado}).eq('id',x.id)
+          if(error){ for(const h of hechos) await supabase.from('cartola_movimientos').update({estado:h.estado,monto_conciliado:h.monto_conciliado||0}).eq('id',h.id); await supabase.from('conciliacion').delete().in('id',[ca.id,cc.id]); throw error }
+          hechos.push(x) } }
       setConc(p=>[...p,ca,cc]); setMovs(p=>p.map(x=>x.id===abono.id||x.id===cargo.id?upd(x):x))
       logActividad('banco.devolucion',{tabla:'cartola_movimientos',id:abono.id,detalle:{title:`Devolución del cargo del ${fmtFechaDMY(cargo.fecha)}`,name:abono.nombre_contraparte||null,monto,abono:abono.id,cargo:cargo.id},completo:true})
     }catch(e){ appAlert('No se pudo registrar la devolución: '+(e.message||e)) }
