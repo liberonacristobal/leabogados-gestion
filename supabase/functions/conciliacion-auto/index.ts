@@ -266,9 +266,18 @@ Deno.serve(async (req) => {
       }
       // Solicitud ya atendida = existe un fondo del cliente por ese monto (±2%) desde 3 días antes de enviarla.
       const cidsS = [...new Set(sols.map((x) => x.client_id).filter(Boolean))];
-      const fondosS = cidsS.length ? await todas(`expenses?select=client_id,amount,date&type=eq.fondo&deleted_at=is.null&amount=gt.0&client_id=in.${enLista(cidsS)}`) : [];
-      const atendida = (s: any) => { const d0 = new Date(new Date(s.enviada_at).getTime() - 3 * 86400000).toISOString().slice(0, 10);
-        return fondosS.some((x) => x.client_id === s.client_id && Math.abs(Number(x.amount) - Number(s.monto)) <= Number(s.monto) * 0.02 && String(x.date) >= d0); };
+      const fondosS = cidsS.length ? await todas(`expenses?select=id,client_id,amount,date&type=eq.fondo&deleted_at=is.null&amount=gt.0&client_id=in.${enLista(cidsS)}`) : [];
+      const fondoDe = (s: any) => { const d0 = new Date(new Date(s.enviada_at).getTime() - 3 * 86400000).toISOString().slice(0, 10);
+        return fondosS.filter((x) => x.client_id === s.client_id && Math.abs(Number(x.amount) - Number(s.monto)) <= Number(s.monto) * 0.02 && String(x.date) >= d0).sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] || null; };
+      const atendida = (s: any) => !!fondoDe(s);
+      // Solicitud con su fondo ya en la app (registrado por cualquier vía, también a mano) → queda «recibida» con la fecha del fondo.
+      // Un fondo atiende a una sola solicitud (la más antigua que calza).
+      const fondoUsado = new Set<string>();
+      for (const sq of [...sols].sort((a, b) => String(a.enviada_at).localeCompare(String(b.enviada_at)))) {
+        const f = fondosS.filter((x) => !fondoUsado.has(x.id) && x.client_id === sq.client_id && Math.abs(Number(x.amount) - Number(sq.monto)) <= Number(sq.monto) * 0.02 && String(x.date) >= new Date(new Date(sq.enviada_at).getTime() - 3 * 86400000).toISOString().slice(0, 10)).sort((a, b) => String(a.date).localeCompare(String(b.date)))[0];
+        if (!f) continue; fondoUsado.add(f.id); (fpr as any).recibidas = [...((fpr as any).recibidas || []), { cliente: nombre[sq.client_id], monto: sq.monto, fondo: f.date }];
+        if (!dryRun) await rest(`fund_requests?id=eq.${sq.id}&recibido_at=is.null`, { method: "PATCH", body: JSON.stringify({ estado: "recibida", recibido_at: `${String(f.date).slice(0, 10)}T12:00:00Z` }) });
+      }
       const solUsada = new Set<string>();
       for (const c of cands) {
         const m = c.mov, ss = sols.filter((s) => s.client_id === m.cliente_id && !solUsada.has(s.id) && !atendida(s));
