@@ -5,10 +5,14 @@
 // Solo abonos identificados a un cliente, pendientes y sin nada conciliado. Lo dudoso (factura y fondo a la vez, posible
 // devolución de un pago, montos que no calzan) queda para una persona. Todo queda en la bitácora y se deshace desde Banco.
 // La llaman procesar-cartola (al llegar la cartola) y agente-correo (al unir un aviso del banco); también a mano.
+// FONDOS POR REGISTRAR: el abono sin destino (o el aviso del banco que aún no llega en la cartola) con señal de fondo
+// (pareceFondo: solicitud de fondos por ese monto, o mensaje que nombra el trabajo o habla de fondos) queda como propuesta en
+// agente_bandeja (tipo fondo_por_registrar) para Gastos › Revisar; una persona lo registra. Solicitudes de fondos con 7 días
+// sin depósito → tarea a quien la envió (una vez).
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
-import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes } from "../_shared/conciliacionReglas.js";
+import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo } from "../_shared/conciliacionReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -51,15 +55,20 @@ Deno.serve(async (req) => {
       todas("client_entities?select=client_id,rut"),
       todas("conciliacion?select=movimiento_id,tipo_destino,factura_id,gasto_id,monto_aplicado,created_at"),
     ]);
-    const movs = await todas(`cartola_movimientos?select=id,fecha,monto,monto_conciliado,cliente_id,rut_contraparte,nombre_contraparte,descripcion,detalle_aviso,categoria,rol_cuenta,n_operacion,estado,es_interno&tipo=eq.abono&es_interno=eq.false&fecha=gte.${desde}&order=fecha.asc`);
+    const movs = await todas(`cartola_movimientos?select=id,cuenta,fecha,monto,monto_conciliado,cliente_id,rut_contraparte,nombre_contraparte,descripcion,detalle_aviso,categoria,rol_cuenta,n_operacion,estado,es_interno&tipo=eq.abono&es_interno=eq.false&fecha=gte.${desde}&order=fecha.asc`);
     const cargos = await todas(`cartola_movimientos?select=id,fecha,monto,rut_contraparte,estado&tipo=eq.cargo&estado=eq.pendiente&fecha=gte.${new Date(Date.now() - (dias + 120) * 86400000).toISOString().slice(0, 10)}`);
+    // Simulación (solo dryRun): estos movimientos como si estuvieran pendientes y sin estos fondos (p. ej. rehacer un día pasado).
+    const sim = dryRun && body.simular ? { movs: new Set<string>(body.simular.movs || []), sinFondos: new Set<string>(body.simular.sinFondos || []), sinAvisoMov: !!body.simular.antesDeCartola } : null;
+    if (sim) movs.forEach((m) => { if (sim.movs.has(m.id)) { m.estado = "pendiente"; m.monto_conciliado = 0; } });
     const cids = [...new Set(movs.map((m) => m.cliente_id).filter(Boolean))];
     const fondosAll = cids.length ? await todas(`expenses?select=id,client_id,amount,date,concept,project,created_at&type=eq.fondo&deleted_at=is.null&apertura_id=is.null&amount=gt.0&client_id=in.${enLista(cids)}`) : [];
+    if (sim) for (let i = fondosAll.length - 1; i >= 0; i--) if (sim.sinFondos.has(fondosAll[i].id)) fondosAll.splice(i, 1);
     const nombre: Record<string, string> = Object.fromEntries(clients.map((c) => [c.id, c.name]));
     const rutsCli: Record<string, Set<string>> = {};
     const addR = (cid: string, r: string) => { const n = normRut(r); if (!n || !cid) return; (rutsCli[cid] = rutsCli[cid] || new Set()).add(n); };
     clients.forEach((c) => addR(c.id, c.rut)); ents.forEach((e) => addR(e.client_id, e.rut));
     const rutsFac = (b: { receptor_rut: string; client_id: string }) => { const s = new Set<string>(); const n = normRut(b.receptor_rut); if (n) s.add(n); (rutsCli[b.client_id] || new Set()).forEach((r) => s.add(r)); return s; };
+    if (sim) for (let i = concAll.length - 1; i >= 0; i--) if (sim.movs.has(concAll[i].movimiento_id)) concAll.splice(i, 1);
     const concPorMov: Record<string, typeof concAll> = {}; concAll.forEach((c) => { (concPorMov[c.movimiento_id] = concPorMov[c.movimiento_id] || []).push(c); });
 
     // Estado del pool en un instante: aplicado (filas de conciliación hasta ese momento) y fondos ya ligados.
@@ -131,6 +140,18 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const elegible = (m: any) => m.cliente_id && !m.es_interno && (!m.categoria || m.categoria === "Cliente");
 
+    if (body.backtestNinguno) {
+      // Abonos ya conciliados donde la regla no habría encontrado destino: ¿en qué terminaron? (calibra «fondos por registrar»).
+      // deno-lint-ignore no-explicit-any
+      const filas: any[] = [];
+      for (const m of movs.filter(elegible)) {
+        const cs = (concPorMov[m.id] || []); if (!cs.length) continue;
+        const T = cs.map((c) => String(c.created_at)).sort()[0]; corte = `${m.fecha}|${m.id}`;
+        const d = decidir(m, T, new Set()); if (d.tipo !== "ninguno") continue;
+        filas.push({ fecha: m.fecha, monto: m.monto, cli: nombre[m.cliente_id], rol: m.rol_cuenta, real: [...new Set(cs.map((c) => c.tipo_destino))].join("+"), texto: [m.descripcion, m.detalle_aviso].filter(Boolean).join(" | ").slice(0, 90) });
+      }
+      return json({ ok: true, n: filas.length, filas });
+    }
     if (backtest) {
       // Abonos ya conciliados a factura o fondo: ¿qué habría hecho la regla en ese momento, con lo que existía entonces?
       const res = { igual: 0, distinto: 0, se_abstiene: 0, duda: 0 }; const distintos: unknown[] = [];
@@ -197,7 +218,85 @@ Deno.serve(async (req) => {
         hechos.pop(); dudas.push({ mov: m.id, motivo: "Error al conciliar: " + String((e as Error).message || e) });
       }
     }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas });
+    // ── Fondos por registrar ──
+    const fpr = { propuestos: [] as unknown[], unidos: 0, cerrados: 0, tareas: [] as unknown[] };
+    try {
+      const diaCL = (ts: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date(ts));
+      const cuentaN = (c: string) => String(c || "").replace(/\D/g, "").replace(/^0+/, "");
+      const rolPorCuenta: Record<string, string> = {}; movs.forEach((m) => { if (m.cuenta && m.rol_cuenta) rolPorCuenta[cuentaN(m.cuenta)] = m.rol_cuenta; });
+      const hace = (d: number) => new Date(Date.now() - d * 86400000).toISOString();
+      const [sols, avisos0, filasF] = await Promise.all([
+        todas(`fund_requests?select=id,client_id,monto,asunto,enviada_at,enviada_por&recibido_at=is.null&enviada_at=gte.${hace(60)}`),
+        todas(`avisos_banco?select=gmail_id,tipo,monto,cuenta,fecha_hora,contraparte_nombre,contraparte_rut,mensaje,banco,movimiento_id,estado&tipo=eq.abono&created_at=gte.${hace(12)}`),
+        todas(`agente_bandeja?select=id,gmail_id,estado,propuesta&tipo=eq.fondo_por_registrar&created_at=gte.${hace(90)}`),
+      ]);
+      const avisos = sim ? avisos0.map((a) => sim.movs.has(a.movimiento_id) && sim.sinAvisoMov ? { ...a, movimiento_id: null, estado: "por_calzar" } : a) : avisos0;
+      if (sim?.sinAvisoMov) for (let i = pend.length - 1; i >= 0; i--) if (sim.movs.has(pend[i].id)) pend.splice(i, 1);
+      // Filas ya propuestas: un aviso o un movimiento se propone UNA vez (si se descartó, no vuelve).
+      const yaMov = new Set<string>(), yaAviso = new Set<string>();
+      filasF.forEach((r) => { if (r.propuesta?.movimiento_id) yaMov.add(r.propuesta.movimiento_id); if (r.propuesta?.aviso_gmail) yaAviso.add(r.propuesta.aviso_gmail); });
+      avisos.forEach((a) => { if (a.movimiento_id && yaAviso.has(a.gmail_id)) yaMov.add(a.movimiento_id); });
+      // Cliente de un aviso: RUT conocido, o el nombre exacto (normalizado) de la ficha o de una de sus razones sociales.
+      const nn = (x: string) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").replace(/\b(spa|ltda|limitada|s ?a|eirl)\b/g, "").replace(/\s+/g, " ").trim();
+      const porRut: Record<string, string> = {}; Object.entries(rutsCli).forEach(([cid, rs]) => rs.forEach((r) => { porRut[r] = porRut[r] && porRut[r] !== cid ? "*" : cid; }));
+      const porNom: Record<string, string> = {}; const addN = (cid: string, n: string) => { const k = nn(n); if (k.length >= 6) porNom[k] = porNom[k] && porNom[k] !== cid ? "*" : cid; };
+      clients.forEach((c) => addN(c.id, c.name)); (await todas("client_entities?select=client_id,name")).forEach((e) => addN(e.client_id, e.name));
+      const cliAviso = (a: { contraparte_rut: string; contraparte_nombre: string }) => { const r = porRut[normRut(a.contraparte_rut)]; if (r && r !== "*") return r; const n = porNom[nn(a.contraparte_nombre)]; return n && n !== "*" ? n : null; };
+      const cands: { mov: any; texto: string; aviso?: any }[] = [];
+      for (const m of pend) { if (used.has(m.id) || yaMov.has(m.id) || hechos.some((h: any) => h.mov === m.id)) continue; if (decidir(m, null, used).tipo !== "ninguno") continue;
+        const av = avisos.find((a) => a.movimiento_id === m.id); cands.push({ mov: m, texto: [m.detalle_aviso, av?.mensaje].filter(Boolean).join(" "), aviso: av }); }
+      for (const a of avisos) { if (a.movimiento_id || a.estado === "calzado" || yaAviso.has(a.gmail_id) || !a.fecha_hora) continue;
+        const cid = cliAviso(a); if (!cid) continue;
+        const mv = { id: null, fecha: diaCL(a.fecha_hora), monto: Math.round(Number(a.monto)), cliente_id: cid, rut_contraparte: a.contraparte_rut, nombre_contraparte: a.contraparte_nombre, descripcion: "", detalle_aviso: a.mensaje, rol_cuenta: rolPorCuenta[cuentaN(a.cuenta)] || "honorarios" };
+        if (!fondosAll.some((x) => x.client_id === cid) && !cids.includes(cid)) { const fx = await todas(`expenses?select=id,client_id,amount,date,concept,project,created_at&type=eq.fondo&deleted_at=is.null&apertura_id=is.null&amount=gt.0&client_id=eq.${cid}`); fondosAll.push(...fx); }
+        if (decidir(mv, null, used).tipo !== "ninguno") continue;
+        cands.push({ mov: mv, texto: a.mensaje || "", aviso: a }); }
+      // Trabajos del cliente: títulos de sus ventas (primero: el fondo queda ligado a la venta) y proyectos ya usados en sus gastos.
+      const cidsC = [...new Set(cands.map((c) => c.mov.cliente_id))];
+      const proyectos: Record<string, string[]> = {};
+      if (cidsC.length) {
+        const [ex, sa] = await Promise.all([todas(`expenses?select=client_id,project&deleted_at=is.null&project=not.is.null&client_id=in.${enLista(cidsC)}`), todas(`sales?select=client_id,title&deleted_at=is.null&client_id=in.${enLista(cidsC)}`)]);
+        [...sa.map((x) => [x.client_id, x.title]), ...ex.map((x) => [x.client_id, x.project])].forEach(([c, p]) => { if (p) (proyectos[c] = proyectos[c] || []).push(p); });
+      }
+      // Solicitud ya atendida = existe un fondo del cliente por ese monto (±2%) desde 3 días antes de enviarla.
+      const cidsS = [...new Set(sols.map((x) => x.client_id).filter(Boolean))];
+      const fondosS = cidsS.length ? await todas(`expenses?select=client_id,amount,date&type=eq.fondo&deleted_at=is.null&amount=gt.0&client_id=in.${enLista(cidsS)}`) : [];
+      const atendida = (s: any) => { const d0 = new Date(new Date(s.enviada_at).getTime() - 3 * 86400000).toISOString().slice(0, 10);
+        return fondosS.some((x) => x.client_id === s.client_id && Math.abs(Number(x.amount) - Number(s.monto)) <= Number(s.monto) * 0.02 && String(x.date) >= d0); };
+      const solUsada = new Set<string>();
+      for (const c of cands) {
+        const m = c.mov, ss = sols.filter((s) => s.client_id === m.cliente_id && !solUsada.has(s.id) && !atendida(s));
+        const p = pareceFondo(m, c.texto, ss, proyectos[m.cliente_id] || []); if (!p) continue;
+        if (p.solicitud) solUsada.add(p.solicitud);
+        const de = c.aviso?.contraparte_nombre || m.nombre_contraparte || "";
+        const fila = { gmail_id: `fondo:${c.aviso?.gmail_id || "mov:" + m.id}`, recibido_at: c.aviso?.fecha_hora || `${m.fecha}T12:00:00Z`, de, de_nombre: de, asunto: "Fondo por registrar", tipo: "fondo_por_registrar", cliente_id: m.cliente_id, estado: "pendiente",
+          motivo: p.fuente === "solicitud" ? "Calza con una solicitud de fondos" : "El mensaje de la transferencia indica un fondo",
+          propuesta: { accion: "registrar_fondo", titulo: "Registrar el fondo", monto: m.monto, fecha: m.fecha, proyecto: p.proyecto, concepto: p.concepto, solicitud_id: p.solicitud, fuente: p.fuente, movimiento_id: m.id || c.aviso?.movimiento_id || null, aviso_gmail: c.aviso?.gmail_id || null },
+          evidencia: [{ texto: `Transferencia de ${de || "el cliente"}${c.texto ? ` · «${c.texto.trim()}»` : ""}`, monto: m.monto, fuente: c.aviso?.banco || "cartola" }] };
+        fpr.propuestos.push({ cliente: nombre[m.cliente_id], monto: m.monto, fecha: m.fecha, proyecto: p.proyecto, fuente: p.fuente, desde: c.aviso && !m.id ? "aviso" : "cartola" });
+        if (!dryRun) await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify(fila) });
+      }
+      // Propuestas abiertas: el aviso ya llegó en la cartola → se une su movimiento; el movimiento ya se concilió en Banco → se cierra.
+      for (const r of filasF.filter((x) => x.estado === "pendiente")) {
+        const p = r.propuesta || {}; let mid = p.movimiento_id;
+        if (!mid && p.aviso_gmail) { const a = avisos.find((x) => x.gmail_id === p.aviso_gmail); if (a?.movimiento_id) { mid = a.movimiento_id; fpr.unidos++; if (!dryRun) await rest(`agente_bandeja?id=eq.${r.id}`, { method: "PATCH", body: JSON.stringify({ propuesta: { ...p, movimiento_id: mid } }) }); } }
+        const mv = mid ? movs.find((x) => x.id === mid) : null;
+        if (mv && (mv.estado !== "pendiente" || (concPorMov[mid] || []).length || hechos.some((h: any) => h.mov === mid))) { fpr.cerrados++; if (!dryRun) await rest(`agente_bandeja?id=eq.${r.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: "El depósito ya está conciliado en Banco", resuelto_at: new Date().toISOString() }) }); }
+      }
+      // Solicitudes de fondos con 7 días o más sin fondo recibido: tarea a quien la envió, una sola vez por solicitud.
+      const viejas = sols.filter((s) => s.enviada_at <= hace(7) && s.enviada_at >= hace(30) && !atendida(s) && !solUsada.has(s.id));
+      if (viejas.length) {
+        const ya = new Set((await todas(`activity_log?select=record_id&action=eq.fondos.solicitud_sin_deposito&created_at=gte.${hace(60)}`)).map((x) => x.record_id));
+        for (const s of viejas.filter((x) => !ya.has(x.id))) {
+          const title = `Fondos solicitados sin depósito: ${nombre[s.client_id] || "cliente"} ${fmt(s.monto)}`, who = s.enviada_por || "Martina";
+          fpr.tareas.push({ cliente: nombre[s.client_id], monto: s.monto, enviada: dmy(s.enviada_at), a: who });
+          if (dryRun) continue;
+          await rest("tasks", { method: "POST", body: JSON.stringify({ title, who, assignees: [who], client_id: s.client_id, status: "Activo", note: `Solicitud del ${dmy(s.enviada_at)} · ${s.asunto || "Solicitud de fondos"}`, assigned_by: "Oficina" }) });
+          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "fondos.solicitud_sin_deposito", table_name: "fund_requests", record_id: s.id, estudio_id: "lea", detail: { title, cliente: nombre[s.client_id], a: who } }) });
+        }
+      }
+    } catch (e) { (fpr as any).error = String((e as Error).message || e); }
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
