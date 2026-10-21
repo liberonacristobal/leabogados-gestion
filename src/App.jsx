@@ -9437,7 +9437,7 @@ function ProcesosView({isDesktop, onBack, origen}){
     let on=true; supabase.from('procesos_corridas').select('id,lanzado_at,terminado_at,estado,status_code,respuesta').eq('jobname',sel.jobname).order('lanzado_at',{ascending:false}).limit(30).then(({data})=>on&&setCorr(data||[]),()=>on&&setCorr([]))
     return ()=>{ on=false } },[sel])
   const cambiarAviso = async()=>{ const nuevo=!aviso
-    if(!await appConfirm(nuevo?'¿Encender el aviso de fallas? Cada día a las 08:00 la app revisa los procesos y, si alguno falló, no respondió o no corrió a su hora, escribe a los socios desde la cuenta de la oficina, una vez por falla.':'¿Apagar el aviso de fallas? La página sigue mostrando el estado de cada proceso.')) return
+    if(!await appConfirm(nuevo?'¿Encender el aviso de fallas? Cada hora la app revisa los procesos: los que fallan se reintentan solos (salvo los que envían correos) y, si siguen fallando después de 6 intentos, se envía un aviso desde la cuenta de la oficina, una vez por falla.':'¿Apagar el aviso de fallas? La página sigue mostrando el estado de cada proceso.')) return
     try{ await setLearningKV('config','vigilancia_procesos',nuevo?'on':'off'); setAviso(nuevo); logActividad('procesos.aviso_'+(nuevo?'encendido':'apagado'),{detalle:{title:`Aviso de fallas de procesos ${nuevo?'encendido':'apagado'}`}}) }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } }
   const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
   const chip=e=><span style={{fontSize:10.5,fontWeight:700,borderRadius:20,padding:'2px 9px',background:e.bg,color:e.c,whiteSpace:'nowrap'}}>{e.t}</span>
@@ -9482,7 +9482,7 @@ function ProcesosView({isDesktop, onBack, origen}){
         </div>
       </div>
       <div style={{...card,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'Aviso de fallas a los socios':'Aviso de fallas'}</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'cada día a las 08:00, desde la cuenta de la oficina, una vez por falla':'a los socios, 08:00'}</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{'Aviso de fallas'}</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'reintenta cada hora lo que falla · avisa tras 6 intentos':'reintenta cada hora · aviso tras 6'}</div></div>
         {aviso!=null&&chip(aviso?{t:'Encendido',bg:C.greenBg,c:C.greenText}:{t:'Apagado',bg:C.bgSoft,c:C.textSoft})}
         {aviso!=null&&!DEMO&&<button onClick={cambiarAviso} style={{fontSize:12,fontWeight:700,border:aviso?`1px solid ${C.border}`:'none',borderRadius:9,padding:'6px 12px',cursor:'pointer',background:aviso?C.surface:C.accent,color:aviso?C.accent:'#fff',whiteSpace:'nowrap'}}>{aviso?'Apagar':'Encender'}</button>}
       </div>
