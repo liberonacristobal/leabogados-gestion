@@ -39,7 +39,9 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
 // deno-lint-ignore no-explicit-any
 async function todas(path: string): Promise<any[]> {
   // deno-lint-ignore no-explicit-any
-  const out: any[] = []; for (let i = 0; i < 50; i++) { const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } }); if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out;
+  // Orden estable entre páginas (sin «order», Postgres no garantiza que las páginas no se pisen). miembros no tiene id.
+  const p2 = /[?&]order=/.test(path) || /^(miembros|rpc\/)/.test(path) ? path : `${path}${path.includes("?") ? "&" : "?"}order=id.asc`;
+  const out: any[] = []; for (let i = 0; i < 50; i++) { const r = await fetch(`${SB_URL}/rest/v1/${p2}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } }); if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out;
 }
 const enLista = (ids: string[]) => `(${ids.map((x) => `"${x}"`).join(",")})`;
 
@@ -48,16 +50,26 @@ Deno.serve(async (req) => {
   let body: any = {}; try { body = await req.json(); } catch { /* sin body */ }
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
+  let lockTomado = false;
   try {
     const backtest = !!body.backtest;
     const cfg = await rest("learnings?select=value&kind=eq.config&key=eq.conciliacion_auto");
     const ON = String(cfg?.[0]?.value || "off").trim().toLowerCase() === "on";
-    const dryRun = backtest || !!body.dryRun || !ON;
+    const dryRun = backtest || !!body.backtestCargos || !!body.backtestNinguno || !!body.dryRun || !ON;
+    // Una sola corrida que escribe a la vez (la llaman la cartola, el agente de correo y el cron): si otra está en curso, esta no
+    // hace nada (las dos tomarían el mismo depósito). El candado vence a los 5 minutos por si una corrida murió sin soltarlo.
+    if (!dryRun) {
+      await rest(`procesos_lock?nombre=eq.conciliacion-auto&tomado_at=lt.${new Date(Date.now() - 5 * 60000).toISOString()}`, { method: "DELETE" });
+      const tomo = await rest("procesos_lock?on_conflict=nombre", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ nombre: "conciliacion-auto" }) });
+      if (!tomo?.length) return json({ ok: true, ocupado: true, motivo: "Otra corrida en curso" });
+      lockTomado = true;
+    }
     const dias = Math.min(400, Number(body.dias) || (backtest ? 150 : 60));
     const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
 
     const [pool, clients, ents, concAll] = await Promise.all([
-      rest("rpc/conciliacion_pool_facturas", { method: "POST", body: "{}" }),
+      // El pool se pide por páginas (PostgREST corta en 1.000 filas): con más facturas abiertas, una «única» podría no serlo.
+      (async () => { const out: any[] = []; for (let i = 0; i < 20; i++) { const r = await fetch(`${SB_URL}/rest/v1/rpc/conciliacion_pool_facturas?order=id.asc`, { method: "POST", headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` }, body: "{}" }); if (!r.ok) throw new Error(`conciliacion_pool_facturas: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out; })(),
       todas("clients?select=id,name,rut"),
       todas("client_entities?select=client_id,rut"),
       todas("conciliacion?select=movimiento_id,tipo_destino,factura_id,gasto_id,monto_aplicado,created_at"),
@@ -191,6 +203,8 @@ Deno.serve(async (req) => {
       hechos.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], destino: d.motivo });
       if (dryRun) continue;
       const nuevas: string[] = [];
+      // Para deshacer si un paso falla a medias: estado previo de cada factura tocada y comisiones que pasaron a «por pagar».
+      const prevBill: { id: string; antes: unknown }[] = [], flipT: string[] = []; let movTocado = false;
       try {
         let movApl = 0; const now = new Date().toISOString();
         if (d.tipo === "fondo") {
@@ -209,19 +223,24 @@ Deno.serve(async (req) => {
             const patch = b.status === "Pagado" ? { reconciled_at: now, updated_at: now }
               : marco ? { status: "Pagado", paid: true, paid_at: m.fecha, payment_date: m.fecha, payment_method: "Transferencia", payment_ref: m.n_operacion || null, paid_amount: Number(b.amount || 0), reconciled_at: now, updated_at: now }
               : { paid_amount: aplTot, payment_method: "Transferencia", payment_ref: m.n_operacion || null, reconciled_at: now, updated_at: now };
-            await rest(`billing?id=eq.${b.id}`, { method: "PATCH", body: JSON.stringify(patch) });
-            if (marco) await tercerosFlip(b.id);
+            const antes = (await rest(`billing?id=eq.${b.id}&select=status,paid,paid_at,payment_date,payment_method,payment_ref,paid_amount,reconciled_at,updated_at`))?.[0];
+            await rest(`billing?id=eq.${b.id}`, { method: "PATCH", body: JSON.stringify(patch) }); prevBill.push({ id: b.id, antes });
+            if (marco) { const ts = await rest(`terceros_pagos?select=id&billing_id=eq.${b.id}&estado=eq.pendiente`); await tercerosFlip(b.id); flipT.push(...(ts || []).map((t: { id: string }) => t.id)); }
             movApl += aplicado;
           }
         }
         const estado = Number(m.monto) - movApl <= 0 ? "conciliado" : "parcial";
-        await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado, monto_conciliado: movApl }) });
+        await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado, monto_conciliado: movApl }) }); movTocado = true;
+        // Bitácora y bandeja: no deshacen la conciliación si fallan (best-effort).
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea",
-          detail: { title: `Conciliado automáticamente: ${nombre[m.cliente_id] || m.nombre_contraparte || ""} ${fmt(m.monto)} del ${dmy(m.fecha)} → ${d.motivo}`, mov: m.id, conciliacion: nuevas, regla: d.motivo, aviso: m.detalle_aviso || null } }) });
-        const av = await rest(`avisos_banco?select=gmail_id&movimiento_id=eq.${m.id}`);
-        for (const a of av || []) await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: `Conciliado automáticamente con ${d.tipo === "fondo" ? "el " + d.motivo.charAt(0).toLowerCase() + d.motivo.slice(1) : "la " + d.motivo}`, propuesta: { movimiento_id: m.id } }) });
+          detail: { title: `Conciliado automáticamente: ${nombre[m.cliente_id] || m.nombre_contraparte || ""} ${fmt(m.monto)} del ${dmy(m.fecha)} → ${d.motivo}`, mov: m.id, conciliacion: nuevas, regla: d.motivo, aviso: m.detalle_aviso || null } }) }).catch(() => null);
+        const av = await rest(`avisos_banco?select=gmail_id&movimiento_id=eq.${m.id}`).catch(() => []);
+        for (const a of av || []) await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: `Conciliado automáticamente con ${d.tipo === "fondo" ? "el " + d.motivo.charAt(0).toLowerCase() + d.motivo.slice(1) : "la " + d.motivo}`, propuesta: { movimiento_id: m.id } }) }).catch(() => null);
       } catch (e) {
         for (const id of nuevas) { try { await rest(`conciliacion?id=eq.${id}`, { method: "DELETE" }); } catch { /* best-effort */ } }
+        for (const p of prevBill) { try { if (p.antes) await rest(`billing?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(p.antes) }); } catch { /* best-effort */ } }
+        if (flipT.length) { try { await rest(`terceros_pagos?id=in.${enLista(flipT)}`, { method: "PATCH", body: JSON.stringify({ estado: "pendiente" }) }); } catch { /* best-effort */ } }
+        if (movTocado) { try { await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: "pendiente", monto_conciliado: 0 }) }); } catch { /* best-effort */ } }
         hechos.pop(); dudas.push({ mov: m.id, motivo: "Error al conciliar: " + String((e as Error).message || e) });
       }
     }
@@ -235,7 +254,7 @@ Deno.serve(async (req) => {
       const [sols, avisos0, filasF] = await Promise.all([
         todas(`fund_requests?select=id,client_id,monto,asunto,enviada_at,enviada_por&recibido_at=is.null&enviada_at=gte.${hace(60)}`),
         todas(`avisos_banco?select=gmail_id,tipo,monto,cuenta,fecha_hora,contraparte_nombre,contraparte_rut,mensaje,banco,movimiento_id,estado&tipo=eq.abono&created_at=gte.${hace(12)}`),
-        todas(`agente_bandeja?select=id,gmail_id,estado,propuesta&tipo=eq.fondo_por_registrar&created_at=gte.${hace(90)}`),
+        todas(`agente_bandeja?select=id,gmail_id,estado,propuesta,cliente_id&tipo=eq.fondo_por_registrar&created_at=gte.${hace(90)}`),
       ]);
       const avisos = sim ? avisos0.map((a) => sim.movs.has(a.movimiento_id) && sim.sinAvisoMov ? { ...a, movimiento_id: null, estado: "por_calzar" } : a) : avisos0;
       if (sim?.sinAvisoMov) for (let i = pend.length - 1; i >= 0; i--) if (sim.movs.has(pend[i].id)) pend.splice(i, 1);
@@ -250,7 +269,10 @@ Deno.serve(async (req) => {
       clients.forEach((c) => addN(c.id, c.name)); (await todas("client_entities?select=client_id,name")).forEach((e) => addN(e.client_id, e.name));
       const cliAviso = (a: { contraparte_rut: string; contraparte_nombre: string }) => { const r = porRut[normRut(a.contraparte_rut)]; if (r && r !== "*") return r; const n = porNom[nn(a.contraparte_nombre)]; return n && n !== "*" ? n : null; };
       const cands: { mov: any; texto: string; aviso?: any }[] = [];
-      for (const m of pend) { if (used.has(m.id) || yaMov.has(m.id) || hechos.some((h: any) => h.mov === m.id)) continue; if (decidir(m, null, used).tipo !== "ninguno") continue;
+      // Propuesta abierta desde un aviso que aún no se une a su movimiento (la cartola llegó antes que el aviso se calzara): el mismo
+      // depósito no se propone dos veces (mismo cliente y monto, ±2 días).
+      const delAviso = (m: any) => filasF.some((r) => r.estado === "pendiente" && r.propuesta?.aviso_gmail && !r.propuesta?.movimiento_id && r.cliente_id === m.cliente_id && Math.round(Number(r.propuesta?.monto)) === Math.round(Number(m.monto)) && Math.abs(new Date(String(r.propuesta?.fecha)).getTime() - new Date(String(m.fecha)).getTime()) <= 2 * 86400000);
+      for (const m of pend) { if (used.has(m.id) || yaMov.has(m.id) || hechos.some((h: any) => h.mov === m.id) || delAviso(m)) continue; if (decidir(m, null, used).tipo !== "ninguno") continue;
         const av = avisos.find((a) => a.movimiento_id === m.id); cands.push({ mov: m, texto: [m.detalle_aviso, av?.mensaje].filter(Boolean).join(" "), aviso: av }); }
       for (const a of avisos) { if (a.movimiento_id || a.estado === "calzado" || yaAviso.has(a.gmail_id) || !a.fecha_hora) continue;
         const cid = cliAviso(a); if (!cid) continue;
@@ -321,7 +343,7 @@ Deno.serve(async (req) => {
         .filter((m) => ruts.has(normRut(m.rut_contraparte)) && !(Number(m.monto_conciliado) > 0) && !(concPorMov[m.id] || []).length && (!m.categoria || ["Proveedor", "Comisiones", "Equipo"].includes(m.categoria)));
       if (cg.length) {
         const [ts, aps] = await Promise.all([
-          todas(`terceros_pagos?select=id,proveedor_id,billing_id,monto,liquido,retencion,estado,bhe_id,movimiento_id&proveedor_id=in.${enLista(provs.map((p) => p.id))}`),
+          todas(`terceros_pagos?select=id,proveedor_id,billing_id,monto,liquido,retencion,estado,bhe_id,movimiento_id,referencia&proveedor_id=in.${enLista(provs.map((p) => p.id))}`),
           todas("learnings?select=key,value&kind=eq.pago_prov_aporte"),
         ]);
         const ligados = new Set(ts.map((t) => t.movimiento_id).filter(Boolean));
@@ -339,12 +361,20 @@ Deno.serve(async (req) => {
             const monto = Math.abs(Number(m.monto) || 0), fecha = String(m.fecha).slice(0, 10);
             com.pagadas.push({ proveedor: p.nombre, fecha, monto, comision: t.id });
             if (dryRun) continue;
-            const patch = { estado: "pagado", pagado_at: fecha, movimiento_id: m.id, referencia: `Pagada: ${dmy(fecha).slice(0, 5)} ${fmt(monto)}`, ...(reajusteBHEPago(t, fecha) || {}) };
-            await rest(`terceros_pagos?id=eq.${t.id}`, { method: "PATCH", body: JSON.stringify(patch) });
-            const ins = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "tercero", monto_aplicado: monto, origen: "auto" }) });
-            await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ categoria: m.categoria || "Proveedor", monto_conciliado: monto, estado: "conciliado" }) });
-            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: `proveedores.${p.id}.enlace`, table_name: "cartola_movimientos", record_id: m.id, estudio_id: "lea", detail: { title: `Pago del ${dmy(fecha).slice(0, 5)} ↔ 1 pagada (conciliación automática)`, monto, conciliacion: ins?.[0]?.id, comision: t.id } }) });
-            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: ins?.[0]?.id, estudio_id: "lea", detail: { title: `Conciliado automáticamente: pago a ${p.nombre} ${fmt(monto)} del ${dmy(fecha)} → comisión por pagar`, mov: m.id } }) });
+            // Por comisión: si un paso falla se deshace lo hecho y se sigue con las demás.
+            let ins: any = null, tTocada = false;
+            try {
+              ins = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "tercero", monto_aplicado: monto, origen: "auto" }) });
+              const patch = { estado: "pagado", pagado_at: fecha, movimiento_id: m.id, referencia: `Pagada: ${dmy(fecha).slice(0, 5)} ${fmt(monto)}`, ...(reajusteBHEPago(t, fecha) || {}) };
+              await rest(`terceros_pagos?id=eq.${t.id}`, { method: "PATCH", body: JSON.stringify(patch) }); tTocada = true;
+              await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ categoria: m.categoria || "Proveedor", monto_conciliado: monto, estado: "conciliado" }) });
+            } catch (e) {
+              if (ins?.[0]?.id) await rest(`conciliacion?id=eq.${ins[0].id}`, { method: "DELETE" }).catch(() => null);
+              if (tTocada) await rest(`terceros_pagos?id=eq.${t.id}`, { method: "PATCH", body: JSON.stringify({ estado: t.estado, pagado_at: null, movimiento_id: null, referencia: t.referencia ?? null, monto: t.monto, retencion: t.retencion }) }).catch(() => null);
+              com.pagadas.pop(); com.error = String((e as Error).message || e); continue;
+            }
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: `proveedores.${p.id}.enlace`, table_name: "cartola_movimientos", record_id: m.id, estudio_id: "lea", detail: { title: `Pago del ${dmy(fecha).slice(0, 5)} ↔ 1 pagada (conciliación automática)`, monto, conciliacion: ins?.[0]?.id, comision: t.id } }) }).catch(() => null);
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: ins?.[0]?.id, estudio_id: "lea", detail: { title: `Conciliado automáticamente: pago a ${p.nombre} ${fmt(monto)} del ${dmy(fecha)} → comisión por pagar`, mov: m.id } }) }).catch(() => null);
           }
         }
       }
@@ -411,7 +441,8 @@ Deno.serve(async (req) => {
           if (rutCont && r === rutCont) {
             partes = repartoDe(m); regla = "correo VALORES de la contadora";
             // Nunca dos veces: si ya hay un costo con el mismo concepto del período, queda para una persona.
-            if (partes) { const ya = await todas(`expenses?select=id&client_id=eq.${interno}&deleted_at=is.null&concept=in.(${encodeURIComponent(partes.filter((p) => p.tipo === "gasto").map((p) => `"${p.concepto.split(" (")[0]}"`).join(","))})`); if (ya.length) partes = null; }
+            // (el PPM con retenciones lleva un paréntesis después del período: se busca por prefijo, no igualdad)
+            if (partes) { const ors = partes.filter((p) => p.tipo === "gasto").map((p) => `concept.like.${p.concepto.split(" (")[0]}*`).join(","); const ya = await todas(`expenses?select=id&client_id=eq.${interno}&deleted_at=is.null&or=(${encodeURIComponent(ors)})`); if (ya.length) partes = null; }
             if (partes) car.contadora.push({ fecha, monto: M, partes: partes.map((p) => `${p.subcategoria || p.tipo} ${fmt(p.monto)}`) });
           } else if (!excl.has(r)) {
             const k = rachaCargo(previosDe(m), m.monto);
@@ -426,7 +457,7 @@ Deno.serve(async (req) => {
               const c = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: p.tipo, gasto_id: gid, monto_aplicado: p.monto, origen: "auto" }) }); nuevas.push(c[0].id);
             }
             await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: "conciliado", monto_conciliado: M, categoria: "Gastos Oficina" }) });
-            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Clasificado automáticamente: cargo ${fmt(M)} del ${dmy(fecha)} → ${partes.filter((p) => p.tipo === "gasto").map((p) => `${p.categoria}${p.subcategoria ? " › " + p.subcategoria : ""}`).join(" + ")}`, mov: m.id, regla, conciliacion: nuevas, gastos: gNuevos } }) });
+            await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Clasificado automáticamente: cargo ${fmt(M)} del ${dmy(fecha)} → ${partes.filter((p) => p.tipo === "gasto").map((p) => `${p.categoria}${p.subcategoria ? " › " + p.subcategoria : ""}`).join(" + ")}`, mov: m.id, regla, conciliacion: nuevas, gastos: gNuevos } }) }).catch(() => null);
           } catch (e) {
             for (const id of nuevas) { try { await rest(`conciliacion?id=eq.${id}`, { method: "DELETE" }); } catch { /* */ } }
             for (const id of gNuevos) { try { await rest(`expenses?id=eq.${id}`, { method: "DELETE" }); } catch { /* */ } }
@@ -447,21 +478,27 @@ Deno.serve(async (req) => {
         const unidos = new Set(concAll.filter((c) => c.gasto_id).map((c) => c.gasto_id));
         for (const m of pagosTC.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))) {
           const M = Math.abs(Number(m.monto) || 0), d0 = new Date(new Date(m.fecha).getTime() - 70 * 86400000).toISOString().slice(0, 10);
-          const sel: any[] = []; let sum = 0;
-          for (const v of viajes) { if (unidos.has(v.id) || String(v.date) > String(m.fecha) || String(v.date) < d0) continue; if (sum + Number(v.amount) > M) break; sel.push(v); sum += Number(v.amount); }
-          if (!sel.length) continue;
+          // Todos los viajes sin unir de la ventana, o ninguno: un pago chico de la tarjeta (p. ej. $3.676) no se queda con viajes de
+          // otro estado de cuenta; si el pago no alcanza a cubrirlos todos, lo reparte una persona.
+          const sel = viajes.filter((v) => !unidos.has(v.id) && String(v.date) <= String(m.fecha) && String(v.date) >= d0);
+          const sum = sel.reduce((t, v) => t + Number(v.amount), 0);
+          if (!sel.length || sum > M) continue;
           sel.forEach((v) => unidos.add(v.id));
           tc.unidos.push({ fecha: m.fecha, pago: M, viajes: sel.length, uber: sum, falta: M - sum });
           if (dryRun) continue;
           const nuevas: string[] = [];
-          for (const v of sel) { const c = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "gasto", gasto_id: v.id, monto_aplicado: Number(v.amount), origen: "auto" }) }); nuevas.push(c[0].id); }
-          await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: M - sum <= 0 ? "conciliado" : "parcial", monto_conciliado: sum, categoria: "Gastos Oficina" }) });
-          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Pago de la tarjeta ${fmt(M)} del ${dmy(m.fecha)}: ${sel.length} viaje${sel.length !== 1 ? "s" : ""} de Uber Business (${fmt(sum)}) ya registrados; falta repartir ${fmt(M - sum)} por rubro (sin volver a sumar Uber)`, mov: m.id, conciliacion: nuevas } }) });
+          try {
+            for (const v of sel) { const c = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "gasto", gasto_id: v.id, monto_aplicado: Number(v.amount), origen: "auto" }) }); nuevas.push(c[0].id); }
+            await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: M - sum <= 0 ? "conciliado" : "parcial", monto_conciliado: sum, categoria: "Gastos Oficina" }) });
+          } catch (e) { for (const id of nuevas) await rest(`conciliacion?id=eq.${id}`, { method: "DELETE" }).catch(() => null); tc.unidos.pop(); tc.error = String((e as Error).message || e); continue; }
+          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea", detail: { title: `Pago de la tarjeta ${fmt(M)} del ${dmy(m.fecha)}: ${sel.length} viaje${sel.length !== 1 ? "s" : ""} de Uber Business (${fmt(sum)}) ya registrados; falta repartir ${fmt(M - sum)} por rubro (sin volver a sumar Uber)`, mov: m.id, conciliacion: nuevas } }) }).catch(() => null);
         }
       }
     } catch (e) { tc.error = String((e as Error).message || e); }
     return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
+  } finally {
+    if (lockTomado) { try { await rest("procesos_lock?nombre=eq.conciliacion-auto", { method: "DELETE" }); } catch { /* vence solo a los 5 min */ } }
   }
 });
