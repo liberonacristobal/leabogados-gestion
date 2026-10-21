@@ -1383,7 +1383,8 @@ function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=nul
   const fondos=movs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const totFondos=fondos.reduce((a,e)=>a+(e.amount||0),0)
   const descuentan=movs.filter(e=>!(e.type==='gasto'&&e.no_descuenta_saldo))
-  const rendido=descuentan.filter(e=>e.type==='gasto'&&e.client_rendered_at).reduce((a,e)=>a+(e.amount||0),0)
+  // excludeRenderId: la rendición que se está editando no cuenta como «ya rendido» (si no, sus gastos se restarían dos veces).
+  const rendido=descuentan.filter(e=>e.type==='gasto'&&e.client_rendered_at&&!(excludeRenderId&&String(e.client_render_id)===String(excludeRenderId))).reduce((a,e)=>a+(e.amount||0),0)
   const {previas, rendidoAntes}=rendicionesPreviasDe(descuentan, excludeRenderId)
   return {fondos, totFondos, rendido, saldo:totFondos-rendido, previas, rendidoAntes}
 }
@@ -16819,8 +16820,8 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const esEdicion = !!editRend
   const isDesktop = useIsDesktop()
   // Lo que se está armando se guarda en el equipo a cada cambio: si se sale (Volver, otra pestaña, se cierra la app) se recupera al volver.
-  const wipKey = `fd_rend_wip_${client.id}`
-  const wip0 = useMemo(()=>{ if(editRend||preSel) return null; try{ const w=JSON.parse(localStorage.getItem(wipKey)||'null'); if(!w||Date.now()-(w.at||0)>14*86400000) return null
+  const wipKey = `fd_rend_wip_${client.id}__${currentUserName||'x'}`   // por persona: en un equipo compartido cada uno ve solo lo suyo
+  const wip0 = useMemo(()=>{ if(editRend||preSel) return null; try{ const w=JSON.parse(localStorage.getItem(wipKey)||localStorage.getItem(`fd_rend_wip_${client.id}`)||'null'); if(!w||Date.now()-(w.at||0)>14*86400000) return null
       const pend=new Set((expenses||[]).filter(e=>e.client_id===client.id&&e.type==='gasto'&&!e.client_rendered_at&&!e.deleted_at).map(e=>String(e.id)))
       const ids=(w.sel||[]).filter(id=>pend.has(String(id))); return ids.length?{...w,sel:ids}:null }catch(_){ return null } },[])   // eslint-disable-line react-hooks/exhaustive-deps
   const [selected, setSelected] = useState(()=> editRend ? new Set((expenses||[]).filter(e=>String(e.client_render_id)===String(editRend.id)).map(e=>e.id)) : new Set(wip0?wip0.sel:[]))
@@ -16858,7 +16859,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const setProyecto = p => setProyF(new Set(p?[p]:[]))
   const [proyOpen,setProyOpen] = useState(false)   // desplegable de proyectos abierto
   const [subproyecto,setSubproyecto] = useState(editRend?.subproject||wip0?.subproyecto||'')
-  useEffect(()=>{ if(esEdicion) return; try{ if(selected.size) localStorage.setItem(wipKey,JSON.stringify({sel:[...selected],proyecto,subproyecto,atencion,at:Date.now()})); else localStorage.removeItem(wipKey) }catch(_){} },[selected,proyecto,subproyecto,atencion])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ if(esEdicion) return; try{ localStorage.removeItem(`fd_rend_wip_${client.id}`); if(selected.size) localStorage.setItem(wipKey,JSON.stringify({sel:[...selected],proyecto,subproyecto,atencion,at:Date.now()})); else localStorage.removeItem(wipKey) }catch(_){} },[selected,proyecto,subproyecto,atencion])   // eslint-disable-line react-hooks/exhaustive-deps
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
   // Multi-RS: al elegir una RS se incluyen sus gastos Y los SIN razón social (ej. notaría sin RS) — no deben quedar fuera de la rendición.
   const inScope = e => singleRS ? true : (selEnt ? (e.entity_id===selEnt || !e.entity_id) : true)
@@ -16880,7 +16881,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   const [addSinFondo,setAddSinFondo] = useState(false)
   const enFondo = !!fondoSel && modoR==='fondo' && (esEdicion?!!editRend?.fondo_id:verModoFondo)
   const fondoObj = enFondo ? ((expenses||[]).find(e=>String(e.id)===String(fondoSel))||null) : null
-  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, null, null, enFondo?fondoSel:null)
+  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, esEdicion?editRend.id:null, null, enFondo?fondoSel:null)
   const fondosDisp = _fondoRend.totFondos
   const saldoActual = _fondoRend.saldo
   // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
@@ -17045,7 +17046,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   useEffect(()=>{ if(DEMO) return; let on=true; supabase.from('learnings').select('value').eq('kind','rendicion_modo').eq('key',String(client.id)).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(on&&['junto','sep1','sepN'].includes(data?.value)) setModo(data.value) },()=>{}); return ()=>{on=false} },[client.id])
   const elegirModo = m => { setModo(m); if(!DEMO) setLearningKV('rendicion_modo',String(client.id),m).catch(()=>{}) }
   const modoEf = puedeSeparar ? modo : 'junto'
-  const cifrasT = t => { const f=rendicionFondo(expenses, client.id, scopeEnt, null, t); const gs=gastosSel.filter(e=>keyT({...e,...proyPatch(e)})===t); const tg=gs.reduce((a,e)=>a+(e.amount||0),0); return {t, f, gs, tg, saldo:f.totFondos-f.rendido-tg} }
+  const cifrasT = t => { const f=rendicionFondo(expenses, client.id, scopeEnt, esEdicion?editRend.id:null, t); const gs=gastosSel.filter(e=>keyT({...e,...proyPatch(e)})===t); const tg=gs.reduce((a,e)=>a+(e.amount||0),0); return {t, f, gs, tg, saldo:f.totFondos-f.rendido-tg} }
   const porT = (multiT||porTrabajoUno) ? trabajosSel.map(cifrasT) : []
   const periodoDe = gs => { const _fs=gs.map(e=>e.date).filter(Boolean).sort(); const _ma=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const _di=d=>fmtFechaDMY(d); return _fs.length ? (_ma(_fs[0])===_ma(_fs[_fs.length-1]) ? _ma(_fs[0]) : `${_di(_fs[0])} – ${_di(_fs[_fs.length-1])}`) : new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
   // Una sola forma de crear la rendición (borrador, vista previa del correo, separadas): registra la fila, marca los gastos y la devuelve con sus gastos.
@@ -17120,7 +17121,7 @@ function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], 
   _autoBorr.current = (!esEdicion && gastosSel.length>0 && !faltaProyR && !saving && !(!enFondo&&multiT&&modo!=='junto'&&!puedeSeparar)) ? async()=>{
     try{ const vs=virtuales(); const hechas=[]; for(const v of vs) hechas.push(await v._crear())
       await agruparSep1(hechas)
-      try{ localStorage.removeItem(wipKey) }catch(_){}
+      try{ localStorage.removeItem(wipKey); localStorage.removeItem(`fd_rend_wip_${client.id}`) }catch(_){}
       logActividad('rendicion.borrador_guardado',{tabla:'rendiciones',id:hechas[0]?.id,detalle:{cliente:client.name,title:'Borrador guardado al salir de la rendición',monto:Math.round(hechas.reduce((a,x)=>a+(x.total||0),0))}})
     }catch(_){ /* queda la selección guardada en el equipo y se recupera al volver */ } } : null
   // Solo en un desmontaje real: el doble montaje de prueba de React (desarrollo) vuelve a montar antes del setTimeout.
@@ -19515,10 +19516,12 @@ function conteoBorradores({clients, expenses, rendiciones, sales, persona=null})
   return {prep:0, arm:nArm}
 }
 // Rendiciones en curso sin guardar en este equipo (la selección que RendicionModal guarda a cada cambio): se listan en Borradores para retomarlas.
-function rendicionesEnCurso(clients, expenses){ const out=[]
+function rendicionesEnCurso(clients, expenses, persona=null){ const out=[]
   try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(!k||!k.startsWith('fd_rend_wip_')) continue
       const w=JSON.parse(localStorage.getItem(k)||'null'); if(!w||Date.now()-(w.at||0)>14*86400000) continue
-      const cid=k.slice(12), c=(clients||[]).find(x=>String(x.id)===cid); if(!c||_esOfiCliR(c)) continue
+      const [cid,quien]=k.slice(12).split('__')   // formato antiguo (sin persona): se muestra a todos hasta que venza
+      if(quien&&persona&&quien!==persona) continue
+      const c=(clients||[]).find(x=>String(x.id)===cid); if(!c||_esOfiCliR(c)) continue
       const ids=new Set((w.sel||[]).map(String)), gs=gastosPorRendirCli(expenses,cid).filter(e=>ids.has(String(e.id))); if(!gs.length) continue
       out.push({c, n:gs.length, m:gs.reduce((a,e)=>a+(Number(e.amount)||0),0), at:w.at, proyecto:w.proyecto||null}) } }catch(_){}
   return out.sort((a,b)=>b.at-a.at) }
@@ -20801,7 +20804,7 @@ function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], exp
   const autorDef = autor && (autor==='Todos'||autores.includes(autor)) ? autor : (autores.includes(currentUserName) ? currentUserName : 'Todos')
   const borrItems = borrTodos.filter(x=>autorDef==='Todos'||x.autor===autorDef)
   // Sin guardar: lo que se estaba armando en este equipo (de quien entra) y no alcanzó a quedar como borrador.
-  const enCurso = (autorDef==='Todos'||autorDef===currentUserName) ? rendicionesEnCurso(clients,expenses).map(x=>({...x,abg:respDe[String(x.c.id)]||'Sin abogado'})).filter(x=>abgDef==='Todos'||x.abg===abgDef) : []
+  const enCurso = (autorDef==='Todos'||autorDef===currentUserName) ? rendicionesEnCurso(clients,expenses,currentUserName).map(x=>({...x,abg:respDe[String(x.c.id)]||'Sin abogado'})).filter(x=>abgDef==='Todos'||x.abg===abgDef) : []
   const base = verTerm ? term : vivos.filter(f=>f.grp===g)
   const abgs=['Todos',...[...new Set([...vivos.map(f=>f.abg),...(g==='envd'?enviadas.map(x=>x.abg):g==='env'?borrItems.map(x=>x.abg):[])])].filter(a=>a!=='Sin abogado').sort((a,b)=>a.localeCompare(b,'es')),...(vivos.some(f=>f.abg==='Sin abogado')?['Sin abogado']:[])]
   const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
@@ -37926,7 +37929,8 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
         const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id, tipo_destino:'factura', factura_id:fac.id, monto_aplicado:monto, origen:auto?'auto':'manual', marco_pago:true}).select().single()
         if(ic.error){ await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw ic.error } cr=ic.data; marcaQuien(cr.id)
         const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-        const {error:me}=await supabase.from('cartola_movimientos').update({estado, monto_conciliado:movAplic, cliente_id:mov.cliente_id||clientId}).eq('id',mov.id); if(me) throw me
+        const {error:me}=await supabase.from('cartola_movimientos').update({estado, monto_conciliado:movAplic, cliente_id:mov.cliente_id||clientId}).eq('id',mov.id)
+        if(me){ await supabase.from('conciliacion').delete().eq('id',cr.id); await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw me }   // nada a medias
         if(socio) await setLearningKV('socio_factura',fac.id,socio)
       }
       const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
