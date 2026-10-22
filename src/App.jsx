@@ -30320,8 +30320,8 @@ const CIERRE_ESTADOS = [
 // Exige el detalle de la gestión + estado; permite adjuntar documentos. El detalle y los adjuntos
 // viajan en el correo "Tarea terminada" que le llega a quien asignó la tarea. Se guarda en la tarea.
 function CierreTareaModal({task, clients=[], saving, onConfirm, onClose}){
-  const [estado,setEstado] = useState('Completada')
-  const [detalle,setDetalle] = useState('')
+  const [estado,setEstado] = useState(task.completion_status||'Completada')
+  const [detalle,setDetalle] = useState(task.completion_note||'')
   const [files,setFiles] = useState([])   // [{name,base64,mime,size}]
   const [err,setErr] = useState('')
   const client = clients.find(c=>c.id===task.client_id)
@@ -30394,6 +30394,12 @@ async function agendarTareaCalendar(t, clients=[]){
   }
 function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   const [comments,setComments] = useState([])
+  // Evidencia del agente (edge tareas-evidencia): lo que pide la tarea ya está en los registros. «No corresponde» no se vuelve a proponer.
+  const [evNo,setEvNo] = useState(false)
+  const ev = task?.evidencia && !task.evidencia.descartada && !evNo ? task.evidencia : null
+  const noCorresponde = async()=>{ const nv={...task.evidencia,descartada:true}
+    if(!DEMO){ const {error}=await supabase.from('tasks').update({evidencia:nv}).eq('id',task.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
+    task.evidencia=nv; setEvNo(true); logActividad('tareas.evidencia_descartada',{tabla:'tasks',id:task.id,detalle:{title:`«${task.title}»: no corresponde (${nv.texto})`}}) }
   const [links,setLinks] = useState([])
   useEffect(()=>{
     if(!task?.id) return
@@ -30445,6 +30451,16 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
           <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Gestión realizada{task.completion_status?` · ${task.completion_status}`:''}</div>
           <div style={{fontSize:13,color:C.text,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{task.completion_note}</div>
           {task.completed_by&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Reportó {task.completed_by}{task.completed_at?` · ${fmtDate(String(task.completed_at).slice(0,10))}`:''}</div>}
+        </div>
+      )}
+      {!terminada&&ev&&(
+        <div style={{background:C.greenBg,borderRadius:8,padding:'10px 12px',margin:'0 0 12px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Cumplida según los registros</div>
+          <div style={{fontSize:13,color:C.text,lineHeight:1.5}}>{ev.texto}</div>
+          <div style={{display:'flex',gap:8,marginTop:8,justifyContent:'flex-end'}}>
+            <button onClick={noCorresponde} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',padding:'6px 8px',cursor:'pointer'}}>No corresponde</button>
+            <button onClick={()=>onComplete({...task,completion_status:'Completada',completion_note:ev.texto})} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:9,padding:'6px 14px',cursor:'pointer'}}>Marcar cumplida</button>
+          </div>
         </div>
       )}
       {subs.length>0&&(
@@ -30597,6 +30613,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
               </div>
             )}
             {(t.delegated_to||[]).length>0&&<div style={{fontSize:9.5,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
+            {!done&&t.evidencia&&!t.evidencia.descartada&&<div style={{fontSize:9.5,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Cumplida según los registros</div>}
           </div>
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>

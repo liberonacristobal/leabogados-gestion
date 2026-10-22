@@ -14,6 +14,9 @@
 // CARGOS RECURRENTES: racha (rachaCargo: 3 cargos previos al mismo RUT con la misma clase de oficina y monto ±30%) → costo de
 // oficina igual; contadora (repartoContadora con el correo VALORES del mes anterior, al peso; PPM menos retenciones BHE del
 // mes). Nunca socios, equipo, proveedores ni clientes. body.backtestCargos = compara la regla con lo ya clasificado.
+// SALDO A FAVOR CARGADO A MANO: el abono que calza exacto y único (±10 días) con un anticipo del cliente sin respaldo del banco
+// (elegirAnticipo) se enlaza a ese anticipo en vez de dejarlo para crear otro (el doble de Gabriela). Si además calza con una
+// factura o un fondo, lo ve una persona.
 // TARJETA ↔ UBER: el pago de la tarjeta se une con los viajes de Uber Business ya registrados como gasto (lo demás, por rubro).
 // NOTARÍA ↔ BANCO: el cargo a un RUT de notaría ya conocido por el monto exacto y único de una liquidación (liqParaCargo, la misma
 // regla de Banco) se enlaza y sus OT quedan pagadas con la fecha del cargo. Sin RUT conocido o con monto distinto, lo ve una persona.
@@ -22,7 +25,7 @@
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
-import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
+import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, elegirAnticipo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 import { nombreGenerico } from "../_shared/contrapartes.js";
 import { liqParaCargo } from "../_shared/notariaReglas.js";
@@ -95,7 +98,7 @@ Deno.serve(async (req) => {
       (async () => { const out: any[] = []; for (let i = 0; i < 20; i++) { const r = await fetch(`${SB_URL}/rest/v1/rpc/conciliacion_pool_facturas?order=id.asc`, { method: "POST", headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` }, body: "{}" }); if (!r.ok) throw new Error(`conciliacion_pool_facturas: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out; })(),
       todas("clients?select=id,name,rut"),
       todas("client_entities?select=client_id,rut"),
-      todas("conciliacion?select=movimiento_id,tipo_destino,factura_id,gasto_id,monto_aplicado,created_at"),
+      todas("conciliacion?select=movimiento_id,tipo_destino,factura_id,gasto_id,anticipo_id,monto_aplicado,created_at"),
     ]);
     const movs = await todas(`cartola_movimientos?select=id,cuenta,fecha,monto,monto_conciliado,cliente_id,rut_contraparte,nombre_contraparte,descripcion,detalle_aviso,categoria,rol_cuenta,n_operacion,estado,es_interno&tipo=eq.abono&es_interno=eq.false&fecha=gte.${desde}&order=fecha.asc`);
     const cargos = await todas(`cartola_movimientos?select=id,fecha,monto,rut_contraparte,estado&tipo=eq.cargo&estado=eq.pendiente&fecha=gte.${new Date(Date.now() - (dias + 120) * 86400000).toISOString().slice(0, 10)}`);
@@ -105,6 +108,7 @@ Deno.serve(async (req) => {
     const cids = [...new Set(movs.map((m) => m.cliente_id).filter(Boolean))];
     const fondosAll = cids.length ? await todas(`expenses?select=id,client_id,amount,date,concept,project,created_at&type=eq.fondo&deleted_at=is.null&apertura_id=is.null&amount=gt.0&client_id=in.${enLista(cids)}`) : [];
     if (sim) for (let i = fondosAll.length - 1; i >= 0; i--) if (sim.sinFondos.has(fondosAll[i].id)) fondosAll.splice(i, 1);
+    const anticiposAll = cids.length ? await todas(`anticipos?select=id,client_id,monto,fecha,nota,estado,created_at&monto=gt.0&client_id=in.${enLista(cids)}`) : [];
     const nombre: Record<string, string> = Object.fromEntries(clients.map((c) => [c.id, c.name]));
     const rutsCli: Record<string, Set<string>> = {};
     const addR = (cid: string, r: string) => { const n = normRut(r); if (!n || !cid) return; (rutsCli[cid] = rutsCli[cid] || new Set()).add(n); };
@@ -121,7 +125,7 @@ Deno.serve(async (req) => {
     // Lo aplicado y los fondos ligados ANTES de un corte del banco (fecha|id). Sin corte = todo lo que hay hoy.
     const estadoAntes = (k: string | null) => {
       const apl: Record<string, number> = {}, ligados = new Set<string>();
-      concAll.forEach((c) => { if (k) { const fm = fechaMov[c.movimiento_id]; if (fm && !(fm < k)) return; } if (c.tipo_destino === "factura" && c.factura_id) apl[c.factura_id] = (apl[c.factura_id] || 0) + Number(c.monto_aplicado || 0); if (c.tipo_destino === "fondo" && c.gasto_id) ligados.add(c.gasto_id); });
+      concAll.forEach((c) => { if (k) { const fm = fechaMov[c.movimiento_id]; if (fm && !(fm < k)) return; } if (c.tipo_destino === "factura" && c.factura_id) apl[c.factura_id] = (apl[c.factura_id] || 0) + Number(c.monto_aplicado || 0); if (c.tipo_destino === "fondo" && c.gasto_id) ligados.add(c.gasto_id); if (c.tipo_destino === "anticipo" && c.anticipo_id) ligados.add(c.anticipo_id); });
       return { apl, ligados };
     };
     const estadoEn = (T: string | null) => estadoAntes(T ? corte : null);
@@ -171,12 +175,15 @@ Deno.serve(async (req) => {
       const cb = honorarios && !f ? elegirCombo(mov, aPool(delCliente)) : null;
       const fondos = fondosAll.filter((x) => x.client_id === mov.cliente_id && !ligados.has(x.id) && !used.has(x.id) && (!T || String(x.created_at) < T));
       const fo = elegirFondo(mov, fondos, texto);
+      const an = elegirAnticipo(mov, anticiposAll.filter((x) => x.client_id === mov.cliente_id && !ligados.has(x.id) && !used.has(x.id) && (!T || String(x.created_at) < T)));
       const devol = cargos.some((c) => pr && normRut(c.rut_contraparte) === pr && Number(c.monto) <= Number(mov.monto) && String(c.fecha) <= String(fecha));
       if (devol) return { tipo: "duda", motivo: "Puede ser la devolución de un pago nuestro" };
       if ((f || cb) && fo) return { tipo: "duda", motivo: "Calza con una factura y con un fondo" };
+      if (an && (f || cb || fo)) return { tipo: "duda", motivo: "Calza con un saldo a favor cargado a mano y con otro destino" };
       if (f) return { tipo: "factura", facturas: [f], motivo: `Factura N° ${folioN(f.invoice_no)}` };
       if (cb) return { tipo: "factura", facturas: cb, motivo: `Facturas N° ${cb.map((b: { invoice_no: string }) => folioN(b.invoice_no)).join(", ")}` };
       if (fo) return { tipo: "fondo", fondo: fo, motivo: `Fondo «${fo.concept || "Provisión de fondos"}»` };
+      if (an) return { tipo: "anticipo", anticipo: an, motivo: `Saldo a favor del ${dmy(an.fecha)} cargado a mano` };
       return { tipo: "ninguno" };
     };
     // deno-lint-ignore no-explicit-any
@@ -198,16 +205,16 @@ Deno.serve(async (req) => {
       // Abonos ya conciliados a factura o fondo: ¿qué habría hecho la regla en ese momento, con lo que existía entonces?
       const res = { igual: 0, distinto: 0, se_abstiene: 0, duda: 0 }; const distintos: unknown[] = [];
       for (const m of movs.filter(elegible)) {
-        const cs = (concPorMov[m.id] || []).filter((c) => ["factura", "fondo"].includes(c.tipo_destino)); if (!cs.length) continue;
-        if ((concPorMov[m.id] || []).some((c) => !["factura", "fondo"].includes(c.tipo_destino))) continue;   // mezcla con otros destinos: no aplica
+        const cs = (concPorMov[m.id] || []).filter((c) => ["factura", "fondo", "anticipo"].includes(c.tipo_destino)); if (!cs.length) continue;
+        if ((concPorMov[m.id] || []).some((c) => !["factura", "fondo", "anticipo"].includes(c.tipo_destino))) continue;   // mezcla con otros destinos: no aplica
         const T = cs.map((c) => String(c.created_at)).sort()[0];
         corte = `${m.fecha}|${m.id}`;
         const d = decidir(m, T, new Set());
-        const real = cs.map((c) => c.factura_id || c.gasto_id).sort().join(",");
+        const real = cs.map((c) => c.factura_id || c.gasto_id || c.anticipo_id).sort().join(",");
         if (d.tipo === "ninguno") { res.se_abstiene++; continue; }
         if (d.tipo === "duda") { res.duda++; continue; }
         // deno-lint-ignore no-explicit-any
-        const prop = (d.tipo === "fondo" ? [d.fondo.id] : (d.facturas as any[]).map((b) => b.id)).sort().join(",");
+        const prop = (d.tipo === "fondo" ? [d.fondo.id] : d.tipo === "anticipo" ? [d.anticipo.id] : (d.facturas as any[]).map((b) => b.id)).sort().join(",");
         if (prop === real) res.igual++;
         else { res.distinto++; distintos.push({ fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], regla: d.motivo, real: cs.map((c) => `${c.tipo_destino}:${c.factura_id ? folioN(pool.find((b: { id: string }) => b.id === c.factura_id)?.invoice_no) : c.gasto_id}`).join(" + ") }); }
       }
@@ -222,7 +229,7 @@ Deno.serve(async (req) => {
       const d = decidir(m, null, used);
       if (d.tipo === "ninguno") continue;
       if (d.tipo === "duda") { dudas.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], motivo: d.motivo }); continue; }
-      const sel = d.tipo === "fondo" ? [d.fondo.id] : (d.facturas as { id: string }[]).map((b) => b.id); sel.forEach((x) => used.add(x));
+      const sel = d.tipo === "fondo" ? [d.fondo.id] : d.tipo === "anticipo" ? [d.anticipo.id] : (d.facturas as { id: string }[]).map((b) => b.id); sel.forEach((x) => used.add(x));
       hechos.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], destino: d.motivo });
       if (dryRun) continue;
       const nuevas: string[] = [];
@@ -232,6 +239,9 @@ Deno.serve(async (req) => {
         let movApl = 0; const now = new Date().toISOString();
         if (d.tipo === "fondo") {
           const ins = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "fondo", gasto_id: d.fondo.id, monto_aplicado: m.monto, origen: "auto" }) });
+          nuevas.push(ins[0].id); movApl = Number(m.monto);
+        } else if (d.tipo === "anticipo") {
+          const ins = await rest("conciliacion", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id, tipo_destino: "anticipo", anticipo_id: d.anticipo.id, monto_aplicado: m.monto, origen: "auto" }) });
           nuevas.push(ins[0].id); movApl = Number(m.monto);
         } else {
           // Igual que reconciliar/reconciliarCombo de la app: aplica el saldo, marca la factura pagada si queda cubierta.
@@ -258,7 +268,7 @@ Deno.serve(async (req) => {
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.conciliado_auto", table_name: "conciliacion", record_id: nuevas[0], estudio_id: "lea",
           detail: { title: `Conciliado automáticamente: ${nombre[m.cliente_id] || m.nombre_contraparte || ""} ${fmt(m.monto)} del ${dmy(m.fecha)} → ${d.motivo}`, mov: m.id, conciliacion: nuevas, regla: d.motivo, aviso: m.detalle_aviso || null } }) }).catch(() => null);
         const av = await rest(`avisos_banco?select=gmail_id&movimiento_id=eq.${m.id}`).catch(() => []);
-        for (const a of av || []) await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: `Conciliado automáticamente con ${d.tipo === "fondo" ? "el " + d.motivo.charAt(0).toLowerCase() + d.motivo.slice(1) : "la " + d.motivo}`, propuesta: { movimiento_id: m.id } }) }).catch(() => null);
+        for (const a of av || []) await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(a.gmail_id)}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: `Conciliado automáticamente con ${d.tipo === "fondo" || d.tipo === "anticipo" ? "el " + d.motivo.charAt(0).toLowerCase() + d.motivo.slice(1) : "la " + d.motivo}`, propuesta: { movimiento_id: m.id } }) }).catch(() => null);
       } catch (e) {
         for (const id of nuevas) { try { await rest(`conciliacion?id=eq.${id}`, { method: "DELETE" }); } catch { /* best-effort */ } }
         for (const p of prevBill) { try { if (p.antes) await rest(`billing?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(p.antes) }); } catch { /* best-effort */ } }
