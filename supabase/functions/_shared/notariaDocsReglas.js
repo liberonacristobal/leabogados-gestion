@@ -17,6 +17,14 @@ export function leerCorreoNotaria(texto) {
   return { tipo: m[1].trim(), repertorio: rep || null, fecha: `${m[5]}-${m[4]}-${m[3]}`, codigo: c ? c[1] : null }
 }
 
+// ¿El correo lo firma la notaría? La firma (p. ej. «Mildred Gutiérrez», «Silvana Delgado») debe estar en el texto PROPIO del
+// correo, antes de lo citado («De:», «El … escribió:»), para que un tercero que responde citando a la notaría no cuente.
+export function firmadoPorNotaria(texto, firmas) {
+  const t = String(texto || ''); const corte = t.search(/^\s*(>|De:|From:|-----\s*Original|El .{0,120}escribi[oó]:|On .{0,120}wrote:)/mi)
+  const propio = norm(corte >= 0 ? t.slice(0, corte) : t)
+  return (firmas || []).some(f => { const n = norm(f).trim(); return n.length >= 5 && propio.includes(n) })
+}
+
 // OT de la liquidación que corresponde al documento: misma fecha y el tipo de documento contenido en la glosa de la OT
 // (al menos 2/3 de sus palabras, y todas si son dos o menos). Varias el mismo día (cinco prendas «sobre vehículos», «sobre
 // acciones»…) → la que calza más palabras, si es una sola. Sin OT ese día → a ±3 días solo con TODAS las palabras (dos o más) y única.
@@ -34,9 +42,14 @@ export function otParaDocumento(doc, ots) {
   return cerca.length === 1 ? cerca[0] : null
 }
 
-// Nombre ordenado del archivo en Drive: fecha ISO (ordena por fecha en la carpeta), tipo y repertorio.
-export function nombreArchivoNotaria(doc, ext = 'pdf') {
-  const tipo = String(doc.tipo || 'Documento').toLowerCase().replace(/\s+/g, ' ').trim()
+// Nombre del archivo en Drive: la razón social primero (el usuario lo pidió así), luego el tipo, la fecha y el repertorio.
+// «GESMAQ SPA» → «GESMAQ SpA». Sin tipo (borrador, matriz): la razón social y el nombre original, salvo que ya la traiga.
+export const rsBonita = rs => String(rs || '').replace(/\s+/g, ' ').trim().replace(/\bSPA\b/g, 'SpA')
+export function nombreArchivoNotaria(doc, ext = 'pdf', rs = '', original = '') {
+  const R = rsBonita(rs)
+  if (!doc?.tipo) { const base = String(original || 'Documento').replace(/\.[a-z0-9]+$/i, ''); const ya = R && norm(base).includes(norm(R)); return `${R && !ya ? `${R} - ` : ''}${base}.${ext}`.replace(/[\\/:*?"<>|]/g, '-') }
+  const tipo = String(doc.tipo).toLowerCase().replace(/\s+/g, ' ').trim()
   const t = tipo.charAt(0).toUpperCase() + tipo.slice(1)
-  return `${doc.fecha} ${t}${doc.repertorio ? ` - Rep ${doc.repertorio}` : ''}.${ext}`.replace(/[\\/:*?"<>|]/g, '-')
+  const [y, m, d] = String(doc.fecha || '').split('-')
+  return `${R ? `${R} - ` : ''}${t}${y ? ` - ${d}-${m}-${y}` : ''}${doc.repertorio ? ` - Rep ${doc.repertorio}` : ''}.${ext}`.replace(/[\\/:*?"<>|]/g, '-')
 }
