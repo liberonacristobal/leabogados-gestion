@@ -3144,7 +3144,7 @@ function NovedadesView({items, isDesktop, isAdmin, onOpen, onBack, origen, onEdi
   </div>)
 }
 
-function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioActive,onNovedades,novN=0}){
+function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioActive}){
   const sp = {fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'}
   const I = {
     grid:<svg width="18" height="18" viewBox="0 0 24 24" {...sp}><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>,
@@ -3200,7 +3200,6 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
         {s.items.map(item)}
       </div>))}
       <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:7,paddingTop:10}}>
-        {onNovedades&&<button onClick={onNovedades} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 11px',borderRadius:8,border:'none',background:tab==='novedades'?'rgba(255,255,255,.12)':'transparent',color:novN||tab==='novedades'?'#fff':'#a8c2ca',fontSize:13,fontWeight:500,cursor:'pointer',textAlign:'left'}}><span style={{display:'flex',fontSize:17}}><Gl n='sparkle' w={1.8}/></span>Novedades{novN>0&&<span style={{marginLeft:'auto',background:C.normal,color:'#fff',fontSize:10,fontWeight:700,borderRadius:20,padding:'1px 7px'}}>{novN}</span>}</button>}
         {/* Copiloto: la IA del estudio → protagonista al pie (full-width, destacado). Buscar queda secundario. */}
         <button onClick={onCopiloto} title='Counsel AI' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'10px',borderRadius:10,border:'1px solid rgba(159,225,203,.35)',background:'rgba(159,225,203,.12)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}><svg width="16" height="16" viewBox="0 0 24 24" fill="#9FE1CB"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Counsel AI</button>
         <button onClick={onPalette} title='Buscar (⌘K)' style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'7px',borderRadius:8,border:'1px solid rgba(255,255,255,.14)',background:'transparent',color:'#a8c2ca',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}><svg width="13" height="13" viewBox="0 0 24 24" {...sp}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Buscar</button>
@@ -43826,7 +43825,7 @@ export default function App() {
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
         )}
-        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen} onNovedades={verNovedades} novN={novNuevas.length}/>
+        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen}/>
         <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
