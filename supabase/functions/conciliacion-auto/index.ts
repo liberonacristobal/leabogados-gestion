@@ -20,6 +20,7 @@
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
+import { nombreGenerico } from "../_shared/contrapartes.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -67,6 +68,22 @@ Deno.serve(async (req) => {
     const dias = Math.min(400, Number(body.dias) || (backtest ? 150 : 60));
     const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
 
+    // Nombre real del pagador por RUT: si el banco trae un nombre genérico de su servicio de pagos («NOMINA MISMO DIA PROVEEDORES»)
+    // o ninguno, se toma el de la razón social, el cliente, el proveedor, la factura de compra del SII u otro movimiento del mismo RUT.
+    const nombres = { completados: [] as unknown[], error: null as string | null };
+    try {
+      const sinNombre = (await todas(`cartola_movimientos?select=id,rut_contraparte,nombre_contraparte&rut_contraparte=not.is.null&fecha=gte.${desde}`)).filter((m) => normRut(m.rut_contraparte) && nombreGenerico(m.nombre_contraparte));
+      if (sinNombre.length) {
+        const [en, cl, pv, sc, otros] = await Promise.all([todas("client_entities?select=rut,name"), todas("clients?select=rut,name"), todas("proveedores?select=rut,nombre"), todas("sii_compras_docs?select=emisor_rut,emisor_name"), todas(`cartola_movimientos?select=rut_contraparte,nombre_contraparte&rut_contraparte=in.(${[...new Set(sinNombre.map((m) => `"${m.rut_contraparte}"`))].join(",")})`)]);
+        const fuente: Record<string, string> = {};
+        const add = (r: string, n: string) => { const k = normRut(r); if (k && n && !nombreGenerico(n) && !fuente[k]) fuente[k] = String(n).trim(); };
+        en.forEach((x) => add(x.rut, x.name)); cl.forEach((x) => add(x.rut, x.name)); pv.forEach((x) => add(x.rut, x.nombre)); sc.forEach((x) => add(x.emisor_rut, x.emisor_name)); otros.forEach((x) => add(x.rut_contraparte, x.nombre_contraparte));
+        for (const m of sinNombre) { const n = fuente[normRut(m.rut_contraparte)]; if (!n) continue;
+          nombres.completados.push({ mov: m.id, rut: m.rut_contraparte, antes: m.nombre_contraparte, nombre: n });
+          if (!dryRun) await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ nombre_contraparte: n }) }); }
+        if (!dryRun && nombres.completados.length) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.nombre_por_rut", table_name: "cartola_movimientos", estudio_id: "lea", detail: { title: `${nombres.completados.length} movimiento${nombres.completados.length !== 1 ? "s" : ""} con el nombre real del pagador (por RUT)`, cambios: nombres.completados } }) }).catch(() => null);
+      }
+    } catch (e) { nombres.error = String((e as Error).message || e); }
     const [pool, clients, ents, concAll] = await Promise.all([
       // El pool se pide por páginas (PostgREST corta en 1.000 filas): con más facturas abiertas, una «única» podría no serlo.
       (async () => { const out: any[] = []; for (let i = 0; i < 20; i++) { const r = await fetch(`${SB_URL}/rest/v1/rpc/conciliacion_pool_facturas?order=id.asc`, { method: "POST", headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` }, body: "{}" }); if (!r.ok) throw new Error(`conciliacion_pool_facturas: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out; })(),
@@ -495,7 +512,7 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) { tc.error = String((e as Error).message || e); }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc });
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, nombres_por_rut: nombres });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   } finally {

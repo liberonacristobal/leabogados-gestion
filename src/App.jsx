@@ -17,6 +17,7 @@ import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
+import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
@@ -37036,12 +37037,12 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   const nombreIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>idx.push({cid:c.id,t:_toksNom(c.name)}))
     const seen=new Set(); billing.forEach(f=>{ if(f.receptor_name&&f.client_id){ const k=f.client_id+'|'+f.receptor_name; if(!seen.has(k)){ seen.add(k); idx.push({cid:f.client_id,t:_toksNom(f.receptor_name)}) } } })
-    aliases.forEach(a=>{ if(a.nombre_pagador&&a.cliente_id){ const tk=_toksNom(a.nombre_pagador); if(tk.length) idx.push({cid:a.cliente_id,t:tk,rut:crNormRut(a.rut_pagador)||null}) } })
+    aliases.forEach(a=>{ if(a.nombre_pagador&&a.cliente_id&&!nombreGenerico(a.nombre_pagador)){ const tk=_toksNom(a.nombre_pagador); if(tk.length) idx.push({cid:a.cliente_id,t:tk,rut:crNormRut(a.rut_pagador)||null}) } })
     return idx },[clients,billing,aliases])
   const sugerencias = useMemo(()=>{ const out={}
     // Solo abonos aún por conciliar (uno ya conciliado o clasificado no se vuelve a sugerir). Con RUT en el depósito, un nombre
     // aprendido de OTRO RUT no cuenta: «PROVEEDORES MISMO DIA» es el servicio del banco, no el pagador (Tarragona vs Spinex, 24-07).
-    movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte&&mv.estado==='pendiente'&&!(Number(mv.monto_conciliado)>0)&&!mv.categoria){
+    movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte&&!nombreGenerico(mv.nombre_contraparte)&&mv.estado==='pendiente'&&!(Number(mv.monto_conciliado)>0)&&!mv.categoria){
       const nt=_toksNom(mv.nombre_contraparte); if(!nt.length) return
       const rutMv=crNormRut(mv.rut_contraparte)
       const hits=new Set()
@@ -37258,7 +37259,9 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     if(!clientId) return
     // override (sugerencia aceptada sin abrir el editor) usa el RUT/nombre del propio movimiento, no el formulario.
     const rut = override ? (mov.rut_contraparte||null) : ((editForm.rut||'').trim() || mov.rut_contraparte || null)
-    const nombre = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
+    const nombre0 = override ? (mov.nombre_contraparte||null) : ((editForm.nombre||'').trim() || mov.nombre_contraparte || null)
+    // Nombre genérico del banco («NOMINA MISMO DIA PROVEEDORES»): no se aprende; se usa el de la razón social de ese RUT o el del cliente.
+    const nombre = nombreGenerico(nombre0) ? ((rut&&(clientEntities||[]).find(e=>crNormRut(e.rut)===crNormRut(rut))?.name) || cmap[clientId] || null) : nombre0
     if(rut && esRutPropio(rut)){ appAlert('Ese es el RUT propio de la oficina: es un movimiento interno, no se asocia a un cliente.'); return }
     // Seguridad del alias: si este RUT ya está mapeado a OTRO cliente, avisar y pedir confirmación (nunca cambiar en silencio).
     if(rut){ const prev=aliases.find(a=>crNormRut(a.rut_pagador)===crNormRut(rut))
