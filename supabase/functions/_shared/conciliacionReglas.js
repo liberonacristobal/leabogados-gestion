@@ -93,6 +93,15 @@ export function elegirFondo(mov, fondos, texto) {
   return cs.every(f => firma(f) === firma(cs[0])) ? cs[0] : null
 }
 
+// Saldo a favor (anticipo) cargado a mano, sin respaldo del banco, que espera su depósito: mismo monto al peso, a ±10 días y ÚNICO.
+// Fuera: el ya marcado ·revisado (se revisó que no tiene depósito propio) y el creado desde una conciliación.
+export function elegirAnticipo(mov, anticipos) {
+  const M = Math.round(Number(mov.monto) || 0), t0 = mov.fecha ? _t(mov.fecha) : null
+  const cs = (anticipos || []).filter(a => Math.round(Number(a.monto) || 0) === M && M > 0 && !/·revisado/.test(a.nota || '') && !/conciliaci[oó]n/i.test(a.nota || '')
+    && (!t0 || !a.fecha || Math.abs(_t(a.fecha) - t0) <= 10 * 86400000))
+  return cs.length === 1 ? cs[0] : null
+}
+
 // Trabajo del cliente que nombra un texto (mensaje del aviso, asunto de la solicitud): «constitución sociedad osorno» →
 // Osorno; «viáticos villa rica» → Villarica. Nombres del mismo trabajo (la venta «Puesta en marcha Osorno» y el proyecto
 // «OSORNO» de los gastos: un nombre contiene al otro) cuentan como uno y se devuelve el primero de la lista (la venta, que
