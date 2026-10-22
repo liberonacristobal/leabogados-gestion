@@ -8,3 +8,6 @@ dist
 .env.*.local
 *.bak*
 .claude/launch.json
+
+# Renders con datos de clientes (correos, nombres): no van al repositorio
+docs/render-*.html
