@@ -18,6 +18,10 @@ import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
+import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
+import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
+import * as SD from '../supabase/functions/_shared/saludDatos.js'
+const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
@@ -8756,7 +8760,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   useEffect(()=>{ setRows(compras) },[compras])
   const [cargos,setCargos]=useState([])
   const [q,setQ]=useState(''); const [ord,setOrd]=useState('anio'); const [yr,setYr]=useState(''); const [busy,setBusy]=useState(null)
-  useEffect(()=>{ if(DEMO){ setCargos([]); return } let v=true; supabase.from('cartola_movimientos').select('id,rut_contraparte,monto,fecha,nombre_contraparte').eq('tipo','cargo').then(({data})=>{ if(v&&data) setCargos(data) },()=>{}); return ()=>{v=false} },[])
+  useEffect(()=>{ if(DEMO){ setCargos([]); return } let v=true; selectAll(()=>supabase.from('cartola_movimientos').select('id,tipo,rut_contraparte,monto,fecha,nombre_contraparte,estado,es_interno').eq('tipo','cargo').order('id')).then(({data})=>{ if(v&&data) setCargos(data) },()=>{}); return ()=>{v=false} },[])
   const nR=r=>String(r||'').replace(/[.\s-]/g,'').toLowerCase()
   const dmy=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
   const tipoLbl=t=>({33:'Afecta',34:'Exenta',56:'Nota débito',61:'Nota crédito'})[Number(t)]||('DTE '+t)
@@ -8769,8 +8773,9 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   const neto=fil.reduce((a,d)=>a+sign(d)*(Number(d.neto)||0),0)
   const nAfecta=fil.filter(d=>Number(d.tipo_dte)===33).length
   const sinProv=fil.filter(d=>!d.proveedor_id).length
-  const cargoByKey={}; cargos.forEach(m=>{ const k=nR(m.rut_contraparte)+'|'+Math.abs(Number(m.monto)||0); if(nR(m.rut_contraparte)&&!cargoByKey[k]) cargoByKey[k]=m })
-  const pagoDe=d=>d.movimiento_id?{enlazado:true}:(cargoByKey[nR(d.emisor_rut)+'|'+Math.abs(Number(d.monto)||0)]||null)
+  // Pago del banco de cada factura: la misma regla exacta y única que aplica conciliacion-auto (_shared/comprasReglas.js).
+  const calceDe={}; calcesCompraPago(rows,cargos).forEach(({d,m})=>{ calceDe[d.id]=m })
+  const pagoDe=d=>d.movimiento_id?{enlazado:true}:(calceDe[d.id]||null)
   const calzan=fil.filter(d=>!d.movimiento_id&&pagoDe(d)).length
   const groups={}; fil.forEach(d=>{ const k=nR(d.emisor_rut)||d.emisor_name||String(d.id); const g=groups[k]||(groups[k]={rut:d.emisor_rut,name:d.emisor_name,docs:[],neto:0,iva:0,hasProv:false}); g.docs.push(d); g.neto+=sign(d)*(Number(d.neto)||0); g.iva+=sign(d)*(Number(d.iva)||0); if(d.proveedor_id)g.hasProv=true })
   let gs=Object.values(groups); gs.forEach(g=>g.docs.sort((a,b)=>String(b.fecha_emision||'').localeCompare(String(a.fecha_emision||''))))
@@ -10586,24 +10591,17 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const [ahDone,setAhDone]=useState(()=>new Set()) // honorarios ya alineados en esta sesión
   const cName=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'—'
   const isDesk=useIsDesktop()   // hook ANTES de cualquier return temprano
+  // Última corrida del auditor nocturno (edge auditor-datos), que revisa con estas mismas reglas cada noche.
+  const [audAt,setAudAt]=useState(null)
+  useEffect(()=>{ if(DEMO) return; supabase.from('auditoria_hallazgos').select('ultima_vez').order('ultima_vez',{ascending:false}).limit(1).then(({data})=>{ if(data?.[0]) setAudAt(data[0].ultima_vez) },()=>{}) },[])
+  const audLinea=audAt&&<div style={{fontSize:11,color:C.textSoft,margin:'0 2px 8px'}}>Revisión automática cada noche · última: {fechaHoraCL(audAt)}</div>
   // Banco: plata contada dos veces o de más. Lee la cartola y la caja chica enlazada (no vienen en props).
   const [bkMovs,setBkMovs]=useState([]); const [bkPc,setBkPc]=useState([])
   useEffect(()=>{ if(DEMO) return; let v=true
     selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,tipo,nombre_contraparte,descripcion,estado,monto_conciliado,es_interno').order('id')).then(({data})=>{ if(v&&data) setBkMovs(data) },()=>{})
     supabase.from('petty_cash').select('movimiento_id,amount').not('movimiento_id','is',null).then(({data})=>{ if(v&&data) setBkPc(data) },()=>{})
     return ()=>{v=false} },[])
-  const bancoChk=useMemo(()=>{
-    const concBy={}, tipoBy={}; (conciliacion||[]).forEach(c=>{ const k=String(c.movimiento_id); concBy[k]=(concBy[k]||0)+(Number(c.monto_aplicado)||0); (tipoBy[k]=tipoBy[k]||new Set()).add(c.tipo_destino) })
-    const pcBy={}; (bkPc||[]).forEach(p=>{ const k=String(p.movimiento_id); pcBy[k]=(pcBy[k]||0)+Math.abs(Number(p.amount)||0) })
-    const tercBy={}; (terceros||[]).forEach(t=>{ if(t.movimiento_id) tercBy[String(t.movimiento_id)]=true })
-    const vivos=(bkMovs||[]).filter(m=>!m.es_interno&&m.estado!=='interno')
-    const sobre=vivos.filter(m=>(concBy[String(m.id)]||0)>(Number(m.monto)||0)+1)
-    const doble=vivos.filter(m=>tercBy[String(m.id)]&&tipoBy[String(m.id)]?.has('gasto'))
-    // Una entrega de caja y la conciliación de sus gastos pueden describir la MISMA transferencia → se toma el mayor, no la suma.
-    const atras=vivos.filter(m=>Math.min(Number(m.monto)||0,Math.max(concBy[String(m.id)]||0,pcBy[String(m.id)]||0))>(Number(m.monto_conciliado)||0)+1)
-    const sinBanco=(terceros||[]).filter(t=>t.estado==='pagado'&&!t.movimiento_id&&String(t.pagado_at||'')>='2026-06-01')
-    return {sobre,doble,atras,sinBanco,concBy}
-  },[bkMovs,bkPc,conciliacion,terceros])
+  const bancoChk=useMemo(()=>SD.bancoChk(bkMovs,conciliacion,bkPc,terceros),[bkMovs,bkPc,conciliacion,terceros])
   const [fixing,setFixing]=useState(null)   // id de la factura cuyo vencimiento se está corrigiendo
   const [ctBusy,setCtBusy]=useState(null)   // sale_id de la cuota↔tramo que se está resolviendo
   const [ctDone,setCtDone]=useState(()=>new Set())  // sale_id ya resueltos/ignorados en esta sesión
@@ -10612,55 +10610,23 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const [glPick,setGlPick]=useState({})     // key → categoría elegida en la compuerta
   const [glBusy,setGlBusy]=useState(null)
   useEffect(()=>{ if(DEMO){ setCoRows(demoData.learnings_co||[]); return } supabase.from('learnings').select('key,value').eq('kind','costo_oficina').then(({data})=>{ if(data) setCoRows(data) },()=>{}) },[])
-  const rutMulti=useMemo(()=>{ const m={}; (clientEntities||[]).forEach(e=>{ const r=crNormRut(e.rut); if(!r) return; if(!m[r]) m[r]={ids:new Set(),rs:e.name}; m[r].ids.add(String(e.client_id)) }); return Object.entries(m).filter(([r,v])=>v.ids.size>1).map(([r,v])=>({rut:r, rs:v.rs, clientIds:[...v.ids]})) },[clientEntities])
-  const folioDup=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||!b.invoice_no) return; const f=folioN(b.invoice_no); if(!/^\d+$/.test(f)) return; (m[f]=m[f]||[]).push(b) }); return Object.entries(m).filter(([f,a])=>a.length>1).map(([f,a])=>({folio:f, rows:a})) },[billing])
+  const rutMulti=useMemo(()=>SD.rutMulti(clientEntities),[clientEntities])
+  const folioDup=useMemo(()=>SD.folioDup(billing),[billing])
   // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
-  const facDup=useMemo(()=>{ const norm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' '); const m={}
-    ;(billing||[]).forEach(b=>{ if(b.deleted_at||b.status==='Anulada'||['reembolso','nota_credito'].includes(b.billing_type||'')) return
-      const rut=crNormRut(b.receptor_rut); const ident=rut||norm(b.receptor_name)||('cli:'+b.client_id)
-      const key=ident+'|'+norm(b.concept)+'|'+Math.round(b.amount||0); (m[key]=m[key]||[]).push(b) })
-    return Object.values(m).filter(a=>a.length>1).map(a=>({ rut:a[0].receptor_rut||null, rs:a[0].receptor_name||null, cid:a[0].client_id, concept:a[0].concept, amount:a[0].amount, rows:a }))
-  },[billing])
-  const montoNeDte=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.dte_xml&&b.amount!=null).map(b=>({b, dte:dteMontoTotal(b.dte_xml)})).filter(x=>x.dte!=null&&Math.round(x.dte)!==Math.round(x.b.amount)),[billing])
-  const ventasDup=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)) return; const k=`${s.client_id}|${s.amount_uf||s.amount_clp||0}|${s.year}|${s.month}`; (m[k]=m[k]||[]).push(s) }); return Object.values(m).filter(a=>a.length>1) },[sales])
+  const facDup=useMemo(()=>SD.facDup(billing),[billing])
+  const montoNeDte=useMemo(()=>SD.montoNeDte(billing),[billing])
+  const ventasDup=useMemo(()=>SD.ventasDup(sales),[sales])
   // Doble conteo cuota↔tramo: venta NO recurrente donde la suma de cuotas Programadas + facturas Emitidas SUPERA la venta → al emitir el tramo la programada no se redujo, se cuenta dos veces. Excluye recurrentes (mensuales), donde prog+emit>venta es normal (meses futuros+pasados).
-  const cuotaTramo=useMemo(()=>{ const bySale={}; (billing||[]).forEach(b=>{ if(b.deleted_at||!b.sale_id) return; (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
-    const out=[]
-    ;(sales||[]).forEach(s=>{ if(s.deleted_at||!['Activo','Terminado'].includes(s.status)||s.cobro_type==='mensual') return
-      const bs=bySale[String(s.id)]||[]; if(!bs.length) return
-      const prog=bs.filter(b=>b.status==='Programada').reduce((a,b)=>a+montoFactura(b),0)
-      const emit=bs.filter(b=>b.invoice_no&&b.status!=='Anulada').reduce((a,b)=>a+montoFactura(b),0)
-      if(prog<=0||emit<=0) return
-      const venta=Math.round((Number(s.amount_uf)||0)*(Number(s.uf_value)||40000)+(Number(s.amount_clp)||0))
-      const exceso=prog+emit-venta
-      if(venta>0 && exceso>venta*0.08 && exceso>100000) out.push({s, venta, prog, emit, exceso}) })
-    return out.sort((a,b)=>b.exceso-a.exceso)
-  },[billing,sales])
+  const cuotaTramo=useMemo(()=>SD.cuotaTramo(billing,sales),[billing,sales])
   // Glosa en conflicto: clave del diccionario costo_oficina que guardó >1 categoría (Retiro vs Sueldo) → la sugerencia sale no determinista.
-  const glosaConflict=useMemo(()=>{ const m={}; (coRows||[]).forEach(r=>{ if(!r.key) return; const cat=String(r.value||'').trim(); if(!cat) return; (m[r.key]=m[r.key]||{})[cat]=(m[r.key][cat]||0)+1 })
-    return Object.entries(m).filter(([k,v])=>Object.keys(v).length>1).map(([k,v])=>({key:k, votos:Object.entries(v).sort((a,b)=>b[1]-a[1]).map(([cat,n])=>({cat,n}))}))
-  },[coRows])
+  const glosaConflict=useMemo(()=>SD.glosaConflict(coRows),[coRows])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
-  const huerfanas=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&String(b.invoice_no||'').trim()&&!b.client_id&&!['reembolso','nota_credito'].includes(b.billing_type||'')),[billing])
+  const huerfanas=useMemo(()=>SD.huerfanas(billing),[billing])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
-  const vencIncoh=useMemo(()=>(billing||[]).filter(b=>!b.deleted_at&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&b.issued_at&&b.due&&String(b.due).slice(0,10)<String(b.issued_at).slice(0,10)),[billing])
+  const vencIncoh=useMemo(()=>SD.vencIncoh(billing),[billing])
   // Anticipos posibles duplicados: uno cargado a MANO (sin respaldo bancario, no marcado 'revisado') cuyo monto
   // CALZA con los depósitos del banco del mismo cliente (la suma, o uno exacto). Caso Gabriela/Eugenia.
-  const antDup=useMemo(()=>{
-    const bankIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
-    const bankByCli={}; (anticipos||[]).forEach(a=>{ if(bankIds.has(String(a.id))) (bankByCli[String(a.client_id)]=bankByCli[String(a.client_id)]||[]).push(a) })
-    const out=[]
-    ;(anticipos||[]).forEach(a=>{
-      if(bankIds.has(String(a.id))||/·revisado/.test(a.nota||'')||(a.monto||0)<=0) return
-      const banks=bankByCli[String(a.client_id)]||[]; if(!banks.length) return
-      const suma=banks.reduce((s,b)=>s+(b.monto||0),0)
-      const uno=banks.find(b=>Math.abs((b.monto||0)-(a.monto||0))<=1)
-      const calceSuma=Math.abs(suma-(a.monto||0))<=1
-      if(calceSuma) out.push({manual:a, banks, suma})
-      else if(uno) out.push({manual:a, banks:[uno], suma:uno.monto||0})
-    })
-    return out
-  },[anticipos,conciliacion])
+  const antDup=useMemo(()=>SD.antDup(anticipos,conciliacion),[anticipos,conciliacion])
   // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
   const [ufMapFechas,setUfMapFechas]=useState({})   // UF por fecha (mindicador) para el calce por monto de la señal 8
   useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); (anticipos||[]).forEach(a=>{ if(a.fecha)ds.push(a.fecha) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing,anticipos])
@@ -10707,7 +10673,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
       if(!cv||!cv.ok) return true
       return cv.usado+cv.prog.reduce((a,x)=>a+x.uu,0) < cv.plan*0.97 })
   },[saludRows,sales,billing,ufMapFechas])
-  const honorarioDesc=saludRows.filter(v=>v.honorario_descuadrado)
+  const honorarioDesc=useMemo(()=>SD.honorarioDescuadrado(saludRows,billing,sales),[saludRows,billing,sales])
   // Pago ya recibido (anticipo disponible, de UNA venta) que calza con sus cuotas programadas vencidas o del próximo mes
   // (suma de las más antiguas ±2% o $1.000 = variación UF): esas cuotas ya están pagadas → «Cubrir» las deja Anticipadas. Caso Varas/Donoso/Cordomi.
   const [cubiertasRD,setCubiertasRD]=useState(()=>new Set())
@@ -10742,15 +10708,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     return out
   },[anticipos,billing,sales,ufMapFechas,cubiertasRD])
   // Ventas COBRADAS en Borrador/Propuesta: tienen facturas emitidas/pagadas pero su estado las deja FUERA de "Vendido" (que cuenta solo Activo+Terminado). Trabajo real invisible → candidato a pasar a Terminado. Client-side desde sales+billing.
-  const ventasBorradorCobrado=useMemo(()=>{
-    const bySale={}; (billing||[]).forEach(b=>{ if(b.sale_id)(bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
-    return (sales||[]).filter(s=>!s.deleted_at&&['Borrador','Propuesta'].includes(s.status)).map(s=>{
-      const bs=(bySale[String(s.id)]||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.invoice_no)
-      const emitido=bs.reduce((a,b)=>a+(Number(b.amount)||0),0)
-      const pagado=bs.filter(b=>b.status==='Pagado').reduce((a,b)=>a+(Number(b.amount)||0),0)
-      return { s, emitido, pagado, n:bs.length }
-    }).filter(x=>x.emitido>0).sort((a,b)=>b.pagado-a.pagado)
-  },[sales,billing])
+  const ventasBorradorCobrado=useMemo(()=>SD.ventasBorradorCobrado(sales,billing),[sales,billing])
   // Cruce banco→RUT: cliente con actividad y SIN RUT (ni ficha ni RS) cuyo nombre calza, por token completo (sin conectores), con un único RUT en el banco.
   const bancoRut=useMemo(()=>{
     if(!movsRut.length) return []
@@ -10780,7 +10738,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
   const total=rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
-  if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}><div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
+  if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
   // Cifras SIEMPRE a la derecha: monto principal + (opcional) secundario debajo, alineados.
@@ -10788,6 +10746,7 @@ function RevisionDatosModal({billing=[], clients=[], clientEntities=[], sales=[]
   const fila={display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}
   const secBox={breakInside:'avoid',display:'inline-block',width:'100%',boxSizing:'border-box',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px 8px',marginBottom:12}
   return <div>
+    {audLinea}
     <div style={{background:C.soonBg,borderRadius:12,padding:'12px 14px',marginBottom:12}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por revisar</div><div style={{fontSize:24,fontWeight:800,color:C.soonText,letterSpacing:-.4,fontVariantNumeric:'tabular-nums'}}>{total}</div><div style={{fontSize:11.5,color:C.soonText}}>Toca cada una para abrir su ficha o factura · cada resolución queda registrada.</div></div>
     <div style={isDesk?{columnCount:2,columnGap:12}:undefined}>
     {folioDup.length>0&&<div style={secBox}>{sh('Folio duplicado','#C0392B',folioDup.length)}
@@ -15970,10 +15929,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
       hits.forEach(h=>{ const mismoT=hits.filter(x=>x.ts===h.ts).length, mismaW=hits.filter(x=>x.w===h.w).length; if(mismoT!==1||mismaW!==1) return
         if(h.w.some(m=>usados.has(m.id))) return; h.w.forEach(m=>usados.add(m.id))
         out.push({k:'x:'+h.w.map(m=>m.id).join('+'),tipo:'combo',prov:p,ms:h.w,m:h.w[h.w.length-1],ts:h.ts,t:h.ts[0]}) })
-      const ds=docsDe(p.id).filter(d=>!d.movimiento_id&&Number(d.tipo_dte)!==61)
-      cs.forEach(m=>{ const a=amt(m); const dd=ds.filter(d=>Math.abs(Number(d.monto)||0)===a); if(dd.length!==1) return; if(cs.filter(o=>amt(o)===a).length!==1) return
-        if(docs.some(d=>String(d.movimiento_id)===String(m.id))) return
-        out.push({k:'d:'+dd[0].id,tipo:'sii',prov:p,m,d:dd[0]}) }) })
+      calcesCompraPago(docsDe(p.id), cs).forEach(({d,m})=>out.push({k:'d:'+d.id,tipo:'sii',prov:p,m,d})) })
     return out.sort((a,b)=>String(b.m.fecha).localeCompare(String(a.m.fecha)))
   },[proveedores,cargos,docs,terceros,concs,gastosCat,billing,aporteAsig])
   const calceDeCargo = mid => calces.find(c=>c.tipo!=='sii'&&(c.ms||[c.m]).some(m=>String(m.id)===String(mid)))
@@ -26491,11 +26447,7 @@ function cobranzaAccion(b, lastISO, hoyISO){
   if(gap!=null && gap<COBRANZA_GAP) return null   // aún dentro del piso, no reenviar
   return { nivel: diasVenc<=30?'firme':'final', diasVenc, gap }
 }
-// Monto REAL de una factura emitida = MntTotal de su DTE (autoridad legal), no el monto programado de la venta.
-// Barato: regex sobre el XML, sin generar el PDF. Devuelve número o null si no hay DTE.
-function dteMontoTotal(dteXml){ if(!dteXml) return null; const m=String(dteXml).match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); return m?Math.round(+m[1]):null }
-// Monto a mostrar/usar de una factura: el del DTE si está emitida con XML; si no, el guardado (programado).
-function montoFactura(b){ const t=b&&b.dte_xml?dteMontoTotal(b.dte_xml):null; return (t!=null)?t:(b?.amount||0) }
+// dteMontoTotal / montoFactura (monto REAL = MntTotal del DTE; sin XML, el programado) viven en _shared/saludDatos.js.
 // Glosa legible de una factura: los ítems de su DTE (lo que vio el cliente); sin XML, el concepto.
 function glosaFactura(b){ const p=b?.dte_xml?parseDteFactura(b.dte_xml):null; const it=(p?.items||[]).map(i=>[i.nmb,i.dsc].filter(Boolean).join(' · ')).filter(Boolean); return it.length?it.join(' + '):(b?.concept||'') }
 // Parser LIVIANO del DTE (sin jsPDF/timbre): datos para la ficha inline de previsualización. Devuelve null si no hay DTE.
@@ -38361,27 +38313,15 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   }
   // Abono a caja chica ya ingresado a mano (mismo nombre, monto exacto, aún sin vincular a un movimiento).
   const cajaChicaMatch = (persona, monto) => (pettyCash||[]).find(p => p.user_name===persona && (p.amount||0)>0 && Math.abs((p.amount||0)-monto)<=TOL && !p.movimiento_id && !String(p.notes||'').includes('mov:') && !_ccEsAjuste(p))
-  // Pago a la notaría ↔ su liquidación (rendiciones tipo 'notaria'). Enlace 1:1 = rendiciones.movimiento_id.
-  // Calce: liquidación sin pago enlazado, creada a ±30 días del cargo. Monto exacto y único → se enlaza con un toque; si el RUT ya es
-  // conocido de la notaría (aprendido al enlazar: learnings 'notaria_rut') se enlaza solo. Monto distinto → solo si el RUT es de la notaría.
+  // Pago a la notaría ↔ su liquidación: regla única en _shared/notariaReglas.js (la aplica también conciliacion-auto cada noche).
   const [liqsNota,setLiqsNota]=useState([]); const [rutsNota,setRutsNota]=useState(()=>new Set())
   useEffect(()=>{
     if(DEMO){ setLiqsNota((demoData.rendiciones||[]).filter(r=>r.tipo==='notaria'&&!r.anulada_at)); return }
     supabase.from('rendiciones').select('id,created_at,total,n_gastos,ot_numbers,periodo,movimiento_id,estado_envio,sent_at').eq('tipo','notaria').is('anulada_at',null).then(({data})=>setLiqsNota(data||[]),()=>{})
     supabase.from('learnings').select('key').eq('kind','notaria_rut').then(({data})=>setRutsNota(new Set((data||[]).map(x=>x.key))),()=>{})
   },[])
-  const _diasEntre=(a,b)=>Math.round((new Date(String(a).slice(0,10)+'T12:00')-new Date(String(b).slice(0,10)+'T12:00'))/864e5)
   const liqDeMov = m => liqsNota.find(r=>String(r.movimiento_id)===String(m.id)) || null
-  const liqParaCargo = m => {
-    if(!m || m.tipo!=='cargo' || m.es_interno || (m.monto_conciliado||0)>0) return null
-    const libres=liqsNota.filter(r=>!r.movimiento_id && Math.abs(_diasEntre(r.created_at,m.fecha))<=30)
-    const ex=libres.filter(r=>Math.round(r.total||0)===Math.round(m.monto||0))
-    const rutNota=!!m.rut_contraparte && rutsNota.has(m.rut_contraparte)
-    if(ex.length===1) return {liq:ex[0], exacto:true, auto:rutNota}
-    if(!rutNota || ex.length>1) return null
-    const cerca=libres.map(r=>({r,d:Math.abs((r.total||0)-(m.monto||0))})).filter(x=>x.d<=Math.max(1,(m.monto||0))*0.1).sort((a,b)=>a.d-b.d)
-    return cerca.length ? {liq:cerca[0].r, exacto:false, auto:false, dif:(m.monto||0)-(cerca[0].r.total||0)} : null
-  }
+  const liqParaCargo = m => _liqParaCargo(m, liqsNota, rutsNota)
   const enlazarNotaria = async(m, liq) => {
     if(busy) return; setBusy(m.id)
     try{

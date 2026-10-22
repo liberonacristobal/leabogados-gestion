@@ -15,12 +15,18 @@
 // oficina igual; contadora (repartoContadora con el correo VALORES del mes anterior, al peso; PPM menos retenciones BHE del
 // mes). Nunca socios, equipo, proveedores ni clientes. body.backtestCargos = compara la regla con lo ya clasificado.
 // TARJETA ↔ UBER: el pago de la tarjeta se une con los viajes de Uber Business ya registrados como gasto (lo demás, por rubro).
+// NOTARÍA ↔ BANCO: el cargo a un RUT de notaría ya conocido por el monto exacto y único de una liquidación (liqParaCargo, la misma
+// regla de Banco) se enlaza y sus OT quedan pagadas con la fecha del cargo. Sin RUT conocido o con monto distinto, lo ve una persona.
+// COMPRAS DEL SII ↔ PAGOS: la factura de compra con un solo cargo del mismo RUT y monto al peso en su ventana (calcesCompraPago)
+// queda con su pago (sii_compras_docs.movimiento_id). Es trazabilidad: no cambia la conciliación del cargo.
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 import { nombreGenerico } from "../_shared/contrapartes.js";
+import { liqParaCargo } from "../_shared/notariaReglas.js";
+import { calcesCompraPago } from "../_shared/comprasReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -512,7 +518,59 @@ Deno.serve(async (req) => {
         }
       }
     } catch (e) { tc.error = String((e as Error).message || e); }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, nombres_por_rut: nombres });
+    // ── Pago a la notaría ↔ su liquidación ──
+    const nota = { enlazadas: [] as unknown[], por_confirmar: 0, error: null as string | null };
+    try {
+      const [liqs, rn] = await Promise.all([
+        todas("rendiciones?select=id,created_at,total,movimiento_id,estado_envio,sent_at&tipo=eq.notaria&anulada_at=is.null"),
+        todas("learnings?select=key&kind=eq.notaria_rut"),
+      ]);
+      const rutsNota = new Set(rn.map((x) => x.key));
+      const cgN = (await todas(`cartola_movimientos?select=id,tipo,fecha,monto,monto_conciliado,rut_contraparte,estado,es_interno,categoria&tipo=eq.cargo&estado=eq.pendiente&fecha=gte.${desde}&order=fecha.asc`))
+        .filter((m) => !m.es_interno && !(concPorMov[m.id] || []).length && (!m.categoria || m.categoria === "Notaría"));
+      for (const m of cgN) {
+        const r = liqParaCargo(m, liqs, rutsNota);
+        if (!r) continue;
+        if (!r.auto) { nota.por_confirmar++; continue; }
+        const liq = r.liq, monto = Math.abs(Number(m.monto) || 0), fecha = String(m.fecha).slice(0, 10), pagadoAt = `${fecha}T12:00:00Z`;
+        nota.enlazadas.push({ fecha, monto, liquidacion: liq.id });
+        liq.movimiento_id = m.id;
+        if (dryRun) continue;
+        // Si un paso falla se deshace lo hecho: la liquidación queda sin pago y el cargo pendiente.
+        let pasos = 0;
+        try {
+          const tom = await rest(`rendiciones?id=eq.${liq.id}&movimiento_id=is.null`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id }) });
+          if (!tom?.length) throw new Error("La liquidación ya tenía un pago enlazado");
+          pasos = 1;
+          await rest(`cartola_movimientos?id=eq.${m.id}&estado=eq.pendiente`, { method: "PATCH", body: JSON.stringify({ estado: "conciliado", monto_conciliado: monto, categoria: "Notaría" }) }); pasos = 2;
+          await rest(`expenses?notaria_render_id=eq.${liq.id}&notaria_liquidado_at=is.null`, { method: "PATCH", body: JSON.stringify({ notaria_liquidado_at: pagadoAt }) });
+        } catch (e) {
+          if (pasos >= 2) await rest(`cartola_movimientos?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: "pendiente", monto_conciliado: 0, categoria: m.categoria ?? null }) }).catch(() => null);
+          if (pasos >= 1) await rest(`rendiciones?id=eq.${liq.id}`, { method: "PATCH", body: JSON.stringify({ movimiento_id: null }) }).catch(() => null);
+          nota.enlazadas.pop(); nota.error = String((e as Error).message || e); continue;
+        }
+        await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.notaria_enlazada", table_name: "rendiciones", record_id: liq.id, estudio_id: "lea", detail: { title: `Pago a la notaría ${fmt(monto)} del ${dmy(fecha)} ↔ liquidación del ${dmy(liq.created_at)} (conciliación automática)`, movimiento: m.id, fecha, pagado: monto, liquidacion: liq.total } }) }).catch(() => null);
+      }
+    } catch (e) { nota.error = String((e as Error).message || e); }
+    // ── Facturas de compra del SII ↔ pagos del banco ──
+    const compras = { enlazadas: [] as unknown[], error: null as string | null };
+    try {
+      const [docs, cgC] = await Promise.all([
+        todas("sii_compras_docs?select=id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,monto,movimiento_id,proveedor_id"),
+        todas("cartola_movimientos?select=id,tipo,fecha,monto,rut_contraparte,estado,es_interno&tipo=eq.cargo&rut_contraparte=not.is.null"),
+      ]);
+      for (const { d, m } of calcesCompraPago(docs, cgC)) {
+        const monto = Math.abs(Number(d.monto) || 0);
+        compras.enlazadas.push({ folio: d.folio, emisor: d.emisor_name, emision: d.fecha_emision, pago: m.fecha, monto });
+        if (dryRun) continue;
+        try {
+          const ok = await rest(`sii_compras_docs?id=eq.${d.id}&movimiento_id=is.null`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ movimiento_id: m.id }) });
+          if (!ok?.length) { compras.enlazadas.pop(); continue; }
+        } catch (e) { compras.enlazadas.pop(); compras.error = String((e as Error).message || e); continue; }
+        await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: d.proveedor_id ? `proveedores.${d.proveedor_id}.factura` : "compras.pago_enlazado", table_name: "sii_compras_docs", record_id: d.id, estudio_id: "lea", detail: { title: `Factura de compra N° ${d.folio} de ${d.emisor_name || "proveedor"} ↔ pago del ${dmy(m.fecha)} (conciliación automática)`, monto, movimiento: m.id } }) }).catch(() => null);
+      }
+    } catch (e) { compras.error = String((e as Error).message || e); }
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, notaria: nota, compras_sii: compras, nombres_por_rut: nombres });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   } finally {

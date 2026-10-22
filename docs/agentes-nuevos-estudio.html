@@ -1,0 +1,225 @@
+<title>Agentes nuevos FirmDesk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: informe en una columna de lectura; tarjetas de agente en grilla 2-col en escritorio, 1-col en celular */
+:root{
+  --bg:#F5F7F9; --surface:#FFFFFF; --accent:#003C50; --muted:#537281; --line:#E4E8EB; --soft:#99ABB4;
+  --text:#3D3D3D; --green:#1D9E75; --red:#E24B4A; --chip:#E4E8EB; --chipText:#003C50;
+  --sans:'DM Sans',-apple-system,'Segoe UI',sans-serif; --mono:'DM Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1C22; --surface:#15262D; --accent:#9FC6D3; --muted:#8FA9B4; --line:#24383F; --soft:#5E7680;
+  --text:#DCE3E6; --green:#3CC193; --red:#F07574; --chip:#20343B; --chipText:#B9D5DE; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1C22; --surface:#15262D; --accent:#9FC6D3; --muted:#8FA9B4; --line:#24383F; --soft:#5E7680;
+  --text:#DCE3E6; --green:#3CC193; --red:#F07574; --chip:#20343B; --chipText:#B9D5DE; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55;margin:0}
+.wrap{max-width:1040px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:26px;font-weight:700;color:var(--accent);margin:0;letter-spacing:-.3px;text-wrap:balance}
+h2{font-size:18px;font-weight:700;color:var(--accent);margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--muted);font-size:14px;margin-top:4px}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+section{margin-top:34px;display:flex;flex-direction:column;gap:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{background:var(--chip);color:var(--chipText);border-radius:20px;padding:3px 11px;font-size:12.5px;font-weight:500;white-space:nowrap}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.foto{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.foto .panel{display:flex;flex-direction:column;gap:6px;min-width:0}
+.foto b{color:var(--accent);font-weight:600}
+.k{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ag{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.ag-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.ag-h h3{margin:0;font-size:15.5px;font-weight:700;color:var(--accent)}
+.code{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}
+.row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:8px;font-size:13.5px}
+.row span:first-child{color:var(--muted);font-weight:500}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.tag{font-size:11.5px;border-radius:20px;padding:1px 9px;background:var(--chip);color:var(--chipText);font-weight:500}
+.tag.g{color:var(--green)} .tag.r{color:var(--red)}
+.fase{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.fase .cnt{font-size:13px;color:var(--muted)}
+ul.plain{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.reco{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:8px}
+.reco ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.mono{font-family:var(--mono);font-size:12.5px}
+@media(max-width:720px){.grid,.foto{grid-template-columns:minmax(0,1fr)} h1{font-size:22px} .row{grid-template-columns:74px minmax(0,1fr)}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Liberona Escala Abogados · estudio del 21-10-2026</div>
+  <h1>Agentes nuevos para la app</h1>
+  <div class="sub">Qué más puede hacer sola la app, en base al código, la base de datos, los procesos automáticos y el uso real de cada persona.</div>
+  <div class="chips">
+    <span class="chip">37 procesos programados</span>
+    <span class="chip">33 funciones del servidor</span>
+    <span class="chip">90 tablas</span>
+    <span class="chip">Bitácora de 90 días</span>
+    <span class="chip">Uso por persona de 60 días</span>
+    <span class="chip">974 aprendizajes guardados</span>
+    <span class="chip">Gmail · SII · Drive · BICE · Claude</span>
+  </div>
+
+  <section>
+    <h2>La foto de hoy</h2>
+    <div class="foto">
+      <div class="panel"><b>El trabajo manual recae en una persona</b>
+        <div>En 90 días, casi todas las acciones manuales de la bitácora son de Cristóbal: más de 500 de auditoría y respaldo, 29 conciliaciones de gastos de oficina, 21 boletas dadas de alta desde el SII, 20 ajustes de notaría y 19 duplicados del banco eliminados.</div>
+        <div class="k">activity_log, 90 días</div></div>
+      <div class="panel"><b>El banco está al día</b>
+        <div>De 36 movimientos sin conciliar desde junio, 35 son traspasos entre cuentas propias. Queda un abono por conciliar: Fatme Sleman, 19-10-2026, $1.964.799.</div>
+        <div class="k">cartola_movimientos, revisado fila a fila</div></div>
+      <div class="panel"><b>Hay piezas construidas que no se usan</b>
+        <div>La cobranza automática está construida pero apagada, sin ningún cliente liberado y sin horario. La tabla de plazos está vacía, hay 4 registros de horas y el recordatorio de horas y la cartera semanal están apagados.</div>
+        <div class="k">cobranza-auto · plazos · horas · learnings config</div></div>
+      <div class="panel"><b>La revisión de datos depende de abrir pantallas</b>
+        <div>Las 16 revisiones de Salud de datos solo corren si alguien abre ese panel. La liquidación de la notaría se enlaza con su cargo solo cuando alguien abre Banco.</div>
+        <div class="k">App.jsx:10582 · App.jsx:38428</div></div>
+      <div class="panel"><b>Pocas fichas con contacto</b>
+        <div>27 de 129 fichas tienen un contacto registrado y hay 15 destinatarios de factura aprendidos. Ningún correo al cliente se puede automatizar sin saber a quién va.</div>
+        <div class="k">contacts · learnings factura_to</div></div>
+      <div class="panel"><b>Tareas vencidas que quizá ya están hechas</b>
+        <div>De 14 tareas activas, 9 están vencidas. Entre ellas hay dos «Solicitar fondos al cliente» (19 y 7 días) y una «emitir factura exenta primera cuota», cuyo resultado la app puede verificar sola.</div>
+        <div class="k">tasks, revisado fila a fila</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="fase"><h2>Primera etapa · back office sin correos</h2><span class="cnt">5 agentes · bajo riesgo · reusan reglas que ya existen</span></div>
+    <div class="grid">
+      <div class="ag"><div class="ag-h"><h3>Auditor nocturno</h3><span class="code">App.jsx:10582</span></div>
+        <div class="row"><span>Qué hace</span><span>Corre cada noche las 16 revisiones de Salud de datos (folio duplicado, monto distinto del DTE, cuotas fantasma, anticipo que cubre, ventas duplicadas, RUT con varios clientes). Abre cada fila y revisa su ciclo completo.</span></div>
+        <div class="row"><span>Resultado</span><span>Deja en Pendientes solo lo que se confirma, con su prueba. Mide sus propios falsos positivos para corregir la regla.</span></div>
+        <div class="row"><span>Compuerta</span><span>Nunca corrige una cifra solo. Propone, y el socio confirma o descarta.</span></div>
+        <div class="tags"><span class="tag">Auditar</span><span class="tag g">Más impacto</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Notaría ↔ banco</h3><span class="code">App.jsx:38428</span></div>
+        <div class="row"><span>Qué hace</span><span>Lleva al servidor la regla que hoy solo corre al abrir Banco: un cargo a un RUT de notaría ya conocido, por el monto exacto y único de una liquidación, se enlaza y sus OT quedan pagadas.</span></div>
+        <div class="row"><span>Por qué</span><span>La conciliación automática no tiene lógica de notaría.</span></div>
+        <div class="row"><span>Compuerta</span><span>Solo un calce único. Los demás casos van a la Bandeja.</span></div>
+        <div class="tags"><span class="tag">Automatizar</span><span class="tag">Notaría</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Compras del SII ↔ pagos</h3><span class="code">sii-sync:299</span></div>
+        <div class="row"><span>Qué hace</span><span>Cruza las 243 facturas de compra del SII con los cargos del banco (mismo RUT y monto exacto) y deja cada una pagada con su movimiento. Un proveedor nuevo se propone para su alta.</span></div>
+        <div class="row"><span>Por qué</span><span>La sincronización del SII deja ese enlace vacío («paso futuro») y la vista de Compras lo hace a mano (App.jsx:8780).</span></div>
+        <div class="row"><span>Compuerta</span><span>Un proveedor nuevo o un calce ambiguo va a la Bandeja.</span></div>
+        <div class="tags"><span class="tag">Automatizar</span><span class="tag">Proveedores</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Fondos cargados a mano ↔ transferencia</h3><span class="code">App.jsx:37764</span></div>
+        <div class="row"><span>Qué hace</span><span>Enlaza un fondo o anticipo cargado a mano con la transferencia del mismo cliente y monto que lo respalda, el caso que hoy pide «Vincular».</span></div>
+        <div class="row"><span>Por qué</span><span>El detector de anticipos duplicados (App.jsx:10649) ya encuentra estos casos, pero alguien tiene que resolverlos.</span></div>
+        <div class="row"><span>Compuerta</span><span>Solo un calce único y exacto. Nunca dos registros para la misma plata.</span></div>
+        <div class="tags"><span class="tag">Automatizar</span><span class="tag">Fondos</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Tareas con evidencia</h3><span class="code">tasks</span></div>
+        <div class="row"><span>Qué hace</span><span>Detecta cuando lo que pide una tarea ya ocurrió: la solicitud de fondos se envió, la factura se emitió o la OT se liquidó. Propone marcarla «Cumplida» con la prueba.</span></div>
+        <div class="row"><span>Por qué</span><span>9 de 14 tareas activas están vencidas, y varias se pueden verificar con datos de la app.</span></div>
+        <div class="row"><span>Compuerta</span><span>El responsable confirma. Se agrega a su reporte de cierre.</span></div>
+        <div class="tags"><span class="tag">Tareas</span><span class="tag">Todos los usuarios</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Ya en el plan del 21-10</h3><span class="code">plan agentes</span></div>
+        <div class="row"><span>BHE</span><span>Una boleta de honorarios sin costo cargado se convierte en una propuesta de costo.</span></div>
+        <div class="row"><span>Resumen</span><span>El correo del lunes agrega lo que hicieron los agentes en la semana y lo que quedó en la Bandeja.</span></div>
+        <div class="tags"><span class="tag">Pendiente de iniciar</span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="fase"><h2>Segunda etapa · correos al cliente como borrador</h2><span class="cnt">6 agentes · el socio aprueba cada envío</span></div>
+    <div class="grid">
+      <div class="ag"><div class="ag-h"><h3>Cobranza</h3><span class="code">cobranza-auto</span></div>
+        <div class="row"><span>Qué hace</span><span>Activa lo que ya existe, primero en modo simulación. Cada lunes revisa las facturas vencidas una por una (pagada, cubierta por anticipo, conciliada, gestionada fuera) y prepara el recordatorio de las que sobreviven.</span></div>
+        <div class="row"><span>Después</span><span>El socio libera cliente por cliente y la app envía sola a los clientes liberados.</span></div>
+        <div class="row"><span>Compuerta</span><span>Doble: interruptor global y cliente liberado. Ya está construida así.</span></div>
+        <div class="tags"><span class="tag">Cobro</span><span class="tag g">Construido, apagado</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Acuse de pago</h3><span class="code">App.jsx:26415</span></div>
+        <div class="row"><span>Qué hace</span><span>Cuando la conciliación automática salda por completo una factura, prepara el borrador del acuse de pago al cliente.</span></div>
+        <div class="row"><span>Por qué</span><span>Hoy el acuse solo se ofrece cuando la conciliación se hace a mano (App.jsx:37519).</span></div>
+        <div class="row"><span>Compuerta</span><span>Queda como «Borrador preparado» en Pendientes.</span></div>
+        <div class="tags"><span class="tag">Cliente</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Envío de facturas emitidas</h3><span class="code">App.jsx:12294</span></div>
+        <div class="row"><span>Qué hace</span><span>Cada día toma las facturas emitidas por enviar que tienen un destinatario aprendido y prepara su correo con el PDF y el XML.</span></div>
+        <div class="row"><span>Compuerta</span><span>Antes revisa el ciclo completo: si está pagada o se envió fuera de la app, no la toca. El socio aprueba el lote, con un resumen de lo enviado.</span></div>
+        <div class="tags"><span class="tag">Facturación</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Solicitud de fondos al cliente</h3><span class="code">App.jsx:26972</span></div>
+        <div class="row"><span>Qué hace</span><span>Cuando un cliente queda con saldo negativo, prepara el borrador de la solicitud de fondos con el saldo y las OT pendientes. Hoy el aviso diario solo le avisa al abogado.</span></div>
+        <div class="row"><span>Compuerta</span><span>El abogado responsable revisa y envía. El seguimiento a 7 días ya existe.</span></div>
+        <div class="tags"><span class="tag">Fondos</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Rendiciones mensuales</h3><span class="code">App.jsx:20875</span></div>
+        <div class="row"><span>Qué hace</span><span>Cuando conviene rendir, arma el borrador de la rendición por cliente y trabajo, con el modo, los destinatarios y el mensaje aprendidos.</span></div>
+        <div class="row"><span>Compuerta</span><span>Quien rinde revisa los gastos antes de enviar. Nunca se marca como rendida sin envío.</span></div>
+        <div class="tags"><span class="tag">Gastos</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Contactos desde el correo</h3><span class="code">contacts</span></div>
+        <div class="row"><span>Qué hace</span><span>Lee los hilos de contacto@ y de las facturas enviadas y propone el contacto de facturación de cada ficha. Extiende la sugerencia de contactos que ya existe, que tiene 21 descartes aprendidos.</span></div>
+        <div class="row"><span>Por qué</span><span>Es la condición para los otros cinco agentes de esta etapa: hoy solo 27 de 129 fichas tienen contacto.</span></div>
+        <div class="tags"><span class="tag">Base</span><span class="tag g">Habilita la etapa</span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="fase"><h2>Tercera etapa · trabajo legal y dirección</h2><span class="cnt">5 agentes</span></div>
+    <div class="grid">
+      <div class="ag"><div class="ag-h"><h3>Plazos</h3><span class="code">plazos</span></div>
+        <div class="row"><span>Qué hace</span><span>Extrae plazos de notificaciones, resoluciones del SII, correos y documentos de Drive y los propone. Avisa a 7 días y el mismo día.</span></div>
+        <div class="row"><span>Por qué</span><span>Inicio y la vista de plazos ya los muestran, pero la tabla está vacía porque nadie los carga.</span></div>
+        <div class="row"><span>Compuerta</span><span>Obligatoria, por ser materia legal: el abogado valida cada plazo con su fuente.</span></div>
+        <div class="tags"><span class="tag">Legal</span><span class="tag r">Mayor riesgo</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Horas sugeridas</h3><span class="code">horas</span></div>
+        <div class="row"><span>Qué hace</span><span>El viernes arma la hoja de horas sugerida de cada persona a partir del calendario, los correos enviados, los documentos de Drive y las tareas cerradas.</span></div>
+        <div class="row"><span>Por qué</span><span>Hay 4 registros de horas. Sin horas no funcionan las horas por facturar, el repricing ni la rentabilidad por cliente.</span></div>
+        <div class="row"><span>Compuerta</span><span>Cada persona confirma o corrige su hoja, y la app aprende de esa corrección.</span></div>
+        <div class="tags"><span class="tag">Horas</span><span class="tag g">Más valor futuro</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Avance de proyectos</h3><span class="code">App.jsx:35503</span></div>
+        <div class="row"><span>Qué hace</span><span>Aplica en el servidor la regla de pasos aprendidos: un paso confirmado las veces mínimas se marca solo. Hoy esa regla corre solo al abrir el proyecto.</span></div>
+        <div class="row"><span>Compuerta</span><span>La que ya existe: el agente diario sugiere y la regla aprendida libera.</span></div>
+        <div class="tags"><span class="tag">Cartera</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Propuestas sin respuesta</h3><span class="code">App.jsx:4168</span></div>
+        <div class="row"><span>Qué hace</span><span>A los 14 días sin respuesta, prepara el borrador del seguimiento de la propuesta en el mismo hilo.</span></div>
+        <div class="row"><span>Compuerta</span><span>El socio envía. Una propuesta aceptada nunca crea una venta sola: necesita la aceptación del cliente.</span></div>
+        <div class="tags"><span class="tag">Ventas</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Clientes que se enfrían</h3><span class="code">App.jsx:4975</span></div>
+        <div class="row"><span>Qué hace</span><span>Una vez al mes lleva al correo del lunes los clientes en riesgo o sin actividad que detecta Inteligencia, con el motivo y la última interacción.</span></div>
+        <div class="row"><span>Compuerta</span><span>Solo informa. El contacto al cliente queda como borrador opcional.</span></div>
+        <div class="tags"><span class="tag">Dirección</span></div></div>
+
+      <div class="ag"><div class="ag-h"><h3>Limpieza técnica</h3><span class="code">App.jsx:2247 · 16064 · 41325</span></div>
+        <div class="row"><span>Qué hace</span><span>Cuando cada agente del servidor esté probado, retira su copia del navegador: el enlace de caja chica, el de comisiones y la sincronización con Drive al abrir la app.</span></div>
+        <div class="row"><span>Por qué</span><span>Una sola regla por proceso evita que dos copias diverjan.</span></div>
+        <div class="tags"><span class="tag">Mantención</span></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reglas comunes a todos los agentes</h2>
+    <div class="panel"><ul class="plain">
+      <li>Compuerta, aprendizaje y liberación: cada agente parte proponiendo y se automatiza cuando su regla acierta siempre.</li>
+      <li>Sobre plata, solo un calce único y exacto. Lo ambiguo va a la Bandeja con un toque para resolverlo.</li>
+      <li>Todo correo al cliente parte como borrador, y cada envío confirma qué salió, a quién y desde qué cuenta.</li>
+      <li>Cada hallazgo se verifica sobre las filas reales y su ciclo completo, y llega con su prueba.</li>
+      <li>Cada corrida queda en Procesos automáticos, con vigilancia y reintento.</li>
+      <li>Las reglas son compartidas entre la app y el servidor, y configurables por estudio.</li>
+    </ul></div>
+  </section>
+
+  <section>
+    <h2>Recomendación</h2>
+    <div class="reco">
+      <ol>
+        <li><b>Auditor nocturno, Notaría ↔ banco y Compras del SII ↔ pagos.</b> Sacan trabajo manual del back office sin enviar ningún correo, y reusan reglas que ya existen.</li>
+        <li><b>Contactos desde el correo y Cobranza en simulación.</b> La cobranza ya está construida, y en simulación permite ver qué enviaría antes de liberar a ningún cliente.</li>
+        <li><b>Tareas con evidencia y Horas sugeridas.</b> Son las que más cambian el día a día del equipo.</li>
+      </ol>
+    </div>
+  </section>
+</div>
