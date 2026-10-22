@@ -27724,7 +27724,7 @@ function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,client
   )
 }
 
-function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
+function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
   useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
@@ -27895,7 +27895,7 @@ function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses
       <div style={{padding:'20px 24px 100px',borderTop:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:11,flexWrap:'wrap',gap:8}}>
           <div style={TIT_PAG}>Clientes <span style={{fontSize:13,color:C.textSoft,fontWeight:500}}>· {cl.length}</span></div>
-          <div style={{display:'flex',gap:7,alignItems:'center'}}><button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button><ActBtn onClick={()=>onProveedores&&onProveedores()} style={{color:C.accent}}>Proveedores</ActBtn><ActBtn onClick={exportarExcel} title='Descargar la lista filtrada'><SIcon n='download' s={14} c={C.accent}/>Excel</ActBtn><ActBtn variant='primary' onClick={onAdd}>+ Cliente</ActBtn></div>
+          <div style={{display:'flex',gap:7,alignItems:'center'}}><button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button>{onContactos&&<ActBtn onClick={onContactos} style={{color:C.accent}}>Contactos</ActBtn>}<ActBtn onClick={()=>onProveedores&&onProveedores()} style={{color:C.accent}}>Proveedores</ActBtn><ActBtn onClick={exportarExcel} title='Descargar la lista filtrada'><SIcon n='download' s={14} c={C.accent}/>Excel</ActBtn><ActBtn variant='primary' onClick={onAdd}>+ Cliente</ActBtn></div>
         </div>
         <Buscador value={q} onChange={setQ} placeholder='Buscar por nombre, razón social o RUT' style={{marginBottom:9}}/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
@@ -27952,7 +27952,7 @@ function ClientsView({onAsociarTrabajo,clients,sales,billing,setBilling,expenses
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
           <Buscador value={q} onChange={setQ} placeholder='Nombre, razón social o RUT' style={{flex:1,minWidth:0}}/>
-          <button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>
+          {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
         {respChips&&<div style={{marginBottom:4}}>{respChips}</div>}
@@ -32963,17 +32963,264 @@ function GmailTareasModal({clients=[], onCrear, onEditar, onClose}){
     </div>
   )
 }
-function GmailContactosModal({clients=[], clientEntities=[], onClose}){
+// Clientes › Contactos: personas encontradas en el Gmail del estudio (contactos_candidatos), revisadas por grupos
+// (abogado, estado, área, tipo, función, confianza). Confirmar crea el contacto en la ficha con su función;
+// descartar se aprende (contacto_descartado) y elegir el cliente de un correo enseña su dominio (dominio_cliente).
+const FUN_CONTACTO = {decision:'Decisión',administracion:'Administración y contabilidad',gestion:'Gestión',asistente:'Asistente',familia:'Familia',asesor:'Asesor externo',sin_definir:'Sin definir'}
+const FUN_CONTACTO_ORD = Object.keys(FUN_CONTACTO)
+const _MAIL_GENERICO = /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|gmx|aol)\b/
+const _DEMO_CANDIDATOS = [
+  { id:'cc1', email:'gerencia@comercialandes.cl', nombre:'Paula Ríos', client_id:'c1', rol:'cliente', funcion:'decision', cargo:'Gerente General', fuentes:['firma: «Gerente General»'], recibe:['Informativo estratégico','Propuestas y reportes'], confianza:'alta', posibles:[], estado:'propuesto', evidencia:{hilos:14,ultimo:'2026-10-18'} },
+  { id:'cc2', email:'contabilidad@comercialandes.cl', nombre:'Contabilidad Andes', client_id:'c1', rol:'cliente', funcion:'administracion', cargo:null, fuentes:['casilla «contabilidad@»','recibe facturas desde la app'], recibe:['Informativo técnico-contable','Facturas y cobranza'], confianza:'alta', posibles:[], estado:'propuesto', evidencia:{hilos:9,ultimo:'2026-10-02'} },
+  { id:'cc3', email:'jperez@contadoresasociados.cl', nombre:'Jorge Pérez', client_id:'c1', rol:'asesor', funcion:'asesor', cargo:'Contador', fuentes:['envía documentos contables'], recibe:['Informativo técnico-contable'], confianza:'media', posibles:[], estado:'propuesto', evidencia:{hilos:4,ultimo:'2026-09-20'} },
+  { id:'cc4', email:'socio@riofrio.cl', nombre:'Andrés Riofrío', client_id:'c2', rol:'cliente', funcion:'decision', cargo:'Socio', fuentes:['firma: «Socio»'], recibe:['Informativo estratégico'], confianza:'alta', posibles:[], estado:'registrado', evidencia:{hilos:22,ultimo:'2026-10-20'} },
+  { id:'cc5', email:'finanzas@riofrio.cl', nombre:'Carla Soto', client_id:'c2', rol:'cliente', funcion:'administracion', cargo:'Jefa de Finanzas', fuentes:['firma: «Jefa de Finanzas»'], recibe:['Informativo técnico-contable','Rendiciones y fondos'], confianza:'alta', posibles:[], estado:'propuesto', evidencia:{hilos:6,ultimo:'2026-10-11'} },
+  { id:'cc6', email:'abogado@bancodelsur.cl', nombre:'Banco del Sur', client_id:'c2', rol:'contraparte', funcion:'sin_definir', cargo:null, fuentes:[], recibe:[], confianza:'media', posibles:[], estado:'propuesto', evidencia:{hilos:3,ultimo:'2026-08-30'} },
+  { id:'cc7', email:'mvaldes@gmail.com', nombre:'María Valdés', client_id:null, rol:'desconocido', funcion:'sin_definir', cargo:null, fuentes:[], recibe:[], confianza:'baja', posibles:['Tech Araucanía SpA','Viñedos del Maipo Ltda'], estado:'propuesto', evidencia:{hilos:2,ultimo:'2026-07-14'} },
+  { id:'cc8', email:'admin@vinedosmaipo.cl', nombre:'Administración Viñedos', client_id:'c5', rol:'cliente', funcion:'administracion', cargo:null, fuentes:['casilla «admin@»'], recibe:['Facturas y cobranza'], confianza:'media', posibles:[], estado:'propuesto', evidencia:{hilos:5,ultimo:'2026-10-07'} },
+]
+function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack, origen, onOpenClientFicha, onBuscarGmail}){
+  const D=isDesktop
+  const [rows,setRows]=useState(null), [ficha,setFicha]=useState([])
+  const [F,setF]=useState({ab:'',st:'',ar:'',tipo:'',fun:'',cf:'',rev:'pend'})
+  const [q,setQ]=useState(''), [sel,setSel]=useState(null), [verDet,setVerDet]=useState(false), [lote,setLote]=useState(null), [busy,setBusy]=useState(false)
+  const [cerrados,setCerrados]=useState({}), [funPick,setFunPick]=useState({}), [cliPick,setCliPick]=useState({})
+  const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_CANDIDATOS); return }
+    supabase.from('contactos_candidatos').select('*').order('created_at').limit(5000).then(({data})=>setRows(data||[]),()=>setRows([]))
+    supabase.from('contacts').select('client_id,email,funcion').then(({data})=>setFicha((data||[]).filter(c=>c.email)),()=>{}) },[])
+  useEffect(()=>{ cargar() },[cargar])
+  const cli=useMemo(()=>Object.fromEntries(clients.map(c=>[String(c.id),c])),[clients])
+  const areasCli=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s.client_id&&s.area&&!s.deleted_at){ const k=String(s.client_id); (m[k]=m[k]||new Set()).add(s.area) } }); return m },[sales])
+  const wrap=ch=><div style={D?{maxWidth:1280,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>{ch}</div>
+  const header=<PageHeader origen={origen||'Clientes'} onBack={onBack} titulo='Contactos' right={onBuscarGmail&&!DEMO?<ActBtn onClick={onBuscarGmail} title='Buscar personas nuevas en tu Gmail'>Buscar en Gmail</ActBtn>:null} style={{margin:D?'-12px -20px 12px':'-8px -16px 12px'}}/>
+  if(rows===null) return wrap(<>{header}<div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div></>)
+
+  const SIN='__sin'
+  const kCli=r=>r.client_id&&cli[String(r.client_id)]?String(r.client_id):SIN
+  const nomCli=k=>k===SIN?'Por asignar cliente':(cli[k]?.name||'—')
+  const abDe=k=>k===SIN?SIN:(cli[k]?.abogado_responsable||'Sin asignar')
+  const arDe=k=>[...(areasCli[k]||[])].sort()
+  const est=r=>r.estado==='propuesto'?'':r.estado==='descartado'?'no':'ok'
+  const fn=r=>funPick[r.id]||r.funcion||'sin_definir'
+  const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+  const qq=_n(q.trim())
+  const pasaCli=(r,sinAb)=>{ const k=kCli(r); return (sinAb||!F.ab||abDe(k)===F.ab)&&(!F.st||cli[k]?.status===F.st)&&(!F.ar||(F.ar==='-'?k!==SIN&&!arDe(k).length:arDe(k).includes(F.ar))) }
+  const pasaPer=(r,conRev=true)=>(!F.tipo||r.rol===F.tipo)&&(!F.fun||fn(r)===F.fun)&&(!F.cf||r.confianza===F.cf)&&(!conRev||F.rev===''||(F.rev==='pend'?!est(r):est(r)===F.rev))
+  const pasaQ=r=>!qq||_n(`${nomCli(kCli(r))} ${r.nombre||''} ${r.email} ${(r.posibles||[]).join(' ')}`).includes(qq)
+  const filtrar=(sinAb,conRev=true)=>rows.filter(r=>pasaCli(r,sinAb)&&pasaPer(r,conRev)&&pasaQ(r))
+
+  // Cifras: lo confirmado y lo que ya estaba en la ficha cuentan; la base son los clientes del estudio (sin internos ni colaboradores).
+  const base=clients.filter(c=>!c.is_internal&&!c.is_colaborador), enBase=new Set(base.map(c=>String(c.id)))
+  const vivos=[...ficha.map(c=>({k:String(c.client_id),f:c.funcion})), ...rows.filter(r=>est(r)==='ok'&&r.client_id).map(r=>({k:String(r.client_id),f:fn(r)}))].filter(x=>enBase.has(x.k))
+  const nCli=f=>new Set(vivos.filter(x=>!f||x.f===f).map(x=>x.k)).size
+  const nPend=rows.filter(r=>!est(r)).length
+  const kpis=[['Por revisar',nPend,'en Gmail'],['Con correo',nCli(),`clientes de ${base.length}`],['Decisión',nCli('decision'),'clientes identificados'],['Administración',nCli('administracion'),'clientes identificados']]
+
+  const sinAbF=filtrar(true)
+  const AB_ORD=[...new Set(['Cristóbal','Erasmo','Martín',...base.map(c=>c.abogado_responsable).filter(Boolean),'Sin asignar',SIN])]
+  const abChips=[['', 'Todos', sinAbF.length], ...AB_ORD.map(a=>[a, a===SIN?'Por asignar cliente':a, sinAbF.filter(r=>abDe(kCli(r))===a).length]).filter(x=>x[2]||F.ab===x[0])]
+  const areasOpc=[...new Set(Object.values(areasCli).flatMap(s=>[...s]))].sort((a,b)=>a.localeCompare(b,'es'))
+  const SELS=[
+    ['st','Estado',[['','Todos'],['Activo','Activo'],['Prospecto','Prospecto'],['Terminado','Terminado']]],
+    ['ar','Área',[['','Todas'],...areasOpc.map(a=>[a,a]),['-','Sin área']]],
+    ['tipo','Tipo',[['','Todos'],['cliente','Del cliente'],['asesor','Asesor'],['desconocido','Sin clasificar'],['contraparte','Contraparte']]],
+    ['fun','Función',[['','Todas'],...FUN_CONTACTO_ORD.map(k=>[k,FUN_CONTACTO[k]])]],
+    ['cf','Confianza',[['','Todas'],['alta','Alta'],['media','Media'],['baja','Baja']]],
+    ['rev','Revisión',[['pend','Por revisar'],['ok','Confirmados'],['no','Descartados'],['','Todos']]],
+  ]
+  const setFil=(k,v)=>{ setF(p=>({...p,[k]:v})); setLote(null) }
+
+  const rs=filtrar(false)
+  const g={}; rs.forEach(r=>{ const k=kCli(r); (g[k]=g[k]||[]).push(r) })
+  const porAb={}; Object.keys(g).forEach(k=>{ const a=abDe(k); (porAb[a]=porAb[a]||[]).push(k) })
+  const orden=AB_ORD.filter(a=>porAb[a]).flatMap(a=>porAb[a].sort((x,y)=>nomCli(x).localeCompare(nomCli(y),'es')))
+  const selK=sel&&g[sel]?sel:(D?orden[0]||null:null)
+  const pendDe=k=>rows.filter(r=>kCli(r)===k&&!est(r)).length
+
+  // Escritura: confirmar en lote (contactos nuevos en una sola inserción), descartar, deshacer, asignar cliente.
+  const quien=user?.name||user?.email||'Oficina'
+  const confirmables=lst=>lst.filter(r=>!est(r)&&kCli(r)!==SIN&&r.rol!=='contraparte')
+  const confirmar=async lst=>{ const ok=confirmables(lst); if(!ok.length||busy) return; setBusy(true)
+    const now=new Date().toISOString(); let hechos=0
+    try{
+      const ids={}
+      if(!DEMO){
+        const cids=[...new Set(ok.map(r=>r.client_id))]
+        for(let i=0;i<cids.length;i+=100){ const {data}=await supabase.from('contacts').select('id,client_id,email').in('client_id',cids.slice(i,i+100)); (data||[]).forEach(c=>{ if(c.email) ids[`${c.client_id}|${String(c.email).trim().toLowerCase()}`]=c.id }) }
+        const campos=r=>({rol:r.rol==='asesor'?'asesor':'cliente',funcion:fn(r),funcion_fuente:(r.fuentes||[]).join(' · ')||null,recibe:r.recibe?.length?r.recibe:null,origen:r.origen||'gmail',verificado_por:quien,verificado_at:now})
+        const nuevos=ok.filter(r=>!ids[`${r.client_id}|${r.email.toLowerCase()}`])
+        for(let i=0;i<nuevos.length;i+=200){
+          const {data,error}=await supabase.from('contacts').insert(nuevos.slice(i,i+200).map(r=>({client_id:r.client_id,nombre:(r.nombre||r.email.split('@')[0]).trim(),email:r.email,cargo:r.cargo||null,...campos(r)}))).select('id,client_id,email')
+          if(error) throw error
+          ;(data||[]).forEach(c=>{ ids[`${c.client_id}|${String(c.email).trim().toLowerCase()}`]=c.id })
+        }
+        const upd=ok.map(r=>({id:r.id,email:r.email,estado:'confirmado',funcion:fn(r),contact_id:ids[`${r.client_id}|${r.email.toLowerCase()}`]||null,revisado_por:quien,revisado_at:now,updated_at:now}))
+        for(let i=0;i<upd.length;i+=200){ const {error}=await supabase.from('contactos_candidatos').upsert(upd.slice(i,i+200),{onConflict:'id'}); if(error) throw error }
+      }
+      const okIds=new Set(ok.map(r=>r.id))
+      setRows(p=>p.map(x=>okIds.has(x.id)?{...x,estado:'confirmado',funcion:fn(x),contact_id:ids[`${x.client_id}|${x.email.toLowerCase()}`]||x.contact_id}:x)); hechos=ok.length
+      logActividad('contactos.confirmados',{tabla:'contactos_candidatos',detalle:{title:`${hechos} contacto${hechos!==1?'s':''} confirmado${hechos!==1?'s':''} en la ficha de su cliente`,n:hechos}})
+    }catch(e){ appAlert('No se pudo confirmar: '+(e.message||e)); cargar() }
+    setBusy(false); setLote(null) }
+  const descartar=async lst=>{ const ok=lst.filter(r=>!est(r)); if(!ok.length||busy) return; setBusy(true)
+    const now=new Date().toISOString()
+    try{
+      if(!DEMO){
+        const ids=ok.map(r=>r.id)
+        for(let i=0;i<ids.length;i+=200){ const {error}=await supabase.from('contactos_candidatos').update({estado:'descartado',revisado_por:quien,revisado_at:now,updated_at:now}).in('id',ids.slice(i,i+200)); if(error) throw error }
+        supabase.from('learnings').insert(ok.map(r=>({kind:'contacto_descartado',key:r.email,value:'descartado',meta:{}}))).then(()=>{},()=>{})
+      }
+      const okIds=new Set(ok.map(r=>r.id)); setRows(p=>p.map(x=>okIds.has(x.id)?{...x,estado:'descartado'}:x))
+      logActividad('contactos.descartados',{tabla:'contactos_candidatos',detalle:{title:`${ok.length} persona${ok.length!==1?'s':''} descartada${ok.length!==1?'s':''} de la base de contactos`,n:ok.length}})
+    }catch(e){ appAlert('No se pudo descartar: '+(e.message||e)) }
+    setBusy(false); setLote(null) }
+  const deshacer=async r=>{ if(busy) return; setBusy(true)
+    try{
+      if(!DEMO){
+        if(r.estado==='confirmado'&&r.contact_id) await supabase.from('contacts').delete().eq('id',r.contact_id).eq('origen',r.origen||'gmail')
+        if(r.estado==='descartado') await supabase.from('learnings').delete().eq('kind','contacto_descartado').eq('key',r.email)
+        const {error}=await supabase.from('contactos_candidatos').update({estado:'propuesto',contact_id:null,revisado_por:null,revisado_at:null,updated_at:new Date().toISOString()}).eq('id',r.id); if(error) throw error
+      }
+      setRows(p=>p.map(x=>x.id===r.id?{...x,estado:'propuesto',contact_id:null}:x))
+      logActividad('contactos.deshecho',{tabla:'contactos_candidatos',id:r.id,detalle:{title:`${r.email}: vuelve a por revisar`}})
+    }catch(e){ appAlert('No se pudo deshacer: '+(e.message||e)) }
+    setBusy(false) }
+  const asignarCli=async(r,cid)=>{ if(!cid) return
+    const dom=r.email.split('@')[1]||''
+    if(!DEMO){ const {error}=await supabase.from('contactos_candidatos').update({client_id:cid,rol:r.rol==='desconocido'?'cliente':r.rol,updated_at:new Date().toISOString()}).eq('id',r.id); if(error){ appAlert('No se pudo guardar: '+error.message); return }
+      if(dom&&!_MAIL_GENERICO.test(dom)) learnPut('dominio_cliente',dom,cid,{}) }
+    setRows(p=>p.map(x=>x.id===r.id?{...x,client_id:cid,rol:x.rol==='desconocido'?'cliente':x.rol}:x))
+    logActividad('contactos.cliente_asignado',{tabla:'contactos_candidatos',id:r.id,detalle:{title:`${r.email} → ${nomCli(String(cid))}`}}) }
+  const esDelCliente=async r=>{ if(!DEMO){ const {error}=await supabase.from('contactos_candidatos').update({rol:'cliente',updated_at:new Date().toISOString()}).eq('id',r.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
+    setRows(p=>p.map(x=>x.id===r.id?{...x,rol:'cliente'}:x)) }
+  const aRed=async r=>{ if(busy) return; setBusy(true)
+    try{ if(!DEMO){ const dom=r.email.split('@')[1]||''; const {error}=await supabase.from('red_profesional').insert({nombre:(r.nombre||r.email.split('@')[0]).trim(),email:r.email,web:dom&&!_MAIL_GENERICO.test(dom)?dom:null}); if(error) throw error
+        await supabase.from('contactos_candidatos').update({estado:'descartado',revisado_por:quien,revisado_at:new Date().toISOString(),evidencia:{...(r.evidencia||{}),destino:'red_profesional'}}).eq('id',r.id) }
+      setRows(p=>p.map(x=>x.id===r.id?{...x,estado:'descartado'}:x)); logActividad('contactos.a_red',{tabla:'contactos_candidatos',id:r.id,detalle:{title:`${r.email} → Red profesional`}})
+    }catch(e){ appAlert('No se pudo guardar en la red: '+(e.message||e)) }
+    setBusy(false) }
+
+  // Presentación
+  const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
+  const lblSty={...SEC_LBL,fontSize:9.5}
+  const btnPri={fontSize:12,fontWeight:700,border:'none',borderRadius:8,padding:'7px 12px',background:C.accent,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}
+  const btnSec={fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',background:C.card,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}
+  const btnTxt={fontSize:12,fontWeight:600,border:'none',background:'none',color:C.muted,padding:'7px 4px',cursor:'pointer',whiteSpace:'nowrap'}
+  const activos=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'))
+
+  const pend=rs.filter(r=>!est(r)), conf=confirmables(rs), nCliL=new Set(pend.map(kCli)).size, quedan=pend.length-conf.length
+  const loteBox=<div style={{...card,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'8px 12px',marginBottom:12,fontSize:12.5,color:C.text}}>
+    {!pend.length? <span style={{flex:1}}>{filtrar(false,false).length?'Grupo revisado.':'Sin personas con estos filtros.'}</span>
+    : lote? <>
+        <span style={{flex:'1 1 220px',minWidth:0}}>{lote==='ok'?<>Confirmar <b style={{color:C.accent}}>{conf.length}</b> en la ficha de su cliente{quedan?` · ${quedan} sin cliente o contraparte quedan por revisar`:''}</>:<>Descartar <b style={{color:C.accent}}>{pend.length}</b> persona{pend.length!==1?'s':''}</>}</span>
+        <button disabled={busy||(lote==='ok'&&!conf.length)} onClick={()=>lote==='ok'?confirmar(pend):descartar(pend)} style={{...btnPri,opacity:busy?.6:1}}>{busy?'Guardando…':lote==='ok'?`Confirmar ${conf.length}`:`Descartar ${pend.length}`}</button>
+        <button onClick={()=>setLote(null)} style={btnTxt}>Cancelar</button>
+      </>
+    : <>
+        <span style={{flex:'1 1 220px',minWidth:0}}><b style={{color:C.accent}}>{pend.length}</b> por revisar en este grupo · {nCliL} cliente{nCliL!==1?'s':''}</span>
+        <button disabled={!conf.length} onClick={()=>setLote('ok')} style={{...btnSec,opacity:conf.length?1:.5}}>Confirmar el grupo</button>
+        <button onClick={()=>setLote('no')} style={btnTxt}>Descartar el grupo</button>
+      </>}
+  </div>
+
+  const lista=<div style={{...card,overflow:'hidden'}}>
+    {orden.length? AB_ORD.filter(a=>porAb[a]).map((a,ai)=>{ const ks=porAb[a], cerrado=!!cerrados[a]; return <div key={a}>
+      <div onClick={()=>setCerrados(p=>({...p,[a]:!p[a]}))} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'9px 13px',background:C.bgSoft,borderTop:ai?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
+        <span style={{...SEC_LBL}}>{a===SIN?'Por asignar cliente':a}</span>
+        <span style={{fontSize:11.5,color:C.muted}}>{ks.length} cliente{ks.length!==1?'s':''} {cerrado?'▸':'▾'}</span>
+      </div>
+      {!cerrado&&ks.map(k=>{ const p=pendDe(k), on=selK===k; return <div key={k} onClick={()=>{ setSel(k); setVerDet(true); if(!D) window.scrollTo(0,0) }} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on&&D?C.azulBg:'transparent'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nomCli(k)}</div>
+          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k===SIN?'Elige el cliente de cada correo':[cli[k]?.status,...arDe(k)].filter(Boolean).join(' · ')||'—'} · {g[k].length} en el filtro</div>
+        </div>
+        <span style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',color:p?C.soonText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{p?`${p} por revisar`:'Revisado'}</span>
+      </div> })}
+    </div> }) : <div style={{padding:'28px 16px',textAlign:'center',fontSize:13,color:C.muted}}>Sin clientes con estos filtros.</div>}
+  </div>
+
+  const fila=(r,i)=>{ const e=est(r), f=fn(r), ev=r.evidencia||{}, k=kCli(r)
+    const evTxt=(r.fuentes||[]).length?r.fuentes.join(' · '):[ev.hilos?`${ev.hilos} hilo${ev.hilos!==1?'s':''}`:ev.correos?`${ev.correos} correo${ev.correos!==1?'s':''}`:null, ev.ultimo?`último ${fmtFechaDMY(ev.ultimo)}`:null].filter(Boolean).join(' · ')
+    const otros=(r.posibles||[]).length>1?`También calza con: ${r.posibles.filter(n=>n!==nomCli(k)).join(', ')}`:''
+    const dot={alta:C.greenText,media:C.soon,baja:C.textSoft}[r.confianza]||C.textSoft
+    const txtSty={fontSize:11,color:C.muted,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}
+    const acc = r.estado==='registrado' ? <span style={{fontSize:11.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>Ya en la ficha</span>
+      : e ? <><span style={{fontSize:11.5,fontWeight:600,color:e==='ok'?C.greenText:C.muted,whiteSpace:'nowrap'}}>{e==='ok'?'Confirmado':'Descartado'}</span><button disabled={busy} onClick={()=>deshacer(r)} style={btnTxt}>Deshacer</button></>
+      : k===SIN ? <><select value={cliPick[r.id]||''} onChange={ev2=>{ setCliPick(p=>({...p,[r.id]:ev2.target.value})); asignarCli(r,ev2.target.value) }} style={{fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.surface,minWidth:0,flex:D?'0 1 200px':'1 1 auto',maxWidth:D?200:'none'}}><option value=''>Elige el cliente</option>{activos.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button disabled={busy} onClick={()=>aRed(r)} style={btnTxt}>→ Red</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
+      : r.rol==='contraparte' ? <><button disabled={busy} onClick={()=>esDelCliente(r)} style={btnSec}>Es del cliente</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
+      : <><select value={f} onChange={ev2=>setFunPick(p=>({...p,[r.id]:ev2.target.value}))} title='Función' style={{fontSize:12,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 6px',background:C.surface,minWidth:0,flex:D?'0 1 170px':'1 1 auto',maxWidth:D?170:'none'}}>{FUN_CONTACTO_ORD.map(x=><option key={x} value={x}>{FUN_CONTACTO[x]}</option>)}</select><button disabled={busy} onClick={()=>confirmar([r])} style={btnPri}>Confirmar</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
+    return <div key={r.id} style={{display:'flex',alignItems:'center',gap:D?12:8,rowGap:6,flexWrap:'wrap',padding:D?'10px 14px':'10px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
+      <div style={{flex:'1 1 240px',minWidth:0,opacity:e?.6:1}}>
+        <div style={{fontSize:13.5,fontWeight:600,color:C.text,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}}>{r.nombre||r.email.split('@')[0]}{r.cargo?` · ${r.cargo}`:''}</div>
+        <div style={{fontSize:12,color:C.azulInfo,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.email}</div>
+        {(otros||evTxt)&&<div style={txtSty}>{otros||evTxt}</div>}
+        {r.rol!=='contraparte'&&(r.recibe||[]).length>0&&<div style={{...txtSty,color:C.accent}}>Recibe: {r.recibe.join(' · ')}</div>}
+      </div>
+      <span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5,width:D?56:'auto'}}><span style={{width:6,height:6,borderRadius:'50%',background:dot}}/>{r.confianza?r.confianza[0].toUpperCase()+r.confianza.slice(1):'—'}</span>
+      <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,justifyContent:'flex-end',marginLeft:'auto',width:D?'auto':'100%'}}>{acc}</div>
+    </div> }
+
+  const det=(()=>{ if(!selK) return <div style={{...card,padding:'28px 16px',textAlign:'center',fontSize:13,color:C.muted}}>Elige un cliente.</div>
+    const ps=rows.filter(r=>kCli(r)===selK&&pasaQ(r)&&pasaPer(r,false)&&(F.rev==='pend'||F.rev===''||est(r)===F.rev))
+    const altas=confirmables(rows.filter(r=>kCli(r)===selK&&r.confianza==='alta'))
+    const fg={}; ps.forEach(r=>{ const k=r.rol==='contraparte'?'contraparte':fn(r); (fg[k]=fg[k]||[]).push(r) })
+    const m=cli[selK]
+    return <div style={{minWidth:0}}>
+      {!D&&<button onClick={()=>setVerDet(false)} style={{...btnTxt,color:C.accent,fontSize:13,padding:'0 0 10px'}}>‹ Clientes</button>}
+      <div style={{display:'flex',alignItems:'flex-start',gap:10,flexWrap:'wrap',marginBottom:6}}>
+        <div style={{flex:D?1:'1 1 100%',minWidth:0}}>
+          <div onClick={selK!==SIN&&onOpenClientFicha?()=>onOpenClientFicha(selK):undefined} title={selK!==SIN?'Ver ficha del cliente':undefined} style={{fontSize:18,fontWeight:800,color:C.accent,cursor:selK!==SIN?'pointer':'default'}}>{nomCli(selK)}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{selK===SIN?'Elige el cliente de cada correo antes de confirmarlo':[m?.abogado_responsable,m?.status,...arDe(selK)].filter(Boolean).join(' · ')}</div>
+        </div>
+        {altas.length>0&&<button disabled={busy} onClick={()=>confirmar(altas)} style={btnPri}>Confirmar {altas.length} de confianza alta</button>}
+      </div>
+      {[...FUN_CONTACTO_ORD,'contraparte'].filter(k=>fg[k]).map(k=><div key={k}>
+        <div style={{...SEC_LBL,display:'flex',justifyContent:'space-between',margin:'12px 2px 6px'}}><span>{k==='contraparte'?'Contraparte':FUN_CONTACTO[k]}</span><span style={{color:C.muted,fontWeight:600}}>{fg[k].length}</span></div>
+        <div style={{...card,overflow:'hidden'}}>{fg[k].sort((a,b)=>(({alta:0,media:1,baja:2}[a.confianza]??3)-({alta:0,media:1,baja:2}[b.confianza]??3))||((b.evidencia?.hilos||0)-(a.evidencia?.hilos||0))).map(fila)}</div>
+      </div>)}
+      {!ps.length&&<div style={{...card,padding:'24px 16px',textAlign:'center',fontSize:13,color:C.muted,marginTop:10}}>Sin personas con estos filtros en este cliente.</div>}
+    </div> })()
+
+  const revisados=rows.filter(r=>est(r)).length
+  return wrap(<>
+    {header}
+    {(D||!verDet)&&<>
+      <div style={{display:'grid',gridTemplateColumns:D?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:10,marginBottom:12}}>
+        {kpis.map(([l,v,s])=><div key={l} style={{...card,padding:'11px 14px',minWidth:0}}>
+          <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+          <div style={{fontSize:24,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',lineHeight:1.2}}>{v}</div>
+          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
+        </div>)}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+        <div style={{display:'flex',gap:6,overflowX:'auto',flex:1,minWidth:0,scrollbarWidth:'none'}}>
+          {abChips.map(([k,l,n])=>{ const on=F.ab===k; return <button key={k||'todos'} onClick={()=>{ setFil('ab',k); setSel(null) }} style={{fontSize:12.5,fontWeight:600,borderRadius:20,padding:'6px 13px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{l} <span style={{fontWeight:500,opacity:.8}}>{n}</span></button> })}
+        </div>
+        {D&&<span style={{fontSize:12.5,color:C.muted,whiteSpace:'nowrap'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></span>}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:D?'repeat(6,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:6,marginBottom:8}}>
+        {SELS.map(([k,l,ops])=>{ const act=F[k]&&!(k==='rev'&&F[k]==='pend'); return <label key={k} style={{background:C.card,border:`1px solid ${act?C.accent:C.border}`,borderRadius:8,padding:'4px 9px 5px',minWidth:0,display:'block'}}>
+          <span style={{...lblSty,display:'block',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span>
+          <select value={F[k]} onChange={e=>setFil(k,e.target.value)} style={{width:'100%',border:'none',outline:'none',background:'none',fontSize:12.5,color:C.text,padding:0,cursor:'pointer'}}>{ops.map(([v,t])=><option key={v} value={v}>{t}</option>)}</select>
+        </label> })}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:6,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',marginBottom:10}}>
+        <SIcon n='search' s={14} c={C.done}/>
+        <input value={q} onChange={e=>{ setQ(e.target.value); setLote(null) }} placeholder='Buscar cliente, persona o correo' style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/>
+      </div>
+      {!D&&<div style={{fontSize:12.5,color:C.muted,margin:'0 2px 8px'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></div>}
+      {loteBox}
+    </>}
+    {D ? <div style={{display:'grid',gridTemplateColumns:'340px minmax(0,1fr)',gap:14,alignItems:'start'}}>{lista}{det}</div>
+       : (verDet&&selK ? det : lista)}
+  </>)
+}
+function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContactos}){
   const [phase,setPhase] = useState('idle')        // idle|scanning|review|error
   const [prog,setProg] = useState({done:0,total:0,label:''})
-  const [props_,setProps] = useState([])
   const [dismissed,setDismissed] = useState(new Set())
-  const [accepted,setAccepted] = useState(new Set())
-  const [busyE,setBusyE] = useState('')            // email en proceso
+  const [nuevos,setNuevos] = useState(0)            // personas nuevas que quedaron por revisar en Clientes › Contactos
   const [err,setErr] = useState('')
-  const [revTab,setRevTab] = useState('con')       // pestaña del panel: 'con' (con cliente) | 'sin' (por asignar)
-  const [sinShow,setSinShow] = useState(50)        // cuántos "por asignar" mostrar (paginado incremental)
-  const [cambiarFor,setCambiarFor] = useState(null) // email del contacto "con cliente" al que se le está cambiando el cliente
   const lastScan = (typeof localStorage!=='undefined' && localStorage.getItem('gmail_contactos_last'))||''
   const clientName = id => clients.find(c=>String(c.id)===String(id))?.name||'Cliente'
   const domLearnedRef = useRef({})   // dominio → client_id aprendido (de asignaciones manuales previas)
@@ -33026,7 +33273,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
         const j=await r.json(); (j.messages||[]).forEach(m=>ids.push(m.id)); pageToken=j.nextPageToken; if(!pageToken) break
       }
       ids=ids.slice(0,CAP)
-      if(!ids.length){ setProps([]); localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`); setPhase('review'); return }
+      if(!ids.length){ setNuevos(0); localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`); setPhase('review'); return }
       const agg={}; let done=0
       const fetchMeta = async(id)=>{
         try{
@@ -33055,69 +33302,16 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
       let cands=Object.values(agg).filter(a=>a.count>=1 && !existEmails.has(a.email) && !dismissed.has(a.email))
       cands.forEach(a=>{ a.client_id = domClient[a.domain] || clientByDomain(a.domain) || null; a.cargo='' })
       await asociarIA(cands.filter(a=>!a.client_id))
-      setProps(cands.sort((a,b)=>b.count-a.count))
+      // Lo encontrado queda como propuesta en Clientes › Contactos (una sola revisión para todo lo que viene de Gmail).
+      const {data:yaCand}=await supabase.from('contactos_candidatos').select('email').limit(10000)
+      const yaC=new Set((yaCand||[]).map(x=>String(x.email).toLowerCase()))
+      const filas=cands.filter(a=>!yaC.has(a.email)).map(a=>({email:a.email,nombre:a.name||null,client_id:a.client_id||null,rol:a.client_id?'cliente':'desconocido',funcion:'sin_definir',cargo:a.cargo||null,confianza:a.byIA?'baja':'media',fuentes:a.byIA?['cliente sugerido por IA']:[],recibe:[],posibles:[],evidencia:{correos:a.count,ultimo:a.last,asuntos:a.subjects},origen:'gmail_app'}))
+      for(let i=0;i<filas.length;i+=200){ const {error}=await supabase.from('contactos_candidatos').insert(filas.slice(i,i+200)); if(error) throw error }
+      setNuevos(filas.length)
       localStorage.setItem('gmail_contactos_last',`${new Date().getFullYear()}/${new Date().getMonth()+1}/${new Date().getDate()}`)
       setPhase('review')
     }catch(e){ setErr(e.message||String(e)); setPhase('error') }
   }
-
-  const agregar = async(a, cid)=>{
-    const clientId=cid||a.client_id; if(!clientId) return
-    setBusyE(a.email)
-    try{
-      const {error}=await supabase.from('contacts').insert({client_id:clientId, nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, cargo:a.cargo||null})
-      if(error) throw error
-      setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','agregar_gmail',{email:a.email,client_id:clientId},null)
-      // Aprende el dominio (si fue asignación manual) y asocia al instante los demás del mismo dominio aún sin cliente.
-      if(cid && a.domain && !PROV.test(a.domain)){
-        domLearnedRef.current[a.domain]=clientId
-        learnPut('dominio_cliente', a.domain, clientId, {})
-        setProps(p=>p.map(x=>(!x.client_id && x.domain===a.domain && x.email!==a.email)?{...x,client_id:clientId,byDom:true}:x))
-      }
-    }catch(e){ appAlert('No se pudo agregar: '+e.message) }
-    setBusyE('')
-  }
-  const aRed = async(a)=>{   // manda el contacto a Red profesional (web inferida del dominio; país/categoría se completan en la vista)
-    setBusyE(a.email)
-    try{
-      const {error}=await supabase.from('red_profesional').insert({nombre:(a.name||a.email.split('@')[0]).trim(), email:a.email, web:a.domain&&!PROV.test(a.domain)?a.domain:null})
-      if(error) throw error
-      setAccepted(p=>new Set([...p,a.email])); logEvent('contactos','a_red',{email:a.email},null)
-    }catch(e){ appAlert('No se pudo guardar en red: '+e.message) }
-    setBusyE('')
-  }
-  const descartar = a=>{ learnPut('contacto_descartado',a.email,'descartado',{}); setDismissed(p=>new Set([...p,a.email])) }
-  const reasignar = (email,cid)=> setProps(p=>p.map(a=>a.email===email?{...a,client_id:cid}:a))
-  const agregarSeguros = async(list)=>{ for(const a of list){ if(!accepted.has(a.email)) await agregar(a) } }
-
-  const visibles = props_.filter(a=>!accepted.has(a.email)&&!dismissed.has(a.email))
-  const conCliente = visibles.filter(a=>a.client_id)
-  const sinCliente = visibles.filter(a=>!a.client_id)
-  const grupos = {}; conCliente.forEach(a=>{ (grupos[a.client_id]=grupos[a.client_id]||[]).push(a) })
-  const ini = n => (n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()
-  const selCli = {fontSize:11,color:C.muted,border:`0.5px solid ${C.border}`,borderRadius:6,padding:'3px 6px',background:'#fff',marginTop:3,maxWidth:'100%'}
-  const clientesOrden = [...clients].filter(c=>c.status!=='Terminado').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'))
-  const fila = (a,asignable)=>(
-    <div key={a.email} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid #F1F3F5`}}>
-      <div style={{width:34,height:34,borderRadius:'50%',background:asignable?C.soonBg:C.azulBg,color:asignable?C.soonText:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{ini(a.name||a.email)}</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||a.email.split('@')[0]}</div>
-        <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.email}{a.cargo?<span style={{color:C.textSoft}}> · {a.cargo}{a.byIA?' (IA)':''}</span>:''}</div>
-        <div style={{fontSize:10,color:C.textSoft}}>{a.count} correo{a.count!==1?'s':''}{a.last?` · último ${fmtFechaDMY(a.last)}`:''}</div>
-        {asignable&&<ClientePicker clients={clientesOrden} onPick={cid=>agregar(a,cid)}/>}
-        {!asignable&&cambiarFor===a.email&&<div style={{marginTop:4}}>
-          <ClientePicker clients={clientesOrden} onPick={cid=>{reasignar(a.email,cid);setCambiarFor(null)}}/>
-          <button onClick={()=>{reasignar(a.email,null);setCambiarFor(null)}} style={{marginTop:4,fontSize:10,color:C.soonText,background:'none',border:'none',cursor:'pointer',padding:0}}>Sin cliente (mover a "Por asignar")</button>
-        </div>}
-      </div>
-      <div style={{display:'flex',gap:6,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>
-        {a.client_id&&<button disabled={busyE===a.email} onClick={()=>agregar(a)} style={{...chipBtn('primary'),opacity:busyE===a.email?.6:1}}>Agregar</button>}
-        {!asignable&&<button onClick={()=>setCambiarFor(cambiarFor===a.email?null:a.email)} style={chipBtn('soft')}>Cambiar</button>}
-        {asignable&&<button disabled={busyE===a.email} onClick={()=>aRed(a)} style={chipBtn('green')}>→ Red</button>}
-        <button onClick={()=>descartar(a)} style={chipBtn('soft')}>Descartar</button>
-      </div>
-    </div>
-  )
 
   return (
     <div style={{maxWidth:600}}>
@@ -33167,47 +33361,14 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose}){
           <button onClick={()=>setPhase('idle')} style={{padding:'9px 16px',borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver</button>
         </div>
       )}
-      {phase==='review'&&(()=>{
-        const tab=(k,l,n,col)=>{ const on=revTab===k; return (
-          <button onClick={()=>setRevTab(k)} style={{flex:1,padding:'9px 6px',border:'none',borderBottom:`2px solid ${on?col:'transparent'}`,background:'none',color:on?col:C.muted,fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{l} <span style={{fontSize:11,fontWeight:700,color:on?'#fff':C.muted,background:on?col:C.track,borderRadius:20,padding:'1px 7px',marginLeft:2}}>{n}</span></button>
-        )}
-        return (
-        <div>
-          {visibles.length===0
-            ? <div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'26px 0'}}>Sin contactos nuevos por revisar.</div>
-            : <>
-              <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:12}}>
-                {tab('con','Con cliente',conCliente.length,C.accent)}
-                {tab('sin','Por asignar',sinCliente.length,'#854F0B')}
-              </div>
-              {revTab==='con'&&(conCliente.length===0
-                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>No hay contactos asociados a un cliente.</div>
-                : <>
-                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><button onClick={()=>agregarSeguros(conCliente.filter(a=>a.count>=2))} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'9px 14px',cursor:'pointer'}}>Agregar todos ({conCliente.filter(a=>a.count>=2).length})</button></div>
-                  {Object.keys(grupos).map(cid=>(
-                    <div key={cid} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'8px 14px',background:C.bgSoft}}>
-                        <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{clientName(cid)} · {grupos[cid].length}</span>
-                        {grupos[cid].length>1&&<button onClick={()=>agregarSeguros(grupos[cid])} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>Agregar todos</button>}
-                      </div>
-                      {grupos[cid].map(a=>fila(a,false))}
-                    </div>
-                  ))}
-                </>)}
-              {revTab==='sin'&&(sinCliente.length===0
-                ? <div style={{textAlign:'center',color:C.muted,fontSize:12,padding:'20px 0'}}>Todos quedaron asociados.</div>
-                : <>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.4}}>Busca el cliente de cada contacto (escribe su nombre) y se agrega; o descártalo.</div>
-                  <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
-                    {sinCliente.slice(0,sinShow).map(a=>fila(a,true))}
-                  </div>
-                  {sinCliente.length>sinShow&&<button onClick={()=>setSinShow(n=>n+50)} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',marginBottom:10}}>Ver más ({sinCliente.length-sinShow} restantes)</button>}
-                </>)}
-            </>}
-          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver al inicio</button>
+      {phase==='review'&&(
+        <div style={{padding:'24px 10px',textAlign:'center'}}>
+          <div style={{fontSize:28,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nuevos}</div>
+          <div style={{fontSize:13,color:C.muted,marginBottom:16}}>{nuevos===1?'persona nueva por revisar':'personas nuevas por revisar'} en Clientes › Contactos</div>
+          {onIrContactos&&<button onClick={onIrContactos} style={{width:'100%',height:44,borderRadius:12,border:'none',background:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',marginBottom:9}}>Revisar en Contactos</button>}
+          <button onClick={()=>setPhase('idle')} style={{width:'100%',height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Volver</button>
         </div>
-        )
-      })()}
+      )}
     </div>
   )
 }
@@ -40772,11 +40933,11 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente'}
+const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -41227,6 +41388,7 @@ export default function App() {
   // Pila de navegación cross-link: cada salto apila {tab,fichaId,scroll}; el ← desapila y restaura la posición exacta.
   // DEBE ir antes de handleBackOrigin (su dep array se evalúa en render → TDZ/pantalla negra si va después).
   const [navStack,setNavStack]=useState([])
+  const [contactosKey,setContactosKey]=useState(0)   // recarga Clientes › Contactos tras buscar en Gmail
   // Asigna proyecto (venta) y/o razón social a uno o varios gastos/fondos desde la ficha. Solo completa lo que falta (no pisa);
   // aprende la glosa → proyecto (learnings gasto_venta); deshacer con el toast; bitácora.
   // forzar: corrige lo ya asignado (reemplaza proyecto/RS distintos); sin forzar solo completa lo que falta.
@@ -43861,6 +44023,7 @@ export default function App() {
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
+            {tab==='contactos'&&userRole==='admin'&&<ContactosClientes key={contactosKey} isDesktop={isDesktop} clients={clients} sales={sales} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha} onBuscarGmail={()=>setModal({type:'gmailContactos'})}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
@@ -43880,7 +44043,7 @@ export default function App() {
             {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria,arch)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria,archivoCorreo:arch||null}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
             {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} setExpenses={setExpenses} setRendiciones={setRendiciones} setBilling={setBilling} user={user} onRendicionComplete={handleRendicionComplete}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView onContactos={()=>navTo({tab:'contactos'})} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
@@ -43971,7 +44134,7 @@ export default function App() {
         {modal?.type==='aprendizaje'&&<Modal fullscreenOnMobile title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {/* 'redaccion' ya NO es modal: página 'flujo'. */}
         {/* 'plazos' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='gmailContactos'&&<Modal fullscreenOnMobile title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)}/></Modal>}
+        {modal?.type==='gmailContactos'&&<Modal fullscreenOnMobile title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)} onIrContactos={()=>{ setModal(null); if(tab==='contactos') setContactosKey(k=>k+1); else navTo({tab:'contactos'}) }}/></Modal>}
         {modal?.type==='gmailTareas'&&<Modal fullscreenOnMobile title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='redProfesional'&&<Modal fullscreenOnMobile title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal fullscreenOnMobile title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
