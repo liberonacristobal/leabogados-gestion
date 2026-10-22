@@ -173,7 +173,8 @@ Deno.serve(async (req) => {
     const interno = internoRow?.[0]?.id || null;
     const rutEstudio = nRutB(estRow?.[0]?.rut || "");
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
-    const domOficina = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").split("@")[1]?.toLowerCase() || "";
+    const casillaAgente = (String(casillaCfg?.[0]?.value || "").split(/[,;\s]+/).find((e) => e.includes("@")) || "").toLowerCase().trim();
+    const domOficina = casillaAgente.split("@")[1] || "";
     const desde25 = iso(new Date(Date.now() - 25 * 86400000));
     // deno-lint-ignore no-explicit-any
     const [movsRec, avisosPrev]: any[] = await Promise.all([
@@ -277,6 +278,23 @@ Deno.serve(async (req) => {
       const asunto = String(m.subject || ""), cuerpo = String(m.body || "").slice(0, 20000);
       const adj = (Array.isArray(m.attachments) ? m.attachments : []).slice(0, 6);
       const esInterno = !!domOficina && dom === domOficina;
+      // Copia que llega desde la casilla de una persona (regla de Workspace): si no trae ninguna señal administrativa (asunto de
+      // fondos/rendición/liquidación, cuentas o RUT de la oficina en el texto, notaría, boleta de honorarios), se descarta SIN
+      // guardar su contenido ni sus adjuntos. Las cuentas y el RUT salen de la base (cartola y estudio), no del código.
+      const destinos = `${m.to || ""},${m.cc || ""}`.toLowerCase();
+      if (casillaAgente && !destinos.includes(casillaAgente)) {
+        const dig = `${asunto} ${cuerpo}`.replace(/(\d)[.\-\s](?=\d)/g, "$1");
+        const senal = /(solicitud|provisi[oó]n) de fondos|fondos? por rendir|rendici[oó]n de gastos|liquidaci[oó]n de gastos/i.test(asunto)
+          || [...cuentasPropias].some((c) => c && c.length >= 6 && dig.includes(c)) || (!!rutEstudio && dig.toUpperCase().includes(rutEstudio))
+          || dominiosNotaria.has(dom) || correosNotaria.has(de) || adj.some((a: { name: string }) => /bhe|boleta|honorario/i.test(a.name || ""));
+        if (!senal) {
+          if (!dryRun) await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ gmail_id: gid, thread_id: m.threadId || null, recibido_at: recibido.toISOString(), de: "(copia no relacionada)", asunto: "(no se guardó)", tipo: "otro", estado: "descartado", motivo: "Copia de una casilla personal sin relación con la administración: no se guardó su contenido" }) });
+          out.procesados++; out.por_estado.descartado = (out.por_estado.descartado || 0) + 1;
+          // deno-lint-ignore no-explicit-any
+          if (dryRun) (out as any).filas = [...((out as any).filas || []), { gmail_id: gid, estado: "descartado", tipo: "copia_personal", motivo: "sin señal administrativa" }];
+          continue;
+        }
+      }
       let cid: string | null = cliPorEmail.get(de) || null;
       if (!cid && dom && !GENERICOS.test(dom) && cliPorDominio.get(dom)?.size === 1) cid = [...cliPorDominio.get(dom)!][0];
       let porNombre: { id: string; name: string } | null = null;
