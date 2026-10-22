@@ -1291,7 +1291,7 @@ const _PED_CHIP={carg:['Cargada',C.greenText,C.greenBg],rev:['Por revisar',C.azu
 // Notaría › Documentos (edge notaria-documentos): lo que envió la notaría, agrupado por cliente, con su archivo en
 // Clientes/<Cliente>/Notaría. «Por clasificar»: una persona elige el cliente y la app lo guarda en su carpeta.
 const _DEMO_DOCS_NOTARIA = [
-  { id:'dn1', recibido_at:'2026-10-14T17:36:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101413123242)', tipo_documento:'CONSTITUCION DE SOCIEDAD POR ACCIONES', repertorio:'52157', fecha_documento:'2026-10-02', archivo_nombre:'316-2026101413123242.pdf', cliente_id:'c1', ot_number:'497834', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
+  { id:'dn1', razon_social:'MI MARKET SpA', recibido_at:'2026-10-14T17:36:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101413123242)', tipo_documento:'CONSTITUCION DE SOCIEDAD POR ACCIONES', repertorio:'52157', fecha_documento:'2026-10-02', archivo_nombre:'316-2026101413123242.pdf', cliente_id:'c1', ot_number:'497834', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
   { id:'dn2', recibido_at:'2026-10-02T19:29:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026100213213667)', tipo_documento:'AUTORIZACION USO DOMICILIO COMERCIAL', repertorio:null, fecha_documento:'2026-10-02', archivo_nombre:'316-2026100213213667.pdf', cliente_id:'c2', ot_number:'497650', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
   { id:'dn3', recibido_at:'2026-09-29T22:24:00Z', asunto:'RE: Confección Matriz Mandatos Judiciales', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'FORMATO NOTARIA.docx', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente' },
   { id:'dn4', recibido_at:'2026-10-16T15:10:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101615021131)', tipo_documento:'PROTOCOLIZACION EXTRACTO', repertorio:'53480', fecha_documento:'2026-10-16', archivo_nombre:'316-2026101615021131.pdf', cliente_id:null, ot_number:null, estado:'pendiente_ot' },
@@ -1299,7 +1299,7 @@ const _DEMO_DOCS_NOTARIA = [
 function useDocumentosNotaria(){
   const [rows,setRows]=useState(null)
   const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_DOCS_NOTARIA); return }
-    supabase.from('documentos_notaria').select('id,recibido_at,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_url,drive_nombre,metodo').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
+    supabase.from('documentos_notaria').select('id,recibido_at,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_url,drive_nombre,metodo,razon_social').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
       .then(({data})=>setRows(data||[]),()=>setRows([])) },[])
   useEffect(()=>{ cargar() },[cargar])
   return {rows,recargar:cargar,setRows}
@@ -1336,7 +1336,7 @@ function DocumentosNotaria({isDesktop, clients=[], user, onOpenClientFicha}){
       setRows(p=>p.map(x=>x.id===d.id?{...x,estado:'descartado'}:x)) }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
     setBusy(null) }
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
-  const sub=d=>[d.repertorio?`Rep ${d.repertorio}`:null, d.ot_number?`OT-${d.ot_number}`:null].filter(Boolean).join(' · ')
+  const sub=d=>[d.razon_social&&_n(d.razon_social)!==_n(nom(d.cliente_id))?d.razon_social:null, d.repertorio?`Rep ${d.repertorio}`:null, d.ot_number?`OT-${d.ot_number}`:null].filter(Boolean).join(' · ')
   const fila=(d,i,extra)=><div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
     {diaGrande(d.fecha_documento||isoLocal(d.recibido_at))}
     <div style={{flex:1,minWidth:0}}>

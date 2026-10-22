@@ -1,7 +1,8 @@
 // Edge Function: notaria-documentos
 // Documentos que envía la notaría (escrituras, extractos, finiquitos, cartas certificadas, poderes…): los lee en la casilla
 // conectada (drive_auth, la misma de bhe-correo) SOLO con remitente de la notaría, lleva el listado (documentos_notaria) y guarda
-// cada archivo en Clientes/<Cliente>/Notaría con un nombre ordenado.
+// cada archivo en Clientes/<Cliente>/Notaría con un nombre ordenado. También los PDF firmados por la notaría desde otra dirección
+// (firma configurada en learnings config notaria_firmas, en el texto propio del correo).
 // Cliente: el correo automático de la notaría trae tipo de documento, repertorio, fecha y código de validación
 // (_shared/notariaDocsReglas.js); se cruza con la OT de la liquidación de la MISMA fecha y tipo (única) → cliente, gasto y OT.
 // Sin esa estructura, por el nombre del cliente en el asunto (único). Lo que no se identifica queda «Por clasificar»; lo que
@@ -11,7 +12,7 @@
 // que guarda el archivo en su carpeta. Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { decodeBase64Url } from "jsr:@std/encoding@1/base64url";
-import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria } from "../_shared/notariaDocsReglas.js";
+import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria, firmadoPorNotaria } from "../_shared/notariaDocsReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -21,7 +22,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const HS = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
 const norm = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-const DOCS = /\.(pdf|docx?|odt)$/i;
+const DOCS = /\.pdf$/i;   // solo PDF (lo firmado); borradores y matrices en Word no
 const CARPETA = "Notaría";
 
 // deno-lint-ignore no-explicit-any
@@ -102,21 +103,24 @@ Deno.serve(async (req) => {
     if (!u?.email || !dom || !String(u.email).toLowerCase().endsWith("@" + dom.toLowerCase())) return json({ error: "No autorizado" }, 403);
   }
   try {
-    const cfg = await rest("learnings?kind=eq.config&key=in.(notaria_documentos,notaria_pedir_liquidacion)&select=key,value");
+    const cfg = await rest("learnings?kind=eq.config&key=in.(notaria_documentos,notaria_pedir_liquidacion,notaria_firmas,agente_casilla)&select=key,value");
     const ON = String(cfg.find((c: { key: string }) => c.key === "notaria_documentos")?.value || "").toLowerCase() === "on";
     const dryRun = !!body.dryRun || !ON;
     // Remitentes de la notaría: los correos configurados para el pedido de liquidación y su dominio (no los de casillas públicas).
     let correos: string[] = []; try { correos = JSON.parse(cfg.find((c: { key: string }) => c.key === "notaria_pedir_liquidacion")?.value || "{}").notaria || []; } catch { /* sin config */ }
     const libres = /@(gmail|hotmail|outlook|yahoo)\./i;
     const remitentes = [...new Set(correos.flatMap((c) => libres.test(c) ? [c] : [c, c.split("@")[1]]).filter(Boolean))];
-    if (!remitentes.length) return json({ ok: false, error: "Sin correos de la notaría configurados (learnings config notaria_pedir_liquidacion.notaria)" });
+    let firmas: string[] = []; try { firmas = JSON.parse(cfg.find((c: { key: string }) => c.key === "notaria_firmas")?.value || "[]"); } catch { /* sin firmas */ }
+    const domOficina = String(cfg.find((c: { key: string }) => c.key === "agente_casilla")?.value || "").split("@")[1] || "";
+    if (!remitentes.length && !firmas.length) return json({ ok: false, error: "Sin correos ni firmas de la notaría configurados" });
+    const deNotaria = (de: string) => { const d = String(de || "").toLowerCase(); return remitentes.some((r) => d.includes(r.toLowerCase())); };
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
     const [ots, clients, ents, previos] = await Promise.all([
-      todas("expenses?select=id,client_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
+      todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
       todas("clients?select=id,name,drive_folder_id,is_internal"),
       todas("client_entities?select=id,client_id,name"),
-      todas("documentos_notaria?select=id,gmail_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id"),
+      todas("documentos_notaria?select=id,gmail_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,drive_file_id,drive_nombre&origen=eq.notaria"),
     ]);
     const cli: Record<string, { name: string; drive_folder_id: string | null }> = Object.fromEntries(clients.map((c) => [c.id, c]));
     const yaCod = new Set(previos.map((p) => p.codigo_validacion).filter(Boolean));
@@ -126,9 +130,40 @@ Deno.serve(async (req) => {
     const nombreLibre = (cid: string, n: string) => { let x = n, i = 2; while (usados.has(`${cid}|${x}`)) x = n.replace(/(\.[a-z0-9]+)$/i, ` (${i++})$1`); usados.add(`${cid}|${x}`); return x; };
     // Nombres de cliente y de sus razones sociales para el asunto («INMOBILIARIA SANTA GRACIA SpA»); solo nombres largos.
     const nombres = [...clients.filter((c) => !c.is_internal).map((c) => ({ n: norm(c.name), id: c.id })), ...ents.map((e) => ({ n: norm(e.name), id: e.client_id }))].filter((x) => x.n.length >= 8);
+    // Razón social del documento: la de la OT; si no, la que nombra el asunto o el archivo; si no, la única del cliente; si no, su nombre.
+    const entDe: Record<string, { name: string; client_id: string }> = Object.fromEntries(ents.map((e) => [e.id, e]));
+    const otDe: Record<string, { entity_id: string | null }> = Object.fromEntries(ots.map((o) => [o.id, o]));
+    const rsEnTexto = (t: string, cid: string) => { const a = norm(t); const es = ents.filter((e) => e.client_id === cid && norm(e.name).length >= 8 && a.includes(norm(e.name))); return es.length === 1 ? es[0].name : null; };
+    const rsDe = (cid: string, expenseId: string | null, asunto: string, archivo: string) => {
+      const e = expenseId ? otDe[expenseId]?.entity_id : null; if (e && entDe[e]?.client_id === cid) return entDe[e].name;
+      const t = rsEnTexto(asunto || "", cid) || rsEnTexto(String(archivo || "").replace(/[._-]+/g, " "), cid); if (t) return t;
+      const es = ents.filter((x) => x.client_id === cid); return es.length === 1 ? es[0].name : (cli[cid]?.name || "");
+    };
     const clienteEnTexto = (t: string) => { const a = norm(t); const ids = [...new Set(nombres.filter((x) => a.includes(x.n)).map((x) => x.id))]; return ids.length === 1 ? ids[0] : null; };
 
-    const q = encodeURIComponent(`from:(${remitentes.join(" OR ")}) has:attachment (filename:pdf OR filename:docx OR filename:doc) after:${desde.replace(/-/g, "/")}`);
+    // Renombrar lo ya guardado con la regla vigente del nombre (razón social primero). Solo cambia el nombre en Drive.
+    if (body.renombrar) {
+      const out: unknown[] = []; const vistos = new Set<string>();
+      for (const p of previos.filter((x) => x.estado === "guardado" && x.drive_file_id && x.cliente_id)) {
+        const ext = ((p.drive_nombre || p.archivo_nombre || "").match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || "pdf";
+        const rs = rsDe(p.cliente_id, p.expense_id, p.asunto || "", p.archivo_nombre);
+        const doc = p.tipo_documento ? { tipo: p.tipo_documento, fecha: String(p.fecha_documento || "").slice(0, 10), repertorio: p.repertorio } : null;
+        let nombre = nombreArchivoNotaria(doc, ext, rs, p.archivo_nombre), i = 2; const base = nombre;
+        while (vistos.has(`${p.cliente_id}|${nombre}`)) nombre = base.replace(/(\.[a-z0-9]+)$/i, ` (${i++})$1`);
+        vistos.add(`${p.cliente_id}|${nombre}`);
+        if (nombre === p.drive_nombre) continue;
+        out.push({ antes: p.drive_nombre, ahora: nombre });
+        if (dryRun) continue;
+        const r = await g(`https://www.googleapis.com/drive/v3/files/${p.drive_file_id}?supportsAllDrives=true&fields=id`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nombre }) });
+        if (!r.ok) { out.pop(); continue; }
+        await rest(`documentos_notaria?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify({ drive_nombre: nombre, razon_social: rs, updated_at: new Date().toISOString() }) });
+      }
+      return json({ ok: true, dryRun, renombrados: out.length, muestra: out.slice(0, 15) });
+    }
+    // De la notaría por remitente, o por la firma de su gente desde cualquier dirección (nunca correos de la oficina).
+    const porFirma = firmas.map((f) => `"${f.replace(/"/g, "")}"`);
+    const quien = [remitentes.length ? `from:(${remitentes.join(" OR ")})` : "", ...porFirma].filter(Boolean).join(" OR ");
+    const q = encodeURIComponent(`(${quien}) has:attachment filename:pdf${domOficina ? ` -from:${domOficina}` : ""} after:${desde.replace(/-/g, "/")}`);
     // deno-lint-ignore no-explicit-any
     const ids: any[] = []; let page = "";
     for (let i = 0; i < 20; i++) { const r = await g(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${page ? `&pageToken=${page}` : ""}`); const d = await r.json(); if (!r.ok) throw new Error(`Gmail: ${d?.error?.message || r.status}`); ids.push(...(d.messages || [])); page = d.nextPageToken; if (!page) break; }
@@ -158,6 +193,7 @@ Deno.serve(async (req) => {
       const walk = (p: any) => { if (!p) return; if (p.mimeType === "text/plain" && p.body?.data && !p.filename) plano += texto(p.body.data) + "\n"; if (p.filename && p.body?.attachmentId && DOCS.test(p.filename)) partes.push(p); (p.parts || []).forEach(walk); };
       walk(dm.payload);
       if (!partes.length) continue;
+      if (!deNotaria(hdr("from")) && !firmadoPorNotaria(plano, firmas)) continue;   // la firma está solo en lo citado: no es de la notaría
       const asunto = hdr("subject"), de = hdr("from"), recibido = new Date(Number(dm.internalDate)).toISOString();
       const est = leerCorreoNotaria(plano);
       for (const p of partes) {
@@ -193,7 +229,9 @@ Deno.serve(async (req) => {
             const ra = await g(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${mid}/attachments/${p.body.attachmentId}`); const da = await ra.json();
             if (!ra.ok || !da.data) throw new Error("No se pudo descargar el adjunto");
             const ext = (p.filename.match(/\.([a-z0-9]+)$/i) || [])[1] || "pdf";
-            const nombre = nombreLibre(cid as string, est ? nombreArchivoNotaria(est, ext.toLowerCase()) : p.filename);
+            const rs = rsDe(cid as string, ot?.id || null, asunto, p.filename);
+            const nombre = nombreLibre(cid as string, nombreArchivoNotaria(est, ext.toLowerCase(), rs, p.filename));
+            fila.razon_social = rs;
             const up = await subir(await carpetaNotaria(carpeta as string), nombre, p.mimeType || "application/pdf", b64url(da.data));
             Object.assign(fila, { drive_file_id: up.id, drive_url: `https://drive.google.com/file/d/${up.id}/view`, drive_nombre: nombre });
           } catch (e) { Object.assign(fila, { estado: "error", motivo: String((e as Error).message || e) }); res.errores.push({ ...resumen, error: fila.motivo }); }
