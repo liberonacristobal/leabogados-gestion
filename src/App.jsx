@@ -37030,17 +37030,22 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   // Costo de oficina aprendido por glosa (el mismo arriendo/sueldo/servicio que vuelve cada mes) → categoría + subcategoría sugeridas.
   const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaKey(m.descripcion); const l=gk&&costoOfiLearn[gk]; return (l&&!l.ambiguo)?l:null }
   // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
-  const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon'])
+  const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon',
+    // palabras de servicios bancarios de pago (no identifican al pagador): «NOMINA MISMO DIA PROVEEDORES», «PAGO PROVEEDORES»
+    'nomina','mismo','proveedores','proveedor','pagos','remuneraciones','transferencias'])
   const nombreIdx = useMemo(()=>{ const idx=[]
     clients.forEach(c=>idx.push({cid:c.id,t:_toksNom(c.name)}))
     const seen=new Set(); billing.forEach(f=>{ if(f.receptor_name&&f.client_id){ const k=f.client_id+'|'+f.receptor_name; if(!seen.has(k)){ seen.add(k); idx.push({cid:f.client_id,t:_toksNom(f.receptor_name)}) } } })
-    aliases.forEach(a=>{ if(a.nombre_pagador&&a.cliente_id){ const tk=_toksNom(a.nombre_pagador); if(tk.length) idx.push({cid:a.cliente_id,t:tk}) } })
+    aliases.forEach(a=>{ if(a.nombre_pagador&&a.cliente_id){ const tk=_toksNom(a.nombre_pagador); if(tk.length) idx.push({cid:a.cliente_id,t:tk,rut:crNormRut(a.rut_pagador)||null}) } })
     return idx },[clients,billing,aliases])
   const sugerencias = useMemo(()=>{ const out={}
-    movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte){
+    // Solo abonos aún por conciliar (uno ya conciliado o clasificado no se vuelve a sugerir). Con RUT en el depósito, un nombre
+    // aprendido de OTRO RUT no cuenta: «PROVEEDORES MISMO DIA» es el servicio del banco, no el pagador (Tarragona vs Spinex, 24-07).
+    movs.forEach(mv=>{ if(mv.tipo==='abono'&&!mv.es_interno&&!mv.cliente_id&&mv.nombre_contraparte&&mv.estado==='pendiente'&&!(Number(mv.monto_conciliado)>0)&&!mv.categoria){
       const nt=_toksNom(mv.nombre_contraparte); if(!nt.length) return
+      const rutMv=crNormRut(mv.rut_contraparte)
       const hits=new Set()
-      nombreIdx.forEach(e=>{ const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x)))))
+      nombreIdx.forEach(e=>{ if(rutMv&&e.rut&&e.rut!==rutMv) return; const inter=e.t.filter(t=>nt.some(x=> x===t || (x.length>=5&&t.length>=5&&(x.startsWith(t)||t.startsWith(x)))))
         const fuertes=inter.filter(t=>!_NOM_COMUN.has(t)&&t.length>=5)   // tokens distintivos (no nombres de pila comunes)
         if(fuertes.length>=1 && (inter.length>=2 || fuertes.some(t=>t.length>=6))) hits.add(e.cid) })
       if(hits.size===1) out[mv.id]=[...hits][0] }})
@@ -39929,7 +39934,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                     </div>
                   )
                 })()}
-                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9,color:C.textSoft,marginTop:6,borderTop:`1px solid #F1F1F1`,paddingTop:4,lineHeight:1.4}}>{(concByMov[m.id]).map((r,i)=>{const dest=r.tipo_destino==='fondo'?'Fondo por Rendir':r.tipo_destino==='anticipo'?'Saldo a favor':r.tipo_destino==='gasto'?'Reembolso de gastos':'Conciliado con factura';return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
+                {(concByMov[m.id]||[]).length>0&&<div style={{fontSize:9,color:C.textSoft,marginTop:6,borderTop:`1px solid #F1F1F1`,paddingTop:4,lineHeight:1.4}}>{(concByMov[m.id]).map((r,i)=>{const dest={factura:'Conciliado con factura',fondo:'Fondo por rendir',anticipo:'Saldo a favor',gasto:m.tipo==='cargo'?'Gasto':'Reembolso de gastos',ingreso:'Ingreso de oficina',tercero:'Pago de comisión',devolucion:'Devolución de un pago'}[r.tipo_destino]||r.tipo_destino;return <div key={i}>{dest} · {r.origen==='auto'?'automático':'manual'}{r.created_at?` · ${fmtFechaDMY(r.created_at)}`:''}</div>})}</div>}
                 </div>
     )
   }
