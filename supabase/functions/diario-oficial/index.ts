@@ -181,9 +181,15 @@ Deno.serve(async (req) => {
       const sinLeer = deSujeto.filter((p) => !leida(p) || (repDoc && !soloDigitos(p.detalle?.repertorio)));
       let pub = null, criterio = null;
       // La misma escritura puede publicarse más de una vez (complemento o corrección): cuenta la primera; las otras quedan anotadas.
-      const primera = (xs: typeof cand) => [...xs].sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
+      // Una división publica con el mismo repertorio a la que se divide y a cada sociedad nueva: primero la publicación A NOMBRE de la
+      // sociedad del acto, luego la del tipo de acto, luego la más antigua.
+      const orden = (p: { nombre_norm: string; categoria: string; fecha: string }) =>
+        `${p.nombre_norm === sujeto ? 0 : 1}${acto && normRS(p.categoria || "").includes(acto) ? 0 : 1}${p.fecha}`;
       let otras: typeof cand = [];
-      if (porRep.length) { pub = primera(porRep); criterio = "repertorio"; otras = porRep.filter((p) => p !== pub); }
+      if (porRep.length) {
+        pub = [...porRep].sort((a, b) => orden(a).localeCompare(orden(b)))[0]; criterio = "repertorio";
+        otras = porRep.filter((p) => p !== pub && p.nombre_norm === pub.nombre_norm);
+      }
       else if (porFecha.length) { pub = mejor(porFecha); criterio = "fecha_escritura"; }
       else if (!repDoc && !fEsc && deSujeto.length) { pub = mejor(deSujeto); criterio = deSujeto.every(leida) ? "sociedad" : "cercania"; }
       else if (sinLeer.length) { pub = mejor(sinLeer); criterio = "cercania"; }

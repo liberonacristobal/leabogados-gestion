@@ -1296,12 +1296,13 @@ const _DEMO_DOCS_NOTARIA = [
   { id:'dn2', recibido_at:'2026-10-02T19:29:00Z', thread_id:'t2', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026100213213667)', tipo_documento:'AUTORIZACION USO DOMICILIO COMERCIAL', repertorio:null, fecha_documento:'2026-10-02', archivo_nombre:'316-2026100213213667.pdf', cliente_id:'c2', ot_number:'497650', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
   { id:'dn3', recibido_at:'2026-09-29T22:24:00Z', thread_id:'t3', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'Comprobantes de pago Prenda y Escrituras', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'Comprobante_359995-2026 REP 52160.pdf', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente', drive_url:'https://drive.google.com' },
   { id:'dn5', recibido_at:'2026-09-29T22:24:00Z', thread_id:'t3', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'Comprobantes de pago Prenda y Escrituras', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'REP 52161.pdf', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente', drive_url:'https://drive.google.com' },
-  { id:'dn4', recibido_at:'2026-10-16T15:10:00Z', thread_id:'t4', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101615021131)', tipo_documento:'PROTOCOLIZACION EXTRACTO', repertorio:'53480', fecha_documento:'2026-10-16', archivo_nombre:'316-2026101615021131.pdf', cliente_id:null, ot_number:null, estado:'pendiente_ot', leido_at:'2026-10-16T16:00:00Z', lectura:{acto:'Protocolización de extracto',sociedades:[{razon_social:'Inversiones Demo SpA'}]} },
+  { id:'dn4', recibido_at:'2026-10-16T15:10:00Z', thread_id:'t4', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101615021131)', tipo_documento:'PROTOCOLIZACION EXTRACTO', repertorio:'53480', fecha_documento:'2026-10-16', archivo_nombre:'316-2026101615021131.pdf', cliente_id:null, ot_number:null, estado:'pendiente_ot', leido_at:'2026-10-16T16:00:00Z', lectura:{acto:'Protocolización de extracto',sociedades:[{razon_social:'Inversiones Demo SpA'}]}, do_estado:'publicado', do_publicacion:{fecha:'2026-10-15',nombre:'INVERSIONES DEMO SpA 77.000.000-0',categoria:'CONSTITUCIÓN',cve:'2886071',url:'https://www.diariooficial.interior.gob.cl/',criterio:'repertorio',repertorio:'42.434/2026',fecha_escritura:'2026-08-17',vence:'2026-10-16',otras:[]} },
+  { id:'dn6', recibido_at:'2026-10-20T15:10:00Z', thread_id:'t6', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado', tipo_documento:'EXTRACTO', repertorio:'54020', fecha_documento:'2026-10-20', archivo_nombre:'316-2610-2010-0000.pdf', cliente_id:'c1', ot_number:null, estado:'guardado', drive_url:'https://drive.google.com', lectura:{acto:'Constitución de sociedad por acciones (extracto)',sociedades:[{razon_social:'Comercial Demo SpA'}]}, do_estado:'pendiente', do_publicacion:{base:'2026-10-20',vence:'2026-12-19',sociedad:'comercial demo spa',repertorio:'54020'} },
 ]
 function useDocumentosNotaria(){
   const [rows,setRows]=useState(null)
   const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_DOCS_NOTARIA); return }
-    supabase.from('documentos_notaria').select('id,gmail_id,thread_id,recibido_at,remitente,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_file_id,drive_url,drive_nombre,metodo,razon_social,lectura,sugerencia,leido_at').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
+    supabase.from('documentos_notaria').select('id,gmail_id,thread_id,recibido_at,remitente,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_file_id,drive_url,drive_nombre,metodo,razon_social,lectura,sugerencia,leido_at,do_estado,do_publicacion').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
       .then(({data})=>setRows(data||[]),()=>setRows([])) },[])
   useEffect(()=>{ cargar() },[cargar])
   return {rows,recargar:cargar,setRows}
@@ -1325,10 +1326,34 @@ const _claseDoc = d => { const t=_normTxt(d.tipo_documento), a=_normTxt(`${d.arc
 const _esWord = d => /\.(docx?|rtf|odt)$/i.test(d.archivo_nombre||'')   // la notaría solo registra PDF (decisión del usuario 23-10)
 const _fechaDoc = d => String(d.fecha_documento||isoLocal(d.recibido_at)||'').slice(0,10)
 const _remitente = d => String(d.remitente||'').replace(/<.*>/,'').replace(/"/g,'').trim()
+// Publicación en el Diario Oficial (edge diario-oficial, probada por el repertorio de la escritura). Un trámite = la escritura:
+// su extracto, su protocolización y las publicaciones repetidas (complementos) van juntos.
+const _sinRut = n => String(n||'').replace(/\s*\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\*?\s*$/,'').trim()
+const _repDO = r => { const x=String(r||'').split('/')[0].replace(/\D/g,''); return x?Number(x).toLocaleString('es-CL'):'' }
+function tramitesDiarioOficial(docs){
+  const grupos=new Map(), alias=new Map()
+  docs.filter(d=>d.do_estado&&d.do_estado!=='no_aplica'&&d.do_publicacion).forEach(d=>{ const p=d.do_publicacion
+    const cves=p.cve?[p.cve,...(p.otras||[]).map(o=>o.cve)]:[]
+    const k=cves.map(c=>alias.get(c)).find(Boolean)||(p.cve?`c${p.cve}`:`p${p.sociedad||''}|${p.repertorio||''}`)
+    cves.forEach(c=>alias.set(c,k))
+    const g=grupos.get(k)||{k,docs:[],pubs:new Map()}; g.docs.push(d)
+    if(p.cve){ g.pubs.set(p.cve,{fecha:p.fecha,url:p.url,cve:p.cve}); (p.otras||[]).forEach(o=>g.pubs.set(o.cve,o)) }
+    grupos.set(k,g) })
+  return [...grupos.values()].map(g=>{ const conPub=g.docs.filter(d=>d.do_estado==='publicado')
+    const d0=conPub.find(d=>!g.pubs.size||[...g.pubs.values()].sort((a,b)=>a.fecha.localeCompare(b.fecha))[0].cve===d.do_publicacion.cve)||g.docs[0], p=d0.do_publicacion
+    const pub=conPub.length?[...g.pubs.values()].sort((a,b)=>a.fecha.localeCompare(b.fecha))[0]:null
+    const fe=[p.fecha_escritura,...g.docs.map(d=>d.lectura?.escritura?.fecha)].find(x=>/^\d{4}-\d{2}-\d{2}/.test(String(x||'')))?.slice(0,10)||null
+    const actos=_normTxt(g.docs.map(d=>d.lectura?.acto||d.tipo_documento||'').join(' ')), cat=_normTxt(p.categoria||'')
+    const acto=/constituc/.test(cat)?(/divisi/.test(actos)?'Constitución por división':'Constitución'):/modific/.test(cat)?(/divisi/.test(actos)?'División':/fusi/.test(actos)?'Fusión':'Modificación'):/disolu/.test(cat)?'Disolución':cat?p.categoria.charAt(0)+p.categoria.slice(1).toLowerCase():/constituc/.test(actos)?'Constitución':'Modificación'
+    const soc=p.nombre?_sinRut(p.nombre):(g.docs[0].lectura?.sociedades||[]).find(x=>_normTxt(x?.razon_social)===_normTxt(p.sociedad))?.razon_social||p.sociedad||''
+    return {k:g.k, estado:pub?'publicado':g.docs.some(d=>d.do_estado==='plazo_vencido')?'plazo_vencido':'pendiente', pub, nPub:g.pubs.size, docs:g.docs,
+      sociedad:soc.replace(/\bSpA\b/g,'SPA')===soc.toUpperCase()?titleCase(soc).replace(/\bSpa\b/g,'SpA').replace(/\bLtda\b\.?/g,'Ltda.'):rsBonita(soc), acto, rep:_repDO(p.repertorio), fEsc:fe, dias:pub&&fe?_diasEntre(fe,pub.fecha):null, vence:p.vence||null} })
+}
 function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[], user, onOpenClientFicha}){
   const {rows,recargar,setRows}=useDocumentosNotaria()
   const [q,setQ]=useState(''), [mes,setMes]=useState(''), [clase,setClase]=useState(''), [abog,setAbog]=useState(''), [agrupar,setAgrupar]=useState('cliente')
   const [fuera,setFuera]=useState(()=>new Set()), [otro,setOtro]=useState({}), [busy,setBusy]=useState(null), [abiertos,setAbiertos]=useState(()=>new Set()), [envMas,setEnvMas]=useState(()=>new Set()), [nEnv,setNEnv]=useState(12)
+  const [doTodos,setDoTodos]=useState(false), [doAb,setDoAb]=useState(null)
   const [aprendidos,setAprendidos]=useState([])
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_parte').then(({data})=>setAprendidos(data||[]),()=>{}) },[])
   const D=isDesktop
@@ -1448,11 +1473,16 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       {e.ds.length>4&&<button onClick={()=>setEnvMas(p=>{ const n=new Set(p); n.has(e.k)?n.delete(e.k):n.add(e.k); return n })} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:D?'8px 14px 10px 72px':'8px 12px 10px 44px'}}>{mas?'Ver menos':`Ver los otros ${e.ds.length-4} archivos`}</button>}
       </div>
     </div>) }
+  // Una línea tenue en cada extracto: publicado (con su fecha) o por publicar (con el plazo).
+  const fNw=iso=><span style={{whiteSpace:'nowrap'}}>{fmtFechaDMY(iso)}</span>
+  const lineaDO=d=>d.do_estado==='publicado'&&d.do_publicacion?.fecha?<div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>Publicado en el Diario Oficial el {fNw(d.do_publicacion.fecha)}</div>
+    :['pendiente','plazo_vencido'].includes(d.do_estado)&&d.do_publicacion?.vence?<div style={{fontSize:11.5,color:d.do_estado==='plazo_vencido'?C.overdueText:C.soonText,marginTop:1}}>{d.do_estado==='plazo_vencido'?<>Sin publicación en el Diario Oficial · plazo vencido el {fNw(d.do_publicacion.vence)}</>:<>Por publicar en el Diario Oficial · plazo {fNw(d.do_publicacion.vence)}</>}</div>:null
   const filaReg=(d,i)=><div key={d.id} onClick={()=>d.drive_url&&window.open(d.drive_url,'_blank','noopener')} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:d.drive_url?'pointer':'default'}}>
     {diaGrande(_fechaDoc(d))}
     <div style={{flex:1,minWidth:0}}>
       <div style={{fontSize:13.5,fontWeight:600,color:C.text}}>{_tipoDoc(d)}{verDe(d)>0&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.track,borderRadius:10,padding:'1px 7px',marginLeft:6}}>versión {verDe(d)}</span>}</div>
       <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{[agrupar!=='cliente'?<span key='c' onClick={onOpenClientFicha?ev=>{ev.stopPropagation();onOpenClientFicha(d.cliente_id)}:undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(d.cliente_id)}</span>:null, d.razon_social&&_normTxt(d.razon_social)!==_normTxt(nom(d.cliente_id))?rsBonita(d.razon_social):null, !D&&d.repertorio?`Rep ${d.repertorio}`:null].filter(Boolean).reduce((a,x,j)=>j?[...a,' · ',x]:[x],[])}</div>
+      {lineaDO(d)}
     </div>
     {D&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{[d.repertorio?`Rep ${d.repertorio}`:null,d.ot_number?`OT ${d.ot_number}`:null].filter(Boolean).join(' · ')}</span>}
     {abrir(d)}{D&&descargar(d)}
@@ -1462,6 +1492,35 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
   const desde14=new Date(Date.now()-14*864e5).toISOString()
   const ultimos=vivos.filter(d=>String(d.recibido_at||'')>=desde14&&!esCorreoOficina((String(d.remitente||'').match(/<([^>]+)>/)||[])[1]||d.remitente)&&pasa(d)).sort((a,b)=>String(b.recibido_at).localeCompare(String(a.recibido_at)))
   const descargar=d=>d.drive_file_id?<a href={`https://drive.google.com/uc?export=download&id=${d.drive_file_id}`} target='_blank' rel='noreferrer' onClick={ev=>ev.stopPropagation()} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>Descargar</a>:null
+  // Diario Oficial: lo por publicar arriba (vencido primero, luego el plazo más próximo); lo publicado, del más reciente.
+  const tram=tramitesDiarioOficial(vivos.filter(pasa))
+  const porPub=tram.filter(t=>t.estado!=='publicado').sort((a,b)=>(a.estado==='plazo_vencido'?0:1)-(b.estado==='plazo_vencido'?0:1)||String(a.vence).localeCompare(String(b.vence)))
+  const publicados=tram.filter(t=>t.estado==='publicado').sort((a,b)=>b.pub.fecha.localeCompare(a.pub.fecha))
+  const listaDO=[...porPub,...(doTodos||hayFiltro?publicados:publicados.slice(0,5))]
+  const filaDO=(t,i)=>{ const ab=doAb===t.k, pend=t.estado!=='publicado', venc=t.estado==='plazo_vencido'
+    const plazo=pend&&t.vence?<span style={{fontSize:12,fontWeight:600,color:venc?C.overdueText:C.soonText,whiteSpace:'nowrap'}}>{venc?`Plazo vencido el ${fmtFechaDMY(t.vence)}`:`Por publicar · plazo ${fmtFechaDMY(t.vence)}`}</span>:null
+    const sub=[t.acto, t.rep?`Rep ${t.rep}`:null, !D&&t.dias!=null?`día ${t.dias} de 60`:null, D&&t.fEsc?`escritura del ${fmtFechaDMY(t.fEsc)}`:null, t.nPub>1?`${t.nPub} publicaciones`:null, `${t.docs.length} documento${t.docs.length!==1?'s':''}`].filter(Boolean).join(' · ')
+    return <div key={t.k} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
+      <div onClick={()=>setDoAb(ab?null:t.k)} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',cursor:'pointer'}}>
+        {diaGrande(t.pub?.fecha||_fechaDoc(t.docs[0]))}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:600,color:C.text}}>{t.sociedad}</div>
+          <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{sub}</div>
+          {!D&&plazo&&<div style={{marginTop:1}}>{plazo}</div>}
+        </div>
+        {D&&(plazo||(t.dias!=null&&<span style={{fontSize:12,fontWeight:t.dias>=50?600:400,color:t.dias>60?C.overdueText:t.dias>=50?C.soonText:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>Día {t.dias} de 60</span>))}
+        {t.pub?.url&&<a href={String(t.pub.url).replace(/^http:/,'https:')} target='_blank' rel='noreferrer' onClick={ev=>ev.stopPropagation()} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>{D?'Ver publicación':'Ver'}</a>}
+      </div>
+      {ab&&<div style={{background:C.bgSoft,borderTop:`1px solid ${C.track}`,padding:D?'4px 14px 6px 70px':'4px 12px 6px 56px'}}>
+        {t.nPub>1&&[...new Map(t.docs.flatMap(d=>[d.do_publicacion,...(d.do_publicacion?.otras||[])]).filter(x=>x?.cve).map(x=>[x.cve,x])).values()].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(x=><div key={x.cve} style={{display:'flex',alignItems:'center',gap:12,padding:'6px 0'}}>
+          <div style={{flex:1,minWidth:0,fontSize:13,color:C.text}}>Publicación del {fmtFechaDMY(x.fecha)}<span style={{fontSize:11.5,color:C.textSoft}}> · CVE {x.cve}</span></div>
+          <a href={String(x.url).replace(/^http:/,'https:')} target='_blank' rel='noreferrer' style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',whiteSpace:'nowrap'}}>Ver</a></div>)}
+        {t.docs.map(d=><div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:'6px 0'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{_tipoDoc(d)}</div>
+            <div style={{fontSize:11.5,color:C.textSoft}}>{[fmtFechaDMY(_fechaDoc(d)), d.repertorio?`Rep ${d.repertorio}`:null, d.cliente_id&&d.estado==='guardado'?nom(d.cliente_id):'Por asignar'].filter(Boolean).join(' · ')}</div></div>
+          {abrir(d)}{descargar(d)}</div>)}
+      </div>}
+    </div> }
   return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
     <div style={{...card,display:'grid',gridTemplateColumns:D?'minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr)':'1fr 1fr',overflow:'hidden'}}>
       <div style={{padding:D?'13px 16px':'11px 13px',gridColumn:D?undefined:'1 / -1',borderRight:D?`1px solid ${C.border}`:'none',borderBottom:D?'none':`1px solid ${C.border}`}}>
@@ -1493,9 +1552,17 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:13.5,fontWeight:600,color:C.text}}>{_tipoDoc(d)}</div>
           <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{[d.cliente_id&&d.estado==='guardado'?<span key='c' onClick={onOpenClientFicha?()=>onOpenClientFicha(d.cliente_id):undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(d.cliente_id)}</span>:<span key='p' style={{color:C.soonText,fontWeight:600}}>{d.estado==='asignado'?`Asignado a ${nom(d.cliente_id)}`:'Por asignar'}</span>, d.repertorio?`Rep ${d.repertorio}`:null, D&&d.fecha_documento?`firmada el ${fmtFechaDMY(d.fecha_documento)}`:null].filter(Boolean).reduce((a,x,j)=>j?[...a,' · ',x]:[x],[])}</div>
+          {lineaDO(d)}
         </div>
         {abrir(d)}{descargar(d)}
       </div>)}</div>
+    </div>}
+    {tram.length>0&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{...SEC_LBL,margin:'2px 2px 0',display:'flex',justifyContent:'space-between',gap:10}}><span>Diario Oficial · {tram.length} extracto{tram.length!==1?'s':''}</span>{D&&<span style={{fontSize:12,fontWeight:400,color:C.textSoft,textTransform:'none',letterSpacing:0}}>{tram.length-porPub.length} publicado{tram.length-porPub.length!==1?'s':''} · {porPub.length} por publicar</span>}</div>
+      <div style={{...card,overflow:'hidden'}}>
+        {listaDO.map(filaDO)}
+        {!doTodos&&tram.length>listaDO.length&&<button onClick={()=>setDoTodos(true)} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',borderTop:`1px solid ${C.track}`,cursor:'pointer',padding:D?'9px 14px':'9px 12px',width:'100%',textAlign:'left'}}>Ver los {tram.length}</button>}
+      </div>
     </div>}
     {listaEnv.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={{...SEC_LBL,margin:'2px 2px 0'}}>Por asignar · {listaEnv.reduce((a,e)=>a+e.ds.length,0)} {D?'documentos ':''}en {listaEnv.length} envío{listaEnv.length!==1?'s':''}</div>
