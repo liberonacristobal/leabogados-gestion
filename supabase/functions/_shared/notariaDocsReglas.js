@@ -112,3 +112,22 @@ export function sugerenciasDocumento(doc, { ots = [], usadas = new Set(), indice
   }
   return { sugerencias: [...sug.values()], auto: auto && sug.size === 1 ? auto : null }
 }
+
+// Cliente desde la lectura con IA de un escaneado (fuente única: edge notaria-documentos). Primero RUT exacto (de una sociedad o de
+// una persona); si no, nombre, pero comparando cada compareciente POR SEPARADO (dos palabras del cliente en la misma persona) y
+// descartando notarios, testigos y a la gente de la oficina (que comparecen como testigos o solicitantes). Nombre de una sola palabra
+// solo cuenta contra una razón social, nunca contra el nombre de una persona.
+export function clienteDeLectura(lec, { indice = [], porRut = {}, excluir = [] } = {}) {
+  const rutN = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
+  const fuera = new Set((excluir || []).map(x => norm(x).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean))
+  const esOficina = n => { const t = norm(n).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim(); return [...fuera].some(f => f && (t.includes(f) || f.split(' ').filter(w => w.length > 3).every(w => t.includes(w)))) }
+  const personas = (lec?.comparecientes || []).filter(p => p?.nombre && !/notari|testig|suplente|oficial/i.test(p.calidad || '') && !esOficina(p.nombre))
+  const socs = (lec?.sociedades || []).filter(s => s?.razon_social)
+  const ruts = [...personas, ...socs].map(x => rutN(x.rut)).filter(r => r.length >= 7)
+  const porR = [...new Set(ruts.map(r => porRut[r]).filter(Boolean))]
+  if (porR.length === 1) return { client_id: porR[0], fuente: 'ia', motivo: 'RUT en la comparecencia' }
+  const hits = new Set()
+  for (const s of socs) clientesEnTexto(s.razon_social, indice).forEach(k => hits.add(k.cid))
+  for (const p of personas) { const T = new Set(tokNom(p.nombre)); indice.filter(k => k.t.length >= 2 && T.has(k.t[0]) && T.has(k.t[1])).forEach(k => hits.add(k.cid)) }
+  return hits.size === 1 ? { client_id: [...hits][0], fuente: 'ia', motivo: 'Nombre en la comparecencia' } : null
+}
