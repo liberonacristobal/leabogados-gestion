@@ -265,6 +265,7 @@ const _ICON_PATHS = {
   sparkle:'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6',
   building:'M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M3 21h18M9 7h1M9 11h1M9 15h1M14 7h1M14 11h1M14 15h1',
   file:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
+  cal:'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18',
   briefcase:'M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16',
   wallet:'M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01',
   check:'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
@@ -16200,6 +16201,51 @@ function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[]
   const vencs=[]; venc.sort((a,b)=>a.fecha.localeCompare(b.fecha)).forEach(x=>{ const g=x.k==='DJ'&&vencs.find(y=>y.k==='DJ'&&y.fecha===x.fecha)
     if(g){ g.forms.push(x.t.replace('DJ ','')); g.t=`Declaraciones juradas ${g.forms.join(' · ')}`; g.s='' } else vencs.push(x.k==='DJ'?{...x, forms:[x.t.replace('DJ ','')]}:{...x}) })
   return {hoy, ciclos, alertas:alertas.sort((a,b)=>a.sev-b.sev), proximos, cicloProx, ajustes, enPlazo, anio:{cols, filas}, vencimientos:vencs} }
+// ── CALENDARIO DE UN CLIENTE (Ficha › Resumen › Calendario): lo que ya tiene fecha en la app para ese cliente en los próximos 60 días.
+// Contribuciones de sus roles (tabla propiedades; cuotas 30-04/06/09/11 al hábil siguiente), publicación de extractos en el Diario
+// Oficial (do_publicacion.vence), causas en tabla (causas.ultima_tabla), plazos de contratos (tabla plazos; los de tipo 'tabla' ya
+// salen de la causa) y las obligaciones tributarias elegidas para el cliente (obligaciones_tributarias con client_id), con las
+// mismas fechas legales del calendario del estudio (CAL_CL, venceCalTrib, _djFecha).
+const CAL_CLI_DIAS = 60
+const CONTRIB_CUOTAS = [['04','1ª'],['06','2ª'],['09','3ª'],['11','4ª']]
+const OBL_CLIENTE = [['F29',null,'F29 mensual'],['F22',null,'F22 anual'],['DJ','1879','DJ 1879 · retenciones de honorarios'],['DJ','1887','DJ 1887 · sueldos'],['DJ','1948','DJ 1948 · retiros de socios'],['PATENTE',null,'Patente municipal']]
+function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[], dj=[]}={}){
+  hoy = hoy || isoLocal(Date.now())
+  const hasta=isoLocal(new Date(new Date(hoy+'T12:00').getTime()+CAL_CLI_DIAS*864e5)), Y=+hoy.slice(0,4), items=[]
+  const dentro=f=>f&&f<=hasta, push=x=>{ if(dentro(x.fecha)) items.push({...x, vencido:x.fecha<hoy}) }
+  if(props.length){ const conD=props.filter(p=>Number(p.deuda_contribuciones)>0), deuda=conD.reduce((a,p)=>a+Number(p.deuda_contribuciones),0)
+    const prox=[Y,Y+1].flatMap(y=>CONTRIB_CUOTAS.map(([mm,n])=>({f:_habilDesde(`${y}-${mm}-30`),n}))).find(x=>x.f>=hoy)
+    if(prox) push({fecha:prox.f, t:`Contribuciones · ${prox.n} cuota`, s:`${props.length} rol${props.length===1?'':'es'}${deuda?` · deuda ${fmtMill(deuda)} en ${conD.length} rol${conD.length===1?'':'es'}`:''}`, go:'financiero'}) }
+  ;(docs||[]).filter(d=>['pendiente','plazo_vencido'].includes(d.do_estado)&&d.do_publicacion?.vence).forEach(d=>push({fecha:String(d.do_publicacion.vence).slice(0,10), t:'Publicación del extracto', s:`Diario Oficial · ${d.do_estado==='plazo_vencido'?'plazo vencido':'plazo de 60 días'}`, go:'notaria'}))
+  const activas=(causas||[]).filter(c=>c.estado==='activa'), enTabla=activas.filter(c=>c.ultima_tabla?.fecha&&c.ultima_tabla.fecha>=hoy)
+  enTabla.forEach(c=>push({fecha:c.ultima_tabla.fecha, t:`Vista en tabla · Rol ${c.rol}-${c.anio}`, s:[String(c.corte_nombre||'').replace(/^Corte de Apelaciones de /,'C.A. de '),c.ultima_tabla.sala,c.ultima_tabla.numero?`N° ${c.ultima_tabla.numero}`:''].filter(Boolean).join(' · '), go:'financiero'}))
+  ;(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.tipo!=='tabla'&&p.fecha).forEach(p=>push({fecha:String(p.fecha).slice(0,10), t:p.titulo||'Plazo', s:p.descripcion||'Plazo del contrato', go:'plazos'}))
+  const elegidas=(obl||[]).filter(o=>o.activo!==false)
+  elegidas.forEach(o=>{ if(o.tipo==='F29'){ const ym=hoy.slice(0,7); let per=_ymMas(ym,-1); if(venceCalTrib('F29',per)<hoy) per=ym; push({fecha:venceCalTrib('F29',per), t:`F29 de ${_mesNom(per).split(' ')[0]}`, s:'Obligación tributaria'}) }
+    else if(o.tipo==='F22'){ let f=_habilDesde(`${Y}-04-30`); if(f<hoy) f=_habilDesde(`${Y+1}-04-30`); push({fecha:f, t:`F22 · Renta AT ${f.slice(0,4)}`, s:'Obligación tributaria'}) }
+    else if(o.tipo==='DJ'){ const r=[Y,Y+1].map(a=>_djFecha(o,(dj||[]).filter(x=>+x.anio_tributario===a))).filter(Boolean).map(r=>_habilDesde(r.fecha)).find(f=>f>=hoy); if(r) push({fecha:r, t:`DJ ${o.formulario}`, s:'Obligación tributaria'}) }
+    else if(o.tipo==='PATENTE'){ const m=Array.from({length:8},(_,i)=>_ymMas(hoy.slice(0,7),i)).find(m=>CAL_CL.PATENTE.meses.includes(+m.slice(5,7))&&_finDeMes(m)>=hoy); if(m) push({fecha:_finDeMes(m), t:'Patente municipal', s:'Fecha según la municipalidad'}) } })
+  items.sort((a,b)=>a.fecha.localeCompare(b.fecha))
+  return {items, hoy, seguimiento:activas.length-enTabla.length, elegidas, oblTxt:elegidas.map(o=>o.tipo==='DJ'?`DJ ${o.formulario}`:o.tipo==='PATENTE'?'Patente':o.tipo).join(' · ')} }
+// Fuentes del calendario del cliente que no trae la ficha: extractos por publicar, plazos y obligaciones elegidas (+ DJ del estudio).
+function useCalCliente(clientId){
+  const [f,setF]=useState(null), [dj,setDj]=useState([])
+  useEffect(()=>{ let v=true; cargarCalTrib().then(x=>{ if(v) setDj(x.dj||[]) })
+    if(DEMO){ setF({docs:[], plazos:[], obl:[]}); return ()=>{ v=false } }
+    Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
+      supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId)])
+      .then(([d,p,o])=>{ if(v) setF({docs:d.data||[], plazos:p.data||[], obl:o.data||[]}) },()=>{ if(v) setF({docs:[], plazos:[], obl:[]}) })
+    return ()=>{ v=false } },[clientId])
+  // Elegir/quitar una obligación tributaria del cliente (queda guardada: no se vuelve a preguntar).
+  const alternar=useCallback(async(tipo,formulario,detalle)=>{ const ex=(f?.obl||[]).find(o=>o.tipo===tipo&&String(o.formulario||'')===String(formulario||''))
+    const nuevo=ex?{...ex,activo:ex.activo===false}:{client_id:clientId,tipo,formulario,detalle,activo:true}
+    setF(x=>({...x, obl:ex?x.obl.map(o=>o===ex?nuevo:o):[...x.obl,nuevo]}))
+    if(DEMO) return
+    const {data,error}=ex?.id?await supabase.from('obligaciones_tributarias').update({activo:nuevo.activo}).eq('id',ex.id).select().single():await supabase.from('obligaciones_tributarias').insert({client_id:clientId,tipo,formulario,detalle,activo:true}).select().single()
+    if(error){ setF(x=>({...x, obl:ex?x.obl.map(o=>o===nuevo?ex:o):x.obl.filter(o=>o!==nuevo)})); appAlert('No se pudo guardar: '+error.message); return }
+    setF(x=>({...x, obl:x.obl.map(o=>o===nuevo?data:o)}))
+    logActividad(nuevo.activo?'calendario.obligacion_cliente':'calendario.obligacion_cliente_quitada',{tabla:'clients',id:clientId,detalle:{title:`${detalle||tipo} ${nuevo.activo?'elegida':'quitada'} para el cliente`}}) },[clientId,f])
+  return {f, dj, alternar} }
 // Fuentes del calendario (se leen una vez por sesión; `recargarCalTrib` al marcar una presentada).
 let _calTribP=null
 const _DEMO_CALTRIB = (()=>{ const ym=isoLocal(Date.now()).slice(0,7), y=+ym.slice(0,4), valores={}, pagos=[]
@@ -28151,6 +28197,12 @@ function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[], setFt
   const fmtM1 = fmtShort
   const ufM1 = n => n>0 ? `UF ${Math.round(n).toLocaleString('es-CL')}` : '—'   // KPI hero: UF redonda (sin ",0" colgando)
   const nVencFicha = porCobrar.filter(b=>esVencidaB(b)&&saldoBill(b)>0).length   // vencida con saldo: una factura Vencido ya abonada entera no se debe
+  // Secciones del Resumen: todas parten plegadas (una línea con su cifra) y se despliegan al tocar.
+  const [abiertas,setAbiertas] = useState(()=>new Set())
+  const alt = k => setAbiertas(x=>{ const n=new Set(x); n.has(k)?n.delete(k):n.add(k); return n })
+  const [elegir,setElegir] = useState(false)
+  const propsCal = usePropiedades({clientId:client.id}), causasCal = useCausas({clientId:client.id}), calCli = useCalCliente(client.id)
+  const cal = useMemo(()=>calendarioCliente({props:propsCal.rows||[], causas:causasCal.rows||[], ...(calCli.f||{}), dj:calCli.dj}),[propsCal.rows,causasCal.rows,calCli.f,calCli.dj])
   return (<>
         {/* FOTO: 5 tarjetas KPI individuales (Vendido·Facturado·Cobrado·Por cobrar·Fondos) + 2 tarjetas accionables (Vencidas·Próximas tareas). Sin duplicar: el detalle vive en las pestañas. */}
         {(()=>{
@@ -28174,58 +28226,47 @@ function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[], setFt
             {kc('Por cobrar', totalPorCobrar>0?fmtM1(totalPorCobrar):'$0', nVencFicha>0?`${nVencFicha} vencida${nVencFicha!==1?'s':''}`:'saldo vivo', totalPorCobrar>0?(nVencFicha>0?C.overdueText:C.accent):C.muted, 'financiero')}
             {kc('Fondos', fmtM1(saldoFondos), porRendir.length>0?`${porRendir.length} por rendir ›`:saldoFondos<0?'por reponer':'disponibles', saldoFondos<0?C.overdueText:C.tealText, 'documentos')}
           </div>
-          {porRendir.length>0&&onRendicion&&<div style={{background:C.surface,border:`1px solid ${C.greenText}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
-              <span style={{width:28,height:28,borderRadius:8,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={15} c={C.greenText}/></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Por rendir al cliente</div><div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{porRendir.length} gasto{porRendir.length!==1?'s':''}{porRendir[0]?.date?` · sin rendir desde ${fmtDate(porRendir[0].date)}`:''}</div></div>
-              <span style={{fontSize:13,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(porRendirTot)}</span>
-            </div>
-            {porRendir.slice(0,3).map(e=>(
-              <div key={e.id} onClick={onEditExpense?()=>onEditExpense(e):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditExpense?'pointer':'default',fontSize:12}}>
-                <div style={{flex:1,minWidth:0,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||e.category||'Gasto'}</div>
-                <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtDate(e.date)}</span>
-                <span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span>
-              </div>))}
-            {porRendir.length>3&&<div onClick={()=>setFtab('documentos')} style={{padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.greenText,cursor:'pointer'}}>Ver los {porRendir.length} en Cartola <Gl n='chevron'/></div>}
-            <div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><ActBtn variant='success' full onClick={()=>onRendicion(client)}>Rendir</ActBtn></div>
-          </div>}
-          <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,marginBottom:8,alignItems:'start'}}>
-            {/* Vencidas (accionable) */}
-            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              {venc.length>0 ? (<>
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
-                  <span style={{width:28,height:28,borderRadius:8,background:C.overdueBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={15} c={C.overdueText}/></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Vencidas</div><div style={{fontSize:10,color:C.muted}}>a cobrar ya</div></div>
-                  <span style={{fontSize:13,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(vencTot)}</span>
-                </div>
-                {venc.slice(0,3).map(b=>{const d=dcol(b.issued_at||b.due);return (
-                  <div key={b.id} onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditBilling?'pointer':'default',fontSize:12}}>
-                    {diaGrande(b.issued_at||b.due,C.overdueText)}
-                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.concept||'Factura'}</div><div style={{fontSize:10,color:C.muted}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}{dvenc(b)} d</div></div>
-                    <span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(saldoBill(b))}</span>
-                  </div>)})}
-                <div onClick={()=>setFtab('financiero')} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.overdueText,cursor:'pointer'}}>Cobrar · ir a Ventas <Gl n='chevron'/></div>
-              </>) : (
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px'}}>
-                  <span style={{width:28,height:28,borderRadius:8,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.greenText}/></span>
-                  <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Al día</div><div style={{fontSize:10,color:C.muted}}>sin facturas vencidas</div></div>
-                </div>)}
-            </div>
-            {/* Próximas tareas */}
-            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:`1px solid ${C.bgSoft}`}}>
-                <span style={{width:28,height:28,borderRadius:8,background:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='check' s={15} c={C.accent}/></span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Próximas tareas</div><div style={{fontSize:10,color:C.muted}}>{clientTasks.length} pendiente{clientTasks.length!==1?'s':''}</div></div>
-              </div>
-              {tks.length===0
-                ? <div style={{padding:'12px 14px',fontSize:12,color:C.muted}}>Sin tareas pendientes.</div>
-                : tks.map(t=>(<div key={t.id} onClick={()=>onEditTask&&onEditTask(t)} style={{display:'flex',alignItems:'flex-start',gap:9,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onEditTask?'pointer':'default',fontSize:12}}>
-                    <span style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),marginTop:5,flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}</div><div style={{fontSize:10,color:C.muted}}>{taskAssignees(t).join(', ')||'—'}{t.due?` · vence ${fmtFechaDMY(t.due)}`:''}</div></div>
-                  </div>))}
-              {onAddTask&&<div onClick={()=>onAddTask()} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>+ Nueva tarea</div>}
-            </div>
-          </div>
+          {(()=>{
+            const sec=(k,icn,ibg,icol,t,sub,val,vcol,body,borde)=>{ const ab=abiertas.has(k)&&!!body
+              return <div key={k} style={{background:C.surface,border:`1px solid ${borde||C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}}>
+                <div onClick={body?()=>alt(k):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:ab?`1px solid ${C.bgSoft}`:'none',cursor:body?'pointer':'default'}}>
+                  <span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icn} s={15} c={icol}/></span>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+                  {val!=null&&<span style={{fontSize:13,fontWeight:800,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</span>}
+                  {body&&<span style={{color:C.done,fontSize:13,flexShrink:0,display:'inline-flex',transform:ab?'rotate(180deg)':'none',transition:'transform .12s'}}><Gl n='chevD'/></span>}
+                </div>{ab&&body}</div> }
+            const fila=(key,on,izq,centro,der)=><div key={key} onClick={on} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:on?'pointer':'default',fontSize:12}}>{izq}<div style={{flex:1,minWidth:0}}>{centro}</div>{der}</div>
+            const pie=(txt,col,on)=><div onClick={on} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:col,cursor:on?'pointer':'default'}}>{txt} <Gl n='chevron'/></div>
+            const tt=(a,b)=><><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a}</div>{b&&<div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b}</div>}</>
+            const sRend=porRendir.length>0&&onRendicion&&sec('rend','wallet',C.greenBg,C.greenText,'Por rendir al cliente',`${porRendir.length} gasto${porRendir.length!==1?'s':''}${porRendir[0]?.date?` · desde ${fmtFechaDMY(porRendir[0].date)}`:''}`,fmt(porRendirTot),C.greenText,<>
+              {porRendir.slice(0,3).map(e=>fila(e.id,onEditExpense?()=>onEditExpense(e):undefined,null,<div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||e.category||'Gasto'}</div>,<><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(e.date)}</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span></>))}
+              {porRendir.length>3&&pie(`Ver los ${porRendir.length} en Cartola`,C.greenText,()=>setFtab('documentos'))}
+              <div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><ActBtn variant='success' full onClick={()=>onRendicion(client)}>Rendir</ActBtn></div></>,C.greenText)
+            const sVenc=venc.length>0
+              ? sec('venc','file',C.overdueBg,C.overdueText,'Vencidas',`${venc.length} factura${venc.length!==1?'s':''} · a cobrar ya`,fmt(vencTot),C.overdueText,<>
+                  {venc.slice(0,3).map(b=>fila(b.id,onEditBilling?()=>onEditBilling(b):undefined,diaGrande(b.issued_at||b.due,C.overdueText),tt(b.concept||'Factura',`${b.invoice_no?`Factura N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}${dvenc(b)} d`),<span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(saldoBill(b))}</span>))}
+                  {pie('Cobrar · ir a Ventas',C.overdueText,()=>setFtab('financiero'))}</>)
+              : sec('venc','check',C.greenBg,C.greenText,'Vencidas','al día · sin facturas vencidas',null,null,null)
+            const nTV=clientTasks.filter(t=>t.due&&String(t.due).slice(0,10)<isoLocal(Date.now())).length
+            const sTar=sec('tar','check',C.azulBg,C.accent,'Próximas tareas',`pendiente${clientTasks.length!==1?'s':''}${nTV?` · ${nTV} vencida${nTV!==1?'s':''}`:''}`,String(clientTasks.length),C.accent,<>
+              {tks.length===0?<div style={{padding:'12px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin tareas pendientes.</div>
+                :tks.map(t=>fila(t.id,onEditTask?()=>onEditTask(t):undefined,<span style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0}}/>,tt(t.title,`${taskAssignees(t).join(', ')||'—'}${t.due?` · vence ${fmtFechaDMY(t.due)}`:''}`),null))}
+              {onAddTask&&<div onClick={()=>onAddTask()} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>+ Nueva tarea</div>}</>)
+            const goCal=g=>g==='financiero'?()=>setFtab('financiero'):undefined
+            const chipD=f=>{ const d=_diasA(cal.hoy,f), pr=d<=31; return <span style={{fontSize:10.5,fontWeight:700,borderRadius:10,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,background:d<0?C.overdueBg:pr?C.soonBg:C.track,color:d<0?C.overdueText:pr?C.soonText:C.muted}}>{d<0?'Vencido':d===0?'Hoy':`En ${d} día${d===1?'':'s'}`}</span> }
+            const sCal=sec('cal','cal',C.azulBg,C.accent,'Calendario',cal.items.length?`en ${CAL_CLI_DIAS} días · próximo ${fmtFechaDMY(cal.items[0].fecha)}`:`en ${CAL_CLI_DIAS} días`,String(cal.items.length),C.accent,<>
+              {cal.items.length?cal.items.map((x,i)=>fila(i,goCal(x.go),diaGrande(x.fecha,x.vencido?C.overdueText:undefined),tt(x.t,x.s),chipD(x.fecha)))
+                :<div style={{padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.greenText}}>Sin vencimientos en {CAL_CLI_DIAS} días</div>}
+              {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:11.5}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700}}><span style={{color:C.muted,fontWeight:600,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Obligaciones tributarias · {cal.oblTxt||'por definir'}</span><span onClick={()=>setElegir(v=>!v)} style={{color:C.azulInfo,cursor:'pointer',flexShrink:0}}>{elegir?'Listo':'Elegir'}</span></div>
+              {elegir&&<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`}}>{OBL_CLIENTE.map(([tp,fo,lb])=>{ const on=cal.elegidas.some(o=>o.tipo===tp&&String(o.formulario||'')===String(fo||''))
+                return <span key={lb} onClick={()=>calCli.alternar(tp,fo,lb)} style={{fontSize:11.5,fontWeight:600,border:`1px solid ${on?C.accent:C.border}`,borderRadius:14,padding:'4px 10px',background:on?C.accent:C.surface,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{lb}</span> })}</div>}</>)
+            // Escritorio: dos columnas (Por rendir · Próximas tareas | Vencidas · Calendario); celular: una columna en ese orden.
+            const col=xs=><div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0}}>{xs.filter(Boolean)}</div>
+            return isDesktop
+              ? <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:12,marginBottom:8,alignItems:'start'}}>{col(sRend?[sRend,sTar]:[sVenc,sTar])}{col(sRend?[sVenc,sCal]:[sCal])}</div>
+              : <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:8}}>{[sRend,sVenc,sTar,sCal].filter(Boolean)}</div>
+          })()}
           </>)
         })()}
   </>)
