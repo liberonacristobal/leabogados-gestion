@@ -104,14 +104,18 @@ Deno.serve(async (req) => {
     else if (body.client_id) filtro += `&client_id=eq.${encodeURIComponent(body.client_id)}`;
     const [causas, miembros, clientes] = await Promise.all([
       rest(`causas?select=*&${filtro}&order=created_at.asc`),
-      rest("miembros?select=email,nombre"),
-      rest("clients?select=id,name"),
+      rest("miembros?select=email,nombre,rol"),
+      rest("clients?select=id,name,abogado_responsable"),
     ]);
     const nomCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; name: string }) => [c.id, c.name]));
+    const duenoCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; abogado_responsable: string }) => [c.id, c.abogado_responsable || ""]));
     // Correo del abogado por su nombre (miembros trae alias): la dirección más corta del dominio de la oficina.
     const correoDe = (n: string) => { const k = String(n || "").trim().toLowerCase(); if (!k) return null;
       const ms = miembros.filter((m: { email: string; nombre: string }) => String(m.nombre || "").toLowerCase().split(/\s+/)[0] === k.split(/\s+/)[0] && String(m.email || "").toLowerCase().endsWith("@" + dom));
       return ms.map((m: { email: string }) => m.email.toLowerCase()).sort((a: string, b: string) => a.length - b.length)[0] || null; };
+    // Equipo en copia (decisión del usuario 23-10): el abogado dueño del cliente y los miembros que no son socios (rol ≠ admin),
+    // una dirección por persona; más los que se agreguen en learnings config causas_avisar_a.
+    const noSocios = [...new Set(miembros.filter((m: { rol: string }) => m.rol !== "admin").map((m: { nombre: string }) => correoDe(m.nombre)).filter(Boolean))] as string[];
     const hoy = hoyCL();
     const res = { revisadas: 0, en_tabla: [] as unknown[], avisos: [] as unknown[], errores: [] as unknown[] };
     for (const c of causas) {
@@ -126,15 +130,16 @@ Deno.serve(async (req) => {
         if (prox) res.en_tabla.push({ causa: `${c.rol}-${c.anio}`, corte: c.corte_nombre, ...prox, nueva });
         if (nueva && !dryRun) {
           const aAbog = correoDe(c.abogado);
-          const para = (aAbog ? [aAbog] : equipo.slice(0, 1)) as string[];
-          const cc = equipo.filter((e) => !para.includes(e));
+          const aDueno = correoDe(duenoCli[c.client_id]);
+          const para = (aAbog ? [aAbog] : aDueno ? [aDueno] : equipo.slice(0, 1)) as string[];
+          const cc = [...new Set([correoDe(duenoCli[c.client_id]), ...noSocios, ...equipo].filter((e) => e && !para.includes(e as string)))] as string[];
           const nombreA = String(c.abogado || "").trim().split(/\s+/)[0] || "equipo";
           const titulo = `${c.caratula || nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}`;
           let enviado = false, motivo = "";
           if (ON && para.length) {
             try {
               const linea = `${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero} de la tabla` : ""}, para el ${dmy(prox.fecha)}`;
-              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:22px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Hola ${esc(aAbog ? nombreA : "equipo")},</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">La siguiente causa fue puesta en tabla:</p><table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">${[["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]].filter((x) => x[1]).map(([k, v]) => `<tr><td style="padding:7px 10px;border-top:1px solid #E4E8EB;color:#537281;white-space:nowrap">${k}</td><td style="padding:7px 10px;border-top:1px solid #E4E8EB;font-weight:600">${v}</td></tr>`).join("")}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Programación de Salas, pjud.cl, revisada el ${dmy(hoy)}. La vista quedó también en el calendario de plazos de la app.</p></div></body></html>`;
+              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:22px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Hola ${esc(aAbog ? nombreA : (String(duenoCli[c.client_id] || "").split(/\s+/)[0] || "equipo"))},</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">La siguiente causa fue puesta en tabla:</p><table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">${[["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]].filter((x) => x[1]).map(([k, v]) => `<tr><td style="padding:7px 10px;border-top:1px solid #E4E8EB;color:#537281;white-space:nowrap">${k}</td><td style="padding:7px 10px;border-top:1px solid #E4E8EB;font-weight:600">${v}</td></tr>`).join("")}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Programación de Salas, pjud.cl, revisada el ${dmy(hoy)}. La vista quedó también en el calendario de plazos de la app.</p></div></body></html>`;
               const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
               await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, ...(cc.length ? { cc } : {}), subject: toAscii(`Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`), content: toAscii(`${titulo}: ${linea}`), html });
               await client.close(); enviado = true;
