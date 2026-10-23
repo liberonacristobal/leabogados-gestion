@@ -35,11 +35,16 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-function emailDelJwt(req: Request): string | null {
+// Correo del usuario SOLO si su sesión es auténtica: se valida contra Supabase Auth (no basta con decodificar el token,
+// que cualquiera puede fabricar si la verificación del gateway estuviera apagada).
+async function emailDelJwt(req: Request): Promise<string | null> {
   try {
-    const tok = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-    const payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    return payload?.email || null
+    const tok = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim()
+    if (!tok) return null
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user`, { headers: { apikey: Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', Authorization: `Bearer ${tok}` } })
+    if (!r.ok) return null
+    const u = await r.json()
+    return u?.email ? String(u.email).toLowerCase() : null
   } catch {
     return null
   }
@@ -96,7 +101,7 @@ serve(async (req) => {
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
   const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas']
-  const email = emailDelJwt(req)
+  const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !ADMINS.includes(email))) {
     console.log(`[sii-sync] acceso denegado (email: ${email || 'sin email'})`)
