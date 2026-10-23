@@ -19,6 +19,7 @@ import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
+import { sugerenciasDocumento, indiceNombres, rsBonita } from '../supabase/functions/_shared/notariaDocsReglas.js'
 import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
@@ -1291,98 +1292,212 @@ const _PED_CHIP={carg:['Cargada',C.greenText,C.greenBg],rev:['Por revisar',C.azu
 // Notaría › Documentos (edge notaria-documentos): lo que envió la notaría, agrupado por cliente, con su archivo en
 // Clientes/<Cliente>/Notaría. «Por clasificar»: una persona elige el cliente y la app lo guarda en su carpeta.
 const _DEMO_DOCS_NOTARIA = [
-  { id:'dn1', razon_social:'MI MARKET SpA', recibido_at:'2026-10-14T17:36:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101413123242)', tipo_documento:'CONSTITUCION DE SOCIEDAD POR ACCIONES', repertorio:'52157', fecha_documento:'2026-10-02', archivo_nombre:'316-2026101413123242.pdf', cliente_id:'c1', ot_number:'497834', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
-  { id:'dn2', recibido_at:'2026-10-02T19:29:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026100213213667)', tipo_documento:'AUTORIZACION USO DOMICILIO COMERCIAL', repertorio:null, fecha_documento:'2026-10-02', archivo_nombre:'316-2026100213213667.pdf', cliente_id:'c2', ot_number:'497650', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
-  { id:'dn3', recibido_at:'2026-09-29T22:24:00Z', asunto:'RE: Confección Matriz Mandatos Judiciales', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'FORMATO NOTARIA.docx', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente' },
-  { id:'dn4', recibido_at:'2026-10-16T15:10:00Z', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101615021131)', tipo_documento:'PROTOCOLIZACION EXTRACTO', repertorio:'53480', fecha_documento:'2026-10-16', archivo_nombre:'316-2026101615021131.pdf', cliente_id:null, ot_number:null, estado:'pendiente_ot' },
+  { id:'dn1', razon_social:'MI MARKET SpA', recibido_at:'2026-10-14T17:36:00Z', thread_id:'t1', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101413123242)', tipo_documento:'CONSTITUCION DE SOCIEDAD POR ACCIONES', repertorio:'52157', fecha_documento:'2026-10-02', archivo_nombre:'316-2026101413123242.pdf', cliente_id:'c1', ot_number:'497834', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
+  { id:'dn2', recibido_at:'2026-10-02T19:29:00Z', thread_id:'t2', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026100213213667)', tipo_documento:'AUTORIZACION USO DOMICILIO COMERCIAL', repertorio:null, fecha_documento:'2026-10-02', archivo_nombre:'316-2026100213213667.pdf', cliente_id:'c2', ot_number:'497650', estado:'guardado', drive_url:'https://drive.google.com', metodo:'ot_tipo_fecha' },
+  { id:'dn3', recibido_at:'2026-09-29T22:24:00Z', thread_id:'t3', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'Comprobantes de pago Prenda y Escrituras', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'Comprobante_359995-2026 REP 52160.pdf', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente', drive_url:'https://drive.google.com' },
+  { id:'dn5', recibido_at:'2026-09-29T22:24:00Z', thread_id:'t3', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'Comprobantes de pago Prenda y Escrituras', tipo_documento:null, repertorio:null, fecha_documento:null, archivo_nombre:'REP 52161.pdf', cliente_id:null, ot_number:null, estado:'por_clasificar', motivo:'No se identificó el cliente', drive_url:'https://drive.google.com' },
+  { id:'dn4', recibido_at:'2026-10-16T15:10:00Z', thread_id:'t4', remitente:'Silvana Delgado <sdelgado@notaria.cl>', asunto:'RV: 38 Notaria: Documento Firmado (316-2026101615021131)', tipo_documento:'PROTOCOLIZACION EXTRACTO', repertorio:'53480', fecha_documento:'2026-10-16', archivo_nombre:'316-2026101615021131.pdf', cliente_id:null, ot_number:null, estado:'pendiente_ot', leido_at:'2026-10-16T16:00:00Z', lectura:{acto:'Protocolización de extracto',sociedades:[{razon_social:'Inversiones Demo SpA'}]} },
 ]
 function useDocumentosNotaria(){
   const [rows,setRows]=useState(null)
   const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_DOCS_NOTARIA); return }
-    supabase.from('documentos_notaria').select('id,recibido_at,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_url,drive_nombre,metodo,razon_social').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
+    supabase.from('documentos_notaria').select('id,gmail_id,thread_id,recibido_at,remitente,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_url,drive_nombre,metodo,razon_social,lectura,sugerencia,leido_at').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
       .then(({data})=>setRows(data||[]),()=>setRows([])) },[])
   useEffect(()=>{ cargar() },[cargar])
   return {rows,recargar:cargar,setRows}
 }
 function DocumentosNotariaTile({render}){ const {rows}=useDocumentosNotaria(); return render(rows) }
-const _tipoDoc = d => { const t=String(d.tipo_documento||'').toLowerCase().trim(); return t ? t.charAt(0).toUpperCase()+t.slice(1) : String(d.archivo_nombre||'Documento').replace(/\.[a-z0-9]+$/i,'') }
-function DocumentosNotaria({isDesktop, clients=[], user, onOpenClientFicha}){
+// Tipo legible (la notaría escribe en mayúsculas y sin tildes). Sin tipo: el nombre del archivo, ordenado.
+const _TILDES = {modificacion:'modificación',division:'división',constitucion:'constitución',protocolizacion:'protocolización',autorizacion:'autorización',cesion:'cesión',declaracion:'declaración',delegacion:'delegación',reduccion:'reducción',publica:'pública',cancelacion:'cancelación',prohibicion:'prohibición',opcion:'opción',devolucion:'devolución',vehiculos:'vehículos',vehiculo:'vehículo',credito:'crédito',creditos:'créditos',transaccion:'transacción',subordinacion:'subordinación',rectificacion:'rectificación',inscripcion:'inscripción',informaticas:'informáticas',instruccion:'instrucción',notificacion:'notificación',liberacion:'liberación',transferencia:'transferencia',sesion:'sesión',accion:'acción',acciones:'acciones',deposito:'depósito',propietario:'propietario',unico:'único',numero:'número'}
+const _tipoDoc = d => {
+  const t=String(d.tipo_documento||'').toLowerCase().replace(/\s+/g,' ').trim()
+  if(t) { const x=t.split(' ').map(w=>_TILDES[w]||w).join(' ').replace(/\bspa\b/g,'SpA'); return x.charAt(0).toUpperCase()+x.slice(1) }
+  let b=String(d.archivo_nombre||'Documento').replace(/\.[a-z0-9]+$/i,'').replace(/_/g,' ').replace(/\s+/g,' ').trim()
+  if(/^\d[\d -]*$/.test(b)) return /^\d{6}$/.test(b)?`OT ${b}`:'Documento sin nombre'
+  if(b===b.toUpperCase()&&/[A-ZÁÉÍÓÚÑ]{4}/.test(b)) { const x=b.toLowerCase().split(' ').map(w=>_TILDES[w]||w).join(' ').replace(/\bspa\b/g,'SpA').replace(/\s-a-\s/g,' a '); b=x.charAt(0).toUpperCase()+x.slice(1) }
+  return b
+}
+// Clase del documento: firmado (escritura, extracto, protocolización), comprobante de pago, instrucción o documento.
+const _DOC_CLASE = {esc:['Escritura firmada',C.accent,C.azulBg],ext:['Extracto',C.accent,C.azulBg],pro:['Protocolización',C.accent,C.azulBg],com:['Comprobante de pago',C.soonText,C.soonBg],ins:['Instrucción',C.muted,C.track],doc:['Documento',C.muted,C.track]}
+const _claseDoc = d => { const t=_normTxt(d.tipo_documento), a=_normTxt(`${d.archivo_nombre||''} ${d.asunto||''}`)
+  if(t) return /extracto/.test(t)&&!/protocolizacion/.test(t)?'ext':/protocolizacion/.test(t)?'pro':'esc'
+  if(/comprobante|tgr|pago/.test(a)) return 'com'; if(/instruccion/.test(a)) return 'ins'; return 'doc' }
+const _esWord = d => /\.(docx?|rtf|odt)$/i.test(d.archivo_nombre||'')   // la notaría solo registra PDF (decisión del usuario 23-10)
+const _fechaDoc = d => String(d.fecha_documento||isoLocal(d.recibido_at)||'').slice(0,10)
+const _remitente = d => String(d.remitente||'').replace(/<.*>/,'').replace(/"/g,'').trim()
+function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[], user, onOpenClientFicha}){
   const {rows,recargar,setRows}=useDocumentosNotaria()
-  const [q,setQ]=useState(''), [pick,setPick]=useState({}), [busy,setBusy]=useState(null), [verEspera,setVerEspera]=useState(false), [abiertos,setAbiertos]=useState(()=>new Set())
+  const [q,setQ]=useState(''), [mes,setMes]=useState(''), [clase,setClase]=useState(''), [abog,setAbog]=useState(''), [agrupar,setAgrupar]=useState('cliente')
+  const [fuera,setFuera]=useState(()=>new Set()), [otro,setOtro]=useState({}), [busy,setBusy]=useState(null), [abiertos,setAbiertos]=useState(()=>new Set()), [envMas,setEnvMas]=useState(()=>new Set()), [nEnv,setNEnv]=useState(12)
+  const [aprendidos,setAprendidos]=useState([])
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_parte').then(({data})=>setAprendidos(data||[]),()=>{}) },[])
   const D=isDesktop
   const nom=id=>clients.find(c=>String(c.id)===String(id))?.name||'—'
-  const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-  if(rows===null) return <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div>
-  const qq=_n(q.trim())
-  const pasa=d=>!qq||_n(`${d.tipo_documento||''} ${d.archivo_nombre||''} ${d.asunto||''} ${d.repertorio||''} ${d.ot_number||''} ${d.cliente_id?nom(d.cliente_id):''}`).includes(qq)
-  const guard=rows.filter(d=>d.estado==='guardado'&&pasa(d)), porCla=rows.filter(d=>['por_clasificar','error','asignado'].includes(d.estado)&&pasa(d)), espera=rows.filter(d=>d.estado==='pendiente_ot'&&pasa(d))
-  const grupos={}; guard.forEach(d=>{ (grupos[d.cliente_id]=grupos[d.cliente_id]||[]).push(d) })
-  const orden=Object.keys(grupos).sort((a,b)=>nom(a).localeCompare(nom(b),'es'))
-  const activos=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'))
-  const asignar=async d=>{ const cid=pick[d.id]; if(!cid||busy) return; setBusy(d.id)
+  const abogDe=id=>clients.find(c=>String(c.id)===String(id))?.abogado_responsable||''
+  const ctx=useMemo(()=>{ if(!rows) return null
+    const clasificados=rows.filter(d=>d.cliente_id&&['guardado','asignado'].includes(d.estado))
+    return {ots:(expenses||[]).filter(e=>e.ot_number&&!e.deleted_at), usadas:new Set(clasificados.map(d=>String(d.ot_number||'')).filter(Boolean)), indice:indiceNombres(clients,clientEntities,[],aprendidos), clasificados}
+  },[rows,expenses,clients,clientEntities,aprendidos])
+  if(rows===null||!ctx) return <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div>
+  const vivos=rows.filter(d=>!_esWord(d)&&!['duplicado','descartado'].includes(d.estado))
+  const qq=_normTxt(q)
+  const pasa=d=>(!qq||_normTxt(`${_tipoDoc(d)} ${d.archivo_nombre||''} ${d.asunto||''} ${d.repertorio||''} ${d.ot_number||''} ${d.razon_social||''} ${d.cliente_id?nom(d.cliente_id):''}`).includes(qq))
+    &&(!mes||_fechaDoc(d).slice(0,7)===mes)&&(!clase||_claseDoc(d)===clase)
+  const guard=vivos.filter(d=>d.estado==='guardado'), porAsig=vivos.filter(d=>['por_clasificar','pendiente_ot','asignado','error'].includes(d.estado))
+  const sugDe=d=>sugerenciasDocumento(d,ctx).sugerencias
+  const nConSug=porAsig.filter(d=>sugDe(d).length).length
+  const meses=[...new Set(vivos.map(d=>_fechaDoc(d).slice(0,7)).filter(Boolean))].sort().reverse()
+  const abogados=[...new Set(guard.map(d=>abogDe(d.cliente_id)).filter(Boolean))].sort()
+  // Por asignar por ENVÍO (un correo = una tarjeta con todos sus PDF); la escritura va con su extracto (mismo repertorio).
+  const envios={}; porAsig.filter(pasa).forEach(d=>{ const k=d.thread_id||d.gmail_id||d.id; (envios[k]=envios[k]||[]).push(d) })
+  const listaEnv=Object.entries(envios).map(([k,ds])=>{ ds.sort((a,b)=>String(a.repertorio||'').localeCompare(String(b.repertorio||''))||_fechaDoc(a).localeCompare(_fechaDoc(b)))
+    const sug=new Map(); ds.forEach(d=>sugDe(d).forEach(s=>{ const x=sug.get(s.client_id)||{...s,n:0}; x.n++; sug.set(s.client_id,x) }))
+    return {k,ds,rec:ds.map(d=>d.recibido_at).sort().pop(),sug:[...sug.values()].sort((a,b)=>b.n-a.n)} }).sort((a,b)=>String(b.rec).localeCompare(String(a.rec)))
+  const tituloEnv=e=>{ const tipos=[...new Set(e.ds.map(_tipoDoc))]; const as=String(e.ds[0].asunto||'').replace(/^\s*((rv|re|fw|fwd):\s*)+/i,'').trim()
+    if(e.ds.every(d=>d.tipo_documento)&&tipos.length===1) return tipos[0]
+    if(as&&!/documento firmado/i.test(as)&&!/^\d+$/.test(as.replace(/\W/g,''))) return as
+    return tipos.length===1?tipos[0]:`${e.ds.length} documentos` }
+  const subEnv=e=>{ const d=e.ds[0], de=_remitente(d)
+    if(e.ds.length===1&&d.tipo_documento) return [d.fecha_documento?`Firmada el ${fmtFechaDMY(d.fecha_documento)}`:null, d.repertorio?`Rep ${d.repertorio}`:null, d.ot_number?`OT ${d.ot_number}`:null, de].filter(Boolean).join(' · ')
+    const reps=[...new Set(e.ds.map(x=>x.repertorio).filter(Boolean))]
+    return [`${e.ds.length} PDF`, reps.length===1&&e.ds.length>1?`mismo repertorio ${reps[0]}`:null, de].filter(Boolean).join(' · ') }
+  const asignar=async(e,cid,{aprender=false}={})=>{ const ds=e.ds.filter(d=>!fuera.has(d.id)); if(!cid||!ds.length||busy) return; setBusy(e.k)
     try{
-      if(!DEMO){ const {error}=await supabase.from('documentos_notaria').update({cliente_id:cid,estado:'asignado',motivo:null,updated_at:new Date().toISOString()}).eq('id',d.id); if(error) throw error }
-      logActividad('notaria.documento_asignado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${_tipoDoc(d)} → ${nom(cid)}`,archivo:d.archivo_nombre}})
-      if(DEMO){ setRows(p=>p.map(x=>x.id===d.id?{...x,cliente_id:cid,estado:'guardado',drive_url:'https://drive.google.com'}:x)); appAlert(`Guardado en Drive, en la carpeta Notaría de ${nom(cid)} (demo).`); return }
+      const ids=ds.map(d=>d.id)
+      if(!DEMO){ const {error}=await supabase.from('documentos_notaria').update({cliente_id:cid,estado:'asignado',motivo:null,updated_at:new Date().toISOString()}).in('id',ids); if(error) throw error }
+      ds.forEach(d=>logActividad('notaria.documento_asignado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${_tipoDoc(d)} → ${nom(cid)}`,archivo:d.archivo_nombre,cliente:nom(cid)}}))
+      // Lo confirmado a mano se aprende: la razón social que leyó la IA (si es una sola) queda como parte de ese cliente.
+      if(aprender&&!DEMO) ds.forEach(d=>{ const so=(d.lectura?.sociedades||[]).filter(x=>x?.razon_social); if(so.length===1) learnPut('notaria_parte',so[0].razon_social,String(cid)) })
+      setRows(p=>p.map(x=>ids.includes(x.id)?{...x,cliente_id:cid,estado:DEMO?'guardado':'asignado',drive_url:x.drive_url||(DEMO?'https://drive.google.com':null)}:x))
+      if(DEMO){ appAlert(`Guardado en Drive, en la carpeta Notaría de ${nom(cid)} (demo).`); return }
       const {data,error}=await supabase.functions.invoke('notaria-documentos',{body:{}})
-      const ok=(data?.guardados||[]).some(x=>x.archivo===d.archivo_nombre)
+      const listos=[...(data?.guardados||[]),...(data?.movidos||[])].filter(x=>ds.some(d=>d.archivo_nombre===x.archivo)).length
       recargar()
-      appAlert(ok?`Guardado en Drive, en la carpeta Notaría de ${nom(cid)}.`:error||data?.error?`Quedó asignado a ${nom(cid)}; el archivo NO se guardó todavía (${data?.error||error?.message}). Se reintenta en la próxima revisión, cada 2 horas.`:`Quedó asignado a ${nom(cid)}; el archivo se guarda en la próxima revisión, cada 2 horas.`)
-    }catch(e){ appAlert('No se pudo asignar: '+(e.message||e)) }
+      appAlert(listos===ds.length?`Guardado${ds.length>1?`s ${ds.length} documentos`:''} en Drive, en la carpeta Notaría de ${nom(cid)}.`:error||data?.error?`Quedó asignado a ${nom(cid)}; el archivo NO se guardó todavía (${data?.error||error?.message}). Se reintenta en la próxima revisión, cada 2 horas.`:`Quedó asignado a ${nom(cid)}; ${listos?`${listos} de ${ds.length} ya están en su carpeta y el resto se guarda`:'se guarda'} en la próxima revisión, cada 2 horas.`)
+    }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) }
     setBusy(null) }
-  const descartar=async d=>{ if(busy) return; setBusy(d.id)
-    try{ if(!DEMO){ const {error}=await supabase.from('documentos_notaria').update({estado:'descartado',motivo:`No es de un cliente · ${user?.name||'Oficina'}`,updated_at:new Date().toISOString()}).eq('id',d.id); if(error) throw error }
-      logActividad('notaria.documento_descartado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${d.archivo_nombre}: no es de un cliente`}})
-      setRows(p=>p.map(x=>x.id===d.id?{...x,estado:'descartado'}:x)) }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
+  const crearCarpeta=async(e,cid)=>{ const cl=clients.find(c=>String(c.id)===String(cid)); if(!cl||busy) return; setBusy(e.k)
+    try{ if(!DEMO){ const res=await driveCall({action:'createFolder', name:(cl.name||'').trim()})
+        if(res?.conflict){ setBusy(null); appAlert(`Ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${cl.name}» en Drive:\n\n${(res.similar||[]).map(x=>`• ${x.name}`).join('\n')}\n\nNo creé otra para no duplicar. Vincúlala desde la ficha del cliente.`); return }
+        const fid=res?.folderId||res?.id; if(!fid) throw new Error('Drive no devolvió la carpeta')
+        const {error}=await supabase.from('clients').update({drive_folder_id:fid}).eq('id',cl.id); if(error) throw error
+        const _nn=_normTxt(cl.name); if(_nn) learnPut('cliente_folder',_nn,String(cl.id)) }
+      setBusy(null); await asignar(e,cid)
+    }catch(err){ setBusy(null); appAlert('No se pudo crear la carpeta: '+(err.message||err)) } }
+  const descartar=async e=>{ const ds=e.ds.filter(d=>!fuera.has(d.id)); if(!ds.length||busy) return; setBusy(e.k)
+    try{ const ids=ds.map(d=>d.id)
+      if(!DEMO){ const {error}=await supabase.from('documentos_notaria').update({estado:'descartado',motivo:`No es de un cliente · ${user?.name||'Oficina'}`,updated_at:new Date().toISOString()}).in('id',ids); if(error) throw error }
+      ds.forEach(d=>logActividad('notaria.documento_descartado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${_tipoDoc(d)}: no es de un cliente`,archivo:d.archivo_nombre}}))
+      setRows(p=>p.map(x=>ids.includes(x.id)?{...x,estado:'descartado'}:x)) }catch(err){ appAlert('No se pudo guardar: '+(err.message||err)) }
     setBusy(null) }
+  // Registro de lo guardado: agrupado por cliente, mes o tipo; filtros arriba; exportable.
+  const reg=guard.filter(d=>pasa(d)&&(!abog||abogDe(d.cliente_id)===abog)).sort((a,b)=>_fechaDoc(b).localeCompare(_fechaDoc(a)))
+  const llave=d=>agrupar==='mes'?_fechaDoc(d).slice(0,7):agrupar==='tipo'?_claseDoc(d):String(d.cliente_id)
+  const etq=k=>agrupar==='mes'?(k?mesTitulo(k+'-15T12:00'):'Sin fecha'):agrupar==='tipo'?_DOC_CLASE[k][0]:nom(k)
+  const grupos={}; reg.forEach(d=>{ const k=llave(d); (grupos[k]=grupos[k]||[]).push(d) })
+  const ordenG=Object.keys(grupos).sort((a,b)=>agrupar==='mes'?b.localeCompare(a):etq(a).localeCompare(etq(b),'es'))
+  // Mismo tipo, fecha, repertorio y OT con distinta clave de validación = otra versión que reenvió la notaría (no se borra).
+  const versiones={}; guard.forEach(d=>{ const k=`${d.cliente_id}|${d.tipo_documento}|${d.fecha_documento}|${d.repertorio||''}|${d.ot_number||''}`; (versiones[k]=versiones[k]||[]).push(d) })
+  const verDe=d=>{ const v=(versiones[`${d.cliente_id}|${d.tipo_documento}|${d.fecha_documento}|${d.repertorio||''}|${d.ot_number||''}`]||[]).slice().sort((a,b)=>String(b.recibido_at).localeCompare(String(a.recibido_at))); return v.length>1&&d.tipo_documento?v.length-v.indexOf(d):0 }
+  const exportar=async()=>{ try{ const XLSX=await loadXLSXStyle()
+    const data=reg.map(d=>[fmtFechaDMY(_fechaDoc(d)), nom(d.cliente_id), d.razon_social||'', _tipoDoc(d), _DOC_CLASE[_claseDoc(d)][0], d.repertorio||'', d.ot_number||'', abogDe(d.cliente_id), d.drive_url||''])
+    const ws=XLSX.utils.aoa_to_sheet([['Documentos de la notaría'],[],['Fecha','Cliente','Razón social','Documento','Clase','Repertorio','OT','Abogado','Drive'],...data])
+    ws['!cols']=[{wch:11},{wch:26},{wch:32},{wch:48},{wch:18},{wch:11},{wch:9},{wch:14},{wch:50}]
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Documentos'); XLSX.writeFile(wb,`Documentos de la notaria${mes?` ${mes}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
-  const sub=d=>[d.razon_social&&_n(d.razon_social)!==_n(nom(d.cliente_id))?d.razon_social:null, d.repertorio?`Rep ${d.repertorio}`:null, d.ot_number?`OT-${d.ot_number}`:null].filter(Boolean).join(' · ')
-  const fila=(d,i,extra)=><div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
-    {diaGrande(d.fecha_documento||isoLocal(d.recibido_at))}
+  const chip=k=>{ const [l,c,b]=_DOC_CLASE[k]; return <span key={k} style={{fontSize:11,fontWeight:600,color:c,background:b,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap'}}>{l}</span> }
+  const abrir=d=>d.drive_url?<a href={d.drive_url} target='_blank' rel='noreferrer' onClick={ev=>ev.stopPropagation()} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>Abrir</a>:<span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',flexShrink:0}}>{D?'Se guarda en Drive en la próxima revisión':'Por guardar'}</span>
+  const pill=(on,txt,sub,fn,dis)=><button key={txt+(sub||'')} disabled={dis} onClick={fn} style={{fontSize:12.5,fontWeight:600,borderRadius:9,padding:'7px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:dis?'default':'pointer',whiteSpace:D?'nowrap':'normal',textAlign:'left',opacity:dis?.6:1,maxWidth:'100%'}}>{txt}{sub&&<span style={{fontWeight:400,opacity:.8}}> · {sub}</span>}</button>
+  const selSty={fontSize:12.5,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',minWidth:0,maxWidth:D?190:'100%'}
+  const activos=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'))
+  const tarjetaEnv=e=>{ const d0=e.ds[0], sinCarpeta=e.ds.find(d=>d.cliente_id&&/carpeta/i.test(d.motivo||'')), asig=e.ds.find(d=>d.estado==='asignado'), mas=envMas.has(e.k), muestra=mas?e.ds:e.ds.slice(0,4), lec=e.ds.find(d=>d.lectura&&!d.lectura.error)?.lectura
+    const clases=[...new Set(e.ds.map(_claseDoc))]
+    return (<div key={e.k} style={{...card,overflow:'hidden'}}>
+      <div style={{display:'grid',gridTemplateColumns:'44px minmax(0,1fr)',columnGap:12,padding:D?'12px 14px':'11px 12px'}}>
+        {diaGrande(isoLocal(e.rec))}
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.text}}>{tituloEnv(e)}</div>
+          <div style={{fontSize:12,color:C.textSoft,marginTop:2}}>{subEnv(e)}</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{clases.map(chip)}</div>
+          {lec&&<div style={{fontSize:12,color:C.muted,marginTop:6}}>Leído en el documento: {[lec.acto,(lec.sociedades||[]).map(x=>x.razon_social).filter(Boolean).join(', ')||(lec.comparecientes||[]).map(x=>x.nombre).filter(Boolean).slice(0,3).join(', ')].filter(Boolean).join(' · ')}</div>}
+        </div>
+        <div style={{gridColumn:D?2:'1 / -1',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginTop:8}}>
+          {asig?<span style={{fontSize:12,color:C.textSoft}}>Asignado a {nom(asig.cliente_id)}; se guarda en su carpeta en la próxima revisión.</span>
+          :sinCarpeta?<><span style={{fontSize:12,color:C.textSoft}}>{nom(sinCarpeta.cliente_id)}: falta su carpeta en Drive.</span>{pill(true,'Crear carpeta y guardar',null,()=>crearCarpeta(e,sinCarpeta.cliente_id),busy===e.k)}</>
+          :<>
+            {e.sug.length>0&&<span style={{fontSize:12,color:C.textSoft}}>{e.sug.length>1?'Posibles:':'Sugerido:'}</span>}
+            {e.sug.length===0&&<span style={{fontSize:12,color:C.textSoft}}>{e.ds.some(d=>d.leido_at)?'Sin pista en el documento.':'Sin pista; se lee con IA en la próxima revisión.'}</span>}
+            {e.sug.map(s=>pill(e.sug.length===1,nom(s.client_id),s.motivo,()=>asignar(e,s.client_id),busy===e.k))}
+            {otro[e.k]!=null
+              ?<><select value={otro[e.k]} onChange={ev=>setOtro(p=>({...p,[e.k]:ev.target.value}))} style={selSty}><option value=''>Elige el cliente</option>{activos.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>{pill(true,'Guardar en su carpeta',null,()=>asignar(e,otro[e.k],{aprender:true}),!otro[e.k]||busy===e.k)}</>
+              :pill(false,'Otro cliente',null,()=>setOtro(p=>({...p,[e.k]:''})),busy===e.k)}
+            <button disabled={busy===e.k} onClick={()=>descartar(e)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'7px 4px',whiteSpace:'nowrap'}}>No es de un cliente</button>
+          </>}
+        </div>
+      </div>
+      <div>{muestra.map(d=><div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:D?'8px 14px':'8px 12px',borderTop:`1px solid ${C.track}`}}>
+        <input type='checkbox' checked={!fuera.has(d.id)} onChange={()=>setFuera(p=>{ const n=new Set(p); n.has(d.id)?n.delete(d.id):n.add(d.id); return n })} style={{width:16,height:16,margin:D?'0 14px':'0 14px 0 2px',accentColor:C.accent,flexShrink:0}} aria-label='Incluir'/>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{_tipoDoc(d)}</div>
+          <div style={{fontSize:11.5,color:C.textSoft}}>{[_DOC_CLASE[_claseDoc(d)][0], d.fecha_documento?fmtFechaDMY(d.fecha_documento):null, !D&&d.repertorio?`Rep ${d.repertorio}`:null].filter(Boolean).join(' · ')}</div></div>
+        {D&&d.repertorio&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>Rep {d.repertorio}</span>}
+        {abrir(d)}
+      </div>)}
+      {e.ds.length>4&&<button onClick={()=>setEnvMas(p=>{ const n=new Set(p); n.has(e.k)?n.delete(e.k):n.add(e.k); return n })} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:D?'8px 14px 10px 72px':'8px 12px 10px 44px'}}>{mas?'Ver menos':`Ver los otros ${e.ds.length-4} archivos`}</button>}
+      </div>
+    </div>) }
+  const filaReg=(d,i)=><div key={d.id} onClick={()=>d.drive_url&&window.open(d.drive_url,'_blank','noopener')} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:d.drive_url?'pointer':'default'}}>
+    {diaGrande(_fechaDoc(d))}
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:13.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{_tipoDoc(d)}</div>
-      <div style={{fontSize:11.5,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub(d)||d.asunto||d.archivo_nombre}</div>
+      <div style={{fontSize:13.5,fontWeight:600,color:C.text}}>{_tipoDoc(d)}{verDe(d)>0&&<span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.track,borderRadius:10,padding:'1px 7px',marginLeft:6}}>versión {verDe(d)}</span>}</div>
+      <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{[agrupar!=='cliente'?<span key='c' onClick={onOpenClientFicha?ev=>{ev.stopPropagation();onOpenClientFicha(d.cliente_id)}:undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(d.cliente_id)}</span>:null, d.razon_social&&_normTxt(d.razon_social)!==_normTxt(nom(d.cliente_id))?rsBonita(d.razon_social):null, !D&&d.repertorio?`Rep ${d.repertorio}`:null].filter(Boolean).reduce((a,x,j)=>j?[...a,' · ',x]:[x],[])}</div>
     </div>
-    {extra}
+    {D&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{[d.repertorio?`Rep ${d.repertorio}`:null,d.ot_number?`OT ${d.ot_number}`:null].filter(Boolean).join(' · ')}</span>}
+    {abrir(d)}
   </div>
-  const abrir=d=>d.drive_url?<a href={d.drive_url} target='_blank' rel='noreferrer' style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>Abrir</a>:null
-  const selSty={fontSize:12,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:D?'6px 8px':'9px 10px',minWidth:0,maxWidth:D?220:'100%',width:D?undefined:'100%',flex:D?undefined:'1 1 100%'}
-  const btn={fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',cursor:'pointer',padding:'7px 12px',whiteSpace:'nowrap'}
-  const total=rows.filter(d=>d.estado==='guardado').length, nPor=rows.filter(d=>['por_clasificar','error','asignado'].includes(d.estado)).length, nEsp=rows.filter(d=>d.estado==='pendiente_ot').length
+  const hayFiltro=!!(qq||mes||clase||abog)
   return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
-    <div style={{...card,padding:'13px 15px'}}>
-      <span style={{...SEC_LBL}}>Documentos enviados por la notaría</span>
-      <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:25,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{total}</span><span style={{fontSize:12,color:C.muted}}>en la carpeta de su cliente{nPor?` · ${nPor} por clasificar`:''}{nEsp?` · ${nEsp} esperan su OT`:''}</span></div>
+    <div style={{...card,display:'grid',gridTemplateColumns:D?'minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr)':'1fr 1fr',overflow:'hidden'}}>
+      <div style={{padding:D?'13px 16px':'11px 13px',gridColumn:D?undefined:'1 / -1',borderRight:D?`1px solid ${C.border}`:'none',borderBottom:D?'none':`1px solid ${C.border}`}}>
+        {D&&<div style={{...SEC_LBL}}>Documentos de la notaría</div>}
+        <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:D?2:0}}><span style={{fontSize:D?27:23,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{vivos.length}</span><span style={{fontSize:12,color:C.muted}}>{D?'':'documentos '}{meses.length?`desde ${fmtFechaDMY(meses[meses.length-1]+'-01')}`:''}</span></div>
+      </div>
+      {[['guard','En su carpeta',guard.length,C.text,D?'se abren desde la app':null,null],['por','Por asignar',porAsig.length,porAsig.length?C.soonText:C.text,D?`${nConSug} con sugerencia`:null,null]].map(([k,l,v,col,s,fn],i)=><div key={k} onClick={fn||undefined} style={{padding:D?'13px 16px':'10px 13px',borderLeft:i&&D?`1px solid ${C.track}`:i?`1px solid ${C.track}`:'none',cursor:fn?'pointer':'default'}}>
+        <div style={{...SEC_LBL,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:D?20:17,fontWeight:700,color:col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{v}</div>{s&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:2,whiteSpace:'nowrap'}}>{s}</div>}
+      </div>)}
     </div>
-    <div style={{display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px'}}>
-      <SIcon n='search' s={14} c={C.done}/>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, tipo, repertorio u OT' style={{border:'none',background:'none',outline:'none',fontSize:12,color:C.text,width:'100%',minWidth:0}}/>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <div style={{flex:D?'1 1 240px':'1 1 100%',display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',minWidth:0}}>
+        <SIcon n='search' s={14} c={C.done}/>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, razón social, tipo, repertorio u OT' style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/>
+      </div>
+      <select value={mes} onChange={e=>setMes(e.target.value)} style={selSty}><option value=''>Todos los meses</option>{meses.map(m=><option key={m} value={m}>{mesTitulo(m+'-15T12:00')}</option>)}</select>
+      <select value={clase} onChange={e=>setClase(e.target.value)} style={selSty}><option value=''>Todos los tipos</option>{Object.entries(_DOC_CLASE).map(([k,v])=><option key={k} value={k}>{v[0]}</option>)}</select>
+      {abogados.length>1&&<select value={abog} onChange={e=>setAbog(e.target.value)} style={selSty}><option value=''>Todos los abogados</option>{abogados.map(a=><option key={a} value={a}>{a}</option>)}</select>}
+      {D&&<span style={{flex:1}}/>}
+      <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden',background:C.surface}}>
+        {[['cliente','Cliente'],['mes','Mes'],['tipo','Tipo']].map(([k,l])=><button key={k} onClick={()=>setAgrupar(k)} style={{fontSize:12,fontWeight:600,padding:'6px 11px',border:'none',cursor:'pointer',background:agrupar===k?C.accent:'transparent',color:agrupar===k?'#fff':C.muted}}>{l}</button>)}
+      </div>
+      {D&&<button onClick={exportar} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Exportar Excel</button>}
     </div>
-    {porCla.length>0&&<div>
-      <div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Por clasificar · {porCla.length}</div>
-      <div style={{...card,overflow:'hidden'}}>{porCla.map((d,i)=><div key={d.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
-        {fila(d,0,D?<span style={{fontSize:11,color:d.estado==='error'?C.overdueText:C.textSoft,flexShrink:0,whiteSpace:'nowrap'}}>{d.estado==='asignado'?`Asignado a ${nom(d.cliente_id)}`:d.estado==='error'?'No se guardó':''}</span>:null)}
-        <div style={{display:'flex',gap:8,alignItems:'center',padding:D?'0 14px 10px 66px':'0 12px 10px',flexWrap:D?'nowrap':'wrap'}}>
-          <select value={pick[d.id]||''} onChange={e=>setPick(p=>({...p,[d.id]:e.target.value}))} style={selSty}><option value=''>Elige el cliente</option>{activos.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
-          <button disabled={!pick[d.id]||busy===d.id} onClick={()=>asignar(d)} style={{...btn,opacity:!pick[d.id]||busy===d.id?.5:1}}>{busy===d.id?'Guardando…':'Guardar en su carpeta'}</button>
-          <button disabled={busy===d.id} onClick={()=>descartar(d)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'7px 6px',whiteSpace:'nowrap'}}>No es de un cliente</button>
-        </div>
-      </div>)}</div>
+    {listaEnv.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{...SEC_LBL,margin:'2px 2px 0'}}>Por asignar · {listaEnv.reduce((a,e)=>a+e.ds.length,0)} {D?'documentos ':''}en {listaEnv.length} envío{listaEnv.length!==1?'s':''}</div>
+      {listaEnv.slice(0,nEnv).map(tarjetaEnv)}
+      {listaEnv.length>nEnv&&<button onClick={()=>setNEnv(n=>n+20)} style={{alignSelf:'flex-start',fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'2px'}}>Ver {Math.min(20,listaEnv.length-nEnv)} envíos más (quedan {listaEnv.length-nEnv})</button>}
     </div>}
-    {orden.map(cid=>{ const ds=grupos[cid], op=!!qq||abiertos.has(cid)||orden.length<=3; return (
-      <div key={cid}>
-        <div onClick={()=>!qq&&setAbiertos(p=>{ const n=new Set(p); n.has(cid)?n.delete(cid):n.add(cid); return n })} style={{display:'flex',alignItems:'center',gap:8,padding:'2px 2px 6px',cursor:'pointer'}}>
-          <span style={{fontSize:13,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-          <span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(cid)}:undefined} style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nom(cid)}</span>
-          <span style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{ds.length} documento{ds.length!==1?'s':''}</span>
-        </div>
-        {op&&<div style={{...card,overflow:'hidden'}}>{ds.map((d,i)=>fila(d,i,abrir(d)))}</div>}
-      </div>) })}
-    {espera.length>0&&<div>
-      <div onClick={()=>setVerEspera(v=>!v)} style={{...SEC_LBL,margin:'2px 2px 6px',cursor:'pointer',display:'flex',justifyContent:'space-between'}}><span>Esperan su OT · {espera.length}</span><span style={{color:C.textSoft}}>{verEspera?'Ocultar':'Ver'}</span></div>
-      {verEspera&&<div style={{...card,overflow:'hidden'}}>{espera.map((d,i)=>fila(d,i,null))}</div>}
-    </div>}
-    {!rows.length&&<div style={{...card,padding:24,textAlign:'center',fontSize:13,color:C.muted}}>Sin documentos de la notaría.</div>}
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{...SEC_LBL,margin:'4px 2px 0',display:'flex',justifyContent:'space-between'}}><span>En la carpeta de su cliente · {reg.length}</span>{!D&&<button onClick={exportar} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textTransform:'none',letterSpacing:0}}>Excel</button>}</div>
+      {ordenG.map(k=>{ const ds=grupos[k], op=hayFiltro||abiertos.has(k)||ordenG.length<=3; return (
+        <div key={k} style={{...card,overflow:'hidden'}}>
+          <div onClick={()=>!hayFiltro&&setAbiertos(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })} style={{display:'flex',alignItems:'center',gap:8,padding:D?'11px 14px':'10px 12px',cursor:'pointer'}}>
+            <span style={{fontSize:13,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
+            <span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{etq(k)}</span>
+            <span style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{ds.length} documento{ds.length!==1?'s':''}</span>
+            {agrupar==='cliente'&&onOpenClientFicha&&<button onClick={ev=>{ev.stopPropagation();onOpenClientFicha(k)}} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'0 0 0 4px'}}>Ficha</button>}
+          </div>
+          {op&&<div style={{borderTop:`1px solid ${C.track}`}}>{ds.map((d,i)=>filaReg(d,i))}</div>}
+        </div>) })}
+      {!reg.length&&<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{hayFiltro?'Ningún documento con esos filtros.':'Sin documentos guardados.'}</div>}
+    </div>
   </div>)
 }
 function PedidosTile({render, bulkImports}){ const {pedidos}=usePedidosNotaria(bulkImports); return render(pedidos===null?undefined:(pedidos[0]||null)) }
@@ -22378,8 +22493,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
                     go:()=>{ setNoNSel(new Set(nn.items.filter(x=>x.estado==='pendiente').map(x=>x.id))); setNotaTab('nonuestras') }})}
                   <PedidosTile bulkImports={bulkImports} render={u=>tile('rec',{t:'Pedidos', s:u===undefined?'…':u?`${fmtFechaDMY(isoLocal(u.p.created_at))} · ${_PED_CHIP[u.estado][0].toLowerCase()}`:'días 15 y 30',
                     ic:<SIcon n='mail' s={17} c={u&&u.porSeguir?C.soonText:u&&u.estado==='rev'?C.azulInfo:C.muted}/>, bg:u&&u.porSeguir?C.soonBg:u&&u.estado==='rev'?C.azulBg:C.bgSoft, go:()=>setNotaTab('recordatorios')})}/>
-                  <DocumentosNotariaTile render={rs=>{ const nG=(rs||[]).filter(d=>d.estado==='guardado').length, nP=(rs||[]).filter(d=>['por_clasificar','error','asignado'].includes(d.estado)).length
-                    return tile('docs',{t:'Documentos', s:rs===null?'…':nP?`${nG} guardados · ${nP} por clasificar`:`${nG} guardados`, sM:rs===null?'…':nP?`${nP} por clasificar`:`${nG} guardados`,
+                  <DocumentosNotariaTile render={rs=>{ const _v=(rs||[]).filter(d=>!_esWord(d)), nG=_v.filter(d=>d.estado==='guardado').length, nP=_v.filter(d=>['por_clasificar','pendiente_ot','error','asignado'].includes(d.estado)).length
+                    return tile('docs',{t:'Documentos', s:rs===null?'…':nP?`${nG} guardados · ${nP} por asignar`:`${nG} guardados`, sM:rs===null?'…':nP?`${nP} por asignar`:`${nG} guardados`,
                       ic:<SIcon n='file' s={17} c={nP?C.soonText:C.muted}/>, bg:nP?C.soonBg:C.bgSoft, go:()=>setNotaTab('documentos')},hayNN) }}/>
                 </div>) })()}
           </div>
@@ -22469,8 +22584,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
         </div>
       )}
       {showNotaria&&notaTab==='documentos'&&(
-        <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?820:undefined,margin:'0 auto'}}>
-          <DocumentosNotaria isDesktop={isDesktop} clients={clients} user={currentUser} onOpenClientFicha={onOpenClientFicha}/>
+        <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?1100:undefined,margin:'0 auto'}}>
+          <DocumentosNotaria isDesktop={isDesktop} clients={clients} clientEntities={clientEntities} expenses={expenses} user={currentUser} onOpenClientFicha={onOpenClientFicha}/>
         </div>
       )}
       {showNotaria&&notaTab==='nonuestras'&&(()=>{
