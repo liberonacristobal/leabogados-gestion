@@ -1365,7 +1365,8 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
   const abogDe=id=>clients.find(c=>String(c.id)===String(id))?.abogado_responsable||''
   const ctx=useMemo(()=>{ if(!rows) return null
     const clasificados=rows.filter(d=>d.cliente_id&&['guardado','asignado'].includes(d.estado))
-    return {ots:(expenses||[]).filter(e=>e.ot_number&&!e.deleted_at), usadas:new Set(clasificados.map(d=>String(d.ot_number||'')).filter(Boolean)), indice:indiceNombres(clients,clientEntities,[],aprendidos), clasificados}
+    const porRut={}; [...clients.map(c=>[c.rut,c.id]),...clientEntities.map(e=>[e.rut,e.client_id])].forEach(([r,id])=>{ const k=String(r||'').replace(/[^0-9kK]/g,'').toUpperCase(); if(k.length>=7&&id) porRut[k]=String(id) })
+    return {ots:(expenses||[]).filter(e=>e.ot_number&&!e.deleted_at), usadas:new Set(clasificados.map(d=>String(d.ot_number||'')).filter(Boolean)), indice:indiceNombres(clients,clientEntities,[],aprendidos), clasificados, porRut}
   },[rows,expenses,clients,clientEntities,aprendidos])
   if(rows===null||!ctx) return <div style={{fontSize:12,color:C.muted,padding:'10px 2px'}}>Cargando…</div>
   const vivos=rows.filter(d=>!_esWord(d)&&!['duplicado','descartado'].includes(d.estado))
@@ -1402,6 +1403,10 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       ds.forEach(d=>logActividad('notaria.documento_asignado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${_tipoDoc(d)} → ${nom(cid)}`,archivo:d.archivo_nombre,cliente:nom(cid)}}))
       // Lo confirmado a mano se aprende: la razón social que leyó la IA (si es una sola) queda como parte de ese cliente.
       if(aprender&&!DEMO) ds.forEach(d=>{ const so=(d.lectura?.sociedades||[]).filter(x=>x?.razon_social); if(so.length===1) learnPut('notaria_parte',so[0].razon_social,String(cid)) })
+      // El extracto publicado trae la razón social y el RUT de la sociedad: al asignarlo, queda como razón social del cliente.
+      if(!DEMO) for(const d of ds){ const pb=d.do_publicacion; if(!pb?.rut||!pb?.nombre) continue
+        const nueva=await aprenderRS(cid, fmtRutCL(pb.rut), rsBonita(_sinRut(pb.nombre)), clientEntities)
+        if(nueva) logActividad('cliente.rs_aprendida',{tabla:'client_entities',id:nueva.id,detalle:{title:`Razón social ${nueva.name} (${nueva.rut}) aprendida para ${nom(cid)}`,origen:'Diario Oficial',documento:d.id}}) }
       setRows(p=>p.map(x=>ids.includes(x.id)?{...x,cliente_id:cid,estado:DEMO?'guardado':'asignado',drive_url:x.drive_url||(DEMO?'https://drive.google.com':null)}:x))
       if(DEMO){ appAlert(`Guardado en Drive, en la carpeta Notaría de ${nom(cid)} (demo).`); return }
       const {data,error}=await supabase.functions.invoke('notaria-documentos',{body:{}})

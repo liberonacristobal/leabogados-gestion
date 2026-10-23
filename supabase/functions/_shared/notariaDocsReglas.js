@@ -89,8 +89,12 @@ function _cands(doc, ots, usadas, dias) {
   return (ots || []).filter(o => !o.deleted_at && o.ot_number && o.date && o.client_id && !usadas.has(String(o.ot_number)) && Math.abs(_dias(String(o.date).slice(0, 10), f)) <= dias)
     .filter(o => { const ct = new Set(toks(`${o.concept || ''} ${o.materia || ''}`)); return tt.filter(w => ct.has(w)).length >= necesita })
 }
-export function sugerenciasDocumento(doc, { ots = [], usadas = new Set(), indice = [], clasificados = [] } = {}) {
+export function sugerenciasDocumento(doc, { ots = [], usadas = new Set(), indice = [], clasificados = [], porRut = {} } = {}) {
   const sug = new Map(), put = (cid, s) => { cid = String(cid || ''); if (cid && !sug.has(cid)) sug.set(cid, { client_id: cid, ...s }) }
+  // La publicación del Diario Oficial (edge diario-oficial) trae el RUT de la sociedad del extracto: si es la razón social de un
+  // cliente, ese es el cliente. porRut = RUT sin puntos ni guion → client_id (fichas y razones sociales).
+  const rutDO = String(doc.do_publicacion?.rut || '').replace(/[^0-9kK]/g, '').toUpperCase()
+  if (rutDO.length >= 7 && porRut[rutDO]) put(porRut[rutDO], { fuente: 'diario_oficial', motivo: 'RUT publicado en el Diario Oficial' })
   const reps = repertoriosDoc(doc)
   const conRep = clasificados.filter(c => c.cliente_id && reps.length && repertoriosDoc(c).some(r => reps.includes(r)))
   if (new Set(conRep.map(c => String(c.cliente_id))).size === 1) put(conRep[0].cliente_id, { fuente: 'repertorio', motivo: `Mismo repertorio (${reps[0]}) que un documento ya en su carpeta` })
