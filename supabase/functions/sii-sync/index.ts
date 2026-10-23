@@ -302,30 +302,25 @@ serve(async (req) => {
     // VERIFICAR antes de confiar en prod: (a) que getCompras devuelva los campos
     // correctos (ver los VERIFICAR marcados en rcv.ts), (b) que la tabla
     // sii_compras_docs exista (correr supabase/sql/sii_compras.sql).
+    // Sin periodo (cron diario 'compras-sii-diario'): mes anterior + mes actual, igual que cron-cuadre-ventas.
     if (body.action === 'sync-compras') {
-      const periodoC = String(body.periodo || '')
-      if (!/^\d{4}-\d{2}$/.test(periodoC)) return json({ error: 'periodo debe tener formato YYYY-MM' }, 400)
+      const per = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+      const hoyC = new Date()
+      const periodosC = body.periodo
+        ? [String(body.periodo)]
+        : [per(new Date(Date.UTC(hoyC.getUTCFullYear(), hoyC.getUTCMonth() - 1, 1))), per(hoyC)]
+      if (periodosC.some((x) => !/^\d{4}-\d{2}$/.test(x))) return json({ error: 'periodo debe tener formato YYYY-MM' }, 400)
       if (ambiente !== 'produccion') {
         return json({ error: 'El RCV solo existe en produccion. Cambia SII_AMBIENTE a produccion.', ambiente }, 400)
       }
-      console.log(`[sii-sync] sync-compras ${periodoC} solicitado por ${email}`)
+      console.log(`[sii-sync] sync-compras ${periodosC.join(', ')} solicitado por ${email || 'cron'}`)
 
       let tokenC = await obtenerToken()
       // DEBUG (temporal): dump crudo para verificar campos/tipos contra el SII real.
       if (body.debug) {
-        try { return json({ ok: true, debug: true, raw: await getComprasRaw(periodoC, tokenC) }) }
-        catch (e) { tokenC = await obtenerToken(true); return json({ ok: true, debug: true, raw: await getComprasRaw(periodoC, tokenC) }) }
+        try { return json({ ok: true, debug: true, raw: await getComprasRaw(periodosC[0], tokenC) }) }
+        catch (e) { tokenC = await obtenerToken(true); return json({ ok: true, debug: true, raw: await getComprasRaw(periodosC[0], tokenC) }) }
       }
-      let compras
-      try {
-        compras = await getCompras(periodoC, tokenC)
-      } catch (e) {
-        // Token expirado a mitad de operacion: renovar y reintentar UNA vez (igual que ventas)
-        console.log(`[sii-sync] consulta compras fallo, renovando token: ${e instanceof Error ? e.message : e}`)
-        tokenC = await obtenerToken(true)
-        compras = await getCompras(periodoC, tokenC)
-      }
-
       const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
       // Match del proveedor por RUT normalizado (helper unico de match.ts).
@@ -337,49 +332,62 @@ serve(async (req) => {
         if (n && !provPorRut.has(n)) provPorRut.set(n, p.id)
       }
 
-      // Filas a upsertar (dedupe en memoria por la misma llave que el indice unico,
-      // por si el SII devolviera el mismo documento dos veces en la misma respuesta).
-      const vistos = new Set<string>()
-      const filas = []
-      for (const c of compras) {
-        const emisorRut = normalizarRut(c.rutEmisor)
-        const clave = `${c.folio}|${c.tipoDte}|${emisorRut}|${periodoC}`
-        if (vistos.has(clave)) continue
-        vistos.add(clave)
-        filas.push({
-          folio: String(c.folio),
-          tipo_dte: c.tipoDte,
-          fecha_emision: c.fechaEmision || null,
-          emisor_rut: c.rutEmisor,
-          emisor_name: c.nombreEmisor,
-          neto: c.montoNeto || 0,
-          exento: c.montoExento || 0,
-          iva: c.montoIva || 0,
-          monto: c.montoTotal || 0,
-          doc_json: c,
-          proveedor_id: provPorRut.get(emisorRut) || null,
-          periodo: periodoC,
-        })
-      }
+      const detalleC = []
+      for (const periodoC of periodosC) {
+        let compras
+        try {
+          compras = await getCompras(periodoC, tokenC)
+        } catch (e) {
+          // Token expirado a mitad de operacion: renovar y reintentar UNA vez (igual que ventas)
+          console.log(`[sii-sync] consulta compras fallo, renovando token: ${e instanceof Error ? e.message : e}`)
+          tokenC = await obtenerToken(true)
+          compras = await getCompras(periodoC, tokenC)
+        }
 
-      let guardadas = 0
-      if (filas.length) {
-        // Upsert idempotente por la llave anti-duplicado. No pisa estado/movimiento_id
-        // de filas ya conciliadas: onConflict actualiza los campos del documento pero
-        // 'estado' y 'movimiento_id' NO van en el payload, asi que conservan su valor.
-        const { error: upErr, count } = await sb
-          .from('sii_compras_docs')
-          .upsert(filas, { onConflict: 'folio,tipo_dte,emisor_rut,periodo', ignoreDuplicates: false, count: 'exact' })
-        if (upErr) return json({ error: 'No se pudo guardar compras: ' + upErr.message }, 500)
-        guardadas = count ?? filas.length
-      }
+        // Filas a upsertar (dedupe en memoria por la misma llave que el indice unico,
+        // por si el SII devolviera el mismo documento dos veces en la misma respuesta).
+        const vistos = new Set<string>()
+        const filas = []
+        for (const c of compras) {
+          const emisorRut = normalizarRut(c.rutEmisor)
+          const clave = `${c.folio}|${c.tipoDte}|${emisorRut}|${periodoC}`
+          if (vistos.has(clave)) continue
+          vistos.add(clave)
+          filas.push({
+            folio: String(c.folio),
+            tipo_dte: c.tipoDte,
+            fecha_emision: c.fechaEmision || null,
+            emisor_rut: c.rutEmisor,
+            emisor_name: c.nombreEmisor,
+            neto: c.montoNeto || 0,
+            exento: c.montoExento || 0,
+            iva: c.montoIva || 0,
+            monto: c.montoTotal || 0,
+            doc_json: c,
+            proveedor_id: provPorRut.get(emisorRut) || null,
+            periodo: periodoC,
+          })
+        }
 
-      const conProveedor = filas.filter((f) => f.proveedor_id).length
-      console.log(`[sii-sync] sync-compras ${periodoC}: ${compras.length} del SII, ${filas.length} unicas, ${conProveedor} con proveedor`)
-      return json({
-        ok: true, periodo: periodoC, ambiente,
-        totalSII: compras.length, guardadas, sinProveedor: filas.length - conProveedor,
-      })
+        let guardadas = 0
+        if (filas.length) {
+          // Upsert idempotente por la llave anti-duplicado. No pisa estado/movimiento_id
+          // de filas ya conciliadas: onConflict actualiza los campos del documento pero
+          // 'estado' y 'movimiento_id' NO van en el payload, asi que conservan su valor.
+          const { error: upErr, count } = await sb
+            .from('sii_compras_docs')
+            .upsert(filas, { onConflict: 'folio,tipo_dte,emisor_rut,periodo', ignoreDuplicates: false, count: 'exact' })
+          if (upErr) return json({ error: `No se pudo guardar compras ${periodoC}: ${upErr.message}`, detalle: detalleC }, 500)
+          guardadas = count ?? filas.length
+        }
+
+        const conProveedor = filas.filter((f) => f.proveedor_id).length
+        console.log(`[sii-sync] sync-compras ${periodoC}: ${compras.length} del SII, ${filas.length} unicas, ${conProveedor} con proveedor`)
+        detalleC.push({ periodo: periodoC, totalSII: compras.length, guardadas, sinProveedor: filas.length - conProveedor })
+      }
+      // Compatibilidad con la app (un periodo): mismas llaves de antes en la raiz.
+      const d0 = detalleC[0]
+      return json({ ok: true, ambiente, periodo: periodosC.length === 1 ? periodosC[0] : periodosC, ...(periodosC.length === 1 ? d0 : {}), detalle: detalleC })
     }
 
     // TRAÍDO HISTÓRICO READ-ONLY del Registro de VENTAS del SII (facturas + notas de
