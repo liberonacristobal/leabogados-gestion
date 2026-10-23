@@ -1301,7 +1301,7 @@ const _DEMO_DOCS_NOTARIA = [
 function useDocumentosNotaria(){
   const [rows,setRows]=useState(null)
   const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_DOCS_NOTARIA); return }
-    supabase.from('documentos_notaria').select('id,gmail_id,thread_id,recibido_at,remitente,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_url,drive_nombre,metodo,razon_social,lectura,sugerencia,leido_at').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
+    supabase.from('documentos_notaria').select('id,gmail_id,thread_id,recibido_at,remitente,asunto,tipo_documento,repertorio,fecha_documento,archivo_nombre,cliente_id,ot_number,estado,motivo,drive_file_id,drive_url,drive_nombre,metodo,razon_social,lectura,sugerencia,leido_at').eq('origen','notaria').neq('estado','duplicado').order('recibido_at',{ascending:false}).limit(2000)
       .then(({data})=>setRows(data||[]),()=>setRows([])) },[])
   useEffect(()=>{ cargar() },[cargar])
   return {rows,recargar:cargar,setRows}
@@ -1373,7 +1373,7 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       const {data,error}=await supabase.functions.invoke('notaria-documentos',{body:{}})
       const listos=[...(data?.guardados||[]),...(data?.movidos||[])].filter(x=>ds.some(d=>d.archivo_nombre===x.archivo)).length
       recargar()
-      appAlert(listos===ds.length?`Guardado${ds.length>1?`s ${ds.length} documentos`:''} en Drive, en la carpeta Notaría de ${nom(cid)}.`:error||data?.error?`Quedó asignado a ${nom(cid)}; el archivo NO se guardó todavía (${data?.error||error?.message}). Se reintenta en la próxima revisión, cada 2 horas.`:`Quedó asignado a ${nom(cid)}; ${listos?`${listos} de ${ds.length} ya están en su carpeta y el resto se guarda`:'se guarda'} en la próxima revisión, cada 2 horas.`)
+      appAlert(listos===ds.length?`Guardado${ds.length>1?`s ${ds.length} documentos`:''} en Drive, en la carpeta Notaría de ${nom(cid)}.`:error||data?.error?`Quedó asignado a ${nom(cid)}; el archivo NO se guardó todavía (${data?.error||error?.message}). Se reintenta en la próxima revisión diaria (10:20).`:`Quedó asignado a ${nom(cid)}; ${listos?`${listos} de ${ds.length} ya están en su carpeta y el resto se guarda`:'se guarda'} en la próxima revisión diaria (10:20).`)
     }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) }
     setBusy(null) }
   const crearCarpeta=async(e,cid)=>{ const cl=clients.find(c=>String(c.id)===String(cid)); if(!cl||busy) return; setBusy(e.k)
@@ -1452,9 +1452,13 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{[agrupar!=='cliente'?<span key='c' onClick={onOpenClientFicha?ev=>{ev.stopPropagation();onOpenClientFicha(d.cliente_id)}:undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(d.cliente_id)}</span>:null, d.razon_social&&_normTxt(d.razon_social)!==_normTxt(nom(d.cliente_id))?rsBonita(d.razon_social):null, !D&&d.repertorio?`Rep ${d.repertorio}`:null].filter(Boolean).reduce((a,x,j)=>j?[...a,' · ',x]:[x],[])}</div>
     </div>
     {D&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{[d.repertorio?`Rep ${d.repertorio}`:null,d.ot_number?`OT ${d.ot_number}`:null].filter(Boolean).join(' · ')}</span>}
-    {abrir(d)}
+    {abrir(d)}{D&&descargar(d)}
   </div>
   const hayFiltro=!!(qq||mes||clase||abog)
+  // Lo último que ENVIÓ la notaría (14 días), con o sin cliente: para revisarlo y descargarlo. Nunca lo que la oficina le manda.
+  const desde14=new Date(Date.now()-14*864e5).toISOString()
+  const ultimos=vivos.filter(d=>String(d.recibido_at||'')>=desde14&&!esCorreoOficina((String(d.remitente||'').match(/<([^>]+)>/)||[])[1]||d.remitente)&&pasa(d)).sort((a,b)=>String(b.recibido_at).localeCompare(String(a.recibido_at)))
+  const descargar=d=>d.drive_file_id?<a href={`https://drive.google.com/uc?export=download&id=${d.drive_file_id}`} target='_blank' rel='noreferrer' onClick={ev=>ev.stopPropagation()} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>Descargar</a>:null
   return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
     <div style={{...card,display:'grid',gridTemplateColumns:D?'minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr)':'1fr 1fr',overflow:'hidden'}}>
       <div style={{padding:D?'13px 16px':'11px 13px',gridColumn:D?undefined:'1 / -1',borderRight:D?`1px solid ${C.border}`:'none',borderBottom:D?'none':`1px solid ${C.border}`}}>
@@ -1479,6 +1483,17 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       </div>
       {D&&<button onClick={exportar} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Exportar Excel</button>}
     </div>
+    {ultimos.length>0&&<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{...SEC_LBL,margin:'2px 2px 0'}}>Últimos 14 días · {ultimos.length}</div>
+      <div style={{...card,overflow:'hidden'}}>{ultimos.map((d,i)=><div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
+        {diaGrande(isoLocal(d.recibido_at))}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:600,color:C.text}}>{_tipoDoc(d)}</div>
+          <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{[d.cliente_id&&d.estado==='guardado'?<span key='c' onClick={onOpenClientFicha?()=>onOpenClientFicha(d.cliente_id):undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(d.cliente_id)}</span>:<span key='p' style={{color:C.soonText,fontWeight:600}}>{d.estado==='asignado'?`Asignado a ${nom(d.cliente_id)}`:'Por asignar'}</span>, d.repertorio?`Rep ${d.repertorio}`:null, D&&d.fecha_documento?`firmada el ${fmtFechaDMY(d.fecha_documento)}`:null].filter(Boolean).reduce((a,x,j)=>j?[...a,' · ',x]:[x],[])}</div>
+        </div>
+        {abrir(d)}{descargar(d)}
+      </div>)}</div>
+    </div>}
     {listaEnv.length>0&&<div style={{display:'flex',flexDirection:'column',gap:10}}>
       <div style={{...SEC_LBL,margin:'2px 2px 0'}}>Por asignar · {listaEnv.reduce((a,e)=>a+e.ds.length,0)} {D?'documentos ':''}en {listaEnv.length} envío{listaEnv.length!==1?'s':''}</div>
       {listaEnv.slice(0,nEnv).map(tarjetaEnv)}
