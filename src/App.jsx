@@ -16226,7 +16226,8 @@ function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[]
     else if(o.tipo==='DJ'){ const r=[Y,Y+1].map(a=>_djFecha(o,(dj||[]).filter(x=>+x.anio_tributario===a))).filter(Boolean).map(r=>_habilDesde(r.fecha)).find(f=>f>=hoy); if(r) push({fecha:r, t:`DJ ${o.formulario}`, s:'Obligación tributaria'}) }
     else if(o.tipo==='PATENTE'){ const m=Array.from({length:8},(_,i)=>_ymMas(hoy.slice(0,7),i)).find(m=>CAL_CL.PATENTE.meses.includes(+m.slice(5,7))&&_finDeMes(m)>=hoy); if(m) push({fecha:_finDeMes(m), t:'Patente municipal', s:'Fecha según la municipalidad'}) } })
   items.sort((a,b)=>a.fecha.localeCompare(b.fecha))
-  return {items, hoy, seguimiento:activas.length-enTabla.length, elegidas, oblTxt:elegidas.map(o=>o.tipo==='DJ'?`DJ ${o.formulario}`:o.tipo==='PATENTE'?'Patente':o.tipo).join(' · ')} }
+  const noRev=activas.filter(c=>c.ultima_error&&!enTabla.includes(c)).length
+  return {items, hoy, seguimiento:activas.length-enTabla.length-noRev, noRev, elegidas, oblTxt:elegidas.map(o=>o.tipo==='DJ'?`DJ ${o.formulario}`:o.tipo==='PATENTE'?'Patente':o.tipo).join(' · ')} }
 // Fuentes del calendario del cliente que no trae la ficha: extractos por publicar, plazos y obligaciones elegidas (+ DJ del estudio).
 function useCalCliente(clientId){
   const [f,setF]=useState(null), [dj,setDj]=useState([])
@@ -28257,6 +28258,7 @@ function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[], setFt
             const sCal=sec('cal','cal',C.azulBg,C.accent,'Calendario',cal.items.length?`en ${CAL_CLI_DIAS} días · próximo ${fmtFechaDMY(cal.items[0].fecha)}`:`en ${CAL_CLI_DIAS} días`,String(cal.items.length),C.accent,<>
               {cal.items.length?cal.items.map((x,i)=>fila(i,goCal(x.go),diaGrande(x.fecha,x.vencido?C.overdueText:undefined),tt(x.t,x.s),chipD(x.fecha)))
                 :<div style={{padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.greenText}}>Sin vencimientos en {CAL_CLI_DIAS} días</div>}
+              {cal.noRev>0&&fila('nor',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>,<span style={{color:C.overdueText,fontSize:11.5,fontWeight:600}}>{cal.noRev} causa{cal.noRev!==1?'s':''} sin revisar · falló la última revisión</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
               {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:11.5}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700}}><span style={{color:C.muted,fontWeight:600,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Obligaciones tributarias · {cal.oblTxt||'por definir'}</span><span onClick={()=>setElegir(v=>!v)} style={{color:C.azulInfo,cursor:'pointer',flexShrink:0}}>{elegir?'Listo':'Elegir'}</span></div>
               {elegir&&<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`}}>{OBL_CLIENTE.map(([tp,fo,lb])=>{ const on=cal.elegidas.some(o=>o.tipo===tp&&String(o.formulario||'')===String(fo||''))
@@ -33176,6 +33178,7 @@ function useCausas({clientId=null}={}){
 }
 const _estadoCausa = c => { const t=c.ultima_tabla, hoy=isoLocal(new Date().toISOString())
   if(c.estado==='por_confirmar') return ['Por confirmar',C.textSoft,C.track]
+  if(c.ultima_error) return ['No se pudo revisar',C.overdueText,C.overdueBg]   // la última revisión falló: nunca «Sin tabla» sin confirmar
   if(t?.fecha&&t.fecha>=hoy) return t.fecha===hoy?[`Hoy · ${t.estado_dia||'En tabla'}`,C.soonText,C.soonBg]:[`En tabla · ${fmtFechaDMY(t.fecha)}`,C.accent,C.azulBg]
   return ['Sin tabla',C.textSoft,C.track] }
 // Una causa: resumen + acciones + seguimiento (bitácora) detrás de su botón. En celular parte plegada (una línea) y se abre al tocar.
@@ -33436,12 +33439,14 @@ function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClien
   const hoy=isoLocal(new Date().toISOString())
   const lista=(rows||[]).filter(c=>(!corte||c.corte_codigo===corte)&&(!abog||c.abogado===abog)&&(!q||_normTxt(`${c.caratula||''} ${c.rol}-${c.anio} ${nom(c.client_id)}`).includes(_normTxt(q))))
   const tab=lista.filter(c=>c.estado==='activa'&&c.ultima_tabla?.fecha>=hoy).sort((a,b)=>a.ultima_tabla.fecha.localeCompare(b.ultima_tabla.fecha))
-  const pc=lista.filter(c=>c.estado==='por_confirmar'), sin=lista.filter(c=>c.estado==='activa'&&!(c.ultima_tabla?.fecha>=hoy))
+  // «Sin tabla» solo con la última revisión confirmada por pjud.cl; si falló, va a «No se pudo revisar».
+  const err=lista.filter(c=>c.estado==='activa'&&c.ultima_error&&!(c.ultima_tabla?.fecha>=hoy))
+  const pc=lista.filter(c=>c.estado==='por_confirmar'), sin=lista.filter(c=>c.estado==='activa'&&!c.ultima_error&&!(c.ultima_tabla?.fecha>=hoy))
   const porCorte={}; sin.forEach(c=>{ (porCorte[c.corte_nombre]=porCorte[c.corte_nombre]||[]).push(c) })
   const revisarTodas=async()=>{ if(busy) return; setBusy(true)
     try{ if(DEMO){ appAlert('Revisión hecha (demo).'); return }
       const {data,error}=await supabase.functions.invoke('causas-tablas',{body:{}}); if(error||data?.error) throw new Error(data?.error||error?.message)
-      recargar(); appAlert(`${data.revisadas} causa${data.revisadas!==1?'s':''} revisada${data.revisadas!==1?'s':''}: ${(data.en_tabla||[]).length} en tabla${(data.avisos||[]).length?`, ${data.avisos.filter(a=>a.enviado).length} aviso${data.avisos.filter(a=>a.enviado).length!==1?'s':''} enviado${data.avisos.filter(a=>a.enviado).length!==1?'s':''}${data.avisos.some(a=>!a.enviado)?` y ${data.avisos.filter(a=>!a.enviado).length} NO enviado${data.avisos.filter(a=>!a.enviado).length!==1?'s':''}`:''}`:''}.`)
+      recargar(); appAlert(`${data.revisadas} causa${data.revisadas!==1?'s':''} revisada${data.revisadas!==1?'s':''}: ${(data.en_tabla||[]).length} en tabla${(data.avisos||[]).length?`, ${data.avisos.filter(a=>a.enviado).length} aviso${data.avisos.filter(a=>a.enviado).length!==1?'s':''} enviado${data.avisos.filter(a=>a.enviado).length!==1?'s':''}${data.avisos.some(a=>!a.enviado)?` y ${data.avisos.filter(a=>!a.enviado).length} NO enviado${data.avisos.filter(a=>!a.enviado).length!==1?'s':''}`:''}`:''}${(data.errores||[]).length?`. ${data.errores.length} no se ${data.errores.length===1?'pudo':'pudieron'} revisar: ${data.errores.map(x=>`${x.causa} (${x.error})`).join('; ')}`:''}.`)
     }catch(err){ appAlert('No se pudieron revisar las causas: '+(err.message||err)) }
     finally{ setBusy(false) } }
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}
@@ -33461,6 +33466,7 @@ function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClien
         {abogados.length>1&&<select value={abog} onChange={e=>setAbog(e.target.value)} style={sel}><option value=''>Todos los abogados</option>{abogados.map(a=><option key={a} value={a}>{a}</option>)}</select>}
       </div>
       {tab.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>En tabla · {tab.length}</div><div style={card}>{tab.map(fila)}</div></div>}
+      {err.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px',color:C.overdueText}}>No se pudo revisar · {err.length}</div><div style={card}>{err.map(fila)}</div></div>}
       {pc.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Por confirmar · {pc.length}</div><div style={card}>{pc.map(fila)}</div></div>}
       {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
       {!lista.length&&<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{q||corte||abog?'Ninguna causa con esos filtros.':'Sin causas. Se agregan en la ficha del cliente › Ventas › la venta respectiva.'}</div>}
