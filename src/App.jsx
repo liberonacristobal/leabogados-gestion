@@ -32789,13 +32789,14 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
     setBusy(false) }
   const confirmar=()=>{ if(!/^\d+$/.test(String(rol||''))){ setEdit(true); appAlert('Completa el rol de la causa antes de confirmarla.'); return } guardar({estado:'activa',rol:String(rol)},'causas.confirmada') }
   const ab={fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}
-  const detalle=[cliente, _rolTxt(c), _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}`:null, c.abogado].filter(Boolean).join(' · ')
+  const predio=String(c.origen||'').split(' · ')[0].trim()   // antecedente de primera instancia o predio (p. ej. «Tira Larga»)
+  const detalle=[cliente, _rolTxt(c), predio||null, _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}`:null, c.abogado].filter(Boolean).join(' · ')
   const chip=<span style={{fontSize:11,fontWeight:600,color:eCol,background:eBg,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>{e0}</span>
   return (<div style={{borderTop:`1px solid ${C.track}`}}>
     <div onClick={D?undefined:()=>setOp(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'10px 14px':'10px 12px',cursor:D?'default':'pointer'}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13.5,fontWeight:600,color:C.text,...(D?{}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{c.caratula||'Sin carátula'}</div>
-        <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{D?detalle:_rolTxt(c)}</div>
+        <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{D?detalle:[_rolTxt(c),predio].filter(Boolean).join(' · ')}</div>
       </div>
       {chip}
       {D?<div style={{display:'flex',gap:12,flexShrink:0}}>{c.estado==='por_confirmar'?<button onClick={confirmar} disabled={busy} style={ab}>Confirmar</button>:<button onClick={revisar} disabled={busy} style={ab}>{busy?'Revisando…':'Revisar ahora'}</button>}<button onClick={toggleSeg} style={ab}>{verSeg?'Ocultar seguimiento':'Seguimiento'}</button><button onClick={()=>setEdit(v=>!v)} style={{...ab,color:C.muted}}>Editar</button></div>
