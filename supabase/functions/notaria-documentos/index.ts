@@ -18,7 +18,7 @@
 
 import { decodeBase64Url } from "jsr:@std/encoding@1/base64url";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
-import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria, firmadoPorNotaria, sugerenciasDocumento, indiceNombres, clientesEnTexto } from "../_shared/notariaDocsReglas.js";
+import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria, firmadoPorNotaria, sugerenciasDocumento, indiceNombres, clientesEnTexto, clienteDeLectura } from "../_shared/notariaDocsReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
     if (!u?.email || !dom || !String(u.email).toLowerCase().endsWith("@" + dom.toLowerCase())) return json({ error: "No autorizado" }, 403);
   }
   try {
-    const cfg = await rest("learnings?kind=eq.config&key=in.(notaria_documentos,notaria_pedir_liquidacion,notaria_firmas,agente_casilla)&select=key,value");
+    const cfg = await rest("learnings?kind=eq.config&key=in.(notaria_documentos,notaria_pedir_liquidacion,notaria_firmas,agente_casilla,notaria_equipo_nombres)&select=key,value");
     const ON = String(cfg.find((c: { key: string }) => c.key === "notaria_documentos")?.value || "").toLowerCase() === "on";
     const dryRun = !!body.dryRun || !ON;
     // Remitentes de la notaría: los correos configurados para el pedido de liquidación y su dominio (no los de casillas públicas).
@@ -334,15 +334,13 @@ Deno.serve(async (req) => {
       const actual = await todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,estado,tipo_documento,repertorio,fecha_documento,asunto,cliente_id,drive_file_id,leido_at&origen=eq.notaria&estado=in.(por_clasificar,pendiente_ot)&drive_file_id=not.is.null&leido_at=is.null");
       const porRut: Record<string, string> = {}; [...clients.map((c) => [c.rut, c.id]), ...ents.map((e) => [e.rut, e.client_id])].forEach(([r, id]) => { const k = rutN(r as string); if (k.length >= 7 && id) porRut[k] = String(id); });
       const N = Math.min(10, Number(body.leer) || 3);
+      // La gente de la oficina comparece como testigo o solicitante: nunca es el cliente.
+      const equipoNombres = String(cfg.find((c: { key: string }) => c.key === "notaria_equipo_nombres")?.value || "").split(/[,;]/).map((x) => x.trim()).filter(Boolean);
       for (const d of actual.filter((x) => DOCS.test(x.archivo_nombre || "") && !sugerenciasDocumento(x, ctxSug).sugerencias.length).slice(0, N)) {
         try {
           const lec = await leerConIA(await bajarDrive(d.drive_file_id));
-          const ruts = [...(lec.comparecientes || []), ...(lec.sociedades || [])].map((x: { rut?: string }) => rutN(x.rut || "")).filter((x: string) => x.length >= 7);
-          const porR = [...new Set(ruts.map((r: string) => porRut[r]).filter(Boolean))];
-          const nombresL = [...(lec.sociedades || []).map((x: { razon_social?: string }) => x.razon_social), ...(lec.comparecientes || []).map((x: { nombre?: string; calidad?: string }) => `${x.nombre || ""} ${x.calidad || ""}`)].join(" ");
-          const porN = [...new Set(clientesEnTexto(nombresL, indice).map((k) => k.cid))];
-          const cidS = porR.length === 1 ? porR[0] : porN.length === 1 ? porN[0] : null;
-          const sugerencia = cidS ? { client_id: cidS, fuente: "ia", motivo: porR.length === 1 ? "RUT en la comparecencia" : "Nombre en la comparecencia" } : null;
+          const sugerencia = clienteDeLectura(lec, { indice, porRut, excluir: equipoNombres });
+          const cidS = sugerencia?.client_id || null;
           await rest(`documentos_notaria?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ lectura: lec, sugerencia, leido_at: new Date().toISOString(), ...(lec.acto && !d.tipo_documento ? { tipo_documento: String(lec.acto).toUpperCase() } : {}), updated_at: new Date().toISOString() }) });
           leidos.push({ archivo: d.archivo_nombre, acto: lec.acto, cliente: cidS ? cli[cidS]?.name : null });
         } catch (e) { const msg = String((e as Error).message || e); leidos.push({ archivo: d.archivo_nombre, error: msg });
