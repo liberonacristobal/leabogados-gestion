@@ -103,7 +103,9 @@ Deno.serve(async (req) => {
         const porNum = new Map(ya.map((x: { numero: string }) => [String(Number(x.numero)), x]));
         // Filas guardadas antes con el enlace al índice: reciben el de su PDF.
         for (const d of docs) { const x = porNum.get(d.numero) as { id: string; url: string } | undefined; if (x && !/\.pdf$/i.test(x.url || "")) { await rest(`sii_novedades?id=eq.${x.id}`, { method: "PATCH", body: JSON.stringify({ url: d.url }) }); enlaces++; } }
-        const faltan = docs.filter((d) => !porNum.has(d.numero) && d.fecha);
+        // El índice a veces repite un número (Resolución N° 143/2026 aparece dos veces, mismo PDF): cuenta la primera aparición.
+        const vistos = new Set<string>();
+        const faltan = docs.filter((d) => !porNum.has(d.numero) && d.fecha && !vistos.has(d.numero) && vistos.add(d.numero));
         for (let i = 0; i < faltan.length; i += 40) {
           const lote = faltan.slice(i, i + 40), cls = await clasificar(lote, f.tipo, areas);
           const filas = lote.map((d, k) => { const c = cls.find((x: { i: number }) => Number(x.i) === k) || {};
