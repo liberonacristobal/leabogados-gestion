@@ -26333,6 +26333,7 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
 function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onAddSale, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onReplaceProgramada, onOpenSale}) {
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   const causasCli = useCausas({clientId:client.id})   // causas en Cortes de cada venta (agente causas-tablas)
+  const propsCli = usePropiedades({clientId:client.id})   // roles de avalúo de cada venta (tabla propiedades)
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -26447,6 +26448,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
             {open&&<div style={{padding:'0 11px 11px'}}>
               {hasBills&&<CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>}
               <CausasVenta client={client} sale={s} isDesktop={isDesktop} causas={causasCli}/>
+              <PropiedadesVenta client={client} sale={s} isDesktop={isDesktop} props={propsCli}/>
               {onOpenSale&&<div style={{textAlign:'right',marginTop:2}}><span onClick={(e)=>{e.stopPropagation();onOpenSale(s)}} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>Abrir venta <Gl n='chevron'/></span></div>}
             </div>}
           </div>)
@@ -32987,6 +32989,145 @@ function CausasVenta({client, sale, isDesktop, user, causas}){
           </div>
         </div>
       </div>}
+    </>}
+  </div>)
+}
+// Roles de avalúo (tabla propiedades) de una venta, en la ficha del cliente (render FCPbqjEjNk3RsHYSxum8CD aprobado): por comuna y,
+// en una comuna con muchos roles, por destino (sitios eriazos, agrícolas, habitacionales, sin propiedad en el SII, otros). Todo
+// plegado; cada rol se abre con su detalle. Los cruza el agente tgr-remates (comuna + rol).
+const _DEMO_PROPIEDADES = [
+  {id:'pr1',client_id:'c1',sale_id:'s1',comuna:'Linares',rol:'1100-134',lote:'5',nombre:'La Posada LT 5',destino:'Sitio Eriazo',propietario:'Inversiones Demo Limitada',propietario_actual:'Agrícola Demo SpA',inscripcion_fojas:'2027',inscripcion_numero:'2787',inscripcion_anio:1993,superficie_m2:6000,arrendado:true,deuda_contribuciones:1668992,notas:'Deuda neta $1.326.708',fuente:'Planilla demo · Hoja 3'},
+  {id:'pr2',client_id:'c1',sale_id:'s1',comuna:'Linares',rol:'1100-135',lote:'6',nombre:'La Posada LT 6',destino:'Sitio Eriazo',propietario:'Inversiones Demo Limitada',superficie_m2:5600,arrendado:true,deuda_contribuciones:1664243,fuente:'Planilla demo · Hoja 3'},
+  {id:'pr3',client_id:'c1',sale_id:'s1',comuna:'Linares',rol:'1100-7',lote:'7',nombre:'Fdo El Martillo LT 7',destino:'Agrícola',propietario:'Familia Demo y otros',superficie_m2:6450,arrendado:true,fuente:'Planilla demo · Hoja 3'},
+  {id:'pr4',client_id:'c1',sale_id:'s1',comuna:'Linares',rol:'1100-2',lote:'2',estado_sii:'No existe propiedad asociada al rol en TGR ni SII',propietario:'Inversiones Demo Limitada',superficie_m2:6355,fuente:'Planilla demo · Hoja 3'},
+  {id:'pr5',client_id:'c1',sale_id:'s1',comuna:'Linares',rol:'196-8',direccion:'INDEPENDENCIA 548',propietario:'Inversiones Demo Limitada',avaluo_fiscal:165457369,avaluo_afecto:165457369,porcentaje_derecho:100,inscripcion_fojas:'1318',inscripcion_numero:'1839',inscripcion_anio:1993,fuente:'Planilla demo · Hoja 1'},
+  {id:'pr6',client_id:'c1',sale_id:'s1',comuna:'Las Condes',rol:'210-378',direccion:'NAPOLEON 3310 DP 106',propietario:'Inversiones Demo Limitada',avaluo_fiscal:79756594,porcentaje_derecho:100,fuente:'Planilla demo · Hoja 1'},
+]
+function usePropiedades({clientId}){
+  const [rows,setRows]=useState(null)
+  const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_PROPIEDADES.filter(p=>p.client_id===clientId)); return }
+    supabase.from('propiedades').select('*').eq('client_id',clientId).limit(2000).then(({data})=>setRows(data||[]),()=>setRows([])) },[clientId])
+  useEffect(()=>{ cargar() },[cargar])
+  return {rows,setRows,recargar:cargar}
+}
+const _ordRol = (a,b) => { const [a1,a2]=String(a.rol).split('-').map(Number), [b1,b2]=String(b.rol).split('-').map(Number); return (a1-b1)||(a2-b2)||String(a.rol).localeCompare(String(b.rol)) }
+const _nomProp = p => p&&p===p.toUpperCase()?titleCase(p).replace(/\bSpa\b/g,'SpA'):(p||'')
+const _GRUPO_DESTINO = [['Sitio Eriazo','Sitios eriazos'],['Agrícola','Agrícolas'],['Habitacional','Habitacionales']]
+function PropiedadesVenta({client, sale, isDesktop, props}){
+  const D=isDesktop
+  const {rows,setRows}=props
+  const [abierto,setAbierto]=useState(D), [q,setQ]=useState(''), [prop,setProp]=useState(''), [ab,setAb]=useState(()=>new Set()), [det,setDet]=useState(null), [todos,setTodos]=useState(()=>new Set())
+  const [nuevo,setNuevo]=useState(false), [f,setF]=useState({comuna:'',rol:'',nombre:'',propietario:''}), [busy,setBusy]=useState(false)
+  if(rows===null) return null
+  const mias=rows.filter(p=>String(p.sale_id||'')===String(sale.id))
+  if(!mias.length) return null
+  const propietarios=[...new Set(mias.map(p=>p.propietario).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))
+  const qq=_normTxt(q)
+  const lista=mias.filter(p=>(!prop||p.propietario===prop)&&(!qq||_normTxt(`${p.rol} ${p.lote||''} ${p.nombre||''} ${p.direccion||''} ${p.propietario||''} ${p.propietario_actual||''}`).includes(qq)))
+  const hayFiltro=!!(qq||prop)
+  const suma=(xs,k)=>xs.reduce((a,x)=>a+(Number(x[k])||0),0)
+  const toggle=(set,k)=>set(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
+  // Grupos: comuna; si la comuna tiene muchos roles, se parte por destino (lo sin destino queda en «Otros roles de <comuna>»).
+  const comunas={}; lista.forEach(p=>{ (comunas[p.comuna]=comunas[p.comuna]||[]).push(p) })
+  const ordenC=Object.keys(comunas).sort((a,b)=>comunas[b].length-comunas[a].length||a.localeCompare(b,'es'))
+  const subgrupos=(c,xs)=>{ if(xs.length<=12) return [[`${c}`,xs.slice().sort(_ordRol),false]]
+    const g=_GRUPO_DESTINO.map(([d,t])=>[t,xs.filter(p=>p.destino===d)])
+    g.push(['Sin propiedad en el SII',xs.filter(p=>p.estado_sii)])
+    const usados=new Set(g.flatMap(x=>x[1]))
+    g.push([`Otros roles de ${c}`,xs.filter(p=>!usados.has(p))])
+    return g.filter(x=>x[1].length).map(([t,ys])=>[t,ys.slice().sort((a,b)=>(Number(b.deuda_contribuciones)||0)-(Number(a.deuda_contribuciones)||0)||_ordRol(a,b)),true]) }
+  const monto=xs=>{ const d=suma(xs,'deuda_contribuciones'), a=suma(xs,'avaluo_fiscal')
+    return <span style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{a>0?fmtShort(a):''}{a>0&&d>0?' · ':''}{d>0&&<span style={{color:C.soonText}}>{fmtShort(d)} deuda</span>}</span> }
+  const fila=(p,i)=>{ const op=det===p.id
+    const sub=[p.lote?`Lote ${p.lote}`:null, _nomProp(p.propietario)||null, p.destino||(p.estado_sii?'Sin propiedad en el SII':null), D&&p.superficie_m2?`${Number(p.superficie_m2).toLocaleString('es-CL',{maximumFractionDigits:2})} m²`:null, D&&p.arrendado?'arrendado':null].filter(Boolean).join(' · ')
+    const der=Number(p.deuda_contribuciones)>0?[fmtShort(p.deuda_contribuciones),'deuda',C.soonText]:Number(p.avaluo_fiscal)>0?[fmtShort(p.avaluo_fiscal),'avalúo',C.text]:null
+    const dato=(l,v)=><div style={{minWidth:0}}><div style={{fontSize:11,color:C.textSoft}}>{l}</div><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{v||'—'}</div></div>
+    return <div key={p.id}>
+      <div onClick={()=>setDet(op?null:p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'8px 12px 8px 30px':'8px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{p.rol}{p.nombre?` · ${p.nombre}`:''}</div>
+          <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{!p.nombre&&p.direccion?`${p.direccion} · `:''}{sub}</div></div>
+        {der&&<div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:600,color:der[2],fontVariantNumeric:'tabular-nums'}}>{der[0]}</div><div style={{fontSize:11,color:C.textSoft}}>{der[1]}</div></div>}
+      </div>
+      {op&&<div style={{background:C.bgSoft,borderTop:`1px solid ${C.track}`,padding:D?'8px 12px 10px 30px':'8px 12px 10px',display:'grid',gridTemplateColumns:D?'repeat(3,minmax(0,1fr))':'1fr 1fr',gap:'8px 16px'}}>
+        {dato('Inscripción',p.inscripcion_fojas?`Fs ${p.inscripcion_fojas} N° ${p.inscripcion_numero||'—'}${p.inscripcion_anio?` ${p.inscripcion_anio}`:''}`:null)}
+        {dato('Propietario actual',_nomProp(p.propietario_actual))}
+        {dato('Superficie',p.superficie_m2?`${Number(p.superficie_m2).toLocaleString('es-CL',{maximumFractionDigits:2})} m²`:null)}
+        {dato('Avalúo fiscal',Number(p.avaluo_fiscal)>0?fmt(p.avaluo_fiscal):null)}
+        {dato('Avalúo afecto',p.avaluo_afecto!=null?fmt(p.avaluo_afecto):null)}
+        {dato('% de derecho',p.porcentaje_derecho!=null?`${Number(p.porcentaje_derecho).toLocaleString('es-CL')}%`:null)}
+        {dato('Arriendo',p.arrendado?'Arrendado':null)}
+        {dato('Deuda informada',Number(p.deuda_contribuciones)>0?fmt(p.deuda_contribuciones):null)}
+        {dato('Origen',String(p.fuente||'').split(' · ').slice(-1)[0]||null)}
+        {p.notas&&<div style={{gridColumn:'1 / -1',fontSize:12,color:C.muted}}>{p.notas}</div>}
+      </div>}
+    </div> }
+  const grupo=(k,t,xs,nivel)=>{ const op=hayFiltro||ab.has(k), lim=todos.has(k)?xs.length:8
+    return <div key={k} style={{borderTop:`1px solid ${C.track}`}}>
+      <div onClick={()=>!hayFiltro&&toggle(setAb,k)} style={{display:'flex',alignItems:'center',gap:8,padding:nivel&&D?'10px 12px 10px 30px':'10px 12px',background:nivel?C.bgSoft:undefined,cursor:'pointer'}}>
+        <span style={{fontSize:12,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
+        <span style={{fontSize:nivel?13:13.5,fontWeight:700,color:nivel?C.text:C.accent,flex:1,minWidth:0}}>{t}</span>
+        <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{xs.length} rol{xs.length!==1?'es':''}</span>
+        {D&&monto(xs)}
+      </div>
+      {op&&<>{xs.slice(0,lim).map(fila)}{xs.length>lim&&<div style={{padding:D?'8px 12px 10px 30px':'8px 12px 10px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>toggle(setTodos,k)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver los {xs.length}</button></div>}</>}
+    </div> }
+  const exportar=async()=>{ try{ const XLSX=await loadXLSXStyle()
+    const data=lista.slice().sort((a,b)=>a.comuna.localeCompare(b.comuna,'es')||_ordRol(a,b)).map(p=>[p.comuna,p.rol,p.lote||'',p.nombre||p.direccion||'',p.destino||(p.estado_sii?'Sin propiedad en el SII':''),_nomProp(p.propietario),_nomProp(p.propietario_actual),p.inscripcion_fojas?`Fs ${p.inscripcion_fojas} N° ${p.inscripcion_numero||''} ${p.inscripcion_anio||''}`:'',Number(p.superficie_m2)||'',Number(p.avaluo_fiscal)||'',Number(p.deuda_contribuciones)||'',p.arrendado?'Sí':''])
+    const ws=XLSX.utils.aoa_to_sheet([[`Roles · ${client.name} · ${sale.title}`],[],['Comuna','Rol','Lote','Nombre o dirección','Destino','Propietario','Propietario actual','Inscripción','Superficie m²','Avalúo fiscal','Deuda informada','Arrendado'],...data])
+    ws['!cols']=[{wch:12},{wch:10},{wch:6},{wch:34},{wch:22},{wch:34},{wch:30},{wch:22},{wch:12},{wch:15},{wch:15},{wch:10}]
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Roles'); XLSX.writeFile(wb,`Roles ${client.name}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+  const listo=f.comuna.trim()&&/^\d+-\d+$/.test(f.rol.trim())
+  const guardar=async()=>{ if(!listo||busy) return; setBusy(true)
+    try{ const row={client_id:client.id,sale_id:sale.id,comuna:f.comuna.trim(),rol:f.rol.trim(),nombre:f.nombre.trim()||null,propietario:f.propietario.trim()||null,fuente:`Agregado a mano · ${isoLocal(new Date().toISOString())}`}
+      let n={...row,id:'demo-pr-'+Date.now()}
+      if(!DEMO){ const {data,error}=await supabase.from('propiedades').insert(row).select().single(); if(error) throw new Error(/duplicate|unique/.test(error.message)?'Ese rol ya está registrado para este cliente.':error.message); n=data }
+      logActividad('propiedades.agregada',{tabla:'propiedades',id:n.id,detalle:{title:`Rol ${n.comuna} ${n.rol}`,cliente:client.name,venta:sale.title}})
+      setRows(p=>[...(p||[]),n]); setNuevo(false); setF(x=>({...x,rol:'',nombre:''}))
+    }catch(err){ appAlert('No se pudo guardar el rol: '+(err.message||err)) }
+    setBusy(false) }
+  const inS={width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:'2px 0',minWidth:0}
+  const fld=(label,el)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0}}><span style={{display:'block',fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.4,fontWeight:700}}>{label}</span>{el}</label>
+  const selSty={fontSize:12.5,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',minWidth:0,maxWidth:D?220:'100%'}
+  return (<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:C.surface}} onClick={ev=>ev.stopPropagation()}>
+    <div onClick={()=>setAbierto(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgPanel,cursor:'pointer'}}>
+      <span style={{...SEC_LBL,fontSize:10.5}}>Roles · {mias.length}</span>
+      {D&&<span style={{fontSize:12,color:C.textSoft,flex:1}}>{[suma(mias,'avaluo_fiscal')>0?`${fmtShort(suma(mias,'avaluo_fiscal'))} avalúo`:null,suma(mias,'deuda_contribuciones')>0?`${fmtShort(suma(mias,'deuda_contribuciones'))} deuda`:null].filter(Boolean).join(' · ')}</span>}
+      {!D&&<span style={{flex:1}}/>}
+      {abierto&&D?<button onClick={ev=>{ev.stopPropagation();setNuevo(v=>!v)}} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>
+        :<span style={{color:C.done,fontSize:12,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
+    </div>
+    {abierto&&<>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',padding:'10px 12px',borderTop:`1px solid ${C.track}`}}>
+        <div style={{flex:D?'1 1 220px':'1 1 100%',display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',minWidth:0}}>
+          <SIcon n='search' s={14} c={C.done}/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={D?'Buscar rol, lote, dirección o propietario':'Buscar rol o propietario'} style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/>
+        </div>
+        {propietarios.length>1&&<select value={prop} onChange={e=>setProp(e.target.value)} style={selSty}><option value=''>Todos los propietarios</option>{propietarios.map(x=><option key={x} value={x}>{_nomProp(x)}</option>)}</select>}
+        {D&&<button onClick={exportar} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Excel</button>}
+        {!D&&<button onClick={()=>setNuevo(v=>!v)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>}
+      </div>
+      {nuevo&&<div style={{borderTop:`1px solid ${C.track}`,padding:'10px 12px',display:'grid',gridTemplateColumns:D?'minmax(0,1fr) minmax(0,.7fr) minmax(0,1.3fr) minmax(0,1.3fr) auto':'1fr 1fr',gap:8,alignItems:'stretch'}}>
+        {fld('Comuna',<input value={f.comuna} onChange={e=>setF(x=>({...x,comuna:e.target.value}))} style={inS}/>)}
+        {fld('Rol',<input value={f.rol} onChange={e=>setF(x=>({...x,rol:e.target.value.replace(/[^\d-]/g,'')}))} placeholder='1100-60' inputMode='numeric' style={inS}/>)}
+        {fld('Nombre o dirección',<input value={f.nombre} onChange={e=>setF(x=>({...x,nombre:e.target.value}))} style={inS}/>)}
+        {fld('Propietario',<input value={f.propietario} onChange={e=>setF(x=>({...x,propietario:e.target.value}))} list={`prop-${sale.id}`} style={inS}/>)}
+        <datalist id={`prop-${sale.id}`}>{propietarios.map(x=><option key={x} value={x}/>)}</datalist>
+        <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:'flex-end',gridColumn:D?undefined:'1 / -1'}}>
+          <button onClick={()=>setNuevo(false)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+          <button disabled={!listo||busy} onClick={guardar} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar'}</button>
+        </div>
+      </div>}
+      {ordenC.map(c=>{ const xs=comunas[c], sg=subgrupos(c,xs); const op=hayFiltro||ab.has('c:'+c)
+        if(sg.length===1&&!sg[0][2]) return grupo('c:'+c,c,sg[0][1],0)
+        return <div key={c} style={{borderTop:`1px solid ${C.track}`}}>
+          <div onClick={()=>!hayFiltro&&toggle(setAb,'c:'+c)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
+            <span style={{fontSize:12,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
+            <span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1,minWidth:0}}>{c}</span>
+            <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{xs.length} roles</span>{D&&monto(xs)}
+          </div>
+          {op&&sg.map(([t,ys])=>grupo(`g:${c}:${t}`,t,ys,1))}
+        </div> })}
+      {!lista.length&&<div style={{fontSize:12,color:C.textSoft,padding:'10px 12px',borderTop:`1px solid ${C.track}`}}>Ningún rol con esos filtros.</div>}
     </>}
   </div>)
 }
