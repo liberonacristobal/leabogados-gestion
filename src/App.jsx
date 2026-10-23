@@ -19,7 +19,7 @@ import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
-import { sugerenciasDocumento, indiceNombres, rsBonita } from '../supabase/functions/_shared/notariaDocsReglas.js'
+import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
 import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
@@ -1350,6 +1350,9 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
   const abogados=[...new Set(guard.map(d=>abogDe(d.cliente_id)).filter(Boolean))].sort()
   // Por asignar por ENVÍO (un correo = una tarjeta con todos sus PDF); la escritura va con su extracto (mismo repertorio).
   const envios={}; porAsig.filter(pasa).forEach(d=>{ const k=d.thread_id||d.gmail_id||d.id; (envios[k]=envios[k]||[]).push(d) })
+  // Escritura, extracto y protocolización del mismo repertorio llegan a veces en correos distintos: van en una sola tarjeta.
+  { const dueno={}; Object.keys(envios).forEach(k=>{ const reps=[...new Set(envios[k].flatMap(repertoriosDoc))]; const k0=reps.map(r=>dueno[r]).find(x=>x&&envios[x]&&x!==k)
+      if(k0){ envios[k0].push(...envios[k]); delete envios[k]; reps.forEach(r=>{ dueno[r]=k0 }) } else reps.forEach(r=>{ if(!dueno[r]) dueno[r]=k }) }) }
   const listaEnv=Object.entries(envios).map(([k,ds])=>{ ds.sort((a,b)=>String(a.repertorio||'').localeCompare(String(b.repertorio||''))||_fechaDoc(a).localeCompare(_fechaDoc(b)))
     const sug=new Map(); ds.forEach(d=>sugDe(d).forEach(s=>{ const x=sug.get(s.client_id)||{...s,n:0}; x.n++; sug.set(s.client_id,x) }))
     return {k,ds,rec:ds.map(d=>d.recibido_at).sort().pop(),sug:[...sug.values()].sort((a,b)=>b.n-a.n)} }).sort((a,b)=>String(b.rec).localeCompare(String(a.rec)))
