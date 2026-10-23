@@ -1,8 +1,9 @@
 // Edge Function: tgr-remates
 // Nómina pública de propiedades en remate judicial por cobranza de la TGR (remates.tgr.cl › v1/getListaRematesActivos, la misma
 // consulta que hace su página, sin clave ni captcha). Guarda cada remate en tgr_remates (rol, dueño, juzgado, rol judicial, fecha,
-// tasación, avalúo), marca vigente = false lo que ya no aparece, y cruza el dueño con los clientes y sus razones sociales (nombre
-// normalizado, exacto): un cliente nuevo en la nómina queda en activity_log (tgr.remate_cliente) con el remate.
+// tasación, avalúo), marca vigente = false lo que ya no aparece, y cruza con los clientes: por el dueño (nombre de la ficha o de
+// una razón social, normalizado) o por el rol (comuna + manzana + predio de la tabla propiedades). Un remate nuevo de un cliente
+// queda en activity_log (tgr.remate_cliente).
 // La deuda y el cupón de contribuciones por rol NO se consultan: esa búsqueda de la TGR exige reCAPTCHA.
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
@@ -62,10 +63,18 @@ Deno.serve(async (req) => {
     const porNombre = new Map<string, { id: string; estudio_id: string }>();
     for (const c of clients) if (!c.is_internal && norm(c.name).length > 6) porNombre.set(norm(c.name), c);
     for (const e of ents) { const c = clients.find((x: { id: string }) => x.id === e.client_id); if (c && norm(e.name).length > 6) porNombre.set(norm(e.name), c); }
-    const deClientes = filas.filter((f: { dueno_norm: string }) => porNombre.has(f.dueno_norm));
+    // Y por rol: comuna + manzana + predio de las propiedades registradas de cada cliente (tabla propiedades), aunque el dueño
+    // figure con otro nombre en la TGR. rol_formato = «COMUNA-MANZANA-PREDIO» (manzana y predio con ceros a la izquierda).
+    const props = await todas("propiedades?select=client_id,comuna,rol");
+    const claveRol = (comuna: string, mz: string, pr: string) => `${norm(comuna)}|${Number(mz)}|${Number(pr)}`;
+    const porRol = new Map<string, { id: string; estudio_id: string }>();
+    for (const p of props) { const [mz, pr] = String(p.rol || "").split("-"); const c = clients.find((x: { id: string }) => x.id === p.client_id); if (c && mz && pr) porRol.set(claveRol(p.comuna, mz, pr), c); }
+    const rolDe = (f: { rol_formato: string }) => { const a = String(f.rol_formato || "").split("-"); return a.length >= 3 ? claveRol(a.slice(0, -2).join("-"), a[a.length - 2], a[a.length - 1]) : ""; };
+    const clienteDe = (f: { dueno_norm: string; rol_formato: string }) => porNombre.get(f.dueno_norm) || porRol.get(rolDe(f));
+    const deClientes = filas.filter((f: { dueno_norm: string; rol_formato: string }) => clienteDe(f));
     const nuevos = deClientes.filter((f: { sk: string }) => !previos.has(f.sk));
     for (const f of nuevos) {
-      const c = porNombre.get(f.dueno_norm)!;
+      const c = clienteDe(f)!;
       await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "tgr.remate_cliente", table_name: "clients", record_id: c.id, estudio_id: c.estudio_id || "lea",
         detail: { title: `Propiedad en remate (TGR): ${f.dueno} · rol ${f.rol_formato} · ${f.juzgado} ${f.rol_judicial || ""} · remate ${String(f.fecha_remate || "").slice(0, 10).split("-").reverse().join("-")}`, remate: f.sk } }) }).catch(() => null);
     }
