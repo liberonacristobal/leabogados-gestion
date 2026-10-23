@@ -14,7 +14,7 @@
 // MUEVE a la carpeta del cliente con su nombre definitivo. Cliente sugerido con _shared sugerenciasDocumento (OT libres del tipo y
 // fecha, mismo repertorio o correo, partes, vecinos) y, para los escaneados sin pista, con la lectura del PDF con IA (comparecencia,
 // RUT) → documentos_notaria.lectura / sugerencia; una persona confirma. body.subirPorAsignar = sube los por asignar viejos (tope);
-// body.leer = N lecturas con IA en esta corrida (por defecto 3).
+// body.leer = N lecturas con IA en esta corrida (por defecto 3); los extractos se leen siempre; body.releer = ids a releer.
 
 import { decodeBase64Url } from "jsr:@std/encoding@1/base64url";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
@@ -130,7 +130,8 @@ const rutN = (s: string) => String(s || "").replace(/[^0-9kK]/g, "").toUpperCase
 async function leerConIA(bytes: Uint8Array): Promise<any> {
   if (!ANTHROPIC) throw new Error("Sin ANTHROPIC_API_KEY");
   const prompt = `Es un documento notarial chileno (escritura, extracto, protocolización, poder o certificado). Lee la comparecencia y devuelve SOLO un JSON:
-{"acto":"tipo de acto","fecha":"AAAA-MM-DD o null","repertorio":"número o null","comparecientes":[{"nombre":"","rut":"","calidad":"por sí / en representación de X"}],"sociedades":[{"razon_social":"","rut":""}],"resumen":"una línea"}
+{"acto":"tipo de acto","fecha":"AAAA-MM-DD o null","repertorio":"número o null","escritura":{"fecha":"AAAA-MM-DD o null","repertorio":"número o null"},"comparecientes":[{"nombre":"","rut":"","calidad":"por sí / en representación de X"}],"sociedades":[{"razon_social":"","rut":""}],"resumen":"una línea"}
+"escritura" = en un extracto o protocolización de extracto, la fecha y el repertorio de la escritura extractada (no los de la protocolización); en otro documento, null.
 Copia nombres y RUT tal como aparecen. Si no se lee algo, usa null. No inventes.`;
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 1200, messages: [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: encodeBase64(bytes) } }, { type: "text", text: prompt }] }] }) });
@@ -331,15 +332,28 @@ Deno.serve(async (req) => {
     // Lectura con IA de los por asignar que no tienen ninguna otra pista (escaneados): propone el cliente por RUT o por nombre.
     const leidos: unknown[] = [];
     if (!dryRun && ANTHROPIC) {
-      const actual = await todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,estado,tipo_documento,repertorio,fecha_documento,asunto,cliente_id,drive_file_id,leido_at&origen=eq.notaria&estado=in.(por_clasificar,pendiente_ot)&drive_file_id=not.is.null&leido_at=is.null");
+      const cols = "id,gmail_id,thread_id,archivo_nombre,estado,tipo_documento,repertorio,fecha_documento,asunto,cliente_id,drive_file_id,leido_at";
+      // Los extractos se leen SIEMPRE, tengan o no cliente: la razón social y el repertorio de la escritura sirven para buscar su
+      // publicación en el Diario Oficial (edge diario-oficial). body.releer = ids a volver a leer.
+      const releer = (Array.isArray(body.releer) ? body.releer : []).filter((x: string) => /^[0-9a-f-]{36}$/i.test(String(x)));
+      const [sinLeer, extractos, otraVez] = await Promise.all([
+        todas(`documentos_notaria?select=${cols}&origen=eq.notaria&estado=in.(por_clasificar,pendiente_ot)&drive_file_id=not.is.null&leido_at=is.null`),
+        todas(`documentos_notaria?select=${cols}&origen=eq.notaria&estado=neq.duplicado&drive_file_id=not.is.null&leido_at=is.null&tipo_documento=ilike.*extracto*`),
+        releer.length ? todas(`documentos_notaria?select=${cols}&drive_file_id=not.is.null&id=in.(${releer.join(",")})`) : Promise.resolve([]),
+      ]);
+      const esExtracto = (x: { tipo_documento?: string }) => /extracto/i.test(x.tipo_documento || "");
+      const vistos = new Set<string>();
+      const actual = [...otraVez, ...extractos, ...sinLeer].filter((x) => !vistos.has(x.id) && vistos.add(x.id));
+      const forzados = new Set([...otraVez, ...extractos].map((x) => x.id));
       const porRut: Record<string, string> = {}; [...clients.map((c) => [c.rut, c.id]), ...ents.map((e) => [e.rut, e.client_id])].forEach(([r, id]) => { const k = rutN(r as string); if (k.length >= 7 && id) porRut[k] = String(id); });
       const N = Math.min(10, Number(body.leer) || 3);
       // La gente de la oficina comparece como testigo o solicitante: nunca es el cliente.
       const equipoNombres = String(cfg.find((c: { key: string }) => c.key === "notaria_equipo_nombres")?.value || "").split(/[,;]/).map((x) => x.trim()).filter(Boolean);
-      for (const d of actual.filter((x) => DOCS.test(x.archivo_nombre || "") && !sugerenciasDocumento(x, ctxSug).sugerencias.length).slice(0, N)) {
+      for (const d of actual.filter((x) => DOCS.test(x.archivo_nombre || "") && (forzados.has(x.id) || !sugerenciasDocumento(x, ctxSug).sugerencias.length)).slice(0, N)) {
         try {
           const lec = await leerConIA(await bajarDrive(d.drive_file_id));
-          const sugerencia = clienteDeLectura(lec, { indice, porRut, excluir: equipoNombres });
+          // Un extracto que ya tiene cliente no necesita sugerencia: solo se guarda su lectura.
+          const sugerencia = d.cliente_id && esExtracto(d) ? null : clienteDeLectura(lec, { indice, porRut, excluir: equipoNombres });
           const cidS = sugerencia?.client_id || null;
           await rest(`documentos_notaria?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ lectura: lec, sugerencia, leido_at: new Date().toISOString(), ...(lec.acto && !d.tipo_documento ? { tipo_documento: String(lec.acto).toUpperCase() } : {}), updated_at: new Date().toISOString() }) });
           leidos.push({ archivo: d.archivo_nombre, acto: lec.acto, cliente: cidS ? cli[cidS]?.name : null });
