@@ -3,8 +3,10 @@
 // Poder Judicial (pjud.cl › Programación de Salas › Búsqueda por causa): Cortes de Apelaciones por Corte + libro + rol + año,
 // Corte Suprema por rol + año. Sin captcha y sin clave: es la misma consulta que hace la página. La Oficina Judicial Virtual
 // (Clave Única, captcha) NO se usa.
-// Fecha de vista nueva (hoy o futura, distinta de la ya avisada) → correo al abogado responsable de la causa y al equipo
-// (learnings config causas_avisar_a), plazo en el calendario (plazos tipo 'tabla') y bitácora. El día de la vista agrega el estado
+// Cada revisión queda en la bitácora causas_seguimiento (resultado, tabla, aviso). Fecha de vista nueva (hoy o futura, distinta
+// de la ya avisada) → correo desde la casilla de la oficina «Hola <abogado>,» al abogado responsable, con copia al equipo
+// (learnings config causas_avisar_a), y plazo en el calendario (plazos tipo 'tabla'). Horario: viernes 18:00, sábado y domingo
+// 10:00, lunes 06:00 (Chile). El día de la vista agrega el estado
 // de la tabla diaria (En tabla / Suspendida / Vista). Interruptor learnings config causas_tablas = 'on' (sin 'on' = revisa y
 // guarda pero no envía). body.causa_id / body.client_id = revisar solo esas (botón «Revisar ahora» de la ficha); body.dryRun.
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
@@ -123,15 +125,18 @@ Deno.serve(async (req) => {
         const nueva = prox && prox.fecha !== String(c.avisado_fecha || "").slice(0, 10);
         if (prox) res.en_tabla.push({ causa: `${c.rol}-${c.anio}`, corte: c.corte_nombre, ...prox, nueva });
         if (nueva && !dryRun) {
-          const para = [...new Set([correoDe(c.abogado), ...equipo].filter(Boolean))] as string[];
+          const aAbog = correoDe(c.abogado);
+          const para = (aAbog ? [aAbog] : equipo.slice(0, 1)) as string[];
+          const cc = equipo.filter((e) => !para.includes(e));
+          const nombreA = String(c.abogado || "").trim().split(/\s+/)[0] || "equipo";
           const titulo = `${c.caratula || nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}`;
           let enviado = false, motivo = "";
           if (ON && para.length) {
             try {
               const linea = `${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero} de la tabla` : ""}, para el ${dmy(prox.fecha)}`;
-              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:22px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${para.length > 1 ? "Espero que estén muy bien." : "Espero que estés muy bien."}</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">La siguiente causa fue puesta en tabla:</p><table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">${[["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]].filter((x) => x[1]).map(([k, v]) => `<tr><td style="padding:7px 10px;border-top:1px solid #E4E8EB;color:#537281;white-space:nowrap">${k}</td><td style="padding:7px 10px;border-top:1px solid #E4E8EB;font-weight:600">${v}</td></tr>`).join("")}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Programación de Salas, pjud.cl, revisada el ${dmy(hoy)}. La vista quedó también en el calendario de plazos de la app.</p></div></body></html>`;
+              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:22px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Hola ${esc(aAbog ? nombreA : "equipo")},</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">La siguiente causa fue puesta en tabla:</p><table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">${[["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]].filter((x) => x[1]).map(([k, v]) => `<tr><td style="padding:7px 10px;border-top:1px solid #E4E8EB;color:#537281;white-space:nowrap">${k}</td><td style="padding:7px 10px;border-top:1px solid #E4E8EB;font-weight:600">${v}</td></tr>`).join("")}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Programación de Salas, pjud.cl, revisada el ${dmy(hoy)}. La vista quedó también en el calendario de plazos de la app.</p></div></body></html>`;
               const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-              await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(`Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`), content: toAscii(`${titulo}: ${linea}`), html });
+              await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, ...(cc.length ? { cc } : {}), subject: toAscii(`Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`), content: toAscii(`${titulo}: ${linea}`), html });
               await client.close(); enviado = true;
             } catch (e) { motivo = String((e as Error).message || e); }
           } else motivo = !ON ? "aviso apagado (causas_tablas)" : "sin destinatarios";
@@ -139,8 +144,14 @@ Deno.serve(async (req) => {
           await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre}${prox.sala ? ` · ${prox.sala}` : ""}${prox.numero ? ` · N° ${prox.numero}` : ""}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: prox.fecha, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
           patch.avisado_fecha = prox.fecha;
           await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: quien, action: enviado ? "causas.en_tabla_avisada" : "causas.en_tabla_sin_aviso", table_name: "causas", record_id: c.id, estudio_id: c.estudio_id, detail: { title: `${enviado ? "Aviso enviado" : "En tabla, aviso NO enviado"}: Rol ${c.rol}-${c.anio} · ${c.corte_nombre} · ${dmy(prox.fecha)}`, para, motivo: motivo || null, tabla: prox } }) }).catch(() => null);
-          res.avisos.push({ causa: `${c.rol}-${c.anio}`, fecha: prox.fecha, enviado, para, motivo: motivo || null });
+          res.avisos.push({ causa: `${c.rol}-${c.anio}`, fecha: prox.fecha, enviado, para, cc, motivo: motivo || null });
+          patch._aviso = { enviado, para, cc, motivo: motivo || null };
         }
+        // Bitácora de la revisión (también cuando no hay tabla): es el seguimiento que se ve detrás del botón en la causa.
+        const av = patch._aviso as Record<string, unknown> | undefined; delete patch._aviso;
+        if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify({ causa_id: c.id, estudio_id: c.estudio_id, origen: quien === "agente" ? "agente" : "manual", por: quien === "agente" ? null : quien,
+          en_tabla: !!prox, tabla: prox || null, aviso: av || null,
+          resultado: prox ? `En tabla: ${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero}` : ""}, ${dmy(prox.fecha)}${ultima?.estado_dia ? ` (${ultima.estado_dia})` : ""}${av ? (av.enviado ? " · aviso enviado" : ` · aviso NO enviado: ${av.motivo}`) : " · ya avisada"}` : `Sin tabla${ultima ? ` (última vez en tabla: ${dmy(ultima.fecha)})` : ""}` }) }).catch(() => null);
         if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) });
       } catch (e) { res.errores.push({ causa: `${c.rol}-${c.anio}`, error: String((e as Error).message || e) }); }
       await pausa(400);   // una consulta a la vez: es el sitio público del Poder Judicial
