@@ -1595,6 +1595,55 @@ function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=nul
 function fondosSinTrabajo(expenses, clientId, scopeEntId=null){
   return (expenses||[]).filter(e=>e.client_id===clientId && e.type==='fondo' && cuentaEnSaldo(e) && (Number(e.amount)||0)>0 && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && !(e.project||'').trim()).reduce((a,e)=>a+(e.amount||0),0)
 }
+// Imputación entre trabajos (rendición separada que pide el NETO): el saldo a favor de un trabajo abona al trabajo que debe.
+// Se registra moviendo esa parte del fondo del trabajo a favor al trabajo deudor (mismo mecanismo que «Repartir entre proyectos»:
+// la parte nueva lleva fondo_origen_id y su parte de la conciliación), así el saldo del cliente no cambia y cada trabajo parte bien
+// en su próxima rendición. Fondos conciliados en partes con el banco no se tocan (quedan en «faltan»). Devuelve cambios para el estado.
+async function imputarSaldosTrabajos({expenses, clientId, saldos, sales=[], user, ref, cliente}){
+  const norm=x=>String(x||'').trim().toLowerCase()
+  const sid=pr=>(sales||[]).find(sv=>String(sv.client_id)===String(clientId)&&norm(sv.title)===norm(pr))?.id||null
+  const debe=saldos.filter(o=>o.saldo<=-1&&o.trabajo).map(o=>({...o,q:Math.round(-o.saldo)}))
+  const fav=saldos.filter(o=>o.saldo>=1&&o.trabajo).map(o=>({...o,q:Math.round(o.saldo)}))
+  const pares=[]; for(const f of fav){ for(const d of debe){ const m=Math.min(f.q,d.q); if(m<1) continue; pares.push({desde:f.trabajo,hacia:d.trabajo,monto:m,corrDesde:f.corr,corrHacia:d.corr}); f.q-=m; d.q-=m } }
+  const cambios=[], nuevos=[], hechos=[]; let faltan=0, motivo=''
+  const usados={}
+  for(const pa of pares){
+    let resta=pa.monto
+    const fondos=(expenses||[]).filter(e=>String(e.client_id)===String(clientId)&&e.type==='fondo'&&!e.deleted_at&&cuentaEnSaldo(e)&&(Number(e.amount)||0)>0&&(e.project||'')===pa.desde)
+      .map(e=>({...e,amount:(Number(e.amount)||0)-(usados[e.id]||0)})).filter(e=>e.amount>=1)
+      .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')))
+    for(const f of fondos){ if(resta<1) break
+      const toma=Math.min(resta, Math.round(f.amount)), nota=`Imputado desde el trabajo ${pa.desde} · Rendiciones N° ${ref}`
+      try{
+        const {data:conc,error:ce}=DEMO?{data:[]}:await supabase.from('conciliacion').select('*').eq('gasto_id',f.id); if(ce) throw ce
+        if((conc||[]).length>1||((conc||[])[0]&&Math.round(Number(conc[0].monto_aplicado))!==Math.round(Number(f.amount)))){ motivo='un fondo está conciliado en partes con el banco'; continue }
+        const notas=[f.notas,nota].filter(Boolean).join(' · ')
+        if(toma>=Math.round(f.amount)){
+          const patch={project:pa.hacia, sale_id:sid(pa.hacia), notas}
+          if(!DEMO){ const {error}=await supabase.from('expenses').update(patch).eq('id',f.id); if(error) throw error }
+          cambios.push({id:f.id,patch}); hechos.push({fondo:f.id,monto:toma,antes:{project:f.project||null,sale_id:f.sale_id||null,notas:f.notas||null},entero:true})
+        } else {
+          const row={client_id:f.client_id, entity_id:f.entity_id||null, type:'fondo', concept:f.concept, category:f.category||'Fondo', date:f.date, created_by:f.created_by||user?.name||null, notas, estudio_id:f.estudio_id||undefined, fondo_origen_id:f.id,
+            invoice_id:f.invoice_id||null, no_descuenta_saldo:!!f.no_descuenta_saldo, subproject:null, amount:toma, project:pa.hacia, sale_id:sid(pa.hacia)}
+          let nuevo={...row,id:'demo-f-'+Date.now()+nuevos.length,created_at:new Date().toISOString()}, concN=null
+          if(!DEMO){
+            const {data,error}=await supabase.from('expenses').insert(row).select().single(); if(error) throw error; nuevo=data
+            try{
+              if(conc&&conc[0]){ const c=conc[0]; const {data:cn,error:e2}=await supabase.from('conciliacion').insert({movimiento_id:c.movimiento_id, tipo_destino:c.tipo_destino, gasto_id:data.id, monto_aplicado:toma, origen:c.origen, created_by:user?.name||null, ...(c.estudio_id?{estudio_id:c.estudio_id}:{})}).select('id').single(); if(e2) throw e2; concN=cn.id
+                const {error:e3}=await supabase.from('conciliacion').update({monto_aplicado:Math.round(Number(c.monto_aplicado))-toma}).eq('id',c.id); if(e3) throw e3 }
+              const {error:e4}=await supabase.from('expenses').update({amount:Math.round(f.amount)-toma}).eq('id',f.id); if(e4) throw e4
+            }catch(e){ if(concN) await supabase.from('conciliacion').delete().eq('id',concN); if(conc&&conc[0]) await supabase.from('conciliacion').update({monto_aplicado:conc[0].monto_aplicado}).eq('id',conc[0].id); await supabase.from('expenses').delete().eq('id',data.id); throw e }
+          }
+          nuevos.push(nuevo); cambios.push({id:f.id,patch:{amount:Math.round(f.amount)-toma}}); hechos.push({fondo:f.id,nuevo:nuevo.id,monto:toma,entero:false})
+        }
+        usados[f.id]=(usados[f.id]||0)+toma; resta-=toma
+      }catch(e){ motivo=e?.message||String(e); break }
+    }
+    if(resta>=1) faltan+=resta
+  }
+  if(hechos.length) logActividad('rendicion.saldo_imputado',{tabla:'clients',id:clientId,detalle:{cliente,title:`Saldo a favor imputado entre trabajos · Rendiciones N° ${ref}`,monto:hechos.reduce((a,h)=>a+h.monto,0),pares,hechos,faltan},completo:true})
+  return {cambios, nuevos, faltan, motivo, pares}
+}
 // Gastos de una rendición: los guardados (client_render_id) o, en la vista previa sin guardar, los que trae la rendición.
 const gastosDeRend = (r, expenses) => (r&&r._gastos) ? r._gastos : (expenses||[]).filter(e=>e.client_render_id===r?.id)
 // Fondo de una rendición guardada (misma regla que su correo y su PDF): con 2+ RS se acota a la RS de sus gastos; por trabajo, a su trabajo.
@@ -2185,7 +2234,7 @@ function ClientsViewLimited({onContactos=null,openFichaId=null,onOpenedFicha=nul
   if(rendicionClient&&setExpenses){ const cerrar=()=>{setRendicionClient(null);setRendEdit(null)}
     return <FlujoPagina origen={rendicionClient.name||'Clientes'} titulo={rendEdit?'Editar rendición':'Rendición'} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={cerrar} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones&&setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRendCV(r)}} asPage/></FlujoPagina> }
   if(emailRendCV){ const cli=clients.find(c=>String(c.id)===String(emailRendCV.client_id))
-    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones&&setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones&&setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
+    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={(id,at,corr)=>setRendiciones&&setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones&&setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
   if(isDesktop) return (
     <div style={{display:'grid',gridTemplateColumns:'360px 1fr',height:'calc(100vh - 66px)',borderTop:`1px solid ${C.border}`}}>
       <div style={{overflowY:'auto',borderRight:`1px solid ${C.border}`,background:C.bgSoft}}>{listInner}</div>
@@ -23251,7 +23300,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const _revisada = rendNav&&!rendEdit ? ()=>{ if(_rendCliRef.current!==_yo) return; const j=_busca(rendNav.i+1,1); if(j>=0) _irBorr(j); else cerrar() } : null
     return _envPag(<FlujoPagina origen={_origenRend} titulo={rendEdit?'Editar rendición':'Rendición'} ctx={rendicionClient.name&&rendicionClient.name!==_origenRend?rendicionClient.name:null} onBack={cerrar} maxW={1180}><RendicionModal key={rendicionClient.id} client={rendicionClient} entityIds={rendEntityIds} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={cerrar} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} onRendicionComplete={onRendicionComplete} currentUserName={currentUserName} editRend={rendEdit} preSel={!!_nav} navBorr={_nav} onRevisada={_revisada} onEnviar={r=>{setRendicionClient(null);setRendEntityIds([]);setRendEdit(null);setRendNav(null);setEmailRend(r)}} asPage/></FlujoPagina>) }
   if(emailRend){ const cli=clients.find(c=>c.id===emailRend.client_id)
-    return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar rendición' ctx={[cli?.name!==_origenRend?cli?.name:null,emailRend.correlativo?`N° ${emailRend.correlativo}`:null].filter(Boolean).join(' · ')||null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal key={`${emailRend.id||'v'}-${emailRend.client_id}-${emailRend.correlativo||''}`} r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)} asPage/></FlujoPagina>) }
+    return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar rendición' ctx={[cli?.name!==_origenRend?cli?.name:null,emailRend.correlativo?`N° ${emailRend.correlativo}`:null].filter(Boolean).join(' · ')||null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal key={`${emailRend.id||'v'}-${emailRend.client_id}-${emailRend.correlativo||''}`} r={emailRend} client={clients.find(c=>c.id===emailRend.client_id)} user={currentUser} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)} asPage/></FlujoPagina>) }
   if(devEmailRend) return _envPag(<FlujoPagina origen={_origenRend} titulo='Enviar devolución' ctx={devEmailRend.client?.name&&devEmailRend.client.name!==_origenRend?devEmailRend.client.name:null} onBack={()=>setDevEmailRend(null)} maxW={1180}><DevolucionEmailModal client={devEmailRend.client} rend={devEmailRend.rend} rendN={devEmailRend.rend?.correlativo} amount={devEmailRend.amount} fecha={devEmailRend.fecha} user={currentUser} setRendiciones={setRendiciones} onClose={()=>setDevEmailRend(null)} asPage/></FlujoPagina>)
   // Detalle de una liquidación de caja chica = PÁGINA (antes modal): foto guardada al liquidar (fondo · gastado · cubierto) + gastos por cliente.
   if(liqDetail){ const r=liqDetail; const gs=(expenses||[]).filter(e=>String(e.render_id)===String(r.id)).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1); const tot=gs.reduce((a,e)=>a+(e.amount||0),0)
@@ -27118,7 +27167,7 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
   const _page = _body
   return asPage ? _page : (<Modal fullscreen fsMaxWidth={(tab==='historial'||(client&&isDesktop))?980:640} title={<><span style={{color:C.accent}}>Solicitar fondos</span>{tab==='nueva'&&client?.name&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose}>{_body}</Modal>)
 }
-function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSent, onClose, onPatch, onNext, asPage=false}) {
+function RendicionEmailModal({r, client, user, expenses, clientEntities=[], sales=[], setExpenses=null, onSent, onClose, onPatch, onNext, asPage=false}) {
   const isDesktop = useIsDesktop()
   // Varias rendiciones en un mismo correo (separadas por trabajo): r es la primera y r._hermanas las demás.
   const _todas = [r, ...((r&&r._hermanas)||[])]
@@ -27145,6 +27194,11 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
   // Saldo de cada rendición del correo (por trabajo cuando corresponde; en la vista previa se descuentan sus gastos).
   const saldoDeR = x => { const g=gastosDeRend(x, expenses); const f=rendicionFondo(expenses, x.client_id, entId, null, x.por_trabajo?(x.project||''):null, x.fondo_id||null); const sg=g.reduce((a,e)=>a+(e.amount||0),0); return x._virtual ? f.saldo-sg : f.saldo }
   const _saldosM = _multi ? _todas.map(x=>({x, saldo:saldoDeR(x), trabajo:x.project||'sin trabajo', corr:x.correlativo})) : null
+  // Trabajos con saldos de distinto signo en el mismo correo: por defecto se pide el NETO (el saldo a favor de uno abona al que debe y al
+  // enviar queda registrada la imputación); «Devolver el saldo a favor» cobra lo adeudado y devuelve aparte. Se recuerda por cliente.
+  const _debM = (_saldosM||[]).reduce((a,o)=>a+(o.saldo<0?-o.saldo:0),0), _favM = (_saldosM||[]).reduce((a,o)=>a+(o.saldo>0?o.saldo:0),0)
+  const _netoAplica = _multi && _debM>=1 && _favM>=1
+  const [devolverFav,setDevolverFav] = useState(!!_borr?.devolver_favor)
   const _persona = esPersona(client?.name)
   // Trato del correo: tú / usted (una persona) · ustedes (empresa o varios). Se aprende por cliente (learnings trato_cliente).
   const [trato,setTrato] = useState(_borr?.trato||(_persona?'tu':'ustedes'))
@@ -27213,23 +27267,37 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], onSe
     const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.indexOf(':'); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+1).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
     lines.forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()? `<p style="margin:0 0 10px">${esc(l)}</p>` : '' } })
     flush()
-    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="${BRAND.nombre}" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma, logoC, lang)}</div></div>`
+    return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="${BRAND.nombre}" style="height:24px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;padding-left:12px">${_multi?(lang==='en'?`Expense Reports No. ${_todas.map(x=>x.correlativo||'?').join(' and ')}`:`Rendiciones N° ${_todas.map(x=>x.correlativo||'?').join(' y ')}`):`${lang==='en'?'Expense Report':'Rendición de gastos'}${r.correlativo?`${lang==='en'?' No. ':' N° '}${r.correlativo}`:''}`}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma, logoC, lang)}</div></div>`
   }
   // Correo con varias rendiciones (una por trabajo): nombra cada N° con su trabajo y saldo; se transfiere la suma de lo que queda a cargo.
   const cuerpoMulti = (lang='es') => {
     const Y = adic.on ? Math.max(0, parseInt(adic.monto)||0) : 0, mot = adic.motivo.trim() ? ` (${adic.motivo.trim()})` : ''
-    const deb = (_saldosM||[]).reduce((a,o)=>a+(o.saldo<0?-o.saldo:0),0), fav=(_saldosM||[]).filter(o=>o.saldo>0)
-    const tot = deb + Y
+    const deb = _debM, favs=(_saldosM||[]).filter(o=>o.saldo>0), debs=(_saldosM||[]).filter(o=>o.saldo<0), fav=_favM
+    const neto = _netoAplica && !devolverFav
+    const tot = neto ? deb + Y - fav : deb + Y
+    const yL = a => a.length<2 ? (a[0]||'') : `${a.slice(0,-1).join(', ')} ${lang==='en'?'and':'y'} ${a[a.length-1]}`
+    const refN = (arr, en) => en ? (arr.length>1?`reports No. ${yL(arr.map(o=>o.corr||'?'))}`:`report No. ${arr[0]?.corr||'?'}`) : (arr.length>1?`de las rendiciones N° ${yL(arr.map(o=>o.corr||'?'))}`:`de la rendición N° ${arr[0]?.corr||'?'}`)
     if(lang==='en'){
       const cuentaE = `\n  ${BRAND.nombreLegal}\n  Tax ID (RUT): ${fmtRutCL(BRAND.rut)}\n  Bank: ${BRAND.pago.gastos.banco}\n  Checking account: ${BRAND.pago.gastos.cuentaFmt}\n  Confirmation to: ${BRAND.pago.gastos.email}`
       const lineas = (_saldosM||[]).map(o=>`• No. ${o.corr||'?'} · ${o.trabajo}: ${o.saldo<0?`balance payable ${fmtN(-o.saldo)}`:o.saldo>0?`balance in your favor ${fmtN(o.saldo)}`:'no balance'}`).join('\n')
-      return `${saludoCliEn(client?.name)},\n\nI hope you are doing well. Please find attached your expense reports, one per matter:\n\n${lineas}\n\nThe attached documents contain an itemized breakdown of each disbursement.${tot>0?`\n\nWe kindly ask you to transfer ${Y?`a total of ${fmtN(tot)} (including an additional fund of ${fmtN(Y)} for the upcoming steps)`:fmtN(tot)} to the account of:${cuentaE}`:''}${fav.length?`\n\nPlease let us know whether you prefer to keep the balance in your favor as a fund or to have it refunded.`:''}\n\nWe remain at your disposal for any questions.\n\nKind regards,`
+      const adE = Y?` (including an additional fund of ${fmtN(Y)} for the upcoming steps)`:''
+      let cierre
+      if(neto) cierre = tot>0 ? (Y&&fav>deb ? `\n\nFor the upcoming steps we request an additional fund of ${fmtN(Y)}. After deducting the balance in your favor from ${refN(favs,true)}, which covers the balance payable on ${refN(debs,true)}, we kindly ask you to transfer ${fmtN(tot)} to the account of:${cuentaE}` : `\n\nAfter deducting the balance in your favor from ${refN(favs,true)}, we kindly ask you to transfer ${fmtN(tot)}${adE} to the account of:${cuentaE}`)
+        : `\n\nThe balance in your favor from ${refN(favs,true)} covers the balance payable on ${refN(debs,true)}${Y?` and the additional fund of ${fmtN(Y)} for the upcoming steps`:''}, so no transfer is needed.${tot<0?` A balance of ${fmtN(-tot)} remains in your favor; please let us know whether you prefer to keep it as a fund or to have it refunded.`:''}`
+      else cierre = (tot>0?`\n\nWe kindly ask you to transfer ${fmtN(tot)}${adE} to the account of:${cuentaE}`:'')
+        + (favs.length?(_netoAplica?`\n\nFor the balance in your favor on ${refN(favs,true)} (${fmtN(fav)}), please let us know the bank account to which you would like it refunded.`:`\n\nPlease let us know whether you prefer to keep the balance in your favor as a fund or to have it refunded.`):'')
+      return `${saludoCliEn(client?.name)},\n\nI hope you are doing well. Please find attached your expense reports, one per matter:\n\n${lineas}\n\nThe attached documents contain an itemized breakdown of each disbursement.${cierre}\n\nWe remain at your disposal for any questions.\n\nKind regards,`
     }
     const cuentaLEA = `\n  ${BRAND.nombreLegal}\n  RUT: ${fmtRutCL(BRAND.rut)}\n  Banco: ${BRAND.pago.gastos.banco}\n  Cuenta Corriente: ${BRAND.pago.gastos.cuentaFmt}\n  Comprobante a: ${BRAND.pago.gastos.email}`
     const lineas = (_saldosM||[]).map(o=>`• N° ${o.corr||'?'} · ${o.trabajo}: ${o.saldo<0?`saldo a ${T.su} cargo de ${fmtN(-o.saldo)}`:o.saldo>0?`saldo a ${T.su} favor de ${fmtN(o.saldo)}`:'sin saldo pendiente'}`).join('\n')
     const Le = T.le[0].toUpperCase()+T.le.slice(1)
-    const cierre = (tot>0 ? `\n\n${Le} agradeceremos transferir ${Y?`un total de ${fmtN(tot)}, que incluye fondos adicionales por ${fmtN(Y)}${mot} para los próximos trámites,`:fmtN(tot)} a la cuenta de:${cuentaLEA}` : '')
-      + (fav.length ? `\n\nPor el saldo a ${T.su} favor, ${T.le} agradeceremos indicarnos si ${T.pref} mantenerlo como fondo o que ${T.selo} devolvamos.` : '')
+    const adT = Y?`un total de ${fmtN(tot)}, que incluye fondos adicionales por ${fmtN(Y)}${mot} para los próximos trámites,`:fmtN(tot)
+    let cierre
+    if(neto) cierre = tot>0 ? (Y&&fav>deb ? `\n\nPara los próximos trámites${mot} solicitamos fondos adicionales por ${fmtN(Y)}. Descontado el saldo a ${T.su} favor ${refN(favs)}, que cubre el saldo a ${T.su} cargo ${refN(debs)}, ${T.le} agradeceremos transferir ${fmtN(tot)} a la cuenta de:${cuentaLEA}` : `\n\nDescontado el saldo a ${T.su} favor ${refN(favs)}, ${T.le} agradeceremos transferir ${adT} a la cuenta de:${cuentaLEA}`)
+      : `\n\nEl saldo a ${T.su} favor ${refN(favs)} cubre el saldo a ${T.su} cargo ${refN(debs)}${Y?` y los fondos adicionales por ${fmtN(Y)}${mot} para los próximos trámites`:''}, por lo que no es necesario transferir.${tot<0?` Queda un saldo a ${T.su} favor de ${fmtN(-tot)}; ${T.le} agradeceremos indicarnos si ${T.pref} mantenerlo como fondo o que ${T.selo} devolvamos.`:''}`
+    else cierre = (tot>0 ? `\n\n${Le} agradeceremos transferir ${adT}${_netoAplica&&debs.length===1?` (saldo ${refN(debs)})`:''} a la cuenta de:${cuentaLEA}` : '')
+      + (favs.length ? (_netoAplica ? `\n\nPor el saldo a ${T.su} favor ${refN(favs)} (${fmtN(fav)}), ${T.le} agradeceremos indicarnos la cuenta corriente a la que ${T.pref} que ${T.selo} devolvamos.`
+        : `\n\nPor el saldo a ${T.su} favor, ${T.le} agradeceremos indicarnos si ${T.pref} mantenerlo como fondo o que ${T.selo} devolvamos.`) : '')
     return `${saludoCli(client?.name)}:\n\nEspero que ${T.esp} muy bien. ${T.adj}s rendiciones de gastos, una por trabajo:\n\n${lineas}\n\nEn los documentos adjuntos ${T.enc} el detalle de cada desembolso.${cierre}\n\nQuedamos atentos a cualquier consulta.\n\nSaludos cordiales,`
   }
   const saludoCliEn = name => esPersona(name) ? `Dear ${(name||'').trim().split(/\s+/)[0]}` : 'Dear Sir or Madam'
@@ -27295,6 +27363,12 @@ Saludos cordiales,`
     supabase.from('learnings').select('value').eq('kind','trato_cliente').eq('key',String(r.client_id)).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&['tu','usted','ustedes'].includes(data?.value)&&data.value!==trato) setTrato(data.value) },()=>{})
     return ()=>{alive=false} },[r?.client_id])   // eslint-disable-line react-hooks/exhaustive-deps
   const elegirTrato = t => { setTrato(t); if(!DEMO&&r?.client_id) setLearningKV('trato_cliente',String(r.client_id),t).catch(()=>{}) }
+  useEffect(()=>{ if(DEMO||!r?.client_id||!_netoAplica||_borr?.devolver_favor!=null) return; let alive=true
+    supabase.from('learnings').select('value').eq('kind','rendicion_neto').eq('key',String(r.client_id)).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(alive&&data?.value==='devolver') setDevolverFav(true) },()=>{})
+    return ()=>{alive=false} },[r?.client_id])   // eslint-disable-line react-hooks/exhaustive-deps
+  const _devIni = useRef(true)
+  useEffect(()=>{ if(_devIni.current){ _devIni.current=false; return } if(!bodyTocadoR.current) setBody(cuerpoCorreo(lang)) },[devolverFav])   // eslint-disable-line react-hooks/exhaustive-deps
+  const elegirDevolver = v => { bodyTocadoR.current=false; setDevolverFav(v); if(!DEMO&&r?.client_id) setLearningKV('rendicion_neto',String(r.client_id),v?'devolver':'neto').catch(()=>{}) }
   useEffect(()=>{ if(!bodyTocadoR.current) setBody(adic.on||_multi?cuerpoCorreo(lang):(learnedTplR.current[lang]?_untokR(learnedTplR.current[lang],lang):cuerpoCorreo(lang))) },[adic.on,adic.monto,adic.motivo])   // eslint-disable-line
   // Carga tu última redacción (cliente + signo de saldo + idioma) y la aplica con las cifras de ESTA rendición.
   useEffect(()=>{ if(!r?.client_id||_multi) return; let alive=true
@@ -27325,7 +27399,7 @@ Saludos cordiales,`
   // La vista previa no registra nada: recién al guardar o enviar se crea(n) la(s) rendición(es) y se marcan sus gastos.
   const persistir = async() => { const out=[]; for(const x of _todas){ out.push(x._virtual ? await x._crear() : x) } return out }
   const _modoCorreo = _multi ? 'sep1' : (r._cola?.length ? 'sepN' : 'junto')
-  const correoDatos = (extra, saved) => ({para:para.trim(), cc, asunto, cuerpo:body, trato, lang, studioOn, adic:adicRaw, por:user?.name||null, modo:_modoCorreo, grupo:(saved||[]).map(x=>x.id), ...extra})
+  const correoDatos = (extra, saved) => ({para:para.trim(), cc, asunto, cuerpo:body, trato, lang, studioOn, adic:adicRaw, por:user?.name||null, modo:_modoCorreo, grupo:(saved||[]).map(x=>x.id), devolver_favor:_netoAplica?devolverFav:null, ...extra})
   const guardarBorrador = async() => {
     setSending(true)
     try{
@@ -27408,6 +27482,12 @@ Saludos cordiales,`
         if(seErr){ console.error('No se pudo marcar la rendición como enviada:',seErr.message); appAlert(`El correo salió, pero la app no pudo marcar la rendición N° ${x.correlativo} como enviada (${seErr.message}). Avísale a soporte para que quede registrada.`) }
         else { onSent && onSent(x.id, now, x.correlativo); onPatch && onPatch(x.id,{correo:correoEnv, dirigido_email:(para||'').trim()||null}) }
       }
+      // Neto: el saldo a favor de un trabajo queda imputado al que debe (con bitácora; se deshace uniendo el fondo en Gastos › Editar fondo).
+      if(_netoAplica && !devolverFav){ try{
+        const res=await imputarSaldosTrabajos({expenses, clientId:r.client_id, saldos:_todas.map((x,i)=>({trabajo:x.project||'', saldo:(_saldosM[i]||{}).saldo||0, corr:conNum[i]?.correlativo})), sales, user, ref:conNum.map(x=>x.correlativo).join(' y '), cliente:client?.name})
+        if(setExpenses&&(res.cambios.length||res.nuevos.length)) setExpenses(p=>[...p.map(e=>{ const c=res.cambios.find(z=>z.id===e.id); return c?{...e,...c.patch}:e }),...res.nuevos])
+        if(res.faltan>=1) appAlert(`El correo salió. La imputación entre trabajos quedó incompleta: ${fmt(res.faltan)} sin registrar${res.motivo?` (${res.motivo})`:''}. Regístrala en Gastos › Editar fondo › Repartir entre proyectos.`)
+      }catch(e){ appAlert('El correo salió, pero no se pudo registrar la imputación entre trabajos: '+(e?.message||e)+'. Regístrala en Gastos › Editar fondo › Repartir entre proyectos.') } }
       const corr = conNum.map(x=>x.correlativo).join(' y ')
       try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
       // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
@@ -27417,7 +27497,7 @@ Saludos cordiales,`
       // Lo que la rendición le pide transferir queda como solicitud de fondos (seguimiento hasta el depósito): saldo a su cargo + fondos
       // adicionales; con saldo a favor, solo lo adicional que exceda ese saldo. Se cierra sola cuando entra el depósito (Rendir a cliente).
       { const _Y=adic.on?Math.max(0,parseInt(adic.monto)||0):0, _sal=Math.abs(saldoCliente)
-        const pedido=Math.round(_multi ? (_saldosM||[]).reduce((a,o)=>a+(o.saldo<0?-o.saldo:0),0)+_Y : (saldoCliente<0 ? _sal+_Y : (saldoCliente>0 ? Math.max(0,_Y-_sal) : _Y)))
+        const pedido=Math.round(_multi ? Math.max(0, _debM+_Y-(_netoAplica&&!devolverFav?_favM:0)) : (saldoCliente<0 ? _sal+_Y : (saldoCliente>0 ? Math.max(0,_Y-_sal) : _Y)))
         if(pedido>0){ try{
           // Reenviar no duplica el pedido: si el cliente ya tiene una solicitud abierta (sin depósito), se actualiza esa.
           // Se reusa solo una solicitud abierta, del cliente en general (sin venta) y aún sin depósito; una ya cubierta no se pisa.
@@ -27483,10 +27563,21 @@ Saludos cordiales,`
         <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>Asunto</div>
         <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
       </div>
+      {_netoAplica&&(()=>{ const net=_debM-_favM
+        const fila=(k,l,v,col,b)=>(<div key={k} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',columnGap:10,alignItems:'baseline',padding:b?'7px 0 2px':'4px 0',borderTop:b?`1px solid ${C.border}`:'none',marginTop:b?3:0,fontSize:13}}><div style={{minWidth:0}}>{l}</div><span style={{fontWeight:b?700:600,color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(v)}</span></div>)
+        const est=t=><span style={isDesktop?{marginLeft:8,fontSize:11.5,color:C.textSoft}:{display:'block',fontSize:11.5,color:C.textSoft}}>{t}</span>
+        return (<div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:C.accent,marginBottom:2}}>Saldos de los trabajos</div>
+          {(_saldosM||[]).filter(o=>Math.abs(o.saldo)>=1).map((o,i)=>fila(i,<><span>N° {o.corr||'?'} · {o.trabajo}</span>{est(o.saldo<0?'A su cargo':'A su favor')}</>,Math.abs(o.saldo),o.saldo<0?C.overdueText:C.greenText))}
+          {devolverFav
+            ? <>{fila('t',<span style={{fontWeight:700,color:C.accent}}>A transferir</span>,_debM,C.text,true)}{fila('d',<span style={{color:C.muted}}>A devolver al cliente</span>,_favM,C.greenText)}</>
+            : (net>0 ? fila('t',<span style={{fontWeight:700,color:C.accent}}>A transferir (neto)</span>,net,C.text,true) : fila('t',<span style={{fontWeight:700,color:C.accent}}>Queda a su favor</span>,-net,C.greenText,true))}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}><Switch on={devolverFav} onToggle={()=>elegirDevolver(!devolverFav)}/><span style={{fontSize:12.5,color:C.text}}>Devolver el saldo a favor</span></div>
+        </div>) })()}
       <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Fondos adicionales</span>
           {ultFondo&&!adic.on&&<button type='button' onClick={()=>setAdic(p=>({...p,monto:String(Math.round(ultFondo.amount))}))} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Último fondo {fmt(ultFondo.amount)}</button>}
-          {adic.on&&<span style={{marginLeft:'auto',fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{saldoCliente<0?`total a transferir ${fmt(Math.abs(saldoCliente)+(parseInt(adic.monto)||0))}`:saldoCliente>0?`a transferir ${fmt(Math.max(0,(parseInt(adic.monto)||0)-saldoCliente))}`:''}</span>}
+          {adic.on&&<span style={{marginLeft:'auto',fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{_multi?`a transferir ${fmt(Math.max(0,_debM+(parseInt(adic.monto)||0)-(_netoAplica&&!devolverFav?_favM:0)))}`:saldoCliente<0?`total a transferir ${fmt(Math.abs(saldoCliente)+(parseInt(adic.monto)||0))}`:saldoCliente>0?`a transferir ${fmt(Math.max(0,(parseInt(adic.monto)||0)-saldoCliente))}`:''}</span>}
         </div>
         {<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
           <span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',width:150}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={adic.monto?Number(adic.monto).toLocaleString('es-CL'):''} onChange={e=>setAdic(p=>({...p,monto:e.target.value.replace(/\D/g,'')}))} inputMode='numeric' placeholder='Monto' style={{border:'none',outline:'none',fontSize:13,padding:'8px 8px 8px 2px',width:'100%',background:'none'}}/></span>
@@ -27519,10 +27610,10 @@ Saludos cordiales,`
         </div><div style={{fontSize:10,color:C.textSoft,marginTop:6}}>Se guarda para tus próximos correos. El correo incluye el logo de Liberona Escala.</div></>}
       </div>
       {!(asPage&&isDesktop)&&<details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>}
-      <div style={{display:'flex',gap:8}}>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         {_todas.map((x,i)=><button key={i} onClick={()=>verPDF(x)} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{_multi?`PDF N° ${x.correlativo||i+1}`:'Ver PDF'}</button>)}
-        <button onClick={guardarBorrador} disabled={sending} style={{flex:1.3,padding:'9px 10px',borderRadius:10,border:'none',background:C.azulBg,color:C.accent,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',opacity:sending?.6:1}}>Guardar borrador</button>
+        <button onClick={guardarBorrador} disabled={sending} style={{flex:(!isDesktop&&_multi)?'1 1 100%':1.3,padding:'9px 10px',borderRadius:10,border:'none',background:C.azulBg,color:C.accent,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',opacity:sending?.6:1}}>Guardar borrador</button>
       </div>
       <button onClick={enviar} disabled={sending||!para.trim()} style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:13.5,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':(_multi?`Enviar en un correo · ${_todas.length} PDF`:(r._cola?.length?(r._cola[0]._cliName&&String(r._cola[0].client_id)!==String(r.client_id)?`Enviar y seguir con ${r._cola[0]._cliName}`:`Enviar y seguir con la N° ${r._cola[0].correlativo||'siguiente'}`):'Enviar'))}</button>
       </>)
@@ -27632,7 +27723,7 @@ function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[], setFt
   </>)
 }
 
-function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
+function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
   const [emailRend,setEmailRend] = useState(null)
   const [menuMas,setMenuMas] = useState(false)
   // Volver a la misma pestaña de la ficha tras una página (gasto, factura, ajuste…).
@@ -27669,7 +27760,7 @@ function ClientFicha({onAsociarTrabajo,onToggleStatus,onOpenFusion,client,client
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}><Gl n='chevron'/></span>
 
   // Correo de rendición = PÁGINA (igual que en Gastos): "‹ cliente" vuelve a la ficha. Va después de todos los hooks.
-  if(emailRend) return <FlujoPagina origen={client.name} titulo='Enviar rendición' ctx={emailRend.correlativo?`N° ${emailRend.correlativo}`:null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal asPage r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} onSent={onRendicionSent} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)}/></FlujoPagina>
+  if(emailRend) return <FlujoPagina origen={client.name} titulo='Enviar rendición' ctx={emailRend.correlativo?`N° ${emailRend.correlativo}`:null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal asPage r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={onRendicionSent} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)}/></FlujoPagina>
 
   return (
     <div style={{paddingBottom:100}}>
@@ -27805,6 +27896,7 @@ function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBill
   const fichaEl = selected ? (
       <ClientFicha
         client={selected}
+        setExpenses={setExpenses}
         respaldoMap={respaldoMap}
         cartolaHasta={cartolaHasta}
         initialFtab={forceFtab}
@@ -27851,7 +27943,7 @@ function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBill
   if(rendicionClient){ const cerrar=()=>{setRendicionClient(null);setRendEdit(null)}
     return <FlujoPagina origen={rendicionClient.name||'Clientes'} titulo={rendEdit?'Editar rendición':'Rendición'} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRendCV(r)}} asPage/></FlujoPagina> }
   if(emailRendCV){ const cli=clients.find(c=>String(c.id)===String(emailRendCV.client_id))
-    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
+    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
 
   // Lista: UNA fila por cliente con los mismos datos en escritorio y móvil (responsable, tareas, por cobrar, fondos).
   const esEmpresaC = c => /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a|sociedad|inversiones|comercial|constructora|consultores|holding|cia|cía|asociados|partners)\b/i.test(c.name||'')||/empresa|corp|sociedad/i.test(c.type||'')
