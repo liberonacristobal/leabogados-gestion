@@ -550,8 +550,12 @@ function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
   return out
 }
 
-// UF por FECHA (serie histórica de mindicador, cache persistente) — para calzar montos con la UF del día de emisión.
-// Se baja por AÑO (1 llamada/año trae toda la serie diaria) y se guarda date→uf en localStorage.
+// UF por FECHA (cache persistente) — para calzar montos con la UF del día de emisión. Fuente: tabla `indicadores` (CMF, la
+// alimenta el agente indicadores cada día; 2022→ comparada día a día con mindicador sin diferencias); mindicador solo si la tabla
+// no trae ese año. Se baja por AÑO y se guarda date→uf en localStorage.
+async function ufDeTabla(desde, hasta){
+  try{ const {data,error}=await supabase.from('indicadores').select('fecha,valor').eq('codigo','uf').gte('fecha',desde).lte('fecha',hasta).order('fecha').limit(1000)
+    if(error||!data?.length) return null; const m={}; data.forEach(r=>{ const v=Number(r.valor); if(v>0) m[String(r.fecha).slice(0,10)]=v }); return m }catch(_){ return null } }
 const _UF_FECHA_KEY='fd_uf_fecha'
 const ufFechaCache=()=>{ try{ return JSON.parse(localStorage.getItem(_UF_FECHA_KEY)||'{}') }catch(_){ return {} } }
 async function fetchUFFechas(isos){
@@ -559,7 +563,10 @@ async function fetchUFFechas(isos){
   const anios=[...new Set((isos||[]).map(d=>String(d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))]
   // El año en curso se vuelve a bajar si aún no trae la UF de hoy (si no, la serie quedaba congelada en la primera descarga).
   const hoy=isoLocal(Date.now()), yHoy=hoy.slice(0,4)
-  for(const y of anios){ if(done.includes(y) && !(y===yHoy && !m[hoy])) continue; try{ const r=await fetch(`https://mindicador.cl/api/uf/${y}`); const j=await r.json(); (j&&j.serie||[]).forEach(s=>{ const d=String(s.fecha||'').slice(0,10); if(d&&s.valor>0) m[d]=s.valor }); if(!done.includes(y)) done.push(y) }catch(_){} }
+  for(const y of anios){ if(done.includes(y) && !(y===yHoy && !m[hoy])) continue
+    const t=await ufDeTabla(`${y}-01-01`,`${y}-12-31`)
+    if(t&&(y!==yHoy||t[hoy])){ Object.assign(m,t); if(!done.includes(y)) done.push(y); continue }
+    try{ const r=await fetch(`https://mindicador.cl/api/uf/${y}`); const j=await r.json(); (j&&j.serie||[]).forEach(s=>{ const d=String(s.fecha||'').slice(0,10); if(d&&s.valor>0) m[d]=s.valor }); if(!done.includes(y)) done.push(y) }catch(_){} }
   m.__anios=done; try{ localStorage.setItem(_UF_FECHA_KEY,JSON.stringify(m)) }catch(_){}
   return m
 }
@@ -3942,8 +3949,8 @@ const ultimaActividad = (clientId, sales, billing, expenses) => {
 }
 
 // ─── UF EN VIVO (fuente única) ────────────────────────────────────────────────
-// Valor UF del día desde mindicador.cl, con caché diario en localStorage.
-// fetchUF() es el ÚNICO punto que llama a la API; nadie más debe hacerlo directo.
+// Valor UF del día: tabla `indicadores` (CMF) y, si no está, mindicador.cl; con caché diario en localStorage.
+// fetchUF() es el ÚNICO punto que lo consulta; nadie más debe hacerlo directo.
 const UF_CACHE_KEY = 'uf_cache_v1'
 const ufTodayISO = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 const readUFCache = () => { try{ const c=JSON.parse(localStorage.getItem(UF_CACHE_KEY)||'null'); if(c&&typeof c.value==='number'&&c.date) return c }catch(_){} return null }
@@ -3962,6 +3969,8 @@ async function fetchUF(){
   const today = ufTodayISO()
   const cache = readUFCache()
   if(cache && cache.date===today) return {value:cache.value, date:today, isToday:true}
+  const t = await ufDeTabla(today, today)
+  if(t?.[today]>0){ writeUFCache(today, t[today]); return {value:t[today], date:today, isToday:true} }
   try{
     const r = await fetch('https://mindicador.cl/api/uf')
     const j = await r.json()
