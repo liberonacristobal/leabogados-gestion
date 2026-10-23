@@ -2119,7 +2119,7 @@ function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
-function ClientsViewLimited({onContactos=null,openFichaId=null,onOpenedFicha=null,onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive,setExpenses,setRendiciones,setBilling,user,onRendicionComplete}) {
+function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=null,onOpenedFicha=null,onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive,setExpenses,setRendiciones,setBilling,user,onRendicionComplete}) {
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null), [rendEdit,setRendEdit] = useState(null), [emailRendCV,setEmailRendCV] = useState(null)   // Rendir desde la ficha completa (responsable)
   const [selected,setSelected] = useState(null)
@@ -2315,6 +2315,7 @@ function ClientsViewLimited({onContactos=null,openFichaId=null,onOpenedFicha=nul
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {onImportDrive&&<button onClick={onImportDrive} title='Importar desde Drive' style={driveBtn}><DriveIcon size={20}/></button>}
             {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),color:C.accent}}>Contactos</button>}
+            {onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),color:C.accent}}>Causas</button>}
             {onAdd&&<button onClick={onAdd} style={chipBtn('primary')}>+ Cliente</button>}
           </div>
         </div>
@@ -26216,6 +26217,7 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
 
 function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[], billing=[], respaldoMap, cartolaHasta=null, onNuevoAnticipo, onSaveFields, onEditBilling, onAddBilling, onAddSale, onConciliar, onOpenConciliacion, onAssignSeries, onStatusChange, onReplaceProgramada, onOpenSale}) {
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
+  const causasCli = useCausas({clientId:client.id})   // causas en Cortes de cada venta (agente causas-tablas)
   // Cockpit de facturas: TODAS las del cliente — buscador + tabs por año + agrupación Proyecto → Razón social → Factura con orden por fecha.
   // Tocar una factura abre el editor BillingForm (editar/marcar pagada/anular/eliminar) → cambios se propagan a toda la app.
   const all = (clientBilling||[]).filter(b=>!b.deleted_at)
@@ -26318,17 +26320,18 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
           const pct=fac>0?Math.min(100,Math.round(cob/fac*100)):0
           const hasBills=sb.length>0; const open=cjOpen.has(String(s.id)); const olvN=cuotasOlvidadas(sb).length
           return (<div key={s.id} style={{background:'#fff',border:`0.5px solid ${olvN?C.overdueText:C.border}`,borderRadius:12,marginBottom:7,overflow:'hidden'}}>
-            <div onClick={()=> hasBills?toggleCj(s.id):(onOpenSale&&onOpenSale(s))} style={{padding:'10px 12px',cursor:'pointer'}}>
+            <div onClick={()=>toggleCj(s.id)} style={{padding:'10px 12px',cursor:'pointer'}}>
               <div style={{display:'flex',alignItems:'center',gap:9}}>
                 <SIcon n={ai} s={19} c={C.muted}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}{(()=>{ const n=(causasCli.rows||[]).filter(c=>String(c.sale_id||'')===String(s.id)).length; return n?` · ${n} causa${n!==1?'s':''}`:'' })()}</div></div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
-                {hasBills&&<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>}
+                <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
               </div>
               {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct}% cobrado</span></div>}
             </div>
-            {hasBills&&open&&<div style={{padding:'0 11px 11px'}}>
-              <CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>
+            {open&&<div style={{padding:'0 11px 11px'}}>
+              {hasBills&&<CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>}
+              <CausasVenta client={client} sale={s} isDesktop={isDesktop} causas={causasCli}/>
               {onOpenSale&&<div style={{textAlign:'right',marginTop:2}}><span onClick={(e)=>{e.stopPropagation();onOpenSale(s)}} style={{fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>Abrir venta <Gl n='chevron'/></span></div>}
             </div>}
           </div>)
@@ -27949,7 +27952,7 @@ function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,onOpenFus
   )
 }
 
-function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
+function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
   useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
@@ -28121,7 +28124,7 @@ function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBill
       <div style={{padding:'20px 24px 100px',borderTop:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:11,flexWrap:'wrap',gap:8}}>
           <div style={TIT_PAG}>Clientes <span style={{fontSize:13,color:C.textSoft,fontWeight:500}}>· {cl.length}</span></div>
-          <div style={{display:'flex',gap:7,alignItems:'center'}}><button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button>{onContactos&&<ActBtn onClick={onContactos} style={{color:C.accent}}>Contactos</ActBtn>}<ActBtn onClick={()=>onProveedores&&onProveedores()} style={{color:C.accent}}>Proveedores</ActBtn><ActBtn onClick={exportarExcel} title='Descargar la lista filtrada'><SIcon n='download' s={14} c={C.accent}/>Excel</ActBtn><ActBtn variant='primary' onClick={onAdd}>+ Cliente</ActBtn></div>
+          <div style={{display:'flex',gap:7,alignItems:'center'}}><button onClick={onImportDrive} title='Sincronizar con Drive' style={driveBtn}><DriveIcon size={20}/></button>{onCausas&&<ActBtn onClick={onCausas} style={{color:C.accent}}>Causas</ActBtn>}{onContactos&&<ActBtn onClick={onContactos} style={{color:C.accent}}>Contactos</ActBtn>}<ActBtn onClick={()=>onProveedores&&onProveedores()} style={{color:C.accent}}>Proveedores</ActBtn><ActBtn onClick={exportarExcel} title='Descargar la lista filtrada'><SIcon n='download' s={14} c={C.accent}/>Excel</ActBtn><ActBtn variant='primary' onClick={onAdd}>+ Cliente</ActBtn></div>
         </div>
         <Buscador value={q} onChange={setQ} placeholder='Buscar por nombre, razón social o RUT' style={{marginBottom:9}}/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
@@ -28178,7 +28181,7 @@ function ClientsView({onContactos,onAsociarTrabajo,clients,sales,billing,setBill
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
           <Buscador value={q} onChange={setQ} placeholder='Nombre, razón social o RUT' style={{flex:1,minWidth:0}}/>
-          {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>
+          {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
         {respChips&&<div style={{marginBottom:4}}>{respChips}</div>}
@@ -32734,6 +32737,184 @@ function PapeleraModal({clients=[],onClose,onChanged}){
 // Lee el Gmail corporativo (scope gmail.readonly), extrae participantes externos, los asocia a clientes
 // (dominio conocido → directo; ambiguos → IA Opus) y propone agregarlos a la ficha. Compuerta humana.
 // Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto) y dominio, nunca el cuerpo.
+// ─── CAUSAS EN TABLA (agente causas-tablas) ─────────────────────────────────────────────────────────────────────
+// Causas del estudio en Cortes de Apelaciones y Corte Suprema. Se agregan en Ficha › Ventas › la venta respectiva; Clientes › Causas
+// es la vista de todas. El agente revisa la búsqueda pública de pjud.cl (viernes 18:00, sábado y domingo 10:00, lunes 06:00) y avisa
+// por correo desde la casilla de la oficina al abogado, con copia al dueño del cliente y a los no socios. Cada revisión queda en
+// causas_seguimiento (botón «Seguimiento»).
+const CORTES_PJUD = [['2011001','Corte de Apelaciones de Arica'],['2101002','Corte de Apelaciones de Iquique'],['2301003','Corte de Apelaciones de Antofagasta'],['2401004','Corte de Apelaciones de Copiapó'],['2501005','Corte de Apelaciones de La Serena'],['3101006','Corte de Apelaciones de Valparaíso'],['6051007','Corte de Apelaciones de Santiago'],['6231008','Corte de Apelaciones de San Miguel'],['3351009','Corte de Apelaciones de Rancagua'],['3901010','Corte de Apelaciones de Talca'],['4151011','Corte de Apelaciones de Chillán'],['4551013','Corte de Apelaciones de Concepción'],['4901014','Corte de Apelaciones de Temuco'],['5101015','Corte de Apelaciones de Valdivia'],['5351016','Corte de Apelaciones de Puerto Montt'],['5651017','Corte de Apelaciones de Coyhaique'],['5901018','Corte de Apelaciones de Punta Arenas'],['6050000','Corte Suprema']]
+// Libros de las Cortes de Apelaciones (pjud.cl): el número de rol se repite en cada libro, por eso es obligatorio.
+const LIBROS_PJUD = [['28','Civil'],['29','Familia'],['30','Laboral - Cobranza'],['31','Penal'],['32','Contencioso Administrativo'],['33','Tributario Y Aduanero'],['34','Protección'],['35','Amparo'],['36','Policia Local'],['37','Exhorto'],['38','Ley De Navegación'],['39','Ambiental'],['41','Ministro Primera Instancia Y Fuero']]
+const _libroLegible = n => String(n||'').replace(/\bY\b/g,'y').replace(/\bDe\b/g,'de').replace(/Policia/,'Policía')
+const _corteCorta = n => String(n||'').replace('Corte de Apelaciones de ','C.A. ')
+const _rolTxt = c => /^\d+$/.test(String(c.rol||'')) ? `Rol ${c.rol}-${c.anio}` : 'Rol por completar'
+const _DEMO_CAUSAS = [
+  { id:'cz1', client_id:'c1', sale_id:'s1', abogado:'Cristóbal', instancia:'apelaciones', corte_codigo:'2501005', corte_nombre:'Corte de Apelaciones de La Serena', libro_codigo:'33', libro_nombre:'Tributario Y Aduanero', rol:'15', anio:2025, caratula:'Demo / SII Dirección Regional La Serena', estado:'activa', ultima_tabla:{sala:'Segunda Sala',numero:'5',fecha:'2026-11-02'}, avisado_fecha:'2026-11-02', ultima_revision_at:'2026-10-23T11:00:00Z' },
+  { id:'cz2', client_id:'c1', sale_id:'s1', abogado:'Erasmo', instancia:'apelaciones', corte_codigo:'6051007', corte_nombre:'Corte de Apelaciones de Santiago', libro_codigo:'34', libro_nombre:'Protección', rol:'', anio:2026, caratula:'Demo con Isapre', estado:'por_confirmar' },
+]
+function useCausas({clientId=null}={}){
+  const [rows,setRows]=useState(null)
+  const cargar=useCallback(()=>{ if(DEMO){ setRows(_DEMO_CAUSAS.filter(c=>!clientId||c.client_id===clientId)); return }
+    let q=supabase.from('causas').select('*').neq('estado','terminada').order('created_at',{ascending:true})
+    if(clientId) q=q.eq('client_id',clientId)
+    q.then(({data})=>setRows(data||[]),()=>setRows([])) },[clientId])
+  useEffect(()=>{ cargar() },[cargar])
+  return {rows,setRows,recargar:cargar}
+}
+const _estadoCausa = c => { const t=c.ultima_tabla, hoy=isoLocal(new Date().toISOString())
+  if(c.estado==='por_confirmar') return ['Por confirmar',C.textSoft,C.track]
+  if(t?.fecha&&t.fecha>=hoy) return t.fecha===hoy?[`Hoy · ${t.estado_dia||'En tabla'}`,C.soonText,C.soonBg]:[`En tabla · ${fmtFechaDMY(t.fecha)}`,C.accent,C.azulBg]
+  return ['Sin tabla',C.textSoft,C.track] }
+// Una causa: resumen + acciones + seguimiento (bitácora) detrás de su botón. En celular parte plegada (una línea) y se abre al tocar.
+function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
+  const D=isDesktop
+  const [op,setOp]=useState(D), [verSeg,setVerSeg]=useState(false), [seg,setSeg]=useState(null), [busy,setBusy]=useState(false), [edit,setEdit]=useState(false), [rol,setRol]=useState(c.rol||'')
+  const [e0,eCol,eBg]=_estadoCausa(c)
+  const cargarSeg=()=>{ if(DEMO){ setSeg([{id:'s1',revisado_at:'2026-10-23T19:40:00Z',origen:'manual',resultado:'Sin tabla: la búsqueda por causa no trae programación.'}]); return }
+    supabase.from('causas_seguimiento').select('*').eq('causa_id',c.id).order('revisado_at',{ascending:false}).limit(40).then(({data})=>setSeg(data||[]),()=>setSeg([])) }
+  const toggleSeg=()=>{ if(!verSeg&&seg===null) cargarSeg(); setVerSeg(v=>!v) }
+  const revisar=async()=>{ if(busy) return; setBusy(true)
+    try{ if(DEMO){ appAlert('Revisión hecha (demo): sin cambios en la tabla.'); return }
+      const {data,error}=await supabase.functions.invoke('causas-tablas',{body:{causa_id:c.id}})
+      if(error||data?.error) throw new Error(data?.error||error?.message||'sin respuesta')
+      const t=(data.en_tabla||[])[0]
+      appAlert(data.errores?.length?`No se pudo revisar: ${data.errores[0].error}`:t?`En tabla: ${t.sala||''}${t.numero?`, N° ${t.numero}`:''}, ${fmtFechaDMY(t.fecha)}.${(data.avisos||[]).length?((data.avisos[0].enviado)?` Aviso enviado a ${[...data.avisos[0].para,...(data.avisos[0].cc||[])].join(', ')} desde la casilla de la oficina.`:` El aviso NO se envió (${data.avisos[0].motivo}).`):''}`:'Sin tabla por ahora. Quedó en el seguimiento.')
+      onCambio&&onCambio(); if(seg!==null) cargarSeg()
+    }catch(err){ appAlert('No se pudo revisar la causa: '+(err.message||err)+'\n\nSi el agente aún no está activo, la revisión automática empieza al activarlo.') }
+    finally{ setBusy(false) } }
+  const guardar=async(patch,log)=>{ setBusy(true)
+    try{ if(!DEMO){ const {error}=await supabase.from('causas').update({...patch,updated_at:new Date().toISOString()}).eq('id',c.id); if(error) throw error }
+      logActividad(log,{tabla:'causas',id:c.id,detalle:{title:`${_rolTxt({...c,...patch})} · ${_corteCorta(c.corte_nombre)}`,antes:Object.fromEntries(Object.keys(patch).map(k=>[k,c[k]??null])),cliente:cliente||null}})
+      onCambio&&onCambio({...c,...patch}) }catch(err){ appAlert('No se pudo guardar: '+(err.message||err)) }
+    setBusy(false) }
+  const confirmar=()=>{ if(!/^\d+$/.test(String(rol||''))){ setEdit(true); appAlert('Completa el rol de la causa antes de confirmarla.'); return } guardar({estado:'activa',rol:String(rol)},'causas.confirmada') }
+  const ab={fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}
+  const detalle=[cliente, _rolTxt(c), _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}`:null, c.abogado].filter(Boolean).join(' · ')
+  const chip=<span style={{fontSize:11,fontWeight:600,color:eCol,background:eBg,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>{e0}</span>
+  return (<div style={{borderTop:`1px solid ${C.track}`}}>
+    <div onClick={D?undefined:()=>setOp(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'10px 14px':'10px 12px',cursor:D?'default':'pointer'}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13.5,fontWeight:600,color:C.text,...(D?{}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{c.caratula||'Sin carátula'}</div>
+        <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{D?detalle:_rolTxt(c)}</div>
+      </div>
+      {chip}
+      {D?<div style={{display:'flex',gap:12,flexShrink:0}}>{c.estado==='por_confirmar'?<button onClick={confirmar} disabled={busy} style={ab}>Confirmar</button>:<button onClick={revisar} disabled={busy} style={ab}>{busy?'Revisando…':'Revisar ahora'}</button>}<button onClick={toggleSeg} style={ab}>{verSeg?'Ocultar seguimiento':'Seguimiento'}</button><button onClick={()=>setEdit(v=>!v)} style={{...ab,color:C.muted}}>Editar</button></div>
+        :<span style={{color:C.done,fontSize:12,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
+    </div>
+    {op&&<div style={{padding:D?'0 14px 10px':'0 12px 12px'}}>
+      {!D&&<><div style={{fontSize:12,color:C.textSoft}}>{[_libroLegible(c.libro_nombre),_corteCorta(c.corte_nombre),c.abogado].filter(Boolean).join(' · ')}</div>
+        <div style={{display:'flex',gap:14,marginTop:8,flexWrap:'wrap'}}>{c.estado==='por_confirmar'?<button onClick={confirmar} disabled={busy} style={ab}>Confirmar</button>:<button onClick={revisar} disabled={busy} style={ab}>{busy?'Revisando…':'Revisar ahora'}</button>}<button onClick={toggleSeg} style={ab}>Seguimiento</button><button onClick={()=>setEdit(v=>!v)} style={{...ab,color:C.muted}}>Editar</button></div></>}
+      {edit&&<div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8}}>
+        <input value={rol} onChange={ev=>setRol(ev.target.value.replace(/\D/g,''))} placeholder='Rol' inputMode='numeric' style={{width:90,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',outline:'none'}}/>
+        <span style={{fontSize:12.5,color:C.textSoft}}>-{c.anio}</span>
+        <button disabled={busy||!rol} onClick={()=>{ guardar({rol:String(rol)},'causas.editada'); setEdit(false) }} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'7px 12px',cursor:'pointer',opacity:!rol?.5:1}}>Guardar</button>
+        <button disabled={busy} onClick={async()=>{ if(await appConfirm('¿Dar por terminada esta causa? Deja de revisarse en las tablas.')){ guardar({estado:'terminada'},'causas.terminada') } }} style={{...ab,color:C.muted}}>Terminar causa</button>
+      </div>}
+      {verSeg&&<div style={{marginTop:8,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}>
+        <div style={{...SEC_LBL,fontSize:10,marginBottom:4}}>Seguimiento</div>
+        {seg===null?<div style={{fontSize:12,color:C.textSoft}}>Cargando…</div>:!seg.length?<div style={{fontSize:12,color:C.textSoft}}>Sin revisiones todavía.</div>
+          :seg.map(x=><div key={x.id} style={{display:'flex',flexDirection:D?'row':'column',gap:D?10:1,fontSize:12,padding:'3px 0'}}><span style={{color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(isoLocal(x.revisado_at))} {new Date(x.revisado_at).toTimeString().slice(0,5)}</span><span style={{minWidth:0}}><b style={{color:C.accent,fontWeight:600}}>{x.origen==='agente'?'Revisión automática':'Revisión manual'}</b> · {x.resultado}</span></div>)}
+        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Próximas revisiones: viernes 18:00 · sábado 10:00 · domingo 10:00 · lunes 06:00</div>
+      </div>}
+    </div>}
+  </div>)
+}
+// Causas de una venta (Ficha › Ventas): lista + «+ Causa». En celular el bloque parte plegado en una línea con su resumen.
+function CausasVenta({client, sale, isDesktop, user, causas}){
+  const D=isDesktop
+  const {rows,setRows,recargar}=causas
+  const [abierto,setAbierto]=useState(D), [nueva,setNueva]=useState(false), [busy,setBusy]=useState(false)
+  const [f,setF]=useState({corte:'',libro:'',rol:'',anio:String(new Date().getFullYear()),caratula:'',abogado:sale.responsible||client.abogado_responsable||''})
+  if(rows===null) return null
+  const mias=rows.filter(c=>String(c.sale_id||'')===String(sale.id))
+  const esSup=f.corte==='6050000'
+  const listo=f.corte&&(esSup||f.libro)&&/^\d+$/.test(f.rol)&&/^\d{4}$/.test(f.anio)
+  const guardar=async()=>{ if(!listo||busy) return; setBusy(true)
+    try{ const corte=CORTES_PJUD.find(x=>x[0]===f.corte), libro=LIBROS_PJUD.find(x=>x[0]===f.libro)
+      const row={client_id:client.id, sale_id:sale.id, abogado:f.abogado||null, instancia:esSup?'suprema':'apelaciones', corte_codigo:f.corte, corte_nombre:corte[1], libro_codigo:esSup?null:f.libro, libro_nombre:esSup?null:libro?.[1]||null, rol:String(Number(f.rol)), anio:Number(f.anio), caratula:f.caratula.trim()||null, estado:'activa', fuente:'manual', created_by:user?.name||null}
+      let nuevo={...row,id:'demo-cz-'+Date.now()}
+      if(!DEMO){ const {data,error}=await supabase.from('causas').insert(row).select().single(); if(error) throw new Error(/causas_unica|duplicate/.test(error.message)?'Esa causa ya está registrada.':error.message); nuevo=data }
+      logActividad('causas.agregada',{tabla:'causas',id:nuevo.id,detalle:{title:`${_rolTxt(nuevo)} · ${_corteCorta(nuevo.corte_nombre)}`,cliente:client.name,venta:sale.title}})
+      setRows(p=>[...(p||[]),nuevo]); setNueva(false); setF(x=>({...x,rol:'',caratula:''}))
+      if(!DEMO){ const {data}=await supabase.functions.invoke('causas-tablas',{body:{causa_id:nuevo.id}}).catch(()=>({data:null})); const t=(data?.en_tabla||[])[0]; recargar(); appAlert(data?.ok?(t?`Causa guardada. Está en tabla: ${t.sala||''}${t.numero?`, N° ${t.numero}`:''}, ${fmtFechaDMY(t.fecha)}.`:'Causa guardada. Hoy no está en tabla; se revisa en los próximos horarios.'):'Causa guardada. Se revisa en los próximos horarios.') }
+    }catch(err){ appAlert('No se pudo guardar la causa: '+(err.message||err)) }
+    setBusy(false) }
+  const fld=(label,el,st)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0,...st}}><span style={{display:'block',fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>{el}</label>
+  const inS={width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:'2px 0',minWidth:0}
+  const nPc=mias.filter(c=>c.estado==='por_confirmar').length, nTab=mias.filter(c=>c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())).length
+  const resumen=[nTab?`${nTab} en tabla`:null,nPc?`${nPc} por confirmar`:null].filter(Boolean).join(' · ')
+  return (<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:C.surface}} onClick={ev=>ev.stopPropagation()}>
+    <div onClick={D?undefined:()=>setAbierto(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgPanel,cursor:D?'default':'pointer'}}>
+      <span style={{...SEC_LBL,fontSize:10.5,flex:1}}>Causas{mias.length?` · ${mias.length}`:''}</span>
+      {resumen&&<span style={{fontSize:11,fontWeight:600,color:nTab?C.accent:C.textSoft,background:nTab?C.azulBg:C.track,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap'}}>{resumen}</span>}
+      {D?<button onClick={()=>setNueva(v=>!v)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button>
+        :<span style={{color:C.done,fontSize:12,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
+    </div>
+    {abierto&&<>
+      {mias.map(c=><CausaFila key={c.id} c={c} isDesktop={D} user={user} onCambio={x=>x?setRows(p=>p.map(y=>y.id===x.id?x:y).filter(y=>y.estado!=='terminada')):recargar()}/>)}
+      {!mias.length&&!nueva&&<div style={{fontSize:12,color:C.textSoft,padding:'10px 12px',borderTop:`1px solid ${C.track}`}}>Sin causas en esta venta.</div>}
+      {!D&&!nueva&&<div style={{padding:'9px 12px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>setNueva(true)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button></div>}
+      {nueva&&<div style={{borderTop:`1px solid ${C.track}`,padding:'11px 12px'}}>
+        <div style={{...SEC_LBL,fontSize:10,marginBottom:8}}>Agregar causa a esta venta</div>
+        <div style={{display:'grid',gridTemplateColumns:D?'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,.7fr) minmax(0,.6fr)':'1fr 1fr',gap:8}}>
+          {fld('Corte',<select value={f.corte} onChange={ev=>setF(x=>({...x,corte:ev.target.value}))} style={inS}><option value=''>Elige la Corte</option>{CORTES_PJUD.map(([k,n])=><option key={k} value={k}>{n}</option>)}</select>,D?null:{gridColumn:'1 / -1'})}
+          {!esSup&&fld('Libro',<select value={f.libro} onChange={ev=>setF(x=>({...x,libro:ev.target.value}))} style={inS}><option value=''>Elige el libro</option>{LIBROS_PJUD.map(([k,n])=><option key={k} value={k}>{_libroLegible(n)}</option>)}</select>,D?null:{gridColumn:'1 / -1'})}
+          {fld('Rol',<input value={f.rol} onChange={ev=>setF(x=>({...x,rol:ev.target.value.replace(/\D/g,'')}))} inputMode='numeric' style={inS}/>,esSup&&D?{gridColumn:'span 2'}:null)}
+          {fld('Año',<input value={f.anio} onChange={ev=>setF(x=>({...x,anio:ev.target.value.replace(/\D/g,'').slice(0,4)}))} inputMode='numeric' style={inS}/>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:D?'minmax(0,3fr) minmax(0,1fr) auto':'1fr',gap:8,marginTop:8,alignItems:'stretch'}}>
+          {fld('Carátula',<input value={f.caratula} onChange={ev=>setF(x=>({...x,caratula:ev.target.value}))} style={inS}/>)}
+          {fld('Abogado',<select value={f.abogado} onChange={ev=>setF(x=>({...x,abogado:ev.target.value}))} style={inS}><option value=''>—</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(n=><option key={n} value={n}>{n}</option>)}</select>)}
+          <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:D?'flex-start':'flex-end'}}>
+            <button onClick={()=>setNueva(false)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+            <button disabled={!listo||busy} onClick={guardar} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar y revisar'}</button>
+          </div>
+        </div>
+      </div>}
+    </>}
+  </div>)
+}
+// Clientes › Causas: todas las causas del estudio (se agregan desde la venta). En tabla primero, por confirmar, sin tabla por Corte.
+function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClientFicha}){
+  const D=isDesktop
+  const {rows,setRows,recargar}=useCausas()
+  const [q,setQ]=useState(''), [corte,setCorte]=useState(''), [abog,setAbog]=useState(''), [busy,setBusy]=useState(false)
+  const nom=id=>clients.find(c=>String(c.id)===String(id))?.name||'—'
+  const hoy=isoLocal(new Date().toISOString())
+  const lista=(rows||[]).filter(c=>(!corte||c.corte_codigo===corte)&&(!abog||c.abogado===abog)&&(!q||_normTxt(`${c.caratula||''} ${c.rol}-${c.anio} ${nom(c.client_id)}`).includes(_normTxt(q))))
+  const tab=lista.filter(c=>c.estado==='activa'&&c.ultima_tabla?.fecha>=hoy).sort((a,b)=>a.ultima_tabla.fecha.localeCompare(b.ultima_tabla.fecha))
+  const pc=lista.filter(c=>c.estado==='por_confirmar'), sin=lista.filter(c=>c.estado==='activa'&&!(c.ultima_tabla?.fecha>=hoy))
+  const porCorte={}; sin.forEach(c=>{ (porCorte[c.corte_nombre]=porCorte[c.corte_nombre]||[]).push(c) })
+  const revisarTodas=async()=>{ if(busy) return; setBusy(true)
+    try{ if(DEMO){ appAlert('Revisión hecha (demo).'); return }
+      const {data,error}=await supabase.functions.invoke('causas-tablas',{body:{}}); if(error||data?.error) throw new Error(data?.error||error?.message)
+      recargar(); appAlert(`${data.revisadas} causa${data.revisadas!==1?'s':''} revisada${data.revisadas!==1?'s':''}: ${(data.en_tabla||[]).length} en tabla${(data.avisos||[]).length?`, ${data.avisos.filter(a=>a.enviado).length} aviso${data.avisos.filter(a=>a.enviado).length!==1?'s':''} enviado${data.avisos.filter(a=>a.enviado).length!==1?'s':''}${data.avisos.some(a=>!a.enviado)?` y ${data.avisos.filter(a=>!a.enviado).length} NO enviado${data.avisos.filter(a=>!a.enviado).length!==1?'s':''}`:''}`:''}.`)
+    }catch(err){ appAlert('No se pudieron revisar las causas: '+(err.message||err)) }
+    finally{ setBusy(false) } }
+  const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}
+  const sel={fontSize:12.5,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',minWidth:0}
+  const fila=c=><CausaFila key={c.id} c={c} isDesktop={D} user={user} cliente={<span onClick={onOpenClientFicha?ev=>{ev.stopPropagation();onOpenClientFicha(c.client_id)}:undefined} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>{nom(c.client_id)}</span>} onCambio={x=>x?setRows(p=>p.map(y=>y.id===x.id?x:y).filter(y=>y.estado!=='terminada')):recargar()}/>
+  const abogados=[...new Set((rows||[]).map(c=>c.abogado).filter(Boolean))].sort()
+  const cortes=[...new Set((rows||[]).map(c=>c.corte_codigo))]
+  return (<div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?1100:undefined,margin:'0 auto'}}>
+    <PageHeader origen={origen||'Clientes'} onBack={onBack} titulo='Causas' right={<button onClick={revisarTodas} disabled={busy} style={{...chipBtn('soft'),color:C.accent}}>{busy?'Revisando…':D?'Revisar todas ahora':'Revisar todas'}</button>} style={{margin:D?'-12px -20px 12px':'-8px -16px 12px'}}/>
+    {rows===null?<div style={{fontSize:12,color:C.muted}}>Cargando…</div>:<div style={{display:'flex',flexDirection:'column',gap:12}}>
+      <div style={{...card,display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))'}}>
+        {[['Causas activas',(rows||[]).filter(c=>c.estado==='activa').length,C.text,'Cortes de Apelaciones y Suprema'],['En tabla',(rows||[]).filter(c=>c.estado==='activa'&&c.ultima_tabla?.fecha>=hoy).length,C.azulInfo,'próximas vistas'],['Por confirmar',(rows||[]).filter(c=>c.estado==='por_confirmar').length,C.soonText,'se agregan desde la venta']].map(([l,v,col,s],i)=><div key={l} style={{padding:D?'12px 16px':'10px 10px',borderLeft:i?`1px solid ${C.track}`:'none'}}><div style={{...SEC_LBL,fontSize:D?11:9.5,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:D?22:17,fontWeight:700,color:col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{v}</div>{D&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:2,whiteSpace:'nowrap'}}>{s}</div>}</div>)}
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <div style={{flex:D?'1 1 260px':'1 1 100%',display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',minWidth:0}}><SIcon n='search' s={14} c={C.done}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, carátula o rol' style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/></div>
+        {cortes.length>1&&<select value={corte} onChange={e=>setCorte(e.target.value)} style={sel}><option value=''>Todas las Cortes</option>{cortes.map(k=><option key={k} value={k}>{(CORTES_PJUD.find(x=>x[0]===k)||[k,k])[1]}</option>)}</select>}
+        {abogados.length>1&&<select value={abog} onChange={e=>setAbog(e.target.value)} style={sel}><option value=''>Todos los abogados</option>{abogados.map(a=><option key={a} value={a}>{a}</option>)}</select>}
+      </div>
+      {tab.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>En tabla · {tab.length}</div><div style={card}>{tab.map(fila)}</div></div>}
+      {pc.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Por confirmar · {pc.length}</div><div style={card}>{pc.map(fila)}</div></div>}
+      {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
+      {!lista.length&&<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{q||corte||abog?'Ninguna causa con esos filtros.':'Sin causas. Se agregan en la ficha del cliente › Ventas › la venta respectiva.'}</div>}
+    </div>}
+  </div>)
+}
+
 // ─── RED PROFESIONAL: base de contactos de la red (no clientes), por país y categoría ─────────
 function RedProfesionalModal({preset=null, onClose, onSaved}){
   const [rows,setRows] = useState(null)
@@ -41159,12 +41340,12 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos'}
+const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
-  limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
+  limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
 const PALETTE_ACTIONS = [
@@ -41946,7 +42127,7 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
+    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'||tab==='causas'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
     if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
@@ -44249,6 +44430,7 @@ export default function App() {
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
+            {tab==='causas'&&<CausasEstudio isDesktop={isDesktop} clients={clients} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='contactos'&&<ContactosClientes key={contactosKey} isDesktop={isDesktop} clients={clients} sales={sales} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha} onBuscarGmail={()=>setModal({type:'gmailContactos'})}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
@@ -44268,8 +44450,8 @@ export default function App() {
             </div>}
             {tab==='expenses'&&<ExpensesView onOpenMovBanco={id=>navTo({tab:'conciliacion',conc:id})} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} onIrCajaChica={()=>navTo({tab:'cajachica'})} onRevisionCajaChica={()=>navTo({tab:'conciliacion',ccRev:true})} expenses={expenses} clients={clients} clientEntities={clientEntities} sales={sales} onAdd={(c)=>setModal({type:'gastos',data:c||null})} onEdit={e=>setModal({type:'expenseEdit',data:e})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c||null,dev:!!dev})} onBulk={(notaria,arch)=>setModal({type:'cargaMasiva',data:{notaria:!!notaria,archivoCorreo:arch||null}})} onAssignRS={handleAssignRS} onAssignClientToExpense={handleAssignClientToExpense} onMoverAOficina={handleMoverAOficina} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} currentUserName={user?.name} currentUser={user} isAdmin={userRole==='admin'} expenseAttachments={expenseAttachments} setExpenseAttachments={setExpenseAttachments} onRendicionComplete={handleRendicionComplete} billing={billing} setBilling={setBilling} pettyCash={pettyCash} onAssignCajaChica={handleAssignCajaChica} onAssignGastoRS={handleAssignGastoRS} onToggleClientStatus={handleToggleClientStatus} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} onSaveClientFields={handleUpdateClientFields} onOpenClientFicha={handleOpenClientFicha} expenseAudit={expenseAudit} openGastosOfi={gastosOfiOpen} onGastosOfiOpened={()=>setGastosOfiOpen(false)} costosOfiMes={costosOfiMes} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onIrConciliacion={()=>setModal({type:'conciliaHub'})} bulkImports={bulkImports} onUndoImport={handleUndoImport} navTo={expNav} onNavDone={()=>setExpNav(null)} onSolicitarFondos={(c,s,m,r)=>setModal({type:'solicitarFondos',data:{client:c||null,sale:s||null,monto:m||null,responsable:r||null}})}/>}
             {tab==='cajachica'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<CajaChicaView isAdmin={userRole==='admin'} expenses={expenses||[]} setExpenses={setExpenses} clients={clients||[]} currentUserName={user?.name} currentUserEmail={user?.email} pettyCash={pettyCash||[]} setPettyCash={setPettyCash||((v)=>{})} rendiciones={rendiciones||[]} setRendiciones={setRendiciones||((v)=>{})} onOpenClientFicha={handleOpenClientFicha} onEditExpense={e=>setModal({type:'expenseEdit',data:e})}/></> }
-            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited onContactos={()=>navTo({tab:'contactos'})} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} setExpenses={setExpenses} setRendiciones={setRendiciones} setBilling={setBilling} user={user} onRendicionComplete={handleRendicionComplete}/>}
-            {tab==='clients'&&userRole==='admin'&&<ClientsView onContactos={()=>navTo({tab:'contactos'})} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
+            {tab==='clients'&&userRole==='limited'&&<ClientsViewLimited onContactos={()=>navTo({tab:'contactos'})} onCausas={()=>navTo({tab:'causas'})} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} expenses={expenses} tasks={tasks} clientEntities={clientEntities} rendiciones={rendiciones} sales={sales} billing={billing} anticipos={anticipos} currentUserName={user?.name} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onQuickTask={(c,title)=>handleSaveTask({title, client_id:c.id, status:'Activo', assignees:user?.name?[user.name]:[]})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenSale={(s)=>setModal({type:'sale',data:s})} onAjuste={c=>setModal({type:'ajuste',data:c})} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onSaveFields={handleUpdateClientFields} setExpenses={setExpenses} setRendiciones={setRendiciones} setBilling={setBilling} user={user} onRendicionComplete={handleRendicionComplete}/>}
+            {tab==='clients'&&userRole==='admin'&&<ClientsView onContactos={()=>navTo({tab:'contactos'})} onCausas={()=>navTo({tab:'causas'})} onAsociarTrabajo={handleAsociarTrabajo} clients={clients} sales={sales} billing={billing} setBilling={setBilling} expenses={expenses} tasks={tasks} clientEntities={clientEntities} anticipos={anticipos} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(c)=>setModal({type:'anticipo',data:{preClient:c}})} onToggleStatus={handleToggleClientStatus} onEdit={c=>navTo({tab:'editCliente',editClientId:c.id,returnFichaId:c.id})} onAdd={()=>navTo({tab:'editCliente',editClientId:'__new__'})} onAddTask={(c)=>setModal({type:'task',data:c?{preClient:c}:null})} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onAddFondo={(c,dev)=>setModal({type:'fondo',data:c,dev:!!dev})} onAddSale={(c)=>setModal({type:'sale',data:{client_id:c.id}})} onAddBilling={(c)=>setModal({type:'billing',data:{client_id:c.id}})} onEditBilling={b=>setModal({type:'billing',data:b})} onEditTask={t=>setModal({type:'task',data:t})} onEditExpense={e=>setModal({type:'expenseEdit',data:e})} onAjuste={c=>setModal({type:'ajuste',data:c})} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenConciliacion={handleOpenConciliacion} onAssignSeries={handleAssignSeries} onStatusChange={handleStatusChange} onImportDrive={()=>setModal({type:'clienteDrive'})} onReplaceProgramada={handleReplaceProgramada} onProveedores={()=>navTo({tab:'proveedores'})} proveedores={proveedores} terceros={terceros} onSaveProveedor={handleSaveProveedor} onRevertirPagoProveedor={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} onOpenSale={(s)=>setModal({type:'sale',data:s})} provSaving={saving} setExpenses={setExpenses} setRendiciones={setRendiciones} rendiciones={rendiciones} user={user} onSaveFields={handleUpdateClientFields} onRendicionComplete={handleRendicionComplete} openFichaId={openFichaId} onOpenedFicha={()=>setOpenFichaId(null)} navOrigin={navStack.length?navStack[navStack.length-1].tab:null} navOriginLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:null} onBackOrigin={handleBackOrigin} onOpenFusion={(c)=>setModal({type:'fusionarClientes',data:c?.id?{preA:c.id}:null})}/>}
           </ViewErrorBoundary></div>
         )}
         {!isDesktop&&userRole==='limited'&&tab==='tasks'&&(
