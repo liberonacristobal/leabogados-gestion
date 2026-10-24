@@ -85,8 +85,11 @@ async function programacion(c: any): Promise<any[]> {
   if (/registro\(s\) no encontrado|no encontrado/i.test(t)) return [];
   const ff = filas(t); const cab = (ff[0] || []).map((x) => x.toLowerCase());
   const col = (n: string) => cab.findIndex((x) => x.includes(n));
+  // pjud.cl responde a los servidores de la nube con una verificación anti-robots (captcha): no se responde ni se salta.
+  if (/human visitor|what code is in the image|enable javascript to view the page/i.test(t)) throw new Error("pjud.cl pidió una verificación anti-robots (captcha) al servidor; la revisión automática no tiene acceso");
   // Cualquier otra respuesta debe traer la tabla con sus columnas; si no, NO se da por «Sin tabla».
-  if (!ff.length || col("fecha") < 0 || (col("sala") < 0 && col("ingreso") < 0 && col("causa") < 0)) throw new Error("pjud.cl respondió sin la tabla esperada (página distinta o en mantención)");
+  if (!ff.length || col("fecha") < 0 || (col("sala") < 0 && col("ingreso") < 0 && col("causa") < 0)) throw Object.assign(new Error("pjud.cl respondió sin la tabla esperada (página distinta o en mantención)"),
+    { muestra: `HTTP ${r.status} · ${t.length} bytes · ${t.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400)}` });
   const iS = col("sala"), iN = cab.findIndex((x) => x === "n°" || x === "n" || x.startsWith("n°")), iC = col("causa"), iI = col("ingreso"), iF = col("fecha");
   const rolTxt = `${Number(c.rol)}-${c.anio}`;
   const nl = (x: string) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -197,7 +200,7 @@ Deno.serve(async (req) => {
         estado.push({ c, k: prox ? "tabla" : "sin", prox, seg });
       } catch (e) {
         const motivo = String((e as Error).message || e);
-        res.errores.push({ causa: `${c.rol}-${c.anio}`, error: motivo });
+        res.errores.push({ causa: `${c.rol}-${c.anio}`, error: motivo, ...(dryRun ? { muestra: (e as { muestra?: string }).muestra || null } : {}) });
         // La causa muestra «No se pudo revisar» en la app hasta la próxima revisión correcta.
         if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ ultima_error: motivo, ultima_error_at: new Date().toISOString() }) }).catch(() => null);
         // No se pudo ver la causa: queda en su seguimiento como «No se pudo revisar» (nunca como «Sin tabla»).
