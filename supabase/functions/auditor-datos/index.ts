@@ -52,10 +52,10 @@ Deno.serve(async (req) => {
   const dryRun = !!body.dryRun;
   try {
     const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos] = await Promise.all([
-      todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,dte_xml,issued_at,due"),
-      todas("sales?select=id,client_id,status,deleted_at,amount_uf,amount_clp,uf_value,year,month,cobro_type,title"),
+      todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,due"),
+      todas("sales?select=id,client_id,status,deleted_at,amount_uf,amount_clp,uf_value,year,month,cobro_type,cobro_config,area,title"),
       todas("anticipos?select=id,client_id,sale_id,monto,nota,estado"),
-      todas("conciliacion?select=id,movimiento_id,tipo_destino,monto_aplicado,anticipo_id"),
+      todas("conciliacion?select=id,movimiento_id,tipo_destino,monto_aplicado,anticipo_id,factura_id"),
       todas("terceros_pagos?select=id,movimiento_id,estado,pagado_at,monto,proveedor_id"),
       todas("cartola_movimientos?select=id,fecha,monto,tipo,nombre_contraparte,descripcion,estado,monto_conciliado,es_interno"),
       todas("petty_cash?select=id,movimiento_id,amount&movimiento_id=not.is.null"),
