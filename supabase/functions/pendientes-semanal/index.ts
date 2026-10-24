@@ -203,9 +203,9 @@ serve(async (req) => {
       }).join("");
       const total = arr.reduce((s:number,x:any)=> s+x.saldo, 0);
       return `<div style="padding:16px 26px 4px;">${sec("1","Cobros ya recibidos, sin registrar",GRN)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Estos clientes <b style="color:${INK};">ya te pagaron</b> —hay un depósito en la cuenta corriente de la oficina— pero el pago <b style="color:${INK};">no está vinculado a su factura</b>, así que la factura sigue apareciendo como vencida. Revisa que el depósito corresponda y <b style="color:${INK};">concílialo</b>: la factura pasa a pagada y el vencido de tu cartera baja.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Depósitos recibidos que aún no están conciliados con su factura.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRNBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${GRN};font-weight:600;">${arr.length} cliente${arr.length!==1?"s":""} con pagos esperando</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por conciliar</span> <span style="font-size:16px;font-weight:800;color:${GRN};margin-left:6px;">${fmt(total)}</span></td></tr></table>`+
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRNBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${GRN};font-weight:600;">${arr.length} cliente${arr.length!==1?"s":""} con depósitos por conciliar</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por conciliar</span> <span style="font-size:16px;font-weight:800;color:${GRN};margin-left:6px;">${fmt(total)}</span></td></tr></table>`+
         cta("Conciliar estos cobros",GRN,"https://gestion.leabogados.cl/?ir=cobros")+`</div>`;
     };
 
@@ -216,7 +216,7 @@ serve(async (req) => {
       const rowsA = ants.map((x:any,i:number)=> `<tr><td style="padding:11px 0;border-top:1px solid ${HAIR};"><div style="font-size:13.5px;font-weight:700;color:${INK};">${esc(x.cli)}</div><div style="font-size:11px;color:${MUT};margin-top:2px;">1 anticipo a mano que ya entró por el banco (${fmt(x.monto)})</div></td><td align="right" valign="top" style="padding:11px 0;border-top:1px solid ${HAIR};white-space:nowrap;"><span style="font-size:11px;font-weight:700;color:${AMB};background:${AMBBG};border-radius:999px;padding:3px 11px;">1 por revisar</span></td></tr>`).join("");
       const nCli = new Set([...folios.map((x:any)=>x.cli), ...ants.map((x:any)=>x.cli)]).size;
       return `<div style="padding:24px 26px 4px;">${sec("2","Documentos duplicados por limpiar",AMB)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Algunos de tus clientes tienen la <b style="color:${INK};">misma factura o anticipo cargado dos veces</b> (un folio repetido, o un pago a mano que también entró por el banco). Eso <b style="color:${INK};">infla su saldo y descuadra las cifras</b>. La app ya detectó cuál es el documento real y cuál la copia — tú solo <b style="color:${INK};">confirmas y retiras la copia</b> (reversible).</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Facturas o anticipos registrados dos veces. La copia se retira con tu confirmación.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rowsF}${rowsA}</table>`+
         `<div style="font-size:11.5px;color:${FAINT};margin-top:10px;">${total} documento${total!==1?"s":""} duplicado${total!==1?"s":""} en ${nCli} de tus clientes.</div>`+
         cta("Limpiar estos duplicados",AMB,"https://gestion.leabogados.cl/?ir=duplicados")+`</div>`;
@@ -230,7 +230,7 @@ serve(async (req) => {
       const mas = rest.length ? `<div style="font-size:11.5px;color:${FAINT};margin-top:9px;">y ${rest.length} cliente${rest.length!==1?"s":""} más · ${rest.reduce((s:number,x:any)=>s+x.n,0)} gastos · ${fmt(rest.reduce((s:number,x:any)=>s+x.monto,0))}</div>` : "";
       const nTot = arr.reduce((s:number,x:any)=>s+x.n,0), mTot = arr.reduce((s:number,x:any)=>s+x.monto,0);
       return `<div style="padding:24px 26px 4px;">${sec("","Gastos sin proyecto",NV)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Para rendir cuentas, cada gasto va a su proyecto. Abre la ficha del cliente › Fondos y gastos: al tocar un gasto eliges el proyecto y marcas los demás que van al mismo.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos sin proyecto asignado.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+ mas +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${nTot} gasto${nTot!==1?"s":""} en ${arr.length} cliente${arr.length!==1?"s":""}</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Sin proyecto</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(mTot)}</span></td></tr></table>`+
         cta("Asignar en la app",NV)+`</div>`;
@@ -243,11 +243,11 @@ serve(async (req) => {
       const nItems = cobros.length + dups.reduce((s:number,x:any)=> s+(x.n||1), 0);
       if (!nItems) return "";
       const top = cobros.slice(0, 8);
-      const rows = top.map((x:any,i:number)=> `<tr><td style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${esc(x.quien || "Sin nombre en la cartola")}</div><div style="font-size:11px;color:${MUT};margin-top:3px;line-height:1.4;">Depósito del <b>${esc(fDia(x.fecha))}</b>${x.op?` · Op. ${esc(String(x.op))}`:""}${x.conNombre?"<br>Trae nombre — vincúlalo a su ficha":"<br>Identifícalo y asígnalo a un cliente"}</div></td><td align="right" valign="top" style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:15px;font-weight:800;color:${NV};">${fmt(x.saldo)}</span></td></tr>`).join("");
+      const rows = top.map((x:any,i:number)=> `<tr><td style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${esc(x.quien || "Sin nombre en la cartola")}</div><div style="font-size:11px;color:${MUT};margin-top:3px;line-height:1.4;">Depósito del <b>${esc(fDia(x.fecha))}</b>${x.op?` · Op. ${esc(String(x.op))}`:""}${x.conNombre?"<br>Con nombre del depositante":"<br>Sin nombre del depositante"}</div></td><td align="right" valign="top" style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:15px;font-weight:800;color:${NV};">${fmt(x.saldo)}</span></td></tr>`).join("");
       const dupLine = dups.length ? `<div style="font-size:11.5px;color:${MUT};margin-top:10px;">Además, ${dups.reduce((s:number,x:any)=>s+(x.n||1),0)} documento(s) duplicado(s) de clientes sin abogado asignado.</div>` : "";
       const masCob = cobros.length>top.length ? `<div style="font-size:11.5px;color:${FAINT};margin-top:9px;">y ${cobros.length-top.length} depósito(s) más sin identificar.</div>` : "";
       return `<div style="padding:24px 26px 4px;">${sec("3","Sin responsable asignado",NV)}`+
-        `<div style="background:${AZBG};border-radius:10px;padding:10px 13px;margin:0 0 13px;font-size:11.5px;color:${NV};line-height:1.5;">Estos depósitos <b>no tienen cliente ni abogado</b> asociado, así que no caen en la cartera de nadie. Aparecen en el correo de <b>Cristóbal y Erasmo</b> — <b>revísenlos entre los dos</b>: identifiquen de quién es cada uno y asígnenlo a su cliente para que deje de quedar suelto.</div>`+
+        `<div style="background:${AZBG};border-radius:10px;padding:10px 13px;margin:0 0 13px;font-size:11.5px;color:${NV};line-height:1.5;">Depósitos sin cliente ni abogado asignado.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
         masCob + dupLine +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${cobros.length} depósito${cobros.length!==1?"s":""} sin identificar <span style="color:${MUT};font-weight:400;">· entre los dos</span></td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por asignar</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(totCob)}</span></td></tr></table>`+
@@ -265,7 +265,7 @@ serve(async (req) => {
         nSP ? `<b style="color:${NV};font-weight:700;">${nSP} gasto${nSP!==1?"s":""} sin proyecto</b>` : "",
         nSr ? `<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>` : "",
       ].filter(Boolean);
-      const resumen = partes.length ? `${partes.join(" · ")}. Cada tema tiene su propia acción abajo.` : `Nada pendiente de tus clientes ${mensual?"este mes":"esta semana"}.`;
+      const resumen = partes.length ? `${partes.join(" · ")}.` : `Nada pendiente de tus clientes ${mensual?"este mes":"esta semana"}.`;
       const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), pH = sinProyHtml(sinProy), sH = sinRespHtml(srCobros, srDup);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -279,7 +279,7 @@ serve(async (req) => {
   ${dH}
   ${pH}
   ${sH}
-  ${(!cH&&!dH&&!pH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin cobros por registrar ni duplicados por limpiar. Todo en orden.</div>`:`<div style="height:8px;"></div>`}
+  ${(!cH&&!dH&&!pH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes de tus clientes.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };

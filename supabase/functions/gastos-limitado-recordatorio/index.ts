@@ -87,9 +87,8 @@ serve(async (req) => {
     <div style="background:${NAVY};color:#fff;padding:16px 20px"><div style="font-size:15px;font-weight:700">${ESTUDIO}</div><div style="font-size:11px;opacity:.85">Recordatorio de gastos</div></div>
     <div style="padding:20px">
       <div style="font-size:14px;font-weight:600;color:${NAVY};margin-bottom:8px">Hola ${u.nombre},</div>
-      <div style="font-size:13px;line-height:1.6;margin-bottom:16px">${linea}<br>Cargar tus gastos al día mantiene tus rendiciones y la caja chica cuadradas — y toma un minuto.</div>
-      <a href="${APP_URL}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 22px;border-radius:9px">Cargar gastos ahora</a>
-      <div style="font-size:11px;color:${MUT};margin-top:16px;line-height:1.5">Si ya no cargas gastos, avísale a Cristóbal para dejar de recibir este recordatorio.</div>
+      <div style="font-size:13px;line-height:1.6;margin-bottom:16px">${linea}</div>
+      <a href="${APP_URL}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 22px;border-radius:9px">Cargar gastos</a>
     </div>
   </div>
   <div style="text-align:center;font-size:10px;color:#99ABB4;margin-top:14px">${ESTUDIO}</div>

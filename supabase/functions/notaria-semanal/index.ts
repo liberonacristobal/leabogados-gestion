@@ -183,7 +183,7 @@ serve(async (req) => {
       const bloqueDeben = deben.length ? sec("Por cobrar",RED)+deben.map(cardDebtor).join("")+gap(6) : "";
       const bloqueCub = cubiertos.length
         ? sec("Por rendir · cubierto por fondo",GRN)
-          +`<div style="font-size:11.5px;color:${MUT};margin:-4px 0 10px;">${nOtRendir} OT sin rendir por ${fmt(totalRendir)}. El cliente tiene fondo de sobra: no es cobro, solo falta formalizarlas para descontar del fondo.</div>`
+          +`<div style="font-size:11.5px;color:${MUT};margin:-4px 0 10px;">${nOtRendir} OT sin rendir por ${fmt(totalRendir)}, cubiertas por el fondo del cliente.</div>`
           +`<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${cubiertos.map((r,i)=>rowCovered(r,i===0)).join("")}</table>`+gap(8)
         : "";
       const sinNada = !deben.length && !cubiertos.length;

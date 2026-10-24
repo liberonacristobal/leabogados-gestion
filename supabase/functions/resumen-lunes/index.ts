@@ -204,7 +204,7 @@ serve(async (req) => {
             <div style="font-size:9.5px;font-weight:700;color:${MUT};text-transform:uppercase;letter-spacing:.3px;">Cobranza del a&ntilde;o &middot; meta ${fmShort(metaCobranza)}</div>
             <div style="font-size:20px;font-weight:800;color:${A};margin-top:3px;">${fmShort(cobradoAno)} <span style="font-size:12px;font-weight:700;color:${MUT};">/ ${fmShort(metaCobranza)} &middot; ${cobPct}%</span></div>
             <table style="width:100%;border-collapse:collapse;margin-top:9px;"><tr><td style="height:8px;border-radius:5px;background:#E4E8EB;padding:0;"><div style="height:8px;width:${cobPct}%;background:${GRN};border-radius:5px;font-size:0;line-height:0;">&nbsp;</div></td></tr></table>
-            <div style="font-size:10.5px;color:${MUT};margin-top:5px;">${cobPct >= 100 ? `Meta anual <b style="color:${GRN};">cumplida</b>` : `Vas en el <b style="color:${GRN};">${cobPct}%</b> &middot; faltan ${fmShort(Math.max(0, metaCobranza - cobradoAno))}`}</div>
+            <div style="font-size:10.5px;color:${MUT};margin-top:5px;">${cobPct >= 100 ? `Meta anual <b style="color:${GRN};">cumplida</b>` : `Avance <b style="color:${GRN};">${cobPct}%</b> &middot; faltan ${fmShort(Math.max(0, metaCobranza - cobradoAno))}`}</div>
           </div>` : "";
         const kpis = `<table style="width:100%;border-collapse:separate;border-spacing:0;"><tr>${kp(fmShort(cobradoSemana), "Cobrado semana", GRN)}${kp(fmShort(porCobrar), "Por cobrar", RED)}${kp(fmShort(vencido), "Vencido", vencido > 0 ? RED : A)}</tr></table>`;
         const lineaVence = venceSemN > 0 ? `<div style="font-size:11px;color:${AMB};margin-top:8px;"><b>Vence esta semana:</b> ${venceSemN} factura${venceSemN !== 1 ? "s" : ""} &middot; ${fmShort(venceSem)} &middot; <a href="https://gestion.leabogados.cl/?ir=cobranza" style="color:${A};font-weight:700;text-decoration:none;">cobrar &rsaquo;</a></div>` : "";
@@ -216,13 +216,13 @@ serve(async (req) => {
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
 
-      const subject = "Tu semana · Liberona Escala Abogados";
+      const subject = `Resumen del lunes · ${fmtFecha(todayCL)}`;
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family:Arial,Helvetica,sans-serif;background:#EEF1F3;margin:0;padding:20px;">
 <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #E4E8EB;">
   <div style="background:#003C50;padding:20px 24px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="26" style="height:26px;display:inline-block;border:0;"/></div>
   <div style="padding:8px 22px 18px;">
-    <div style="padding:14px 0 2px;font-size:13px;color:#537281;">Hola <b style="color:#003C50;">${esc(adm.name)}</b>, tu resumen de la semana en un vistazo.</div>
+    <div style="padding:14px 0 2px;font-size:13px;color:#537281;">Hola <b style="color:#003C50;">${esc(adm.name)}</b>,</div>
     ${bloques.join("")}
   </div>
   <div style="background:#F5F7F9;padding:14px 24px;text-align:center;font-size:10px;color:#537281;line-height:1.6;"><b style="color:#003C50;">Liberona Escala Abogados</b> &middot; gestion.leabogados.cl<br/>Resumen semanal autom&aacute;tico &middot; cada lunes</div>
