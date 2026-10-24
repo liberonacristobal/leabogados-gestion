@@ -10361,7 +10361,8 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
   useEffect(()=>{ let on=true
     if(DEMO){ setRows(_DEMO_BANDEJA); return }
     const hace30=new Date(Date.now()-30*86400000).toISOString()
-    supabase.from('agente_bandeja').select('*').or(`estado.in.(pendiente,sospechoso),recibido_at.gte.${hace30}`).order('recibido_at',{ascending:false}).limit(400)
+    // Orden por fecha de ENTRADA a la Bandeja (created_at): una factura registrada días después de emitida queda arriba, no al fondo.
+    supabase.from('agente_bandeja').select('*').or(`estado.in.(pendiente,sospechoso),created_at.gte.${hace30}`).order('created_at',{ascending:false}).limit(400)
       .then(({data,error})=>{ if(!on) return; if(error){ setErr(error.message); return } setRows(data||[]); autoCerrar(data||[]).catch(()=>{}) },e=>on&&setErr(e.message||String(e)))
     return ()=>{ on=false } },[])   // eslint-disable-line react-hooks/exhaustive-deps
   const nombreCli=r=>{ const c=r.cliente_id?cliPorId.get(String(r.cliente_id)):null; return c?.name||r.cliente_nombre||(r.tipo==='liquidacion_notaria'||/notar/i.test(r.de||'')?`Notaría · ${r.de_nombre||r.de}`:(r.de_nombre||r.de)) }
