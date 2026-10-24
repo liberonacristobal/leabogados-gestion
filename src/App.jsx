@@ -9914,7 +9914,7 @@ const estadoProceso = p => !p.active ? {t:'Pausado',bg:C.bgSoft,c:C.textSoft,k:'
   : p.estado==='apagado' ? {t:'Apagado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
   : (p.estado==='error'||p.estado==='sin_respuesta') ? {t:'Con falla',bg:C.overdueBg,c:C.overdueText,k:'falla'}
   : p.estado==='lanzado' ? {t:'En curso',bg:C.azulBg,c:C.accent,k:'ok'}
-  : {t:'Sin registro',bg:C.bgSoft,c:C.textSoft,k:'sin'}
+  : {t:'Aún no corre',bg:C.bgSoft,c:C.textSoft,k:'sin'}
 // Fecha y hora de Chile en dd-mm-aaaa hh:mm (formato único).
 const fechaHoraCL = iso => { if(!iso) return '—'; const p=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(iso)); const g=t=>p.find(x=>x.type===t)?.value||''; return `${g('day')}-${g('month')}-${g('year')} ${g('hour')}:${g('minute')}` }
 // Horario de una tarea (cron en UTC) leído en hora de Chile de hoy.
@@ -9930,9 +9930,64 @@ function horarioProceso(schedule, corto=false){
   if(dow&&dow!=='*') return `${dow.includes(',')?dow.split(',').map(x=>DC[x]).join(' y '):DL[dow]}${corto?' ':', '}${t}`
   return corto?`diario ${t}`:`todos los días, ${t}`
 }
+// Centro de agentes: cada proceso en su tema (por su nombre técnico), en el orden en que se muestran.
+const TEMAS_PROCESOS = [
+  ['banco','Banco y conciliación',/^(agente-segunda|alerta-cartola|caja-chica|aviso-fondos-diario)/],
+  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo)/],
+  ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|notaria|diario-oficial|tgr-remates)/],
+  ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
+  ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal)/],
+  ['ofi','Oficina y costos',/^(oficina-|valores-contadora)/],
+  ['equipo','Resúmenes al equipo',/^(tu-semana|resumen-lunes|gastos-limitado|horas-)/],
+  ['control','Control de la app',/./],
+]
+const temaProceso = jobname => (TEMAS_PROCESOS.find(([,,r])=>r.test(String(jobname||'')))||TEMAS_PROCESOS[TEMAS_PROCESOS.length-1])[0]
+// «Lo que hizo» en una línea, leído de la última respuesta del proceso (procesos_corridas). Solo campos que el proceso devuelve;
+// si no hay un resumen reconocible, la fecha de la última corrida. Nunca una cifra que no venga en la respuesta.
+function resumenCorrida(p){
+  let r=null; try{ r=typeof p.respuesta==='string'?JSON.parse(p.respuesta):p.respuesta }catch(_){ r=null }
+  const nn=(v,a,b)=>`${v} ${v===1?a:b}`, len=x=>Array.isArray(x)?x.length:null
+  if(r&&typeof r==='object'){
+    if(r.skipped==='apagado') return 'apagado'
+    if(r.error) return `error: ${String(r.error).slice(0,80)}`
+    const j=String(p.jobname||'')
+    if(/^causas-tablas/.test(j)&&r.revisadas!=null) return `${nn(r.revisadas,'causa revisada','causas revisadas')} · ${len(r.en_tabla)??0} en tabla${len(r.errores)?` · ${len(r.errores)} sin revisar`:''}`
+    if(j==='clientes-drive-sync'&&r.addedN!=null) return `${nn(r.addedN,'cliente nuevo','clientes nuevos')} · ${r.linkedN??0} vinculados`
+    if(/^bhe-correo/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'correo','correos')} · ${len(r.nuevas)??0} boletas nuevas`
+    if(/^auditor-datos/.test(j)&&r.por_revisar!=null) return `${r.por_revisar} por revisar · ${r.nuevos??0} nuevos`
+    if(/^vigilancia-procesos/.test(j)&&r.revisados!=null) return `${r.revisados} procesos · ${r.en_falla??0} en falla`
+    if(/^titulos-cortos/.test(j)&&r.revisadas!=null) return `${r.revisadas} revisados · ${len(r.cambios)??0} cambios`
+    if(/^tareas-evidencia/.test(j)&&r.revisadas!=null) return `${nn(r.revisadas,'tarea revisada','tareas revisadas')} · ${len(r.propuestas)??0} propuestas`
+    if(/^agente-pmo/.test(j)&&r.nuevas!=null) return nn(r.nuevas,'paso sugerido','pasos sugeridos')
+    if(/^notaria-sin-cliente/.test(j)&&r.n!=null) return nn(r.n,'OT sin cliente','OT sin cliente')
+    if(/^notaria-pedir/.test(j)) return r.enviado?'liquidación pedida a la notaría':(r.motivo?String(r.motivo).replace(/\s*\(\d{4}-\d{2}-\d{2}\)/,''):'')
+    if(/^facturas-sii-registrar/.test(j)&&Array.isArray(r.registradas)) return `${len(r.registradas)} registradas · ${len(r.a_bandeja)??0} por aprobar`
+    if(/^verificar-estados/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'factura revisada','facturas revisadas')} · ${r.cambiados??0} con cambio`
+    if(/^caja-chica-sweep/.test(j)&&r.nEnlazadas!=null) return nn(r.nEnlazadas,'transferencia enlazada','transferencias enlazadas')
+    if(/^aviso-fondos-diario/.test(j)&&r.enviados!=null) return nn(r.enviados,'aviso enviado','avisos enviados')
+    if(/^alerta-cartola/.test(j)&&r.gap!=null) return r.gap?`${nn(r.gap,'día','días')} sin cartola${r.enviado?' · aviso enviado':''}`:'cartolas al día'
+    if(/^agente-segunda/.test(j)&&r.segunda_revision) return `${nn(r.segunda_revision.revisados??0,'comprobante revisado','comprobantes revisados')} · ${r.segunda_revision.registrados??0} registrados`
+    if(/^task-reminders/.test(j)&&Array.isArray(r.sent)) return nn(r.sent.length,'recordatorio enviado','recordatorios enviados')
+    if(/^notaria-documentos/.test(j)&&r.leidos!=null) return nn(r.leidos,'documento leído','documentos leídos')
+    if(j==='sii-radar'&&r.inserted!=null) return nn(r.inserted,'norma nueva','normas nuevas')
+    if(j==='tgr-remates'&&r.remates!=null) return `${r.remates} remates · ${r.de_clientes??0} de clientes`
+  }
+  return p.ultima?`última ${fechaHoraCL(p.ultima)}`:`primera: ${horarioProceso(p.schedule)}`
+}
 async function cargarProcesos(){ if(DEMO) return _DEMO_PROCESOS; const {data,error}=await supabase.rpc('procesos_estado'); if(error) throw error; return data||[] }
 
-function ProcesosView({isDesktop, onBack, origen}){
+function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision, onOpenCartera, onOpenTareas}){
+  // Por aprobar: lo que los agentes dejan para una persona, hoy repartido en 4 lugares (Bandeja, Revisión de datos, pasos de
+  // proyectos y evidencias de tareas). Cada fila lleva a su lugar; aquí no se aprueba nada.
+  const [pa,setPa]=useState(null), [paAb,setPaAb]=useState(!!isDesktop), [temasAb,setTemasAb]=useState(()=>new Set())
+  useEffect(()=>{ let on=true
+    if(DEMO){ setPa({bandeja:_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso'),hallazgos:[],pmo:0,evid:0}); return ()=>{ on=false } }
+    Promise.all([supabase.from('agente_bandeja').select('tipo,estado,asunto,propuesta').in('estado',['pendiente','sospechoso']),
+      supabase.from('auditoria_hallazgos').select('detector,titulo').is('resuelto_at',null),
+      supabase.from('pmo_sugerencias').select('id',{count:'exact',head:true}).eq('estado','pendiente'),
+      supabase.from('tasks').select('id',{count:'exact',head:true}).not('evidencia','is',null).neq('status','Terminado')])
+      .then(([b,h,pm,ev])=>{ if(on) setPa({bandeja:b.data||[],hallazgos:h.data||[],pmo:pm.count||0,evid:ev.count||0}) },()=>{ if(on) setPa({bandeja:[],hallazgos:[],pmo:0,evid:0}) })
+    return ()=>{ on=false } },[])
   const [procs,setProcs]=useState(null), [err,setErr]=useState(null), [aviso,setAviso]=useState(null), [sel,setSel]=useState(null), [corr,setCorr]=useState(null)
   useEffect(()=>{ let on=true; cargarProcesos().then(d=>on&&setProcs(d),e=>on&&setErr(e.message||String(e)))
     if(!DEMO) supabase.from('learnings').select('value').eq('kind','config').eq('key','vigilancia_procesos').order('updated_at',{ascending:false}).limit(1).then(({data})=>on&&setAviso(String(data?.[0]?.value||'off')==='on'),()=>{}); else setAviso(false)
@@ -9965,14 +10020,36 @@ function ProcesosView({isDesktop, onBack, origen}){
   const lista=procs||[]
   const n=k=>lista.filter(p=>estadoProceso(p).k===k).length
   const nOk=n('ok'), nF=n('falla'), nS=n('sin'), nP=n('pausa')
-  const partes=[['Correctos',nOk,C.greenText,C.greenBg],['Con falla',nF,nF?C.overdueText:C.textSoft,nF?C.overdueBg:C.bgSoft],['Sin registro',nS,C.textSoft,C.bgSoft],['Pausados',nP,C.textSoft,C.bgSoft]]
-  const GR=[['cada 2 horas','Cada 2 horas'],['diario','Diarios'],['lunes a viernes','Lunes a viernes'],['semanal','Semanales'],['mensual','Mensuales']]
-  const fila=(p,i)=>{ const e=estadoProceso(p); const ult=p.ultima?`última ${fechaHoraCL(p.ultima)}`:'sin corrida registrada'
-    return <div key={p.jobname} onClick={()=>setSel(p)} style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'10px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
-      <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
-        <div style={{fontSize:isDesktop?11:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${horarioProceso(p.schedule)} · hora de Chile`:<><b style={{color:e.c,fontWeight:700}}>{e.t}</b> · {p.ultima?fechaHoraCL(p.ultima):horarioProceso(p.schedule,true)}</>}</div></div>
-      {isDesktop&&<div style={{textAlign:'right',flexShrink:0}}>{chip(e)}<div style={{fontSize:10.5,color:C.textSoft,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{ult}</div></div>}
-      <span style={{color:C.textSoft}}><Gl n='chevron'/></span></div> }
+  const partes=[['Correctos',nOk,C.greenText,C.greenBg],['Con falla',nF,nF?C.overdueText:C.textSoft,nF?C.overdueBg:C.bgSoft],['Aún no corren',nS,C.textSoft,C.bgSoft],['Apagados',nP,C.textSoft,C.bgSoft]]
+  // Fila de un agente: nombre, lo que hizo (última respuesta) y su estado.
+  const fila=(p,i)=>{ const e=estadoProceso(p)
+    return <div key={p.jobname} onClick={()=>setSel(p)} style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'9px 14px':'9px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.nombre}</div>
+        <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{resumenCorrida(p)}</div></div>
+      {chip(e)}<span style={{color:C.textSoft}}><Gl n='chevron'/></span></div> }
+  const altTema=k=>setTemasAb(s=>{ const n=new Set(s); n.has(k)?n.delete(k):n.add(k); return n })
+  const grupoTema=([k,t])=>{ const ps=lista.filter(p=>temaProceso(p.jobname)===k); if(!ps.length) return null
+    const ab=temasAb.has(k), c=x=>ps.filter(p=>estadoProceso(p).k===x).length, ok=c('ok'), fa=c('falla'), si=c('sin'), ap=c('pausa')
+    const res=ok===ps.length?`${ps.length} agentes · todos correctos`:[fa?`${fa} con falla`:'',ok?`${ok} correcto${ok===1?'':'s'}`:'',si?`${si} aún no corre${si===1?'':'n'}`:'',ap?`${ap} apagado${ap===1?'':'s'}`:''].filter(Boolean).join(' · ')
+    return <div key={k} style={{...card,overflow:'hidden',breakInside:'avoid',marginBottom:12}}>
+      <div onClick={()=>altTema(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer'}}>
+        <span style={{width:28,height:28,borderRadius:8,background:fa?C.overdueBg:C.azulBg,color:fa?C.overdueText:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12.5,fontWeight:800,flexShrink:0}}>{t[0]}</span>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:11,color:fa?C.overdueText:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{res}</div></div>
+        <span style={{color:C.done,fontSize:13,display:'inline-flex',transform:ab?'rotate(180deg)':'none'}}><Gl n='chevD'/></span></div>
+      {ab&&ps.map(fila)}</div> }
+  // Por aprobar agrupado: cada fila = un tipo de decisión, con su cantidad y a dónde lleva.
+  const BANDEJA_TIPO={cuenta_bancaria:'Cuentas bancarias por confirmar',factura_sin_registrar:'Facturas por registrar',fondo_por_registrar:'Fondos por registrar',comprobante:'Comprobantes por revisar',pedido_cliente:'Pedidos de clientes',respaldo_gasto:'Respaldos de gastos',boleta_honorarios:'Boletas de honorarios',liquidacion_notaria:'Liquidaciones de la notaría'}
+  const HALLAZGO_TIPO={cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas'}
+  const paFilas=(()=>{ if(!pa) return []; const out=[]
+    const gb={}; pa.bandeja.forEach(r=>{ const k=r.estado==='sospechoso'?'sospechoso':r.tipo||'otro'; (gb[k]=gb[k]||[]).push(r) })
+    Object.entries(gb).forEach(([k,rs])=>{ const folios=k==='factura_sin_registrar'?rs.map(r=>(String(r.asunto||'').match(/N° ?(\d+)/)||[])[1]).filter(Boolean):[]
+      out.push({k:'b'+k,t:k==='sospechoso'?'Cambios de cuenta por revisar':BANDEJA_TIPO[k]||'Correos por revisar',s:`${folios.length?`N° ${folios.join(', ')} · `:''}Bandeja del agente`,n:rs.length,on:onOpenBandeja}) })
+    const gh={}; pa.hallazgos.forEach(h=>{ (gh[h.detector]=gh[h.detector]||[]).push(h) })
+    Object.entries(gh).forEach(([k,hs])=>out.push({k:'h'+k,t:HALLAZGO_TIPO[k]||String(hs[0].titulo||'Hallazgo').split(' · ')[0],s:'Revisión de datos',n:hs.length,on:onOpenRevision}))
+    if(pa.pmo) out.push({k:'pmo',t:'Pasos sugeridos de proyectos',s:'Mis proyectos',n:pa.pmo,on:onOpenCartera})
+    if(pa.evid) out.push({k:'ev',t:'Tareas cumplidas según los registros',s:'Tareas · por confirmar',n:pa.evid,on:onOpenTareas})
+    return out })()
+  const paTot=paFilas.reduce((a,x)=>a+x.n,0)
   return wrap(<>
     <PageHeader origen={origen||'Oficina'} onBack={onBack} titulo='Procesos automáticos' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
     {err&&<div style={{...card,padding:16,color:C.overdueText,fontSize:13,marginBottom:12}}>No se pudo leer el estado de los procesos: {err}</div>}
@@ -9985,14 +10062,24 @@ function ProcesosView({isDesktop, onBack, origen}){
           {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:11.5,fontWeight:600,color:c}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
         </div>
       </div>
+      <div style={{...card,overflow:'hidden',marginBottom:12}}>
+        <div onClick={paTot?()=>setPaAb(v=>!v):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:paTot?'pointer':'default'}}>
+          <span style={{width:28,height:28,borderRadius:8,background:paTot?C.soonBg:C.greenBg,color:paTot?C.soonText:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,flexShrink:0}}>{paTot?'!':<Gl n='tick'/>}</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Por aprobar</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pa===null?'Cargando…':paTot?'lo que los agentes dejan para tu decisión':'nada pendiente'}</div></div>
+          {paTot>0&&<span style={{fontSize:13,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{paTot}</span>}
+          {paTot>0&&<span style={{color:C.done,fontSize:13,display:'inline-flex',transform:paAb?'rotate(180deg)':'none'}}><Gl n='chevD'/></span>}
+        </div>
+        {paAb&&paFilas.map(x=><div key={x.k} onClick={x.on||undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:x.on?'pointer':'default'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.t}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.s}</div></div>
+          <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{x.n}</span>
+          {x.on&&<span style={{fontSize:11.5,fontWeight:700,color:C.azulInfo,whiteSpace:'nowrap'}}>{isDesktop?'Revisar ':''}<Gl n='chevron'/></span>}</div>)}
+      </div>
+      <div style={{...SEC_LBL,margin:'4px 2px 8px'}}>Agentes por tema</div>
+      <div style={isDesktop?{columns:2,columnGap:12}:{}}>{TEMAS_PROCESOS.map(grupoTema)}</div>
       <div style={{...card,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{'Aviso de fallas'}</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{isDesktop?'reintenta cada hora lo que falla · avisa tras 6 intentos':'reintenta cada hora · aviso tras 6'}</div></div>
         {aviso!=null&&chip(aviso?{t:'Encendido',bg:C.greenBg,c:C.greenText}:{t:'Apagado',bg:C.bgSoft,c:C.textSoft})}
         {aviso!=null&&!DEMO&&<button onClick={cambiarAviso} style={{fontSize:12,fontWeight:700,border:aviso?`1px solid ${C.border}`:'none',borderRadius:9,padding:'6px 12px',cursor:'pointer',background:aviso?C.surface:C.accent,color:aviso?C.accent:'#fff',whiteSpace:'nowrap'}}>{aviso?'Apagar':'Encender'}</button>}
-      </div>
-      <div style={isDesktop?{columns:2,columnGap:14}:{}}>
-        {GR.map(([k,t])=>{ const ps=lista.filter(p=>p.cada===k); if(!ps.length) return null
-          return <div key={k} style={{breakInside:'avoid',marginBottom:12}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>{t} · {ps.length}</div><div style={{...card,overflow:'hidden'}}>{ps.map(fila)}</div></div> })}
       </div>
       <div style={{marginTop:6}}><BitacoraLista prefijo='procesos.' titulo='Bitácora de procesos' limite={12} vacio='Aún no hay registros.' etiquetas={{'procesos.falla_detectada':'Falla detectada','procesos.resuelto':'Resuelto','procesos.falla_avisada':'Aviso enviado','procesos.aviso_encendido':'Aviso encendido','procesos.aviso_apagado':'Aviso apagado','procesos.vigilancia_encendida':'Aviso encendido','procesos.fallas_revisadas':'Fallas revisadas'}}/></div>
     </>}
@@ -44990,7 +45077,7 @@ export default function App() {
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenBandeja={()=>navTo({tab:'bandeja'})}/>
             </div>}
             {tab==='calendarioTrib'&&userRole==='admin'&&<CalendarioTributarioView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} expenses={expenses} user={user}/>}
-            {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')}/>}
+            {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
