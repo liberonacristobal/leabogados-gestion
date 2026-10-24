@@ -9,6 +9,7 @@
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { f29Estimado, TASA_PPM } from "../_shared/f29Reglas.js";
+import { holaEquipo } from "../_shared/correoEquipo.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -95,7 +96,7 @@ Deno.serve(async (req) => {
     ].join("");
     const asunto = `F29 de ${mesNom(per)} estimado: ${fmt(e.total)}`;
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:22px">`
-      + `<p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Estimados,</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">Espero que estén muy bien.</p>`
+      + `<p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(destino, miembros))}:</p>`
       + `<p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">Estimación del F29 de ${esc(mesNom(per))}, con vencimiento el ${dmy(vence)}:</p>`
       + `<table style="width:100%;border-collapse:collapse;font-size:13px">${filas}</table>`
       + `<p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Registro de Ventas del SII, boletas de honorarios registradas en la app y F29 de ${esc(mesNom(prev))}${e.iu == null ? " (sin los valores de la contadora de ese mes: el impuesto único no se pudo estimar)" : ""}. Se cuadra con los valores de la contadora al recibirlos.</p></div></body></html>`;
