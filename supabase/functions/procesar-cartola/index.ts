@@ -146,7 +146,8 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { Prefer: 'return=minimal' },
         body: JSON.stringify([{
-          fecha_desde: minF, fecha_hasta: maxF,
+          // Cobertura hasta el «Hasta» del encabezado del banco (si es válido y no anterior al último movimiento ni futuro).
+          fecha_desde: minF, fecha_hasta: (parsed.fechaHasta && /^\d{4}-\d\d-\d\d$/.test(parsed.fechaHasta) && parsed.fechaHasta >= maxF && parsed.fechaHasta <= new Date().toISOString().slice(0, 10)) ? parsed.fechaHasta : maxF,
           movimientos_n: movs.length,
           origen: 'diaria',
           archivo: String(body.filename || '') || null,

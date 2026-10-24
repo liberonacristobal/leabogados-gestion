@@ -210,5 +210,7 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
     mov.hash = hashMovimiento(mov)
     movimientos.push(mov)
   }
-  return { cuenta, rol_cuenta: rol, anio: anioFallback, filename, totalAbonos, totalCargos, saldoInicial, saldoFinal, movimientos }
+  // «Hasta» del encabezado = el banco cubre hasta ese día aunque no haya movimientos (la cobertura no sale del último movimiento).
+  const fechaHasta = fechaHeader ? `${fechaHeader.y}-${fechaHeader.mm}-${fechaHeader.d}` : null
+  return { cuenta, rol_cuenta: rol, anio: anioFallback, filename, totalAbonos, totalCargos, saldoInicial, saldoFinal, fechaHasta, movimientos }
 }
