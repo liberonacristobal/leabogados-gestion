@@ -66,13 +66,15 @@ export function validarRespaldo(xml: string, p: Pendiente): string | null {
 export async function bajarXmlEmitidos(rutEmpresa: string, pendientes: Pendiente[]): Promise<{ captcha: boolean; resultados: Resultado[] }> {
   let s = await abrirSesion(rutEmpresa)
   const resultados: Resultado[] = []
+  let captchaRevisado = false
   for (const p of pendientes) {
     try {
       let pag = await s.ir(lista(p.folio, p.tipo))
       // Tras una descarga, el SII a veces devuelve la lista vacía en la misma sesión (visto 24-10 con el 2.º folio): sesión nueva y reintento.
       if (!/mipeGesDocEmi\.cgi/.test(pag.t)) { s = await abrirSesion(rutEmpresa); pag = await s.ir(lista(p.folio, p.tipo)) }
       if (/IngresoRutClave|InicioAutenticacion/i.test(pag.t) && !/mipeGesDocEmi/.test(pag.t)) throw new Error('el SII no abrió la sesión del certificado')
-      if (await captchaActivo(s, pag.t)) return { captcha: true, resultados }
+      // Una sola revisión del captcha por corrida (una consulta menos por factura).
+      if (!captchaRevisado) { if (await captchaActivo(s, pag.t)) return { captcha: true, resultados }; captchaRevisado = true }
       if (!/mipeGesDocEmi\.cgi/.test(pag.t)) { resultados.push({ id: p.id, folio: p.folio, estado: 'sin_documento', detalle: 'el folio no aparece en Documentos Emitidos' }); continue }
       // Valor del botón «Archivo Respaldo» tal como lo trae la página (new_win_down('X')).
       const dl = [...pag.t.matchAll(/<[^>]*new_win_down\(\s*['"]([^'"]+)['"]\s*\)[^>]*>[^<]{0,40}/gi)].find((m) => /Respaldo/i.test(m[0]))?.[1]
