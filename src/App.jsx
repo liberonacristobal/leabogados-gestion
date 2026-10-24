@@ -17,6 +17,7 @@ import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
+import { f29Estimado } from '../supabase/functions/_shared/f29Reglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
@@ -10380,7 +10381,7 @@ function CalendarioTributarioView({isDesktop, onBack, origen, expenses=[], user}
     <div style={{padding:'9px 14px',borderTop:`1px solid ${C.track}`,fontSize:12,color:C.textSoft}}>Vigila: correo de valores al {CAL_CL.valoresHasta} · F29 y cotizaciones sin pago al vencer · pago distinto a lo informado · DJ y F22 sin marcar como presentadas</div></div>
   const mon=(k,t,s,a)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,fontSize:13}}><div style={{flex:1,minWidth:0}}><div style={{color:C.text}}>{t}</div>{s&&<div style={{fontSize:11.5,color:C.textSoft}}>{s}</div>}</div>{a!=null&&<span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{a}</span>}</div>
   const proxCard=proximos.length>0&&<div style={{...card,overflow:'hidden'}}>{hd(`Próximos pagos · ${mesDe(cicloProx.mes)}`)}
-    <div style={{marginTop:-1}}>{proximos.map((p,i)=>mon(i,p.t,<>{p.est?'estimado · promedio 3 meses':'informado por la contadora'}{p.vence&&<> · <span style={{whiteSpace:'nowrap'}}>vence el {fmtFechaDMY(p.vence)}</span></>}</>,fmt(p.monto)))}</div></div>
+    <div style={{marginTop:-1}}>{proximos.map((p,i)=>mon(i,p.t,<>{p.est==='cerrado'?'estimado · mes cerrado':p.est==='abierto'?`se calcula el ${fmtFechaDMY(p.calcula)}`:p.est?'estimado · promedio 3 meses':p.estF29!=null?`informado · estimado ${fmt(p.estF29)}`:'informado por la contadora'}{p.vence&&<> · <span style={{whiteSpace:'nowrap'}}>vence el {fmtFechaDMY(p.vence)}</span></>}</>,p.monto==null?'—':fmt(p.monto)))}</div></div>
   const ajCard=isDesktop&&ajustes.length>0&&<div style={{...card,overflow:'hidden'}}>{hd('Ajustes explicados')}
     <div style={{marginTop:-1}}>{ajustes.map((a,i)=>mon(i,`${a.tipo==='F29'?'F29':'Cotizaciones'} ${mesDe(a.per)}: pagado ${fmt(a.pag.monto)} · informado ${fmt(a.inf)}`,`−${fmt(a.dif)} = retenciones de boletas de honorarios (en el costo de cada boleta)`,null))}</div></div>
   // ── El año: una fila por obligación, una columna por mes de pago.
@@ -16204,7 +16205,7 @@ const _pagoCal = (expenses, tipo, per) => { const l=tipo==='F29'?_pagosDe(expens
 const _djFecha = (o, dj) => { const rows=(dj||[]).filter(r=>String(r.formulario)===String(o.formulario)&&r.fecha); if(!rows.length) return null
   const w=new Set(_normTxt(o.detalle||'').split(' ').filter(x=>x.length>3)), sc=r=>_normTxt(r.detalle||'').split(' ').filter(x=>w.has(x)).length
   return rows.slice().sort((a,b)=>sc(b)-sc(a)||String(a.fecha).localeCompare(String(b.fecha)))[0] }
-function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[], hoy}={}){
+function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[], docs=[], boletas=[], hoy}={}){
   hoy = hoy || isoLocal(Date.now())
   const ym=hoy.slice(0,7), tiene=new Set((obl||[]).filter(o=>o.activo!==false&&!o.client_id).map(o=>o.tipo))
   const cumpl=new Map((cumplidas||[]).filter(c=>!c.client_id).map(c=>[c.clave,c]))
@@ -16275,9 +16276,14 @@ function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[]
   const prev3=vKeys.filter(k=>k<cicloProx.per).slice(-3).map(k=>valores[k])
   const prom=f=>prev3.length?prev3.reduce((a,x)=>a+(Number(x?.[f])||0),0)/prev3.length:null
   const vp=valores[cicloProx.per]
+  // F29: informado por la contadora; si no ha llegado, estimado del mes cerrado (f29Reglas); con el mes abierto, se calcula al cierre.
+  const f29E=cicloProx.per<ym?f29Estimado({per:cicloProx.per, docs, boletas, valores}):null
+  const f29Prox=vp?{t:'F29 · IVA/PPM', monto:vp.ppm, est:false, estF29:f29E?.completo?f29E.total:null, vence:cicloProx.f29.vence}
+    :f29E?.completo?{t:'F29 · IVA/PPM', monto:f29E.total, est:'cerrado', f29:f29E, vence:cicloProx.f29.vence}
+    :{t:'F29 · IVA/PPM', monto:null, est:'abierto', calcula:_habilDesde(`${_ymMas(cicloProx.per,1)}-01`), vence:cicloProx.f29.vence}
   const proximos=[tiene.has('COT')&&!cicloProx.cot.pago&&{t:'Cotizaciones', monto:vp?vp.cotizaciones:prom('cotizaciones'), est:!vp, vence:cicloProx.cot.vence},
-    tiene.has('F29')&&{t:'F29 · IVA/PPM', monto:vp?vp.ppm:prom('ppm'), est:!vp, vence:cicloProx.f29.vence},
-    (vp?.contadora||prev3.length)&&{t:'Honorario contadora', monto:vp?vp.contadora:(prev3[prev3.length-1]?.contadora||null), est:!vp, vence:null}].filter(x=>x&&x.monto>0)
+    tiene.has('F29')&&f29Prox,
+    (vp?.contadora||prev3.length)&&{t:'Honorario contadora', monto:vp?vp.contadora:(prev3[prev3.length-1]?.contadora||null), est:!vp, vence:null}].filter(x=>x&&(x.monto>0||x.est==='abierto'))
   // Ajustes: los 3 últimos períodos con diferencia explicada (retenciones de boletas en el concepto del pago).
   const ajustes=vKeys.slice(-4).reverse().flatMap(per=>(per===perAct?ciclos[0]:ciclo(per)).cuadra.partes.filter(p=>p.k==='expl').map(p=>({...p, per}))).slice(0,3)
   // F29 de los últimos 12 meses pagados dentro de plazo.
@@ -16357,24 +16363,28 @@ function useCalCliente(clientId){
   return {f, dj, alternar, resolverPlazoDoc} }
 // Fuentes del calendario (se leen una vez por sesión; `recargarCalTrib` al marcar una presentada).
 let _calTribP=null
-const _DEMO_CALTRIB = (()=>{ const ym=isoLocal(Date.now()).slice(0,7), y=+ym.slice(0,4), valores={}, pagos=[]
+const _DEMO_CALTRIB = (()=>{ const ym=isoLocal(Date.now()).slice(0,7), y=+ym.slice(0,4), valores={}, pagos=[], docs=[], boletas=[]
   for(let i=0;i<6;i++){ const per=_ymMas(ym,-i-1), c=1800000+i*15000, p=700000+i*40000
     valores[per]={mes:per, cotizaciones:c, ppm:p, contadora:45000}
+    docs.push({tipo_dte:34, fecha_emision:`${per}-20`, monto:28000000+i*1500000}); boletas.push({fecha:`${per}-10`, retencion:60000+i*5000})
     pagos.push({id:'dct'+i, category:'Leyes sociales', subcategory:'Cotizaciones', date:`${_ymMas(per,1)}-12`, amount:c, concept:`Cotizaciones sueldos ${per.slice(5,7)}-${per.slice(0,4)}`},
       {id:'dpp'+i, category:'Impuestos y patentes', subcategory:'PPM', date:`${_ymMas(per,1)}-12`, amount:i===1?p-21500:p, concept:`IVA/PPM ${per.slice(5,7)}-${per.slice(0,4)}${i===1?' (retención boleta N° 12 $21.500 va en el costo de su boleta)':''}`}) }
   pagos.push({id:'dpat', category:'Impuestos y patentes', subcategory:'Patente municipal', date:`${_ymMas(ym,-1)}-10`, amount:290000, concept:'Patente municipal'})
   const obl=['F29','COT','F22','PATENTE'].map(t=>({tipo:t, activo:true, client_id:null})).concat([['1879','Retenciones de honorarios'],['1887','Sueldos']].map(([f,d])=>({tipo:'DJ', formulario:f, detalle:d, activo:true, client_id:null})))
   const dj=[y,y+1].flatMap(a=>[{anio_tributario:a, formulario:'1879', detalle:'', fecha:`${a}-03-15`},{anio_tributario:a, formulario:'1887', detalle:'', fecha:`${a}-03-15`}])
-  return {obl, dj, valores, cumplidas:[], pagos} })()
+  return {obl, dj, valores, cumplidas:[], pagos, docs, boletas} })()
 function cargarCalTrib(){
   if(DEMO) return Promise.resolve(_DEMO_CALTRIB)
   if(!_calTribP){ const y=new Date().getFullYear()
     _calTribP=Promise.all([supabase.from('obligaciones_tributarias').select('*').is('client_id',null), supabase.from('sii_dj_vencimientos').select('*').in('anio_tributario',[y,y+1]),
       supabase.from('learnings').select('key,value').eq('kind','valores_contadora'), supabase.from('obligaciones_cumplidas').select('*').is('client_id',null),
-      supabase.from('sii_novedades').select('url').eq('tipo','resolucion').ilike('titulo','%vencimiento%declaraciones juradas%').order('fecha',{ascending:false}).limit(1)])
-      .then(([o,d,v,c,u])=>{ const valores={}; (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
-        return {obl:o.data||[], dj:d.data||[], valores, cumplidas:c.data||[], pagos:[], urlSII:u?.data?.[0]?.url||null} })
-      .catch(()=>{ _calTribP=null; return {obl:[], dj:[], valores:{}, cumplidas:[], pagos:[]} }) }
+      supabase.from('sii_novedades').select('url').eq('tipo','resolucion').ilike('titulo','%vencimiento%declaraciones juradas%').order('fecha',{ascending:false}).limit(1),
+      // F29 estimado de mes cerrado (f29Reglas): facturas del Registro de Ventas y boletas recibidas de los últimos 4 meses.
+      supabase.from('sii_cargas_docs').select('tipo_dte,fecha_emision,monto').gte('fecha_emision',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
+      supabase.from('boletas_honorarios').select('fecha,retencion,estado').gte('fecha',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`)])
+      .then(([o,d,v,c,u,sd,bh])=>{ const valores={}; (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
+        return {obl:o.data||[], dj:d.data||[], valores, cumplidas:c.data||[], pagos:[], docs:sd.data||[], boletas:bh.data||[], urlSII:u?.data?.[0]?.url||null} })
+      .catch(()=>{ _calTribP=null; return {obl:[], dj:[], valores:{}, cumplidas:[], pagos:[], docs:[], boletas:[]} }) }
   return _calTribP }
 function useCalTrib(expenses){
   const [f,setF]=useState(null), [n,setN]=useState(0)
