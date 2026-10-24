@@ -33299,7 +33299,9 @@ const _estadoCausa = c => { const t=c.ultima_tabla, hoy=isoLocal(new Date().toIS
   if(c.estado==='por_confirmar') return ['Por confirmar',C.textSoft,C.track]
   if(c.ultima_error) return ['No se pudo revisar',C.overdueText,C.overdueBg]   // la última revisión falló: nunca «Sin tabla» sin confirmar
   if(t?.fecha&&t.fecha>=hoy) return t.fecha===hoy?[`Hoy · ${t.estado_dia||'En tabla'}`,C.soonText,C.soonBg]:[`En tabla · ${fmtFechaDMY(t.fecha)}`,C.accent,C.azulBg]
-  return [c.ultima_fuente==='monitor'?'Sin tabla hoy':'Sin tabla',C.textSoft,C.track] }   // el Monitor solo muestra la tabla del día
+  // «Sin tabla» = la Programación de Salas lo confirmó en las últimas 36 h (computador de la oficina); si solo hay Monitor, es del día.
+  const progOk=c.programacion_at&&Date.now()-new Date(c.programacion_at).getTime()<36*3600e3
+  return [progOk||c.ultima_fuente!=='monitor'?'Sin tabla':'Sin tabla hoy',C.textSoft,C.track] }
 // Una causa: resumen + acciones + seguimiento (bitácora) detrás de su botón. En celular parte plegada (una línea) y se abre al tocar.
 function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
   const D=isDesktop
@@ -33350,7 +33352,7 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
         <div style={{...SEC_LBL,fontSize:10,marginBottom:4}}>Seguimiento</div>
         {seg===null?<div style={{fontSize:12,color:C.textSoft}}>Cargando…</div>:!seg.length?<div style={{fontSize:12,color:C.textSoft}}>Sin revisiones todavía.</div>
           :seg.map(x=><div key={x.id} style={{display:'flex',flexDirection:D?'row':'column',gap:D?10:1,fontSize:12,padding:'3px 0'}}><span style={{color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(isoLocal(x.revisado_at))} {new Date(x.revisado_at).toTimeString().slice(0,5)}</span><span style={{minWidth:0}}><b style={{color:C.accent,fontWeight:600}}>{x.origen==='agente'?'Revisión automática':'Revisión manual'}</b> · {x.resultado}</span></div>)}
-        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Se revisa en días hábiles de 08:00 a 15:45 (Monitor de Salas, pjud.cl)</div>
+        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Programación de Salas 3 veces al día · Monitor de Salas el día de la vista</div>
       </div>}
     </div>}
   </div>)
@@ -33587,7 +33589,7 @@ function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClien
       {tab.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>En tabla · {tab.length}</div><div style={card}>{tab.map(fila)}</div></div>}
       {err.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px',color:C.overdueText}}>No se pudo revisar · {err.length}</div><div style={card}>{err.map(fila)}</div></div>}
       {pc.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Por confirmar · {pc.length}</div><div style={card}>{pc.map(fila)}</div></div>}
-      {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla hoy · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
+      {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
       {!lista.length&&<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{q||corte||abog?'Ninguna causa con esos filtros.':'Sin causas. Se agregan en la ficha del cliente › Ventas › la venta respectiva.'}</div>}
     </div>}
   </div>)

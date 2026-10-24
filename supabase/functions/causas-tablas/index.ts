@@ -136,9 +136,141 @@ function buscarEnSala(c: any, s: Sala) {
   return null;
 }
 
+// Configuración, causas y destinatarios de los avisos (una sola regla para el Monitor y para el computador de la oficina).
+async function contexto(filtro: string) {
+  const cfg = await rest("learnings?kind=eq.config&key=in.(causas_tablas,causas_avisar_a,causas_avisar_fallas,agente_casilla)&select=key,value");
+  const ON = String(cfg.find((c: { key: string }) => c.key === "causas_tablas")?.value || "").toLowerCase() === "on";
+  const dom = String(cfg.find((c: { key: string }) => c.key === "agente_casilla")?.value || "").split("@")[1] || "";
+  const lista = (k: string) => String(cfg.find((c: { key: string }) => c.key === k)?.value || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((e) => e && dom && e.endsWith("@" + dom));
+  const [todas, miembros, clientes] = await Promise.all([
+    rest(`causas?select=*&${filtro}&order=created_at.asc`),
+    rest("miembros?select=email,nombre,rol"),
+    rest("clients?select=id,name,abogado_responsable"),
+  ]);
+  const nomCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; name: string }) => [c.id, c.name]));
+  const duenoCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; abogado_responsable: string }) => [c.id, c.abogado_responsable || ""]));
+  // Correo del abogado por su nombre (miembros trae alias): la dirección más corta del dominio de la oficina.
+  const correoDe = (n: string) => { const k = String(n || "").trim().toLowerCase(); if (!k) return null;
+    const ms = miembros.filter((m: { email: string; nombre: string }) => String(m.nombre || "").toLowerCase().split(/\s+/)[0] === k.split(/\s+/)[0] && String(m.email || "").toLowerCase().endsWith("@" + dom));
+    return ms.map((m: { email: string }) => m.email.toLowerCase()).sort((a: string, b: string) => a.length - b.length)[0] || null; };
+  // Equipo en copia (decisión del usuario 23-10): el abogado dueño del cliente y los miembros que no son socios, más causas_avisar_a.
+  const noSocios = [...new Set(miembros.filter((m: { rol: string }) => m.rol !== "admin").map((m: { nombre: string }) => correoDe(m.nombre)).filter(Boolean))] as string[];
+  const equipo = lista("causas_avisar_a");
+  // Para: el abogado de la causa (o el dueño del cliente); copia: dueño del cliente, no socios y causas_avisar_a.
+  // deno-lint-ignore no-explicit-any
+  const destinos = (c: any) => {
+    const aAbog = correoDe(c.abogado), aDueno = correoDe(duenoCli[c.client_id]);
+    const para = (aAbog ? [aAbog] : aDueno ? [aDueno] : equipo.slice(0, 1)) as string[];
+    const cc = [...new Set([aDueno, ...noSocios, ...equipo].filter((e) => e && !para.includes(e as string)))] as string[];
+    return { para, cc, nombreA: aAbog ? String(c.abogado).trim().split(/\s+/)[0] : String(duenoCli[c.client_id] || "").split(/\s+/)[0] || "equipo" };
+  };
+  return { ON, fallasA: lista("causas_avisar_fallas"), todas, miembros, nomCli, destinos };
+}
+// Envía un aviso de una causa y lo deja en la bitácora (activity_log). Nunca dice «enviado» si no salió.
+// deno-lint-ignore no-explicit-any
+async function avisarCausa(o: { ON: boolean; dryRun: boolean; quien: string }, c: any, para: string[], cc: string[], tipo: string, asunto: string, texto: string, html: string) {
+  let enviado = false, motivo = "";
+  if (o.dryRun) motivo = "prueba (no se envía)";
+  else if (!o.ON) motivo = "aviso apagado (causas_tablas)";
+  else if (!para.length) motivo = "sin destinatarios";
+  else try { await enviar(para, cc, asunto, texto, CAJA(html)); enviado = true; } catch (e) { motivo = String((e as Error).message || e); }
+  if (!o.dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: o.quien, action: enviado ? `causas.${tipo}_avisada` : `causas.${tipo}_sin_aviso`, table_name: "causas", record_id: c.id, estudio_id: c.estudio_id, detail: { title: `${enviado ? "Aviso enviado" : "Aviso NO enviado"}: ${asunto}`, para, cc, motivo: motivo || null } }) }).catch(() => null);
+  return { enviado, para, cc, motivo: motivo || null };
+}
+
+// ─── Computador de la oficina (scripts/pjud-local) ───
+// Consulta desde un computador de la oficina, donde pjud.cl responde sin captcha, solo las causas del estudio: Programación de
+// Salas por causa (la tabla con su fecha, con anticipación) y el Estado Diario de su tribunal (resoluciones del día). Pocas
+// consultas al día; si pjud.cl le pide captcha, se detiene y lo informa (nunca lo resuelve). Se identifica con su propia clave
+// (header x-pjud-local), cuya huella SHA-256 está en learnings config causas_local_token_sha256; la clave vive solo en ese equipo.
+const sha256 = async (t: string) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+// deno-lint-ignore no-explicit-any
+async function atenderLocal(body: any, token: string) {
+  const h = await rest("learnings?kind=eq.config&key=eq.causas_local_token_sha256&select=value").catch(() => []);
+  if (!token || !h?.[0]?.value || await sha256(token) !== String(h[0].value)) return json({ error: "No autorizado" }, 403);
+  const quien = "agente-local", { fecha: hoy, hora } = ahoraCL();
+  const k = await contexto("estado=eq.activa");
+  if (body.local === "pedido")
+    return json({ ok: true, hoy, causas: k.todas.map((c: Record<string, unknown>) => ({ id: c.id, rol: c.rol, anio: c.anio, instancia: c.instancia, corte_codigo: c.corte_codigo, corte_nombre: c.corte_nombre, libro_codigo: c.libro_codigo, libro_nombre: c.libro_nombre, caratula: c.caratula })) });
+  if (body.local !== "resultado") return json({ error: "Pedido desconocido" }, 400);
+  const dryRun = !!body.dryRun;
+  // deno-lint-ignore no-explicit-any
+  const porId = new Map<string, any>(k.todas.map((c: { id: string }) => [c.id, c]));
+  const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
+  const segHoy = new Set(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&resultado=like.*Programación de Salas*&select=causa_id`).catch(() => [])) || []).map((x: { causa_id: string }) => x.causa_id));
+  const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
+  const out = { programacion: 0, en_tabla: [] as unknown[], resoluciones: [] as unknown[], avisos: [] as unknown[], errores: [] as unknown[], captcha: !!body.captcha };
+  const fuente = `consultada desde el computador de la oficina el ${dmy(hoy)} a las ${hora}`;
+  for (const r of Array.isArray(body.programacion) ? body.programacion : []) {
+    const c = porId.get(r.causa_id); if (!c) continue;
+    const base = { causa_id: c.id, estudio_id: c.estudio_id, origen: "agente", por: null };
+    if (r.error) { out.errores.push({ causa: `${c.rol}-${c.anio}`, error: r.error }); if (!segHoy.has(c.id)) await segPost({ ...base, en_tabla: false, tabla: null, aviso: null, resultado: `Programación de Salas: no se pudo consultar (${r.error})` }); continue; }
+    out.programacion++;
+    // deno-lint-ignore no-explicit-any
+    const filas = (Array.isArray(r.filas) ? r.filas : []).filter((x: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha || "")));
+    // deno-lint-ignore no-explicit-any
+    const prox = filas.filter((x: any) => x.fecha >= hoy).sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))[0] || null;
+    // Consulta correcta: la causa deja de estar «No se pudo revisar».
+    const patch: Record<string, unknown> = { programacion_at: new Date().toISOString(), ultima_error: null, ultima_error_at: null };
+    let av: unknown = null;
+    if (prox) {
+      out.en_tabla.push({ causa: `${c.rol}-${c.anio}`, ...prox });
+      // El día de la vista manda el Monitor (estado en vivo); antes, la programación.
+      if (!(c.ultima_tabla?.fuente === "monitor" && c.ultima_tabla?.fecha === hoy)) patch.ultima_tabla = { sala: prox.sala || "", numero: String(prox.numero || ""), fecha: prox.fecha, caratula: prox.caratula || "", ingreso: prox.ingreso || "", fuente: "programacion", revisado_at: new Date().toISOString() };
+      if (prox.fecha !== String(c.avisado_fecha || "").slice(0, 10)) {
+        const { para, cc, nombreA } = k.destinos(c);
+        const asunto = `Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`;
+        av = await avisarCausa({ ON: k.ON, dryRun, quien }, c, para, cc, "en_tabla", asunto,
+          `${c.caratula || k.nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero} de la tabla` : ""}, para el ${dmy(prox.fecha)}`,
+          `${P(`Hola ${esc(nombreA)},`)}${P("La siguiente causa fue puesta en tabla:")}${FILAS([["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(k.nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: Programación de Salas, pjud.cl, ${fuente}. La vista quedó en el calendario de plazos de la app; el día de la vista la app sigue la sala y avisa cuando la causa esté próxima a verse.`)}`);
+        out.avisos.push({ tipo: "en_tabla", causa: `${c.rol}-${c.anio}`, ...(av as object) });
+        if (!dryRun) await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre}${prox.sala ? ` · ${prox.sala}` : ""}${prox.numero ? ` · N° ${prox.numero}` : ""}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: prox.fecha, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
+        patch.avisado_fecha = prox.fecha;
+      }
+    }
+    if (av || !segHoy.has(c.id)) await segPost({ ...base, en_tabla: !!prox, tabla: prox, aviso: av,
+      resultado: prox ? `En tabla (Programación de Salas): ${prox.sala || "sala por informar"}${prox.numero ? `, N° ${prox.numero}` : ""}, ${dmy(prox.fecha)}${av ? ((av as { enviado: boolean }).enviado ? " · aviso enviado" : ` · aviso NO enviado: ${(av as { motivo: string }).motivo}`) : ""}` : "Sin tabla (Programación de Salas, confirmado)" });
+    if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) }).catch(() => null);
+  }
+  // Resoluciones del Estado Diario: una vez por causa y fecha (causas.estado_diario_fecha guarda la última avisada).
+  // deno-lint-ignore no-explicit-any
+  const est = (Array.isArray(body.estados) ? body.estados : []).filter((x: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha || ""))).sort((a: any, b: any) => a.fecha.localeCompare(b.fecha));
+  const ultimaFecha = new Map<string, string>();
+  for (const r of est) {
+    const c = porId.get(r.causa_id); if (!c) continue;
+    const ya = ultimaFecha.get(c.id) ?? String(c.estado_diario_fecha || "");
+    if (r.fecha <= ya) continue;
+    ultimaFecha.set(c.id, r.fecha);
+    out.resoluciones.push({ causa: `${c.rol}-${c.anio}`, fecha: r.fecha, providencias: r.providencias, reservada: !!r.reservada });
+    const { para, cc, nombreA } = k.destinos(c);
+    const n = Number(r.providencias) || 1;
+    const doc = /^https:\/\/www\.pjud\.cl\//.test(String(r.doc || "")) ? String(r.doc) : "";
+    const av = await avisarCausa({ ON: k.ON, dryRun, quien }, c, para, cc, "resolucion", `Resolución en la causa: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(r.fecha)}`,
+      `${c.caratula || k.nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${n === 1 ? "1 resolución" : `${n} resoluciones`} en el estado diario del ${dmy(r.fecha)}.${doc ? ` ${doc}` : ""}`,
+      `${P(`Hola ${esc(nombreA)},`)}${P(`La siguiente causa tiene ${n === 1 ? "una resolución" : `${n} resoluciones`} en el estado diario del <b>${dmy(r.fecha)}</b>:`)}${FILAS([["Causa", esc(c.caratula || r.partes || "")], ["Cliente", esc(k.nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Tribunal", esc(c.corte_nombre)], ["Resolución", doc ? `<a href="${esc(doc)}" style="color:#003C50">Ver resolución</a>` : r.reservada ? "Causa reservada: sin documento público" : "Sin documento en el estado diario"], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: Estado Diario, pjud.cl, ${fuente}.`)}`);
+    out.avisos.push({ tipo: "resolucion", causa: `${c.rol}-${c.anio}`, ...av });
+    await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen: "agente", por: null, en_tabla: false, tabla: null, aviso: av, resultado: `Estado diario del ${dmy(r.fecha)}: ${n === 1 ? "1 resolución" : `${n} resoluciones`}${doc ? "" : r.reservada ? " (causa reservada)" : ""}${av.enviado ? " · aviso enviado" : ` · aviso NO enviado: ${av.motivo}`}` });
+    if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ estado_diario_fecha: r.fecha }) }).catch(() => null);
+  }
+  // Captcha o error general en el computador: aviso a causas_avisar_fallas, como máximo uno al día.
+  if ((body.captcha || body.error) && !dryRun && k.ON && k.fallasA.length) {
+    const ya = await rest(`activity_log?action=eq.causas.local_falla&created_at=gte.${encodeURIComponent(desde)}&select=id&limit=1`).catch(() => []);
+    if (!ya?.length) {
+      const motivo = body.captcha ? "pjud.cl pidió una verificación anti-robots (captcha); la consulta se detuvo sin responderla" : String(body.error);
+      let ok = false; try { await enviar(k.fallasA, [], `La consulta de causas desde el computador de la oficina se detuvo - ${dmy(hoy)}`, motivo, CAJA(`${P("Hola,")}${P(`La consulta de las causas en pjud.cl desde el computador de la oficina <b style="color:#A32D2D">se detuvo</b>.`)}${PIE(`Motivo: ${esc(motivo)}. Mientras tanto, el día de la vista sigue funcionando el Monitor de Salas.`)}`)); ok = true; } catch { /* queda en la bitácora */ }
+      await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: quien, action: "causas.local_falla", table_name: "causas", record_id: null, estudio_id: "lea", detail: { title: `Consulta desde el computador de la oficina detenida: ${motivo}`, aviso_enviado: ok } }) }).catch(() => null);
+    }
+  }
+  return json({ ok: true, dryRun, aviso: k.ON, ...out });
+}
+
 Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any
   let body: any = {}; try { body = await req.json(); } catch { /* sin body */ }
+  const tokLocal = (req.headers.get("x-pjud-local") || "").trim();
+  if (tokLocal || body.local) {
+    try { return await atenderLocal(body, tokLocal); } catch (e) { return json({ error: String((e as Error).message || e) }, 500); }
+  }
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!CRON_SECRET) return json({ error: "No autorizado" }, 403);
   let quien = "agente";
@@ -150,34 +282,17 @@ Deno.serve(async (req) => {
     quien = u.email;
   }
   try {
-    const cfg = await rest("learnings?kind=eq.config&key=in.(causas_tablas,causas_avisar_a,causas_avisar_fallas,agente_casilla)&select=key,value");
-    const ON = String(cfg.find((c: { key: string }) => c.key === "causas_tablas")?.value || "").toLowerCase() === "on";
-    const dom = String(cfg.find((c: { key: string }) => c.key === "agente_casilla")?.value || "").split("@")[1] || "";
-    const lista = (k: string) => String(cfg.find((c: { key: string }) => c.key === k)?.value || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((e) => e && dom && e.endsWith("@" + dom));
-    const equipo = lista("causas_avisar_a"), fallasA = lista("causas_avisar_fallas");
     const dryRun = !!body.dryRun, seguir = !!body.seguir && quien === "agente";
     const { fecha: hoy, hora } = ahoraCL();
     let filtro = "estado=eq.activa";
     if (body.causa_id) filtro += `&id=eq.${encodeURIComponent(body.causa_id)}`;
     else if (body.client_id) filtro += `&client_id=eq.${encodeURIComponent(body.client_id)}`;
-    const [todas, miembros, clientes] = await Promise.all([
-      rest(`causas?select=*&${filtro}&order=created_at.asc`),
-      rest("miembros?select=email,nombre,rol"),
-      rest("clients?select=id,name,abogado_responsable"),
-    ]);
+    const { ON, fallasA, todas, miembros, nomCli, destinos } = await contexto(filtro);
     // Seguimiento: solo las causas que hoy están en una tabla y aún no se ven (estado «En Tabla»).
     // deno-lint-ignore no-explicit-any
     const causas = seguir ? todas.filter((c: any) => c.ultima_tabla?.fecha === hoy && c.ultima_tabla?.fuente === "monitor" && /en tabla/i.test(c.ultima_tabla?.estado_dia || "")) : todas;
     const res = { modo: seguir ? "seguir" : "detectar", revisadas: 0, en_tabla: [] as unknown[], avisos: [] as unknown[], errores: [] as unknown[], falla: null as unknown, salas: [] as unknown[] };
     if (!causas.length) return json({ ok: true, dryRun, aviso: ON, ...res });
-    const nomCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; name: string }) => [c.id, c.name]));
-    const duenoCli: Record<string, string> = Object.fromEntries(clientes.map((c: { id: string; abogado_responsable: string }) => [c.id, c.abogado_responsable || ""]));
-    // Correo del abogado por su nombre (miembros trae alias): la dirección más corta del dominio de la oficina.
-    const correoDe = (n: string) => { const k = String(n || "").trim().toLowerCase(); if (!k) return null;
-      const ms = miembros.filter((m: { email: string; nombre: string }) => String(m.nombre || "").toLowerCase().split(/\s+/)[0] === k.split(/\s+/)[0] && String(m.email || "").toLowerCase().endsWith("@" + dom));
-      return ms.map((m: { email: string }) => m.email.toLowerCase()).sort((a: string, b: string) => a.length - b.length)[0] || null; };
-    // Equipo en copia (decisión del usuario 23-10): el abogado dueño del cliente y los miembros que no son socios, más causas_avisar_a.
-    const noSocios = [...new Set(miembros.filter((m: { rol: string }) => m.rol !== "admin").map((m: { nombre: string }) => correoDe(m.nombre)).filter(Boolean))] as string[];
 
     // Salas a leer por Corte (detectar: todas; seguir: solo las de hoy). Una lectura por sala y corrida, una a la vez.
     const salasPorCorte = new Map<string, { valor: string; salas: Map<string, Sala | Error> } | Error>();
@@ -251,20 +366,12 @@ Deno.serve(async (req) => {
         res.en_tabla.push({ causa: `${c.rol}-${c.anio}`, corte: c.corte_nombre, ...prox });
         const nueva = String(c.avisado_fecha || "").slice(0, 10) !== hoy;
         const cerca = !prox.aviso_cerca && prox.viendo != null && f.orden > prox.viendo && f.orden - prox.viendo <= 2 && /en tabla/i.test(f.estado);
-        const aAbog = correoDe(c.abogado), aDueno = correoDe(duenoCli[c.client_id]);
-        const para = (aAbog ? [aAbog] : aDueno ? [aDueno] : equipo.slice(0, 1)) as string[];
-        const cc = [...new Set([aDueno, ...noSocios, ...equipo].filter((e) => e && !para.includes(e as string)))] as string[];
-        const nombreA = aAbog ? String(c.abogado).trim().split(/\s+/)[0] : String(duenoCli[c.client_id] || "").split(/\s+/)[0] || "equipo";
+        const { para, cc, nombreA } = destinos(c);
         const rolL = `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`;
         const avisar = async (tipo: string, asunto: string, texto: string, html: string) => {
-          let enviado = false, motivo = "";
-          if (dryRun) motivo = "prueba (no se envía)";
-          else if (!ON) motivo = "aviso apagado (causas_tablas)";
-          else if (!para.length) motivo = "sin destinatarios";
-          else try { await enviar(para, cc, asunto, texto, CAJA(html)); enviado = true; } catch (e) { motivo = String((e as Error).message || e); }
-          if (!dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: quien, action: enviado ? `causas.${tipo}_avisada` : `causas.${tipo}_sin_aviso`, table_name: "causas", record_id: c.id, estudio_id: c.estudio_id, detail: { title: `${enviado ? "Aviso enviado" : "Aviso NO enviado"}: ${asunto}`, para, cc, motivo: motivo || null } }) }).catch(() => null);
-          res.avisos.push({ tipo, causa: `${c.rol}-${c.anio}`, enviado, para, cc, motivo: motivo || null });
-          return { enviado, para, cc, motivo: motivo || null };
+          const a = await avisarCausa({ ON, dryRun, quien }, c, para, cc, tipo, asunto, texto, html);
+          res.avisos.push({ tipo, causa: `${c.rol}-${c.anio}`, ...a });
+          return a;
         };
         let av: unknown = null;
         if (nueva) {
