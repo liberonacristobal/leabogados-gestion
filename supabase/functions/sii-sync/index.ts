@@ -550,16 +550,30 @@ serve(async (req) => {
         return { id: b.id, folio: String(b.invoice_no).replace(/\D/g, ''), tipo: c?.tipo_dte ?? (b.billing_type === 'nota_credito' ? 61 : null), monto: Math.abs(Number(c?.monto ?? b.amount) || 0) }
       }).filter((p: Pendiente) => p.folio)
       if (!pendientes.length) return json({ ok: true, pendientes: 0 })
-      const { captcha, resultados } = await bajarXmlEmitidos(getEmisor().rut.replace(/\./g, ''), pendientes)
+      // Tope de intentos: una factura que falló XML_MAX_INTENTOS días no se vuelve a buscar (no insistir al SII); queda «a mano».
+      const XML_MAX_INTENTOS = 3
+      const { data: ints } = await sb.from('learnings').select('key, hits').eq('kind', 'xml_emitido_intentos').in('key', pendientes.map((p) => p.id))
+      const intentos = new Map((ints || []).map((l: { key: string; hits: number }) => [l.key, Number(l.hits) || 0]))
+      const aMano = pendientes.filter((p) => (intentos.get(p.id) || 0) >= XML_MAX_INTENTOS).map((p) => p.folio)
+      const aBuscar = pendientes.filter((p) => (intentos.get(p.id) || 0) < XML_MAX_INTENTOS)
+      if (!aBuscar.length) return json({ ok: true, pendientes: 0, a_mano: aMano })
+      const { captcha, resultados } = await bajarXmlEmitidos(getEmisor().rut.replace(/\./g, ''), aBuscar)
       let cargados = 0
       if (!body.dryRun) for (const r of resultados.filter((x) => x.estado === 'cargado')) {
         const { error } = await sb.from('billing').update({ dte_xml: r.xml }).eq('id', r.id).is('dte_xml', null)
         if (error) { r.estado = 'error'; r.detalle = error.message } else cargados++
       }
+      if (!body.dryRun) for (const r of resultados.filter((x) => x.estado !== 'cargado')) {
+        const n = (intentos.get(r.id) || 0) + 1
+        const fila = { kind: 'xml_emitido_intentos', key: r.id, value: r.folio, hits: n, meta: { ultimo: r.detalle || r.estado }, estudio_id: 'lea' }
+        if (intentos.has(r.id)) await sb.from('learnings').update(fila).eq('kind', fila.kind).eq('key', r.id)
+        else await sb.from('learnings').insert(fila)
+        if (n >= XML_MAX_INTENTOS) aMano.push(r.folio)
+      }
       const resumen = resultados.map(({ xml, ...r }) => ({ ...r, bytes: xml?.length }))
       console.log(`[sii-sync] xml-emitidos: ${cargados} cargados de ${pendientes.length}${captcha ? ' · CAPTCHA ACTIVO, detenido' : ''}`)
       if (captcha) return json({ error: 'El SII activó el captcha de la descarga de XML: el proceso se detuvo sin saltarlo. Los XML pendientes se bajan a mano.', cargados, resultados: resumen }, 409)
-      return json({ ok: true, pendientes: pendientes.length, cargados, dryRun: !!body.dryRun, resultados: resumen })
+      return json({ ok: true, pendientes: aBuscar.length, cargados, a_mano: aMano, dryRun: !!body.dryRun, resultados: resumen })
     }
 
     const periodo = String(body.periodo || '')
