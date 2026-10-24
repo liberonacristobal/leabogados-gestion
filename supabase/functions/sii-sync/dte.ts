@@ -127,11 +127,12 @@ export function armarDocumento(f: FacturaInput, caf: CafParsed, nowIso: string):
   const detalle = f.items.map((i, idx) =>
     `<Detalle>` +
     `<NroLinDet>${idx + 1}</NroLinDet>` +
+    // Orden del esquema SII (DTE_v10.xsd, versión 2.5 de 06-02-2026): IndExe va ANTES de NmbItem; después de PrcItem se rechaza.
+    (exenta ? `<IndExe>1</IndExe>` : '') +
     `<NmbItem>${t(i.nombre).slice(0, 80)}</NmbItem>` +
     (i.desc ? `<DscItem>${t(i.desc).slice(0, 1000)}</DscItem>` : '') +
     (i.qty != null ? `<QtyItem>${n(i.qty)}</QtyItem>` : '') +
     (i.precio != null ? `<PrcItem>${n(i.precio)}</PrcItem>` : '') +
-    (exenta ? `<IndExe>1</IndExe>` : '') +
     `<MontoItem>${n(i.monto)}</MontoItem>` +
     `</Detalle>`
   ).join('')
