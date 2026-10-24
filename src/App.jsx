@@ -9936,7 +9936,7 @@ const TEMAS_PROCESOS = [
   ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo)/],
   ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
-  ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal)/],
+  ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal|lector-documentos)/],
   ['ofi','Oficina y costos',/^(oficina-|valores-contadora)/],
   ['equipo','Resúmenes al equipo',/^(tu-semana|resumen-lunes|gastos-limitado|horas-)/],
   ['control','Control de la app',/./],
@@ -9971,22 +9971,27 @@ function resumenCorrida(p){
     if(/^notaria-documentos/.test(j)&&r.leidos!=null) return nn(r.leidos,'documento leído','documentos leídos')
     if(j==='sii-radar'&&r.inserted!=null) return nn(r.inserted,'norma nueva','normas nuevas')
     if(j==='tgr-remates'&&r.remates!=null) return `${r.remates} remates · ${r.de_clientes??0} de clientes`
+    if(j==='lector-documentos'&&r.leidos!=null) return `${nn(r.leidos,'documento leído','documentos leídos')} · ${r.con_plazos??0} con plazos · ${r.por_leer??0} por leer`
   }
   return p.ultima?`última ${fechaHoraCL(p.ultima)}`:`primera: ${horarioProceso(p.schedule)}`
 }
 async function cargarProcesos(){ if(DEMO) return _DEMO_PROCESOS; const {data,error}=await supabase.rpc('procesos_estado'); if(error) throw error; return data||[] }
 
-function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision, onOpenCartera, onOpenTareas}){
+function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision, onOpenCartera, onOpenTareas, onOpenClientFicha}){
   // Por aprobar: lo que los agentes dejan para una persona, hoy repartido en 4 lugares (Bandeja, Revisión de datos, pasos de
   // proyectos y evidencias de tareas). Cada fila lleva a su lugar; aquí no se aprueba nada.
   const [pa,setPa]=useState(null), [paAb,setPaAb]=useState(!!isDesktop), [temasAb,setTemasAb]=useState(()=>new Set())
   useEffect(()=>{ let on=true
-    if(DEMO){ setPa({bandeja:_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso'),hallazgos:[],pmo:0,evid:0}); return ()=>{ on=false } }
+    if(DEMO){ setPa({bandeja:_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso'),hallazgos:[],pmo:0,evid:0,docPlazos:[]}); return ()=>{ on=false } }
     Promise.all([supabase.from('agente_bandeja').select('tipo,estado,asunto,propuesta').in('estado',['pendiente','sospechoso']),
       supabase.from('auditoria_hallazgos').select('detector,titulo').is('resuelto_at',null),
       supabase.from('pmo_sugerencias').select('id',{count:'exact',head:true}).eq('estado','pendiente'),
-      supabase.from('tasks').select('id',{count:'exact',head:true}).not('evidencia','is',null).neq('status','Terminado')])
-      .then(([b,h,pm,ev])=>{ if(on) setPa({bandeja:b.data||[],hallazgos:h.data||[],pmo:pm.count||0,evid:ev.count||0}) },()=>{ if(on) setPa({bandeja:[],hallazgos:[],pmo:0,evid:0}) })
+      supabase.from('tasks').select('id',{count:'exact',head:true}).not('evidencia','is',null).neq('status','Terminado'),
+      supabase.from('documentos_lectura').select('client_id,plazos').not('plazos','is',null)])
+      .then(([b,h,pm,ev,dl])=>{ if(!on) return
+        // Plazos con fecha que el Lector de documentos dejó por confirmar (se confirman en el calendario de cada cliente).
+        const docPlazos=[]; (dl.data||[]).forEach(l=>(Array.isArray(l.plazos)?l.plazos:[]).forEach(p=>{ if(p.estado==='propuesto'&&p.fecha) docPlazos.push(l.client_id) }))
+        setPa({bandeja:b.data||[],hallazgos:h.data||[],pmo:pm.count||0,evid:ev.count||0,docPlazos}) },()=>{ if(on) setPa({bandeja:[],hallazgos:[],pmo:0,evid:0,docPlazos:[]}) })
     return ()=>{ on=false } },[])
   const [procs,setProcs]=useState(null), [err,setErr]=useState(null), [aviso,setAviso]=useState(null), [sel,setSel]=useState(null), [corr,setCorr]=useState(null)
   useEffect(()=>{ let on=true; cargarProcesos().then(d=>on&&setProcs(d),e=>on&&setErr(e.message||String(e)))
@@ -10048,6 +10053,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
     Object.entries(gh).forEach(([k,hs])=>out.push({k:'h'+k,t:HALLAZGO_TIPO[k]||String(hs[0].titulo||'Hallazgo').split(' · ')[0],s:'Revisión de datos',n:hs.length,on:onOpenRevision}))
     if(pa.pmo) out.push({k:'pmo',t:'Pasos sugeridos de proyectos',s:'Mis proyectos',n:pa.pmo,on:onOpenCartera})
     if(pa.evid) out.push({k:'ev',t:'Tareas cumplidas según los registros',s:'Tareas · por confirmar',n:pa.evid,on:onOpenTareas})
+    if(pa.docPlazos?.length){ const cs=[...new Set(pa.docPlazos)]; out.push({k:'dp',t:'Plazos encontrados en documentos',s:`${cs.length} cliente${cs.length===1?'':'s'} · se confirman en el calendario de su ficha`,n:pa.docPlazos.length,on:onOpenClientFicha?()=>onOpenClientFicha(cs[0]):null}) }
     return out })()
   const paTot=paFilas.reduce((a,x)=>a+x.n,0)
   return wrap(<>
@@ -16296,7 +16302,7 @@ function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[]
 const CAL_CLI_DIAS = 60
 const CONTRIB_CUOTAS = [['04','1ª'],['06','2ª'],['09','3ª'],['11','4ª']]
 const OBL_CLIENTE = [['F29',null,'F29 mensual'],['F22',null,'F22 anual'],['DJ','1879','DJ 1879 · retenciones de honorarios'],['DJ','1887','DJ 1887 · sueldos'],['DJ','1948','DJ 1948 · retiros de socios'],['PATENTE',null,'Patente municipal']]
-function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[], dj=[]}={}){
+function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[], dj=[], lect=[]}={}){
   hoy = hoy || isoLocal(Date.now())
   const hasta=isoLocal(new Date(new Date(hoy+'T12:00').getTime()+CAL_CLI_DIAS*864e5)), Y=+hoy.slice(0,4), items=[]
   const dentro=f=>f&&f<=hasta, push=x=>{ if(dentro(x.fecha)) items.push({...x, vencido:x.fecha<hoy}) }
@@ -16307,6 +16313,9 @@ function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[]
   const activas=(causas||[]).filter(c=>c.estado==='activa'), enTabla=activas.filter(c=>c.ultima_tabla?.fecha&&c.ultima_tabla.fecha>=hoy)
   enTabla.forEach(c=>push({fecha:c.ultima_tabla.fecha, t:`Vista en tabla · Rol ${c.rol}-${c.anio}`, s:[String(c.corte_nombre||'').replace(/^Corte de Apelaciones de /,'C.A. de '),c.ultima_tabla.sala,c.ultima_tabla.numero?`N° ${c.ultima_tabla.numero}`:''].filter(Boolean).join(' · '), go:'financiero'}))
   ;(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.tipo!=='tabla'&&p.fecha).forEach(p=>push({fecha:String(p.fecha).slice(0,10), t:p.titulo||'Plazo', s:p.descripcion||'Plazo del contrato', go:'plazos'}))
+  // Plazos que el Lector de documentos encontró en la carpeta del cliente: quedan «por confirmar» hasta que una persona los
+  // confirme (pasan a la tabla plazos y salen de aquí) o los descarte. Los sin fecha exacta no van al calendario.
+  ;(lect||[]).forEach(l=>(Array.isArray(l.plazos)?l.plazos:[]).forEach((p,i)=>{ if(p.estado==='propuesto'&&p.fecha) push({fecha:p.fecha, t:p.titulo, s:`En documento · ${l.nombre||'Drive'}`, porConfirmar:{lect:l, idx:i}}) }))
   const elegidas=(obl||[]).filter(o=>o.activo!==false)
   elegidas.forEach(o=>{ if(o.tipo==='F29'){ const ym=hoy.slice(0,7); let per=_ymMas(ym,-1); if(venceCalTrib('F29',per)<hoy) per=ym; push({fecha:venceCalTrib('F29',per), t:`F29 de ${_mesNom(per).split(' ')[0]}`, s:'Obligación tributaria'}) }
     else if(o.tipo==='F22'){ let f=_habilDesde(`${Y}-04-30`); if(f<hoy) f=_habilDesde(`${Y+1}-04-30`); push({fecha:f, t:`F22 · Renta AT ${f.slice(0,4)}`, s:'Obligación tributaria'}) }
@@ -16319,10 +16328,12 @@ function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[]
 function useCalCliente(clientId){
   const [f,setF]=useState(null), [dj,setDj]=useState([])
   useEffect(()=>{ let v=true; cargarCalTrib().then(x=>{ if(v) setDj(x.dj||[]) })
-    if(DEMO){ setF({docs:[], plazos:[], obl:[]}); return ()=>{ v=false } }
+    if(DEMO){ const f40=isoLocal(Date.now()+40*864e5)   // ejemplo inventado: un plazo que el lector encontró en un contrato
+      setF({docs:[], plazos:[], obl:[], lect:[{id:'dl1',drive_file_id:'demo-arriendo',nombre:'Contrato de arriendo bodega.pdf',plazos:[{titulo:'Término del arriendo',fecha:f40,cita:'El presente contrato tendrá una duración de un año a contar de su firma.',estado:'propuesto'}]}]}); return ()=>{ v=false } }
     Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
-      supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId)])
-      .then(([d,p,o])=>{ if(v) setF({docs:d.data||[], plazos:p.data||[], obl:o.data||[]}) },()=>{ if(v) setF({docs:[], plazos:[], obl:[]}) })
+      supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId),
+      supabase.from('documentos_lectura').select('id,drive_file_id,nombre,plazos').eq('client_id',clientId).not('plazos','is',null)])
+      .then(([d,p,o,l])=>{ if(v) setF({docs:d.data||[], plazos:p.data||[], obl:o.data||[], lect:l.data||[]}) },()=>{ if(v) setF({docs:[], plazos:[], obl:[], lect:[]}) })
     return ()=>{ v=false } },[clientId])
   // Elegir/quitar una obligación tributaria del cliente (queda guardada: no se vuelve a preguntar).
   const alternar=useCallback(async(tipo,formulario,detalle)=>{ const ex=(f?.obl||[]).find(o=>o.tipo===tipo&&String(o.formulario||'')===String(formulario||''))
@@ -16333,7 +16344,17 @@ function useCalCliente(clientId){
     if(error){ setF(x=>({...x, obl:ex?x.obl.map(o=>o===nuevo?ex:o):x.obl.filter(o=>o!==nuevo)})); appAlert('No se pudo guardar: '+error.message); return }
     setF(x=>({...x, obl:x.obl.map(o=>o===nuevo?data:o)}))
     logActividad(nuevo.activo?'calendario.obligacion_cliente':'calendario.obligacion_cliente_quitada',{tabla:'clients',id:clientId,detalle:{title:`${detalle||tipo} ${nuevo.activo?'elegida':'quitada'} para el cliente`}}) },[clientId,f])
-  return {f, dj, alternar} }
+  // Plazo encontrado en un documento: confirmar = pasa a la tabla plazos (con la cita como descripción); descartar = no vuelve a salir.
+  const resolverPlazoDoc=useCallback(async({lect,idx},confirmar)=>{ const p=(lect.plazos||[])[idx]; if(!p) return
+    let plazoId=null
+    if(confirmar&&!DEMO){ const {data,error}=await supabase.from('plazos').insert({client_id:clientId,titulo:p.titulo,descripcion:p.cita||p.descripcion||null,tipo:'plazo',fecha:p.fecha,estado:'pendiente',fuente:'documento',file_id:lect.drive_file_id}).select('*').single()
+      if(error){ appAlert('No se pudo confirmar el plazo: '+error.message); return } plazoId=data.id; setF(x=>({...x, plazos:[...(x.plazos||[]),data]})) }
+    if(confirmar&&DEMO) setF(x=>({...x, plazos:[...(x.plazos||[]),{id:'demo-'+Date.now(),client_id:clientId,titulo:p.titulo,descripcion:p.cita,tipo:'plazo',fecha:p.fecha,estado:'pendiente',fuente:'documento'}]}))
+    const nuevos=(lect.plazos||[]).map((q,j)=>j===idx?{...q,estado:confirmar?'confirmado':'descartado',...(plazoId?{plazo_id:plazoId}:{})}:q)
+    if(!DEMO){ const {error}=await supabase.from('documentos_lectura').update({plazos:nuevos}).eq('id',lect.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
+    setF(x=>({...x, lect:(x.lect||[]).map(l=>l.id===lect.id?{...l,plazos:nuevos}:l)}))
+    logActividad(confirmar?'documentos.plazo_confirmado':'documentos.plazo_descartado',{tabla:'clients',id:clientId,detalle:{title:`Plazo ${confirmar?'confirmado':'descartado'} del documento «${lect.nombre||''}»: ${p.titulo}${p.fecha?` · ${fmtFechaDMY(p.fecha)}`:''}`}}) },[clientId])
+  return {f, dj, alternar, resolverPlazoDoc} }
 // Fuentes del calendario (se leen una vez por sesión; `recargarCalTrib` al marcar una presentada).
 let _calTribP=null
 const _DEMO_CALTRIB = (()=>{ const ym=isoLocal(Date.now()).slice(0,7), y=+ym.slice(0,4), valores={}, pagos=[]
@@ -28346,7 +28367,13 @@ function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[], setFt
             const goCal=g=>g==='financiero'?()=>setFtab('financiero'):undefined
             const chipD=f=>{ const d=_diasA(cal.hoy,f), pr=d<=31; return <span style={{fontSize:10.5,fontWeight:700,borderRadius:10,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,background:d<0?C.overdueBg:pr?C.soonBg:C.track,color:d<0?C.overdueText:pr?C.soonText:C.muted}}>{d<0?'Vencido':d===0?'Hoy':`En ${d} día${d===1?'':'s'}`}</span> }
             const sCal=sec('cal','cal',C.azulBg,C.accent,'Calendario',cal.items.length?`en ${CAL_CLI_DIAS} días · próximo ${fmtFechaDMY(cal.items[0].fecha)}`:`en ${CAL_CLI_DIAS} días`,String(cal.items.length),C.accent,<>
-              {cal.items.length?cal.items.map((x,i)=>fila(i,goCal(x.go),diaGrande(x.fecha,x.vencido?C.overdueText:undefined),tt(x.t,x.s),chipD(x.fecha)))
+              {cal.items.length?cal.items.map((x,i)=>x.porConfirmar
+                ? <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}>{diaGrande(x.fecha,x.vencido?C.overdueText:undefined)}
+                    <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,color:C.text}}>{x.t}</div><div style={{fontSize:10,color:C.muted,overflowWrap:'anywhere'}}>{x.s}</div>
+                      <div style={{display:'flex',gap:6,marginTop:6,alignItems:'center'}}><span style={{fontSize:10.5,fontWeight:700,borderRadius:10,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>Por confirmar</span><span style={{flex:1}}/>
+                        <button onClick={()=>calCli.resolverPlazoDoc(x.porConfirmar,true)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'4px 10px',background:C.accent,color:'#fff',cursor:'pointer',fontFamily:'inherit'}}>Confirmar</button>
+                        <button onClick={()=>calCli.resolverPlazoDoc(x.porConfirmar,false)} style={{fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px',background:C.surface,color:C.muted,cursor:'pointer',fontFamily:'inherit'}}>Descartar</button></div></div></div>
+                : fila(i,goCal(x.go),diaGrande(x.fecha,x.vencido?C.overdueText:undefined),tt(x.t,x.s),chipD(x.fecha)))
                 :<div style={{padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.greenText}}>Sin vencimientos en {CAL_CLI_DIAS} días</div>}
               {cal.noRev>0&&fila('nor',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>,<span style={{color:C.overdueText,fontSize:11.5,fontWeight:600}}>{cal.noRev} causa{cal.noRev!==1?'s':''} sin revisar · falló la última revisión</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
               {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:11.5}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
@@ -45077,7 +45104,7 @@ export default function App() {
               <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenBandeja={()=>navTo({tab:'bandeja'})}/>
             </div>}
             {tab==='calendarioTrib'&&userRole==='admin'&&<CalendarioTributarioView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} expenses={expenses} user={user}/>}
-            {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})}/>}
+            {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
