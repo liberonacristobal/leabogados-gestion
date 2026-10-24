@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
       const nombres = pila.length > 1 ? `${pila.slice(0, -1).join(", ")} y ${pila[pila.length - 1]}` : (pila[0] || "");
       const html = shell(`<p>Hola${nombres ? " " + esc(nombres) : ""}:</p><p>Se recibió la liquidación de la notaría${av.de ? ` (${esc(av.de)}${av.nombre ? `, «${esc(av.nombre)}»` : ""})` : ""}${ped ? `, en respuesta al pedido del ${dmy(String(ped.created_at))}` : ""}. Está precargada en la app para que la revisen en <b>Gastos › Notaría › Pedidos › «Revisar liquidación»</b>.</p><p style="margin:18px 0"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 20px;border-radius:18px;font-size:13px;font-weight:bold">Revisar en la app</a></p><p style="margin:0;font-size:12px;color:#888">${esc(nombreEstudio)} · aviso automático</p>`);
       if (dry && !testTo) return json({ ok: true, modo: "simulacion", para, html });
-      try { await enviar({ to: para, cc: [], subject: "Liquidación de notaría recibida - por revisar en la app" + (testTo ? " (prueba)" : ""), html }); }
+      try { await enviar({ to: para, cc: [], subject: "Liquidación de notaría recibida, por revisar" + (testTo ? " (prueba)" : ""), html }); }
       catch (e) { if (!testTo) await log("notaria.aviso_liquidacion_fallido", { slot: av.slot, gmail_id: av.gmail_id, title: "El aviso de la liquidación NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
       if (testTo) return json({ ok: true, enviado: true, para });
       const quienRev = String(cfg.seguimiento_a || "Martina");

@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
   const cfg = await sbAll("learnings?select=value&kind=eq.config&key=eq.aviso_cuotas");
   const ON = String((cfg[0] && cfg[0].value) || "off").trim().toLowerCase() === "on";
 
-  const asunto = olv.length === 1 ? "1 cuota quedo sin facturar" : `${olv.length} cuotas quedaron sin facturar`;
+  const asunto = olv.length === 1 ? "Cuotas sin facturar: 1" : `Cuotas sin facturar: ${olv.length}`;
 
   // ── Shell estándar de la app (cartera-semanal) · formato B: tabla compacta con RS+RUT + deep-link por cliente ──
   const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", MUT = "#66787F", FAINT = "#9DAEB4", RED = "#C0403E", AMB = "#9A6410", REDBG = "#FBECEB", AMBBG = "#FAF0DA";
