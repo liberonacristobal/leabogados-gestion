@@ -1,12 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { trabajosSinFacturar } from "../_shared/ventasReglas.js";
 
 // Correo semanal "Pendientes de tus clientes" por abogado responsable.
 // ALCANCE (definido con el usuario): SOLO lo pendiente del cliente del abogado —
 //   (1) Cobros ya recibidos, sin registrar: depósitos en la cuenta de la oficina, con cliente asignado, sin conciliar a su factura.
 //   (2) Documentos duplicados por limpiar: folios repetidos + anticipos a mano que calzan con el banco (subconjunto SEGURO; el módulo Duplicados es la fuente completa).
 //   (3) Gastos sin proyecto (desde el 01-06-2026): para rendir cuentas cada gasto del cliente va a su proyecto; se asigna en la ficha › Fondos y gastos.
+//   (4) Trabajos sin facturar: regla única trabajosSinFacturar (_shared/ventasReglas.js), la misma de Facturación › Por revisar.
 // Nada de compras del SII, costos de oficina ni otras métricas.
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
@@ -69,7 +71,7 @@ serve(async (req) => {
     // Bloques que se envían (config 'pendientes_semanal_bloques' o body.bloques): cobros,duplicados,proyecto,sinresp. Sin config = todos.
     let bloquesTxt = body.bloques ? String(body.bloques) : "";
     if (!bloquesTxt) { const { data: bq } = await sb.from("learnings").select("value").eq("kind","config").eq("key","pendientes_semanal_bloques").order("updated_at",{ascending:false}).limit(1); bloquesTxt = (bq?.[0]?.value || "").trim(); }
-    const BLOQ = new Set((bloquesTxt || "cobros,duplicados,proyecto,sinresp").split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean));
+    const BLOQ = new Set((bloquesTxt || "cobros,duplicados,proyecto,sinresp,sinfacturar").split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean));
 
     // ── Datos (con reintento para no mandar cifras vacías si una consulta arranca en frío) ──
     const fetchAll = async () => {
@@ -101,6 +103,26 @@ serve(async (req) => {
     const t0 = Date.parse(hoyCL);
     const diasVenc = (iso:string)=> iso ? Math.round((t0 - Date.parse(String(iso).slice(0,10))) / 86400000) : null; // + = vencida
     const fDia = (iso:string)=>{ const m = String(iso || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso || ""); };   // dd-mm-aaaa (fmtFechaDMY)
+    // (4) Trabajos sin facturar, por abogado responsable (venta.responsible → cliente.abogado_responsable → los admins).
+    const sinFactDe: Record<string, any[]> = {};
+    if (BLOQ.has("sinfacturar")) {
+      const [vs, bs, ufs, ne, dec] = await Promise.all([
+        pageAll(()=>sb.from("sales").select("id,client_id,title,status,deleted_at,moneda,amount_uf,amount_clp,cobro_type,cobro_config,area,responsible").order("id")),
+        pageAll(()=>sb.from("billing").select("id,sale_id,client_id,invoice_no,status,amount,due,issued_at,created_at,deleted_at,billing_type,concept").not("sale_id","is",null).order("id")),
+        pageAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo","uf").order("fecha")),
+        sb.from("learnings").select("key").eq("kind","cuota_no_emitir"),
+        sb.from("learnings").select("key").eq("kind","trabajo_sin_facturar")]);
+      if (vs.error || bs.error || ufs.error) throw new Error("No se pudieron cargar las ventas para «Trabajos sin facturar»");
+      // El monto de una factura emitida es el del DTE (montoFactura lee MntTotal): se trae el XML solo de las emitidas.
+      const conXml = await pageAll(()=>sb.from("billing").select("id,dte_xml").not("sale_id","is",null).not("invoice_no","is",null).not("dte_xml","is",null).order("id"));
+      const mnt: Record<string,string> = {}; (conXml.data||[]).forEach((r:any)=>{ const m=String(r.dte_xml||"").match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); if (m) mnt[String(r.id)]=`<MntTotal>${m[1]}</MntTotal>`; });
+      const billingV = (bs.data||[]).map((b:any)=> mnt[String(b.id)] ? { ...b, dte_xml: mnt[String(b.id)] } : b);
+      const uf: Record<string,number> = {}; (ufs.data||[]).forEach((r:any)=>{ uf[String(r.fecha).slice(0,10)] = Number(r.valor)||0; });
+      const ufK = Object.keys(uf).filter(k=>k<=hoyCL).sort(); const ufHoy = ufK.length ? uf[ufK[ufK.length-1]] : 0;
+      const lista = trabajosSinFacturar({ sales: vs.data||[], billing: billingV, uf, ufHoy, hoy: hoyCL, noEmitir: new Set((ne.data||[]).map((r:any)=>String(r.key))), decididos: new Set((dec.data||[]).map((r:any)=>String(r.key))) });
+      lista.forEach((x:any)=>{ const r = x.s.responsible || respDeCliente(x.s.client_id); (r && EMAIL[r] ? [r] : ADMINS).forEach((n:string)=> (sinFactDe[n]=sinFactDe[n]||[]).push(x)); });
+    }
+
 
     // Rango de la semana en curso (lunes a domingo) para el saludo.
     const _hoy = new Date(hoyCL+"T00:00:00Z");
@@ -110,7 +132,7 @@ serve(async (req) => {
     const _mLun = _lun.toLocaleDateString("es-CL",{ month:"long", timeZone:"UTC" });
     const _mDom = _dom.toLocaleDateString("es-CL",{ month:"long", timeZone:"UTC" });
     const rango = mensual
-      ? `${_hoy.toLocaleDateString("es-CL",{ month:"long", year:"numeric", timeZone:"UTC" }).replace(/^./,(c:string)=>c.toUpperCase())}`
+      ? `${_hoy.toLocaleDateString("es-CL",{ month:"long", year:"numeric", timeZone:"UTC" }).replace(" de "," ").replace(/^./,(c:string)=>c.toUpperCase())}`
       : _mLun===_mDom
       ? `Semana del ${_lun.getUTCDate()} al ${_dom.getUTCDate()} de ${_mDom}`
       : `Semana del ${_lun.getUTCDate()} de ${_mLun} al ${_dom.getUTCDate()} de ${_mDom}`;
@@ -230,7 +252,6 @@ serve(async (req) => {
       const mas = rest.length ? `<div style="font-size:11.5px;color:${FAINT};margin-top:9px;">y ${rest.length} cliente${rest.length!==1?"s":""} más · ${rest.reduce((s:number,x:any)=>s+x.n,0)} gastos · ${fmt(rest.reduce((s:number,x:any)=>s+x.monto,0))}</div>` : "";
       const nTot = arr.reduce((s:number,x:any)=>s+x.n,0), mTot = arr.reduce((s:number,x:any)=>s+x.monto,0);
       return `<div style="padding:24px 26px 4px;">${sec("","Gastos sin proyecto",NV)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos sin proyecto asignado.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+ mas +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${nTot} gasto${nTot!==1?"s":""} en ${arr.length} cliente${arr.length!==1?"s":""}</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Sin proyecto</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(mTot)}</span></td></tr></table>`+
         cta("Asignar en la app",NV)+`</div>`;
@@ -238,6 +259,21 @@ serve(async (req) => {
 
     // Sección 3 (solo admins): depósitos y duplicados sin cliente/abogado, para que Cristóbal y Erasmo los tomen entre los dos.
     const AZBG = "#E6F1FB";   // C.azulBg
+    const sinFactHtml = (arr:any[]) => {
+      if (!arr.length) return "";
+      const rows = arr.map((x:any,i:number)=>{ const v0=x.viejas[0];
+        const det = x.viejas.length ? `${x.viejas.length===1?"Cuota programada":`${x.viejas.length} cuotas programadas`} al ${fDia(v0.due)}, sin emitir` : `Saldo ${x.enUF?`${x.sinCuota.toFixed(2).replace(".",",")} UF`:fmt(x.sinCuota)} sin cuota`;
+        return `<tr><td style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}"><div style="font-size:14px;font-weight:700;color:${INK};">${esc(cname(x.s.client_id))}</div><div style="font-size:11px;color:${MUT};margin-top:3px;line-height:1.4;">${esc(x.s.title||"Trabajo")} &middot; última factura ${esc(fDia(x.ult))} (${x.dias} días)<br>${det}</div></td>`+
+          `<td align="right" valign="top" style="padding:11px 0;${i===0?"":`border-top:1px solid ${HAIR};`}white-space:nowrap;"><span style="font-size:15px;font-weight:800;color:${NV};">${fmt(x.monto)}</span></td></tr>`; }).join("");
+      const tot = arr.reduce((s:number,x:any)=>s+x.monto,0), nCli = new Set(arr.map((x:any)=>String(x.s.client_id))).size;
+      const conUF = arr.some((x:any)=>x.sinCuota>0&&x.enUF);
+      return `<div style="padding:24px 26px 4px;">${sec("","Trabajos sin facturar",NV)}`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Trabajos que ya facturan y llevan más de 60 días sin factura nueva.</div>`+
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${AZBG};border-radius:12px;margin-top:13px;"><tr><td style="padding:13px 16px;font-size:12.5px;color:${NV};font-weight:600;">${arr.length} trabajo${arr.length!==1?"s":""} de ${nCli} cliente${nCli!==1?"s":""}</td><td align="right" style="padding:13px 16px;white-space:nowrap;"><span style="font-size:10.5px;color:${MUT};text-transform:uppercase;letter-spacing:.6px;">Por facturar</span> <span style="font-size:16px;font-weight:800;color:${NV};margin-left:6px;">${fmt(tot)}</span></td></tr></table>`+
+        (conUF ? `<div style="font-size:11px;color:${FAINT};margin-top:6px;">Saldos en UF a la UF del ${esc(fDia(hoyCL))}.</div>` : "")+
+        cta("Ver los trabajos",NV,"https://gestion.leabogados.cl/?ir=sinfacturar")+`</div>`;
+    };
     const sinRespHtml = (cobros:any[], dups:any[]) => {
       const totCob = cobros.reduce((s:number,x:any)=> s+x.saldo, 0);
       const nItems = cobros.length + dups.reduce((s:number,x:any)=> s+(x.n||1), 0);
@@ -254,7 +290,7 @@ serve(async (req) => {
         cta("Identificar y asignar",NV,"https://gestion.leabogados.cl/?ir=sinasignar")+`</div>`;
     };
 
-    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[], sinProy:any[]=[]) => {
+    const armar = (nombre:string, cobros:any[], folios:any[], ants:any[], srCobros:any[]=[], srDup:any[]=[], sinProy:any[]=[], sinFact:any[]=[]) => {
       secN = 0;
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
       const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
@@ -263,10 +299,11 @@ serve(async (req) => {
         nCob ? `<b style="color:${GRN};font-weight:700;">${nCob} cobro${nCob!==1?"s":""} por registrar</b>` : "",
         nDup ? `<b style="color:${AMB};font-weight:700;">${nDup} duplicado${nDup!==1?"s":""} por limpiar</b>` : "",
         nSP ? `<b style="color:${NV};font-weight:700;">${nSP} gasto${nSP!==1?"s":""} sin proyecto</b>` : "",
+        sinFact.length ? `<b style="color:${NV};font-weight:700;">${sinFact.length} trabajo${sinFact.length!==1?"s":""} sin facturar</b>` : "",
         nSr ? `<b style="color:${NV};font-weight:700;">${srCobros.length} depósito${srCobros.length!==1?"s":""} sin identificar</b>` : "",
       ].filter(Boolean);
       const resumen = partes.length ? `${partes.join(" · ")}.` : `Nada pendiente de tus clientes ${mensual?"este mes":"esta semana"}.`;
-      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), pH = sinProyHtml(sinProy), sH = sinRespHtml(srCobros, srDup);
+      const cH = cobrosHtml(cobros), dH = dupHtml(folios, ants), pH = sinProyHtml(sinProy), fH = sinFactHtml(sinFact), sH = sinRespHtml(srCobros, srDup);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
@@ -278,8 +315,9 @@ serve(async (req) => {
   ${cH}
   ${dH}
   ${pH}
+  ${fH}
   ${sH}
-  ${(!cH&&!dH&&!pH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes de tus clientes.</div>`:`<div style="height:8px;"></div>`}
+  ${(!cH&&!dH&&!pH&&!fH&&!sH)?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes de tus clientes.</div>`:`<div style="height:8px;"></div>`}
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };
@@ -299,7 +337,7 @@ serve(async (req) => {
     const haySinResp = sinRespCobros.length + sinRespDup.length > 0;
     // Destinatarios: quien tenga algo pendiente propio; y los admins también si hay algo sin responsable.
     let nombres = testTo ? [ NAME_OF_EMAIL[testTo] || "Cristóbal" ]
-                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length || (sinProyDe[n]||[]).length || (haySinResp && ADMINS.includes(n)));
+                         : Object.keys(EMAIL).filter(n=> (cobrosDe[n]||[]).length || (dupFolioDe[n]||[]).length || (dupAntDe[n]||[]).length || (sinProyDe[n]||[]).length || (sinFactDe[n]||[]).length || (haySinResp && ADMINS.includes(n)));
     if (soloNombres) nombres = nombres.filter(n=> soloNombres.includes(n));
 
     for (const nombre of nombres) {
@@ -312,12 +350,12 @@ serve(async (req) => {
       const nCob = cobros.length, nDup = folios.reduce((s:number,x:any)=>s+x.n,0)+ants.length;
       const nSr = srCob.length + srDup.reduce((s:number,x:any)=>s+(x.n||1),0);
       const sinProy = BLOQ.has("proyecto") ? (sinProyDe[nombre]||[]) : []; const nSP = sinProy.reduce((s:number,x:any)=>s+x.n,0);
-      if (!testTo && !nCob && !nDup && !nSr && !nSP) continue;   // en cron real no mandar correos vacíos
-      const html = armar(nombre, cobros, folios, ants, srCob, srDup, sinProy);
-      // Asunto que invita a mirar, no castigador (sin recuento de pendientes).
-      const subject = (nSP && !nCob && !nDup && !nSr) ? "Gastos de tus clientes sin proyecto" : "Tus clientes en 2 minutos";
+      const sinFact = BLOQ.has("sinfacturar") ? (sinFactDe[nombre]||[]) : [];
+      if (!testTo && !nCob && !nDup && !nSr && !nSP && !sinFact.length) continue;   // en cron real no mandar correos vacíos
+      const html = armar(nombre, cobros, folios, ants, srCob, srDup, sinProy, sinFact);
+      const subject = `Pendientes de tus clientes · ${rango}`;
       if (!dryRun) await sendMail(to, subject, html);
-      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinProyecto:nSP, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
+      sent.push({ nombre, to, cobros:nCob, duplicados:nDup, sinProyecto:nSP, sinFacturar:sinFact.length, sinResp:nSr, ...(dryRun?{subject,html}:{}) });
     }
 
     return new Response(JSON.stringify({ ok:true, modo: testTo?"prueba":"cron", dryRun, sent, count:sent.length }), { headers:{ "Content-Type":"application/json", "Access-Control-Allow-Origin":"*" } });
