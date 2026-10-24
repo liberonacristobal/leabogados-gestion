@@ -182,7 +182,13 @@ Deno.serve(async (req) => {
       rest("learnings?kind=eq.config&key=eq.agente_casilla&select=value&order=updated_at.desc&limit=1"),
     ]);
     // deno-lint-ignore no-explicit-any
-    const [provsBoleta, estRow, miembrosNom, internoRow]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1"), rest("miembros?select=email,nombre"), rest("clients?select=id&is_internal=eq.true&limit=1")]);
+    const [provsBoleta, estRow, miembrosNom, internoRow, tramCfg]: any[] = await Promise.all([rest("proveedores?select=id,rut,nombre&documento=eq.boleta"), rest("estudios?select=rut&id=eq.lea&limit=1"), rest("miembros?select=email,nombre"), rest("clients?select=id&is_internal=eq.true&limit=1"),
+      rest("learnings?kind=eq.config&key=eq.tramites_remitentes&select=value&order=updated_at.desc&limit=1").catch(() => [])]);
+    // Remitentes de trámites (Registro Civil, Archivo Judicial, conservadores): dominios o direcciones exactas, en la configuración
+    // del estudio. Las copias que llegan desde las casillas del equipo solo se guardan si vienen de uno de ellos (o traen otra señal
+    // administrativa); el resto se descarta sin guardar su contenido.
+    const tramRem = String(tramCfg?.[0]?.value || "").toLowerCase().split(/[,;\s]+/).map((x) => x.trim().replace(/^@/, "")).filter(Boolean);
+    const esRemTramite = (de: string, dom: string) => tramRem.some((x) => x.includes("@") ? de === x : (dom === x || dom.endsWith("." + x)));
     const interno = internoRow?.[0]?.id || null;
     const rutEstudio = nRutB(estRow?.[0]?.rut || "");
     // Dominio de la oficina = el de la casilla del agente (configuración, no escrito en el código).
@@ -299,7 +305,7 @@ Deno.serve(async (req) => {
         const dig = `${asunto} ${cuerpo}`.replace(/(\d)[.\-\s](?=\d)/g, "$1");
         const senal = /(solicitud|provisi[oó]n) de fondos|fondos? por rendir|rendici[oó]n de gastos|liquidaci[oó]n de gastos/i.test(asunto)
           || [...cuentasPropias].some((c) => c && c.length >= 6 && dig.includes(c)) || (!!rutEstudio && dig.toUpperCase().includes(rutEstudio))
-          || dominiosNotaria.has(dom) || correosNotaria.has(de) || adj.some((a: { name: string }) => /bhe|boleta|honorario/i.test(a.name || ""));
+          || dominiosNotaria.has(dom) || correosNotaria.has(de) || esRemTramite(de, dom) || adj.some((a: { name: string }) => /bhe|boleta|honorario/i.test(a.name || ""));
         if (!senal) {
           if (!dryRun) await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ gmail_id: gid, thread_id: m.threadId || null, recibido_at: recibido.toISOString(), de: "(copia no relacionada)", asunto: "(no se guardó)", tipo: "otro", estado: "descartado", motivo: "Copia de una casilla personal sin relación con la administración: no se guardó su contenido" }) });
           out.procesados++; out.por_estado.descartado = (out.por_estado.descartado || 0) + 1;
@@ -331,7 +337,7 @@ Deno.serve(async (req) => {
       for (const a of adj) { if (!a.b64 || !/\.pdf$/i.test(a.name || "") || !/bhe|boleta|honorario/i.test(a.name || "")) continue;
         const b = parseBHE(await itemsPdf(a.b64)); if (b && rutEstudio && nRutB(b.receptor_rut) === rutEstudio) bheDe.push({ bhe: b, path: adjGuardados.find((g) => g.nombre === a.name)?.path }); }
       // Boletas y facturas de trámites (notaría, conservador, registro civil, diario oficial) → respaldo del gasto ya cargado.
-      const esTramite = esNotaria || /notari|conservador|cbr|registrocivil|srcei|diariooficial/i.test(dom);
+      const esTramite = esNotaria || esRemTramite(de, dom) || /notari|conservador|cbr|registrocivil|srcei|diariooficial|ajs\.cl/i.test(dom);
       const respaldos: { nombre: string; path?: string; texto: string }[] = [];
       if (esTramite && !bheDe.length) for (const a of adj) { if (!a.b64 || !/\.pdf$/i.test(a.name || "") || !/boleta|factura/i.test(a.name || "")) continue;
         respaldos.push({ nombre: a.name, path: adjGuardados.find((g) => g.nombre === a.name)?.path, texto: await textoPdf(a.b64) }); }
