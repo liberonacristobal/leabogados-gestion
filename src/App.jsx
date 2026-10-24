@@ -14923,26 +14923,26 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               const Btn=(label,on,primary)=><button onClick={on} disabled={siiBusy} style={{fontSize:12,fontWeight:600,color:primary?'#fff':C.accent,background:primary?C.accent:'#fff',border:primary?'none':`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer',opacity:siiBusy?.6:1}}>{label}</button>
               const siiIcon=<svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={enProd?C.greenText:C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6M9 13h6M9 17h4'/></svg>
               const estTxt=enProd?'Producción':etapaEmision<=1?'Sin postular':'En certificación'
-              const siiSub=enProd?`${emitidas.length} emitida${emitidas.length!==1?'s':''} · directo al SII`:'Emite tus facturas directo al SII'
+              const siiSub=enProd?`${emitidas.length} emitida${emitidas.length!==1?'s':''} al SII`:'Directo desde la app'
               return (<>
                 <div style={{marginTop:14}}>
                   <div style={{...SEC_LBL,margin:'2px 2px 7px'}}>Facturación electrónica</div>
                   <div onClick={()=>setSiiPageOpen(true)} style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'13px 15px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                     <span style={{width:34,height:34,borderRadius:10,background:enProd?C.greenBg:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{siiIcon}</span>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>Emisión electrónica · SII</div><div style={{fontSize:11,color:C.muted}}>{siiSub}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Emisión SII</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{siiSub}</div></div>
                     <span style={{fontSize:9.5,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{estTxt}</span>
                     <span style={{color:C.textSoft,fontSize:16,flexShrink:0}}><Gl n='chevron'/></span>
                   </div>
                 </div>
                 {siiPageOpen&&!billingPage&&createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:200,background:C.bg,overflowY:'auto'}}>
-                  <PageHeader origen='Facturación' onBack={()=>setSiiPageOpen(false)} titulo='Facturación electrónica' right={<span style={{fontSize:10,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 11px',whiteSpace:'nowrap'}}>{estTxt}</span>}/>
+                  <PageHeader origen='Facturación' onBack={()=>setSiiPageOpen(false)} titulo='Facturación electrónica' right={isDesktop?<span style={{fontSize:10,fontWeight:700,background:enProd?C.greenBg:C.ambarBg,color:enProd?C.greenText:C.soonText,borderRadius:20,padding:'3px 11px',whiteSpace:'nowrap'}}>{estTxt}</span>:null}/>
                   <div style={{maxWidth:isDesktop?900:560,margin:'0 auto',padding:'16px 16px 60px'}}>
                     <div style={isDesktop?{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,alignItems:'start'}:{display:'flex',flexDirection:'column',gap:9}}>
                       {/* Estado + folios */}
                       <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px'}}>
                         <div style={{display:'flex',alignItems:'center',gap:10}}>
                           <span style={{width:32,height:32,borderRadius:10,background:enProd?C.greenBg:C.azulBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{siiIcon}</span>
-                          <div style={{flex:1,minWidth:0}}><div style={{...SEC_LBL}}>Emisión SII</div><div style={{fontSize:14,fontWeight:800,color:C.accent}}>{enProd?'Conectado':'En certificación'}</div></div>
+                          <div style={{flex:1,minWidth:0}}><div style={{...SEC_LBL}}>Emisión SII</div><div style={{fontSize:14,fontWeight:800,color:C.accent}}>{enProd?'Conectado':estTxt}</div></div>
                         </div>
                         <div style={{fontSize:11,color:C.muted,marginTop:6}}>{siiSub}</div>
                         {(()=>{ const f34=(foliosEstado||[]).find(x=>x.tipoDte===34); if(!f34) return null; const bajo=f34.disponibles<=5; return (
@@ -29891,7 +29891,9 @@ const NOMBRE_DTE_CORTO={33:'Factura',34:'Factura exenta',56:'Nota de débito',61
 async function facturaDtePdfBase64(docXml, opts={}){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const bwip = await _loadBwip()
-  const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?m[1].trim():'' }
+  // Los textos del XML vienen escapados («A &amp; B»): se imprimen como los lee el cliente.
+  const unx=v=>v.replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')
+  const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?unx(m[1].trim()):'' }
   const ted=(docXml.match(/<TED[\s\S]*?<\/TED>/)||[''])[0]
   const idDoc=(docXml.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(docXml.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(docXml.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(docXml.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
   const detalles=[...docXml.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
@@ -29904,7 +29906,7 @@ async function facturaDtePdfBase64(docXml, opts={}){
   const fmtRut=r=>{ const a=String(r||'').split('-'); return (a[0]||'').replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(a[1]?'-'+a[1]:'') }
   const fmtN=n=>(n||0).toLocaleString('es-CL')
   const MES=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const fchL=iso=>{ const a=String(iso||'').split('-'); return a.length<3?'':`${+a[2]} de ${MES[+a[1]]} de ${a[0]}` }
+  const fchL=iso=>{ const a=String(iso||'').split('-'); return a.length<3?'':`${+a[2]} de ${String(MES[+a[1]]||'').toLowerCase()} de ${a[0]}` }
   const fma={'1':'Contado','2':'Crédito','3':'Sin costo'}[D.fma]||''
   const logo=LOGO_FACTURA_B64
   const NAVY=[0,60,80], GRAF=[61,61,61], MUT=[83,114,129], BORD=[210,216,221], RED=[192,11,11], REDLT=[196,125,125]
@@ -29922,31 +29924,37 @@ async function facturaDtePdfBase64(docXml, opts={}){
   p.setFontSize(16.5); p.text('N° '+D.folio,bx+bw/2,by+25,{align:'center'})
   p.setFont('helvetica','normal'); p.setFontSize(6.5); p.setTextColor(...REDLT); p.text(BRAND.siiUnidad||'S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+30,{align:'center'})
   const fy=by+bh+6; p.setFont('helvetica','normal'); p.setFontSize(8); p.setTextColor(...MUT)
-  p.text('Fecha de emisión:',bx,fy); const flw=p.getTextWidth('Fecha de emisión:  ')
-  p.setFont('helvetica','bold'); p.setTextColor(...GRAF); p.text(fchL(D.fch),bx+flw,fy)
+  // Fecha alineada al borde derecho del recuadro del folio (un mes largo no se sale de la hoja).
+  const flw=p.getTextWidth('Fecha de emisión:  '); p.setFont('helvetica','bold'); const fvw=p.getTextWidth(fchL(D.fch)); const fx=Math.max(M,bx+bw-flw-fvw)
+  p.setFont('helvetica','normal'); p.text('Fecha de emisión:',fx,fy); p.setFont('helvetica','bold'); p.setTextColor(...GRAF); p.text(fchL(D.fch),fx+flw,fy)
   let ye=43; p.setFontSize(8.5)
-  const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); p.text(val,M+w,ye); ye+=4.7 }
+  // Datos del emisor a la izquierda, sin entrar al recuadro del folio: un texto largo (dirección) pasa a una segunda línea.
+  const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); const ls=p.splitTextToSize(String(val||''),bx-4-(M+w)); ls.forEach((l,i)=>p.text(l,M+w,ye+i*3.9)); ye+=4.7+(ls.length-1)*3.9 }
   // Datos del emisor: los del DTE (lo que el SII recibió); el texto de la app solo si el XML no los trae.
   const giroE=g('GiroEmis',emi)||'Prestación de servicios y asesorías profesionales', dirE=[g('DirOrigen',emi),g('CmnaOrigen',emi)].filter(Boolean).join(', ')||BRAND.direccionCalle
   inl('Giro:',giroE)
   inl('Dirección:',dirE)
   p.setFontSize(8.5)
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Email:',M,ye); let cx=M+p.getTextWidth('Email:  ')
-  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(BRAND.pago.honorarios.email,cx,ye); cx+=p.getTextWidth(BRAND.pago.honorarios.email)
+  const mailE=g('CorreoEmisor',emi)||BRAND.pago.honorarios.email
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(mailE,cx,ye); cx+=p.getTextWidth(mailE)
   p.setTextColor(...MUT); p.text('     ·     ',cx,ye); cx+=p.getTextWidth('     ·     ')
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Teléfono:',cx,ye); cx+=p.getTextWidth('Teléfono:  ')
-  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(g('Telefono',emi)||BRAND.telefonoFactura||BRAND.telefono,cx,ye); ye+=6
+  const telX=g('Telefono',emi), telE=/^9\d{8}$/.test(telX)?'+56'+telX:(telX||BRAND.telefonoFactura||BRAND.telefono)
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(telE,cx,ye); ye=Math.max(ye+6,by+bh+10)
   p.setFont('helvetica','bold'); p.setFontSize(9); p.setTextColor(...NAVY); p.text('VENTA DEL GIRO',M,ye)
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ye+5,W-M,ye+5)
-  let y=ye+9; const rh=32
+  // Receptor: la razón social y la dirección largas pasan a varias líneas y el recuadro crece (antes se montaban sobre el RUT).
+  p.setFontSize(8.5); const rznL=p.splitTextToSize(String(D.rznR||''),150), dirL=p.splitTextToSize(String(D.dirR||''),150), extra=(rznL.length-1+Math.max(0,dirL.length-1))*4.2
+  let y=ye+9; const rh=32+extra
   p.setFillColor(247,249,250); p.setDrawColor(...BORD); p.setLineWidth(0.3); p.roundedRect(M,y,W-2*M,rh,1.5,1.5,'FD')
-  p.setFontSize(8.5); const VX=M+30; let yr=y+7
+  const VX=M+30; let yr=y+7
   const lbl=(t,x,yy)=>{ p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.text(t,x,yy) }
   const val=(t,x,yy,mw)=>{ p.setTextColor(...GRAF); p.setFont('helvetica','normal'); p.text(t,x,yy,mw?{maxWidth:mw}:undefined) }
-  lbl('Señor(es):',M+3,yr); val(D.rznR,VX,yr,150); yr+=5.4
+  lbl('Señor(es):',M+3,yr); rznL.forEach((l,i)=>val(l,VX,yr+i*4.2)); yr+=5.4+(rznL.length-1)*4.2
   lbl('R.U.T.:',M+3,yr); val(fmtRut(D.rutR),VX,yr); yr+=5.4
   lbl('Giro:',M+3,yr); val(D.giroR,VX,yr,150); yr+=5.4
-  lbl('Dirección:',M+3,yr); val(D.dirR,VX,yr,150); yr+=5.4
+  lbl('Dirección:',M+3,yr); dirL.forEach((l,i)=>val(l,VX,yr+i*4.2)); yr+=5.4+Math.max(0,dirL.length-1)*4.2
   lbl('Comuna:',M+3,yr); val(D.cmnaR,VX,yr); lbl('Ciudad:',M+98,yr); val(D.ciuR,M+114,yr)
   y+=rh+9
   p.setFillColor(...NAVY); p.rect(M,y,W-2*M,7.5,'F'); p.setTextColor(255,255,255); p.setFont('helvetica','bold'); p.setFontSize(8)
