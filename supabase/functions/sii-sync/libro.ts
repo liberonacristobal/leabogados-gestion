@@ -33,9 +33,8 @@ export function armarLibroVentas(car: LibroCaratula, detalle: LibroDetalle[], no
   })
   const resumen = Object.entries(porTipo).map(([t, r]) =>
     `<TotalesPeriodo><TpoDoc>${t}</TpoDoc><TotDoc>${r.tot}</TotDoc>` +
-    (r.exe ? `<TotMntExe>${r.exe}</TotMntExe>` : '') +
-    (r.neto ? `<TotMntNeto>${r.neto}</TotMntNeto>` : '') +
-    (r.iva ? `<TotMntIVA>${r.iva}</TotMntIVA>` : '') +
+    // LibroCV_v10.xsd: TotMntExe, TotMntNeto y TotMntIVA son obligatorios aunque sean 0 (factura exenta: neto e IVA en 0).
+    `<TotMntExe>${r.exe}</TotMntExe><TotMntNeto>${r.neto}</TotMntNeto><TotMntIVA>${r.iva}</TotMntIVA>` +
     `<TotMntTotal>${r.total}</TotMntTotal></TotalesPeriodo>`,
   ).join('')
 
