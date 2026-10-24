@@ -1,14 +1,14 @@
 // Edge Function: f29-estimado
 // El primer día hábil de cada mes calcula el F29 estimado del mes recién CERRADO (regla única _shared/f29Reglas.js, la misma del
 // calendario tributario de la app) y lo envía por correo a los socios desde la casilla de la oficina, para provisionar el pago:
-// PPM (1,5% de lo facturado menos notas de crédito, Registro de Ventas del SII) + retención de las boletas de honorarios recibidas
+// PPM (tasa declarada, f29_declarados; 2% en 2026, de lo facturado menos notas de crédito, Registro de Ventas del SII) + retención de las boletas de honorarios recibidas
 // + impuesto único de trabajadores del mes anterior. Una vez por período (learnings kind f29_estimado, key AAAA-MM).
 // Destinatarios: learnings config f29_avisar_a; si no hay, los miembros admin del dominio de la oficina.
 // body.per = 'AAAA-MM' (otro período), body.forzar = no exige primer día hábil ni que no se haya enviado, body.dryRun = no envía
 // ni guarda. Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
-import { f29Estimado, TASA_PPM } from "../_shared/f29Reglas.js";
+import { f29Estimado } from "../_shared/f29Reglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -67,15 +67,18 @@ Deno.serve(async (req) => {
     if (ya && !forzar) return json({ ok: true, omitido: `el F29 estimado de ${per} ya se envió`, previo: JSON.parse(ya.value) });
 
     const prev = ymMas(per, -1), desde = `${prev}-01`, hasta = `${ymMas(per, 1)}-01`;
-    const [docs, boletas, vals, miembros] = await Promise.all([
+    const [docs, boletas, vals, miembros, decl] = await Promise.all([
       rest(`sii_cargas_docs?select=tipo_dte,fecha_emision,monto&fecha_emision=gte.${desde}&fecha_emision=lt.${hasta}`),
       rest(`boletas_honorarios?select=fecha,retencion,estado&fecha=gte.${desde}&fecha=lt.${hasta}`),
       rest(`learnings?kind=eq.valores_contadora&key=in.(${prev},${per})&select=key,value`),
       rest("miembros?select=email,nombre,rol"),
+      rest(`f29_declarados?select=periodo,tasa_ppm,impuesto_unico,total&periodo=lt.${per}&order=periodo.desc&limit=12`).catch(() => []),
     ]);
     const valores: Record<string, unknown> = {};
     for (const v of vals || []) { try { valores[v.key] = JSON.parse(v.value); } catch { /* fila mala */ } }
-    const e = f29Estimado({ per, docs, boletas, valores, tasa: TASA_PPM });
+    const declarados: Record<string, unknown> = {};
+    for (const d of decl || []) declarados[d.periodo] = d;
+    const e = f29Estimado({ per, docs, boletas, valores, declarados });
     const vence = habilDesde(`${ymMas(per, 1)}-20`, await feriados(Number(ymMas(per, 1).slice(0, 4))));
 
     // Una dirección por socio (miembros trae alias: cl@ y cristobal.liberona@): la más corta del dominio de la oficina.
@@ -89,7 +92,7 @@ Deno.serve(async (req) => {
 
     const fila = (k: string, v: string, b = false) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;color:${b ? "#003C50" : "#3D3D3D"};${b ? "font-weight:700;" : ""}">${k}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;text-align:right;white-space:nowrap;${b ? "font-weight:700;color:#003C50;" : ""}">${v}</td></tr>`;
     const filas = [
-      fila(`PPM (1,5% de ${fmt(e.base)} facturados)`, fmt(e.ppm)),
+      fila(`PPM (${String(Math.round(e.tasa * 1000) / 10).replace(".", ",")}% de ${fmt(e.base)} facturados)`, fmt(e.ppm)),
       fila(`Retención de boletas de honorarios (${e.nBoletas} ${e.nBoletas === 1 ? "boleta" : "boletas"})`, fmt(e.ret)),
       fila("Impuesto único de trabajadores (mes anterior)", e.iu != null ? fmt(e.iu) : "sin dato"),
       fila("Total estimado", fmt(e.total), true),
