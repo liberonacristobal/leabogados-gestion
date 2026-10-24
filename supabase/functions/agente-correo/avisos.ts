@@ -1,4 +1,5 @@
-// Avisos de transferencias de los bancos (BICE y Banco de Chile por ahora; se agregan formatos sin tocar el resto).
+// Avisos de transferencias de los bancos: BICE, Banco de Chile y Scotiabank con su formato; el resto (Santander, BCI, Itaú,
+// BancoEstado…) con una lectura general que exige monto, fecha y una cuenta DE LA OFICINA escrita en el aviso.
 // Lee del correo lo que la cartola no trae o trae oculto: contraparte (nombre, RUT, banco, cuenta) y el mensaje de la
 // transferencia. Solo datos del texto del banco, sin IA. El calce con la cartola es exacto (ver calzarAviso).
 
@@ -34,7 +35,17 @@ function fechaEn(t: string): string | null {
   return null;
 }
 
-export function leerAviso(de: string, asunto: string, cuerpo: string): Aviso | null {
+// Fecha «23/10/26 12:41:18» o «23/10/2026 12:41» (año de 2 o 4 dígitos) → ISO de Chile.
+function fechaDMY(t: string): string | null {
+  const m = t.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})(?:,? (?:a las )?(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null; const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  return isoChile(y, +m[2], +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0);
+}
+const BANCO_DE: [RegExp, string][] = [[/santander/, "Santander"], [/bci|tbanc/, "BCI"], [/itau/, "Itaú"], [/bancoestado/, "BancoEstado"], [/scotiabank/, "Scotiabank"],
+  [/security/, "Security"], [/falabella/, "Falabella"], [/ripley/, "Ripley"], [/consorcio/, "Consorcio"], [/internacional/, "Internacional"], [/btgpactual/, "BTG Pactual"], [/hsbc/, "HSBC"], [/coopeuch/, "Coopeuch"]];
+
+// `propias` = cuentas de la oficina (de la cartola). La lectura general solo acepta un aviso que nombra una de ellas.
+export function leerAviso(de: string, asunto: string, cuerpo: string, propias?: Set<string | null>): Aviso | null {
   const t = textoPlano(cuerpo), dom = String(de || "").toLowerCase();
   // BICE · transferencia enviada desde una cuenta de la oficina.
   if (/bice\.cl/.test(dom) && /Se ha realizado la siguiente transferencia/i.test(t)) {
@@ -68,6 +79,33 @@ export function leerAviso(de: string, asunto: string, cuerpo: string): Aviso | n
     const msj = t.match(/Mensaje (.*?) Fecha y hora/i), op = t.match(/ID de la operaci[oó]n: ?(\S+)/i);
     return { banco: "Banco de Chile", tipo: "abono", monto: montoNum(m[4]), cuenta: cuentaNorm(m[2]), fecha_hora: fechaEn(t), n_operacion: op?.[1] || null,
       contraparte_nombre: limpio(m[1]), contraparte_rut: null, contraparte_banco: "Banco de Chile", contraparte_cuenta: cuentaNorm(m[3]), mensaje: limpio(msj?.[1]) || limpio(asunto) };
+  }
+  // Scotiabank · «Aviso de Transferencia de fondos recibida» (el cliente transfiere a una cuenta de la oficina).
+  if (/scotiabank\.cl/.test(dom) && /Transferencia de fondos recibida/i.test(t)) {
+    const m = t.match(/nuestro\(a\) cliente (.+?), con fecha (\d{1,2}\/\d{1,2}\/\d{2,4} \d{1,2}:\d{2}(?::\d{2})?) ha efectuado una transferencia.*?Monto \$ ?([\d.]+).*?Cuenta: ?(\d[\d-]*)/i);
+    if (!m) return null;
+    // El RUT que trae el aviso es el de la oficina (destinatario), no el del que transfiere: no se toma.
+    const msj = t.match(/Mensaje: ?(.*?) ?Ante cualquier duda/i);
+    return { banco: "Scotiabank", tipo: "abono", monto: montoNum(m[3]), cuenta: cuentaNorm(m[4]), fecha_hora: fechaDMY(m[2]), n_operacion: null,
+      contraparte_nombre: limpio(m[1]), contraparte_rut: null, contraparte_banco: "Scotiabank", contraparte_cuenta: null, mensaje: limpio(msj?.[1]) };
+  }
+  // Otros bancos · lectura general, SOLO transferencias recibidas (la oficina no transfiere desde ellos). Exige: el monto con $,
+  // la fecha y una cuenta de la oficina escrita en el aviso; si falta cualquiera, no es un aviso (queda para una persona).
+  // El calce con la cartola sigue siendo exacto (cuenta, monto y fecha), así que una lectura dudosa nunca concilia sola.
+  if (propias && propias.size && !/(bice|bancochile|bancoedwards)\.cl/.test(dom) && !/cartola/i.test(asunto) && /transferencia|traspaso|abono/i.test(`${asunto} ${t.slice(0, 400)}`) && !/(transferiste|has transferido|realizaste una transferencia|cargo en tu cuenta)/i.test(t)) {
+    const mm = t.match(/monto(?: transferido| de la transferencia| de la operaci[oó]n| operaci[oó]n| total)?:? ?\$ ?([\d.]+)/i) || t.match(/\$ ?(\d{1,3}(?:\.\d{3})+)/);
+    const nums = [...t.matchAll(/\b(\d[\d-]{5,})\b/g)].map((x) => cuentaNorm(x[1])).filter((x) => x && propias.has(x));
+    const fecha = fechaEn(t) || fechaDMY(t);
+    if (!mm || !nums.length || !fecha) return null;
+    const banco = (BANCO_DE.find(([r]) => r.test(dom)) || [null, "Otro banco"])[1];
+    // Nombre de quien transfiere: hasta la siguiente etiqueta del aviso; si no queda un nombre limpio (letras, 3–80), va vacío.
+    const nom0 = t.match(/(?:nuestro\(a\) cliente|el cliente|ordenante|nombre del (?:ordenante|originador|remitente)|origen|enviada por|desde la cuenta de)\s*:?\s*(.+?)(?:,| RUT| Rut| con fecha| ha | Banco| Monto| Cuenta| Fecha| N[°º]|$)/i);
+    const nom = nom0 && /^[A-Za-zÁÉÍÓÚÑáéíóúñ&.'\- ]{3,80}$/.test(nom0[1].trim()) ? nom0 : null;
+    const op = t.match(/(?:N[°º]\s*(?:de\s*)?(?:operaci[oó]n|comprobante|transacci[oó]n)|c[oó]digo de (?:operaci[oó]n|transacci[oó]n)|Operaci[oó]n N[°º])\s*:?\s*([A-Z0-9-]{4,})/i);
+    const msj = t.match(/(?:mensaje|comentario|glosa|descripci[oó]n)\s*:?\s*(.{1,120}?)(?: Fecha| Ante | Saludos| Atentamente| Monto|$)/i);
+    return { banco, tipo: "abono", monto: montoNum(mm[1]), cuenta: nums[0], fecha_hora: fecha, n_operacion: op?.[1] || null,
+      // contraparte_rut null: el aviso suele traer el RUT de la oficina, no el del que transfiere.
+      contraparte_nombre: limpio(nom?.[1]), contraparte_rut: null, contraparte_banco: banco, contraparte_cuenta: null, mensaje: limpio(msj?.[1]) };
   }
   return null;
 }
