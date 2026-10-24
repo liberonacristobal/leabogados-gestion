@@ -9964,7 +9964,7 @@ function horarioProceso(schedule, corto=false){
 // Centro de agentes: cada proceso en su tema (por su nombre técnico), en el orden en que se muestran.
 const TEMAS_PROCESOS = [
   ['banco','Banco y conciliación',/^(agente-segunda|alerta-cartola|caja-chica|aviso-fondos-diario)/],
-  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado)/],
+  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos)/],
   ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|causas-monitor|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
   ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal|lector-documentos)/],
@@ -10128,6 +10128,8 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
 // · sospechoso = cambio de cuenta o pedido de transferir · sin_accion/descartado = informativos. Las partes suman el total.
 // Al abrir, la propia página confirma lo que ya se hizo por otra vía (depósito conciliado, liquidación cargada) y lo cierra sola.
 const _DEMO_BANDEJA = [
+  {id:'dbh1',gmail_id:'doc:pedir_boleta:demo',recibido_at:'2026-10-24T12:00:00Z',de:'RUT 15.111.222-3',de_nombre:'Felipe Rojas Mena',asunto:'Boleta de honorarios por pedir · Felipe Rojas Mena',tipo:'boleta_honorarios',estado:'pendiente',motivo:'Comisión pagada sin boleta',propuesta:{accion:'pedir_boleta',titulo:'Pedir la boleta de honorarios',nombre:'Felipe Rojas Mena',para:'frojas@correo.cl',tasa:0.1525,lineas:[{tercero_id:'t1',trabajo:'Estudio de títulos',factura:'512',pago_cliente:'2026-09-28',pagado_at:'2026-09-30',bruto:412979,retencion:62979,liquido:350000}]},evidencia:[{texto:'Transferido el 30-09-2026 · Factura N° 512',monto:350000},{texto:'Retención',monto:62979},{texto:'Bruto de la boleta',monto:412979}]},
+  {id:'dbh2',gmail_id:'doc:definir_documento:demo',recibido_at:'2026-10-24T12:00:00Z',de:'RUT 16.333.444-5',de_nombre:'Tomás Herrera',asunto:'Documento por definir · Tomás Herrera',tipo:'boleta_honorarios',estado:'pendiente',motivo:'Comisión pagada sin boleta ni factura · ¿boleta o factura?',propuesta:{accion:'definir_documento',titulo:'Definir el documento de la comisión',nombre:'Tomás Herrera',lineas:[]},evidencia:[{texto:'Transferido el 01-07-2026 · Factura N° 471',monto:500000},{texto:'Transferido el 02-07-2026 · Factura N° 471',monto:2500000}]},
   {id:'d1',recibido_at:'2026-10-20T10:05:57Z',de:'genesis.garcia@sbschile.com',de_nombre:'Génesis Garcia',asunto:'Re: Solicitud de fondos por rendir Proyecto Villarica',cuerpo:'Adjunto comprobante de pago solicitado.\n\nEl lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@leabogados.cl>) escribió:\n> ... por un total de $1.200.000.-',adjuntos:[{nombre:'Comprobante Operación Express.pdf',mime:'application/pdf'}],tipo:'comprobante',cliente_nombre:'Alejandro Lee',abogado:'Erasmo',estado:'pendiente',motivo:'Por recibir · cartola al 19-10-2026',propuesta:{accion:'registrar_solicitud',titulo:'Registrar la solicitud de fondos',montos:[1200000],montos_cand:[1200000]},evidencia:[{texto:'Solicitud citada en el correo',monto:1200000,fuente:'correo'}]},
   {id:'ds1',gmail_id:'sii:491-34',recibido_at:'2026-10-20T12:00:00Z',de:'OLIVER SPA',de_nombre:'OLIVER SPA',asunto:'Factura N° 491 emitida en el SII',tipo:'factura_sin_registrar',cliente_id:'c3',estado:'pendiente',motivo:'3 ventas activas: elegir la venta · puede cubrir 2 cuotas de «Reorganización» ($1.634.880)',propuesta:{accion:'registrar_factura',titulo:'Registrar la factura N° 491',folio:'491'},evidencia:[{texto:'Factura N° 491 del 20-10-2026 · OLIVER SPA',monto:1634180,fuente:'SII'}]},
   {id:'dr1',recibido_at:'2026-10-20T15:17:28Z',de:'usuario@notariarapanui.cl',de_nombre:'Notaría Rapa Nui',asunto:'RE: Consulta solicitud de documentos',tipo:'respaldo_gasto',cliente_nombre:'Notaría Rapa Nui',estado:'pendiente',motivo:'2 gastos por el mismo monto',adjuntos:[{nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',mime:'application/pdf'}],propuesta:{accion:'adjuntar_respaldo',titulo:'Adjuntar el respaldo al gasto',path:'demo/boleta.pdf',nombre:'4677 BOLETA CERTIFICADO DE VIGENCIA.pdf',candidatos:[{id:'e-demo-1',fecha:'2026-10-20',monto:20000,cliente:'Viñedos del Maipo Ltda',concepto:'Certificado de vigencia'},{id:'e-demo-2',fecha:'2026-10-09',monto:20000,cliente:'Comercial Andes SpA',concepto:'Gastos notariales'}]},evidencia:[{texto:'Monto del documento',monto:20000,fuente:'PDF'}]},
@@ -10139,7 +10141,17 @@ const _DEMO_BANDEJA = [
   {id:'d5',recibido_at:'2026-10-09T14:29:00Z',de:'adquisiciones@bastro.cl',de_nombre:'Bastro',asunto:'COMPROBANTE DE PAGO',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Eduardo Barra',abogado:'Erasmo',estado:'registrado',motivo:'Depósito del 09-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 09-10-2026',monto:1369907,fuente:'cartola'}]},
   {id:'d6',recibido_at:'2026-10-16T12:00:00Z',de:'noticias@legalnews.cl',de_nombre:'Legal News',asunto:'Boletín semanal',cuerpo:'',adjuntos:[],tipo:'spam',estado:'sin_accion',motivo:'Publicidad o notificación',propuesta:{},evidencia:[]},
 ]
-const BANDEJA_BTN = {registrar_factura:'Abrir en Facturación',adjuntar_respaldo:'Adjuntar al gasto',registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado'}
+// Pedido de boleta a un colaborador (agente comisiones-documentos): el borrador se arma con BRAND (receptor) y los datos de la propuesta.
+const borradorPedidoBoleta = p => { const L=p.lineas||[], uno=L.length===1, l0=L[0]||{}, tot=k=>L.reduce((a,l)=>a+(Number(l[k])||0),0), pila=String(p.nombre||'').trim().split(/\s+/)[0]
+  const trab=uno?(l0.trabajo?`por la comisión del trabajo "${l0.trabajo}"${l0.factura?` (Factura N° ${l0.factura}${l0.pago_cliente?`, pagada por el cliente el ${fmtFechaDMY(l0.pago_cliente)}`:''})`:''}`:'por la comisión'):`por ${L.length} comisiones`
+  return [`${pila}:`,'','Espero que estés muy bien.','',
+    `${uno?`El ${fmtFechaDMY(l0.pagado_at)} te transferimos ${fmt(tot('liquido'))}`:`Te transferimos ${fmt(tot('liquido'))}`} ${trab}. Para registrar el pago, te agradeceré emitir la boleta de honorarios con estos datos:`,'',
+    `  Receptor: ${BRAND.nombreLegal||BRAND.nombre}`, ...(BRAND.rut?[`  RUT: ${BRAND.rut}`]:[]),
+    `  Glosa: ${uno&&l0.trabajo?`Comisión ${l0.trabajo}`:'Comisiones'}`,
+    `  Bruto: ${fmt(tot('bruto'))}`, `  Retención ${pctBHE(p.tasa||tasaBHE(l0.pagado_at))}: ${fmt(tot('retencion'))}`, `  Líquido (ya transferido): ${fmt(tot('liquido'))}`,'',
+    'Saludos cordiales,'].join('\n') }
+const asuntoPedidoBoleta = p => { const L=p.lineas||[], l0=L[0]||{}, b=L.reduce((a,l)=>a+(Number(l.bruto)||0),0); return `Boleta de honorarios · ${L.length===1&&l0.trabajo?`comisión ${l0.trabajo}`:'comisiones'} · ${fmt(b)}` }
+const BANDEJA_BTN = {registrar_factura:'Abrir en Facturación',adjuntar_respaldo:'Adjuntar al gasto',registrar_fondo:'Registrar fondo',registrar_solicitud:'Confirmar',crear_tarea:'Crear tarea',guardar_cuenta:'Guardar cuenta',conciliar:'Conciliar en Banco',cargar_notaria:'Cargar liquidación',revisar:'Revisado',pedir_boleta:'Enviar el pedido'}
 // Fondo por registrar (conciliacion-auto lo propone desde el aviso del banco o la cartola, con señal de fondo): una persona
 // lo confirma desde Gastos › Revisar o la Bandeja. Nunca dos veces: si el depósito ya se concilió en Banco, solo se cierra; si
 // el cliente ya tiene un fondo igual sin respaldo del banco (±10 días), se vincula ese en vez de crear otro. Con el movimiento
@@ -10203,6 +10215,7 @@ function solicitudCitada(cuerpo){
 const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
 function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII}){
   const [elegido,setElegido]=useState({})   // adjuntar_respaldo: gasto elegido por tarjeta
+  const [paraBoleta,setParaBoleta]=useState({})   // pedir_boleta: correo del colaborador (se aprende al enviar)
   const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
   const cliPorId=useMemo(()=>new Map((clients||[]).map(c=>[String(c.id),c])),[clients])
   const yo=user?.name||'Oficina'
@@ -10234,7 +10247,21 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
     if(a==='cargar_notaria'){ onCargarNotaria&&onCargarNotaria(p.path?{path:p.path,nombre:p.nombre||'Liquidación notaría.xlsx'}:null); return }
     setBusy(r.id)
     try{
-      if(a==='adjuntar_respaldo'){
+      if(a==='pedir_boleta'){
+        const to=String(paraBoleta[r.id]??p.para??'').trim(); if(!to) throw new Error('Falta el correo del colaborador.')
+        const em=String(user?.email||'').toLowerCase(); let firma=FIRMA_DEFAULTS[em]||{nombre:user?.name||'',cargo:'',telefono:''}
+        if(!DEMO&&em){ const {data:fr}=await supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',em).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(fr?.value){ try{ firma={...firma,...JSON.parse(fr.value)} }catch(_){} } }
+        const text=borradorPedidoBoleta(p), subject=asuntoPedidoBoleta(p)
+        const via=DEMO?'usuario':await enviarComoUsuario({to, subject, html:correoMarcaHtml(text,'Boleta de honorarios',firma,false), text, que:'El pedido de boleta'})
+        if(!via){ setBusy(null); return }
+        if(!DEMO&&p.proveedor_id&&to!==p.para){ try{ await setLearningKV('proveedor_email',String(p.proveedor_id),to) }catch(_){} }
+        await hecho(r,{estado:'espera',motivo:`Pedido enviado el ${fmtFechaDMY(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}))} · boleta por recibir`},'boleta_pedida')
+        appAlert(txtEnviado(via,{que:'Pedido de boleta',g:'o',para:to}))
+      } else if(a==='definir_documento'){
+        const doc=r._doc; if(!['boleta','factura'].includes(doc)) throw new Error('Elige boleta o factura.')
+        if(!DEMO&&p.proveedor_id){ const {error}=await supabase.from('proveedores').update({documento:doc}).eq('id',p.proveedor_id); if(error) throw error }
+        await hecho(r,{estado:'resuelto',motivo:`${p.nombre||'Colaborador'} emite ${doc}`},'documento_definido')
+      } else if(a==='adjuntar_respaldo'){
         const cs=p.candidatos||[], gid=elegido[r.id]||(cs.length===1?cs[0].id:null), g=cs.find(x=>String(x.id)===String(gid))
         if(!g) throw new Error(cs.length?'Elige el gasto.':'Aún no hay un gasto por ese monto.')
         if(!p.path) throw new Error('El documento no quedó guardado.')
@@ -10306,20 +10333,25 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
       <div style={{background:sosp?C.overdueBg:C.bgSoft,borderRadius:10,padding:'9px 11px',marginTop:9}}>
         <div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>
         {ev.map((x,i)=>lineaDato(x.texto,x.monto!=null?fmt(x.monto):x.valor,i))}
-        {montos.length>1&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
+        {montos.length>1&&!['pedir_boleta','definir_documento'].includes(p.accion)&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
         {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.motivo}</div>}
         {p.accion==='adjuntar_respaldo'&&(p.candidatos||[]).length>0&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
           <select value={elegido[r.id]||((p.candidatos||[]).length===1?p.candidatos[0].id:'')} onChange={e=>setElegido(o=>({...o,[r.id]:e.target.value}))} style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface}}>
             {(p.candidatos||[]).length>1&&<option value=''>Elige el gasto</option>}
             {(p.candidatos||[]).map(g=><option key={g.id} value={g.id}>{fmtFechaDMY(g.fecha)} · {g.cliente} · {fmt(g.monto)} · {g.concepto}</option>)}
           </select></div>}
+        {p.accion==='pedir_boleta'&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
+          <input value={paraBoleta[r.id]??p.para??''} onChange={e=>setParaBoleta(o=>({...o,[r.id]:e.target.value}))} placeholder='Correo del colaborador' style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface,boxSizing:'border-box'}}/>
+          {abierto===r.id&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}><b>{asuntoPedidoBoleta(p)}</b>{'\n\n'}{borradorPedidoBoleta(p)}</div>}
+        </div>}
         {p.guardar_cuenta&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
       </div>
       {adjuntos(r)}
       {cuerpo(r)}
       <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,marginTop:9,justifyContent:'flex-end'}}>
         {sosp?<button disabled={b} onClick={()=>descartar(r,'Archivado')} style={btnPri}>{b?'Guardando…':'Archivar'}</button>
-          :<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button><button disabled={b} onClick={()=>confirmar(r)} style={{...btnPri,opacity:b?.6:1}}>{b?'Guardando…':(BANDEJA_BTN[p.accion]||'Revisado')}</button></>}
+          :p.accion==='definir_documento'?<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'factura'})} style={{...btnSec,border:`1px solid ${C.border}`,borderRadius:9}}>Factura</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'boleta'})} style={{...btnPri,opacity:b?.6:1}}>{b?'Guardando…':'Boleta'}</button></>
+          :<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button>{p.accion==='pedir_boleta'&&abierto!==r.id&&<button onClick={()=>setAbierto(r.id)} style={btnSec}>Ver el correo</button>}<button disabled={b} onClick={()=>confirmar(r)} style={{...btnPri,opacity:b?.6:1}}>{b?'Enviando…':(BANDEJA_BTN[p.accion]||'Revisado')}</button></>}
       </div>
     </div> }
   const filaHecha=(r,i,conRest)=>{ const m=montoDe(r)

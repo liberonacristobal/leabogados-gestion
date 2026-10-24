@@ -69,3 +69,20 @@ export function calcesPagoComision(porPagar, libres) {
     out.push({ mov: m, t: ts[0] }) }
   return out
 }
+
+// Documentos por pedir a colaboradores: comisión YA pagada por el banco (movimiento_id), sin boleta (bhe_id) ni factura del colaborador.
+// · proveedor que emite boleta y con líquido conocido → pedir la boleta (bruto, retención, líquido ya transferido);
+// · persona natural sin documento definido (RUT bajo 50.000.000) → definir si emite boleta o factura (cambia la retención del F29);
+// · empresa → se espera su factura (la lectura de compras del SII la enlaza): no se pide.
+export function documentosPorPedir({ terceros = [], proveedores = [], desde = '2026-06-06' }) {
+  const prov = id => (proveedores || []).find(p => String(p.id) === String(id)) || null
+  const rutN = r => Number(String(r || '').replace(/[^0-9kK]/g, '').slice(0, -1)) || 0
+  const out = []
+  for (const t of terceros || []) {
+    if (t.estado !== 'pagado' || !t.movimiento_id || t.bhe_id || t.factura_numero || t.comision_pct != null || String(t.pagado_at || '') < desde) continue
+    const p = prov(t.proveedor_id), doc = p?.documento || null
+    if (doc === 'boleta' && t.liquido != null) out.push({ tipo: 'pedir_boleta', t, p, bruto: Number(t.monto) || 0, retencion: Number(t.retencion) || 0, liquido: Number(t.liquido) || 0 })
+    else if (!doc && rutN(t.rut || p?.rut) > 0 && rutN(t.rut || p?.rut) < 50000000) out.push({ tipo: 'definir_documento', t, p })
+  }
+  return out
+}
