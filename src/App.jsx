@@ -21,7 +21,7 @@ import { f29Estimado } from '../supabase/functions/_shared/f29Reglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
-import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
+import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
@@ -9163,6 +9163,22 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   const [cargos,setCargos]=useState([])
   const [q,setQ]=useState(''); const [ord,setOrd]=useState('anio'); const [yr,setYr]=useState(''); const [busy,setBusy]=useState(null)
   useEffect(()=>{ if(DEMO){ setCargos([]); return } let v=true; selectAll(()=>supabase.from('cartola_movimientos').select('id,tipo,rut_contraparte,monto,fecha,nombre_contraparte,estado,es_interno').eq('tipo','cargo').order('id')).then(({data})=>{ if(v&&data) setCargos(data) },()=>{}); return ()=>{v=false} },[])
+  // Por pagar (regla única comprasPorPagar, _shared/comprasReglas.js; la usa también el resumen del lunes). Las respuestas se guardan:
+  // «Pagada por otra vía» = esa factura (learnings compra_pagada) · «Se paga con la tarjeta» = ese emisor (learnings compra_pago_emisor).
+  const [ppx,setPpx]=useState(null)
+  useEffect(()=>{ if(DEMO){ setPpx({gastos:[],tarjeta:[],emisores:new Set(),colab:new Set(),pagadas:new Set()}); return } let v=true
+    Promise.all([supabase.from('expenses').select('amount,date').eq('type','gasto').is('deleted_at',null).gte('date','2026-05-01'),
+      supabase.from('learnings').select('kind,key').in('kind',['tarjeta_comercio','compra_pago_emisor','compra_pagada']),
+      supabase.from('terceros_pagos').select('rut').is('comision_pct',null).not('rut','is',null)])
+      .then(([g,l,t])=>{ if(!v) return; const L=l.data||[], k=x=>L.filter(r=>r.kind===x).map(r=>String(r.key))
+        setPpx({gastos:g.data||[],tarjeta:k('tarjeta_comercio'),emisores:new Set(k('compra_pago_emisor')),colab:new Set((t.data||[]).map(r=>String(r.rut||'').toUpperCase().replace(/[^0-9K]/g,''))),pagadas:new Set(k('compra_pagada'))}) },()=>{})
+    return ()=>{v=false} },[])
+  const porPagar=useMemo(()=>ppx?comprasPorPagar({docs:rows,cargos,gastos:ppx.gastos,tarjetaReglas:ppx.tarjeta,emisoresPago:ppx.emisores,rutsColaboradores:ppx.colab,pagadas:ppx.pagadas,hoy:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})}):[],[ppx,rows,cargos])
+  const marcarPagada=async(x,modo)=>{ const rut=String(x.d.emisor_rut||'').toUpperCase().replace(/[^0-9K]/g,'')
+    setPpx(p=>modo==='tarjeta'?{...p,emisores:new Set([...p.emisores,rut])}:{...p,pagadas:new Set([...p.pagadas,String(x.d.id)])})
+    if(DEMO) return; const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+    try{ if(modo==='tarjeta') await setLearningKV('compra_pago_emisor',rut,JSON.stringify({modo:'tarjeta',nombre:x.d.emisor_name||'',fecha:hoy})); else await setLearningKV('compra_pagada',String(x.d.id),JSON.stringify({motivo:'Pagada por otra vía',fecha:hoy}))
+      logActividad('compras.por_pagar',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · ${modo==='tarjeta'?'se paga con la tarjeta':'pagada por otra vía'}`}}) }catch(_){} }
   const nR=r=>String(r||'').replace(/[.\s-]/g,'').toLowerCase()
   const dmy=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
   const tipoLbl=t=>({33:'Afecta',34:'Exenta',56:'Nota débito',61:'Nota crédito'})[Number(t)]||('DTE '+t)
@@ -9198,6 +9214,17 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
         <div style={{fontSize:27,fontWeight:800,letterSpacing:-.6,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(Math.round(ivaCredito))}</div>
         <div style={{fontSize:11,opacity:.9,marginTop:4}}>de {nAfecta} factura{nAfecta!==1?'s':''} afecta{nAfecta!==1?'s':''} · neto {fmt(Math.round(neto))} · exentas y notas de crédito aparte</div>
       </div>
+      {porPagar.length>0&&<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px'}}><span style={{...SEC_LBL,flex:1}}>Por pagar · {porPagar.length}</span><span style={{fontSize:13,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(porPagar.reduce((a,x)=>a+x.falta,0))}</span></div>
+        {porPagar.map(x=><div key={x.d.id} style={{padding:'9px 14px',borderTop:`1px solid ${C.track}`}}>
+          <div style={{display:'flex',alignItems:'baseline',gap:10}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titleCase(x.d.emisor_name||'Proveedor')}</div>
+            <div style={{fontSize:11,color:C.textSoft,fontVariantNumeric:'tabular-nums'}}>N° {x.d.folio} · {dmy(x.d.fecha_emision)}{x.pagado>0?` · pagado ${fmt(x.pagado)}`:''}</div></div>
+            <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(x.falta)}</span></div>
+          <div style={{display:'flex',gap:7,marginTop:7,flexWrap:'wrap'}}>
+            <button onClick={()=>marcarPagada(x,'otra')} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}}>Pagada por otra vía</button>
+            <button onClick={()=>marcarPagada(x,'tarjeta')} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}}>Se paga con la tarjeta</button>
+          </div></div>)}
+      </div>}
       {(sinProv>0||calzan>0)&&<div style={{display:'flex',gap:8,marginTop:11,flexWrap:'wrap'}}>
         {sinProv>0&&<div style={{flex:'1 1 130px',background:C.overdueBg,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:16,fontWeight:800,color:C.overdueText}}>{sinProv}</div><div style={{fontSize:10.5,color:C.overdueText,lineHeight:1.3}}>sin proveedor · crear</div></div>}
         {calzan>0&&<div style={{flex:'1 1 130px',background:C.greenBg,borderRadius:10,padding:'9px 11px'}}><div style={{fontSize:16,fontWeight:800,color:C.greenText}}>{calzan}</div><div style={{fontSize:10.5,color:'#136b4e',lineHeight:1.3}}>pagos calzan con un cargo</div></div>}
@@ -10442,8 +10469,8 @@ function CalendarioTributarioView({isDesktop, onBack, origen, expenses=[], user}
     <div style={{display:'flex',flexDirection:'column',gap:14,marginTop:14}}>{anioCard}{det}</div></>)
   return wrap(<>{head}<div style={{display:'flex',flexDirection:'column',gap:12}}>{ciclosVer.map(cicloCard)}{alertasCard}{proxCard}{listaCard}{det}<div style={{textAlign:'center',padding:'4px 0'}}>{link}</div></div></>)
 }
-function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], anticipos=[], sales=[], fantasmaIds=null, onOpenFlujoCaja, isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza, onOpenSiiSinEnlazar, onOpenProveedores, onOpenSubarriendo }){
-  const [sub,setSub] = useState(null)
+function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[], clients=[], costosOfiRows=[], billing=[], terceros=[], anticipos=[], sales=[], fantasmaIds=null, onOpenFlujoCaja, isDesktop=true, onOpenEstadoResultados, onOpenResultadoAnio, onOpenVarios, proveedores=[], onSaveProveedor, onOpenRetiros, onOpenCobranza, onOpenSiiSinEnlazar, onOpenProveedores, onOpenSubarriendo, subInicial=null }){
+  const [sub,setSub] = useState(subInicial)
   // Procesos automáticos (solo socios: la RPC devuelve vacío a los demás y la tarjeta no aparece). Misma fuente que la página.
   const [procsN,setProcsN] = useState(null), [bandN,setBandN] = useState(null)
   useEffect(()=>{ if(!onOpenBandeja) return; if(DEMO){ setBandN(_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso').length); return } let v=true; supabase.from('agente_bandeja').select('id',{count:'exact',head:true}).in('estado',['pendiente','sospechoso']).then(({count,error})=>{ if(v&&!error) setBandN(count||0) },()=>{}); return ()=>{ v=false } },[])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -42639,6 +42666,7 @@ export default function App() {
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
   const [ccRevFocus,setCcRevFocus]=useState(false)   // abrir Banco › Cargos con la Revisión de caja chica abierta (desde Gastos)
   const [concBuscar,setConcBuscar]=useState(null)     // abrir Conciliación (Abonos) buscando por un texto (cliente) — desde "Buscar pago" en Cobranza
+  const [oficinaSub,setOficinaSub]=useState(null)   // ?ir=compras abre Oficina › Compras directo
   const [billingIntent,setBillingIntent]=useState(null) // gatillo: abrir Facturación con un foco puntual (checklist/cierre/cotejo) desde navTo; lo consume BillingView y lo limpia
   const [emitidoSeg,setEmitidoSeg]=useState('pagadas') // segmento (pagadas/porcobrar) con que abre la página "Facturas del mes" (navTo desde el Inicio)
   const [editClientId,setEditClientId]=useState(null)  // cliente a editar en la página "editCliente" (id, o '__new__' para uno nuevo); null = ninguno
@@ -42727,7 +42755,8 @@ export default function App() {
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
       else if(ir==='sinemitir'){ setTab('billing'); setBillingIntent('sinemitir') }   // correo día 6 → radar "Cuotas vencidas sin facturar"
       else if(ir==='cierre'){ setTab('billing'); setBillingIntent('cierre') }
-      else if(ir==='sinfacturar'){ setTab('billing'); setBillingIntent('sinfacturar') }   // correo de pendientes → Trabajos sin facturar   // correo de cierre del día 6 → página Cierre de mes
+      else if(ir==='sinfacturar'){ setTab('billing'); setBillingIntent('sinfacturar') }
+      else if(ir==='compras'){ setOficinaSub('compras'); setTab('presupuestoOficina') }   // resumen del lunes → Compras · Por pagar   // correo de pendientes → Trabajos sin facturar   // correo de cierre del día 6 → página Cierre de mes
       else if(ir==='cobranza') setTab('cobranza')   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
   },[user,userRole])
@@ -45158,7 +45187,7 @@ export default function App() {
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack} origen={origenNav('Inicio')}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1100,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <OficinaHub expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenBandeja={()=>navTo({tab:'bandeja'})}/>
+              <OficinaHub subInicial={oficinaSub} expenses={expenses} clients={clients} costosOfiRows={costosOfiRows} billing={billing} terceros={terceros} anticipos={anticipos} sales={sales} fantasmaIds={fantasmaAltaIds} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} isDesktop={isDesktop} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenResultadoAnio={()=>navTo({tab:'resultadoAnio'})} onOpenVarios={()=>{setGastosOfiOpen(true);navTo({tab:'expenses'})}} onOpenRetiros={()=>navTo({tab:'socios'})} onOpenCobranza={()=>navTo({tab:'cobranza'})} onOpenSiiSinEnlazar={()=>navTo({tab:'billing',billingIntent:'sii'})} onOpenProveedores={()=>navTo({tab:'proveedores'})} onOpenSubarriendo={()=>navTo({tab:'subarriendo'})} onOpenProcesos={()=>navTo({tab:'procesos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenBandeja={()=>navTo({tab:'bandeja'})}/>
             </div>}
             {tab==='calendarioTrib'&&userRole==='admin'&&<CalendarioTributarioView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} expenses={expenses} user={user}/>}
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})} onOpenClientFicha={handleOpenClientFicha}/>}

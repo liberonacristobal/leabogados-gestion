@@ -4,6 +4,7 @@
 //   2) Tus proyectos     — facturas emitidas esta semana (movimientos).
 //   3) Tus clientes      — abonos por identificar (sin cliente, pendientes).
 //   4) Facturación       — emitidas semana / por cobrar / vencido (misma lógica que sii-sync resumen-semanal).
+//   5) Facturas recibidas por pagar — regla única comprasPorPagar (_shared/comprasReglas.js), la misma de Oficina › Compras.
 // Una sección sin datos NO aparece (correo corto). task-reminders sigue mié/vie por separado.
 //
 // Auth: verify_jwt=false. Cron con secreto (body.secret === CRON_SECRET). body.dryRun no envía (devuelve el html);
@@ -11,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -74,6 +76,15 @@ serve(async (req) => {
     const { data: concRaw } = await pageAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
     const { data: abRaw } = await pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
     const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
+    // Facturas recibidas por pagar (misma regla y mismas marcas que Oficina › Compras).
+    const [cpDocs, cpCargos, cpGastos, cpL, cpT] = await Promise.all([
+      pageAll(()=>sb.from("sii_compras_docs").select("id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,monto,movimiento_id").order("id")),
+      pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,rut_contraparte,estado,es_interno").eq("tipo","cargo").not("rut_contraparte","is",null).order("id")),
+      pageAll(()=>sb.from("expenses").select("amount,date").eq("type","gasto").is("deleted_at",null).gte("date","2026-05-01").order("id")),
+      sb.from("learnings").select("kind,key").in("kind",["tarjeta_comercio","compra_pago_emisor","compra_pagada"]),
+      sb.from("terceros_pagos").select("rut").is("comision_pct",null).not("rut","is",null)]);
+    const cpK = (k: string) => (cpL.data || []).filter((r: { kind: string }) => r.kind === k).map((r: { key: string }) => String(r.key));
+    const porPagarCompras = (cpDocs.error || cpCargos.error) ? [] : comprasPorPagar({ docs: cpDocs.data || [], cargos: cpCargos.data || [], gastos: cpGastos.data || [], tarjetaReglas: cpK("tarjeta_comercio"), emisoresPago: new Set(cpK("compra_pago_emisor")), rutsColaboradores: new Set((cpT.data || []).map((r: { rut: string }) => String(r.rut || "").toUpperCase().replace(/[^0-9K]/g, ""))), pagadas: new Set(cpK("compra_pagada")), hoy: todayCL });
 
     // deno-lint-ignore no-explicit-any
     const cname = (id: unknown) => (clients || []).find((c: any) => String(c.id) === String(id))?.name || "";
@@ -212,6 +223,15 @@ serve(async (req) => {
         // Dato menor: cuotas vencidas sin facturar, 1 línea con link al radar. Solo si hay.
         const lineaRadar = sinEmitirN > 0 ? `<div style="font-size:11px;color:${MUT};margin-top:4px;">${sinEmitirN} cuota${sinEmitirN !== 1 ? "s" : ""} vencida${sinEmitirN !== 1 ? "s" : ""} sin facturar &middot; <a href="https://gestion.leabogados.cl/?ir=sinemitir" style="color:${A};font-weight:700;text-decoration:none;">revisar &rsaquo;</a></div>` : "";
         bloques.push(sec("#EAF2FB", svgIco(A, ICO_FACT), "Facturación", "esta semana", MUT, hero + kpis + lineaVence + lineaEnviar + lineaRadar + cta("Ir a Facturación")));
+      }
+
+      // 5) Facturas recibidas por pagar
+      if (porPagarCompras.length) {
+        const tit = (n: string) => { let t = String(n || "Proveedor").trim(); for (let k = 0; k < 2; k++) t = t.replace(/[\s,]+(s\.?\s?p\.?\s?a\.?|spa|s\.?\s?a\.?|ltda\.?|limitada|sociedad an[oó]nima)\s*$/i, ""); return t.toLowerCase().replace(/(^|\s)\S/g, (c: string) => c.toUpperCase()).replace(/ (De|Del|La|Las|Los|Y|E) /g, (m: string) => m.toLowerCase()); };
+        // deno-lint-ignore no-explicit-any
+        const filas = porPagarCompras.slice(0, 5).map((x: any) => rowT(`<b style="color:${A}">${esc(tit(x.d.emisor_name))}</b> &middot; N&deg; ${esc(String(x.d.folio))}`, `falta ${fm(x.falta)}`, AMB)).join("");
+        const tot = porPagarCompras.reduce((a: number, x: { falta: number }) => a + x.falta, 0);
+        bloques.push(sec("#FFF8E1", svgIco(AMB, ICO_FACT), "Facturas recibidas por pagar", `${porPagarCompras.length} &middot; ${fm(tot)}`, AMB, filas + `<a href="https://gestion.leabogados.cl/?ir=compras" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver compras &rsaquo;</a>`));
       }
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
