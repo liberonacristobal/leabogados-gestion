@@ -15,7 +15,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { obtenerToken } from './auth.ts'
-import { getVentas, getVentasFull, getCompras, getComprasRaw } from './rcv.ts'
+import { getVentas, getVentasFull, getCompras, getComprasRaw, getObservados } from './rcv.ts'
 import { conciliar, normalizarRut } from './match.ts'
 import { getConfig, getEmisor, getResol } from './config.ts'
 import { parseCaf } from './caf.ts'
@@ -429,9 +429,24 @@ serve(async (req) => {
         console.log(`[sii-sync] sync-compras ${periodoC}: ${compras.length} del SII, ${filas.length} unicas, ${conProveedor} con proveedor`)
         detalleC.push({ periodo: periodoC, totalSII: compras.length, guardadas, sinProveedor: filas.length - conProveedor })
       }
+      // Documentos observados por el SII (W39). El SII los marca meses después (el de sep-2025 apareció en sep-2026): cada día se
+      // revisan el mes anterior y el actual, y los lunes los últimos 36 meses (plazo de revisión). Marca la compra (observado_sii).
+      let observados = 0
+      try {
+        const esLunes = new Date().toLocaleDateString('en-US', { timeZone: 'America/Santiago', weekday: 'short' }) === 'Mon'
+        const perObs = body.periodo ? periodosC : esLunes || body.barridoObs ? Array.from({ length: 36 }, (_, i) => per(new Date(Date.UTC(hoyC.getUTCFullYear(), hoyC.getUTCMonth() - i, 1)))) : periodosC
+        for (const p of perObs) {
+          const obs = await getObservados(p, tokenC)
+          for (const o of obs) {
+            const { data: hit } = await sb.from('sii_compras_docs').update({ observado_sii: true, observado_at: new Date().toISOString(), observado_iva: o.iva })
+              .eq('emisor_rut', o.rut).eq('folio', o.folio).eq('observado_sii', false).select('id')
+            observados += (hit || []).length
+          }
+        }
+      } catch (e) { console.log(`[sii-sync] documentos observados: ${e instanceof Error ? e.message : e}`) }
       // Compatibilidad con la app (un periodo): mismas llaves de antes en la raiz.
       const d0 = detalleC[0]
-      return json({ ok: true, ambiente, periodo: periodosC.length === 1 ? periodosC[0] : periodosC, ...(periodosC.length === 1 ? d0 : {}), detalle: detalleC })
+      return json({ ok: true, ambiente, periodo: periodosC.length === 1 ? periodosC[0] : periodosC, ...(periodosC.length === 1 ? d0 : {}), detalle: detalleC, observadosNuevos: observados })
     }
 
     // TRAÍDO HISTÓRICO READ-ONLY del Registro de VENTAS del SII (facturas + notas de
