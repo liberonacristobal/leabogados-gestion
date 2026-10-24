@@ -1,5 +1,5 @@
 // Edge Function: causas-tablas
-// Revisa si las causas del estudio (tabla causas) están en la tabla del día de su Corte de Apelaciones, leyendo el Monitor de
+// Revisa si las causas del estudio (tabla causas) están en la tabla del día de su Corte de Apelaciones o de la Corte Suprema, leyendo el Monitor de
 // Salas público del Poder Judicial (salas.pjud.cl): por sala, las tablas del día (N° de orden, rol, materia, carátula, estado), la
 // causa que se está viendo, «a verse hasta el N°», horario, integración y videoconferencia. Sin captcha ni clave: es el mismo
 // flujo de la página (entrar a la sala crea la sesión). www.pjud.cl (Programación de Salas, Estados Diarios) responde con captcha
@@ -20,7 +20,7 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
-const MON = "https://salas.pjud.cl/monitor";
+const MON = "https://salas.pjud.cl/monitor", MON_SUP = "https://salas.pjud.cl/monitorSup";
 const SUPREMA = "6050000";
 const UA = "Mozilla/5.0";
 const H = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
@@ -98,10 +98,29 @@ async function leerSala(jar: Map<string, string>, corteValor: string, num: strin
     horario: inf?.hr_desde && inf?.hr_hasta ? `${limpio(inf.hr_desde)} a ${limpio(inf.hr_hasta)}` : null,
     video: vid?.videollamada && /^https?:/.test(String(vid.videollamada)) ? String(vid.videollamada) : null, ministros: ms };
 }
+// Corte Suprema (monitorSup): la sala va por su número (1 Civil, 2 Penal, 3 Constitucional, 4 Mixta), sin sesión. No informa
+// la causa en curso: se toma la fila cuyo estado dice «Alegando» o «Relatando»; no informa horario ni «a verse hasta».
+async function leerSalaSuprema(jar: Map<string, string>, num: string, nombre: string): Promise<Sala> {
+  const post = async (f: string, extra: Record<string, string> = {}) => parseJ(await monFetch(`${MON_SUP}/controlador/${f}.php`, jar, { sala: num, ...extra }), f);
+  const lt = await post("listaTablas");
+  const tablas: Sala["tablas"] = [];
+  for (const d of Array.isArray(lt?.datos) ? lt.datos : []) {
+    const ct = await post("cargaTablasSuprema", { tabla: String(d.tip_tabla) });
+    tablas.push({ glosa: limpio(d.tabla), filas: (Array.isArray(ct?.detalle) ? ct.detalle : []).map((x: Record<string, unknown>) => ({ orden: Number(x.orden), rol: limpio(x.crr_causa), materia: limpio(x.gls_causa), caratulado: limpio(x.caratulado), estado: limpio(x.estado), alegato: limpio(x.alegato) })) });
+  }
+  const activa = tablas.flatMap((t) => t.filas).find((f) => /alegando|relatando/i.test(f.estado));
+  const vid = await post("listaVideollamadaN", { competencia: "-1" }).catch(() => null), min = await post("listaMinistro", { competencia: "-1" }).catch(() => null);
+  const ms = (Array.isArray(min) ? min : Array.isArray(min?.datos) ? min.datos : []).map((m: Record<string, unknown>) => `${limpio(m.glosa_cargo)}: ${limpio(m.nombre)}`.replace(/^: /, "")).filter(Boolean);
+  return { num, nombre, tablas, viendo: activa ? activa.rol : null, hasta: null, horario: null, video: vid?.videollamada && /^https?:/.test(String(vid.videollamada)) ? String(vid.videollamada) : null, ministros: ms };
+}
+// «Tercera, CONSTITUCIONAL» → «Tercera Sala (Constitucional)».
+const salaSup = (x: string) => { const [a, b] = limpio(x).split(/\s*,\s*/); return b ? `${a} Sala (${b.charAt(0)}${b.slice(1).toLowerCase()})` : limpio(x); };
+const esSuprema = (c: { instancia?: string; corte_codigo?: string }) => c.instancia === "suprema" || c.corte_codigo === SUPREMA;
 // La causa en una sala: mismo rol-año y (misma materia que su libro o una palabra de la carátula en común). El rol se repite en
-// cada libro de la Corte, por eso no basta el número.
+// cada libro de la Corte, por eso no basta el número. En la Corte Suprema el rol es único en el año: basta el rol.
 // deno-lint-ignore no-explicit-any
 function buscarEnSala(c: any, s: Sala) {
+  const unico = esSuprema(c);
   const rolTxt = `${Number(c.rol)}-${c.anio}`;
   const lib = nl(c.libro_nombre || "").replace(/[^a-z ]/g, "").split(" ").find((w) => w.length > 3)?.slice(0, 6) || "";
   const pal = new Set(nl(c.caratula || "").replace(/[^a-z ]/g, " ").split(" ").filter((w) => w.length >= 5));
@@ -109,7 +128,7 @@ function buscarEnSala(c: any, s: Sala) {
     if (f.rol.replace(/^0+/, "") !== rolTxt) continue;
     const libOk = !!lib && nl(f.materia).includes(lib);
     const carOk = nl(f.caratulado).replace(/[^a-z ]/g, " ").split(" ").some((w) => pal.has(w));
-    if (libOk || carOk || (!lib && !pal.size)) {
+    if (unico || libOk || carOk || (!lib && !pal.size)) {
       const vf = s.viendo ? t.filas.find((x) => x.rol === s.viendo) : null;
       return { fila: f, tabla: t.glosa, viendo: vf ? vf.orden : null };
     }
@@ -163,14 +182,28 @@ Deno.serve(async (req) => {
     // Salas a leer por Corte (detectar: todas; seguir: solo las de hoy). Una lectura por sala y corrida, una a la vez.
     const salasPorCorte = new Map<string, { valor: string; salas: Map<string, Sala | Error> } | Error>();
     // deno-lint-ignore no-explicit-any
-    const apel = causas.filter((c: any) => c.instancia !== "suprema" && c.corte_codigo !== SUPREMA);
-    for (const corte of [...new Set(apel.map((c: { corte_nombre: string }) => c.corte_nombre))] as string[]) {
+    const corteDe = (c: any) => esSuprema(c) ? "Corte Suprema" : c.corte_nombre;
+    for (const corte of [...new Set(causas.map(corteDe))] as string[]) {
+      // deno-lint-ignore no-explicit-any
+      const deLaCorte = causas.filter((c: any) => corteDe(c) === corte);
+      const salasHoy = new Set(deLaCorte.map((c: { ultima_tabla: { sala_num: string } }) => String(c.ultima_tabla?.sala_num || "")));
+      if (corte === "Corte Suprema") {
+        try {
+          let lista = (parseJ(await monFetch(`${MON_SUP}/controlador/listaSalaPorSuprema.php`, new Map(), {}), "las salas de la Corte Suprema") as { numero: string; sala: string }[]).filter((s) => String(s.numero) !== "0");
+          if (!lista.length) throw new Error("salas.pjud.cl no entregó las salas de la Corte Suprema");
+          if (seguir) lista = lista.filter((s) => salasHoy.has(String(s.numero)));
+          const salas = new Map<string, Sala | Error>(), jar = new Map<string, string>();
+          for (const s of lista) { await pausa(1500); salas.set(String(s.numero), await leerSalaSuprema(jar, String(s.numero), salaSup(s.sala)).catch((e) => e as Error)); }
+          salasPorCorte.set(corte, { valor: "", salas });
+        } catch (e) { salasPorCorte.set(corte, e as Error); }
+        continue;
+      }
       try {
         const op = (await cortesMonitor()).find((o) => nl(o.nombre) === nl(corte));
         if (!op) throw new Error(`la ${corte} no aparece en el Monitor de Salas`);
         let lista = parseJ(await monFetch(`${MON}/controlador/listaSalaPorCorte.php`, new Map(), { corte: op.valor }), "las salas") as { numero: string; sala: string }[];
         if (!Array.isArray(lista) || !lista.length) throw new Error(`salas.pjud.cl no entregó las salas de la ${corte}`);
-        if (seguir) { const nums = new Set(apel.filter((c: { corte_nombre: string }) => c.corte_nombre === corte).map((c: { ultima_tabla: { sala_num: string } }) => String(c.ultima_tabla?.sala_num || ""))); lista = lista.filter((s) => nums.has(String(s.numero))); }
+        if (seguir) lista = lista.filter((s) => salasHoy.has(String(s.numero)));
         const salas = new Map<string, Sala | Error>(), jar = new Map<string, string>();
         await monFetch(`${MON}/monitor.php`, jar);
         for (const s of lista) {
@@ -192,8 +225,7 @@ Deno.serve(async (req) => {
 
     for (const c of causas) {
       try {
-        if (c.instancia === "suprema" || c.corte_codigo === SUPREMA) throw new Error("la Corte Suprema aún no se revisa en el Monitor de Salas");
-        const sc = salasPorCorte.get(c.corte_nombre);
+        const sc = salasPorCorte.get(corteDe(c));
         if (!sc) throw new Error("sin Corte");
         if (sc instanceof Error) throw sc;
         let hit: { fila: Fila; tabla: string; viendo: number | null; sala: Sala } | null = null;
