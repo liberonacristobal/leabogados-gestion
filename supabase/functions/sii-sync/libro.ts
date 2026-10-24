@@ -73,9 +73,9 @@ export function armarLibroVentas(car: LibroCaratula, detalle: LibroDetalle[], no
   const firma = firmarReferencia(canon, '#' + libroId)
 
   return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<LibroCompraVenta xmlns="${SIIDTE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
-    `xsi:schemaLocation="${SIIDTE} LibroCV_v10.xsd" version="1.0">` +
+    `<?xml version="1.0" encoding="ISO-8859-1"?>` +
+    // Sin xmlns:xsi (ver emision.ts): el único namespace en alcance del EnvioLibro firmado es SiiDte.
+    `<LibroCompraVenta xmlns="${SIIDTE}" version="1.0">` +
     envioLibro + firma +
     `</LibroCompraVenta>`
   )

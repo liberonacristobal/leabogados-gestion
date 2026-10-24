@@ -2,9 +2,9 @@
 //
 // Reutiliza la danza de auth.ts (obtenerToken) y http.ts (fetchSII/conReintentos).
 // ⚠ Todo el ida-y-vuelta con el SII y la codificación se validan en CERTIFICACIÓN (maullin):
-//   - ENCODING: el DTE chileno tradicionalmente va en ISO-8859-1. Acá se emite UTF-8 (consistente
-//     con los digests de forge, que firman bytes UTF-8). Si el SII exige latin1, hay que emitir y
-//     digerir en ISO-8859-1 — punto a confirmar con texto acentuado real (razón social/glosa).
+//   - ENCODING: el sobre se declara y se envía en ISO-8859-1 (formato DTE 2.5; si no, «Invalid Character»).
+//     Las firmas XMLDSig digieren la forma canónica C14N, que es UTF-8 por definición; el timbre (TED) firma
+//     el DD en ISO-8859-1. Se confirma con texto acentuado real en el set de pruebas.
 //   - DTEUpload (multipart) y QueryEstUp (SOAP): el formato exacto de campos/respuesta se afina
 //     contra el ambiente de pruebas.
 
@@ -48,24 +48,32 @@ export function armarEnvioDTE(dtesFirmados: string[], car: CaratulaInput, nowIso
   const setDte = `<SetDTE ID="${setId}">${caratula}${dtesFirmados.join('')}</SetDTE>`
   const firma = firmarSetDTE(setDte, setId)
   return (
-    `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<EnvioDTE xmlns="${SIIDTE}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
-    `xsi:schemaLocation="${SIIDTE} EnvioDTE_v10.xsd" version="1.0">` +
+    `<?xml version="1.0" encoding="ISO-8859-1"?>` +
+    // Sin xmlns:xsi/schemaLocation (opcionales): con ellos, la C14N inclusiva del SetDTE y de cada Documento hereda xmlns:xsi y
+    // el digest ya no calza con lo firmado (verificado con lxml 24-10-2026). Así el único namespace en alcance es SiiDte.
+    `<EnvioDTE xmlns="${SIIDTE}" version="1.0">` +
     setDte + firma +
     `</EnvioDTE>`
   )
 }
 
+// Bytes ISO-8859-1 del XML (un byte por carácter; t() de dte.ts ya dejó solo caracteres de ese juego).
+export function latin1(s: string): Uint8Array {
+  const b = new Uint8Array(s.length)
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); b[i] = c < 256 ? c : 63 }
+  return b
+}
+
 // Envía el sobre al SII (DTEUpload: multipart/form-data + cookie TOKEN). Devuelve el TrackID.
 export async function enviarAlSII(envioXml: string): Promise<string> {
-  const cfg = getConfig()
-  const token = await obtenerToken()
+  const cfg = getConfig('emision')
+  const token = await obtenerToken(false, 'emision')
   const e = splitRut(cfg.rutEnvia), c = splitRut(cfg.rutEmpresa)
   return await conReintentos('envío DTE al SII', async () => {
     const fd = new FormData()
     fd.append('rutSender', e.num); fd.append('dvSender', e.dv)
     fd.append('rutCompany', c.num); fd.append('dvCompany', c.dv)
-    fd.append('archivo', new Blob([envioXml], { type: 'text/xml' }), 'envio.xml')
+    fd.append('archivo', new Blob([latin1(envioXml)], { type: 'text/xml' }), 'envio.xml')
     const res = await fetchSII(cfg.uploadUrl, { method: 'POST', headers: { Cookie: `TOKEN=${token}` }, body: fd }, cfg.timeoutMs)
     const txt = await res.text()
     if (!res.ok) throw new Error(`DTEUpload HTTP ${res.status}: ${txt.slice(0, 200)}`)
@@ -77,8 +85,8 @@ export async function enviarAlSII(envioXml: string): Promise<string> {
 
 // Consulta el estado de un envío por TrackID (QueryEstUp.jws). Devuelve estado + glosa crudos del SII.
 export async function consultarEstado(trackId: string): Promise<{ estado: string; glosa: string }> {
-  const cfg = getConfig()
-  const token = await obtenerToken()
+  const cfg = getConfig('emision')
+  const token = await obtenerToken(false, 'emision')
   const c = splitRut(cfg.rutEmpresa)
   const envelope =
     '<?xml version="1.0" encoding="UTF-8"?>' +

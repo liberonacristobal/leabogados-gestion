@@ -37,8 +37,10 @@ export interface FacturaInput {
 }
 
 const IVA = 0.19
-// El DTE no admite & < > en texto (rompe el XML y la firma): se sanean a vacío/espacio.
-const t = (s: unknown) => String(s ?? '').replace(/[<>&]/g, ' ').replace(/\s+/g, ' ').trim()
+// El DTE no admite & < > en texto (rompe el XML y la firma): se sanean a espacio. El SII recibe ISO-8859-1 (formato DTE 2.5):
+// comillas y guiones tipográficos pasan a su par simple y se quita todo carácter fuera de ese juego («Invalid Character»).
+const t = (s: unknown) => String(s ?? '').replace(/[\u2018\u2019\u201A\u2032]/g, "'").replace(/[\u201C\u201D\u201E\u2033]/g, '"')
+  .replace(/[\u2013\u2014\u2212]/g, '-').replace(/\u2026/g, '...').replace(/[<>&]/g, ' ').replace(/[^\x09\x0A\x0D\x20-\xFF]/g, '').replace(/\s+/g, ' ').trim()
 // RUT al formato SII: sin puntos, con guion, DV en mayúscula. 76543210-9
 const rut = (r: unknown) => String(r ?? '').replace(/\./g, '').replace(/\s/g, '').toUpperCase()
 const n = (v: unknown) => Math.round(Number(v) || 0)

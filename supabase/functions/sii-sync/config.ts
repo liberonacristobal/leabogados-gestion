@@ -10,9 +10,13 @@
 // SII_AMBIENTE=produccion (es solo LECTURA del registro, no emite nada).
 
 export type Ambiente = 'certificacion' | 'produccion'
+// Dos usos con ambiente PROPIO: 'lectura' (RCV, XML de emitidos, documentos observados: siempre producción, SII_AMBIENTE) y
+// 'emision' (DTE, libro, estado del envío: SII_AMBIENTE_EMISION; certificación hasta que el SII autorice). Así el set de
+// pruebas se emite en maullin sin cortar la lectura diaria del SII real.
+export type Uso = 'lectura' | 'emision'
 
-export function getConfig() {
-  const ambiente = (Deno.env.get('SII_AMBIENTE') || 'certificacion') as Ambiente
+export function getConfig(uso: Uso = 'lectura') {
+  const ambiente = ((uso === 'emision' ? Deno.env.get('SII_AMBIENTE_EMISION') : Deno.env.get('SII_AMBIENTE')) || 'certificacion') as Ambiente
   const prod = ambiente === 'produccion'
   const dteBase = prod ? 'https://palena.sii.cl/DTEWS' : 'https://maullin.sii.cl/DTEWS'
   // El RCV vive en el portal del SII (www4 prod / www4c cert). Se consulta con el

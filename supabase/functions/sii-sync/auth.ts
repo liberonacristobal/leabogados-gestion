@@ -16,13 +16,13 @@
 
 // deno-lint-ignore-file no-explicit-any
 import forge from 'forge'
-import { getConfig } from './config.ts'
+import { getConfig, type Uso } from './config.ts'
 import { fetchSII, conReintentos, xmlEscape, xmlUnescape } from './http.ts'
 
 const DSIG = 'http://www.w3.org/2000/09/xmldsig#'
 const TTL_MS = 55 * 60 * 1000
 
-let tokenCache: { token: string; expira: number } | null = null
+const tokenCache = new Map<string, { token: string; expira: number }>()   // un token por ambiente (lectura prod / emisión cert)
 
 export interface Credenciales {
   key: any
@@ -72,8 +72,8 @@ export function cargarCertificado(): Credenciales {
 }
 
 // Paso 1: pedir la semilla (un solo uso).
-async function getSeed(): Promise<string> {
-  const { seedUrl, timeoutMs } = getConfig()
+async function getSeed(uso: Uso): Promise<string> {
+  const { seedUrl, timeoutMs } = getConfig(uso)
   const envelope =
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:def="http://DefaultNamespace">' +
@@ -141,8 +141,8 @@ function signSeed(seed: string): string {
 }
 
 // Paso 3: canjear el XML firmado por el token de sesion.
-async function getTokenFromSeed(signedXml: string): Promise<string> {
-  const { tokenUrl, timeoutMs } = getConfig()
+async function getTokenFromSeed(signedXml: string, uso: Uso): Promise<string> {
+  const { tokenUrl, timeoutMs } = getConfig(uso)
   const envelope =
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:def="http://DefaultNamespace">' +
@@ -170,17 +170,19 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
 // Punto de entrada: devuelve token cacheado o ejecuta la danza completa.
 // La semilla es de UN solo uso: cada reintento repite la danza entera
 // (semilla nueva + firma nueva), nunca se reusa una semilla consumida.
-export async function obtenerToken(forzar = false): Promise<string> {
-  if (!forzar && tokenCache && Date.now() < tokenCache.expira) {
+export async function obtenerToken(forzar = false, uso: Uso = 'lectura'): Promise<string> {
+  const amb = getConfig(uso).ambiente
+  const c = tokenCache.get(amb)
+  if (!forzar && c && Date.now() < c.expira) {
     console.log('[sii-sync] token desde cache')
-    return tokenCache.token
+    return c.token
   }
   const token = await conReintentos('autenticacion SII', async () => {
-    const seed = await getSeed()
+    const seed = await getSeed(uso)
     const signed = signSeed(seed)
-    return await getTokenFromSeed(signed)
+    return await getTokenFromSeed(signed, uso)
   })
-  tokenCache = { token, expira: Date.now() + TTL_MS }
+  tokenCache.set(amb, { token, expira: Date.now() + TTL_MS })
   console.log('[sii-sync] token obtenido y cacheado (TTL 55 min)')
   return token
 }
