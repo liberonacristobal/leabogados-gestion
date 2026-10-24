@@ -10082,7 +10082,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
       {ab&&ps.map(fila)}</div> }
   // Por aprobar agrupado: cada fila = un tipo de decisión, con su cantidad y a dónde lleva.
   const BANDEJA_TIPO={cuenta_bancaria:'Cuentas bancarias por confirmar',factura_sin_registrar:'Facturas por registrar',factura_sin_venta:'Facturas sin venta',fondo_por_registrar:'Fondos por registrar',comprobante:'Comprobantes por revisar',pedido_cliente:'Pedidos de clientes',respaldo_gasto:'Respaldos de gastos',boleta_honorarios:'Boletas de honorarios',liquidacion_notaria:'Liquidaciones de la notaría'}
-  const HALLAZGO_TIPO={compra_plazo_reclamo:'Facturas recibidas en plazo de reclamo',cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por aplicar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
+  const HALLAZGO_TIPO={compra_observada_sii:'Compras de proveedores observados por el SII',compra_plazo_reclamo:'Facturas recibidas en plazo de reclamo',cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por aplicar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
   const paFilas=(()=>{ if(!pa) return []; const out=[]
     const gb={}; pa.bandeja.forEach(r=>{ const k=r.estado==='sospechoso'?'sospechoso':r.tipo||'otro'; (gb[k]=gb[k]||[]).push(r) })
     Object.entries(gb).forEach(([k,rs])=>{ const folios=['factura_sin_registrar','factura_sin_venta'].includes(k)?rs.map(r=>(String(r.asunto||'').match(/N° ?(\d+)/)||[])[1]).filter(Boolean):[]
@@ -11486,6 +11486,14 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
     Promise.all([supabase.from('sii_compras_docs').select('id,folio,tipo_dte,emisor_name,monto,sii_estado,fecha_recepcion').eq('sii_estado','PENDIENTE'),supabase.from('learnings').select('key').eq('kind','compra_sin_reclamo')])
       .then(([c,l])=>{ if(!v) return; setCpPend(c.data||[]); setCpVistas(new Set((l.data||[]).map(r=>String(r.key)))) },()=>{})
     return ()=>{v=false} },[])
+  // Compras de proveedores observados por el SII (W39), regla única SD.comprasObservadasSII (la misma del auditor nocturno).
+  const [cpObs,setCpObs]=useState([]), [cpObsVistas,setCpObsVistas]=useState(()=>new Set())
+  useEffect(()=>{ if(DEMO) return; let v=true
+    Promise.all([supabase.from('sii_compras_docs').select('id,folio,tipo_dte,emisor_name,emisor_rut,periodo,monto,observado_iva,observado_sii').eq('observado_sii',true),supabase.from('learnings').select('key').eq('kind','compra_observada_vista')])
+      .then(([c,l])=>{ if(!v) return; setCpObs(c.data||[]); setCpObsVistas(new Set((l.data||[]).map(r=>String(r.key)))) },()=>{})
+    return ()=>{v=false} },[])
+  const observadas=useMemo(()=>SD.comprasObservadasSII(cpObs,cpObsVistas),[cpObs,cpObsVistas])
+  const decidirObservada=async(x,decision)=>{ setCpObsVistas(p=>new Set([...p,String(x.id)])); if(DEMO) return; try{ await setLearningKV('compra_observada_vista',String(x.id),JSON.stringify({decision,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); logActividad('compras.observada_decidida',{tabla:'sii_compras_docs',id:x.id,detalle:{title:`Factura N° ${x.folio} de ${x.emisor_name||'proveedor'} (observada por el SII): ${decision==='rectificar'?'se rectifica el F29':'se acredita el crédito'}`}}) }catch(_){} }
   const enReclamo=useMemo(()=>SD.comprasEnPlazoReclamo(cpPend,new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),cpVistas),[cpPend,cpVistas])
   const sinReclamo=async x=>{ setCpVistas(p=>new Set([...p,String(x.d.id)])); if(DEMO) return; try{ await setLearningKV('compra_sin_reclamo',String(x.d.id),JSON.stringify({fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); logActividad('compras.sin_reclamo',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · revisada sin reclamo`}}) }catch(_){} }
   const antSub=useMemo(()=>SD.anticiposSubarriendo(anticipos,billing,sales,conciliacion).filter(x=>!antSubDone.has(String(x.a.id))),[anticipos,billing,sales,conciliacion,antSubDone])
@@ -11549,7 +11557,7 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=observadas.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -11660,6 +11668,14 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{extra.length?`${extra.length+1} pagos desde el ${fmtFechaDMY(a.fecha)}`:`pago del ${fmtFechaDMY(a.fecha)}`} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
           {amt(fmt(pagado??(Number(a.monto)||0)),`cuotas ${fmt(sum)}`,C.greenText)}</div>
         {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id),extra.map(x=>x.id)); setCubiertasRD(p=>new Set([...p,String(a.id),...extra.map(x=>String(x.id))])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
+      </div>)}
+    </div>}
+    {observadas.length>0&&<div style={secBox}>{sh('Compras de proveedores observados por el SII',C.overdueText,observadas.length)}
+      {observadas.map(x=><div key={x.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(x.emisor_name||'Proveedor')}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>Factura N° {x.folio}{x.periodo?` · ${mesTitulo(String(x.periodo).slice(0,7)+'-15T12:00')}`:''} · IVA objetado en el F29</div></div>
+          {amt(fmt(Number(x.observado_iva)||0),'IVA',C.overdueText)}</div>
+        <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>{[['rectificar','Se rectifica'],['acreditar','Se acredita']].map(([k,l])=><button key={k} onClick={()=>decidirObservada(x,k)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>{l}</button>)}</div>
       </div>)}
     </div>}
     {enReclamo.length>0&&<div style={secBox}>{sh('Facturas recibidas en plazo de reclamo',C.soonText,enReclamo.length)}

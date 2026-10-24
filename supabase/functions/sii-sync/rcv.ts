@@ -295,6 +295,24 @@ export async function getComprasRaw(periodo: string, token: string): Promise<any
   return out
 }
 
+// «Documentos observados» del Registro de Compras: facturas de proveedores con situación tributaria irregular (W39). El SII
+// objeta su crédito de IVA en el F29. Misma consulta que la pestaña del RCV (getDetallesObs), solo lectura.
+export interface CompraObservada { rut: string; folio: string; tipoDte: number; fecha: string; iva: number; total: number }
+export async function getObservados(periodo: string, token: string): Promise<CompraObservada[]> {
+  const { rcvBase, rutEmpresa, timeoutMs } = getConfig()
+  const [rut] = rutEmpresa.replace(/\./g, '').toUpperCase().split('-')
+  const res = await fetchSII(`${rcvBase}/consdcvinternetui/services/data/facadeService/getDetallesObs`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json, text/plain, */*', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; FirmDesk/1.0)', 'Referer': `${rcvBase}/consdcvinternetui/`, 'Cookie': `TOKEN=${token}; CSESSIONID=${token}` },
+    body: JSON.stringify({ metaData: { namespace: `${NAMESPACE}/getDetallesObs`, conversationId: token, transactionId: transId(), page: null }, data: { ptributario: periodo.replace('-', ''), rutEmisor: rut } }),
+  }, timeoutMs)
+  const j = await res.json().catch(() => null)
+  if (!res.ok || !j) throw new Error(`getDetallesObs ${periodo}: HTTP ${res.status}`)
+  const d = Array.isArray(j.data) ? j.data : []
+  // deno-lint-ignore no-explicit-any
+  return d.map((x: any) => ({ rut: `${x.detRutDoc}-${String(x.detDvDoc || '').toUpperCase()}`, folio: String(x.detNroDoc), tipoDte: Number(x.detTipoDoc) || 33, fecha: String(x.detFchDoc || ''), iva: Number(x.detMntIVA) || 0, total: Number(x.detMntTotal) || 0 }))
+}
+
 export async function getCompras(periodo: string, token: string): Promise<CompraSII[]> {
   return await conReintentos('consulta RCV compras', async () => {
     const porTipo = await Promise.all(COMPRA_TIPOS.map((t) => detalleComprasPorTipo(t, periodo, token)))

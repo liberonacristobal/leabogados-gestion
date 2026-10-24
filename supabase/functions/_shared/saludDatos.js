@@ -128,6 +128,12 @@ export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set()) {
     .filter(x => x.quedan >= 0).sort((a, b) => a.vence.localeCompare(b.vence))
 }
 
+// Compras de proveedores observados por el SII («Documentos observados» del RCV, W39): su crédito de IVA está objetado en el F29.
+// vistas = las ya decididas (learnings compra_observada_vista: se rectifica o se acredita). La decisión se ejecuta en el SII.
+export function comprasObservadasSII(docs, vistas = new Set()) {
+  return (docs || []).filter(d => d && d.observado_sii && !vistas.has(String(d.id))).sort((a, b) => String(a.periodo || '').localeCompare(String(b.periodo || '')) || String(a.folio).localeCompare(String(b.folio)))
+}
+
 export function antDup(anticipos, conciliacion) {
   const bankIds = new Set((conciliacion || []).filter(c => c.tipo_destino === 'anticipo' && c.anticipo_id).map(c => String(c.anticipo_id)))
   const bankByCli = {}; (anticipos || []).forEach(a => { if (bankIds.has(String(a.id))) (bankByCli[String(a.client_id)] = bankByCli[String(a.client_id)] || []).push(a) })
@@ -187,12 +193,14 @@ export function hallazgos(d) {
   anticiposSubarriendo(d.anticipos, d.billing, d.sales, d.conciliacion).forEach(x => x.tipo === 'aplicar'
     ? add('anticipo_por_aplicar', x.a.id, `Pago de subarriendo que calza con la Factura N° ${folioN(x.b.invoice_no)} · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, factura: x.b.id, periodo: x.per })
     : add('subarriendo_por_facturar', x.a.id, `Subarriendo de ${perTexto(x.per)} pagado sin factura · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, periodo: x.per }))
+  comprasObservadasSII(d.comprasObs, d.comprasObsVistas).forEach(x => add('compra_observada_sii', x.id, `Factura N° ${x.folio} de ${x.emisor_name || 'proveedor'} · proveedor observado por el SII${x.periodo ? ` · ${perTexto(x.periodo)}` : ''}`, Number(x.observado_iva) || 0, { folio: x.folio, periodo: x.periodo || null }))
   comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas).forEach(x => add('compra_plazo_reclamo', x.d.id, `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
   honorarioDescuadrado(d.saludRows, d.billing, d.sales).forEach(v => add('honorario_descuadrado', v.id, `Honorario distinto de la suma de sus cuotas · ${nom(v.client_id)} · ${v.title || ''}`.trim(), (Number(v.amount_clp) || 0) - (Number(v.suma_cuotas) || 0), { venta: v.id, honorario: v.amount_clp, cuotas: v.suma_cuotas }))
   return out
 }
 
 export const DETECTOR_LBL = {
+  compra_observada_sii: 'Compras de proveedores observados por el SII',
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
   rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE',
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
