@@ -189,6 +189,10 @@ export function hallazgos(d) {
   huerfanas(d.billing).forEach(b => add('factura_sin_cliente', b.id, `Factura N° ${folioN(b.invoice_no)} sin cliente · ${b.receptor_name || ''}`.trim(), b.amount, { factura: b.id }))
   vencIncoh(d.billing).forEach(b => add('vencimiento_incoherente', b.id, `Factura N° ${folioN(b.invoice_no)} con vencimiento anterior a su emisión · ${nom(b.client_id)}`, b.amount, { factura: b.id, emision: b.issued_at, vence: b.due }))
   antDup(d.anticipos, d.conciliacion).forEach(x => add('anticipo_duplicado', x.manual.id, `Saldo a favor cargado a mano que calza con depósitos del banco · ${nom(x.manual.client_id)}`, x.manual.monto, { anticipo: x.manual.id, banco: x.banks.map(b => b.id) }))
+  // Trabajos detenidos (regla única ventasReglas.trabajosDetenidos, calculada por quien llama para no importar en círculo).
+  ;(d.detenidos || []).forEach(x => x.tipo === 'terminado'
+    ? add('trabajo_terminado', x.s.id, `Trabajo activo sin movimiento hace ${x.dias} días y sin saldo · ${nom(x.s.client_id)} · ${x.s.title || ''}`.trim(), 0, { venta: x.s.id, ult: x.ult })
+    : add('trabajo_detenido_saldo', x.s.id, `Trabajo sin movimiento hace ${x.dias} días con saldo por cobrar · ${nom(x.s.client_id)} · ${x.s.title || ''}`.trim(), x.porCobrar, { venta: x.s.id, ult: x.ult, facturas: x.facturas }))
   ventasBorradorCobrado(d.sales, d.billing).forEach(x => add('venta_borrador_facturada', x.s.id, `Venta en ${x.s.status} con facturas emitidas · ${nom(x.s.client_id)}`, x.emitido, { venta: x.s.id, facturas: x.n, pagado: x.pagado }))
   anticiposSubarriendo(d.anticipos, d.billing, d.sales, d.conciliacion).forEach(x => x.tipo === 'aplicar'
     ? add('anticipo_por_aplicar', x.a.id, `Pago de subarriendo que calza con la Factura N° ${folioN(x.b.invoice_no)} · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, factura: x.b.id, periodo: x.per })
@@ -201,6 +205,7 @@ export function hallazgos(d) {
 
 export const DETECTOR_LBL = {
   compra_observada_sii: 'Compras de proveedores observados por el SII',
+  trabajo_terminado: 'Trabajos activos que parecen terminados', trabajo_detenido_saldo: 'Trabajos sin movimiento con saldo por cobrar',
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
   rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE',
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
