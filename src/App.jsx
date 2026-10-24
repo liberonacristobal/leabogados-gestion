@@ -453,7 +453,7 @@ function dueFromIssued(iso){ return ultimoDiaHabilMesEmision(iso) }
 // Guardapelos de año: un <input type=date> puede aceptar un año de 2 dígitos ("26" → "0026") y corromper toda la cadena
 // de cuotas (ej. cobroInicio "0026-09-09" → la venta no genera programadas). Expande cualquier año < 1000 a 20YY.
 const anio4ISO = iso => { const s=String(iso||''); const m=s.match(/^(\d{1,4})-(\d{2})-(\d{2})/); if(!m) return iso; let y=+m[1]; if(y<100) y=2000+y; else if(y<1000) y=2000+(y%100); return `${String(y).padStart(4,'0')}-${m[2]}-${m[3]}${s.slice(m[0].length)}` }
-// Días hábiles (no feriados) SIN cartola entre la última cargada y ayer. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
+// Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
 // Tope de 60 días de barrido: si la frontera está más atrás, es un problema mayor (no la alarma de envío diario).
 function cartolaGapDias(cartolaHasta, cov){
@@ -462,7 +462,9 @@ function cartolaGapDias(cartolaHasta, cov){
   const out=[]; const today=new Date(); today.setHours(0,0,0,0)
   const d=new Date(String(cartolaHasta).slice(0,10)+'T00:00:00'); if(isNaN(d)) return []
   d.setDate(d.getDate()+1); let guard=0
-  while(d<today && guard++<60){ const s=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; if(_esDiaHabil(d)&&!set.has(s)) out.push(s); d.setDate(d.getDate()+1) }
+  // La cartola de un día hábil llega el día hábil SIGUIENTE (la del viernes, el lunes): recién ahí falta (misma regla que alerta-cartola).
+  const sigHabil=d0=>{ const x=new Date(d0); let g=0; do{ x.setDate(x.getDate()+1) }while(!_esDiaHabil(x)&&g++<15); return x }
+  while(d<today && guard++<60){ const s=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; if(_esDiaHabil(d)&&!set.has(s)&&sigHabil(d)<=today) out.push(s); d.setDate(d.getDate()+1) }
   return out
 }
 // N° de cuota desde la glosa (las cuotas viven embebidas en el concepto, ej. "Título — Cuota 1/3"). Vacío si no aplica.

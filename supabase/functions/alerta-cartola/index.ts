@@ -64,10 +64,12 @@ Deno.serve(async (req) => {
     while (d <= h && g++ < 400) { cov.add(iso(d)); d.setDate(d.getDate() + 1); }
     const fh = String(r.fecha_hasta).slice(0, 10); if (!lastCov || fh > lastCov) lastCov = fh;
   }
-  // Días hábiles de los últimos 30 hasta AYER: la cartola de hoy trae los movimientos hasta el día hábil anterior.
+  // La cartola de un día hábil llega la mañana del día hábil SIGUIENTE (la del viernes llega el lunes): un día recién falta
+  // cuando ya pasó su día hábil siguiente o es hoy (el aviso corre en la tarde).
+  const sigHabil = (d0: Date) => { const d = new Date(d0); let g = 0; do { d.setDate(d.getDate() + 1); } while (!esHabil(d) && g++ < 15); return d; };
   const gap: string[] = [];
   { const d = new Date(today); d.setDate(d.getDate() - 30); let guard = 0;
-    while (d < today && guard++ < 40) { const s = iso(d); if (esHabil(d) && !cov.has(s)) gap.push(s); d.setDate(d.getDate() + 1); } }
+    while (d < today && guard++ < 40) { const s = iso(d); if (esHabil(d) && !cov.has(s) && sigHabil(d) <= today) gap.push(s); d.setDate(d.getDate() + 1); } }
   let avisados: string[] = []; try { avisados = JSON.parse(String(cfgAv?.[0]?.value || "[]")); } catch { avisados = []; }
   const nuevos = gap.filter((s) => !avisados.includes(s));
   if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov });
