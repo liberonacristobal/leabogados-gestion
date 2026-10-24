@@ -167,7 +167,7 @@ serve(async (req) => {
         <table style="width:100%;border-collapse:collapse;margin-top:10px;">${facts}</table>
         ${hoyBox}
         <a href="${APP}/?pedirfondos=${it.c.id}&monto=${Math.round(it.deuda)}" style="display:block;text-align:center;background:${NAVY};color:#fff;text-decoration:none;font-weight:700;border-radius:9px;padding:12px 14px;margin-top:14px;font-size:14px;">Pedir fondos a ${esc(it.c.name)}</a>
-        <div style="text-align:center;margin-top:10px;font-size:12.5px;"><a href="${APP}/?cliente=${it.c.id}" style="color:${NAVY};">Ver ficha</a> &nbsp;&nbsp; <a href="${APP}/?pausafondos=${it.c.id}" style="color:${NAVY};">Ya lo hablé</a></div>
+        <div style="text-align:center;margin-top:10px;font-size:12.5px;"><a href="${APP}/?cliente=${it.c.id}" style="color:${NAVY};">Ver ficha</a> &nbsp;&nbsp; <a href="${APP}/?pausafondos=${it.c.id}" style="color:${NAVY};">Conversado con el cliente</a></div>
         ${cc}
       </div>`;
     };
@@ -196,10 +196,10 @@ serve(async (req) => {
         const autores = [...new Set(lista.flatMap((i) => i.cargaHoy.map(quienCargo)).filter(Boolean))].sort((x, y) => (x === "la notaría" ? 1 : 0) - (y === "la notaría" ? 1 : 0));
         const quien = unir(autores), variosQ = autores.length > 1;
         const intro = esSeg
-          ? (uno ? `<b>${esc(top.c.name)}</b> lleva 15 días o más sin fondos y todavía no se le han pedido. Por favor, pídele fondos hoy.`
-                 : `Estos <b>${lista.length} clientes</b> llevan 15 días o más sin fondos y todavía no se les han pedido. Por favor, pídeles fondos hoy.`)
-          : (uno ? `Hoy ${quien ? `${esc(quien)} ${variosQ ? "cargaron" : "cargó"}` : (nG === 1 ? "se cargó" : "se cargaron")} ${nG === 1 ? "un gasto nuevo" : `${nG} gastos nuevos`} a <b>${esc(top.c.name)}</b>, que no tiene fondos para cubrirlo${nG === 1 ? "" : "s"}. Por favor, pídele fondos antes de seguir adelantando plata de la oficina.`
-                 : `Hoy ${quien ? `${esc(quien)} ${variosQ ? "cargaron" : "cargó"}` : "se cargaron"} gastos nuevos a <b>${lista.length} clientes tuyos</b> que no tienen fondos para cubrirlos. Por favor, pídeles fondos antes de seguir adelantando plata de la oficina.`);
+          ? (uno ? `<b>${esc(top.c.name)}</b> lleva 15 días o más sin fondos y sin solicitud de fondos.`
+                 : `Estos <b>${lista.length} clientes</b> llevan 15 días o más sin fondos y sin solicitud de fondos.`)
+          : (uno ? `Hoy ${quien ? `${esc(quien)} ${variosQ ? "cargaron" : "cargó"}` : (nG === 1 ? "se cargó" : "se cargaron")} ${nG === 1 ? "un gasto nuevo" : `${nG} gastos nuevos`} a <b>${esc(top.c.name)}</b>, sin fondos para cubrirlo${nG === 1 ? "" : "s"}.`
+                 : `Hoy ${quien ? `${esc(quien)} ${variosQ ? "cargaron" : "cargó"}` : "se cargaron"} gastos nuevos a <b>${lista.length} clientes tuyos</b>, sin fondos para cubrirlos.`);
         // Seguimientos: una fila por cliente (el nombre abre la solicitud de fondos ya armada).
         const cuerpo = esSeg
           ? `<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">${lista.map((i) => `<tr><td style="padding:7px 0;border-top:1px solid ${LINE};"><a href="${APP}/?pedirfondos=${i.c.id}&monto=${Math.round(i.deuda)}" style="font-size:13.5px;font-weight:700;color:${NAVY};text-decoration:none;">${esc(i.c.name)}</a><div style="font-size:11.5px;white-space:nowrap;color:${i.n >= CC_DESDE ? RED : MUT};">Aviso N° ${i.n}${i.dias != null ? ` · ${i.dias} días` : ""}${i.otSin.length ? ` · ${i.otSin.length} OT` : ""}</div></td><td style="padding:7px 0 7px 10px;border-top:1px solid ${LINE};text-align:right;white-space:nowrap;vertical-align:top;font-size:14px;font-weight:800;color:${RED};">${fm(i.deuda)}</td></tr>`).join("")}</table>`

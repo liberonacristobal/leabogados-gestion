@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
       const mm = await sb(`miembros?select=email,nombre&email=in.(${cc.map((e) => `"${e}"`).join(",")})`);
       const pila = cc.map((e) => String((mm || []).find((m: { email: string }) => String(m.email).toLowerCase() === e.toLowerCase())?.nombre || e.split("@")[0]).split(" ")[0]);
       const nombres = pila.length > 1 ? `${pila.slice(0, -1).join(", ")} y ${pila[pila.length - 1]}` : (pila[0] || "");
-      const html = shell(`<p>Hola${nombres ? " " + esc(nombres) : ""}:</p><p>Llegó la liquidación de la notaría${av.de ? ` (${esc(av.de)}${av.nombre ? `, «${esc(av.nombre)}»` : ""})` : ""}${ped ? `, en respuesta al pedido del ${dmy(String(ped.created_at))}` : ""}. Está precargada en la app para que la revisen en <b>Gastos › Notaría › Pedidos › «Revisar liquidación»</b>.</p><p>No se carga ninguna OT hasta que la confirmen.</p><p style="margin:18px 0"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 20px;border-radius:18px;font-size:13px;font-weight:bold">Revisar en la app</a></p><p style="margin:0;font-size:12px;color:#888">${esc(nombreEstudio)} · aviso automático</p>`);
+      const html = shell(`<p>Hola${nombres ? " " + esc(nombres) : ""}:</p><p>Se recibió la liquidación de la notaría${av.de ? ` (${esc(av.de)}${av.nombre ? `, «${esc(av.nombre)}»` : ""})` : ""}${ped ? `, en respuesta al pedido del ${dmy(String(ped.created_at))}` : ""}. Está precargada en la app para que la revisen en <b>Gastos › Notaría › Pedidos › «Revisar liquidación»</b>.</p><p style="margin:18px 0"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 20px;border-radius:18px;font-size:13px;font-weight:bold">Revisar en la app</a></p><p style="margin:0;font-size:12px;color:#888">${esc(nombreEstudio)} · aviso automático</p>`);
       if (dry && !testTo) return json({ ok: true, modo: "simulacion", para, html });
       try { await enviar({ to: para, cc: [], subject: "Liquidación de notaría recibida - por revisar en la app" + (testTo ? " (prueba)" : ""), html }); }
       catch (e) { if (!testTo) await log("notaria.aviso_liquidacion_fallido", { slot: av.slot, gmail_id: av.gmail_id, title: "El aviso de la liquidación NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
     const uo = await sb("expenses?select=date&category=eq.Notaria&ot_number=not.is.null&date=not.is.null&deleted_at=is.null&order=date.desc.nullslast&limit=1");
     const uoF = uo?.[0]?.date ? String(uo[0].date).slice(0, 10) : null;
     const desdeN = uoF ? (() => { const d = new Date(uoF + "T00:00:00"); d.setDate(d.getDate() + 1); return iso(d); })() : null;
-    const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Muchas gracias de antemano por su ayuda.<br>Quedamos atentos a su respuesta.</p>${firma(firmaOficina)}`);
+    const html = shell(`<p>${esc(saludo)}:</p><p>Espero que estén muy bien.</p><p>Les escribimos para pedirles, por favor, la liquidación de nuestros gastos notariales en formato Excel, con las órdenes de trabajo ${desdeN ? `desde el ${dmy(desdeN)} ` : ""}a la fecha.</p><p>Quedamos atentos a su respuesta.</p>${firma(firmaOficina)}`);
     const destTo = testTo ? [testTo] : notaria, destCc = testTo ? [] : cc;
     const asuntoEnv = testTo ? `${ASUNTO} (prueba ${new Date().toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" })})` : ASUNTO;
     const messageId = `<liquidacion-${slot || iso(today)}-${Date.now()}@${(GMAIL_USER.split("@")[1] || "leabogados.cl")}>`;
@@ -240,19 +240,18 @@ Deno.serve(async (req) => {
 <div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${APP_URL}/le-logo-blanco.png" alt="${esc(nombreEstudio)}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div>
 <div style="padding:24px 28px">
 <div style="font-size:16px;color:#1a1a1a;margin:0 0 6px">Hola${nombreTo ? " " + esc(nombreTo) : ""},</div>
-<div style="font-size:14px;color:#666;margin:0 0 16px;line-height:1.5">Hoy toca pedir a la notaría la liquidación de las OT del período.</div>
-<div style="background:#E6F1FB;border-radius:10px;padding:14px 16px;margin-bottom:14px"><div style="font-size:10px;font-weight:bold;color:#185FA5;text-transform:uppercase;letter-spacing:.5px">Pide la liquidación</div><div style="font-size:18px;font-weight:bold;color:#003C50;margin-top:3px">${desde ? `desde el ${dmy(desde)} hasta hoy` : "hasta hoy"}</div>${desde ? `<div style="font-size:12px;color:#537281;margin-top:2px">el día siguiente a la última OT que ya está cargada</div>` : ""}</div>
+<div style="font-size:14px;color:#666;margin:0 0 16px;line-height:1.5">Corresponde pedir a la notaría la liquidación de las OT del período.</div>
+<div style="background:#E6F1FB;border-radius:10px;padding:14px 16px;margin-bottom:14px"><div style="font-size:10px;font-weight:bold;color:#185FA5;text-transform:uppercase;letter-spacing:.5px">Período por pedir</div><div style="font-size:18px;font-weight:bold;color:#003C50;margin-top:3px">${desde ? `desde el ${dmy(desde)} hasta hoy` : "hasta hoy"}</div>${desde ? `<div style="font-size:12px;color:#537281;margin-top:2px">el día siguiente a la última OT que ya está cargada</div>` : ""}</div>
 <table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">
 ${ultCarga ? fila("Última liquidación cargada", `<b>${dmy(ultCarga.created_at)}</b>${nCarga != null ? ` · ${nCarga} OT` : ""}`) : fila("Última liquidación cargada", "—")}
 ${fila("OT cargadas hasta", `<b>${ultOtFecha ? dmy(ultOtFecha) : "—"}</b>`)}
 ${diasSin != null ? fila("Sin cargar liquidación hace", `<b>${diasSin} día${diasSin !== 1 ? "s" : ""}</b>`, diasSin > 15 ? "#A32D2D" : "#3D3D3D") : ""}
 </table>
-<div style="font-size:13px;color:#666;margin:16px 0 0;line-height:1.5">Cuando llegue el Excel, cárgalo en <b style="color:#3D3D3D">Gastos › Cargar › Excel de notaría</b>.</div>
 <div style="margin-top:18px"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:9px 18px;border-radius:18px;font-size:12px;font-weight:bold">Cargar la liquidación en la app &rarr;</a></div>
 </div>
 <div style="padding:14px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${cc.length ? "Con copia a " + esc(cc.join(", ")) + " · " : ""}aviso automático los días ${dias.join(" y ")} · ${esc(nombreEstudio)}</div>
 </div></body></html>`;
-  const asunto = `Pide la liquidacion de notaria${desde ? " · desde el " + dmy(desde) : ""}`;
+  const asunto = `Liquidación de notaría por pedir${desde ? " · desde el " + dmy(desde) : ""}`;
   const destTo = testTo ? [testTo] : [to];
   const destCc = testTo ? [] : cc;
   const res = { slot, para: destTo, cc: destCc, desde, ultCarga: ultCarga ? { fecha: String(ultCarga.created_at).slice(0, 10), ot: nCarga, por: ultCarga.created_by } : null, ultOtFecha, diasSin, asunto };

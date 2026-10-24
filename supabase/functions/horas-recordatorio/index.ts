@@ -84,10 +84,10 @@ serve(async (req) => {
       const alDia = meta>0 ? pct>=70 : tot>0;
       const cel = dd.map((v,i)=>`<td style="text-align:center;padding:6px 2px;border:1px solid ${BORDER};background:${v>0?'#F5F7F9':'#fff'}"><div style="font-size:9px;color:${MUT};text-transform:uppercase">${DOW[i]}</div><div style="font-size:13px;font-weight:700;color:${v>0?NAVY:'#99ABB4'}">${v>0?fh(v).replace(' h',''):'·'}</div></td>`).join("");
       const msg = tot<=0
-        ? `Aún no registras horas esta semana. Tómate un minuto para cargarlas antes del fin de semana — así el lunes está todo al día.`
+        ? `Aún no registras horas esta semana.`
         : alDia
-          ? `Llevas <b>${fh(tot)}</b> esta semana. Revisa que no falte cargar nada de hoy antes de cerrar.`
-          : `Llevas <b>${fh(tot)}</b> esta semana${meta>0?` (meta ${fh(meta)})`:''}. Revisa que no falte cargar nada antes del fin de semana.`;
+          ? `Llevas <b>${fh(tot)}</b> esta semana.`
+          : `Llevas <b>${fh(tot)}</b> esta semana${meta>0?` (meta ${fh(meta)})`:''}.`;
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:#F5F7F9;font-family:'DM Sans',Arial,sans-serif;color:#3D3D3D">
 <div style="max-width:520px;margin:0 auto;padding:22px 16px">
@@ -98,7 +98,6 @@ serve(async (req) => {
       <div style="font-size:13px;line-height:1.55;color:#3D3D3D;margin-bottom:16px">${msg}</div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:18px"><tr>${cel}</tr></table>
       <a href="${APP_URL}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:9px">Cargar mis horas</a>
-      <div style="font-size:11px;color:${MUT};margin-top:16px;line-height:1.5">${alDia?`<span style="color:${VERDE};font-weight:600">Vas al día.</span> `:`<span style="color:${AMBAR};font-weight:600">Un empujón.</span> `}Cargar toma segundos: la app te propone las tareas y reuniones del día para que solo confirmes.</div>
     </div>
   </div>
   <div style="text-align:center;font-size:10px;color:#99ABB4;margin-top:14px">${ESTUDIO}</div>

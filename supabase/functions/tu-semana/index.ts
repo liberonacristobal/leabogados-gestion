@@ -193,7 +193,7 @@ serve(async (req) => {
       if (!d.caja || (d.caja.nLiq===0)) return "";
       const c = d.caja;
       return `<div style="padding:16px 26px 4px;">${sec("1","Caja chica por liquidar",TEAL)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos de caja chica <b style="color:${INK};">pendientes de liquidación</b>. La liquidación permite <b style="color:${INK};">reponer el fondo</b>.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos de caja chica <b style="color:${INK};">pendientes de liquidación</b>.</div>`+
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${TEALBG};border-radius:12px;"><tr><td style="padding:14px 16px;"><div style="font-size:12.5px;color:${TEAL};font-weight:700;">${c.nLiq} gasto${c.nLiq!==1?"s":""} sin liquidar</div><div style="font-size:11px;color:${MUT};margin-top:3px;">Saldo en tu caja chica: <b style="color:${INK};">${fmt(c.saldo)}</b></div></td><td align="right" style="padding:14px 16px;white-space:nowrap;"><span style="font-size:16px;font-weight:800;color:${TEAL};">${fmt(c.montoLiq)}</span></td></tr></table>`+
         cta("Liquidar caja chica",TEAL,"cajachica")+`</div>`;
     };
@@ -259,7 +259,7 @@ serve(async (req) => {
   <div style="background:${NV};padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
   <div style="padding:26px 26px 10px;">
     <div style="font-size:19px;color:${INK};font-weight:800;letter-spacing:-.3px;">Hola, ${esc(nombre)}</div>
-    <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Resumen semanal · ${esc(rango)}</span><br>Pendientes de la semana, cada uno con su acción.</div>
+    <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Resumen semanal · ${esc(rango)}</span></div>
   </div>
   ${cH}${pH}${fH}${mH}${tH}${nH}
   ${!algo?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes esta semana.</div>`:`<div style="height:8px;"></div>`}

@@ -108,13 +108,13 @@ serve(async (req) => {
     <div style="background:${NAVY};color:#fff;padding:16px 20px"><div style="font-size:15px;font-weight:700">${ESTUDIO}</div><div style="font-size:11px;opacity:.85">Horas por facturar · viernes</div></div>
     <div style="padding:20px">
       <div style="font-size:14px;font-weight:600;color:${NAVY};margin-bottom:6px">Hola ${nombre},</div>
-      <div style="font-size:13px;line-height:1.55;margin-bottom:16px">Tienes horas cargadas que ya superan el umbral y conviene <b>facturarlas al cliente</b>:</div>
+      <div style="font-size:13px;line-height:1.55;margin-bottom:16px">Horas registradas sobre el umbral de facturación:</div>
       ${filas}
       <div style="background:${NAVY};color:#fff;border-radius:9px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin:4px 0 16px">
         <span style="font-size:12px;color:#85B7EB">Total por facturar</span><span style="font-size:17px;font-weight:800">${fh(totH)} · ${fuf(totUF)}</span>
       </div>
       <a href="${APP_URL}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:9px">Ver en la app</a>
-      <div style="font-size:11px;color:${MUT};margin-top:16px;line-height:1.5">Entra a cada cliente para revisar el detalle de las horas y facturarlas. Valor calculado a ${fuf(tarifa)}/h.</div>
+      <div style="font-size:11px;color:${MUT};margin-top:16px;line-height:1.5">Valor calculado a ${fuf(tarifa)} por hora.</div>
     </div>
   </div>
   <div style="text-align:center;font-size:10px;color:#99ABB4;margin-top:14px">${ESTUDIO}</div>
