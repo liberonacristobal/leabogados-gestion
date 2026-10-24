@@ -42688,6 +42688,7 @@ export default function App() {
       if(ir==='duplicados') setModal({type:'conciliar',data:null})
       else if(ir==='cobros'||ir==='sinasignar') setTab('conciliacion')
       else if(ir==='sinemitir'){ setTab('billing'); setBillingIntent('sinemitir') }   // correo día 6 → radar "Cuotas vencidas sin facturar"
+      else if(ir==='cierre'){ setTab('billing'); setBillingIntent('cierre') }   // correo de cierre del día 6 → página Cierre de mes
       else if(ir==='cobranza') setTab('cobranza')   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
   },[user,userRole])
