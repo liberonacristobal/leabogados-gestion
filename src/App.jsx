@@ -16337,7 +16337,7 @@ const _pagoCal = (expenses, tipo, per) => { const l=tipo==='F29'?_pagosDe(expens
 const _djFecha = (o, dj) => { const rows=(dj||[]).filter(r=>String(r.formulario)===String(o.formulario)&&r.fecha); if(!rows.length) return null
   const w=new Set(_normTxt(o.detalle||'').split(' ').filter(x=>x.length>3)), sc=r=>_normTxt(r.detalle||'').split(' ').filter(x=>w.has(x)).length
   return rows.slice().sort((a,b)=>sc(b)-sc(a)||String(a.fecha).localeCompare(String(b.fecha)))[0] }
-function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[], docs=[], boletas=[], hoy}={}){
+function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cumplidas=[], expenses=[], docs=[], boletas=[], hoy}={}){
   hoy = hoy || isoLocal(Date.now())
   const ym=hoy.slice(0,7), tiene=new Set((obl||[]).filter(o=>o.activo!==false&&!o.client_id).map(o=>o.tipo))
   const cumpl=new Map((cumplidas||[]).filter(c=>!c.client_id).map(c=>[c.clave,c]))
@@ -16409,7 +16409,7 @@ function calendarioEstudio({obl=[], dj=[], valores={}, cumplidas=[], expenses=[]
   const prom=f=>prev3.length?prev3.reduce((a,x)=>a+(Number(x?.[f])||0),0)/prev3.length:null
   const vp=valores[cicloProx.per]
   // F29: informado por la contadora; si no ha llegado, estimado del mes cerrado (f29Reglas); con el mes abierto, se calcula al cierre.
-  const f29E=cicloProx.per<ym?f29Estimado({per:cicloProx.per, docs, boletas, valores}):null
+  const f29E=cicloProx.per<ym?f29Estimado({per:cicloProx.per, docs, boletas, valores, declarados}):null
   const f29Prox=vp?{t:'F29 · IVA/PPM', monto:vp.ppm, est:false, estF29:f29E?.completo?f29E.total:null, vence:cicloProx.f29.vence}
     :f29E?.completo?{t:'F29 · IVA/PPM', monto:f29E.total, est:'cerrado', f29:f29E, vence:cicloProx.f29.vence}
     :{t:'F29 · IVA/PPM', monto:null, est:'abierto', calcula:_habilDesde(`${_ymMas(cicloProx.per,1)}-01`), vence:cicloProx.f29.vence}
@@ -16513,9 +16513,11 @@ function cargarCalTrib(){
       supabase.from('sii_novedades').select('url').eq('tipo','resolucion').ilike('titulo','%vencimiento%declaraciones juradas%').order('fecha',{ascending:false}).limit(1),
       // F29 estimado de mes cerrado (f29Reglas): facturas del Registro de Ventas y boletas recibidas de los últimos 4 meses.
       supabase.from('sii_cargas_docs').select('tipo_dte,fecha_emision,monto').gte('fecha_emision',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
-      supabase.from('boletas_honorarios').select('fecha,retencion,estado').gte('fecha',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`)])
-      .then(([o,d,v,c,u,sd,bh])=>{ const valores={}; (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
-        return {obl:o.data||[], dj:d.data||[], valores, cumplidas:c.data||[], pagos:[], docs:sd.data||[], boletas:bh.data||[], urlSII:u?.data?.[0]?.url||null} })
+      supabase.from('boletas_honorarios').select('fecha,retencion,estado').gte('fecha',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
+      // F29 declarados (leídos del SII; solo administradores): tasa del PPM e impuesto único del mes anterior.
+      supabase.from('f29_declarados').select('periodo,tasa_ppm,impuesto_unico,total').order('periodo',{ascending:false}).limit(12)])
+      .then(([o,d,v,c,u,sd,bh,fd])=>{ const valores={}, declarados={}; (fd?.data||[]).forEach(r=>{ declarados[r.periodo]=r }); (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
+        return {obl:o.data||[], dj:d.data||[], valores, declarados, cumplidas:c.data||[], pagos:[], docs:sd.data||[], boletas:bh.data||[], urlSII:u?.data?.[0]?.url||null} })
       .catch(()=>{ _calTribP=null; return {obl:[], dj:[], valores:{}, cumplidas:[], pagos:[], docs:[], boletas:[]} }) }
   return _calTribP }
 function useCalTrib(expenses){

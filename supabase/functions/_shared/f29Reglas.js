@@ -2,11 +2,13 @@
 // Funciones puras: no leen ni escriben la base.
 //   F29 = PPM (tasa × facturado del mes − notas de crédito, Registro de Ventas del SII)
 //       + retención de las boletas de honorarios recibidas en el mes (boletas_honorarios)
-//       + impuesto único de trabajadores = el del mes anterior (F29 informado por la contadora − su PPM − sus retenciones).
-// Verificado con el F29 real de 09-2025 (cód. 62 PPM 587.909 = 1,5% de 39.193.947; cód. 151 366.897; cód. 48 166.584).
-// El impuesto único es estimado: cambia con los sueldos; las diferencias se ven al cuadrar con el correo VALORES.
+//       + impuesto único de trabajadores = el del F29 del mes anterior (cód. 48; tabla f29_declarados, leída del SII).
+// Cotejado con los 13 F29 declarados de 09-2025 a 09-2026: total = cód. 62 + 48 + 151 exacto; la base del PPM y las retenciones
+// de la app calzan al peso con lo declarado. La tasa del PPM (cód. 115) sale de lo declarado (la que más se repite en los últimos
+// 6 meses: en 2026 es 2%; la contadora declaró 1,5% en 09-2025, 12-2025 y 06-2026). Sin F29 cargados: tasa por defecto y el
+// impuesto único derivado del total informado por la contadora (valores_contadora) − su PPM − sus retenciones.
 
-export const TASA_PPM = 0.015
+export const TASA_PPM = 0.02
 
 const _ymMas = (ym, n) => { const d = new Date(`${ym}-01T12:00:00`); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 7) }
 export const f29PerAnterior = per => _ymMas(per, -1)
@@ -27,17 +29,29 @@ export function f29Retenciones(boletas, per) {
 }
 
 // valores = { 'AAAA-MM': { ppm: total F29 informado por la contadora } } (learnings kind valores_contadora; ella lo llama IVA/PPM).
-export function f29Estimado({ per, docs, boletas, valores, tasa = TASA_PPM }) {
+// Tasa del PPM según lo declarado: la que más se repite en los últimos 6 F29 anteriores al período (empate → la más reciente).
+export function f29TasaDeclarada(declarados, per) {
+  const prev = Object.keys(declarados || {}).filter(k => k < per).sort().slice(-6)
+  if (!prev.length) return null
+  const n = {}; prev.forEach(k => { const t = Number(declarados[k]?.tasa_ppm); if (t > 0) n[t] = (n[t] || 0) + 1 })
+  const best = Object.entries(n).sort((a, b) => b[1] - a[1] || prev.map(k => Number(declarados[k]?.tasa_ppm)).lastIndexOf(Number(b[0])) - prev.map(k => Number(declarados[k]?.tasa_ppm)).lastIndexOf(Number(a[0])))[0]
+  return best ? Number(best[0]) / 100 : null
+}
+// declarados = { 'AAAA-MM': { tasa_ppm, impuesto_unico, total } } (tabla f29_declarados, solo administradores).
+export function f29Estimado({ per, docs, boletas, valores, declarados = null, tasa = null }) {
+  tasa = tasa ?? f29TasaDeclarada(declarados, per) ?? TASA_PPM
   const { base, n: nDocs } = f29Base(docs, per)
   const ppm = Math.round(base * tasa)
   const { ret, n: nBoletas } = f29Retenciones(boletas, per)
   const prev = f29PerAnterior(per), vPrev = valores?.[prev]
   let iu = null
-  if (vPrev && Number(vPrev.ppm) > 0) {
+  const dPrev = declarados?.[prev]
+  if (dPrev && dPrev.impuesto_unico != null) iu = Number(dPrev.impuesto_unico) || 0
+  else if (vPrev && Number(vPrev.ppm) > 0) {
     const ppmPrev = Math.round(f29Base(docs, prev).base * tasa), retPrev = f29Retenciones(boletas, prev).ret
     iu = Math.max(0, Number(vPrev.ppm) - ppmPrev - retPrev)
   }
-  const informado = Number(valores?.[per]?.ppm) || null
+  const informado = Number(declarados?.[per]?.total) || Number(valores?.[per]?.ppm) || null
   const total = ppm + ret + (iu || 0)
   return { per, base, nDocs, tasa, ppm, ret, nBoletas, iu, iuDe: prev, total, completo: iu != null, informado, dif: informado != null ? informado - total : null }
 }
