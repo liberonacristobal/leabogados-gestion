@@ -11,3 +11,4 @@ dist
 
 # Renders con datos de clientes (correos, nombres): no van al repositorio
 docs/render-*.html
+.claude/settings.local.json
