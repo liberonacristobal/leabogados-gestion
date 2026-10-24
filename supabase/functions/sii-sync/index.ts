@@ -371,7 +371,19 @@ serve(async (req) => {
             doc_json: c,
             proveedor_id: provPorRut.get(emisorRut) || null,
             periodo: periodoC,
+            sii_estado: c.estadoContab || 'REGISTRO',
+            fecha_recepcion: c.fecRecepcion || null,
+            ref_tipo: c.tipoRef ?? null,
+            ref_folio: c.folioRef ?? null,
           })
+        }
+        // Un documento que pasó de PENDIENTE a REGISTRO en otro período es el MISMO: se actualiza su fila (sin duplicar).
+        if (filas.length) {
+          const { data: ya } = await sb.from('sii_compras_docs').select('folio,tipo_dte,emisor_rut,periodo').in('folio', [...new Set(filas.map((f) => f.folio))])
+          for (const f of filas) {
+            const x = (ya || []).find((y: any) => String(y.folio) === f.folio && Number(y.tipo_dte) === f.tipo_dte && normalizarRut(y.emisor_rut) === normalizarRut(f.emisor_rut))
+            if (x && x.periodo !== f.periodo) f.periodo = x.periodo
+          }
         }
 
         let guardadas = 0

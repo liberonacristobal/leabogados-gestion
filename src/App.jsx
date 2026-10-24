@@ -9187,9 +9187,11 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   const years=[...new Set(rows.map(yrDe).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const _q=q.trim().toLowerCase()
   const fil=rows.filter(d=>{ if(yr&&yrDe(d)!==yr) return false; if(!_q) return true; return `${d.folio||''} ${d.emisor_name||''} ${d.emisor_rut||''}`.toLowerCase().includes(_q) })
-  const ivaCredito=fil.reduce((a,d)=>a+sign(d)*(Number(d.iva)||0),0)
-  const neto=fil.reduce((a,d)=>a+sign(d)*(Number(d.neto)||0),0)
-  const nAfecta=fil.filter(d=>Number(d.tipo_dte)===33).length
+  // IVA crédito: solo las compras aceptadas en el Registro del SII; las pendientes (en plazo de reclamo) entran al quedar registradas.
+  const filReg=fil.filter(d=>d.sii_estado!=='PENDIENTE')
+  const ivaCredito=filReg.reduce((a,d)=>a+sign(d)*(Number(d.iva)||0),0)
+  const neto=filReg.reduce((a,d)=>a+sign(d)*(Number(d.neto)||0),0)
+  const nAfecta=filReg.filter(d=>Number(d.tipo_dte)===33).length
   const sinProv=fil.filter(d=>!d.proveedor_id).length
   // Pago del banco de cada factura: la misma regla exacta y única que aplica conciliacion-auto (_shared/comprasReglas.js).
   const calceDe={}; calcesCompraPago(rows,cargos).forEach(({d,m})=>{ calceDe[d.id]=m })
@@ -10075,7 +10077,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
       {ab&&ps.map(fila)}</div> }
   // Por aprobar agrupado: cada fila = un tipo de decisión, con su cantidad y a dónde lleva.
   const BANDEJA_TIPO={cuenta_bancaria:'Cuentas bancarias por confirmar',factura_sin_registrar:'Facturas por registrar',fondo_por_registrar:'Fondos por registrar',comprobante:'Comprobantes por revisar',pedido_cliente:'Pedidos de clientes',respaldo_gasto:'Respaldos de gastos',boleta_honorarios:'Boletas de honorarios',liquidacion_notaria:'Liquidaciones de la notaría'}
-  const HALLAZGO_TIPO={cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por aplicar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
+  const HALLAZGO_TIPO={compra_plazo_reclamo:'Facturas recibidas en plazo de reclamo',cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por aplicar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
   const paFilas=(()=>{ if(!pa) return []; const out=[]
     const gb={}; pa.bandeja.forEach(r=>{ const k=r.estado==='sospechoso'?'sospechoso':r.tipo||'otro'; (gb[k]=gb[k]||[]).push(r) })
     Object.entries(gb).forEach(([k,rs])=>{ const folios=k==='factura_sin_registrar'?rs.map(r=>(String(r.asunto||'').match(/N° ?(\d+)/)||[])[1]).filter(Boolean):[]
@@ -10511,7 +10513,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
   const [scope,setScope] = useState('anio')   // filtro Año / Por mes (protagonista)
   const [selM,setSelM] = useState(0)           // mes elegido en "Por mes" (solo meses cerrados)
   const [comprasRows,setComprasRows] = useState([])   // DTE de compra del SII (sii_compras_docs): foto IVA crédito + módulo Compras
-  useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
+  useEffect(()=>{ if(DEMO){ setComprasRows([]); return } let v=true; supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,neto,exento,iva,monto,glosa,proveedor_id,movimiento_id,periodo,sii_estado,fecha_recepcion').then(({data})=>{ if(v&&data) setComprasRows(data) },()=>{}); return ()=>{v=false} },[])
   // Ventas del SII (sii_cargas_docs) = fuente de verdad de lo emitido, TODO el año (billing está incompleto). Facturación propia = tipo 33/34 − notas de crédito (61) − facturas por cuenta de terceros.
   const [ventasRows,setVentasRows] = useState([])
   useEffect(()=>{ if(DEMO){ setVentasRows([]); return } let v=true; selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,billing_id').order('id')).then(({data})=>{ if(v&&data) setVentasRows(data) },()=>{}); return ()=>{v=false} },[])
@@ -10621,7 +10623,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       // Comisiones por pagar = saldo vivo, misma fuente que Inicio y Comisiones (saldoComisiones), como Flujo y Por cobrar de esta sección.
       const scO=saldoComisiones(terceros,billing), pp=scO.porPagar, ppAnt=comisPorPagarAnteriores(scO)
       const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
-      const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)).reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
+      const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)&&d.sii_estado!=='PENDIENTE').reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
       const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
         <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
         <div style={{minWidth:0,flex:1}}><div style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14.5,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
@@ -11335,6 +11337,14 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
   const [cubiertasRD,setCubiertasRD]=useState(()=>new Set())
   // Subarriendo: pago de un mes ↔ su factura emitida (regla única SD.anticiposSubarriendo, la misma del auditor nocturno).
   const [antSubDone,setAntSubDone]=useState(()=>new Set())
+  // Facturas recibidas en plazo de reclamo (regla única SD.comprasEnPlazoReclamo, la misma del auditor nocturno).
+  const [cpPend,setCpPend]=useState([]), [cpVistas,setCpVistas]=useState(()=>new Set())
+  useEffect(()=>{ if(DEMO) return; let v=true
+    Promise.all([supabase.from('sii_compras_docs').select('id,folio,tipo_dte,emisor_name,monto,sii_estado,fecha_recepcion').eq('sii_estado','PENDIENTE'),supabase.from('learnings').select('key').eq('kind','compra_sin_reclamo')])
+      .then(([c,l])=>{ if(!v) return; setCpPend(c.data||[]); setCpVistas(new Set((l.data||[]).map(r=>String(r.key)))) },()=>{})
+    return ()=>{v=false} },[])
+  const enReclamo=useMemo(()=>SD.comprasEnPlazoReclamo(cpPend,new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),cpVistas),[cpPend,cpVistas])
+  const sinReclamo=async x=>{ setCpVistas(p=>new Set([...p,String(x.d.id)])); if(DEMO) return; try{ await setLearningKV('compra_sin_reclamo',String(x.d.id),JSON.stringify({fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); logActividad('compras.sin_reclamo',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · revisada sin reclamo`}}) }catch(_){} }
   const antSub=useMemo(()=>SD.anticiposSubarriendo(anticipos,billing,sales,conciliacion).filter(x=>!antSubDone.has(String(x.a.id))),[anticipos,billing,sales,conciliacion,antSubDone])
   const anticipoCubre=useMemo(()=>{
     const lim=new Date(); lim.setDate(lim.getDate()+31); const limISO=lim.toISOString().slice(0,10)
@@ -11396,7 +11406,7 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -11507,6 +11517,14 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{extra.length?`${extra.length+1} pagos desde el ${fmtFechaDMY(a.fecha)}`:`pago del ${fmtFechaDMY(a.fecha)}`} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
           {amt(fmt(pagado??(Number(a.monto)||0)),`cuotas ${fmt(sum)}`,C.greenText)}</div>
         {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id),extra.map(x=>x.id)); setCubiertasRD(p=>new Set([...p,String(a.id),...extra.map(x=>String(x.id))])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
+      </div>)}
+    </div>}
+    {enReclamo.length>0&&<div style={secBox}>{sh('Facturas recibidas en plazo de reclamo',C.soonText,enReclamo.length)}
+      {enReclamo.map(x=><div key={x.d.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(x.d.emisor_name||'Proveedor')}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2}}>Factura N° {x.d.folio} · plazo hasta el {fmtFechaDMY(x.vence)}</div></div>
+          {amt(fmt(Number(x.d.monto)||0),x.quedan===0?'vence hoy':`quedan ${x.quedan} día${x.quedan!==1?'s':''}`,x.quedan<=2?C.overdueText:C.soonText)}</div>
+        <button onClick={()=>sinReclamo(x)} style={{marginTop:7,fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Sin reclamo</button>
       </div>)}
     </div>}
     {antSub.length>0&&<div style={secBox}>{sh('Pagos de subarriendo',C.greenText,antSub.length)}
