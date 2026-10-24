@@ -9968,7 +9968,7 @@ function horarioProceso(schedule, corto=false){
 // Centro de agentes: cada proceso en su tema (por su nombre técnico), en el orden en que se muestran.
 const TEMAS_PROCESOS = [
   ['banco','Banco y conciliación',/^(agente-segunda|alerta-cartola|caja-chica|aviso-fondos-diario)/],
-  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos)/],
+  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos|xml-emitidos)/],
   ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|causas-monitor|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
   ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal|lector-documentos)/],
@@ -9997,6 +9997,7 @@ function resumenCorrida(p){
     if(/^notaria-sin-cliente/.test(j)&&r.n!=null) return nn(r.n,'OT sin cliente','OT sin cliente')
     if(/^notaria-pedir/.test(j)) return r.enviado?'liquidación pedida a la notaría':(r.motivo?String(r.motivo).replace(/\s*\(\d{4}-\d{2}-\d{2}\)/,''):'')
     if(/^facturas-sii-registrar/.test(j)&&Array.isArray(r.registradas)) return `${len(r.registradas)} registradas · ${len(r.a_bandeja)??0} por aprobar`
+    if(/^xml-emitidos/.test(j)&&(r.cargados!=null||r.pendientes===0)) return r.pendientes?`${nn(r.cargados,'XML cargado','XML cargados')} de ${r.pendientes}`:'Sin XML pendientes'
     if(/^verificar-estados/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'factura revisada','facturas revisadas')} · ${r.cambiados??0} con cambio`
     if(/^caja-chica-sweep/.test(j)&&r.nEnlazadas!=null) return nn(r.nEnlazadas,'transferencia enlazada','transferencias enlazadas')
     if(/^aviso-fondos-diario/.test(j)&&r.enviados!=null) return nn(r.enviados,'aviso enviado','avisos enviados')

@@ -23,6 +23,7 @@ import { armarDocumento, type FacturaInput } from './dte.ts'
 import { firmarDocumento } from './firma.ts'
 import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 import { armarLibroVentas } from './libro.ts'
+import { bajarXmlEmitidos, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
 
 const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']
 
@@ -99,8 +100,9 @@ serve(async (req) => {
 
   // Acceso: admin (email en el JWT) O el cron con su secreto, pero el secreto SOLO autoriza los jobs de reporte
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
+  // xml-emitidos entra aca: solo LEE el SII (descarga el respaldo XML) y completa billing.dte_xml vacío.
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas']
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !ADMINS.includes(email))) {
@@ -530,6 +532,34 @@ serve(async (req) => {
       // duplicar la lógica en el edge). Las NC (61) siguen a compuerta.
       console.log(`[sii-sync] cron-cuadre-ventas enlazó ${enlace?.facturas_enlazadas ?? 0} facturas, ${enlace?.nc_enlazadas ?? 0} NC`)
       return json({ ok: true, ambiente, periodos, detalle, enlace })
+    }
+
+    // Facturas emitidas fuera de la app (portal del SII) que no tienen su XML: lo trae con el certificado y lo guarda.
+    // Solo desde XML_DESDE. Si el SII activó el captcha de la descarga, se detiene y responde 409 (vigilancia lo informa).
+    if (body.action === 'xml-emitidos') {
+      if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
+      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      const { data: bills, error: bErr } = await sb.from('billing').select('id, invoice_no, amount, billing_type, status')
+        .is('deleted_at', null).is('dte_xml', null).not('invoice_no', 'is', null).neq('status', 'Anulada').gte('issued_at', XML_DESDE)
+      if (bErr) return json({ error: bErr.message }, 500)
+      const ids = (bills || []).map((b: { id: string }) => b.id)
+      const { data: cola } = ids.length ? await sb.from('sii_cargas_docs').select('billing_id, tipo_dte, monto').in('billing_id', ids) : { data: [] }
+      const porBill = new Map((cola || []).map((c: { billing_id: string }) => [c.billing_id, c]))
+      const pendientes: Pendiente[] = (bills || []).map((b: { id: string; invoice_no: string; amount: number; billing_type: string }) => {
+        const c = porBill.get(b.id) as { tipo_dte?: number; monto?: number } | undefined
+        return { id: b.id, folio: String(b.invoice_no).replace(/\D/g, ''), tipo: c?.tipo_dte ?? (b.billing_type === 'nota_credito' ? 61 : null), monto: Math.abs(Number(c?.monto ?? b.amount) || 0) }
+      }).filter((p: Pendiente) => p.folio)
+      if (!pendientes.length) return json({ ok: true, pendientes: 0 })
+      const { captcha, resultados } = await bajarXmlEmitidos(getEmisor().rut.replace(/\./g, ''), pendientes)
+      let cargados = 0
+      if (!body.dryRun) for (const r of resultados.filter((x) => x.estado === 'cargado')) {
+        const { error } = await sb.from('billing').update({ dte_xml: r.xml }).eq('id', r.id).is('dte_xml', null)
+        if (error) { r.estado = 'error'; r.detalle = error.message } else cargados++
+      }
+      const resumen = resultados.map(({ xml, ...r }) => ({ ...r, bytes: xml?.length }))
+      console.log(`[sii-sync] xml-emitidos: ${cargados} cargados de ${pendientes.length}${captcha ? ' · CAPTCHA ACTIVO, detenido' : ''}`)
+      if (captcha) return json({ error: 'El SII activó el captcha de la descarga de XML: el proceso se detuvo sin saltarlo. Los XML pendientes se bajan a mano.', cargados, resultados: resumen }, 409)
+      return json({ ok: true, pendientes: pendientes.length, cargados, dryRun: !!body.dryRun, resultados: resumen })
     }
 
     const periodo = String(body.periodo || '')
