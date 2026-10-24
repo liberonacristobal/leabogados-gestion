@@ -52,9 +52,10 @@ export function parseCaf(autorizacionXml: string): CafParsed {
 }
 
 // Firma el <DD> del timbre con la llave privada del CAF (RSA-SHA1) → contenido de <FRMT>.
-// El DD debe pasarse YA en su forma canónica (string exacto que va dentro del TED).
+// El DD debe pasarse YA en su forma canónica (string exacto que va dentro del TED). Instructivo técnico: el DD aplanado se
+// firma codificado en ISO-8859-1 → bytes latin1 (modo 'raw' de forge: un byte por carácter). Se confirma en certificación.
 export function firmarTED(ddXml: string, rsask: any): string {
   const md = forge.md.sha1.create()
-  md.update(ddXml, 'utf8')
+  md.update(ddXml, 'raw')
   return forge.util.encode64(rsask.sign(md))
 }

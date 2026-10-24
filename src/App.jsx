@@ -89,6 +89,8 @@ const BRAND = {
   direccionFirma: 'Av. Pdte. Kennedy 7900, Of. 905, Vitacura',    // variante membrete/firma de correo
   ciudad: 'Santiago',
   telefono: '+56 2 2405 3800',
+  telefonoFactura: '+56991556769',   // el que imprime la factura (PDF del DTE)
+  siiUnidad: 'S.I.I. - SANTIAGO ORIENTE',   // unidad del SII del emisor (recuadro del PDF)
   socios: 'Cristóbal Liberona y Erasmo Escala',
   logo: { blanco:'/le-logo-blanco.png', color:'/le-logo-color.png', full:'/le-logo-full-blanco.png' },
   // Datos de cobro (transferencia). Fuente ÚNICA — CUENTA_HONORARIOS/CUENTA_GASTOS y todo texto de pago leen de aquí.
@@ -10216,6 +10218,14 @@ async function registrarFondoPropuesto(r, {proyecto, yo, sales, expenses, onFond
 // facturas-sii-registrar la asigna sola. Todo cambio de billing avisa a la app para recargar (avisarBillingCambio).
 const _billingCambio=new Set()
 const avisarBillingCambio=()=>{ _billingCambio.forEach(f=>{ try{ f() }catch(_){} }) }
+// Valor de learnings config (kind 'config'), leído una vez por sesión. Ej.: sii_emision_etapa (paso de la puesta en marcha de la emisión).
+const _cfgValP={}
+function useConfigValor(key){
+  const [v,setV]=useState(null)
+  useEffect(()=>{ if(DEMO) return; if(!_cfgValP[key]) _cfgValP[key]=supabase.from('learnings').select('value').eq('kind','config').eq('key',key).order('updated_at',{ascending:false}).limit(1).then(({data})=>data?.[0]?.value??null,()=>null)
+    let on=true; _cfgValP[key].then(x=>{ if(on) setV(x) }); return ()=>{on=false} },[key])
+  return v
+}
 let _ventaAprP=null
 function useVentaAprendida(){
   const [m,setM]=useState(()=>({si:{},no:{}}))
@@ -13001,7 +13011,15 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
     const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':supabase.supabaseKey},body:JSON.stringify(body)})
     const d=await res.json().catch(()=>({})); if(!res.ok) throw new Error(d.error||('Error '+res.status)); return d
   }
-  const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); appAlert(`Conexión OK con el SII (${d.ambiente}).\nAutenticación válida (token emitido).`) }catch(e){ appAlert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
+  const siiProbar = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'test-auth'}); const e=await siiCall({action:'test-auth',uso:'emision'}); appAlert(`Conexión con el SII correcta.\nLectura: ${d.ambiente} · Emisión: ${e.ambiente}`) }catch(e){ appAlert('No se pudo conectar al SII: '+e.message) } setSiiBusy(false) }
+  // Intercambio de información (certificación): el SII entrega un EnvioDTE; la app devuelve las tres respuestas firmadas para subirlas al portal.
+  const siiIntercambio = async(file)=>{ if(!file) return; setSiiBusy(true)
+    try{ const xml=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result||'')); r.onerror=()=>rej(new Error('No se pudo leer el archivo.')); r.readAsText(file,'ISO-8859-1') })
+      const d=await siiCall({action:'intercambio', envioXml:xml, nombreArchivo:file.name, contacto:{nombre:user?.name||'', mail:user?.email||''}})
+      siiDescargarXml(d.recepcion,'respuesta_recepcion.xml'); siiDescargarXml(d.resultado,'respuesta_resultado.xml'); siiDescargarXml(d.recibos,'recibos_ley_19983.xml')
+      appAlert(`Respuestas del intercambio listas: ${d.docs.length} documento(s) de ${d.emisor}${d.ajenos?` · ${d.ajenos} con otro RUT receptor (respondidos como rechazados)`:''}.\nSe descargaron 3 archivos: acuse de recibo, aprobación comercial y recibo Ley 19.983. Súbelos en el portal de certificación del SII.`) }
+    catch(e){ appAlert('No se pudo armar el intercambio: '+e.message) }
+    setSiiBusy(false) }
   const siiVerificarEstados = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'verificar-estados'}); appAlert(`Estados verificados en el SII:\n${d.revisados} revisado(s) · ${d.cambiados} actualizado(s)${d.rechazadas?`\n${d.rechazadas} rechazada(s) — revisa tu correo`:''}.`); if(d.cambiados&&onRefresh) await onRefresh() }catch(e){ appAlert('No se pudo verificar estados: '+e.message) } setSiiBusy(false) }
   const siiResumenSemanal = async()=>{ setSiiBusy(true); try{ const d=await siiCall({action:'resumen-semanal'}); appAlert(`Resumen semanal enviado a los admins.\nEmitidas (7d): ${d.emitidasSemana} · Por cobrar: $${(d.porCobrar||0).toLocaleString('es-CL')} · Vencido: $${(d.vencido||0).toLocaleString('es-CL')}.`) }catch(e){ appAlert('No se pudo enviar el resumen: '+e.message) } setSiiBusy(false) }
   // TRAÍDO HISTÓRICO DEL SII (solo lectura). Recorre 2025-01 → 2026-06 (un mes antes del 1er pago
@@ -13060,7 +13078,8 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   ],null,2)
   const siiEmitirSet = async(dryRun)=>{ setSiiBusy(true); setSiiResult(null); try{ const facturas=JSON.parse(siiSetJson||'[]'); if(!Array.isArray(facturas)||!facturas.length) throw new Error('Pega el set de casos (un array JSON de facturas).'); const d=await siiCall({action:'emitir-set',facturas,dryRun}); setSiiResult(d) }catch(e){ setSiiResult({error:e.message}) } setSiiBusy(false) }
   const siiLibro = async()=>{ setSiiBusy(true); setSiiResult(null); try{ if(!/^\d{4}-\d{2}$/.test(siiPeriodo)) throw new Error('Período en formato AAAA-MM (ej. 2026-07).'); const det=(billing||[]).filter(b=>b.dte_track_id&&(b.dte_emitido_at||'').slice(0,7)===siiPeriodo&&!b.deleted_at).map(b=>{ const ent=(clientEntities||[]).find(e=>String(e.id)===String(b.entity_id)); return {tpoDoc:34,nroDoc:Number(b.folio)||0,fchDoc:(b.issued_at||'').slice(0,10),rutDoc:ent?.rut||b.receptor_rut||'',rznSoc:ent?.name||b.receptor_name||'',mntExe:Math.round(b.amount||0),mntTotal:Math.round(b.amount||0)} }); const d=await siiCall({action:'libro-ventas',periodo:siiPeriodo,detalle:det}); setSiiResult({...d,nDet:det.length}) }catch(e){ setSiiResult({error:e.message}) } setSiiBusy(false) }
-  const siiDescargarXml = (xml,name)=>{ try{ const url=URL.createObjectURL(new Blob([xml],{type:'application/xml'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),30000) }catch(_){} }
+  // Los XML para el SII se declaran ISO-8859-1: se bajan con esos bytes (un byte por carácter), no en UTF-8.
+  const siiDescargarXml = (xml,name)=>{ try{ const s=String(xml||''), b=new Uint8Array(s.length); for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i); b[i]=c<256?c:63 } const url=URL.createObjectURL(new Blob([/ISO-8859-1/i.test(s.slice(0,80))?b:s],{type:'application/xml'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),30000) }catch(_){} }
   // Bandeja de envío: facturas emitidas que aún no se mandaron por correo al cliente.
   const [bandejaEnvio,setBandejaEnvio] = useState(()=>!!viewMemLeer('billing')?.bandejaEnvio)
   useEffect(()=>{ viewMemGuardar('billing',{filter,cierreOpen,xmlHub,bandejaEnvio}) },[filter,cierreOpen,xmlHub,bandejaEnvio])
@@ -13669,7 +13688,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       </div>
     )
   }
-  return { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
+  return { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
 }
 
 // ─── POR SOCIO · motor único ────────────────────────────────────────────────
@@ -14083,7 +14102,8 @@ function PorSocioModal({onClose,...props}){
 }
 
 function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onFacturarAdelantos,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,onReclasificarTercero,onBuscarSII,proveedores=[],onSaveProveedor,onIrConciliacion,onOpenPorSocio,onIrCobranza,onConsumeAnticipos,onCrearVentaForm,intent,onIntentDone}) {
-  const { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
+  const { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, masivoSaldo, setMasivoSaldo, factToMap, setFactToMap, abrirBandeja, envioMasivoBusy, setEnvioMasivoBusy, enviarTodas, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
+  const etapaEmision = Number(useConfigValor('sii_emision_etapa'))||1   // paso actual de la puesta en marcha (0 = certificado, ya hecho)
   // Página "Cargar del SII": bitácora (sii_import_batches) e inventario de lo sin registrar se cargan al abrirla. Estado propio (no reusa cargasHist, que abre el modal de historial).
   const [histPage,setHistPage]=useState(null)
   useEffect(()=>{ if(!xmlHub) return; contarSinRegistrar(); setHistPage('loading')
@@ -14857,7 +14877,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               const enProd=emitidas.some(b=>b.dte_ambiente==='prod')
               const Btn=(label,on,primary)=><button onClick={on} disabled={siiBusy} style={{fontSize:12,fontWeight:600,color:primary?'#fff':C.accent,background:primary?C.accent:'#fff',border:primary?'none':`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:'pointer',opacity:siiBusy?.6:1}}>{label}</button>
               const siiIcon=<svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={enProd?C.greenText:C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6M9 13h6M9 17h4'/></svg>
-              const estTxt=enProd?'Producción':'En certificación'
+              const estTxt=enProd?'Producción':etapaEmision<=1?'Sin postular':'En certificación'
               const siiSub=enProd?`${emitidas.length} emitida${emitidas.length!==1?'s':''} · directo al SII`:'Emite tus facturas directo al SII'
               return (<>
                 <div style={{marginTop:14}}>
@@ -14899,13 +14919,13 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                         {!emitidas.length&&<div style={{fontSize:11,color:C.muted}}>Aún no emites facturas.</div>}
                       </>):(<>
                         <div style={{...SEC_LBL,marginBottom:8}}>Puesta en marcha</div>
-                        {[['Certificado digital cargado','ok'],['Postulación + set de pruebas · en curso','now'],['Autorización del SII','next'],['Emitir en producción','next']].map(([t,st],i)=>(
-                          <div key={i} style={{display:'flex',alignItems:'center',gap:9,marginBottom:i<3?7:0}}>
+                        {['Certificado digital','Postulación como facturador propio','Set de pruebas y folios de certificación','Set de pruebas aprobado','Simulación e intercambio de información','Declaración de cumplimiento y autorización','Folios de producción · emitir desde la app'].map((t,i,arr)=>{ const st=i<etapaEmision?'ok':i===etapaEmision?'now':'next'; return (
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:9,marginBottom:i<arr.length-1?7:0}}>
                             {st==='ok'?<span style={{width:16,height:16,borderRadius:'50%',background:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg></span>
                              :st==='now'?<span style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${C.soon}`,background:C.ambarBg,flexShrink:0}}/>
                              :<span style={{width:16,height:16,borderRadius:'50%',border:`2px solid ${C.border}`,flexShrink:0}}/>}
                             <span style={{fontSize:12,color:st==='now'?C.text:st==='ok'?C.muted:C.done,fontWeight:st==='now'?600:400}}>{t}</span>
-                          </div>))}
+                          </div>) })}
                       </>)}
                       </div>
                       {/* Acciones */}
@@ -14913,7 +14933,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                         <div style={{...SEC_LBL,marginBottom:8}}>Acciones</div>
                         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{enProd
                           ? <>{Btn('Ver facturas',()=>{setSiiPageOpen(false);go('clientes')},true)}{Btn('Verificar estados',siiVerificarEstados)}{Btn('Enviar resumen',siiResumenSemanal)}{Btn('Probar conexión',siiProbar)}{Btn('Historial',cargarSiiLog)}</>
-                          : <>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}{Btn('Historial',cargarSiiLog)}</>}</div>
+                          : <>{Btn('Probar conexión',siiProbar,true)}{Btn('Set de pruebas',()=>{setSiiResult(null);if(!siiSetJson)setSiiSetJson(SII_SET_SAMPLE);setSiiPanel('set')})}{Btn('Libro de ventas',()=>{setSiiResult(null);setSiiPanel('libro')})}<label style={{fontSize:12,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',cursor:siiBusy?'default':'pointer',opacity:siiBusy?.6:1}}>Intercambio<input type='file' accept='.xml,text/xml' disabled={siiBusy} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; siiIntercambio(f) }} style={{display:'none'}}/></label>{Btn('Historial',cargarSiiLog)}</>}</div>
                       </div>
                       {/* Histórico SII + pareo */}
                       <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',...(isDesktop?{gridColumn:'1 / -1'}:{})}}>
@@ -29818,13 +29838,20 @@ function _loadBwip(){
   return _bwipP
 }
 // Recibe el string de UN <Documento> (factura exenta tipo 34). Devuelve {base64,folio,rznR,rutR,total}.
-async function facturaDtePdfBase64(docXml){
+// Representación impresa del DTE (Res. Ex. SII 18/2003, mod. 22/2016): recuadro con RUT, nombre del documento con «electrónica» y N°;
+// timbre PDF417 de 2×4,5 a 4×9 cm a más de 200 ppp; «Timbre Electrónico SII», la resolución que autoriza al emisor y
+// «Verifique documento: www.sii.cl». opts.cedible = copia cedible con acuse de recibo (Ley 19.983). opts.resol = {nro, anio}.
+const NOMBRE_DTE={33:['FACTURA','ELECTRÓNICA'],34:['FACTURA NO AFECTA O','EXENTA ELECTRÓNICA'],56:['NOTA DE DÉBITO','ELECTRÓNICA'],61:['NOTA DE CRÉDITO','ELECTRÓNICA']}
+const NOMBRE_DTE_CORTO={33:'Factura',34:'Factura exenta',56:'Nota de débito',61:'Nota de crédito'}
+async function facturaDtePdfBase64(docXml, opts={}){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const bwip = await _loadBwip()
   const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?m[1].trim():'' }
   const ted=(docXml.match(/<TED[\s\S]*?<\/TED>/)||[''])[0]
   const idDoc=(docXml.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(docXml.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(docXml.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(docXml.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
   const detalles=[...docXml.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
+  const refs=[...docXml.matchAll(/<Referencia>[\s\S]*?<\/Referencia>/g)].map(m=>({tipo:g('TpoDocRef',m[0]), folio:g('FolioRef',m[0]), fch:g('FchRef',m[0]), razon:g('RazonRef',m[0])}))
+  const tipoD=+g('TipoDTE',idDoc)||34, resol=opts.resol||_resolDoc.get(docXml)||BRAND.siiResol||{nro:'99',anio:'2014'}
   const D={ folio:g('Folio',idDoc), fch:g('FchEmis',idDoc), fma:g('FmaPago',idDoc), rutE:g('RUTEmisor',emi),
     rutR:g('RUTRecep',rec), rznR:g('RznSocRecep',rec), giroR:g('GiroRecep',rec), dirR:g('DirRecep',rec), cmnaR:g('CmnaRecep',rec), ciuR:g('CiudadRecep',rec),
     exe:+g('MntExe',tot), total:+g('MntTotal',tot),
@@ -29836,7 +29863,9 @@ async function facturaDtePdfBase64(docXml){
   const fma={'1':'Contado','2':'Crédito','3':'Sin costo'}[D.fma]||''
   const logo=LOGO_FACTURA_B64
   const NAVY=[0,60,80], GRAF=[61,61,61], MUT=[83,114,129], BORD=[210,216,221], RED=[192,11,11], REDLT=[196,125,125]
-  const cv=document.createElement('canvas'); bwip.toCanvas(cv,{ bcid:'pdf417', text:ted, scale:2, eclevel:5, includetext:false }); const bc=cv.toDataURL('image/png')
+  const cv=document.createElement('canvas'); bwip.toCanvas(cv,{ bcid:'pdf417', text:ted, scale:4, eclevel:5, includetext:false }); const bc=cv.toDataURL('image/png')
+  // Tamaño legal del timbre: alto 20–40 mm y ancho 45–90 mm, manteniendo la proporción del símbolo.
+  const rat=cv.height/cv.width||0.35; let tw=62, th=tw*rat; if(th<20){ th=20; tw=Math.min(90,th/rat) } if(th>40){ th=40; tw=Math.max(45,th/rat) }
   const p=new jsPDF({unit:'mm',format:'letter',compress:true}); const W=215.9, M=15
   p.setDrawColor(...BORD); p.setLineWidth(0.4); p.roundedRect(11,12,W-22,261,2.5,2.5)
   p.addImage(logo,'PNG',M,16,80,20.8)
@@ -29844,22 +29873,24 @@ async function facturaDtePdfBase64(docXml){
   p.setDrawColor(...RED); p.setLineWidth(0.8); p.roundedRect(bx,by,bw,bh,2,2)
   p.setTextColor(...RED); p.setFont('helvetica','bold')
   p.setFontSize(11); p.text('R.U.T. '+fmtRut(D.rutE),bx+bw/2,by+6.5,{align:'center'})
-  p.setFontSize(9); p.text('FACTURA NO AFECTA O',bx+bw/2,by+13,{align:'center'}); p.text('EXENTA ELECTRÓNICA',bx+bw/2,by+17,{align:'center'})
+  const nom=NOMBRE_DTE[tipoD]||NOMBRE_DTE[34]; p.setFontSize(9); p.text(nom[0],bx+bw/2,by+13,{align:'center'}); p.text(nom[1],bx+bw/2,by+17,{align:'center'})
   p.setFontSize(16.5); p.text('N° '+D.folio,bx+bw/2,by+25,{align:'center'})
-  p.setFont('helvetica','normal'); p.setFontSize(6.5); p.setTextColor(...REDLT); p.text('S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+30,{align:'center'})
+  p.setFont('helvetica','normal'); p.setFontSize(6.5); p.setTextColor(...REDLT); p.text(BRAND.siiUnidad||'S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+30,{align:'center'})
   const fy=by+bh+6; p.setFont('helvetica','normal'); p.setFontSize(8); p.setTextColor(...MUT)
   p.text('Fecha de emisión:',bx,fy); const flw=p.getTextWidth('Fecha de emisión:  ')
   p.setFont('helvetica','bold'); p.setTextColor(...GRAF); p.text(fchL(D.fch),bx+flw,fy)
   let ye=43; p.setFontSize(8.5)
   const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); p.text(val,M+w,ye); ye+=4.7 }
-  inl('Giro:','Prestación de servicios y asesorías profesionales')
-  inl('Dirección:',BRAND.direccionCalle)
+  // Datos del emisor: los del DTE (lo que el SII recibió); el texto de la app solo si el XML no los trae.
+  const giroE=g('GiroEmis',emi)||'Prestación de servicios y asesorías profesionales', dirE=[g('DirOrigen',emi),g('CmnaOrigen',emi)].filter(Boolean).join(', ')||BRAND.direccionCalle
+  inl('Giro:',giroE)
+  inl('Dirección:',dirE)
   p.setFontSize(8.5)
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Email:',M,ye); let cx=M+p.getTextWidth('Email:  ')
   p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(BRAND.pago.honorarios.email,cx,ye); cx+=p.getTextWidth(BRAND.pago.honorarios.email)
   p.setTextColor(...MUT); p.text('     ·     ',cx,ye); cx+=p.getTextWidth('     ·     ')
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Teléfono:',cx,ye); cx+=p.getTextWidth('Teléfono:  ')
-  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text('+56991556769',cx,ye); ye+=6
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(g('Telefono',emi)||BRAND.telefonoFactura||BRAND.telefono,cx,ye); ye+=6
   p.setFont('helvetica','bold'); p.setFontSize(9); p.setTextColor(...NAVY); p.text('VENTA DEL GIRO',M,ye)
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ye+5,W-M,ye+5)
   let y=ye+9; const rh=32
@@ -29878,25 +29909,37 @@ async function facturaDtePdfBase64(docXml){
   p.text('DESCRIPCIÓN',cD,y+5); p.text('CANT.',cQ,y+5,{align:'center'}); p.text('PRECIO UNIT.',cP,y+5,{align:'right'}); p.text('VALOR',cV,y+5,{align:'right'})
   y+=7.5
   D.items.forEach(it=>{ y+=5.5; p.setTextColor(...GRAF); p.setFont('helvetica','bold'); p.setFontSize(8.5); p.text(String(it.nmb||''),cD,y)
-    p.text(String(+it.qty||''),cQ,y,{align:'center'}); p.setFont('helvetica','normal'); p.text(fmtN(it.prc),cP,y,{align:'right'}); p.text(fmtN(it.mnt),cV,y,{align:'right'})
+    p.text(String(+it.qty||''),cQ,y,{align:'center'}); p.setFont('helvetica','normal'); p.text(it.prc?fmtN(it.prc):'',cP,y,{align:'right'}); p.text(fmtN(it.mnt),cV,y,{align:'right'})
     if(it.dsc){ p.setFontSize(7.5); p.setTextColor(...MUT); String(it.dsc).split('\n').forEach(l=>{ y+=3.6; p.text(l,cD+1,y) }) } y+=2.5 })
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,y,W-M,y)
   y+=6; p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.setFontSize(8.5); p.text('Forma de pago: ',M,y); p.setTextColor(...GRAF); p.setFont('helvetica','normal'); p.text(fma,M+24,y)
-  const ty=240
+  // Referencias (notas de crédito y débito): el documento que modifican.
+  if(refs.length){ y+=6; p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.text('Referencias:',M,y); p.setTextColor(...GRAF); p.setFont('helvetica','normal')
+    refs.forEach((r,i)=>{ const f=String(r.fch||'').split('-'); p.text(`${NOMBRE_DTE_CORTO[+r.tipo]||('Documento '+r.tipo)} N° ${r.folio}${f.length===3?` del ${f[2]}-${f[1]}-${f[0]}`:''}${r.razon?` · ${r.razon}`:''}`,M+20,y+i*4.5) }); y+=(refs.length-1)*4.5 }
+  const ty=232
+  // Copia cedible (Ley 19.983): acuse de recibo sobre el timbre y la leyenda CEDIBLE.
+  if(opts.cedible){ const ay=ty-36; p.setDrawColor(...BORD); p.setLineWidth(0.3); p.rect(M,ay,W-2*M,26)
+    p.setFontSize(8); p.setTextColor(...NAVY); p.setFont('helvetica','bold'); p.text('ACUSE DE RECIBO',M+3,ay+5)
+    p.setFont('helvetica','normal'); p.setTextColor(...GRAF); [['Nombre:',M+3,ay+11],['R.U.T.:',M+100,ay+11],['Fecha:',M+3,ay+17],['Recinto:',M+60,ay+17],['Firma:',M+130,ay+17]].forEach(([t,x,yy])=>{ p.text(t,x,yy); p.line(x+p.getTextWidth(t)+1.5,yy+0.6,x+(t==='Nombre:'?90:t==='R.U.T.:'?80:t==='Firma:'?50:65),yy+0.6) })
+    p.setFontSize(6.5); p.setTextColor(...MUT); p.text('El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4, y la letra c) del Art. 5 de la Ley 19.983, acredita que la entrega de mercaderías o servicio(s) prestado(s) ha(n) sido recibido(s).',M+3,ay+22,{maxWidth:W-2*M-6}) }
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ty-8,W-M,ty-8)
-  p.addImage(bc,'PNG',M,ty,44,15.4)
+  p.addImage(bc,'PNG',M,ty,tw,th)
   p.setTextColor(...MUT); p.setFont('helvetica','normal'); p.setFontSize(7)
-  p.text('Timbre Electrónico SII',M,ty+19); p.text('Res. 99 de 2014 · Verifique documento: www.sii.cl',M,ty+22.3)
+  p.text('Timbre Electrónico SII',M,ty+th+3.5); p.text(`Res. ${resol.nro} de ${resol.anio} · Verifique documento: www.sii.cl`,M,ty+th+6.8)
   p.setFontSize(9); p.setTextColor(...GRAF); p.setFont('helvetica','normal')
   p.text('Impuesto adicional',138,ty+1); p.text('$ '+fmtN(0),W-M,ty+1,{align:'right'})
   p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'})
   p.setDrawColor(...NAVY); p.setLineWidth(0.5); p.line(138,ty+10.5,W-M,ty+10.5)
   p.setFont('helvetica','bold'); p.setFontSize(12); p.setTextColor(...NAVY); p.text('TOTAL',138,ty+16.5); p.text('$ '+fmtN(D.total),W-M,ty+16.5,{align:'right'})
-  p.setTextColor(...MUT); p.setFontSize(7); p.text(BRAND.web,W/2,270,{align:'center'})
+  if(opts.cedible){ p.setFont('helvetica','bold'); p.setFontSize(11); p.setTextColor(...RED); p.text('CEDIBLE',W-M,ty+th+6.8,{align:'right'}) }
+  p.setTextColor(...MUT); p.setFont('helvetica','normal'); p.setFontSize(7); p.text(BRAND.web,W/2,270,{align:'center'})
   return { base64: p.output('datauristring').split(',')[1], folio:D.folio, rznR:D.rznR, rutR:D.rutR, total:D.total }
 }
 // Parte un SetDTE/EnvioDTE en sus <Documento> individuales.
-function splitSetDTE(xml){ return [...String(xml||'').matchAll(/<Documento[\s\S]*?<\/Documento>/g)].map(m=>m[0]) }
+// Documentos de un sobre. Recuerda la resolución del SII de su Carátula (NroResol/FchResol), que va bajo el timbre del PDF.
+const _resolDoc=new Map()
+function splitSetDTE(xml){ const s=String(xml||''), car=(s.match(/<Caratula[\s\S]*?<\/Caratula>/)||[''])[0], nro=(car.match(/<NroResol>(\d+)<\/NroResol>/)||[])[1], anio=(car.match(/<FchResol>(\d{4})/)||[])[1]
+  const docs=[...s.matchAll(/<Documento[\s\S]*?<\/Documento>/g)].map(m=>m[0]); if(nro!=null&&anio) docs.forEach(d=>_resolDoc.set(d,{nro,anio})); return docs }
 
 async function rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang='es'){
   const EN = lang==='en'
@@ -44991,11 +45034,13 @@ export default function App() {
     setEmitirBusy(true)
     try{
       const r=await _siiFetch(ep.base)
+      // Certificación: el envío es una prueba ante el SII; el folio no es real y la factura no cambia.
+      if(r.ambiente!=='prod'){ setEmitirPreview(null); setEmitirBusy(false); appAlert(`Prueba de certificación enviada al SII.\nFolio de prueba ${r.folio} · estado ${r.estado||'enviado'}\nLa factura no cambia: en certificación no se registra en Facturación.`); return }
       // El monto REAL de la factura es el del DTE emitido (UF del día), no el programado. Reemplaza amount al emitir.
       const dteTot=r.dteXml?dteMontoTotal(r.dteXml):null
       const dueEmi=ep.fecha?dueFromIssued(ep.fecha):null   // el plazo corre desde la emisión (no dejar el due planificado viejo)
-      const patch={ folio:String(r.folio), status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
-      await supabase.from('billing').update({status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
+      const patch={ invoice_no:String(r.folio), sii_tipo_dte:34, status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
+      await supabase.from('billing').update({invoice_no:String(r.folio), sii_tipo_dte:34, status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
       // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.
@@ -45058,16 +45103,17 @@ export default function App() {
       const razon = obs?.trim()?`${motivo} — ${obs.trim()}`:motivo
       let ncRef=''
       // Si la factura fue emitida electrónicamente (dte_track_id), NO se borra: se anula con una Nota de Crédito al SII (61, exenta) que la referencia (codRef 1).
-      if(bill.dte_track_id){
+      if(bill.dte_track_id&&bill.dte_ambiente==='prod'){
         const ents=(clientEntities||[]).filter(e=>String(e.client_id)===String(bill.client_id))
         const ent = bill.entity_id?ents.find(e=>String(e.id)===String(bill.entity_id)):(ents.length===1?ents[0]:null)
         const recRut = ent?.rut || bill.receptor_rut, recRs = ent?.name || bill.receptor_name
         if(!recRut||!recRs) throw new Error('Falta el receptor de la factura para emitir la Nota de Crédito.')
-        if(!await appConfirm(`Esta factura fue emitida al SII (folio ${bill.folio||'—'}).\nPara anularla se emitirá una NOTA DE CRÉDITO electrónica que la deja sin efecto.\n\n¿Continuar?`)) return
+        const folioF=folioN(bill.invoice_no)||bill.invoice_no
+        if(!await appConfirm(`Esta factura fue emitida al SII (folio ${folioF||'—'}).\nPara anularla se emitirá una NOTA DE CRÉDITO electrónica que la deja sin efecto.\n\n¿Continuar?`)) return
         const r=await _siiFetch({ action:'emitir', tipoDte:61, exenta:true, fecha:new Date().toISOString().slice(0,10),
           receptor:{ rut:recRut, rs:recRs },
           items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }],
-          referencias:[{ tpoDocRef:34, folioRef:bill.folio, fchRef:(bill.issued_at||'').slice(0,10)||new Date().toISOString().slice(0,10), codRef:1, razonRef:(razon||'Anula factura').slice(0,90) }] })
+          referencias:[{ tpoDocRef:34, folioRef:folioF, fchRef:(bill.issued_at||'').slice(0,10)||new Date().toISOString().slice(0,10), codRef:1, razonRef:(razon||'Anula factura').slice(0,90) }] })
         ncRef=` · Nota de crédito N° ${r.folio} (SII ${r.estado||'enviado'})`
       }
       const patch={status:'Anulada', motivo_baja:razon+ncRef, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}

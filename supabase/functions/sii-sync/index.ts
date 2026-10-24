@@ -24,6 +24,7 @@ import { firmarDocumento } from './firma.ts'
 import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 import { armarLibroVentas } from './libro.ts'
 import { bajarXmlEmitidos, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
+import { leerEnvioRecibido, armarRecepcionEnvio, armarResultadoDTE, armarEnvioRecibos } from './intercambio.ts'
 
 const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']
 
@@ -114,11 +115,14 @@ serve(async (req) => {
   try {
     // Modo de prueba aislado: valida la danza completa sin tocar billing.
     if (body.action === 'test-auth') {
-      console.log(`[sii-sync] test-auth solicitado por ${email} (ambiente: ${ambiente})`)
-      const token = await obtenerToken(true)
+      const uso = body.uso === 'emision' ? 'emision' : 'lectura'
+      const ambUso = getConfig(uso).ambiente
+      console.log(`[sii-sync] test-auth ${uso} solicitado por ${email} (ambiente: ${ambUso})`)
+      const token = await obtenerToken(true, uso)
       return json({
         ok: true,
-        ambiente,
+        uso,
+        ambiente: ambUso,
         tokenPreview: token.slice(0, 6) + '...' + token.slice(-4),
         mensaje: 'Danza de autenticacion OK: semilla obtenida, firma aceptada, token emitido',
       })
@@ -128,8 +132,10 @@ serve(async (req) => {
     //   'emitir'      → 1 factura: { tipoDte, fecha?, receptor:{rut,rs,giro?,dir?,comuna?}, items:[{nombre,desc?,qty?,precio?,monto}], fmaPago?, billingId?, dryRun? }
     //   'emitir-set'  → varias (set de certificación): { facturas:[ {…igual que arriba…}, … ], dryRun? }  → un solo sobre con todas
     // dryRun=true arma y firma pero NO envía (inspeccionar el XML / preparar el set de pruebas).
+    // Ambiente de EMISIÓN (SII_AMBIENTE_EMISION), independiente de la lectura. En certificación nada se escribe en Facturación:
+    // los folios de prueba no son facturas reales (set de pruebas y simulación).
     if (body.action === 'emitir' || body.action === 'emitir-set') {
-      const amb = ambiente === 'produccion' ? 'prod' : 'cert'
+      const amb = getConfig('emision').ambiente === 'produccion' ? 'prod' : 'cert'
       const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
       const nowIso = nowChileIso()
       const lista = body.action === 'emitir-set' ? (Array.isArray(body.facturas) ? body.facturas : []) : [body]
@@ -137,8 +143,8 @@ serve(async (req) => {
 
       // Idempotencia: si esa factura YA fue emitida (dte_track_id), no re-emitir (evita doble folio / doble DTE ante reintentos o doble click).
       if (body.action === 'emitir' && body.billingId && !body.dryRun) {
-        const { data: ya } = await sb.from('billing').select('dte_track_id, folio, dte_estado').eq('id', body.billingId).maybeSingle()
-        if (ya?.dte_track_id) return json({ ok: true, yaEmitida: true, folio: ya.folio, trackId: ya.dte_track_id, estado: ya.dte_estado })
+        const { data: ya } = await sb.from('billing').select('dte_track_id, invoice_no, dte_estado, dte_ambiente').eq('id', body.billingId).maybeSingle()
+        if (ya?.dte_track_id && ya.dte_ambiente === amb) return json({ ok: true, yaEmitida: true, ambiente: amb, folio: ya.invoice_no, trackId: ya.dte_track_id, estado: ya.dte_estado })
       }
 
       const firmados = []
@@ -151,7 +157,7 @@ serve(async (req) => {
       const resol = getResol()
       const envio = armarEnvioDTE(
         firmados.map(d => d.dteFirmado),
-        { rutEmisor: getEmisor().rut, rutEnvia: getConfig().rutEnvia, fchResol: resol.fchResol, nroResol: resol.nroResol, subtotales },
+        { rutEmisor: getEmisor().rut, rutEnvia: getConfig('emision').rutEnvia, fchResol: resol.fchResol, nroResol: resol.nroResol, subtotales },
         nowIso,
       )
       const docs = firmados.map(d => ({ docId: d.docId, folio: d.folio, total: d.tot.total }))
@@ -174,24 +180,43 @@ serve(async (req) => {
       try { estado = await consultarEstado(trackId) } catch (_) { /* el estado puede tardar; queda 'enviado' */ }
       await logDte(sb, firmados.map(d => ({ billing_id: body.billingId || null, tipo_dte: d.tipoDte, folio: d.folio, track_id: trackId, estado: estado.estado || 'enviado', ambiente: amb, created_by: email })))
 
-      // En el flujo simple (1 factura con billingId) persiste el DTE en su fila.
-      if (body.action === 'emitir' && body.billingId) {
+      // En el flujo simple (1 factura con billingId) persiste el DTE en su fila: folio en invoice_no (el campo de la factura).
+      // Solo en producción: en certificación el folio es de prueba y la factura real no se toca.
+      const registrada = amb === 'prod' && body.action === 'emitir' && !!body.billingId
+      if (registrada) {
         const d = firmados[0]
-        await sb.from('billing').update({
-          folio: String(d.folio), dte_estado: estado.estado || 'enviado', dte_track_id: trackId,
+        const { error: upErr } = await sb.from('billing').update({
+          invoice_no: String(d.folio), sii_tipo_dte: d.tipoDte, dte_estado: estado.estado || 'enviado', dte_track_id: trackId,
           dte_xml: d.dteFirmado, dte_ambiente: amb, dte_emitido_at: new Date().toISOString(),
         }).eq('id', body.billingId)
+        if (upErr) console.error(`[sii-sync] emitida folio ${d.folio} pero no se pudo guardar en la factura: ${upErr.message}`)
       }
-      return json({ ok: true, ambiente: amb, folio: firmados[0]?.folio, trackId, estado: estado.estado, glosa: estado.glosa, docs, dteXml: body.action === 'emitir' ? firmados[0]?.dteFirmado : undefined })
+      return json({ ok: true, ambiente: amb, registrada, folio: firmados[0]?.folio, trackId, estado: estado.estado, glosa: estado.glosa, docs, dteXml: body.action === 'emitir' ? firmados[0]?.dteFirmado : undefined })
+    }
+
+    // Intercambio de información (certificación): del EnvioDTE que entrega el SII arma el acuse de recibo, la aprobación
+    // comercial y el recibo Ley 19.983, firmados con el certificado. No envía nada: se suben en el portal de certificación.
+    // body: { action:'intercambio', envioXml, nombreArchivo?, contacto?:{nombre,mail,fono}, recinto? }
+    if (body.action === 'intercambio') {
+      const xml = String(body.envioXml || '')
+      if (!xml) return json({ error: 'Falta el XML del envío recibido.' }, 400)
+      const env = leerEnvioRecibido(xml)
+      const ts = nowChileIso(), propio = getEmisor().rut.replace(/\./g, '')
+      const contacto = body.contacto && typeof body.contacto === 'object' ? body.contacto : {}
+      const recepcion = armarRecepcionEnvio(env, { rutResponde: propio, nmbEnvio: String(body.nombreArchivo || 'envio.xml'), contacto, ts })
+      const resultado = armarResultadoDTE(env, { rutResponde: propio, contacto, ts })
+      const recibos = armarEnvioRecibos(env, { rutResponde: propio, rutFirma: getConfig('emision').rutEnvia.replace(/\./g, ''), recinto: String(body.recinto || 'Oficina'), contacto, ts })
+      console.log(`[sii-sync] intercambio ${env.setId}: ${env.docs.length} documento(s) de ${env.rutEmisor} por ${email}`)
+      return json({ ok: true, setId: env.setId, emisor: env.rutEmisor, docs: env.docs, ajenos: env.docs.filter((d) => d.rutRecep !== propio).length, recepcion, resultado, recibos })
     }
 
     // Libro de Ventas electrónico (IECV) para la certificación. Devuelve el XML firmado.
     // body: { action:'libro-ventas', periodo:'YYYY-MM', detalle:[{tpoDoc,nroDoc,fchDoc,rutDoc,rznSoc?,mntExe?,mntNeto?,iva?,mntTotal}] }
     if (body.action === 'libro-ventas') {
-      const amb = ambiente === 'produccion' ? 'prod' : 'cert'
+      const amb = getConfig('emision').ambiente === 'produccion' ? 'prod' : 'cert'
       const resol = getResol()
       const xml = armarLibroVentas(
-        { rutEmisor: getEmisor().rut, rutEnvia: getConfig().rutEnvia, periodo: String(body.periodo || ''), fchResol: resol.fchResol, nroResol: resol.nroResol },
+        { rutEmisor: getEmisor().rut, rutEnvia: getConfig('emision').rutEnvia, periodo: String(body.periodo || ''), fchResol: resol.fchResol, nroResol: resol.nroResol },
         Array.isArray(body.detalle) ? body.detalle : [],
         nowChileIso(),
       )
@@ -216,7 +241,7 @@ serve(async (req) => {
     // Folios CAF disponibles por tipo (para el módulo: alerta de folios bajos). Devuelve solo el CONTEO, nunca el CAF.
     // body: { action:'folios-estado' }
     if (body.action === 'folios-estado') {
-      const amb = ambiente === 'produccion' ? 'prod' : 'cert'
+      const amb = getConfig('emision').ambiente === 'produccion' ? 'prod' : 'cert'
       const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
       const { data } = await sb.from('dte_folios').select('tipo_dte, folio_actual, folio_hasta').eq('ambiente', amb)
       // deno-lint-ignore no-explicit-any

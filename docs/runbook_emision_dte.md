@@ -6,21 +6,22 @@ Secuencia **mecánica** para cuando el SII apruebe la postulación. El motor ya 
 
 ## 0. Pre-requisitos (de la Parte A del checklist)
 - [ ] Postulación como facturador propio enviada en sii.cl.
-- [ ] **CAF de certificación** descargados (XML `<AUTORIZACION>`) por cada tipo de DTE a certificar (34 exenta, y 61 nota de crédito; 33 si emiten afectas).
+- [ ] **CAF de certificación** descargados (XML `<AUTORIZACION>`) por cada tipo de DTE a certificar. El mínimo obligatorio del SII es factura, nota de crédito **y nota de débito**: 34 exenta, 61 y 56 (33 si emiten afectas).
+- [ ] La postulación la hace el **representante legal** con certificado digital (inicio de actividades vigente, primera categoría).
 - [ ] Datos del **Emisor**: RUT, Razón social, Giro, Acteco, Dirección y Comuna de origen.
 
 ## 1. Cargar credenciales (secretos de Supabase)
 La firma usa el `.pfx` que **ya está** (`SII_CERT_B64`, `SII_CERT_PASSWORD`). Faltan estos (Project → Settings → Edge Functions → Secrets, o `supabase secrets set`):
 
 ```
-SII_AMBIENTE=certificacion
-SII_RUT_EMPRESA=76xxxxxxx-x        # RUT del estudio (emisor)
+SII_AMBIENTE_EMISION=certificacion # ambiente SOLO de emisión (DTE, libro, estado). SII_AMBIENTE sigue en produccion: es el de lectura (RCV, XML, observados)
+SII_RUT_EMPRESA=77700387-9         # RUT del estudio (emisor)
 SII_RUT_ENVIA=11111111-1           # RUT de la persona que envía (el dueño del certificado)
 SII_EMISOR_RS=LIBERONA ESCALA ABOGADOS ...
 SII_EMISOR_GIRO=Servicios jurídicos / asesorías profesionales
 SII_EMISOR_ACTECO=691000           # código de actividad económica
-SII_EMISOR_DIR=Cam. Las Hualtatas 4901, C. 11
-SII_EMISOR_COMUNA=Lo Barnechea
+SII_EMISOR_DIR=Av. Pdte. Kennedy 7900, of. 905   # la registrada en Mi SII (24-10-2026)
+SII_EMISOR_COMUNA=Vitacura
 SII_RESOL_FCH=2014-08-22           # en certificación
 SII_RESOL_NRO=0                    # en certificación
 ```
@@ -113,6 +114,12 @@ Desde la app: abrir una factura → **Emitir al SII** hace `dryRun` y muestra fo
 
 Antes del set de pruebas (y cada vez que el SII publique un formato nuevo): `zsh scripts/dte-validar/validar.sh`. Arma una factura exenta 34, una nota de crédito 61, el sobre EnvioDTE y el Libro de Ventas con el código real del motor y los valida con `xmllint` contra los XSD oficiales. Las cuatro líneas deben decir `validates`. Validado el 24-10-2026 con el formato 2.5 (06-02-2026).
 
+## 5c. Verificar las firmas
+
+`zsh scripts/dte-validar/firma.sh` arma con el código real un EnvioDTE (34 + 61), el Libro de Ventas y las tres respuestas del intercambio, firmados con una llave de prueba y con texto acentuado en ISO-8859-1, y verifica cada firma con una implementación independiente (lxml C14N + cryptography) y contra los esquemas. Las ocho líneas deben decir `digest OK · firma OK` y los cinco archivos `validates`. Verificado el 24-10-2026.
+
+Reglas que la prueba fijó: el sobre y el libro **no declaran `xmlns:xsi`** (con él, la C14N inclusiva del elemento firmado lo hereda y el digest no calza); el archivo se envía en **ISO-8859-1**; las firmas XMLDSig digieren la C14N (UTF-8) y el timbre firma el DD en ISO-8859-1.
+
 ## 6. Set de pruebas (lo que el SII asigna tras postular)
 - Cargar los casos del set (cada uno = un DTE con sus datos exactos).
 - Emitir el set en UN sobre: `POST {action:'emitir-set', facturas:[ {tipoDte,receptor,items,…}, … ]}` → un `EnvioDTE` con todos los DTE → TrackID.
@@ -122,13 +129,19 @@ Antes del set de pruebas (y cada vez que el SII publique un formato nuevo): `zsh
 - Generar y enviar el **Libro de Ventas**: `POST {action:'libro-ventas', periodo:'YYYY-MM', detalle:[…]}`.
 - Consultar estado de cada envío.
 
+## 6b. Intercambio de información
+En Facturación › Facturación electrónica › **Intercambio**: subir el EnvioDTE que entrega el SII. La app descarga tres XML firmados (acuse de recibo, aprobación comercial y recibo Ley 19.983) que se suben en el portal de certificación (`action:'intercambio'` en sii-sync, `intercambio.ts`).
+
+## 6c. Muestras impresas
+PDF por documento (una página, texto vectorial, < 500 KB): timbre PDF417 de 2×4,5 a 4×9 cm, «Timbre Electrónico SII», «Res. N de AAAA» (se lee de la Carátula del sobre) y «Verifique documento: www.sii.cl». Las facturas llevan además su **copia cedible** (acuse de recibo Ley 19.983 y leyenda CEDIBLE: `facturaDtePdfBase64(doc,{cedible:true})`).
+
 ## 7. Enviar al SII y esperar autorización
 Subir el set + muestras impresas + libros por el portal de certificación del SII. El SII revisa y **autoriza** como emisor electrónico.
 
 ## 8. Flip a producción
 Al autorizar:
 - [ ] Solicitar **CAF de producción** y cargarlos en `dte_folios` con `ambiente='prod'`.
-- [ ] Cambiar secretos: `SII_AMBIENTE=produccion`, `SII_RESOL_FCH`/`SII_RESOL_NRO` reales (de la resolución de autorización).
+- [ ] Cambiar secretos: `SII_AMBIENTE_EMISION=produccion`, `SII_RESOL_FCH`/`SII_RESOL_NRO` reales (de la resolución de autorización).
 - [ ] `supabase functions deploy sii-sync`.
 - [ ] Emitir la primera factura real desde la app (con su `dryRun` de seguridad).
 
@@ -136,6 +149,7 @@ Al autorizar:
 
 ## Puntos que se afinan recién acá (no testeables antes)
 - **Firma XMLDSig**: si el SII la rechaza, `auth.ts` deja la "PLAN B" (microservicio xml-crypto). El digest/canonicalización del `<Documento>` se confirma con texto acentuado real.
-- **Encoding**: el DTE se emite UTF-8; si el SII exige ISO-8859-1, ajustar en `dte.ts`/`emision.ts` (afecta solo el texto con tildes/ñ).
+- **Encoding**: resuelto el 24-10-2026 (ISO-8859-1, ver 5c). Falta solo confirmarlo con la respuesta real del SII en el set de pruebas.
 - **Montos**: hoy se asume **34 exenta** (monto = exento). Para **33 afecta**, confirmar si el monto de `billing` es neto o con IVA antes de emitir afectas.
-- **Folios**: la asignación lee+actualiza `dte_folios` (no atómica). En producción multiusuario, migrar a un RPC `next_folio`.
+- **Folios**: atómicos con `siguiente_folio()` (2b).
+- **En certificación nada toca Facturación**: «Emitir» con una factura real envía la prueba al SII pero no escribe folio ni estado en la factura.
