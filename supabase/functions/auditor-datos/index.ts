@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
   const dryRun = !!body.dryRun;
   try {
-    const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos] = await Promise.all([
+    const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos, compras, comprasVistas] = await Promise.all([
       todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,due"),
       todas("sales?select=id,client_id,status,deleted_at,amount_uf,amount_clp,uf_value,year,month,cobro_type,cobro_config,area,title"),
       todas("anticipos?select=id,client_id,sale_id,monto,nota,estado"),
@@ -65,10 +65,12 @@ Deno.serve(async (req) => {
       todas("clients?select=id,name"),
       todas("proveedores?select=id,nombre"),
       todas("auditoria_hallazgos?select=id,clave,estado,avisado_at&estado=eq.abierto"),
+      todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,monto,sii_estado,fecha_recepcion&sii_estado=eq.PENDIENTE"),
+      todas("learnings?select=id,key&kind=eq.compra_sin_reclamo"),
     ]);
     const nomCli: Record<string, string> = Object.fromEntries(clients.map((c) => [String(c.id), c.name]));
     const nomProv: Record<string, string> = Object.fromEntries(provs.map((p) => [String(p.id), p.nombre]));
-    const casos = hallazgos({ billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
+    const casos = hallazgos({ compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
     const vistos = new Set(casos.map((c) => c.clave));
     const abiertos = new Map(previos.map((p) => [p.clave, p]));
     const nuevos = casos.filter((c) => !abiertos.has(c.clave));

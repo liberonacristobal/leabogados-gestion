@@ -207,6 +207,10 @@ export interface CompraSII {
   montoExento: number
   montoIva: number
   montoTotal: number
+  estadoContab: string    // REGISTRO o PENDIENTE (pendiente = dentro de los 8 días para reclamar)
+  fecRecepcion: string | null
+  tipoRef: number | null  // documento al que refiere (notas de crédito/débito)
+  folioRef: string | null
 }
 
 // VERIFICADO contra prod (2026-06): getDetalleCompra EXIGE codTipoDoc especifico
@@ -215,7 +219,7 @@ export interface CompraSII {
 const COMPRA_TIPOS = [33, 34, 46, 56, 61]
 
 // Consulta el detalle de compras de UN tipo de documento. Espejo de detallePorTipo.
-async function detalleComprasPorTipo(tipoDoc: number, periodo: string, token: string): Promise<any[]> {
+async function detalleComprasPorTipo(tipoDoc: number, periodo: string, token: string, estadoContab = 'REGISTRO'): Promise<any[]> {
   const { rcvBase, rutEmpresa, timeoutMs } = getConfig()
   const limpio = rutEmpresa.replace(/\./g, '').toUpperCase()
   const [rut, dv] = limpio.split('-')
@@ -237,8 +241,8 @@ async function detalleComprasPorTipo(tipoDoc: number, periodo: string, token: st
       rutEmisor: rut,
       dvEmisor: dv,
       ptributario: periodo.replace('-', ''),  // YYYY-MM -> YYYYMM
-      // VERIFICAR (V3): estado contable a consultar en compras.
-      estadoContab: 'REGISTRO',
+      // REGISTRO = aceptadas; PENDIENTE = recibidas dentro del plazo de reclamo (8 días desde la recepción).
+      estadoContab,
       codTipoDoc: String(tipoDoc),
       operacion: 'COMPRA',
     },
@@ -294,11 +298,16 @@ export async function getComprasRaw(periodo: string, token: string): Promise<any
 export async function getCompras(periodo: string, token: string): Promise<CompraSII[]> {
   return await conReintentos('consulta RCV compras', async () => {
     const porTipo = await Promise.all(COMPRA_TIPOS.map((t) => detalleComprasPorTipo(t, periodo, token)))
+    // Pendientes (en plazo de reclamo): si el SII falla en esta consulta, se guardan igual las registradas.
+    let pend: any[][] = COMPRA_TIPOS.map(() => [])
+    try { pend = await Promise.all(COMPRA_TIPOS.map((t) => detalleComprasPorTipo(t, periodo, token, 'PENDIENTE'))) }
+    catch (e) { console.log(`[sii-sync] RCV compras PENDIENTE ${periodo} falló: ${e instanceof Error ? e.message : e}`) }
     const out: CompraSII[] = []
+    const fecha = (x: unknown) => { const t = String(x ?? '').trim(); if (!t) return null; const m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/); return m ? `${m[3]}-${m[2]}-${m[1]}${m[4] ? 'T' + m[4] : ''}` : t }
     // OJO (verificado prod): detTipoDoc llega NULL en cada fila → el tipo lo da la
     // consulta, no el campo. Los demas campos (detRutDoc/detRznSoc/detMnt*) confirmados.
-    COMPRA_TIPOS.forEach((tipo, i) => {
-      for (const d of porTipo[i]) {
+    const agregar = (lista: any[][], estadoContab: string) => COMPRA_TIPOS.forEach((tipo, i) => {
+      for (const d of lista[i]) {
         const folio = Number(d.detNroDoc ?? 0)
         if (folio <= 0) continue
         out.push({
@@ -311,10 +320,15 @@ export async function getCompras(periodo: string, token: string): Promise<Compra
           montoExento: Number(d.detMntExe ?? 0),
           montoIva: Number(d.detMntIVA ?? 0),
           montoTotal: Number(d.detMntTotal ?? 0),
+          estadoContab,
+          fecRecepcion: fecha(d.detFecRecepcion),
+          tipoRef: d.detTipoDocRef != null && Number(d.detTipoDocRef) > 0 ? Number(d.detTipoDocRef) : null,
+          folioRef: d.detFolioDocRef != null && Number(d.detFolioDocRef) > 0 ? String(d.detFolioDocRef) : null,
         })
       }
     })
-    console.log(`[sii-sync] RCV compras ${periodo}: ${out.length} docs (${COMPRA_TIPOS.map((t, i) => `${porTipo[i].length}×${t}`).join(' ')})`)
+    agregar(porTipo, 'REGISTRO'); agregar(pend, 'PENDIENTE')
+    console.log(`[sii-sync] RCV compras ${periodo}: ${out.length} docs (${COMPRA_TIPOS.map((t, i) => `${porTipo[i].length}+${pend[i].length}p×${t}`).join(' ')})`)
     return out
   })
 }
