@@ -30,13 +30,14 @@ Deno.serve(async (req) => {
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
   const dry = !!body.dryRun;
   try {
-    const [terceros, proveedores, abiertas, mails] = await Promise.all([
+    const [terceros, proveedores, abiertas, mails, sinDoc] = await Promise.all([
       rest("terceros_pagos?select=id,proveedor,rut,monto,liquido,retencion,estado,pagado_at,movimiento_id,bhe_id,factura_numero,comision_pct,billing_id,sale_id,proveedor_id&estado=eq.pagado&comision_pct=is.null&limit=5000"),
       rest("proveedores?select=id,razon_social,nombre,rut,documento&limit=2000"),
       rest("agente_bandeja?select=id,gmail_id,estado,propuesta&tipo=eq.boleta_honorarios&gmail_id=like.doc:*&limit=1000"),
       rest("learnings?select=key,value&kind=eq.proveedor_email"),
+      rest("learnings?select=key&kind=eq.proveedor_sin_documento"),
     ]);
-    const items = documentosPorPedir({ terceros, proveedores });
+    const items = documentosPorPedir({ terceros, proveedores, sinDocumento: new Set((sinDoc || []).map((r: { key: string }) => String(r.key))) });
     const bIds = [...new Set(items.map((x) => x.t.billing_id).filter(Boolean))], sIds = [...new Set(items.map((x) => x.t.sale_id).filter(Boolean))];
     const [bills, sales, concs] = await Promise.all([
       bIds.length ? rest(`billing?select=id,invoice_no,paid_at&id=in.(${bIds.join(",")})`) : [],

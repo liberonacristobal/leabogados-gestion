@@ -19,7 +19,7 @@ import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import { f29Estimado } from '../supabase/functions/_shared/f29Reglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
-import { liqParaCargo as _liqParaCargo } from '../supabase/functions/_shared/notariaReglas.js'
+import { liqParaCargo as _liqParaCargo, notariaPendientes, disponibleNotaria } from '../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
 import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
@@ -10258,9 +10258,9 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
         await hecho(r,{estado:'espera',motivo:`Pedido enviado el ${fmtFechaDMY(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}))} · boleta por recibir`},'boleta_pedida')
         appAlert(txtEnviado(via,{que:'Pedido de boleta',g:'o',para:to}))
       } else if(a==='definir_documento'){
-        const doc=r._doc; if(!['boleta','factura'].includes(doc)) throw new Error('Elige boleta o factura.')
-        if(!DEMO&&p.proveedor_id){ const {error}=await supabase.from('proveedores').update({documento:doc}).eq('id',p.proveedor_id); if(error) throw error }
-        await hecho(r,{estado:'resuelto',motivo:`${p.nombre||'Colaborador'} emite ${doc}`},'documento_definido')
+        const doc=r._doc; if(!['boleta','factura','ninguno'].includes(doc)) throw new Error('Elige boleta o factura.')
+        if(!DEMO&&p.proveedor_id){ if(doc==='ninguno') await setLearningKV('proveedor_sin_documento',String(p.proveedor_id),JSON.stringify({motivo:'No emite boleta ni factura',quien:yo,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); else { const {error}=await supabase.from('proveedores').update({documento:doc}).eq('id',p.proveedor_id); if(error) throw error } }
+        await hecho(r,{estado:'resuelto',motivo:doc==='ninguno'?`${p.nombre||'Colaborador'} no emite documento`:`${p.nombre||'Colaborador'} emite ${doc}`},'documento_definido')
       } else if(a==='adjuntar_respaldo'){
         const cs=p.candidatos||[], gid=elegido[r.id]||(cs.length===1?cs[0].id:null), g=cs.find(x=>String(x.id)===String(gid))
         if(!g) throw new Error(cs.length?'Elige el gasto.':'Aún no hay un gasto por ese monto.')
@@ -10350,7 +10350,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
       {cuerpo(r)}
       <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,marginTop:9,justifyContent:'flex-end'}}>
         {sosp?<button disabled={b} onClick={()=>descartar(r,'Archivado')} style={btnPri}>{b?'Guardando…':'Archivar'}</button>
-          :p.accion==='definir_documento'?<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'factura'})} style={{...btnSec,border:`1px solid ${C.border}`,borderRadius:9}}>Factura</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'boleta'})} style={{...btnPri,opacity:b?.6:1}}>{b?'Guardando…':'Boleta'}</button></>
+          :p.accion==='definir_documento'?<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'ninguno'})} style={btnSec}>No emite</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'factura'})} style={{...btnSec,border:`1px solid ${C.border}`,borderRadius:9}}>Factura</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'boleta'})} style={{...btnPri,opacity:b?.6:1}}>{b?'Guardando…':'Boleta'}</button></>
           :<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button>{p.accion==='pedir_boleta'&&abierto!==r.id&&<button onClick={()=>setAbierto(r.id)} style={btnSec}>Ver el correo</button>}<button disabled={b} onClick={()=>confirmar(r)} style={{...btnPri,opacity:b?.6:1}}>{b?'Enviando…':(BANDEJA_BTN[p.accion]||'Revisado')}</button></>}
       </div>
     </div> }
@@ -21025,7 +21025,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   }
   const [notaResp,setNotaResp] = useState(null)   // filtro de pendientes por abogado responsable del cliente ('__sin__'=sin responsable)
   // Deuda con la notaría = OT (la OT es la fuente de la verdad): un gasto de categoría Notaría sin N° de OT no es deuda con la notaría.
-  const notariaPend = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at&&(Number(e.amount)||0)>1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
+  const notariaPend = useMemo(()=>notariaPendientes(expenses).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])   // regla única _shared/notariaReglas.js
   // Gastos de notaría por $1 (o menos): escrituras/trabajos anulados, solo orden — no se liquidan, se pueden eliminar.
   const notariaAnulados = useMemo(()=>(expenses||[]).filter(e=>e.type!=='fondo'&&e.category==='Notaria'&&!e.notaria_render_id&&(Number(e.amount)||0)<=1).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1),[expenses])
   const [notaAnulOpen,setNotaAnulOpen] = useState(false)
@@ -21034,19 +21034,7 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
   const notaTotal = notaSel.reduce((a,e)=>a+(e.amount||0),0)
   // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (caja chica + notaría pagada) − reservado para
   // OTROS gastos pendientes del cliente (no la notaría que estás liquidando). Así el fondo se reparte entre todo lo que debe.
-  const dispCliente = cid => {
-    if(esOficina(cid)) return { fondo:0, pagado:0, reservado:0, resItems:[], disp:Infinity, oficina:true }   // Oficina = la firma: siempre cubre sus gastos
-    const g=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type!=='fondo'&&!e.no_descuenta_saldo&&cuentaEnSaldo(e))
-    const fondo=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo'&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)
-    const pagado=g.filter(e=>e.rendered_at||e.notaria_liquidado_at).reduce((a,e)=>a+(e.amount||0),0)
-    const esNotaPend=e=>e.category==='Notaria'&&/\d/.test(String(e.ot_number||''))&&!e.notaria_render_id&&!e.notaria_liquidado_at   // lo que se liquida ahora a la notaría (no se reserva)
-    const resItems=g.filter(e=>!e.rendered_at&&!e.notaria_liquidado_at&&!esNotaPend(e))
-    const reservado=resItems.reduce((a,e)=>a+(e.amount||0),0)
-    // Parte del fondo que no es plata del cliente: el ajuste «Incobrable · asumido por la oficina» (castigo ya decidido).
-    const asumido=(expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='fondo'&&e.category==='Ajuste'&&/incobrable/i.test(e.concept||'')&&cuentaEnSaldo(e)).reduce((a,e)=>a+(e.amount||0),0)
-    const disp=Math.max(0, fondo-pagado-reservado)
-    return { fondo, pagado, reservado, resItems, disp, asumido: Math.min(asumido, disp) }
-  }
+  const dispCliente = cid => disponibleNotaria(expenses, cid, { esOficina })   // regla única _shared/notariaReglas.js (la usa también el análisis de la notaría)
   // Mismo criterio que dispCliente, sobre el libro personal (personal_de sin cliente): p. ej. el fondo por rendir que un tercero dejó para un socio.
   // Cuenta personal: un fondo con gastos ligados (reembolso_fondo_id, p. ej. el que deja un tercero para un socio) cubre SOLO esos gastos;
   // el resto se cubre con el saldo propio (fondos de uso general − gastos sin fondo). Misma regla que la página Cuenta personal.
