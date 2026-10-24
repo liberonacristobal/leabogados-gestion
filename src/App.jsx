@@ -9934,7 +9934,7 @@ function horarioProceso(schedule, corto=false){
 const TEMAS_PROCESOS = [
   ['banco','Banco y conciliación',/^(agente-segunda|alerta-cartola|caja-chica|aviso-fondos-diario)/],
   ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo)/],
-  ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|notaria|diario-oficial|tgr-remates)/],
+  ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|causas-monitor|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
   ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal|lector-documentos)/],
   ['ofi','Oficina y costos',/^(oficina-|valores-contadora)/],
@@ -9951,7 +9951,7 @@ function resumenCorrida(p){
     if(r.skipped==='apagado') return 'apagado'
     if(r.error) return `error: ${String(r.error).slice(0,80)}`
     const j=String(p.jobname||'')
-    if(/^causas-tablas/.test(j)&&r.revisadas!=null) return `${nn(r.revisadas,'causa revisada','causas revisadas')} · ${len(r.en_tabla)??0} en tabla${len(r.errores)?` · ${len(r.errores)} sin revisar`:''}`
+    if(/^causas-(tablas|monitor)/.test(j)&&r.revisadas!=null) return r.modo==='seguir'&&!r.revisadas&&!len(r.errores)?'Sin causas en la tabla de hoy':`${nn(r.revisadas,'causa revisada','causas revisadas')} · ${len(r.en_tabla)??0} en la tabla de hoy${len(r.errores)?` · ${len(r.errores)} sin revisar`:''}`
     if(j==='clientes-drive-sync'&&r.addedN!=null) return `${nn(r.addedN,'cliente nuevo','clientes nuevos')} · ${r.linkedN??0} vinculados`
     if(/^bhe-correo/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'correo','correos')} · ${len(r.nuevas)??0} boletas nuevas`
     if(/^auditor-datos/.test(j)&&r.por_revisar!=null) return `${r.por_revisar} por revisar · ${r.nuevos??0} nuevos`
@@ -33272,7 +33272,7 @@ function PapeleraModal({clients=[],onClose,onChanged}){
 // Privacidad: a la IA solo van encabezados (De/Para/CC/Asunto) y dominio, nunca el cuerpo.
 // ─── CAUSAS EN TABLA (agente causas-tablas) ─────────────────────────────────────────────────────────────────────
 // Causas del estudio en Cortes de Apelaciones y Corte Suprema. Se agregan en Ficha › Ventas › la venta respectiva; Clientes › Causas
-// es la vista de todas. El agente revisa la búsqueda pública de pjud.cl (viernes 18:00, sábado y domingo 10:00, lunes 06:00) y avisa
+// es la vista de todas. El agente lee el Monitor de Salas público (salas.pjud.cl; días hábiles 08:00–15:45, y cada 15 minutos la sala donde hoy hay una causa) y avisa
 // por correo desde la casilla de la oficina al abogado, con copia al dueño del cliente y a los no socios. Cada revisión queda en
 // causas_seguimiento (botón «Seguimiento»).
 const CORTES_PJUD = [['2011001','Corte de Apelaciones de Arica'],['2101002','Corte de Apelaciones de Iquique'],['2301003','Corte de Apelaciones de Antofagasta'],['2401004','Corte de Apelaciones de Copiapó'],['2501005','Corte de Apelaciones de La Serena'],['3101006','Corte de Apelaciones de Valparaíso'],['6051007','Corte de Apelaciones de Santiago'],['6231008','Corte de Apelaciones de San Miguel'],['3351009','Corte de Apelaciones de Rancagua'],['3901010','Corte de Apelaciones de Talca'],['4151011','Corte de Apelaciones de Chillán'],['4551013','Corte de Apelaciones de Concepción'],['4901014','Corte de Apelaciones de Temuco'],['5101015','Corte de Apelaciones de Valdivia'],['5351016','Corte de Apelaciones de Puerto Montt'],['5651017','Corte de Apelaciones de Coyhaique'],['5901018','Corte de Apelaciones de Punta Arenas'],['6050000','Corte Suprema']]
@@ -33282,7 +33282,8 @@ const _libroLegible = n => String(n||'').replace(/\bY\b/g,'y').replace(/\bDe\b/g
 const _corteCorta = n => String(n||'').replace('Corte de Apelaciones de ','C.A. ')
 const _rolTxt = c => /^\d+$/.test(String(c.rol||'')) ? `Rol ${c.rol}-${c.anio}` : 'Rol por completar'
 const _DEMO_CAUSAS = [
-  { id:'cz1', client_id:'c1', sale_id:'s1', abogado:'Cristóbal', instancia:'apelaciones', corte_codigo:'2501005', corte_nombre:'Corte de Apelaciones de La Serena', libro_codigo:'33', libro_nombre:'Tributario Y Aduanero', rol:'15', anio:2025, caratula:'Demo / SII Dirección Regional La Serena', estado:'activa', ultima_tabla:{sala:'Segunda Sala',numero:'5',fecha:'2026-11-02'}, avisado_fecha:'2026-11-02', ultima_revision_at:'2026-10-23T11:00:00Z' },
+  { id:'cz1', client_id:'c1', sale_id:'s1', abogado:'Cristóbal', instancia:'apelaciones', corte_codigo:'2501005', corte_nombre:'Corte de Apelaciones de La Serena', libro_codigo:'33', libro_nombre:'Tributario Y Aduanero', rol:'15', anio:2025, caratula:'Demo / SII Dirección Regional La Serena', estado:'activa', ultima_tabla:{sala:'Segunda Sala',numero:'5',fecha:isoLocal(new Date().toISOString()),estado_dia:'En Tabla',viendo:3,fuente:'monitor'}, ultima_fuente:'monitor', avisado_fecha:isoLocal(new Date().toISOString()), ultima_revision_at:'2026-10-23T11:00:00Z' },
+  { id:'cz3', client_id:'c1', sale_id:'s1', abogado:'Cristóbal', instancia:'apelaciones', corte_codigo:'2501005', corte_nombre:'Corte de Apelaciones de La Serena', libro_codigo:'33', libro_nombre:'Tributario Y Aduanero', rol:'18', anio:2025, caratula:'Demo Agrícola / SII Dirección Regional La Serena', estado:'activa', ultima_fuente:'monitor', ultima_revision_at:'2026-10-23T11:00:00Z' },
   { id:'cz2', client_id:'c1', sale_id:'s1', abogado:'Erasmo', instancia:'apelaciones', corte_codigo:'6051007', corte_nombre:'Corte de Apelaciones de Santiago', libro_codigo:'34', libro_nombre:'Protección', rol:'', anio:2026, caratula:'Demo con Isapre', estado:'por_confirmar' },
 ]
 function useCausas({clientId=null}={}){
@@ -33298,7 +33299,7 @@ const _estadoCausa = c => { const t=c.ultima_tabla, hoy=isoLocal(new Date().toIS
   if(c.estado==='por_confirmar') return ['Por confirmar',C.textSoft,C.track]
   if(c.ultima_error) return ['No se pudo revisar',C.overdueText,C.overdueBg]   // la última revisión falló: nunca «Sin tabla» sin confirmar
   if(t?.fecha&&t.fecha>=hoy) return t.fecha===hoy?[`Hoy · ${t.estado_dia||'En tabla'}`,C.soonText,C.soonBg]:[`En tabla · ${fmtFechaDMY(t.fecha)}`,C.accent,C.azulBg]
-  return ['Sin tabla',C.textSoft,C.track] }
+  return [c.ultima_fuente==='monitor'?'Sin tabla hoy':'Sin tabla',C.textSoft,C.track] }   // el Monitor solo muestra la tabla del día
 // Una causa: resumen + acciones + seguimiento (bitácora) detrás de su botón. En celular parte plegada (una línea) y se abre al tocar.
 function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
   const D=isDesktop
@@ -33312,7 +33313,7 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
       const {data,error}=await supabase.functions.invoke('causas-tablas',{body:{causa_id:c.id}})
       if(error||data?.error) throw new Error(data?.error||error?.message||'sin respuesta')
       const t=(data.en_tabla||[])[0]
-      appAlert(data.errores?.length?`No se pudo revisar: ${data.errores[0].error}`:t?`En tabla: ${t.sala||''}${t.numero?`, N° ${t.numero}`:''}, ${fmtFechaDMY(t.fecha)}.${(data.avisos||[]).length?((data.avisos[0].enviado)?` Aviso enviado a ${[...data.avisos[0].para,...(data.avisos[0].cc||[])].join(', ')} desde la casilla de la oficina.`:` El aviso NO se envió (${data.avisos[0].motivo}).`):''}`:'Sin tabla por ahora. Quedó en el seguimiento.')
+      appAlert(data.errores?.length?`No se pudo revisar: ${data.errores[0].error}`:t?`En tabla: ${t.sala||''}${t.numero?`, N° ${t.numero}`:''}, ${fmtFechaDMY(t.fecha)}.${(data.avisos||[]).length?((data.avisos[0].enviado)?` Aviso enviado a ${[...data.avisos[0].para,...(data.avisos[0].cc||[])].join(', ')} desde la casilla de la oficina.`:` El aviso NO se envió (${data.avisos[0].motivo}).`):''}`:'No está en la tabla de hoy. Quedó en el seguimiento.')
       onCambio&&onCambio(); if(seg!==null) cargarSeg()
     }catch(err){ appAlert('No se pudo revisar la causa: '+(err.message||err)+'\n\nSi el agente aún no está activo, la revisión automática empieza al activarlo.') }
     finally{ setBusy(false) } }
@@ -33324,7 +33325,7 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
   const confirmar=()=>{ if(!/^\d+$/.test(String(rol||''))){ setEdit(true); appAlert('Completa el rol de la causa antes de confirmarla.'); return } guardar({estado:'activa',rol:String(rol)},'causas.confirmada') }
   const ab={fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}
   const predio=String(c.origen||'').split(' · ')[0].trim()   // antecedente de primera instancia o predio (p. ej. «Tira Larga»)
-  const detalle=[cliente, _rolTxt(c), predio||null, _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}`:null, c.abogado].filter(Boolean).join(' · ')
+  const detalle=[cliente, _rolTxt(c), predio||null, _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}${c.ultima_tabla.viendo?` · se está viendo el N° ${c.ultima_tabla.viendo}`:''}`:null, c.abogado].filter(Boolean).flatMap((x,i)=>i?[' · ',x]:[x]).map((x,i)=><Fragment key={i}>{x}</Fragment>)   // cliente puede venir como enlace (nodo): se intercala, no se une como texto
   const chip=<span style={{fontSize:11,fontWeight:600,color:eCol,background:eBg,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>{e0}</span>
   return (<div style={{borderTop:`1px solid ${C.track}`}}>
     <div onClick={D?undefined:()=>setOp(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'10px 14px':'10px 12px',cursor:D?'default':'pointer'}}>
@@ -33337,7 +33338,7 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
         :<span style={{color:C.done,fontSize:12,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
     </div>
     {op&&<div style={{padding:D?'0 14px 10px':'0 12px 12px'}}>
-      {!D&&<><div style={{fontSize:12,color:C.textSoft}}>{[_libroLegible(c.libro_nombre),_corteCorta(c.corte_nombre),c.abogado].filter(Boolean).join(' · ')}</div>
+      {!D&&<><div style={{fontSize:12,color:C.textSoft}}>{[_libroLegible(c.libro_nombre),_corteCorta(c.corte_nombre),c.abogado].filter(Boolean).join(' · ')}</div>{c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())&&<div style={{fontSize:12,color:C.text,marginTop:2}}>{[c.ultima_tabla.sala,c.ultima_tabla.numero?`N° ${c.ultima_tabla.numero}`:'',c.ultima_tabla.viendo?`se está viendo el N° ${c.ultima_tabla.viendo}`:''].filter(Boolean).join(' · ')}</div>}
         <div style={{display:'flex',gap:14,marginTop:8,flexWrap:'wrap'}}>{c.estado==='por_confirmar'?<button onClick={confirmar} disabled={busy} style={ab}>Confirmar</button>:<button onClick={revisar} disabled={busy} style={ab}>{busy?'Revisando…':'Revisar ahora'}</button>}<button onClick={toggleSeg} style={ab}>Seguimiento</button><button onClick={()=>setEdit(v=>!v)} style={{...ab,color:C.muted}}>Editar</button></div></>}
       {edit&&<div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8}}>
         <input value={rol} onChange={ev=>setRol(ev.target.value.replace(/\D/g,''))} placeholder='Rol' inputMode='numeric' style={{width:90,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',outline:'none'}}/>
@@ -33349,7 +33350,7 @@ function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
         <div style={{...SEC_LBL,fontSize:10,marginBottom:4}}>Seguimiento</div>
         {seg===null?<div style={{fontSize:12,color:C.textSoft}}>Cargando…</div>:!seg.length?<div style={{fontSize:12,color:C.textSoft}}>Sin revisiones todavía.</div>
           :seg.map(x=><div key={x.id} style={{display:'flex',flexDirection:D?'row':'column',gap:D?10:1,fontSize:12,padding:'3px 0'}}><span style={{color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(isoLocal(x.revisado_at))} {new Date(x.revisado_at).toTimeString().slice(0,5)}</span><span style={{minWidth:0}}><b style={{color:C.accent,fontWeight:600}}>{x.origen==='agente'?'Revisión automática':'Revisión manual'}</b> · {x.resultado}</span></div>)}
-        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Próximas revisiones: viernes 18:00 · sábado 10:00 · domingo 10:00 · lunes 06:00</div>
+        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Se revisa en días hábiles de 08:00 a 15:45 (Monitor de Salas, pjud.cl)</div>
       </div>}
     </div>}
   </div>)
@@ -33586,7 +33587,7 @@ function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClien
       {tab.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>En tabla · {tab.length}</div><div style={card}>{tab.map(fila)}</div></div>}
       {err.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px',color:C.overdueText}}>No se pudo revisar · {err.length}</div><div style={card}>{err.map(fila)}</div></div>}
       {pc.length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Por confirmar · {pc.length}</div><div style={card}>{pc.map(fila)}</div></div>}
-      {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
+      {Object.keys(porCorte).length>0&&<div><div style={{...SEC_LBL,margin:'2px 2px 6px'}}>Sin tabla hoy · {sin.length}</div><div style={{display:'flex',flexDirection:'column',gap:8}}>{Object.entries(porCorte).map(([k,v])=><div key={k} style={card}><div style={{display:'flex',alignItems:'center',padding:'10px 14px'}}><span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1}}>{k}</span><span style={{fontSize:12,color:C.textSoft}}>{v.length} causa{v.length!==1?'s':''}</span></div>{v.map(fila)}</div>)}</div></div>}
       {!lista.length&&<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{q||corte||abog?'Ninguna causa con esos filtros.':'Sin causas. Se agregan en la ficha del cliente › Ventas › la venta respectiva.'}</div>}
     </div>}
   </div>)
