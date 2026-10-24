@@ -109,6 +109,10 @@ supabase functions deploy sii-sync
 ## 5. Probar la emisión — vista previa (no envía nada)
 Desde la app: abrir una factura → **Emitir al SII** hace `dryRun` y muestra folio/total; o `POST {action:'emitir', tipoDte:34, receptor:{…}, items:[…], dryRun:true}` para inspeccionar el `envioXml`.
 
+## 5b. Validar contra los esquemas vigentes del SII
+
+Antes del set de pruebas (y cada vez que el SII publique un formato nuevo): `zsh scripts/dte-validar/validar.sh`. Arma una factura exenta 34, una nota de crédito 61, el sobre EnvioDTE y el Libro de Ventas con el código real del motor y los valida con `xmllint` contra los XSD oficiales. Las cuatro líneas deben decir `validates`. Validado el 24-10-2026 con el formato 2.5 (06-02-2026).
+
 ## 6. Set de pruebas (lo que el SII asigna tras postular)
 - Cargar los casos del set (cada uno = un DTE con sus datos exactos).
 - Emitir el set en UN sobre: `POST {action:'emitir-set', facturas:[ {tipoDte,receptor,items,…}, … ]}` → un `EnvioDTE` con todos los DTE → TrackID.
