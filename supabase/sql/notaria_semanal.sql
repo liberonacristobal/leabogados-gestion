@@ -17,7 +17,7 @@ select cron.schedule(
   select net.http_post(
     url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/notaria-semanal',
     headers := '{"Content-Type":"application/json"}'::jsonb,
-    body := '{"secret":"lea-cron-c9a87cf18e0c04580097b2947545163c4825a918"}'::jsonb,
+    body := '{"secret":"<CRON_SECRET>"}'::jsonb,
     timeout_milliseconds := 30000
   );
   $$
