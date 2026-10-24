@@ -97,6 +97,28 @@ export const vencIncoh = billing => (billing || []).filter(b => !b.deleted_at &&
 
 // Anticipo cargado a MANO (sin respaldo bancario, no marcado ·revisado) cuyo monto calza con los depósitos del banco del mismo
 // cliente (la suma, o uno exacto).
+// Anticipos de subarriendo (cada pago es de SU mes, según la nota): con la factura emitida de ese mes, por el mismo monto, sin abonos
+// ni conciliación → «aplicar» (calce exacto y único por los dos lados); sin factura emitida de ese mes → «emitir» (pendiente de emisión).
+const _MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+export const perTexto = p => { const [y, m] = String(p || '').split('-'); return y && m ? `${_MES[+m - 1]} ${y}` : '' }
+const _per = t => { const x = String(t || '').toLowerCase(); const m = _MES.findIndex(n => x.includes(n)), y = (x.match(/\b(20\d\d)\b/) || [])[1]; return m >= 0 && y ? `${y}-${String(m + 1).padStart(2, '0')}` : null }
+export function anticiposSubarriendo(anticipos, billing, sales, conciliacion) {
+  const sub = new Set((sales || []).filter(s => s && (s.cobro_config?.subarriendo === true || s.area === 'Subarriendo')).map(s => String(s.id)))
+  const conFac = new Set((conciliacion || []).filter(c => c.tipo_destino === 'factura' && c.factura_id).map(c => String(c.factura_id)))
+  const facs = (billing || []).filter(b => b && !b.deleted_at && b.sale_id && sub.has(String(b.sale_id)) && b.status !== 'Anulada' && (b.billing_type || '') !== 'reembolso')
+  const ants = (anticipos || []).filter(a => a && a.estado === 'disponible' && a.sale_id && sub.has(String(a.sale_id)) && (Number(a.monto) || 0) > 0 && _per(a.nota))
+  const out = []
+  for (const a of ants) {
+    const per = _per(a.nota), monto = Math.round(Number(a.monto) || 0)
+    const delMes = facs.filter(b => String(b.sale_id) === String(a.sale_id) && _per(b.concept) === per)
+    const libres = delMes.filter(b => b.invoice_no && b.status !== 'Pagado' && !conFac.has(String(b.id)) && !(Number(b.paid_amount) > 0) && Math.round(Number(b.amount) || 0) === monto)
+    const otros = ants.filter(x => x !== a && String(x.sale_id) === String(a.sale_id) && _per(x.nota) === per && Math.round(Number(x.monto) || 0) === monto)
+    if (libres.length === 1 && !otros.length) out.push({ tipo: 'aplicar', a, b: libres[0], per })
+    else if (!delMes.some(b => b.invoice_no)) out.push({ tipo: 'emitir', a, per })
+  }
+  return out
+}
+
 export function antDup(anticipos, conciliacion) {
   const bankIds = new Set((conciliacion || []).filter(c => c.tipo_destino === 'anticipo' && c.anticipo_id).map(c => String(c.anticipo_id)))
   const bankByCli = {}; (anticipos || []).forEach(a => { if (bankIds.has(String(a.id))) (bankByCli[String(a.client_id)] = bankByCli[String(a.client_id)] || []).push(a) })
@@ -153,6 +175,9 @@ export function hallazgos(d) {
   vencIncoh(d.billing).forEach(b => add('vencimiento_incoherente', b.id, `Factura N° ${folioN(b.invoice_no)} con vencimiento anterior a su emisión · ${nom(b.client_id)}`, b.amount, { factura: b.id, emision: b.issued_at, vence: b.due }))
   antDup(d.anticipos, d.conciliacion).forEach(x => add('anticipo_duplicado', x.manual.id, `Saldo a favor cargado a mano que calza con depósitos del banco · ${nom(x.manual.client_id)}`, x.manual.monto, { anticipo: x.manual.id, banco: x.banks.map(b => b.id) }))
   ventasBorradorCobrado(d.sales, d.billing).forEach(x => add('venta_borrador_facturada', x.s.id, `Venta en ${x.s.status} con facturas emitidas · ${nom(x.s.client_id)}`, x.emitido, { venta: x.s.id, facturas: x.n, pagado: x.pagado }))
+  anticiposSubarriendo(d.anticipos, d.billing, d.sales, d.conciliacion).forEach(x => x.tipo === 'aplicar'
+    ? add('anticipo_por_aplicar', x.a.id, `Pago de subarriendo que calza con la Factura N° ${folioN(x.b.invoice_no)} · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, factura: x.b.id, periodo: x.per })
+    : add('subarriendo_por_facturar', x.a.id, `Subarriendo de ${perTexto(x.per)} pagado sin factura · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, periodo: x.per }))
   honorarioDescuadrado(d.saludRows, d.billing, d.sales).forEach(v => add('honorario_descuadrado', v.id, `Honorario distinto de la suma de sus cuotas · ${nom(v.client_id)} · ${v.title || ''}`.trim(), (Number(v.amount_clp) || 0) - (Number(v.suma_cuotas) || 0), { venta: v.id, honorario: v.amount_clp, cuotas: v.suma_cuotas }))
   return out
 }
@@ -161,5 +186,5 @@ export const DETECTOR_LBL = {
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
   rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE',
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
-  vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado',
+  vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado', anticipo_por_aplicar: 'Anticipo por aplicar', subarriendo_por_facturar: 'Subarriendo por facturar',
 }
