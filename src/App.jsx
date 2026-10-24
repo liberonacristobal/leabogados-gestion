@@ -25445,6 +25445,8 @@ function DocumentosDrive({client, onCount, onPick}){
   const entrarSub = (f)=>{ setPath(p=>[...p,{id:f.id,name:f.name}]); cargarNivel(f.id) }
   const irNivel = (i)=>{ const nueva=path.slice(0,i+1); setPath(nueva); cargarNivel(nueva[nueva.length-1].id) }
   const vincular = async(f)=>{
+    // Una sola carpeta por cliente: la de la ficha (clients.drive_folder_id), que usan también los agentes; client_drive queda de respaldo.
+    try{ await supabase.from('clients').update({drive_folder_id:f.id,updated_at:new Date().toISOString()}).eq('id',client.id) }catch(_){}
     try{ await supabase.from('client_drive').upsert({client_id:String(client.id), folder_id:f.id, folder_name:f.name, updated_at:new Date().toISOString()},{onConflict:'client_id'}) }catch(_){}
     setCand(null); entrarRaiz(f)
   }
@@ -25472,6 +25474,7 @@ function DocumentosDrive({client, onCount, onPick}){
     ;(async()=>{
       setFolder(undefined); setItems(null); setPath([]); setErr(null); setCand(null); setQ('')
       try{
+        if(client.drive_folder_id){ entrarRaiz({id:client.drive_folder_id,name:client.name}); return }   // carpeta de la ficha (fuente única)
         const {data} = await supabase.from('client_drive').select('folder_id,folder_name').eq('client_id',String(client.id)).maybeSingle()
         if(!alive) return
         if(data&&data.folder_id) entrarRaiz({id:data.folder_id,name:data.folder_name})
@@ -32512,6 +32515,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
   useEffect(()=>{ setPrecFiles(null); setPrecSel(null); setPrecTxt(''); setPrecErr(null) },[tipo])   // no arrastrar un precedente de otro tipo
   useEffect(()=>{ setCliDocSel(null); setCliDocTxt(''); setMostrarDocCli(false); setCliDocErr(null); setGuardadoUrl(null); setGuardadoErr(null)   // reset + busca la carpeta del cliente al cambiar
     let alive=true; if(!cliObj){ setCliFolder(null); return ()=>{alive=false} }
+    if(cliObj.drive_folder_id){ setCliFolder({id:cliObj.drive_folder_id,name:cliObj.name}); return ()=>{alive=false} }   // carpeta de la ficha (fuente única)
     ;(async()=>{ try{ const {data}=await supabase.from('client_drive').select('folder_id,folder_name').eq('client_id',String(cliObj.id)).maybeSingle(); if(alive) setCliFolder(data&&data.folder_id?{id:data.folder_id,name:data.folder_name}:null) }catch(_){ if(alive) setCliFolder(null) } })()
     return ()=>{alive=false}
   },[cliObj&&cliObj.id])
