@@ -72,3 +72,38 @@ export function serieYaFacturadaEnMes(billing, saleId, fecha, folio) {
   const mes = String(fecha).slice(0, 7)
   return (billing || []).find(b => !b.deleted_at && b.status !== 'Anulada' && String(b.sale_id) === String(saleId) && b.invoice_no && String(b.invoice_no).replace(/^factura\s*/i, '').trim() !== String(folio) && String(b.issued_at || '').slice(0, 7) === mes) || null
 }
+
+// ── Venta de una factura sin venta (motor ÚNICO: Bandeja, Facturación › Por clasificar, ficha del cliente y el registro
+// automático facturas-sii-registrar). Funciones puras.
+const _normTxt = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+const _nRut = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '')
+// Clave de lo aprendido: cliente + RUT del receptor + glosa (learnings venta_factura / venta_factura_no).
+export const claveVentaFactura = f => `${f?.client_id || ''}|${_nRut(f?.receptor_rut)}|${_normTxt(f?.concept || f?.glosa || '')}`
+// Cuotas programadas de una venta que la factura reemplaza: las más antiguas, en orden, cuya suma más se acerca al monto
+// sin pasarlo en más de 1% (mínimo una). calza = la suma queda a ±1% del monto.
+export function cuotasQueReemplaza(progs, monto) {
+  const xs = [...(progs || [])].sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')))
+  if (!xs.length || !(monto > 0)) return { cuotas: [], suma: 0, dif: monto || 0, calza: false }
+  let best = null, s = 0
+  for (let n = 1; n <= xs.length; n++) { s += Number(xs[n - 1].amount) || 0; if (n > 1 && s > monto * 1.01) break; const d = Math.abs(s - monto); if (!best || d < best.d) best = { n, s, d } }
+  return { cuotas: xs.slice(0, best.n), suma: best.s, dif: Math.round(best.s - monto), calza: best.d <= monto * 0.01 }
+}
+// Ventas candidatas para una factura sin venta, ordenadas por: lo aprendido (confirmaciones de la misma clave) > cuotas que
+// calzan con el monto > misma razón social > única venta activa. rechazadas = sale_ids que una persona dijo que no
+// corresponden para esta clave. auto = ya aprendido (≥2 confirmaciones) y las cuotas calzan: se puede asignar sola.
+// billing = facturas/cuotas del cliente; aprendidas = {sale_id: hits} para la clave de la factura.
+export function sugerirVentas({ factura, sales = [], billing = [], aprendidas = {}, rechazadas = [] }) {
+  if (!factura?.client_id) return []
+  const monto = Math.abs(Math.round(Number(factura.amount) || 0))
+  const activas = (sales || []).filter(s => s && !s.deleted_at && String(s.client_id) === String(factura.client_id) && s.status === 'Activo' && s.cobro_config?.subarriendo !== true && s.area !== 'Subarriendo')
+  const rech = new Set((rechazadas || []).map(String))
+  return activas.map(s => {
+    const progs = (billing || []).filter(b => b && !b.deleted_at && String(b.sale_id) === String(s.id) && b.status === 'Programada' && !b.invoice_no && b.billing_type !== 'reembolso')
+    const r = cuotasQueReemplaza(progs, monto)
+    const hits = Number(aprendidas[String(s.id)]) || 0
+    const mismaRS = !!(s.entity_id && factura.entity_id && String(s.entity_id) === String(factura.entity_id))
+    const motivo = hits ? 'aprendida' : r.calza ? 'cuotas' : mismaRS ? 'rs' : activas.length === 1 ? 'unica' : null
+    const score = (rech.has(String(s.id)) ? -1000 : 0) + hits * 100 + (r.calza ? 50 - Math.min(10, Math.abs(r.dif) / Math.max(1, monto) * 1000) : 0) + (mismaRS ? 10 : 0) + (activas.length === 1 ? 5 : 0)
+    return { sale: s, progs, ...r, hits, mismaRS, motivo, rechazada: rech.has(String(s.id)), auto: hits >= 2 && r.calza && !rech.has(String(s.id)), score }
+  }).sort((a, b) => b.score - a.score)
+}

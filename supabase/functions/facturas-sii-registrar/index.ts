@@ -9,7 +9,7 @@
 // Lo que la app resuelve con reglas extra (comisión por facturar, cuota anticipada, cuota que habría que retirar) y lo ambiguo
 // (RUT sin cliente, cuotas de ventas distintas) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
-import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes } from "../_shared/facturacionReglas.js";
+import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     const out = { registradas: [] as unknown[], a_bandeja: [] as unknown[], cerradas: 0 };
     const [clients, ents, sales, abiertas] = await Promise.all([
       todas("clients?select=id,name,rut"), todas("client_entities?select=id,client_id,rut,name"),
-      todas("sales?select=id,client_id,title,status,area,cobro_config,deleted_at&deleted_at=is.null&status=eq.Activo"),
+      todas("sales?select=id,client_id,title,status,area,cobro_config,entity_id,deleted_at&deleted_at=is.null&status=eq.Activo"),
       todas("agente_bandeja?select=id,gmail_id,estado&tipo=eq.factura_sin_registrar&estado=eq.pendiente"),
     ]);
     // Propuestas abiertas cuya factura ya se registró (en la app o aquí) → se cierran solas.
@@ -139,11 +139,32 @@ Deno.serve(async (req) => {
       // de una misma venta suman el monto (±1%), se proponen para reemplazar con un clic y, mientras tanto, quedan fuera de la
       // proyección de caja y del radar (cubiertas provisoriamente) para no contar dos veces la misma plata.
       if (!dec.saleId) {
-        const progs = billingCli.filter((b: { status: string; billing_type: string }) => b.status === "Programada" && b.billing_type !== "reembolso");
-        let pista: { sv: { id: string; title: string }; ids: string[]; n: number; sum: number } | null = null;
-        for (const sv of activas) { const xs = progs.filter((b: { sale_id: string; id: string }) => b.sale_id === sv.id && !usadas.has(b.id)).sort((a: { due: string }, b: { due: string }) => String(a.due || "").localeCompare(String(b.due || "")));
-          for (const n of [2, 3]) { const sum = xs.slice(0, n).reduce((t: number, b: { amount: number }) => t + (Number(b.amount) || 0), 0); if (xs.length >= n && monto > 0 && Math.abs(sum - monto) / monto <= 0.01) { pista = { sv, ids: xs.slice(0, n).map((b: { id: string }) => b.id), n, sum }; break; } }
-          if (pista) break; }
+        // Motor único (el mismo de la Bandeja, Por clasificar y la ficha): lo aprendido para esta clave primero, luego las
+        // cuotas de una venta que suman el monto (±1%). Con ≥2 confirmaciones y cuotas que calzan, se asigna sola.
+        const fac = { client_id: cli.cid, amount: monto, receptor_rut: d.receptor_rut, concept: d.glosa || "Honorarios", entity_id: cli.ent };
+        const clave = claveVentaFactura(fac);
+        const apr = await todas(`learnings?select=kind,key,hits&kind=in.(venta_factura,venta_factura_no)&key=like.${encodeURIComponent(clave.replace(/[*%]/g, "") + ">")}*`);
+        const aprendidas: Record<string, number> = {}, rechazadas: string[] = [];
+        for (const l of apr) { const sid = String(l.key).slice(String(l.key).lastIndexOf(">") + 1); if (l.kind === "venta_factura") aprendidas[sid] = Number(l.hits) || 1; else rechazadas.push(sid); }
+        const libres = billingCli.filter((b: { id: string }) => !usadas.has(b.id));
+        const sugs = sugerirVentas({ factura: fac, sales: sales.filter((x) => x.client_id === cli.cid), billing: libres, aprendidas, rechazadas });
+        const top = sugs[0] && !sugs[0].rechazada ? sugs[0] : null;
+        if (top?.auto) {
+          const bidA = await crearFactura(top.sale.id);
+          top.cuotas.forEach((c: { id: string }) => usadas.add(c.id));
+          const motivoA = `Asignada sola a «${top.sale.title}» · reemplaza ${top.cuotas.length} cuota${top.cuotas.length !== 1 ? "s" : ""} (aprendido)`;
+          out.a_bandeja.push({ folio: d.folio, monto: d.monto, motivo: motivoA });
+          if (dryRun || !bidA) continue;
+          await rest(`billing?id=in.(${top.cuotas.map((c: { id: string }) => c.id).join(",")})`, { method: "PATCH", body: JSON.stringify({ deleted_at: now, replaced_by_id: bidA }) });
+          const kl = `${clave}>${top.sale.id}`;
+          await rest(`learnings?kind=eq.venta_factura&key=eq.${encodeURIComponent(kl)}`, { method: "PATCH", body: JSON.stringify({ hits: (aprendidas[String(top.sale.id)] || 1) + 1, updated_at: now }) });
+          await rest("agente_bandeja?on_conflict=gmail_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ gmail_id: `venta:${d.folio}-${d.tipo_dte}`, recibido_at: `${fecha}T12:00:00Z`, de: d.receptor_name || "", de_nombre: d.receptor_name || "", asunto: `Factura N° ${d.folio} asignada sola`, tipo: "factura_sin_venta", cliente_id: cli.cid, estado: "registrado", motivo: motivoA, resuelto_at: now,
+            propuesta: { accion: "asignar_venta", titulo: `Asignada a «${top.sale.title}»`, folio: d.folio, billing_id: bidA, sale_id: top.sale.id, venta: top.sale.title, cuotas: top.cuotas.map((c: { id: string }) => c.id), auto: true },
+            evidencia: [{ texto: `Factura N° ${d.folio} del ${dmy(fecha)}`, monto, fuente: "SII" }, { texto: `${top.cuotas.length} cuotas reemplazadas`, monto: Math.round(top.suma), fuente: "App" }] }) });
+          await rest(`agente_bandeja?gmail_id=eq.${encodeURIComponent(`sii:${d.folio}-${d.tipo_dte}`)}&estado=eq.pendiente`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", motivo: motivoA, resuelto_at: now }) });
+          continue;
+        }
+        const pista = top && top.cuotas.length && (top.calza || top.motivo === "aprendida") ? { sv: top.sale, ids: top.cuotas.map((c: { id: string }) => c.id), n: top.cuotas.length, sum: top.suma } : null;
         const bid = await crearFactura(null);
         if (pista) pista.ids.forEach((id) => usadas.add(id));
         const dif = pista ? Math.abs(Math.round(pista.sum) - monto) : 0;

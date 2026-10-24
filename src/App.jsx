@@ -24,7 +24,7 @@ import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '.
 import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
-import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme } from '../supabase/functions/_shared/facturacionReglas.js'
+import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar } from '../supabase/functions/_shared/ventasReglas.js'
 import logoBlanco from './le-logo-blanco.png'
 
@@ -10208,29 +10208,126 @@ async function registrarFondoPropuesto(r, {proyecto, yo, sales, expenses, onFond
     throw e
   }
 }
-// Factura registrada sin venta (facturas-sii-registrar) que reemplaza cuotas programadas de una venta: al aceptar, la factura toma
-// la venta (y la razón social de las cuotas si no tenía) y cada cuota queda reemplazada por ella (soft-delete + replaced_by_id: el
-// trigger le pasa sus comisiones; reversible desde la Papelera). Las cuotas cubiertas provisoriamente se liberan de la marca.
-async function liberarCuotasProvisorias(p){
-  if(DEMO||!(p.cuotas||[]).length||!p.billing_id) return
-  const {error}=await supabase.from('learnings').delete().eq('kind','cuota_no_emitir').in('key',p.cuotas.map(String)).eq('value',`cubierta:${p.billing_id}`)
-  if(error) throw error
+// ── Venta de una factura sin venta: UNA sola forma de asignarla (Bandeja, Facturación › Por clasificar y ficha del cliente).
+// Asignar = la factura toma la venta (y su razón social si no tenía); cada cuota elegida queda reemplazada por ella (soft-delete
+// + replaced_by_id: el trigger le pasa sus comisiones; reversible desde la Papelera). Libera las cuotas cubiertas provisoriamente
+// (cuota_no_emitir «cubierta:<factura>»), cierra la propuesta de la Bandeja y APRENDE: learnings venta_factura (clave → venta,
+// hits = confirmaciones) y venta_factura_no (la venta sugerida que no correspondía). Con 2 confirmaciones y cuotas que calzan,
+// facturas-sii-registrar la asigna sola. Todo cambio de billing avisa a la app para recargar (avisarBillingCambio).
+const _billingCambio=new Set()
+const avisarBillingCambio=()=>{ _billingCambio.forEach(f=>{ try{ f() }catch(_){} }) }
+let _ventaAprP=null
+function useVentaAprendida(){
+  const [m,setM]=useState(()=>({si:{},no:{}}))
+  useEffect(()=>{ if(DEMO) return; if(!_ventaAprP) _ventaAprP=supabase.from('learnings').select('kind,key,hits').in('kind',['venta_factura','venta_factura_no']).then(({data})=>{ const o={si:{},no:{}}
+      ;(data||[]).forEach(r=>{ const i=String(r.key).lastIndexOf('>'); if(i<0) return; const cl=r.key.slice(0,i), sid=r.key.slice(i+1), t=r.kind==='venta_factura'?o.si:o.no; (t[cl]=t[cl]||{})[sid]=Math.max(Number(r.hits)||1,1) }); return o },()=>({si:{},no:{}}))
+    let v=true; _ventaAprP.then(x=>{ if(v) setM(x) }); return ()=>{v=false} },[])
+  return m
 }
-async function asignarVentaPropuesta(p){
-  const ids=(p.cuotas||[]).map(String)
-  if(!p.billing_id||!ids.length) throw new Error('La propuesta no trae la factura o las cuotas.')
-  if(DEMO) return
-  const [{data:f},{data:cs}]=await Promise.all([supabase.from('billing').select('id,sale_id,entity_id,deleted_at,status').eq('id',p.billing_id).maybeSingle(), supabase.from('billing').select('id,sale_id,entity_id,status,deleted_at').in('id',ids)])
+async function aprenderVenta(kind,clave,saleId){
+  if(DEMO||!clave||!saleId) return
+  const key=`${clave}>${saleId}`
+  const {data}=await supabase.from('learnings').select('id,hits').eq('kind',kind).eq('key',key).limit(1)
+  if(data&&data.length) await supabase.from('learnings').update({hits:(Number(data[0].hits)||1)+1,value:String(saleId),updated_at:new Date().toISOString()}).eq('id',data[0].id)
+  else await supabase.from('learnings').insert({kind,key,value:String(saleId),hits:1})
+  _ventaAprP=null
+}
+async function asignarVentaFactura({facturaId, saleId, cuotaIds=[], sugerida=null, venta=''}){
+  if(!facturaId||!saleId) throw new Error('Falta la factura o la venta.')
+  const ids=(cuotaIds||[]).map(String)
+  if(DEMO) return {folio:null}
+  const [{data:f},{data:cs}]=await Promise.all([supabase.from('billing').select('id,client_id,sale_id,entity_id,deleted_at,status,invoice_no,concept,receptor_rut').eq('id',facturaId).maybeSingle(), ids.length?supabase.from('billing').select('id,sale_id,entity_id,status,deleted_at,invoice_no').in('id',ids):Promise.resolve({data:[]})])
   if(!f||f.deleted_at||f.status==='Anulada') throw new Error('La factura ya no está vigente.')
-  if(f.sale_id&&String(f.sale_id)!==String(p.sale_id)) throw new Error('La factura ya tiene otra venta asignada.')
-  const vivas=(cs||[]).filter(c=>!c.deleted_at&&c.status==='Programada'&&String(c.sale_id)===String(p.sale_id))
-  if(vivas.length!==ids.length) throw new Error('Alguna de las cuotas ya no está programada: asigna la venta desde Facturación › Por clasificar.')
+  if(f.sale_id&&String(f.sale_id)!==String(saleId)) throw new Error('La factura ya tiene otra venta asignada.')
+  const vivas=(cs||[]).filter(c=>!c.deleted_at&&c.status==='Programada'&&!c.invoice_no&&String(c.sale_id)===String(saleId))
+  if(vivas.length!==ids.length) throw new Error('Alguna de las cuotas ya no está programada en esa venta. Vuelve a elegirlas.')
   const now=new Date().toISOString()
   const ent=f.entity_id||vivas.find(c=>c.entity_id)?.entity_id||null
-  const {error:e1}=await supabase.from('billing').update({sale_id:p.sale_id,...(ent&&!f.entity_id?{entity_id:ent}:{}),updated_at:now}).eq('id',f.id); if(e1) throw e1
-  const {error:e2}=await supabase.from('billing').update({deleted_at:now,replaced_by_id:f.id}).in('id',ids); if(e2) throw e2
-  await liberarCuotasProvisorias(p)
-  logActividad('facturacion.venta_asignada',{tabla:'billing',id:f.id,detalle:{title:`Factura N° ${p.folio} asignada a «${p.venta}» · reemplaza ${ids.length} cuotas`,cuotas:ids}})
+  const {error:e1}=await supabase.from('billing').update({sale_id:saleId,...(ent&&!f.entity_id?{entity_id:ent}:{}),updated_at:now}).eq('id',f.id); if(e1) throw e1
+  if(ids.length){ const {error:e2}=await supabase.from('billing').update({deleted_at:now,replaced_by_id:f.id}).in('id',ids); if(e2) throw e2 }
+  await supabase.from('learnings').delete().eq('kind','cuota_no_emitir').eq('value',`cubierta:${f.id}`)
+  const clave=claveVentaFactura(f)
+  try{ await aprenderVenta('venta_factura',clave,saleId); if(sugerida&&String(sugerida)!==String(saleId)) await aprenderVenta('venta_factura_no',clave,sugerida) }catch(_){}
+  const folio=folioN(f.invoice_no)||f.invoice_no
+  const motivo=`Factura N° ${folio} asignada a «${venta||'la venta'}»${ids.length?` · reemplaza ${ids.length} cuota${ids.length!==1?'s':''}`:''}`
+  try{ await supabase.from('agente_bandeja').update({estado:'registrado',motivo,resuelto_at:now}).eq('tipo','factura_sin_venta').eq('estado','pendiente').eq('propuesta->>billing_id',String(f.id)) }catch(_){}
+  logActividad('facturacion.venta_asignada',{tabla:'billing',id:f.id,detalle:{title:motivo,venta:saleId,cuotas:ids}})
+  avisarBillingCambio()
+  return {folio,motivo}
+}
+// La venta sugerida no corresponde a esta factura: se recuerda (no se vuelve a sugerir para la misma clave) y se liberan sus cuotas.
+async function rechazarVentaFactura(facturaId,saleId){
+  if(DEMO||!facturaId||!saleId) return
+  const {data:f}=await supabase.from('billing').select('client_id,concept,receptor_rut').eq('id',facturaId).maybeSingle()
+  await supabase.from('learnings').delete().eq('kind','cuota_no_emitir').eq('value',`cubierta:${facturaId}`)
+  if(f) await aprenderVenta('venta_factura_no',claveVentaFactura(f),saleId)
+}
+// Asignar la venta de UNA factura sin venta: sugerida arriba (lo aprendido o las cuotas que suman su monto), las demás ventas
+// del cliente con su contexto, y al elegir una se marcan las cuotas que reemplaza (editables). Confirmación en línea.
+function AsignarVentaFactura({factura, sales=[], billing=[], onHecho}){
+  const apr=useVentaAprendida()
+  const [elegida,setElegida]=useState(null), [sel,setSel]=useState(()=>new Set()), [conf,setConf]=useState(null), [busy,setBusy]=useState(false), [verOtras,setVerOtras]=useState(false), [verCerr,setVerCerr]=useState(false)
+  const monto=Math.abs(montoFactura(factura)||Number(factura.amount)||0)
+  const clave=claveVentaFactura(factura)
+  const sugs=useMemo(()=>sugerirVentas({factura:{...factura,amount:monto},sales,billing,aprendidas:apr.si[clave]||{},rechazadas:Object.keys(apr.no[clave]||{})}),[factura,sales,billing,apr,clave,monto])
+  const top=sugs[0]&&!sugs[0].rechazada&&(sugs[0].motivo==='aprendida'||(sugs[0].motivo==='cuotas'&&sugs[0].cuotas.length))?sugs[0]:null
+  const uf=ufFechaCache()||{}
+  const etq=b=>{ const c=cuotaNMof(b.concept); return `${c?`Cuota ${c.n}/${c.tot}`:'Cuota'} · vence ${fmtFechaDMY(b.due)}` }
+  const contexto=g=>{ const bs=(billing||[]).filter(b=>b&&!b.deleted_at&&String(b.sale_id)===String(g.sale.id)); const cv=coberturaVenta(g.sale,bs,uf); const partes=[]
+    if(g.mismaRS) partes.push('Misma razón social')
+    if(g.progs.length){ const m0=Number(g.progs[0].amount)||0; partes.push(g.progs.every(x=>Number(x.amount)===m0)?`${g.progs.length} cuota${g.progs.length!==1?'s':''} de ${fmt(m0)} por facturar`:`${g.progs.length} cuotas por facturar`) }
+    else if(cv&&cv.ok&&cv.plan-cv.usado>(cv.enUF?0.5:1000)) partes.push(`por facturar ${cv.enUF?fmtUF(Math.round((cv.plan-cv.usado)*10)/10):fmt(cv.plan-cv.usado)} · sin cuotas programadas`)
+    else partes.push('sin cuotas programadas')
+    return partes.join(' · ') }
+  const elegir=g=>{ setElegida(g); setSel(new Set(cuotasQueReemplaza(g.progs,monto).cuotas.map(c=>String(c.id)))); setConf(null) }
+  const ejecutar=async(g,ids)=>{ setBusy(true)
+    try{ const r=await asignarVentaFactura({facturaId:factura.id,saleId:g.sale.id,cuotaIds:ids,sugerida:top?.sale.id||null,venta:g.sale.title})
+      onHecho&&onHecho({sale:g.sale,cuotaIds:ids,motivo:r?.motivo}) }
+    catch(e){ appAlert('No se pudo asignar: '+(e.message||e)) }
+    setBusy(false); setConf(null) }
+  const pedir=(g,ids)=>setConf({g,ids,label:`Asignar la factura N° ${folioN(factura.invoice_no)||factura.invoice_no} a «${g.sale.title}»${ids.length?` y reemplazar ${ids.length} cuota${ids.length!==1?'s':''}`:' sin reemplazar cuotas'}.`})
+  const lnS={display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5}, lnL={color:C.textSoft,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}, lnV={color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',fontWeight:700}
+  const bS={fontSize:12.5,fontWeight:600,color:C.accent,background:'none',border:'none',padding:'7px 8px',cursor:'pointer'}, bP={fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}
+  const difTxt=d=>d?`Diferencia ${fmt(Math.abs(d))}`:'Mismo monto'
+  const confirmBox=conf&&<div style={{marginTop:10,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,padding:'10px 12px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+    <div style={{flex:'1 1 160px',minWidth:0,fontSize:12,color:C.text,lineHeight:1.4}}>{conf.label}</div>
+    <div style={{display:'flex',gap:6,marginLeft:'auto'}}><button disabled={busy} onClick={()=>setConf(null)} style={bS}>Cancelar</button><button disabled={busy} onClick={()=>ejecutar(conf.g,conf.ids)} style={{...bP,opacity:busy?.6:1}}>{busy?'Guardando…':'Confirmar'}</button></div></div>
+  const otras=sugs.filter(g=>g!==top)
+  // Ventas cerradas del cliente: solo a pedido (una factura tardía de un trabajo ya terminado). Mismo cálculo de cuotas.
+  const cerradas=useMemo(()=>{ const cs=(sales||[]).filter(x=>x&&!x.deleted_at&&String(x.client_id)===String(factura.client_id)&&x.status!=='Activo'); return cs.length?sugerirVentas({factura:{...factura,amount:monto},sales:cs.map(x=>({...x,status:'Activo'})),billing}).map(g=>({...g,sale:{...g.sale,status:cs.find(x=>x.id===g.sale.id)?.status},motivo:null})):[] },[factura,sales,billing,monto])
+  const filaVenta=g=><div key={g.sale.id} onClick={()=>elegir(g)} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'8px 10px',cursor:'pointer'}}>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.sale.title}{g.sale.status&&g.sale.status!=='Activo'?<span style={{fontWeight:500,color:C.textSoft}}> · cerrada</span>:null}</div><div style={{fontSize:11,color:C.textSoft,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{contexto(g)}</div></div>
+    <span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>Elegir</span></div>
+  const linkCerr=cerradas.length>0&&!verCerr&&<span onClick={()=>setVerCerr(true)} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',padding:'2px 0'}}>Ver también cerradas ({cerradas.length})</span>
+  if(!sugs.length&&!verCerr) return <div onClick={e=>e.stopPropagation()} style={{fontSize:11.5,color:C.muted,marginTop:10,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><span>Este cliente no tiene ventas activas. Abre su ficha para crear una.</span>{linkCerr}</div>
+  return <div onClick={e=>e.stopPropagation()}>
+    {top&&!elegida&&<div style={{marginTop:10,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:11,padding:'10px 12px'}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.greenText,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{background:C.greenBg,borderRadius:20,padding:'1px 8px'}}>Sugerida</span>{top.motivo==='aprendida'?'asignada antes a esta venta':`${top.cuotas.length} cuota${top.cuotas.length!==1?'s':''} ${top.cuotas.length!==1?'suman':'calza con'} el monto`}</div>
+      <div style={{fontSize:13.5,fontWeight:700,color:C.accent,marginTop:4}}>{top.sale.title}</div>
+      {top.cuotas.map(c=><div key={c.id} style={lnS}><span style={lnL}>{etq(c)}</span><b style={lnV}>{fmt(c.amount)}</b></div>)}
+      {top.cuotas.length>0&&<div style={{fontSize:11,color:C.textSoft,marginTop:5}}>{difTxt(top.dif)}</div>}
+      {!conf&&<div style={{display:'flex',justifyContent:'flex-end',gap:6,marginTop:9,flexWrap:'wrap'}}><button onClick={()=>setVerOtras(v=>!v)} style={bS}>Otra venta</button><button onClick={()=>pedir(top,top.cuotas.map(c=>String(c.id)))} style={bP}>Asignar</button></div>}
+      {confirmBox}
+    </div>}
+    {(!top||verOtras||verCerr)&&!elegida&&<div style={{marginTop:9,borderTop:top?`1px solid ${C.border}`:'none',paddingTop:top?9:0,display:'flex',flexDirection:'column',gap:6}}>
+      {(top?otras:sugs).map(filaVenta)}
+      {verCerr&&cerradas.map(filaVenta)}
+      {linkCerr}
+    </div>}
+    {elegida&&(()=>{ const ids=[...sel], suma=elegida.progs.filter(c=>sel.has(String(c.id))).reduce((a,c)=>a+(Number(c.amount)||0),0)
+      return <div style={{marginTop:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:11,padding:'10px 12px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,minWidth:0,fontSize:13.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{elegida.sale.title}</div><span onClick={()=>{setElegida(null);setConf(null)}} style={{fontSize:11.5,color:C.accent,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Cambiar</span></div>
+        {elegida.progs.length?<div style={{marginTop:6}}>{[...elegida.progs].sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))).map((c,i)=>{ const on=sel.has(String(c.id))
+          return <div key={c.id} onClick={()=>setSel(p=>{ const n=new Set(p); on?n.delete(String(c.id)):n.add(String(c.id)); return n })} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 2px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+            <span style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.accent:C.muted}`,background:on?C.accent:'#fff',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,flexShrink:0}}>{on?'✓':''}</span>
+            <span style={{flex:1,minWidth:0,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{etq(c)}</span><span style={{fontVariantNumeric:'tabular-nums',color:C.text,fontWeight:600}}>{fmt(c.amount)}</span></div> })}
+          <div style={{...lnS,borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:4}}><span style={lnL}>Cuotas marcadas</span><b style={lnV}>{fmt(suma)}</b></div>
+          {ids.length>0&&<div style={{fontSize:11,color:C.textSoft,marginTop:5}}>{difTxt(Math.round(suma-monto))}</div>}
+        </div>:<div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>{contexto(elegida)}</div>}
+        {!conf&&<div style={{display:'flex',justifyContent:'flex-end',gap:6,marginTop:9,flexWrap:'wrap'}}>{ids.length>0&&<button onClick={()=>pedir(elegida,[])} style={bS}>Sin reemplazar cuotas</button>}<button onClick={()=>pedir(elegida,ids)} style={bP}>{ids.length?`Asignar y reemplazar ${ids.length} cuota${ids.length!==1?'s':''}`:'Asignar'}</button></div>}
+        {confirmBox}
+      </div> })()}
+  </div>
 }
 const _MES_ES = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,sept:8,set:8,oct:9,nov:10,dic:11}
 // Fecha y autor de nuestra solicitud citada bajo la respuesta («El lun, 19 oct 2026 a las 16:01, Erasmo Escala (<ee@…>) escribió:»).
@@ -10242,7 +10339,7 @@ function solicitudCitada(cuerpo){
   return {fecha:d&&!isNaN(d)?d.toISOString():null, autor:m[6].trim().split(/\s+/)[0]||null, email:m[7].toLowerCase()}
 }
 const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
-function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII, onIrSinVenta, onBillingCambio}){
+function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII, onIrSinVenta}){
   const [elegido,setElegido]=useState({})   // adjuntar_respaldo: gasto elegido por tarjeta
   const [paraBoleta,setParaBoleta]=useState({})   // pedir_boleta: correo del colaborador (se aprende al enviar)
   const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
@@ -10325,9 +10422,8 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
         if(!DEMO) await setLearningKV('cuenta_conocida',p.dominio,JSON.stringify({cuenta:p.cuenta,banco:p.banco||null,rut:p.rut||null}))
         await hecho(r,{estado:'resuelto',motivo:'Cuenta guardada como conocida'},'cuenta_guardada')
       } else if(a==='asignar_venta'){
-        await asignarVentaPropuesta(p)
+        await asignarVentaFactura({facturaId:p.billing_id,saleId:p.sale_id,cuotaIds:p.cuotas||[],sugerida:p.sale_id,venta:p.venta})
         await hecho(r,{estado:'registrado',motivo:`Factura N° ${p.folio} asignada a «${p.venta}» · reemplaza ${(p.cuotas||[]).length} cuotas`},'venta_asignada')
-        onBillingCambio&&onBillingCambio()
       } else if(a==='revisar'){
         await hecho(r,{estado:'resuelto',motivo:`Revisado por ${yo}`},'revisado')
       }
@@ -10341,7 +10437,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
   const descartar=async(r,como='Descartado')=>{ setBusy(r.id); try{
       const p=r.propuesta||{}
       // «No corresponde» a una venta sugerida: las cuotas vuelven a la proyección y la factura queda sin venta (Facturación › Por clasificar).
-      if(p.accion==='asignar_venta'){ await liberarCuotasProvisorias(p); await hecho(r,{estado:'descartado',motivo:`No corresponde a «${p.venta||'la venta sugerida'}» · la factura queda sin venta (${yo})`},'venta_rechazada') }
+      if(p.accion==='asignar_venta'){ await rechazarVentaFactura(p.billing_id,p.sale_id); await hecho(r,{estado:'descartado',motivo:`No corresponde a «${p.venta||'la venta sugerida'}» · la factura queda sin venta (${yo})`},'venta_rechazada') }
       else await hecho(r,{estado:'descartado',motivo:`${como} por ${yo}`},'descartado') }catch(e){ appAlert('No se pudo descartar: '+(e.message||e)) } setBusy(null) }
   const restaurar=async r=>{ setBusy(r.id); try{ await patch(r.id,{estado:r.propuesta?.accion?'pendiente':'sin_accion',resuelto_por:null,resuelto_at:null,motivo:null}); logActividad('agente.restaurado',{tabla:'agente_bandeja',id:r.id,detalle:{title:'Correo del agente restaurado'}}) }catch(e){ appAlert('No se pudo restaurar: '+(e.message||e)) } setBusy(null) }
   const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
@@ -15207,14 +15303,6 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               appAlert(`${ok} XML adjuntado${ok!==1?'s':''} desde la cola del SII.${faltan.length?`\n\n${faltan.length} no está${faltan.length!==1?'n':''} en la cola — hay que bajarla${faltan.length!==1?'s':''} del SII: N° ${faltan.join(', ')}.`:''}`)
             }catch(e){ appAlert('No se pudo adjuntar el XML: '+(e.message||e)) }
           }
-          // Selector de venta, reusado por fila individual.
-          const salePicker=(clientId,onPick)=>{ const cs=(sales||[]).filter(s=>!s.deleted_at&&String(s.client_id)===String(clientId)); const ab=cs.filter(s=>s.status==='Activo'); const base=(verCerradas||!ab.length)?cs:ab; const vq=ventaBusca.trim().toLowerCase(); const list=[...base].filter(s=>!vq||`${s.title||''} ${s.year||''}`.toLowerCase().includes(vq)).sort((a,b)=>(b.year||0)-(a.year||0)); const nCerr=cs.filter(s=>s.status!=='Activo').length; return (
-            <div style={{marginTop:10,display:'flex',flexDirection:'column',gap:5}}>
-              {cs.length===0&&<div style={{fontSize:11.5,color:C.muted}}>Este cliente no tiene ventas. Abre su ficha para crear una.</div>}
-              {cs.length>4&&<input value={ventaBusca} onChange={e=>setVentaBusca(e.target.value)} placeholder='Buscar proyecto…' style={{padding:'6px 9px',borderRadius:8,border:`0.5px solid ${C.border}`,fontSize:12,outline:'none'}}/>}
-              {list.map(s=><button key={s.id} onClick={()=>onPick(s.id)} style={{textAlign:'left',padding:'7px 10px',borderRadius:8,border:`0.5px solid ${C.border}`,background:'#fff',fontSize:12,color:C.text,cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</span><span style={{color:C.textSoft,flexShrink:0}}>{s.year}{s.status!=='Activo'?' · cerrada':''}</span></button>)}
-              {!verCerradas&&ab.length>0&&nCerr>0&&<button onClick={()=>setVerCerradas(true)} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:'2px 0'}}>Ver también cerradas ({nCerr}) →</button>}
-            </div>) }
           // Panel "De un externo" (reclasifica una factura YA registrada): elige el externo + % que retienes; el resto es cuenta por pagar.
           const extPanel=(b)=>{ const provs=[...(proveedores||[])].sort((a,z)=>((a.razon_social||a.nombre||'')).localeCompare(z.razon_social||z.nombre||'','es')); const provEl=provs.find(p=>String(p.id)===String(tvProv)); const nombreDest=provEl?(provEl.razon_social||provEl.nombre):(tvNuevo.trim()||'el externo'); const total=montoFactura(b); const pct=Math.max(0,Math.min(100,parseFloat(String(tvPct).replace(',','.'))||0)); const comision=pct>0?Math.round(total*pct/100):0; const payable=total-comision; const aprendido=tvProv&&comisionTercMap[String(tvProv)]!=null; const doExt=async()=>{ let pid=tvProv; if(!pid&&tvNuevo.trim()&&onSaveProveedor){ const np=await onSaveProveedor({nombre:tvNuevo.trim()}); if(np) pid=np.id } if(!pid){ appAlert('Elige el externo o escribe su nombre.'); return } const res=onReclasificarTercero&&await onReclasificarTercero(b,{proveedorId:pid,comisionPct:pct}); if(res){ if(pct>0)setComisionTercMap(m=>({...m,[String(pid)]:pct})); setAnioPickFor(null); onRefresh&&onRefresh() } }; return (
             <div style={{marginTop:10,background:C.tealBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
@@ -15238,22 +15326,20 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const pedir=(e,label,run)=>{ setAnioPickFor(null); setPcConfirm({_eid:e.id,label,run}) }
           const doAssignCli=(e,cid)=>{ const nm=(clients||[]).find(c=>String(c.id)===String(cid))?.name||'ese cliente'; pedir(e,`Asignar a ${nm}${e.src==='sii'?' — se registra':''}.`,async()=>{ if(e.src==='sii'){ await crearDesdeXML({...e.d,clienteId:cid},0); setRespaldoRes&&setRespaldoRes(p=>Array.isArray(p)&&!p.length?null:p); contarSinRegistrar() } else { onAssignClient&&await onAssignClient(e.b,cid) } limpiar(); onRefresh&&onRefresh() }) }
           const doSinCli=(e)=>pedir(e,'Agregar sin cliente — se registra sin asignar.',async()=>{ await crearDesdeXML({...e.d,clienteId:null},0); setRespaldoRes&&setRespaldoRes(p=>Array.isArray(p)&&!p.length?null:p); contarSinRegistrar(); limpiar() })
-          const doVenta=(e,sid)=>{ const s=(sales||[]).find(x=>String(x.id)===String(sid)); pedir(e,`Asociar a ${s?.title||'la venta'}${s?.year?` · ${s.year}`:''}.`,async()=>{ onSetVentaAnio&&await onSetVentaAnio(e.b,{sale_id:sid}); limpiar(); onRefresh&&onRefresh() }) }
           // Marcar una factura "sin venta" como REEMBOLSO de gastos (no es ingreso): reusa billing_type='reembolso', la única palanca que la saca de por-cobrar/cobrado. Sale de "Falta venta" (_emitBase excluye reembolso).
           const doReembolso=(e)=>pedir(e,'Marcar como reembolso de gastos.',async()=>{ try{ await supabase.from('billing').update({billing_type:'reembolso',updated_at:new Date().toISOString()}).eq('id',e.b.id); logActividad('facturacion.marcar_reembolso',{tabla:'billing',id:e.b.id,detalle:{invoice_no:e.b.invoice_no,amount:e.b.amount,client_id:e.b.client_id}}); setBilling&&setBilling(p=>p.map(x=>x.id===e.b.id?{...x,billing_type:'reembolso'}:x)) }catch(err){ appAlert('No se pudo marcar como reembolso: '+(err.message||err)) } limpiar(); onRefresh&&onRefresh() })
           const doRS=(e,entId)=>{ const ent=(clientEntities||[]).find(x=>String(x.id)===String(entId)); pedir(e,`Asignar razón social ${ent?.name||''}.`,async()=>{ if(ent){ await supabase.from('billing').update({entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||e.b.receptor_rut||null,updated_at:new Date().toISOString()}).eq('id',e.b.id); setBilling&&setBilling(p=>p.map(x=>x.id===e.b.id?{...x,entity_id:entId,receptor_name:ent.name,receptor_rut:ent.rut||x.receptor_rut}:x)) } limpiar(); onRefresh&&onRefresh() }) }
           const doXml=(e)=>pedir(e,'Adjuntar el XML firmado que está en la cola del SII.',async()=>{ await adjuntarXmlCola([e.b]); limpiar() })
           const sub={fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}
-          // Tipo de factura como primer paso (Honorarios → venta · Gastos · Comisión → socio y origen · Por externo → externo y %).
+          // Si no es de honorarios (la venta se asigna arriba con AsignarVentaFactura): Gastos · Comisión → socio y origen · Por externo → externo y %.
           // Sugerencia aprendida por cliente: el tipo de sus facturas anteriores (BDA → Comisión, Geslog → Por externo).
           const tipoPrevio=cid=>{ const ts=(billing||[]).filter(x=>!x.deleted_at&&x.status!=='Anulada'&&String(x.client_id)===String(cid)&&['comision','externo'].includes(x.billing_type)); if(!ts.length) return null; const c={}; ts.forEach(x=>{ c[x.billing_type]=(c[x.billing_type]||0)+1 }); return Object.keys(c).sort((a,z)=>c[z]-c[a])[0] }
           const tipoChips=(e,b,{ventaOpen,extOpen})=>{ const comOpen=anioPickFor===('com:'+b.id), sug=tipoPrevio(b.client_id)
             const ch=(k,lbl,on,fn,col)=><span key={k} onClick={fn} style={{fontSize:11.5,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:on?'#fff':col}}/>{lbl}</span>
             return <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:10}}>
-              {ch('h','Honorarios',ventaOpen,()=>{setAnioPickFor(ventaOpen?null:b.id);setVentaBusca('')},C.accent)}
-              {ch('g','Gastos',false,()=>doReembolso(e),C.azulInfo)}
-              {ch('c','Comisión',comOpen,()=>{ if(comOpen){ setAnioPickFor(null); return } setComSoc(''); setComOrig(''); setAnioPickFor('com:'+b.id) },C.tealText)}
-              {onReclasificarTercero&&ch('x','Por externo',extOpen,()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')},C.soonText)}
+              {ch('g','Es de gastos',false,()=>doReembolso(e),C.azulInfo)}
+              {ch('c','Es comisión',comOpen,()=>{ if(comOpen){ setAnioPickFor(null); return } setComSoc(''); setComOrig(''); setAnioPickFor('com:'+b.id) },C.tealText)}
+              {onReclasificarTercero&&ch('x','Es de un externo',extOpen,()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')},C.soonText)}
               {sug&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>sugerido: {sug==='comision'?'Comisión':'Por externo'}</span>}
             </div> }
           // Comisión: queda billing_type='comision', con su origen (texto) y el socio que la generó (learnings socio_factura, fuente de Por socio).
@@ -15298,8 +15384,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               </div>
               {sc&&!confirming&&<div style={{fontSize:11,color:C.muted,marginTop:10}}>Se parece a <b style={{color:C.accent}}>{sc.name}</b> <span onClick={()=>doAssignCli(e,sc.id)} style={{color:C.accent,fontWeight:700,cursor:'pointer',marginLeft:3,whiteSpace:'nowrap'}}>· Sí, es <Gl n='chevron'/></span></div>}
               {assignOpen&&<div style={{marginTop:10}}><AsignarClienteInline bill={e.src==='sii'?{receptor_rut:e.rut,receptor_name:e.nm}:e.b} clients={clients} onAssign={(_,cid2)=>doAssignCli(e,cid2)} label='Asignar cliente' placeholder='Buscar cliente por nombre o RUT…'/></div>}
+              {e.cat==='vta'&&b&&<AsignarVentaFactura factura={b} sales={sales} billing={billing} onHecho={()=>{ onRefresh&&onRefresh() }}/>}
               {e.cat==='vta'&&b&&tipoChips(e,b,{ventaOpen,extOpen})}
-              {ventaOpen&&salePicker(cid,(sid)=>doVenta(e,sid))}
               {extOpen&&extPanel(b)}
               {b&&anioPickFor===('com:'+b.id)&&comPanel(e,b)}
               {rsOpen&&<div style={{marginTop:10}}>{ents.length?<select defaultValue='' onChange={ev=>{ if(ev.target.value) doRS(e,ev.target.value) }} style={{width:'100%',fontSize:11.5,padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Asignar razón social…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${fmtRut(en.rut)}`:''}</option>)}</select>:<div style={{fontSize:10.5,color:C.muted}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(b)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>}</div>}
@@ -26952,6 +27038,8 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
   const [ficRs,setFicRs] = useState('all')   // filtro por razón social en la ficha (rsKey | 'all')
   const [ficEst,setFicEst] = useState({})   // colapso de los acordeones por estado en la ficha
   const [vSec,setVSec] = useState({})   // colapso de las secciones-icono de Ventas (Proyectos/Facturas), colapsadas por defecto
+  const [svOpen,setSvOpen] = useState(null)   // factura sin venta con la asignación desplegada
+  const sinVentaF = all.filter(b=>catSinClienteVenta(b)==='vta')   // misma regla que Facturación › Por clasificar
   const vtog = k => setVSec(s=>({...s,[k]:!s[k]}))
   const [facEje,setFacEje] = useState('estado')   // eje de la sección Facturas: 'estado' | 'anio' | 'proyecto'
   const [fConc,setFConc] = useState([]); const [fMovs,setFMovs] = useState([])   // conciliación del cliente para ver el movimiento de una factura conciliada
@@ -27034,6 +27122,16 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
         }
         return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:10}}>
           {VHdr({icon:'briefcase',title:'Proyectos',purpose:'cuánto falta cobrar',k:'proyectos',summary:`${activas.length} vigente${activas.length!==1?'s':''} · ${terminadas.length} terminado${terminadas.length!==1?'s':''}`})}
+          {/* Facturas del cliente sin venta: aviso siempre visible (aunque Proyectos esté colapsado) con la misma asignación de Por clasificar. */}
+          {sinVentaF.map(b=>{ const op=svOpen===b.id; return <div key={b.id} style={{padding:'0 13px 10px'}}>
+            <div onClick={()=>setSvOpen(op?null:b.id)} style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:10,padding:'9px 11px',cursor:'pointer',minWidth:0}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||b.invoice_no} sin venta</span>
+              {isDesktop&&<span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap'}}>· {fmtFechaDMY(b.issued_at)}</span>}
+              <span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>
+              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
+            </div>
+            {op&&<AsignarVentaFactura factura={b} sales={sales} billing={billing} onHecho={()=>setSvOpen(null)}/>}
+          </div> })}
           {vSec.proyectos&&<div style={{padding:'6px 13px 12px'}}>
             {onAddSale&&<button onClick={onAddSale} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:9}}>+ Venta</button>}
             {activas.length===0&&terminadas.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 2px 6px'}}>Sin ventas registradas.</div>}
@@ -42576,6 +42674,8 @@ export default function App() {
   const [pmoSug,setPmoSug]=useState([])                  // pmo_sugerencias: propuestas del Agente PMO (gasto/correo→hito) con compuerta
   const [pmoOps,setPmoOps]=useState(DEMO?(demoData.pmo_operaciones||[]):[])   // pmo_operaciones: biblioteca configurable de pasos por tipo de operación
   const [billingAll,setBilling]=useState([])
+  // Una asignación hecha fuera de Facturación (Bandeja, ficha del cliente) recarga las facturas para que todas las vistas la vean.
+  useEffect(()=>{ const f=async()=>{ if(DEMO) return; const nb=await getBilling().catch(()=>null); if(nb) setBilling(nb) }; _billingCambio.add(f); return ()=>{ _billingCambio.delete(f) } },[])
   // Flip literal Pendiente→Vencido: una vez al cargar, marca las facturas cuyo vencimiento de pago (emisión+30) ya pasó. La app igual las trata como vencidas por color; esto deja el ESTADO guardado al día.
   const vencFlipDone=useRef(false)
   useEffect(()=>{ if(vencFlipDone.current||!billingAll.length) return; vencFlipDone.current=true
@@ -45280,7 +45380,7 @@ export default function App() {
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
-            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} onIrSinVenta={()=>navTo({tab:'billing',billingIntent:'porcompletar'})} onBillingCambio={async()=>{const nb=await getBilling().catch(()=>null);if(nb)setBilling(nb)}} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
+            {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} onIrSinVenta={()=>navTo({tab:'billing',billingIntent:'porcompletar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='causas'&&<CausasEstudio isDesktop={isDesktop} clients={clients} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='contactos'&&<ContactosClientes key={contactosKey} isDesktop={isDesktop} clients={clients} sales={sales} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha} onBuscarGmail={()=>setModal({type:'gmailContactos'})}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
