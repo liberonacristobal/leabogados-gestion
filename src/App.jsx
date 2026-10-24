@@ -726,6 +726,9 @@ function huecoFIFO(saleBills=[]){
   const key=b=>{ const cn=cuotaNMof(b.concept); return cn?cn.n:9999 }
   return abiertas.slice().sort((a,b)=> (key(a)-key(b)) || String(a.due||'').localeCompare(String(b.due||'')))[0]
 }
+// Ventas que YA empezaron a facturar (al menos una factura emitida, no anulada ni de reembolso). Solo en ellas una cuota vencida
+// sin emitir es un olvido: un trabajo activo sin ninguna factura puede no haber empezado su facturación a propósito (usuario 24-10).
+const ventasFacturando = billing => new Set((billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(b.billing_type||'')!=='reembolso'&&b.sale_id).map(b=>String(b.sale_id)))
 // cuotasOlvidadas: programadas SIN emitir que quedaron ATRÁS de una cuota ya emitida de la misma venta
 // (el caso "cobré la 2ª sin la 1ª" — señal casi segura de un salto). Secundario: sin nº, por mes de devengo
 // anterior a una emitida. Alimenta el aviso en el cotejo y el correo del día 6. PURO, read-only.
@@ -4626,7 +4629,8 @@ function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds
     const hoy=new Date().toISOString().slice(0,10)
     const vencMonto=vencidoTot
     const vencN=vencidoBills.length
-    const progVenc=(billingProj||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy)
+    const _fact=ventasFacturando(billing)   // solo trabajos que ya empezaron a facturar (regla del usuario 24-10)
+    const progVenc=(billingProj||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy && (!b.sale_id || _fact.has(String(b.sale_id))))
     const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
     const porIdent=ingresosPorAnioVenta.porIdentificar||0
     const ingYTD_a=ingresosPorAnioVenta.total||0
@@ -14554,8 +14558,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               // Radar "Cuotas vencidas sin facturar": programadas de meses CERRADOS (antes del actual), dentro de la vida de la app (2026-06-06), de ventas Activas, que no marcaste "no corresponde". Candidatas a emitir, por revisar.
               const _m1=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`
               const _saleAct={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) _saleAct[String(s.id)]=s.status })
-              const _cubV=cuotasCubiertasVenta(billing,sales)
-              const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id))&&!_cubV.get(String(b.id))?.total)
+              const _cubV=cuotasCubiertasVenta(billing,sales), _fact=ventasFacturando(billing)
+              const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&_fact.has(String(b.sale_id))&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id))&&!_cubV.get(String(b.id))?.total)
               const sinEmitirN=sinEmitirCands.length
               const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
@@ -14955,8 +14959,8 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
-          const cubV=cuotasCubiertasVenta(billing,sales)
-          const cands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&saleById[String(b.sale_id)]&&!saleById[String(b.sale_id)].deleted_at&&saleById[String(b.sale_id)].status==='Activo'&&b.due&&b.due>='2026-06-06'&&b.due<m1&&!noEmitirSet.has(String(b.id))&&!cubV.get(String(b.id))?.total)
+          const cubV=cuotasCubiertasVenta(billing,sales), fact=ventasFacturando(billing)
+          const cands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&saleById[String(b.sale_id)]&&!saleById[String(b.sale_id)].deleted_at&&saleById[String(b.sale_id)].status==='Activo'&&fact.has(String(b.sale_id))&&b.due&&b.due>='2026-06-06'&&b.due<m1&&!noEmitirSet.has(String(b.id))&&!cubV.get(String(b.id))?.total)
           const byCli={}; cands.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
           keys.forEach(k=>byCli[k].sort((x,y)=>String(x.due).localeCompare(String(y.due))))
