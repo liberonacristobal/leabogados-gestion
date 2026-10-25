@@ -22,7 +22,7 @@ import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../supabase/functions/_shared/gastosReglas.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
-import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir } from '../supabase/functions/_shared/ventasReglas.js'
+import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
 // Lectores de PDF y Word: se cargan la primera vez que se lee un documento (no en la apertura de la app; pesan cerca de 1 MB).
@@ -15507,6 +15507,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
           const cands=cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1})
+          const recib=recibidoACuenta(cands,anticipos,sales)
           const byCli={}; cands.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
           keys.forEach(k=>byCli[k].sort((x,y)=>String(x.due).localeCompare(String(y.due))))
@@ -15531,7 +15532,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                       <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12.5,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s?.title||b.concept||'Cuota'}</div>
-                          <div style={{fontSize:10.5,color:C.overdueText,marginTop:1}}>Vencía {mesLbl(b.due)} · sin emitir</div>
+                          <div style={{fontSize:10.5,color:C.overdueText,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vencía {mesLbl(b.due)} · sin emitir{recib.get(String(b.id))?<span style={{color:C.muted}}> · {fmt(recib.get(String(b.id)))} ya recibido</span>:null}</div>
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(b.amount||0)}</div>
                       </div>

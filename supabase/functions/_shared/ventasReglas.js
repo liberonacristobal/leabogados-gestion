@@ -85,6 +85,21 @@ export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = 
     && fact.has(String(b.sale_id)) && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
 }
 
+// Saldo a favor ya recibido a cuenta de las cuotas por emitir: los anticipos disponibles del MISMO trabajo se reparten por orden de
+// vencimiento (FIFO). La factura se emite igual por el total; lo recibido se imputa después. El subarriendo queda fuera: cada pago
+// es de su mes (anticiposSubarriendo). Devuelve Map id de la cuota → monto recibido.
+export function recibidoACuenta(cuotas = [], anticipos = [], sales = []) {
+  const sub = new Set((sales || []).filter(s => s && (s.cobro_config?.subarriendo === true || s.area === 'Subarriendo')).map(s => String(s.id)))
+  const disp = {}
+  ;(anticipos || []).forEach(a => { if (a && a.estado === 'disponible' && a.sale_id && !sub.has(String(a.sale_id)) && Number(a.monto) > 0) disp[String(a.sale_id)] = (disp[String(a.sale_id)] || 0) + Number(a.monto) })
+  const out = new Map()
+  ;[...(cuotas || [])].sort((x, y) => String(x.due || '').localeCompare(String(y.due || ''))).forEach(b => {
+    const k = String(b.sale_id || ''), r = Math.min(disp[k] || 0, Number(b.amount) || 0)
+    if (r >= 1) { out.set(String(b.id), r); disp[k] -= r }
+  })
+  return out
+}
+
 export const DETENIDO_DIAS = 90
 // Trabajos ACTIVOS sin movimiento en `dias`: ni factura del trabajo, ni gasto, tarea u horas del cliente (la actividad del cliente
 // cuenta para todos sus trabajos: así no se marca de más). Dos casos:
