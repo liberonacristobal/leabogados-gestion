@@ -3494,12 +3494,15 @@ function NotificacionesPagina({user, isAdmin}){
   const [estado,setEstado] = useState('cargando')   // cargando | activas | inactivas | bloqueadas | sin-soporte | instalar
   const [msg,setMsg] = useState(null)               // {tipo:'ok'|'error', texto}
   const [trabajando,setTrabajando] = useState(false)
+  const [tiposOff,setTiposOff] = useState([])   // tipos de aviso apagados en este dispositivo (push_suscripciones.tipos_off)
+  const [endpoint,setEndpoint] = useState(null)
   const leerEstado = useCallback(async()=>{
     if(DEMO){ setEstado('inactivas'); return }
     if(ios && !instalada){ setEstado('instalar'); return }
     if(!soporta){ setEstado('sin-soporte'); return }
     if(Notification.permission==='denied'){ setEstado('bloqueadas'); return }
-    try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription(); setEstado(sub&&Notification.permission==='granted'?'activas':'inactivas') }catch(_){ setEstado('inactivas') }
+    try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription(); setEstado(sub&&Notification.permission==='granted'?'activas':'inactivas')
+      if(sub){ setEndpoint(sub.endpoint); const {data}=await supabase.from('push_suscripciones').select('tipos_off').eq('endpoint',sub.endpoint).maybeSingle(); setTiposOff(data?.tipos_off||[]) } }catch(_){ setEstado('inactivas') }
   },[soporta,ios,instalada])
   useEffect(()=>{ leerEstado() },[leerEstado])
   const probar = async()=>{ const {data,error}=await supabase.functions.invoke('push',{body:{action:'probar'}}); if(error||data?.error) throw new Error(data?.error||error.message)
@@ -3512,7 +3515,7 @@ function NotificacionesPagina({user, isAdmin}){
       const {data,error}=await supabase.functions.invoke('push',{body:{action:'clave'}}); if(error||!data?.clave) throw new Error(data?.error||error?.message||'Sin clave del servidor')
       const reg=await navigator.serviceWorker.ready
       const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_b64aBytes(data.clave)})
-      const j=sub.toJSON()
+      const j=sub.toJSON(); setEndpoint(j.endpoint)
       const {error:e2}=await supabase.from('push_suscripciones').upsert({email:user?.email, endpoint:j.endpoint, p256dh:j.keys?.p256dh, auth:j.keys?.auth, dispositivo:String(navigator.userAgent||'').slice(0,200), activo:true},{onConflict:'endpoint'})
       if(e2) throw e2
       setEstado('activas')
@@ -3536,7 +3539,13 @@ function NotificacionesPagina({user, isAdmin}){
   const CHIP = { activas:['Activadas en este dispositivo',C.greenText,C.greenBg], inactivas:['Desactivadas',C.muted,C.bgSoft], bloqueadas:['Bloqueadas en el navegador',C.overdueText,C.overdueBg],
     'sin-soporte':['No disponibles en este navegador',C.muted,C.bgSoft], instalar:['Falta agregar la app al inicio',C.soonText,C.soonBg], cargando:['Revisando…',C.muted,C.bgSoft] }[estado]
   const btn = (txt,on,principal)=><button onClick={on} disabled={trabajando} style={{height:40,padding:'0 16px',borderRadius:10,border:principal?'none':`1px solid ${C.border}`,background:principal?C.accent:'#fff',color:principal?'#fff':C.accent,fontSize:13,fontWeight:700,cursor:trabajando?'default':'pointer',opacity:trabajando?.6:1}}>{txt}</button>
-  const avisos = [['Tareas','Asignadas o delegadas a ti, y terminadas de las que asignaste.'], ...(isAdmin?[['Pagos recibidos','Pagos de clientes conciliados desde el banco.']]:[])]
+  // Tipos de aviso (mismos códigos que _shared/push.ts). Cada dispositivo apaga los que no quiere.
+  const avisos = [['tareas','Tareas','Asignadas o delegadas a ti, y terminadas de las que asignaste.'],['causas','Causas en tabla','Tu causa en la tabla del día y cuando se acerca su turno.'],
+    ['fondos','Fondos recibidos','Fondos de tus clientes conciliados desde el banco.'],['notaria','Documentos de la notaría','Escrituras, extractos y cartas de tus clientes.'],
+    ['clientes','Remates y Diario Oficial','Remate de la Tesorería o publicación de un cliente tuyo.'],
+    ...(isAdmin?[['pagos','Pagos recibidos','Pagos de clientes conciliados desde el banco.'],['normativa','Normativa del SII','Oficios, circulares y resoluciones nuevas.'],['sistema','Procesos y cartola','Un proceso automático falló o falta la cartola del banco.']]:[])]
+  const cambiarTipo = async k=>{ const nv=tiposOff.includes(k)?tiposOff.filter(x=>x!==k):[...tiposOff,k]; setTiposOff(nv)
+    if(DEMO||!endpoint) return; const {error}=await supabase.from('push_suscripciones').update({tipos_off:nv}).eq('endpoint',endpoint); if(error){ setTiposOff(tiposOff); setMsg({tipo:'error',texto:'No se pudo guardar: '+error.message}) } }
   return (
     <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:560}}>
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',display:'flex',flexDirection:'column',gap:10}}>
@@ -3556,7 +3565,10 @@ function NotificacionesPagina({user, isAdmin}){
       </div>
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px'}}>
         <div style={{...SEC_LBL,marginBottom:8}}>Qué avisos llegan</div>
-        {avisos.map(([t,d],i)=><div key={t} style={{borderTop:i?`1px solid ${C.bgSoft}`:'none',padding:'8px 0'}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:12,color:C.muted,marginTop:2,lineHeight:1.45}}>{d}</div></div>)}
+        {avisos.map(([k,t,d],i)=><div key={k} style={{borderTop:i?`1px solid ${C.bgSoft}`:'none',padding:'9px 0',display:'flex',alignItems:'center',gap:12}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:12,color:C.muted,marginTop:2,lineHeight:1.45}}>{d}</div></div>
+          <Switch on={estado==='activas'&&!tiposOff.includes(k)} disabled={estado!=='activas'} onToggle={()=>cambiarTipo(k)}/></div>)}
+        <div style={{fontSize:11.5,color:C.muted,marginTop:6}}>De 21:00 a 8:00 no suenan: llegan juntos a las 8:00. Las causas en tabla, al momento.</div>
       </div>
     </div>
   )
@@ -5527,7 +5539,7 @@ function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], 
   const [openArea,setOpenArea] = useState(null)   // área de servicios abierta
   const [biSec,setBiSec] = useState(null)       // sección del índice abierta (hub): oport|cartera|servicios|tendencias|ia
   const [openFoco,setOpenFoco] = useState(null) // foco del SII expandido en el héroe
-  const [radarOpen,setRadarOpen] = useState(false) // lista de focos del SII replegada por defecto (evita el muro de novedades)
+  const [radarOpen,setRadarOpen] = useState(()=>{ try{ if(sessionStorage.getItem('abrir_radar')){ sessionStorage.removeItem('abrir_radar'); return true } }catch(_){} return false }) // replegada por defecto (evita el muro de novedades); abierta si se llega desde el aviso de normativa
   const [briefBusy,setBriefBusy] = useState(false)  // generando brief IA del foco
   const [memoBusy,setMemoBusy] = useState(false)    // generando memo de conversación
   const [memoText,setMemoText] = useState(null)     // memo generado (editable)
@@ -43290,6 +43302,7 @@ export default function App() {
       if(ir==='gastos'||ir==='notaria') return setTab('expenses')
       if(ir==='cajachica') return setTab('cajachica')
       if(ir==='tareas') return setTab('tasks')
+      if(ir==='causas') return setTab('causas')
       if(userRole==='limited'&&ir==='porcobrar') return setTab('porCobrarMios')   // correo «Tu semana» del abogado: por cobrar, pedir fondos y rendir
       if(userRole==='limited'&&ir==='comisiones') return setTab('misComisiones')
       // Vistas de conciliación: solo admin.
@@ -43300,7 +43313,9 @@ export default function App() {
       else if(ir==='cierre'){ setTab('billing'); setBillingIntent('cierre') }
       else if(ir==='sinfacturar'){ setTab('billing'); setBillingIntent('sinfacturar') }
       else if(ir==='compras'){ setOficinaSub('compras'); setTab('presupuestoOficina') }   // resumen del lunes → Compras · Por pagar   // correo de pendientes → Trabajos sin facturar   // correo de cierre del día 6 → página Cierre de mes
-      else if(ir==='cobranza') setTab('cobranza')   // correo del lunes → "Vence esta semana" abre Cobranza
+      else if(ir==='cobranza') setTab('cobranza')
+      else if(ir==='procesos') setTab('procesos')
+      else if(ir==='radar'){ try{ sessionStorage.setItem('abrir_radar','1') }catch(_){} setTab('inteligencia') }   // aviso de normativa del SII → Radar abierto   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
   },[user,userRole])
   // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).

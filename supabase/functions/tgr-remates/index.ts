@@ -8,6 +8,7 @@
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { todasRest } from "../_shared/paginar.js";
+import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
     // Lo que ya no está en la nómina: remate realizado, suspendido o retirado.
     await rest(`tgr_remates?vigente=eq.true&ultima_vez=lt.${hoy}`, { method: "PATCH", body: JSON.stringify({ vigente: false }) });
     // Cruce con los clientes: nombre de la ficha o de una razón social igual al dueño.
-    const [clients, ents] = await Promise.all([todas("clients?select=id,name,estudio_id,is_internal"), todas("client_entities?select=client_id,name")]);
+    const [clients, ents] = await Promise.all([todas("clients?select=id,name,estudio_id,is_internal,abogado_responsable"), todas("client_entities?select=client_id,name")]);
     const porNombre = new Map<string, { id: string; estudio_id: string }>();
     for (const c of clients) if (!c.is_internal && norm(c.name).length > 6) porNombre.set(norm(c.name), c);
     for (const e of ents) { const c = clients.find((x: { id: string }) => x.id === e.client_id); if (c && norm(e.name).length > 6) porNombre.set(norm(e.name), c); }
@@ -78,6 +79,8 @@ Deno.serve(async (req) => {
       const c = clienteDe(f)!;
       await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "tgr.remate_cliente", table_name: "clients", record_id: c.id, estudio_id: c.estudio_id || "lea",
         detail: { title: `Propiedad en remate (TGR): ${f.dueno} · rol ${f.rol_formato} · ${f.juzgado} ${f.rol_judicial || ""} · remate ${String(f.fecha_remate || "").slice(0, 10).split("-").reverse().join("-")}`, remate: f.sk } }) }).catch(() => null);
+      const aA = await emailsDeNombres(SB_URL, SB_KEY, [c.abogado_responsable]);
+      if (aA.length) await enviarPush(SB_URL, SB_KEY, aA, { titulo: "Propiedad de un cliente en remate", cuerpo: `${c.name} · rol ${f.rol_formato} · remate ${String(f.fecha_remate || "").slice(0, 10).split("-").reverse().join("-")}`, url: `/?cliente=${c.id}`, etiqueta: `remate-${f.sk}` }, "clientes").catch(() => null);
     }
     return json({ ok: true, remates: filas.length, nuevos: filas.filter((f: { sk: string }) => !previos.has(f.sk)).length, de_clientes: deClientes.length, avisos: nuevos.length });
   } catch (e) {

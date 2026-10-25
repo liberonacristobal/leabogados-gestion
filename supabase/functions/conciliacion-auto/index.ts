@@ -26,7 +26,7 @@
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, elegirAnticipo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
-import { enviarPush } from "../_shared/push.ts";
+import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 import { todasRest } from "../_shared/paginar.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 import { nombreGenerico } from "../_shared/contrapartes.js";
@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
     const [pool, clients, ents, concAll] = await Promise.all([
       // El pool se pide por páginas (PostgREST corta en 1.000 filas): con más facturas abiertas, una «única» podría no serlo.
       (async () => { const out: any[] = []; for (let i = 0; i < 20; i++) { const r = await fetch(`${SB_URL}/rest/v1/rpc/conciliacion_pool_facturas?order=id.asc`, { method: "POST", headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` }, body: "{}" }); if (!r.ok) throw new Error(`conciliacion_pool_facturas: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out; })(),
-      todas("clients?select=id,name,rut"),
+      todas("clients?select=id,name,rut,abogado_responsable"),
       todas("client_entities?select=client_id,rut"),
       todas("conciliacion?select=movimiento_id,tipo_destino,factura_id,gasto_id,anticipo_id,monto_aplicado,created_at"),
     ]);
@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
     if (sim) for (let i = fondosAll.length - 1; i >= 0; i--) if (sim.sinFondos.has(fondosAll[i].id)) fondosAll.splice(i, 1);
     const anticiposAll = cids.length ? await todas(`anticipos?select=id,client_id,monto,fecha,nota,estado,created_at&monto=gt.0&client_id=in.${enLista(cids)}`) : [];
     const nombre: Record<string, string> = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+    const abogadoDe: Record<string, string> = Object.fromEntries(clients.map((c) => [c.id, c.abogado_responsable || ""]));
     const rutsCli: Record<string, Set<string>> = {};
     const addR = (cid: string, r: string) => { const n = normRut(r); if (!n || !cid) return; (rutsCli[cid] = rutsCli[cid] || new Set()).add(n); };
     clients.forEach((c) => addR(c.id, c.rut)); ents.forEach((e) => addR(e.client_id, e.rut));
@@ -228,7 +229,7 @@ Deno.serve(async (req) => {
       if (d.tipo === "ninguno") continue;
       if (d.tipo === "duda") { dudas.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], motivo: d.motivo }); continue; }
       const sel = d.tipo === "fondo" ? [d.fondo.id] : d.tipo === "anticipo" ? [d.anticipo.id] : (d.facturas as { id: string }[]).map((b) => b.id); sel.forEach((x) => used.add(x));
-      hechos.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], destino: d.motivo });
+      hechos.push({ mov: m.id, fecha: m.fecha, monto: m.monto, cliente: nombre[m.cliente_id], destino: d.motivo, tipo: d.tipo, cid: m.cliente_id });
       if (dryRun) continue;
       const nuevas: string[] = [];
       // Para deshacer si un paso falla a medias: estado previo de cada factura tocada y comisiones que pasaron a «por pagar».
@@ -578,15 +579,24 @@ Deno.serve(async (req) => {
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: d.proveedor_id ? `proveedores.${d.proveedor_id}.factura` : "compras.pago_enlazado", table_name: "sii_compras_docs", record_id: d.id, estudio_id: "lea", detail: { title: `Factura de compra N° ${d.folio} de ${d.emisor_name || "proveedor"} ↔ pago del ${dmy(m.fecha)} (conciliación automática)`, monto, movimiento: m.id } }) }).catch(() => null);
       }
     } catch (e) { compras.error = String((e as Error).message || e); }
-    // Pagos que entraron y se conciliaron solos en esta corrida → al teléfono de los socios (si activaron las notificaciones).
+    // Lo que entró y se concilió solo en esta corrida → al teléfono (si activaron las notificaciones):
+    //   · pagos de facturas y anticipos → a los socios (tipo «pagos»);
+    //   · fondos para gastos → al abogado a cargo del cliente, para seguir con la notaría o el trámite (tipo «fondos»).
     if (!dryRun && hechos.length) {
       try {
-        const hs = hechos as { cliente?: string; monto: number }[];
-        const total = hs.reduce((a, h) => a + (Number(h.monto) || 0), 0);
-        const admins = (await todas("miembros?select=email&rol=eq.admin")).map((x: { email: string }) => x.email);
-        await enviarPush(SB_URL, SB_KEY, admins, hs.length === 1
-          ? { titulo: "Pago recibido", cuerpo: `${hs[0].cliente || "Cliente"} · ${fmt(hs[0].monto)} · conciliado`, url: "/?ir=cobros", etiqueta: "pagos" }
-          : { titulo: `${hs.length} pagos recibidos`, cuerpo: `${fmt(total)} · ${hs.slice(0, 3).map((h) => h.cliente || "Cliente").join(", ")}${hs.length > 3 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "pagos" });
+        const hs = hechos as { cliente?: string; monto: number; tipo: string; cid: string }[];
+        const pagos = hs.filter((h) => h.tipo !== "fondo"), fondos = hs.filter((h) => h.tipo === "fondo");
+        if (pagos.length) {
+          const total = pagos.reduce((a, h) => a + (Number(h.monto) || 0), 0);
+          const admins = (await todas("miembros?select=email&rol=eq.admin")).map((x: { email: string }) => x.email);
+          await enviarPush(SB_URL, SB_KEY, admins, pagos.length === 1
+            ? { titulo: "Pago recibido", cuerpo: `${pagos[0].cliente || "Cliente"} · ${fmt(pagos[0].monto)} · conciliado`, url: "/?ir=cobros", etiqueta: "pagos" }
+            : { titulo: `${pagos.length} pagos recibidos`, cuerpo: `${fmt(total)} · ${pagos.slice(0, 3).map((h) => h.cliente || "Cliente").join(", ")}${pagos.length > 3 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "pagos" }, "pagos");
+        }
+        for (const f of fondos) {
+          const a = await emailsDeNombres(SB_URL, SB_KEY, [abogadoDe[f.cid]]);
+          if (a.length) await enviarPush(SB_URL, SB_KEY, a, { titulo: "Fondos recibidos", cuerpo: `${f.cliente || "Cliente"} · ${fmt(f.monto)}`, url: `/?cliente=${f.cid}`, etiqueta: `fondos-${f.cid}` }, "fondos");
+        }
       } catch { /* avisar no frena la conciliación */ }
     }
     return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, notaria: nota, compras_sii: compras, nombres_por_rut: nombres });

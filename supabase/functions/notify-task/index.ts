@@ -317,7 +317,7 @@ serve(async (req) => {
     const accion = tipo === "delegada" ? "delegó" : tipo === "terminada" ? "terminó" : "te asignó";
     const push = await enviarPush(SB_URL, SERVICE_KEY, [toEmail, ...ccEmail], {
       titulo: subjectPrefix, cuerpo: `${quienAvisa} ${accion}: ${titulo}${clienteName ? ` · ${clienteName}` : ""}`, url: "/?ir=tareas", etiqueta: `tarea-${task.id || titulo}`,
-    }).catch(() => null);
+    }, "tareas").catch(() => null);
 
     return new Response(JSON.stringify({ ok: true, sent_to: toEmail, push }), {
       headers: { "Content-Type": "application/json", ...cors(req) },

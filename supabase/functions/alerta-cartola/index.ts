@@ -9,6 +9,7 @@
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
+import { enviarPush } from "../_shared/push.ts";
 
 const ESTUDIO = "Liberona Escala Abogados";
 const SOCIOS = ["cl@leabogados.cl", "ee@leabogados.cl"];
@@ -121,6 +122,7 @@ ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpaddin
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
+    await enviarPush(SB_URL, SB_KEY, [...SOCIOS], { titulo: uno ? "Falta la cartola del banco" : `Faltan ${gap.length} cartolas del banco`, cuerpo: uno ? `Cartola BICE del ${dmy(gap[0])} sin cargar` : `Días sin cartola: ${gap.slice(0, 4).map(dmy).join(", ")}${gap.length > 4 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "cartola" }, "sistema").catch(() => null);
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
