@@ -14,6 +14,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { cargarEquipo, sinTildes } from "../_shared/equipo.js";
+import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
@@ -64,11 +65,12 @@ serve(async (req) => {
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
     const { data: clients } = await sb.from("clients").select("id,name");
-    const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
+    const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,issued_at,created_at,billing_type,dte_xml,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
     const { data: movs } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
-    const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status").order("id"));
+    const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf").order("id"));
+    const { data: ufRaw } = await selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo", "uf").order("fecha"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
     const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
@@ -106,14 +108,12 @@ serve(async (req) => {
     const vencido = porCobrarB.filter((b: Record<string, unknown>) => String(b.due || "") && String(b.due || "") < todayCL).reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
     const porEnviar = vivos.filter((b: Record<string, unknown>) => b.dte_track_id && !b.email_sent_at && ["Pendiente", "Vencido"].includes(b.status as string)).length;
 
-    // ── RADAR: cuotas vencidas sin facturar (firm-wide). Programadas de MESES CERRADOS (due < 1º del mes actual, >= vida de la app 2026-06-06) de ventas Activo, no silenciadas (learnings cuota_no_emitir). CANDIDATAS por revisar — el titular es el conteo, nunca "$ perdidos".
-    const APP_START = "2026-06-06";
+    // ── RADAR: cuotas vencidas sin facturar (regla única cuotasSinEmitir, la misma de Facturación y del cierre de mes). Candidatas
+    // por revisar: el titular es el conteo, nunca "$ perdidos".
     const firstOfMonth = todayCL.slice(0, 7) + "-01";
-    // deno-lint-ignore no-explicit-any
-    const saleById: Record<string, any> = {}; (salesRaw || []).forEach((s: any) => { saleById[String(s.id)] = s; });
     const noEmitir = new Set((noEmitirRaw || []).map((r: Record<string, unknown>) => String(r.key)));
-    // deno-lint-ignore no-explicit-any
-    const sinEmitirN = vivos.filter((b: any) => b.status === "Programada" && b.sale_id && saleById[String(b.sale_id)]?.status === "Activo" && String(b.due || "") >= APP_START && String(b.due || "") < firstOfMonth && !noEmitir.has(String(b.id))).length;
+    const uf = Object.fromEntries((ufRaw || []).map((r: Record<string, unknown>) => [String(r.fecha), Number(r.valor)]));
+    const sinEmitirN = cuotasSinEmitir({ billing: vivos, sales: salesRaw || [], uf, noEmitir, hasta: firstOfMonth }).length;
 
     // ── COBRANZA a caja del año + semana (plano abono/conciliación) y META (annual_targets).
     const year = todayCL.slice(0, 4);

@@ -54,6 +54,37 @@ export function trabajosSinFacturar({ sales = [], billing = [], uf = {}, ufHoy =
   return out.sort((a, b) => b.monto - a.monto)
 }
 
+// Cuotas programadas que YA están cubiertas por su propia venta (fuente única para el flujo y el radar «sin facturar»).
+// Por venta activa: lo facturado (DTE emitidos de la venta) + cuotas anticipadas + programadas abiertas no puede superar el
+// total acordado. Si lo supera, el exceso cubre las programadas más antiguas (FIFO): ya se facturaron con otro texto,
+// otra fecha u otro plan. Cubierta ≥ 80% de la cuota → cubierta entera (diferencia de UF o de plan). uf = {fecha: valor}:
+// sin UF de alguna fecha no se infiere nada (no se esconde plata).
+export function cuotasCubiertasVenta(billing = [], sales = [], uf = {}) {
+  const out = new Map(), porVenta = {}
+  ;(billing || []).forEach(b => { if (b && !b.deleted_at && b.sale_id && b.status !== 'Anulada' && !['reembolso', 'nota_credito'].includes(b.billing_type)) (porVenta[String(b.sale_id)] = porVenta[String(b.sale_id)] || []).push(b) })
+  ;(sales || []).forEach(s => { if (!s || s.deleted_at || s.status !== 'Activo') return; const bs = porVenta[String(s.id)]; if (!bs) return
+    // Recurrentes (mensual / asesoría permanente): el monto de la venta es la cuota del mes, no el total → no aplica.
+    const cv = coberturaVenta(s, bs, uf); if (!cv) return
+    const { plan, usado, prog, ok } = cv
+    if (!ok || !prog.length) return
+    let exceso = usado + prog.reduce((a, x) => a + x.uu, 0) - plan
+    if (!(exceso > plan * 0.03)) return
+    prog.sort((x, y) => String(x.b.due || '').localeCompare(String(y.b.due || ''))).forEach(({ b, uu }) => { if (exceso <= 0 || !(uu > 0)) return; const t = Math.min(exceso, uu)
+      out.set(String(b.id), t >= uu * 0.8 ? { total: true, m: Number(b.amount) || 0 } : { total: false, m: (Number(b.amount) || 0) * t / uu }); exceso -= uu }) })
+  return out
+}
+
+// Radar «Cuotas vencidas sin facturar» (fuente única: Facturación, resumen del lunes y cierre de mes): programadas que vencieron
+// antes de `hasta` (1º del mes en curso = meses cerrados) y dentro de la vida de la app, de ventas Activas que ya facturan, que no
+// están cubiertas por lo ya facturado y que nadie marcó «No corresponde» (learnings cuota_no_emitir). Candidatas por revisar.
+export const APP_DESDE = '2026-06-06'
+export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = new Set(), hasta, appDesde = APP_DESDE }) {
+  const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
+  const cub = cuotasCubiertasVenta(billing, sales, uf), fact = ventasFacturando(billing)
+  return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.sale_id && venta.get(String(b.sale_id))?.status === 'Activo'
+    && fact.has(String(b.sale_id)) && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
+}
+
 export const DETENIDO_DIAS = 90
 // Trabajos ACTIVOS sin movimiento en `dias`: ni factura del trabajo, ni gasto, tarea u horas del cliente (la actividad del cliente
 // cuenta para todos sus trabajos: así no se marca de más). Dos casos:
