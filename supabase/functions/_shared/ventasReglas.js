@@ -92,13 +92,16 @@ export const DETENIDO_DIAS = 90
 //   · 'con_saldo' — con facturas impagas → trabajo detenido con saldo (cobranza).
 // Con cuotas programadas o plan por facturar no entra: eso lo ven el radar y «Trabajos sin facturar». La app no ve el trabajo que va
 // solo por correo: son candidatos con compuerta. decididos = { sale_id: fecha «Sigue activo» } (vuelve a evaluarse pasados `dias`).
-export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tasks = [], horas = [], uf = {}, hoy, dias = DETENIDO_DIAS, decididos = {} }) {
+export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tasks = [], horas = [], pagos = [], uf = {}, hoy, dias = DETENIDO_DIAS, decididos = {} }) {
   const lim = new Date(new Date(String(hoy).slice(0, 10) + 'T12:00:00').getTime() - dias * 864e5).toISOString().slice(0, 10)
   const max = (m, k, v) => { const d = String(v || '').slice(0, 10); if (d && (!m[k] || d > m[k])) m[k] = d }
   const actCli = {}
   ;(expenses || []).forEach(e => e && !e.deleted_at && max(actCli, String(e.client_id), e.date))
   ;(tasks || []).forEach(t => { if (!t) return; max(actCli, String(t.client_id), t.created_at); max(actCli, String(t.client_id), t.completed_at) })
   ;(horas || []).forEach(h => h && max(actCli, String(h.client_id), h.fecha))
+  // Pagos recibidos (abonos del banco asignados al cliente): cuentan solo para el trabajo con saldo por cobrar (cuánto lleva sin
+  // moverse la cobranza). Para «parece terminado» no: un pago reciente suele ser el pago final.
+  const pagoCli = {}; (pagos || []).forEach(p => p && max(pagoCli, String(p.client_id), p.fecha))
   const porVenta = {}; (billing || []).forEach(b => { if (b && !b.deleted_at && b.sale_id) (porVenta[String(b.sale_id)] = porVenta[String(b.sale_id)] || []).push(b) })
   const out = []
   for (const s of sales || []) {
@@ -114,7 +117,8 @@ export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tas
     const progs = bs.filter(b => b.status === 'Programada' && !b.invoice_no)
     const porCobrar = emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).reduce((a, b) => a + Math.max(0, montoFactura(b) - (Number(b.paid_amount) || 0)), 0)
     const dias_ = Math.round((new Date(String(hoy).slice(0, 10) + 'T12:00:00') - new Date(ult + 'T12:00:00')) / 864e5)
-    if (porCobrar >= 1) { out.push({ s, tipo: 'con_saldo', ult, dias: dias_, porCobrar, facturas: emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).length }); continue }
+    if (porCobrar >= 1) { const ultS = [ult, pagoCli[String(s.client_id)] || ''].sort().pop(); if (ultS > lim) continue
+      out.push({ s, tipo: 'con_saldo', ult: ultS, dias: Math.round((new Date(String(hoy).slice(0, 10) + 'T12:00:00') - new Date(ultS + 'T12:00:00')) / 864e5), porCobrar, facturas: emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).length }); continue }
     if (progs.length) continue
     const cv = coberturaVenta(s, bs, uf)
     if (cv && (!cv.ok || cv.plan - cv.usado > Math.max(cv.enUF ? 1 : 10000, cv.plan * 0.03))) continue   // sin UF no se afirma que esté facturado
