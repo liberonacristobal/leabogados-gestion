@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { enviarPush } from "../_shared/push.ts";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -311,8 +312,14 @@ serve(async (req) => {
     } else {
       await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
     }
+    // Además del correo, al teléfono de quien lo recibe (si activó las notificaciones). Nunca frena el correo.
+    const quienAvisa = tipo === "delegada" ? (task.delegated_by || task.who || by) : tipo === "terminada" ? (task.who || "El responsable") : by;
+    const accion = tipo === "delegada" ? "delegó" : tipo === "terminada" ? "terminó" : "te asignó";
+    const push = await enviarPush(SB_URL, SERVICE_KEY, [toEmail, ...ccEmail], {
+      titulo: subjectPrefix, cuerpo: `${quienAvisa} ${accion}: ${titulo}${clienteName ? ` · ${clienteName}` : ""}`, url: "/?ir=tareas", etiqueta: `tarea-${task.id || titulo}`,
+    }).catch(() => null);
 
-    return new Response(JSON.stringify({ ok: true, sent_to: toEmail }), {
+    return new Response(JSON.stringify({ ok: true, sent_to: toEmail, push }), {
       headers: { "Content-Type": "application/json", ...cors(req) },
     });
 

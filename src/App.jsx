@@ -3484,6 +3484,83 @@ export class AppErrorBoundary extends Component {
     return this.props.children
   }
 }
+// ─── Notificaciones en este dispositivo (Web Push): activar, probar y desactivar. Avisos internos: tareas y pagos recibidos. ──
+// En el iPhone solo funcionan con la app agregada a la pantalla de inicio (Safari › Compartir › Agregar a inicio).
+const _b64aBytes = b64 => { const p='='.repeat((4-b64.length%4)%4); const raw=atob((b64+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0))) }
+function NotificacionesPagina({user, isAdmin}){
+  const soporta = typeof window!=='undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const ios = typeof navigator!=='undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent||'')
+  const instalada = typeof window!=='undefined' && (window.navigator.standalone===true || window.matchMedia?.('(display-mode: standalone)').matches)
+  const [estado,setEstado] = useState('cargando')   // cargando | activas | inactivas | bloqueadas | sin-soporte | instalar
+  const [msg,setMsg] = useState(null)               // {tipo:'ok'|'error', texto}
+  const [trabajando,setTrabajando] = useState(false)
+  const leerEstado = useCallback(async()=>{
+    if(DEMO){ setEstado('inactivas'); return }
+    if(ios && !instalada){ setEstado('instalar'); return }
+    if(!soporta){ setEstado('sin-soporte'); return }
+    if(Notification.permission==='denied'){ setEstado('bloqueadas'); return }
+    try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription(); setEstado(sub&&Notification.permission==='granted'?'activas':'inactivas') }catch(_){ setEstado('inactivas') }
+  },[soporta,ios,instalada])
+  useEffect(()=>{ leerEstado() },[leerEstado])
+  const probar = async()=>{ const {data,error}=await supabase.functions.invoke('push',{body:{action:'probar'}}); if(error||data?.error) throw new Error(data?.error||error.message)
+    return data?.enviados||0 }
+  const activar = async()=>{ setTrabajando(true); setMsg(null)
+    try{
+      if(DEMO){ setEstado('activas'); setMsg({tipo:'ok',texto:'Notificación de prueba enviada a este dispositivo.'}); return }
+      const perm = await Notification.requestPermission()
+      if(perm!=='granted'){ setEstado(perm==='denied'?'bloqueadas':'inactivas'); return }
+      const {data,error}=await supabase.functions.invoke('push',{body:{action:'clave'}}); if(error||!data?.clave) throw new Error(data?.error||error?.message||'Sin clave del servidor')
+      const reg=await navigator.serviceWorker.ready
+      const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_b64aBytes(data.clave)})
+      const j=sub.toJSON()
+      const {error:e2}=await supabase.from('push_suscripciones').upsert({email:user?.email, endpoint:j.endpoint, p256dh:j.keys?.p256dh, auth:j.keys?.auth, dispositivo:String(navigator.userAgent||'').slice(0,200), activo:true},{onConflict:'endpoint'})
+      if(e2) throw e2
+      setEstado('activas')
+      const n=await probar()
+      setMsg({tipo:'ok',texto:n?'Notificación de prueba enviada a este dispositivo.':'Activadas. La notificación de prueba no llegó: revisa que el teléfono permita avisos de FirmDesk.'})
+    }catch(e){ setMsg({tipo:'error',texto:'No se pudieron activar: '+(e.message||e)}) }
+    finally{ setTrabajando(false) }
+  }
+  const desactivar = async()=>{ setTrabajando(true); setMsg(null)
+    try{ if(!DEMO){ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription()
+        if(sub){ await supabase.from('push_suscripciones').update({activo:false}).eq('endpoint',sub.endpoint); await sub.unsubscribe() } }
+      setEstado('inactivas'); setMsg({tipo:'ok',texto:'Desactivadas en este dispositivo.'}) }
+    catch(e){ setMsg({tipo:'error',texto:'No se pudieron desactivar: '+(e.message||e)}) }
+    finally{ setTrabajando(false) }
+  }
+  const enviarPrueba = async()=>{ setTrabajando(true); setMsg(null)
+    try{ const n=DEMO?1:await probar(); setMsg(n?{tipo:'ok',texto:'Notificación de prueba enviada a este dispositivo.'}:{tipo:'error',texto:'No llegó a ningún dispositivo: vuelve a activarlas.'}) }
+    catch(e){ setMsg({tipo:'error',texto:'No se pudo enviar: '+(e.message||e)}) }
+    finally{ setTrabajando(false) }
+  }
+  const CHIP = { activas:['Activadas en este dispositivo',C.greenText,C.greenBg], inactivas:['Desactivadas',C.muted,C.bgSoft], bloqueadas:['Bloqueadas en el navegador',C.overdueText,C.overdueBg],
+    'sin-soporte':['No disponibles en este navegador',C.muted,C.bgSoft], instalar:['Falta agregar la app al inicio',C.soonText,C.soonBg], cargando:['Revisando…',C.muted,C.bgSoft] }[estado]
+  const btn = (txt,on,principal)=><button onClick={on} disabled={trabajando} style={{height:40,padding:'0 16px',borderRadius:10,border:principal?'none':`1px solid ${C.border}`,background:principal?C.accent:'#fff',color:principal?'#fff':C.accent,fontSize:13,fontWeight:700,cursor:trabajando?'default':'pointer',opacity:trabajando?.6:1}}>{txt}</button>
+  const avisos = [['Tareas','Asignadas o delegadas a ti, y terminadas de las que asignaste.'], ...(isAdmin?[['Pagos recibidos','Pagos de clientes conciliados desde el banco.']]:[])]
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12,maxWidth:560}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px',display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span style={{...SEC_LBL,margin:0}}>Este dispositivo</span>
+          <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 11px',color:CHIP[1],background:CHIP[2],whiteSpace:'nowrap'}}>{CHIP[0]}</span>
+        </div>
+        {estado==='instalar'&&<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>En el iPhone los avisos llegan a la app instalada: en Safari toca <b>Compartir</b> › <b>Agregar a inicio</b> y abre FirmDesk desde ese ícono.</div>}
+        {estado==='bloqueadas'&&<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>El permiso está bloqueado. Actívalo en los ajustes del navegador o del teléfono para FirmDesk y vuelve a esta página.</div>}
+        {estado==='sin-soporte'&&<div style={{fontSize:13,color:C.text,lineHeight:1.5}}>Este navegador no recibe notificaciones. En el computador funcionan en Chrome, Edge o Safari.</div>}
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {estado==='inactivas'&&btn('Activar en este dispositivo',activar,true)}
+          {estado==='activas'&&btn('Enviar una de prueba',enviarPrueba,true)}
+          {estado==='activas'&&btn('Desactivar',desactivar,false)}
+        </div>
+        {msg&&<div style={{fontSize:12.5,color:msg.tipo==='ok'?C.greenText:C.overdueText}}>{msg.texto}</div>}
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'14px 16px'}}>
+        <div style={{...SEC_LBL,marginBottom:8}}>Qué avisos llegan</div>
+        {avisos.map(([t,d],i)=><div key={t} style={{borderTop:i?`1px solid ${C.bgSoft}`:'none',padding:'8px 0'}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:12,color:C.muted,marginTop:2,lineHeight:1.45}}>{d}</div></div>)}
+      </div>
+    </div>
+  )
+}
 // Blindaje: si una vista lanza un error de render, mostramos un aviso recuperable en vez de dejar la app en blanco.
 class ViewErrorBoundary extends Component {
   constructor(p){ super(p); this.state={err:null} }
@@ -3501,6 +3578,85 @@ class ViewErrorBoundary extends Component {
   }
 }
 // ─── Persistencia liviana por-vista (Parte B): recuerda orden/filtro entre sesiones vía localStorage. Tolera modo privado / storage bloqueado. ──
+// ─── Arrastrar (mouse y dedo): fuente única para mover objetos en la app ──
+// Con mouse arrastra al moverse 6 px; con el dedo, al mantener presionado 400 ms (antes de eso el dedo desplaza la página).
+// El destino se marca con data-soltar="<valor>" (y opcional data-soltar-grupo para no mezclar arrastres). Mientras arrastra, una
+// copia con `etiqueta` sigue al puntero y el destino bajo él queda resaltado (`sobre`). Cerca del borde la página se desplaza sola.
+// El arrastre nativo del navegador (draggable) no funciona en el iPhone: por eso todo arrastre nuevo usa esto.
+function useArrastre({grupo='', onSoltar}){
+  const [arr,setArr]=useState(null)         // { item } mientras arrastra
+  const [sobre,setSobre]=useState(null)     // valor data-soltar bajo el puntero
+  const st=useRef(null)
+  const fin=useRef(null)
+  useEffect(()=>()=>{ fin.current&&fin.current() },[])
+  const props=useCallback((item,etiqueta)=>({
+    onPointerDown:e=>{
+      if(e.button>0 || e.target.closest?.('button,input,select,textarea,a,[data-no-arrastre]')) return   // en un botón o casilla no se arrastra
+      const tactil=e.pointerType!=='mouse', x0=e.clientX, y0=e.clientY, el=e.currentTarget
+      let activo=false, ghost=null, timer=null, raf=null, ult={x:x0,y:y0}, destino=null
+      const sinTexto=document.body.style.userSelect
+      const destinoEn=(x,y)=>{ const t=document.elementFromPoint(x,y)?.closest('[data-soltar]'); if(!t) return null; if((t.dataset.soltarGrupo||'')!==grupo) return null; return t.dataset.soltar }
+      const mover=(x,y)=>{ ult={x,y}; if(ghost){ ghost.style.transform=`translate(${x+12}px,${y-18}px)` } destino=destinoEn(x,y); setSobre(destino) }
+      const auto=()=>{ if(!activo) return; const m=70, v=ult.y<m?-(m-ult.y)/3:ult.y>window.innerHeight-m?(ult.y-(window.innerHeight-m))/3:0
+        if(v){ const sc=document.getElementById('main-scroll'); if(sc&&sc.scrollHeight>sc.clientHeight) sc.scrollTop+=v; else window.scrollBy(0,v); destino=destinoEn(ult.x,ult.y); setSobre(destino) }
+        raf=requestAnimationFrame(auto) }
+      const empezar=()=>{ activo=true; document.body.style.userSelect='none'
+        try{ navigator.vibrate&&navigator.vibrate(12) }catch(_){}
+        ghost=document.createElement('div'); ghost.textContent=etiqueta||''
+        Object.assign(ghost.style,{position:'fixed',left:0,top:0,zIndex:9999,pointerEvents:'none',padding:'6px 12px',borderRadius:'20px',background:C.accent,color:'#fff',fontSize:'12px',fontWeight:'700',fontFamily:'inherit',whiteSpace:'nowrap',maxWidth:'240px',overflow:'hidden',textOverflow:'ellipsis',boxShadow:'0 6px 18px rgba(0,60,80,.28)'})
+        document.body.appendChild(ghost); el.style.opacity='.45'; setArr({item}); mover(ult.x,ult.y); raf=requestAnimationFrame(auto) }
+      const onMove=ev=>{ const dx=ev.clientX-x0, dy=ev.clientY-y0
+        if(!activo){ if(tactil){ if(Math.hypot(dx,dy)>10) limpiar() } else if(Math.hypot(dx,dy)>6) empezar(); return }
+        mover(ev.clientX,ev.clientY) }
+      const onTouchMove=ev=>{ if(activo) ev.preventDefault() }   // con el objeto tomado, el dedo ya no desplaza la página
+      const onUp=()=>{ const d=activo?destino:null, eraActivo=activo; limpiar()
+        if(eraActivo){ const tragar=ev=>{ ev.stopPropagation(); ev.preventDefault() }; window.addEventListener('click',tragar,{capture:true,once:true}); setTimeout(()=>window.removeEventListener('click',tragar,{capture:true}),350) }
+        if(d!=null&&onSoltar) onSoltar(item,d) }
+      const onCtx=ev=>{ if(tactil) ev.preventDefault() }   // el menú del iPhone al mantener presionado
+      const limpiar=()=>{ clearTimeout(timer); cancelAnimationFrame(raf); activo=false; ghost&&ghost.remove(); ghost=null; el.style.opacity=''
+        document.body.style.userSelect=sinTexto
+        window.removeEventListener('pointermove',onMove); window.removeEventListener('pointerup',onUp); window.removeEventListener('pointercancel',onCancel)
+        document.removeEventListener('touchmove',onTouchMove); el.removeEventListener('contextmenu',onCtx); setArr(null); setSobre(null); fin.current=null }
+      const onCancel=()=>{ if(!activo) limpiar() }
+      window.addEventListener('pointermove',onMove); window.addEventListener('pointerup',onUp); window.addEventListener('pointercancel',onCancel)
+      document.addEventListener('touchmove',onTouchMove,{passive:false}); el.addEventListener('contextmenu',onCtx)
+      if(tactil) timer=setTimeout(empezar,400)
+      fin.current=limpiar
+    },
+    style:{touchAction:'manipulation',WebkitTouchCallout:'none',WebkitUserSelect:'none',userSelect:'none'},
+  }),[grupo,onSoltar])
+  return { props, arrastrando:arr?.item??null, sobre }
+}
+
+// ─── Fila deslizable (celular): al deslizar hacia la izquierda aparecen sus acciones DENTRO de la fila (no flotan) ──
+// acciones = [{ etiqueta, color, fondo, onClick }]. En escritorio no desliza (las acciones están a la vista o al pasar el mouse).
+function FilaDeslizable({acciones=[], activo=true, children, radio=8}){
+  const ANCHO=78, total=acciones.length*ANCHO
+  const [dx,setDx]=useState(0), [abierta,setAbierta]=useState(false)
+  const g=useRef(null)
+  if(!activo||!acciones.length) return children
+  const down=e=>{ if(e.pointerType==='mouse') return; g.current={x0:e.clientX,y0:e.clientY,base:abierta?-total:0,eje:null,t0:Date.now()} }
+  const move=e=>{ const s=g.current; if(!s) return; const mx=e.clientX-s.x0, my=e.clientY-s.y0
+    if(!s.eje){ if(Math.hypot(mx,my)<8) return; s.eje=Date.now()-s.t0>350?'arrastre':Math.abs(mx)>Math.abs(my)?'x':'y' }   // quieto antes de moverse = arrastre (useArrastre)
+    if(s.eje!=='x') return
+    setDx(Math.max(-total-24,Math.min(0,s.base+mx))) }
+  const up=()=>{ const s=g.current; g.current=null; if(!s||s.eje!=='x') return
+    const abrir=dx<-total/2; setAbierta(abrir); setDx(abrir?-total:0) }
+  const cerrar=()=>{ setAbierta(false); setDx(0) }
+  return (
+    <div style={{position:'relative',overflow:'hidden',borderRadius:radio}}>
+      <div style={{position:'absolute',top:0,right:0,bottom:0,display:'flex'}}>
+        {acciones.map((a,i)=><button key={i} onClick={e=>{ e.stopPropagation(); cerrar(); a.onClick&&a.onClick() }} style={{width:ANCHO,border:'none',background:a.fondo||C.accent,color:a.color||'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>{a.etiqueta}</button>)}
+      </div>
+      <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={()=>{ g.current=null; setDx(abierta?-total:0) }}
+        onClickCapture={e=>{ if(abierta){ e.stopPropagation(); e.preventDefault(); cerrar() } }}
+        style={{position:'relative',transform:`translateX(${dx}px)`,transition:g.current?'none':'transform .2s ease',touchAction:'pan-y',background:C.card}}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function usePersisted(key, initial){
   const [v,setV] = useState(()=>{ try{ const s=localStorage.getItem(key); return s!=null?JSON.parse(s):initial }catch(_){ return initial } })
   useEffect(()=>{ try{ localStorage.setItem(key, JSON.stringify(v)) }catch(_){} },[key,v])
@@ -21683,10 +21839,6 @@ function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd,onEdit
     const showEstado = !isFondo && !e.personal_de && !e.created_by && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
       <div key={e.id} onClick={()=>{ if(movExp===e.id) return; if(onEdit) onEdit(e); else setMovExp(e.id) }}
-        draggable={isDesktop&&!isFondo&&!!e.client_id}
-        onDragStart={isDesktop?(ev=>{ try{ ev.dataTransfer.setData('text/expense-id',String(e.id)); ev.dataTransfer.effectAllowed='move' }catch(_){}; ev.currentTarget.style.opacity='.45' }):undefined}
-        onDragEnd={isDesktop?(ev=>{ ev.currentTarget.style.opacity='1' }):undefined}
-        title={isDesktop&&!isFondo&&e.client_id?'Arrastra a otro cliente de la lista para reasignar':undefined}
         style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           {bigDate(e.date)}
@@ -26976,13 +27128,16 @@ function VentaPage({origen, titulo, ctx, right, onBack, cobro, ancho=980, childr
 const _MES_AB = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, entities=[], nested=false, sinMetricas=false, onOpenFactura, onAssociate}){
   const [pickFor,setPickFor] = useState(null)   // orphan.id en modo "elige cuota" (móvil / sin drag)
-  const [hover,setHover] = useState(null)        // prog.id resaltada durante el arrastre
+  const [hover,setHover] = useState(null)        // prog.id resaltada (elegida con «Asociar»)
+  // Arrastrar una factura sin asociar a su cuota (mouse o dedo: useArrastre). En el celular sigue también «Asociar».
+  const grupoArr = 'cotejo-'+(sale?.id||'')
+  const arrF = useArrastre({grupo:grupoArr, onSoltar:(oid,progId)=>{ setPickFor(null); setHover(null); onAssociate&&onAssociate(progId,oid) }})
   const [view,setView] = useState(()=>{ try{ return localStorage.getItem('cotejo_view')||'linea' }catch(_){ return 'linea' } })
   const setViewP = v => { setView(v); try{ localStorage.setItem('cotejo_view',v) }catch(_){} }
   const useTable = isDesktop && view==='tabla'
 
   const plan = planDeVenta(sale)
-  const hoy = new Date().toISOString().slice(0,10)
+  const hoy = isoLocal(new Date())
   // Vencimiento EFECTIVO: una programada de un mes ya pasado rodó al mes en curso (fuente única rolledDueMap).
   const rollMap = rolledDueMap(saleBills, hoy)
   const effDue = b => rollMap.get(String(b.id)) || b.due || b.issued_at
@@ -26999,7 +27154,6 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
   const estTxt = b => ({Pagado:'pagada',Pendiente:'pendiente',Vencido:'vencida',Anticipada:'anticipada'}[b.status]||'emitida')
   const estCol = b => ({Pagado:C.greenText,Pendiente:C.soonText,Vencido:C.overdueText,Anticipada:C.accent}[b.status]||C.greenText)
   const doAssoc = async (progId, orphanId) => { setPickFor(null); setHover(null); if(onAssociate) await onAssociate(progId, orphanId) }
-  const onDrop = progId => e => { e.preventDefault(); const oid=e.dataTransfer.getData('text/plain'); if(oid) doAssoc(progId, oid) }
 
   // Razón social + RUT a quien se factura (un cliente puede tener varias RS: se ordenan por RS, no por cliente).
   const nr = r => String(r||'').replace(/[.\s-]/g,'').toUpperCase()
@@ -27029,8 +27183,8 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
       <div style={{fontSize:10.5,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}<span style={{color:C.textSoft,marginLeft:'auto'}}><Gl n='chevron'/></span></div>
     </div>
   ) : (
-    <div onDragOver={e=>{e.preventDefault();setHover(b.id)}} onDragLeave={()=>setHover(h=>h===b.id?null:h)} onDrop={onDrop(b.id)}
-      style={{border:`1.5px dashed ${hover===b.id?C.accent:(C.soon||'#EBD9AE')}`,background:hover===b.id?(C.azulBg||'#EAF0F3'):'transparent',borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',transition:'background .1s'}}>
+    <div data-soltar={b.id} data-soltar-grupo={grupoArr}
+      style={{border:`1.5px dashed ${(hover===b.id||arrF.sobre===String(b.id))?C.accent:(C.soon||'#EBD9AE')}`,background:(hover===b.id||arrF.sobre===String(b.id))?(C.azulBg||'#EAF0F3'):'transparent',borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',transition:'background .1s'}}>
       <span style={{fontSize:12,color:C.soonText}}>por emitir</span>
       {orphans.length>0&&<span style={{fontSize:10.5,color:C.muted}}>{isDesktop?'arrastra aquí':''}</span>}
     </div>
@@ -27109,8 +27263,9 @@ function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=null, en
         return (<div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:9}}>
           <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,marginBottom:6}}>MISMO RUT · SIN ASOCIAR · {orphans.length}</div>
           {orphans.map(o=>{ const sug = fifo || huecos.find(h=>Math.abs((h.amount||0)-(montoFactura(o)||o.amount||0))/Math.max(1,h.amount||1)<0.03)
-            return (<div key={o.id} draggable={isDesktop&&huecos.length>0} onDragStart={e=>e.dataTransfer.setData('text/plain',o.id)}
-              style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6,background:'#fff',cursor:isDesktop&&huecos.length?'grab':'default'}}>
+            const dnd = huecos.length>0 ? arrF.props(o.id, `Factura N° ${folioN(o.invoice_no)||o.invoice_no}`) : null
+            return (<div key={o.id} onPointerDown={dnd?.onPointerDown}
+              style={{...(dnd?.style||{}),border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6,background:'#fff',cursor:isDesktop&&huecos.length?'grab':'default'}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 {isDesktop&&huecos.length>0&&<span style={{color:C.muted,fontSize:14}}>⠿</span>}
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · emitida {dmy(o.issued_at||o.due)}</span></div>{sug&&<div style={{fontSize:10.5,color:C.accent}}>llena el hueco más antiguo · {etiqueta(sug)}</div>}</div>
@@ -31797,11 +31952,11 @@ function TaskPreview({task,clients,onEdit,onComplete,onClose}) {
   )
 }
 
-function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],onAddTask,onEdit,onComplete,onPreview,currentUserName,setTab,navTo,isAdmin,onOpenClientFicha}) {
+function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],onAddTask,onEdit,onComplete,onPreview,onReprogramar,currentUserName,setTab,navTo,isAdmin,onOpenClientFicha}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoy = new Date()
   const DIAS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
-  const fmtISO = d => d.toISOString().slice(0,10)
+  const fmtISO = d => isoLocal(d)   // fecha local (toISOString pasaba al día siguiente después de las 21:00 en Chile)
 
   const [filterClient,setFilterClient] = useState('')
   const [filterProject,setFilterProject] = useState('')
@@ -31809,6 +31964,13 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
   const [verArchivadas,setVerArchivadas] = useState(false)
   const [openActivas,setOpenActivas] = useState(true)
   const [selDay,setSelDay] = useState(null)   // calendario: día seleccionado → detalle abajo + resalta la lista
+  // Reprogramar arrastrando: una tarea (del calendario o de la lista) se suelta sobre un día. El deshacer va en línea, bajo el calendario.
+  const [ultMov,setUltMov] = useState(null)   // {t, de, a}
+  useEffect(()=>{ if(!ultMov) return; const id=setTimeout(()=>setUltMov(null),20000); return ()=>clearTimeout(id) },[ultMov])
+  const moverTarea = useCallback(async(t,iso)=>{ if(!onReprogramar||!t||t.due===iso) return; const de=t.due||null
+    const ok=await onReprogramar(t,iso); if(ok!==false) setUltMov({t,de,a:iso}) },[onReprogramar])
+  const arrT = useArrastre({grupo:'tarea', onSoltar:moverTarea})
+  const sigHabilISO = ()=>{ const x=new Date(); let g=0; do{ x.setDate(x.getDate()+1) }while(!_esDiaHabil(x)&&g++<15); return isoLocal(x) }
   const [openAsignadas,setOpenAsignadas] = useState(true)
   const [grpCerrado,setGrpCerrado] = useState({})          // grupos por urgencia plegados (venc/sem/mas)
   const [verTodasVenc,setVerTodasVenc] = useState(false)   // móvil: vencidas muestra 3 + '+N más'
@@ -31893,11 +32055,22 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
 
   const fmtVenceShort = iso => { if(!iso) return ''; try{ const d=new Date(iso+'T12:00'); return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0') }catch(e){return ''} }
   const bsCard = due => { const d=daysLeft(due); if(d===null) return {bg:C.border,col:C.muted}; if(d<0) return {bg:C.overdueBg,col:C.overdue}; if(d<=1) return {bg:C.ambarBg,col:C.soon}; if(d<=7) return {bg:C.ambarBg,col:C.soon}; return {bg:C.border,col:C.muted} }
+  // Se llama como función (Card({t})), no como <Card/>: definida dentro de la vista, como componente se recrearía en cada dibujo
+  // y la fila deslizable perdería su estado (abierta/cerrada).
   const Card = ({t,showWho,done}) => {
     const client=clients.find(c=>c.id===t.client_id)
     const bs=bsCard(t.due)
+    const mover = !done && !!onReprogramar
+    const dnd = mover ? arrT.props(t, client?.name||t.title) : null
+    const sig = mover && !isDesktop ? sigHabilISO() : null
+    const sigLbl = sig ? (()=>{ const d=new Date(sig+'T12:00'), m=new Date(); m.setDate(m.getDate()+1); return fmtISO(m)===sig?'Mañana':['Dom','Lunes','Martes','Miérc.','Jueves','Viernes','Sáb'][d.getDay()] })() : ''
+    const acciones = !done&&!isDesktop ? [
+      ...(mover&&t.due!==sig?[{etiqueta:sigLbl, fondo:C.accent, onClick:()=>moverTarea(t,sig)}]:[]),
+      ...(onComplete?[{etiqueta:'Terminar', fondo:C.greenText, onClick:()=>onComplete(t)}]:[]),
+    ] : []
     return (
-      <div onClick={()=>(onPreview||setPreview)(t)} className='tk-card' style={{background:C.card,borderRadius:8,marginBottom:5,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:'pointer'}}>
+      <div key={t.id} style={{marginBottom:5}}><FilaDeslizable acciones={acciones}>
+      <div onClick={()=>(onPreview||setPreview)(t)} className='tk-card' {...(dnd?{onPointerDown:dnd.onPointerDown}:{})} style={{...(dnd?dnd.style:{}),background:C.card,borderRadius:8,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:mover&&isDesktop?'grab':'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
@@ -31923,12 +32096,13 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
                   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/></svg>
                 </button>
                 </span>}
-                {onComplete&&<span onClick={(e)=>{e.stopPropagation();onComplete(t)}} title='Terminada' style={{width:isDesktop?18:22,height:isDesktop?18:22,borderRadius:isDesktop?6:7,border:`1.5px solid #D7DEE3`,cursor:'pointer',flexShrink:0}}/>}
+                {onComplete&&<span onClick={(e)=>{e.stopPropagation();onComplete(t)}} data-no-arrastre title='Terminada' style={{width:isDesktop?18:22,height:isDesktop?18:22,borderRadius:isDesktop?6:7,border:`1.5px solid #D7DEE3`,cursor:'pointer',flexShrink:0}}/>}
               </div>
             </div>
           )}
         </div>
       </div>
+      </FilaDeslizable></div>
     )
   }
 
@@ -32041,7 +32215,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
           <>
             <SubHeader label='Archivadas' count={archivadas.length} open={true} onToggle={()=>setVerArchivadas(false)}/>
             {archivadas.length>0
-              ? archivadas.map(t=><div key={t.id} style={{opacity:.6}}><Card t={t} showWho={true} done={true}/></div>)
+              ? archivadas.map(t=><div key={t.id} style={{opacity:.6}}>{Card({t,showWho:true,done:true})}</div>)
               : <div style={{fontSize:12,color:C.muted,padding:'2px 0 8px'}}>Sin tareas archivadas con estos filtros</div>}
           </>
         ) : (
@@ -32066,7 +32240,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
                   </div>
                   {!cerrado&&(arr.length===0
                     ? <div style={{fontSize:12,color:C.muted,padding:'0 2px 6px'}}>Nada vence esta semana.</div>
-                    : <>{vis.map(t=><Card key={t.id} t={t} showWho={false}/>)}
+                    : <>{vis.map(t=>Card({t,showWho:false}))}
                         {vis.length<arr.length&&<div onClick={()=>setVerTodasVenc(true)} style={{fontSize:12,fontWeight:600,color:C.accent,textAlign:'center',padding:'6px 0',cursor:'pointer'}}>+ {arr.length-vis.length} vencida{arr.length-vis.length!==1?'s':''} más</div>}</>)}
                 </div>) })
             })()
@@ -32090,7 +32264,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
                       {vn>0&&<span style={{fontSize:10,fontWeight:600,color:C.overdueText}}>· {vn} vencida{vn!==1?'s':''}</span>}
                       <span style={{marginLeft:'auto',color:C.textSoft,fontSize:12}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>
                     </div>
-                    {open&&arr.map(t=><Card key={t.id} t={t} showWho={false}/>)}
+                    {open&&arr.map(t=>Card({t,showWho:false}))}
                   </div>
                 )
               })
@@ -32101,7 +32275,7 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
           <>
             <div id='sec-term'/>
             <SubHeader label='Terminadas' count={terminadas.length} open={openTerm} onToggle={()=>setOpenTerm(o=>!o)}/>
-            {openTerm&&terminadas.map(t=><Card key={t.id} t={t} showWho={true} done={true}/>)}
+            {openTerm&&terminadas.map(t=>Card({t,showWho:true,done:true}))}
           </>
         )}
           </>
@@ -32130,13 +32304,14 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5}}>
                   {byDay.map(({iso,dia,ts},i)=>{ const esHoy=iso===fmtISO(hoy); const sel=iso===selDay; return (
-                    <div key={i} onClick={()=>ts.length?setSelDay(sel?null:iso):onAddTask(iso)} title={ts.length?'Ver tareas del día':'Nueva tarea este día'} style={{height:cellH,overflow:'hidden',background:sel?C.azulBg:'#fff',borderRadius:8,padding:'6px 7px',border:`1px solid ${sel||esHoy?C.accent:C.border}`,cursor:'pointer',display:'flex',flexDirection:'column'}}>
+                    <div key={i} data-soltar={iso} data-soltar-grupo='tarea' onClick={()=>ts.length?setSelDay(sel?null:iso):onAddTask(iso)} title={ts.length?'Ver tareas del día':'Nueva tarea este día'} style={{height:cellH,overflow:'hidden',background:arrT.sobre===iso?C.azulBg:sel?C.azulBg:'#fff',borderRadius:8,padding:'6px 7px',border:`1px ${arrT.arrastrando&&arrT.sobre===iso?'dashed':'solid'} ${arrT.sobre===iso||sel||esHoy?C.accent:C.border}`,cursor:'pointer',display:'flex',flexDirection:'column',transition:'background .12s'}}>
                       <div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.done,textTransform:'uppercase'}}>{DIAS[i]}</span><span style={{fontSize:13,fontWeight:800,color:esHoy?C.accent:C.text}}>{String(dia.getDate()).padStart(2,'0')}</span></div>
                       <div style={{marginTop:5,display:'flex',flexDirection:'column',gap:3,minHeight:0}}>
                         {ts.slice(0,maxChips).map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); const lbl=cl?cl.name:t.title
+                          const dnd=onReprogramar?arrT.props(t,lbl):{onPointerDown:undefined,style:{}}
                           return isDesktop
-                            ? <div key={t.id} style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
-                            : <div key={t.id} style={{fontSize:9,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            ? <div key={t.id} onPointerDown={dnd.onPointerDown} title={onReprogramar?'Arrastra a otro día para reprogramar':undefined} style={{...dnd.style,fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5,cursor:onReprogramar?'grab':'pointer'}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            : <div key={t.id} onPointerDown={dnd.onPointerDown} style={{...dnd.style,fontSize:9,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
                         })}
                         {ts.length>maxChips&&<div style={{fontSize:9,color:C.textSoft,fontWeight:700}}>+{ts.length-maxChips} más</div>}
                       </div>
@@ -32147,6 +32322,10 @@ function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendiciones=[],on
             )
           })
         })()}
+        {ultMov&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:10,padding:'8px 12px',margin:'0 0 10px'}}>
+          <span style={{minWidth:0,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isDesktop?<><b style={{color:C.text,fontWeight:600}}>{ultMov.t.title}</b> · reprogramada al {fmtFechaDMY(ultMov.a)}</>:<>Reprogramada al <b style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(ultMov.a)}</b></>}</span>
+          <button onClick={async()=>{ const m=ultMov; setUltMov(null); await onReprogramar({...m.t,due:m.a},m.de) }} style={{background:'none',border:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',padding:0,flexShrink:0}}>Deshacer</button>
+        </div>}
         {selDay&&(()=>{ const ts=tasks.filter(t=>t.due===selDay&&t.status!=='Terminado'&&(enMiLista(t,me)||t.assigned_by===me)); const d=new Date(selDay+'T12:00'); const lbl0=d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}); const lbl=lbl0.charAt(0).toUpperCase()+lbl0.slice(1)
           return (
           <div style={{background:'#fff',border:`1px solid ${C.accent}`,borderRadius:12,padding:'10px 12px',marginTop:2,marginBottom:10}}>
@@ -36871,7 +37050,9 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
   const [wsTab,setWsTab] = useState('resumen')                              // subpágina del workspace: resumen|plan|calendario|tareas|equipo|bitacora
   const [dragEnt,setDragEnt] = useState(null)                               // id del entregable que se está arrastrando (tablero de etapas)
   const [dragCol,setDragCol] = useState(null)                               // columna (etapa) sobre la que se está soltando
-  const [dragPaso,setDragPaso] = useState(null)                             // índice del paso que se arrastra (tablero de pasos/carta Gantt)
+  // Reordenar pasos arrastrando el asa ⠿ (mouse o dedo: useArrastre). item = {pid, i, reorder}; destino = «pid:i».
+  const arrPaso = useArrastre({grupo:'paso', onSoltar:(it,dest)=>{ const [pid,to]=String(dest).split(':'); if(String(it.pid)===pid) it.reorder(it.i,+to) }})
+  const dragPaso = arrPaso.arrastrando ? arrPaso.arrastrando.i : null
   const [subAbierto,setSubAbierto] = useState({})                           // pasos con sus sub-etapas expandidas
   const [faseAgr,setFaseAgr] = useState(false)                              // Plan: agrupar pasos por fase (proyectos largos)
   const [faseCol,setFaseCol] = useState({})                                 // fases colapsadas (por key); default = fase completa colapsada
@@ -37665,11 +37846,14 @@ function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeguidores
             const _mt = t => t && !t.archived && t.title && _docConfirma(t.title, h.titulo) && ((String(t.project_id||'')===String(p.id)) || (!t.project_id && p.cliente_id && String(t.client_id||'')===String(p.cliente_id)))
             const tAll = (tasks||[]).filter(_mt); const tareasPaso = tAll.filter(t=>t.status!=='Terminado')
             const tareasListas = !h.hecho && tAll.length>0 && tareasPaso.length===0   // todas las tareas del paso cerradas → compuerta para marcarlo hecho
-            const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted); const dnd=canReorder&&isDesktop
-            return <div key={h.id} draggable={dnd} onDragStart={dnd?(()=>setDragPaso(i)):undefined} onDragEnd={dnd?(()=>setDragPaso(null)):undefined} onDragOver={dnd?(e=>e.preventDefault()):undefined} onDrop={dnd?(()=>{ reorder(dragPaso,i); setDragPaso(null) }):undefined}
-                  style={{ borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', padding:'9px 0', opacity:dragPaso===i?.5:1 }}>
+            const plazoCol = h.hecho?C.muted:(dd!=null&&dd<0?C.overdueText:dd!=null&&dd<=7?C.soonText:C.muted); const dnd=canReorder
+            const asa = dnd ? arrPaso.props({pid:p.id,i,reorder}, h.titulo||'Paso') : null
+            const esteArr = arrPaso.arrastrando && String(arrPaso.arrastrando.pid)===String(p.id) && dragPaso===i
+            const sobreAqui = dnd && arrPaso.arrastrando && arrPaso.sobre===`${p.id}:${i}` && !esteArr
+            return <div key={h.id} data-soltar={dnd?`${p.id}:${i}`:undefined} data-soltar-grupo={dnd?'paso':undefined}
+                  style={{ borderTop:sobreAqui?`2px solid ${C.accent}`:(i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none'), padding:'9px 0', opacity:esteArr?.5:1 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                    {dnd && <span title='Arrastra para reordenar' style={{ cursor:'grab', color:C.textSoft, fontSize:13, lineHeight:1, userSelect:'none' }}>⠿</span>}
+                    {dnd && <span onPointerDown={asa.onPointerDown} title='Arrastra para reordenar' style={{ ...asa.style, cursor:'grab', color:C.textSoft, fontSize:isDesktop?13:17, lineHeight:1, padding:isDesktop?0:'4px 2px' }}>⠿</span>}
                     <span onClick={()=>onToggleHito&&onToggleHito(h.id,!h.hecho)} style={{ width:18, height:18, borderRadius:6, border:`1.5px solid ${h.hecho?C.greenText:C.done}`, background:h.hecho?C.greenText:'transparent', flexShrink:0, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>{h.hecho&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M4 12l5 5L20 6"/></svg>}</span>
                     <div style={{ flex:1, minWidth:0 }}>
                       <input defaultValue={h.titulo} onBlur={e=>{ const v=e.target.value.trim(); if(v&&v!==h.titulo) onUpdHito&&onUpdHito(h.id,{titulo:v}) }} style={{ width:'100%', boxSizing:'border-box', fontSize:13, fontWeight:600, color:h.hecho?C.muted:C.text, textDecoration:h.hecho?'line-through':'none', border:'none', background:'none', padding:'1px 2px' }}/>
@@ -42966,7 +43150,7 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
+    const PAGE_OF={task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
       if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
@@ -44254,6 +44438,17 @@ export default function App() {
     }catch(_){}
   },[clients,user])
 
+  // Reprogramar una tarea (arrastrar a otro día o deslizar en el celular): se ve al instante y se guarda por detrás; si falla, vuelve.
+  const handleReprogramarTask=useCallback(async(t,due)=>{
+    const antes=t.due||null
+    setTasks(p=>p.map(x=>x.id===t.id?{...x,due}:x))
+    if(DEMO) return true
+    const {error}=await supabase.from('tasks').update({due}).eq('id',t.id)
+    if(error){ setTasks(p=>p.map(x=>x.id===t.id?{...x,due:antes}:x)); appAlert('No se pudo reprogramar: '+error.message); return false }
+    logActividad('tareas.reprogramar',{tabla:'tasks',id:t.id,detalle:{title:`«${t.title||'Tarea'}» de ${antes?fmtFechaDMY(antes):'sin fecha'} a ${due?fmtFechaDMY(due):'sin fecha'}`,de:antes,a:due}})
+    return true
+  },[])
+
   // Delegar: el responsable traspasa la tarea a otra(s) persona(s) con un nuevo plazo.
   // NO cambia who/assignees (sigue siendo responsable ante quien la asignó); solo registra
   // delegated_to/by/due/at y avisa por correo a los delegados.
@@ -45462,6 +45657,10 @@ export default function App() {
                   Gestión de usuarios
                 </div>
                 </>}
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'notificaciones'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'/><path d='M10.3 21a1.94 1.94 0 0 0 3.4 0'/></svg>
+                  Notificaciones
+                </div>
                 {actualRole==='admin'&&(userRole==='admin'
                   ? <div style={ddItem} onClick={()=>{setMenuOpen(false);setUserRole('limited');setTab('tasks')}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>
@@ -45497,6 +45696,7 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='solicitarFondos'&&<FlujoPagina origen={origenNav('Gastos')} titulo='Solicitar fondos' ctx={pagina.data?.client?.name||null} onBack={()=>setModal(null)} maxW={1120}><SolicitarFondosModal asPage client={pagina.data?.client} clients={clients} sale={pagina.data?.sale} montoInicial={pagina.data?.monto} responsable={pagina.data?.responsable} user={user} expenses={expenses} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='report'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Generar reporte' onBack={()=>setModal(null)} maxW={1120}><ReportBuilder sales={sales} billing={billing} clients={clients} expenses={expenses} terceros={terceros} tasks={tasks} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='redaccion'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Redactar con IA' onBack={()=>setModal(null)} maxW={1120}><AsistenteRedaccion clients={clients} sales={sales} billing={billing} clientEntities={clientEntities} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='notificaciones'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Notificaciones' onBack={()=>setModal(null)} maxW={640}><NotificacionesPagina user={user} isAdmin={userRole==='admin'}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal expenses={expenses} tasks={tasks} onCerrarTrabajo={rdLog('revision.cerrarTrabajo',async(s)=>{ const {error}=await supabase.from('sales').update({status:'Terminado',updated_at:new Date().toISOString()}).eq('id',s.id); if(error) throw error; setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado'}:x)) })} onCubrirCuotas={handleCubrirCuotas} onConsumeAnticipos={handleConsumeAnticipos} billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
           if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
@@ -45537,7 +45737,7 @@ export default function App() {
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} anticipos={anticipos} fantasmaIds={fantasmaAltaIds} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} terceros={terceros} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onAprobarPropuesta={handleAprobarPropuesta} onDevolverPropuesta={handleDevolverPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
             {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={(preClient)=>setModal({type:'anticipo',data:preClient?{preClient}:null})} onProveedores={()=>navTo({tab:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const nb=await getBilling().catch(()=>null);if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} onReclasificarTercero={handleReclasificarTercero} onBuscarSII={handleBuscarSII} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)}/>}
-            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} rendiciones={rendiciones} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
+            {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} rendiciones={rendiciones} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onReprogramar={handleReprogramarTask} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView setTercerosRoot={setTerceros} openCajaChicaRev={ccRevFocus} sales={sales} setRendiciones={setRendiciones} onCajaChicaRevConsumed={()=>setCcRevFocus(false)} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='misComisiones'&&userRole==='limited'&&miProv&&<ProveedoresView soloProvId={miProv.id} proveedores={[miProv]} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} user={user} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenLim||origenNav('Mi cartera')}/>}
             {tab==='proponerVenta'&&userRole==='limited'&&<ProponerVentaPage clients={clients} sales={sales} user={user} edit={propEdit} onBack={goBack} onSaved={sv=>{ setSales(p=>p.some(x=>x.id===sv.id)?p.map(x=>x.id===sv.id?sv:x):[sv,...p]); setPropEdit(null); goBack() }}/>}
