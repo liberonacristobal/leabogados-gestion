@@ -5,6 +5,7 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
 import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
+import { fgCliente, gastosPorRendirCli } from "../_shared/gastosReglas.js";
 
 // Correo semanal "Tu semana" para el equipo limitado (Martín, Martina, Rodrigo).
 // Sobre lo que ELLOS ven/manejan: (1) Gastos sin rendir al cliente; (2) Caja chica por liquidar; (3) Tus tareas;
@@ -165,13 +166,13 @@ serve(async (req) => {
       (clients||[]).forEach((c:any)=>{ if (c.is_internal) misCli.delete(String(c.id)) });
       if (misCli.size) {
         const bills = cobrables.filter((b:any)=> misCli.has(String(b.client_id)) && saldoBill(b)>0).map((b:any)=>({ b, saldo:saldoBill(b), vence:venceBill(b) })).sort((a:any,b:any)=> a.vence.localeCompare(b.vence));
+        // Fondos por pedir: clientes con saldo en contra de $1.000 o más (reglas únicas fgCliente / gastosPorRendirCli de
+        // _shared/gastosReglas.js, las de Rendir a clientes). Un cliente con saldo a favor no es un pendiente.
         const fondos = [...misCli].map(cid=>{
-          const ex = expenses.filter((e:any)=> String(e.client_id)===cid && !e.apertura_id);
-          const fo = ex.filter((e:any)=> e.type==="fondo").reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0);
-          const ga = ex.filter((e:any)=> e.type!=="fondo" && !e.no_descuenta_saldo).reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0);
-          const pr = ex.filter((e:any)=> e.type==="gasto" && !e.no_descuenta_saldo && !e.client_rendered_at && e.category!=="Apertura");
-          return { cid, saldo: fo-ga, nPR: pr.length, montoPR: pr.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0) };
-        }).filter((x:any)=> x.saldo<0 || x.nPR>0).sort((a:any,b:any)=> a.saldo-b.saldo);
+          const pr = gastosPorRendirCli(expenses, cid);
+          const cidKey = (expenses.find((e:any)=> String(e.client_id)===cid)||{}).client_id ?? cid;
+          return { cid, saldo: fgCliente(expenses, cidKey).saldo, nPR: pr.length, montoPR: pr.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0) };
+        }).filter((x:any)=> x.saldo<=-1000).sort((a:any,b:any)=> a.saldo-b.saldo);
         // Comisiones: su ficha de proveedor por el RUT del miembro (miembros.rut = proveedores.rut). Misma regla que estadoComision.
         const mRut = nRut((miembros||[]).find((m:any)=> nTxt(m.nombre)===yo)?.rut);
         const prov = mRut ? (proveedores||[]).find((p:any)=> nRut(p.rut)===mRut) : null;
@@ -243,12 +244,13 @@ serve(async (req) => {
     const fondosHtml = (d:any, n:string) => {
       const c=d.cartera; if (!c || !c.fondos.length) return "";
       const rows = c.fondos.slice(0,6).map((x:any)=> filaHtml(cname(x.cid), x.nPR?`${x.nPR} gasto${x.nPR!==1?"s":""} sin rendir · ${fmt(x.montoPR)}`:"sin gastos por rendir", x.saldo<0?"−"+fmt(-x.saldo):fmt(x.saldo), x.saldo<0?RED:INK)).join("");
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Fondos por solicitar y gastos por rendir",AMB)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Gastos por rendir y saldos en contra de tus clientes.</div>`+
-        tabla(rows)+dosBtn("Rendir","Solicitar fondos",AMB,"porcobrar")+`</div>`;
+      return `<div style="padding:24px 26px 4px;">${sec(n,"Fondos por solicitar",AMB)}`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Clientes con saldo en contra.</div>`+
+        tabla(rows)+cta("Solicitar fondos",AMB,"porcobrar")+`</div>`;
     };
     const comisionesHtml = (d:any, n:string) => {
-      const k=d.cartera?.com; if (!k || (!k.nListas && !k.nSujeto)) return "";
+      // Solo si hay comisiones por pagar (con acción: registrar la boleta). «Sujeto a cobro» es informativo: no va en el correo.
+      const k=d.cartera?.com; if (!k || !k.nListas) return "";
       const txt = k.nListas
         ? `<b style="color:${INK};">${k.nListas} comisi${k.nListas===1?"ón":"ones"} por pagar</b> · líquido ${fmt(k.liqListas)}. Registra tu boleta en la app.`
         : `Sin comisiones por pagar. Sujeto a cobro: <b style="color:${INK};">${fmt(k.montoSujeto)}</b> en ${k.nSujeto} cuota${k.nSujeto!==1?"s":""}.`;
