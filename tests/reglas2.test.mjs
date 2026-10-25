@@ -161,3 +161,11 @@ test('aviso de fondos: el contador cuenta avisos enviados, no días con gastos; 
   assert.equal(avisoFondosAplica(-80000, [{ date: '2025-11-01' }]), false)          // solo gastos antes de la app
   assert.equal(avisoFondosAplica(-80000, [{ date: '2025-11-01' }, { date: '2026-07-01' }]), true)
 })
+
+test('cuota programada + tramo emitido: «No es doble conteo» no vuelve a aparecer', async () => {
+  const { cuotaTramo } = await import('../supabase/functions/_shared/saludDatos.js')
+  const sales = [{ id: 'v1', status: 'Activo', amount_clp: 3000000, cobro_type: 'cuotas' }]
+  const billing = [{ sale_id: 'v1', invoice_no: '483', status: 'Pendiente', amount: 1000000 }, { sale_id: 'v1', status: 'Programada', amount: 1000000, due: '2026-09-01' }, { sale_id: 'v1', status: 'Programada', amount: 1000000, due: '2026-10-01' }, { sale_id: 'v1', status: 'Programada', amount: 1000000, due: '2026-11-01' }]
+  assert.equal(cuotaTramo(billing, sales).length, 1)
+  assert.equal(cuotaTramo(billing, sales, new Set(['v1'])).length, 0)
+})
