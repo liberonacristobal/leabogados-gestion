@@ -43190,7 +43190,7 @@ export default function App() {
     // abrir(tipo, i): abre el detalle del i-ésimo registro (ficha, factura, venta, gasto, tarea) para recorrer también las subvistas.
     const abrir=(tipo,i=0)=>{ const arr={cliente:clients,venta:sales,factura:billing,gasto:expenses,tarea:tasks}[tipo]; const x=arr?.[i]; if(!x) return false
       if(tipo==='cliente') handleOpenClientFicha(x.id); else setModal({type:{venta:'sale',factura:'billing',gasto:'expenseEdit',tarea:'task'}[tipo],data:x}); return true }
-    window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth,abrir} },[navTo,setModal,goBack,clients,sales,billing,expenses,tasks,handleOpenClientFicha])
+    window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth,abrir,deshacer:msg=>setUndoToast({msg,onUndo:()=>{}})} },[navTo,setModal,goBack,clients,sales,billing,expenses,tasks,handleOpenClientFicha])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
   const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
@@ -43360,8 +43360,8 @@ export default function App() {
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
-  const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — eliminar reversible al toque (soft-delete)
-  useEffect(()=>{ if(undoToast){ const t=setTimeout(()=>setUndoToast(null),6000); return ()=>clearTimeout(t) } },[undoToast])
+  const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — deshacer en línea arriba de la vista (no flotante)
+  useEffect(()=>{ if(undoToast){ const t=setTimeout(()=>setUndoToast(null),20000); return ()=>clearTimeout(t) } },[undoToast])
   useEffect(()=>{ const handler=()=>setMenuOpen(false); document.addEventListener('click',handler); return ()=>document.removeEventListener('click',handler) },[])
   const _hoyHdr = new Date()
   const fechaFull = _hoyHdr.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase())
@@ -45729,7 +45729,17 @@ export default function App() {
         {loading&&!booted?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
-          <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} vista={tab} onReset={()=>setTab('dashboard')}>
+          <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
+            {/* Deshacer EN LÍNEA (no flota): arriba del contenido de la vista donde quedaste, sin tapar nada. Lo usan eliminar,
+                asignar, mover y marcar pagado (undoToast); se quita solo a los 20 s o con la ×. */}
+            {undoToast&&<div style={{maxWidth:isDesktop?1120:640,margin:'0 auto',padding:isDesktop?'12px 26px 0':'10px 14px 0'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,fontSize:12.5,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 12px'}}>
+                <span style={{minWidth:0,flex:1,color:C.text}}>{String(undoToast.msg||'').replace(/\s*·\s*deshacer$/i,'')}</span>
+                <button onClick={async()=>{ const fn=undoToast.onUndo; setUndoToast(null); try{ if(fn) await fn() }catch(e){ appAlert('No se pudo deshacer: '+e.message) } }} style={{background:'none',border:'none',color:C.accent,fontWeight:700,fontSize:12.5,cursor:'pointer',padding:0,flexShrink:0}}>Deshacer</button>
+                <button onClick={()=>setUndoToast(null)} aria-label='Cerrar' style={{background:'none',border:'none',color:C.textSoft,fontSize:15,lineHeight:1,cursor:'pointer',padding:0,flexShrink:0}}><Gl n='x'/></button>
+              </div>
+            </div>}
+            <ViewErrorBoundary key={tab} vista={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard onRendirClientes={()=>{ navTo({tab:'expenses'}); setExpNav('rendirCli') }} proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
@@ -45928,13 +45938,6 @@ export default function App() {
         {/* 'task' / 'taskPreview' / 'cierreTarea' ya NO son modales: viven en la página navegable 'tarea' (TareaPage, ver render de tabs). setModal los redirige. */}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
       </div>
-      {undoToast&&(
-        <div style={{position:'fixed',left:'50%',transform:'translateX(-50%)',bottom:'calc(20px + env(safe-area-inset-bottom))',zIndex:9999,display:'flex',alignItems:'center',gap:12,background:C.accent,color:'#fff',borderRadius:12,padding:'10px 12px 10px 16px',boxShadow:'0 6px 24px rgba(0,0,0,.22)',maxWidth:'calc(100vw - 32px)'}}>
-          <span style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap'}}>{undoToast.msg}</span>
-          <button onClick={async()=>{ const fn=undoToast.onUndo; setUndoToast(null); try{ if(fn) await fn() }catch(e){ appAlert('No se pudo deshacer: '+e.message) } }} style={{background:'rgba(255,255,255,.16)',border:'none',color:'#fff',fontSize:12,fontWeight:700,padding:'6px 13px',borderRadius:8,cursor:'pointer',whiteSpace:'nowrap'}}>Deshacer</button>
-          <button onClick={()=>setUndoToast(null)} style={{background:'none',border:'none',color:'rgba(255,255,255,.7)',fontSize:17,lineHeight:1,cursor:'pointer',padding:0}}><Gl n='x'/></button>
-        </div>
-      )}
       <DialogHost/>
     </>
   )
