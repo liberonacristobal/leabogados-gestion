@@ -75,3 +75,17 @@ export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde
     ultimaLiq: liqs[0] || null,
   }
 }
+
+// Lo que de verdad le toca a quien liquida la notaría: OT pagables con los fondos del cliente (FIFO por fecha dentro del disponible,
+// o de la oficina) y OT sin cliente (por asignar). Las demás esperan fondos del cliente: eso es del aviso de fondos del abogado.
+export function notariaPorLiquidar(expenses = [], { esOficina = () => false } = {}) {
+  const pend = notariaPendientes(expenses), porCli = {}
+  pend.forEach(e => { const k = e.client_id ? String(e.client_id) : '—'; (porCli[k] = porCli[k] || []).push(e) })
+  const pagables = [], esperan = [], sinCliente = porCli['—'] || []
+  Object.entries(porCli).forEach(([cid, ots]) => { if (cid === '—') return
+    const d = disponibleNotaria(expenses, cid, { esOficina }); let usado = 0
+    ots.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(e => { const m = Number(e.amount) || 0
+      if (d.oficina || usado + m <= d.disp) { usado += m; pagables.push(e) } else esperan.push(e) }) })
+  const suma = xs => xs.reduce((a, e) => a + (Number(e.amount) || 0), 0)
+  return { pagables, esperan, sinCliente, montoPagables: suma(pagables), montoEsperan: suma(esperan), montoSinCliente: suma(sinCliente) }
+}

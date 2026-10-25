@@ -175,3 +175,11 @@ export function repartoContadora(monto, valores, retenciones) {
   // PPM igual a las retenciones: no queda gasto de PPM (solo la parte «tercero»); nunca un gasto ni una conciliación en $0.
   return out.flat().filter(p => p.monto > 0)
 }
+
+// Abonos del banco «por identificar» (sin cliente y pendientes): no cuentan los que ya tienen categoría (reembolso, intereses…),
+// los anteriores a la app (histórico importado) ni las transferencias de una persona del estudio (socios, equipo, sus sociedades).
+export function abonosPorIdentificar(movs = [], { rutsPropios = new Set(), appDesde = '2026-06-06' } = {}) {
+  const nr = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
+  return (movs || []).filter(m => m && m.tipo === 'abono' && !m.cliente_id && (Number(m.monto) || 0) > 0 && (m.estado || 'pendiente') === 'pendiente'
+    && !m.categoria && String(m.fecha || '') >= appDesde && !(m.rut_contraparte && rutsPropios.has(nr(m.rut_contraparte))))
+}
