@@ -1229,6 +1229,22 @@ async function logActividad(action, {tabla=null, id=null, detalle=null, completo
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''))?String(id):null
   try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(completo?detalle:resumenBitacora(detalle)) }) }catch(_){}
 }
+// Equipo del estudio (tabla miembros): nombre ↔ correo principal, solo del estudio de quien entró. Fuente única para todo lo
+// que va a una persona del equipo por su nombre (avisos de tareas, pedir fondos, rendiciones, cc internos). Se carga al entrar
+// (cargarEquipo); EQUIPO_RESPALDO solo cubre mientras carga o si la consulta falla, para no dejar un aviso sin destinatario.
+const EQUIPO_RESPALDO = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+let _equipo = null
+function cargarEquipo(miEmail){
+  if(DEMO||_equipo) return Promise.resolve(_equipo)
+  return Promise.resolve(supabase.from('miembros').select('email,nombre,principal,estudio_id,nombre_completo,cargo,telefono')).then(({data})=>{
+    const filas=(data||[]).filter(r=>r.email), mia=filas.find(r=>String(r.email).toLowerCase()===String(miEmail||'').toLowerCase())
+    const est=mia?.estudio_id, pn={}, pe={}, firma={}
+    filas.filter(r=>!est||r.estudio_id===est).forEach(r=>{ const em=String(r.email).toLowerCase(), n=String(r.nombre||'').split(' (')[0]; if(!n) return; pe[em]=n; if(r.principal!==false&&!pn[n]) pn[n]=em
+      if(r.nombre_completo||r.cargo||r.telefono) firma[em]={nombre:r.nombre_completo||n,cargo:r.cargo||'',telefono:r.telefono||''} })
+    _equipo={pn,pe,firma}; return _equipo }).catch(()=>null)
+}
+const equipoPorNombre = () => ({...EQUIPO_RESPALDO, ...(_equipo?.pn||{})})
+const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 // Nombres de los miembros del estudio por email (de `miembros`, no cableados). Cacheado por sesión.
 let _nombresMiembrosCache=null, _nombresMiembrosP=null
 function nombresMiembros(){
@@ -2016,12 +2032,15 @@ function rendicionDocHtml({ razon, rut, periodo, fechaEmision, dirigidoA, gastos
 }
 
 // "Ver PDF" desde el historial: arma los datos de una rendición YA registrada y usa la fuente única.
-const FIRMA_DEFAULTS = {
-  'cl@leabogados.cl':{nombre:'Cristóbal Liberona',cargo:'Socio',telefono:'+56 9 9155 67 69'},
-  'ee@leabogados.cl':{nombre:'Erasmo Escala',cargo:'Socio',telefono:'+56 9 6170 44 43'},
-  'mc@leabogados.cl':{nombre:'Martín Campero Mantelli',cargo:'Abogado',telefono:'+56 9 9149 3495'},
-  'mp@leabogados.cl':{nombre:'Martina Pérez Giuras',cargo:'Procuradora',telefono:'+56 9 3467 4534'}
+// Firma de correo por defecto de cada persona: de la tabla miembros (nombre_completo, cargo, telefono; cargarEquipo). El respaldo
+// solo cubre mientras carga y no guarda teléfonos en el código.
+const FIRMA_RESPALDO = {
+  'cl@leabogados.cl':{nombre:'Cristóbal Liberona',cargo:'Socio',telefono:''},
+  'ee@leabogados.cl':{nombre:'Erasmo Escala',cargo:'Socio',telefono:''},
+  'mc@leabogados.cl':{nombre:'Martín Campero Mantelli',cargo:'Abogado',telefono:''},
+  'mp@leabogados.cl':{nombre:'Martina Pérez Giuras',cargo:'Procuradora',telefono:''}
 }
+const firmaDefault = email => { const e=String(email||'').toLowerCase(); return _equipo?.firma?.[e] || FIRMA_RESPALDO[e] }
 function firmaCorreoHtml(f, logoSrc, lang){
   if(!f || !(f.nombre||f.cargo||f.telefono)) return ''
   const MUTED='#537281', TXT='#3D3D3D'
@@ -7075,7 +7094,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       if(d.proyecto){ up('title',d.proyecto); filled.add('title') }
       const AREAS = ['Corporativo','Tributario','Laboral','Otro']
       if(d.area){ const a=AREAS.find(x=>x.toLowerCase()===d.area?.toLowerCase()); if(a){ up('area',a); filled.add('area') } }
-      const WHO_MAP = {'cl@leabogados.cl':'Cristóbal','ee@leabogados.cl':'Erasmo','mc@leabogados.cl':'Martín','mp@leabogados.cl':'Martina','rd@leabogados.cl':'Rodrigo'}
+      const WHO_MAP = equipoPorEmail()
       { const r = client?.abogado_responsable || (user?.email && WHO_MAP[user.email]); if(r){ up('responsible',r); filled.add('responsible') } }   // el abogado del cliente manda; el usuario es respaldo
       if(d.moneda==='CLP'){ up('moneda','CLP'); if(d.honorario_total){ up('amount_clp',String(d.honorario_total)); filled.add('amount_clp') } }
       else if(d.honorario_total){ up('amount_uf',String(d.honorario_total)); filled.add('amount_uf') }
@@ -8211,7 +8230,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 // Al activar una propuesta: la IA propone las primeras tareas (compuerta editable), se crean asignadas al abogado
 // y se manda UN correo consolidado. Aprende del set confirmado por área (learnings kind='propuesta_tareas').
 function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfirm, onClose, saving}){
-  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const EMAIL_BY_NAME=equipoPorNombre()
   const WHO=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const cli = clients.find(c=>String(c.id)===String(sale?.client_id))
@@ -9114,7 +9133,7 @@ function RolesModal({ onOpenUsers }){
   useEffect(()=>{ let alive=true
     if(DEMO){ setMiembros({ admin:['Cristóbal Liberona','Erasmo Escala'], limited:['Martín Campero','Martina Pérez','Rodrigo'] }); return }
     supabase.from('user_roles').select('email,role,name').then(({data})=>{ if(!alive) return
-      const g={admin:[],limited:[]}; (data||[]).forEach(u=>{ const nm=u.name||(FIRMA_DEFAULTS[u.email]||{}).nombre||String(u.email||'').split('@')[0]; (g[u.role]||(g[u.role]=[])).push(nm) }); setMiembros(g)
+      const g={admin:[],limited:[]}; (data||[]).forEach(u=>{ const nm=u.name||(firmaDefault(u.email)||{}).nombre||String(u.email||'').split('@')[0]; (g[u.role]||(g[u.role]=[])).push(nm) }); setMiembros(g)
     },()=>setMiembros({admin:[],limited:[]}))
     return ()=>{alive=false} },[])
   const puede = (roleId,capId)=> capId==='__sistema' ? roleId==='admin' : (VIEWS_PALETTE[roleId]||[]).some(([v])=>v===capId)
@@ -10595,7 +10614,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
     try{
       if(a==='pedir_boleta'){
         const to=String(paraBoleta[r.id]??p.para??'').trim(); if(!to) throw new Error('Falta el correo del colaborador.')
-        const em=String(user?.email||'').toLowerCase(); let firma=FIRMA_DEFAULTS[em]||{nombre:user?.name||'',cargo:'',telefono:''}
+        const em=String(user?.email||'').toLowerCase(); let firma=firmaDefault(em)||{nombre:user?.name||'',cargo:'',telefono:''}
         if(!DEMO&&em){ const {data:fr}=await supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',em).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(fr?.value){ try{ firma={...firma,...JSON.parse(fr.value)} }catch(_){} } }
         const text=borradorPedidoBoleta(p), subject=asuntoPedidoBoleta(p)
         const via=DEMO?'usuario':await enviarComoUsuario({to, subject, html:correoMarcaHtml(text,'Boleta de honorarios',firma,false), text, que:'El pedido de boleta'})
@@ -11436,7 +11455,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
 // Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
 // Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al abogado responsable.
 function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[], clientEntities=[], proyectosCartera=[], user, pending=null, preA=null, onClose, onMerged}){
-  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const EMAIL_BY_NAME=equipoPorNombre()
   const [aId,setAId]=useState(pending?pending.survivor_id:preA),[bId,setBId]=useState(pending?pending.loser_id:null)   // preA: abierta desde la ficha de un cliente → ese cliente ya elegido
   const [qa,setQa]=useState(''),[qb,setQb]=useState('')
   const [survId,setSurvId]=useState(pending?pending.survivor_id:null)
@@ -13384,7 +13403,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
       batchModo='oficina'
     } else if(!await appConfirm(`Enviar ${conDest.length} factura(s) desde TU correo a su destinatario recordado.${sinDest?`\n${sinDest} se omiten (sin correo recordado).`:''}\n\n¿Continuar?`)) return
     setEnvioMasivoBusy(true)
-    const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
+    const firma=firmaDefault(user?.email)||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
     let ok=0, err=0
     for(const b of conDest){
       try{
@@ -17033,7 +17052,7 @@ function CorreoBoletaPage({prov, bm, lineas=[], user, onBack, onSent}){
   const isDesktop = useIsDesktop()
   const myEmail = String(user?.email||'').toLowerCase()
   const [para,setPara] = useState('')
-  const [firma,setFirma] = useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
+  const [firma,setFirma] = useState(firmaDefault(myEmail)||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [sending,setSending] = useState(false)
   const [verPrev,setVerPrev] = useState(false)   // celular: vista previa del correo bajo demanda
   const uno = lineas.length===1
@@ -20375,8 +20394,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     const li=(t,m)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid #E4E8EB;font-size:12px"><span>${t}</span><span style="font-weight:700;color:#003C50;white-space:nowrap">${m}</span></div>`
     const alarmasHtml = al.length ? `<div style="margin-top:14px"><b style="color:#9A3A24">Alarmas — estas OT no se cargaron, revísalas:</b>${al.map(x=>li(`${x.otL} · ya ${x.st==='pagada'?'pagada a la notaría':'rendida a '+x.cn}`, '$'+x.monto.toLocaleString('es-CL'))).join('')}${li('<b>Total en alarma</b>','<b>$'+totAl.toLocaleString('es-CL')+'</b>')}</div>` : ''
     const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#26333A;font-size:13px;line-height:1.6">Hola,<br><br>Cargué <b>${nImp}</b> OT${nImp!==1?'s':''} de la notaría.${li('Con cliente identificado','<b>'+conCli+'</b>')}${li('Por asignar','<b>'+sinCli+'</b>')}${alarmasHtml}<br>Saludos.</div>`
-    if(!await appConfirm(`¿Avisar a los socios (Cristóbal y Erasmo) el resumen de esta carga${al.length?` y las ${al.length} alarma${al.length!==1?'s':''}`:''}?`)) return
-    try{ const via=await enviarComoUsuario({to:'cl@leabogados.cl, ee@leabogados.cl', subject:`Carga de notaría — ${nImp} OT${nImp!==1?'s':''}${al.length?` · ${al.length} alarma${al.length!==1?'s':''}`:''}`, html, text:`Cargué ${nImp} OTs de la notaría.${al.length?` ${al.length} alarmas detectadas.`:''}`}); if(via){ setAvisadoSocios(true); appAlert(txtEnviado(via,{que:'Aviso',para:'los socios'})) } }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
+    const socios=await cargarAdminsEstudio(); const sociosTo=socios.map(x=>x.email).filter(Boolean).join(', ')||'cl@leabogados.cl, ee@leabogados.cl'
+    if(!await appConfirm(`¿Avisar a los socios (${socios.map(x=>x.nombre).join(' y ')||'Cristóbal y Erasmo'}) el resumen de esta carga${al.length?` y las ${al.length} alarma${al.length!==1?'s':''}`:''}?`)) return
+    try{ const via=await enviarComoUsuario({to:sociosTo, subject:`Carga de notaría — ${nImp} OT${nImp!==1?'s':''}${al.length?` · ${al.length} alarma${al.length!==1?'s':''}`:''}`, html, text:`Cargué ${nImp} OTs de la notaría.${al.length?` ${al.length} alarmas detectadas.`:''}`}); if(via){ setAvisadoSocios(true); appAlert(txtEnviado(via,{que:'Aviso',para:'los socios'})) } }catch(e){ appAlert('No se pudo enviar el aviso: '+(e.message||e)) }
   }
 
   if(resultado) return (
@@ -22701,7 +22721,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
   // Pedir fondos: clientes que la oficina financia (saldo<0), agrupados por su abogado a cargo, para pedirle provisión.
   const [pedirOpen,setPedirOpen] = useState(false)   // modal "pedir fondos a los abogados"
   const [pedirSent,setPedirSent] = useState({})      // estado de envío por correo de abogado
-  const PEDIR_EMAILS={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const PEDIR_EMAILS=equipoPorNombre()
   const pedirFondosGrupos = useMemo(()=>{
     const saldoDe=c=>(balances[c.id]?.fondos||0)-(balances[c.id]?.gastos||0)
     const neg=(clientsWithMovs||[]).filter(c=>c.status!=='Terminado' && !esOficina(c.id) && saldoDe(c)<0)
@@ -27636,7 +27656,7 @@ function FinancieroTab({client, clientBilling, entities, sales=[], anticipos=[],
 function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose, setRendiciones, asPage=false}){
   const isDesktop=useIsDesktop()
   const myEmail=(user?.email||'').toLowerCase()
-  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const EMAIL_BY_NAME=equipoPorNombre()
   const toEmail=x=>{ if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
   const corr=rend?.correlativo||rendN||''
   const [para,setPara]=useState(rend?.dirigido_email||client?.email||'')
@@ -27645,7 +27665,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
   const [studioOn,setStudioOn]=useState(true)
   const studioEmails=useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); set.delete(myEmail); return [...set] },[client?.abogado_responsable,myEmail])
   const [fichaContacts,setFichaContacts]=useState([])
-  const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
+  const [firma,setFirma]=useState(firmaDefault(myEmail)||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const [comp,setComp]=useState(null)   // comprobante: {name,mime,b64}
   const [sending,setSending]=useState(false)
   const asunto=`Devolución de fondos${corr?` · Rendición N° ${corr}`:''} — ${client?.name||''}`
@@ -28015,7 +28035,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
   const [para,setPara]=useState(client?.email||'')
   const [cc,setCc]=useState([]); const [ccInput,setCcInput]=useState('')
   const [contacts,setContacts]=useState([])
-  const [firma,setFirma]=useState(FIRMA_DEFAULTS[myEmail]||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
+  const [firma,setFirma]=useState(firmaDefault(myEmail)||{nombre:user?.name||'',cargo:'Abogado',telefono:''})
   const glosaFac=facturaGlosa(factura, saleR)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
   const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.join(' y ')} | ${client?.name||''}` : `Factura ${folio}${glosaFac?` | ${glosaFac}`:(client?.name?` | ${client.name}`:'')}`)   // número | glosa de la factura (separador | en el asunto, por pedido del usuario)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
@@ -28255,7 +28275,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
 // CC = abogado responsable (automático). Reusa enviarComoUsuario + la cuenta de gastos + los learnings factura_to/cc y la tabla
 // contacts → los correos ingresados se APRENDEN y se sugieren en TODO correo futuro al cliente (facturas, rendiciones, etc.). Linkeado al cliente.
 function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial, responsable, user, expenses=[], onClose, asPage=false}){
-  const EMAIL_BY_NAME={'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const EMAIL_BY_NAME=equipoPorNombre()
   const [client,setClient]=useState(clientProp||null)   // si viene sin cliente (tarjeta del hub) se elige con el buscador
   const [cq,setCq]=useState('')
   const resp = responsable || client?.abogado_responsable || null
@@ -28442,7 +28462,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], sale
   const ultFondo = (expenses||[]).filter(e=>e.type==='fondo'&&e.client_id===r.client_id&&!e.deleted_at&&(e.amount||0)>0).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0]||null
   const [para,setPara] = useState(_borr?.para || r?._carry?.para || r?.dirigido_email || client?.email || '')
   // Cc: gente del cliente (con chips, aprendida y editable) + copia al estudio (responsable + quienes cargaron los gastos).
-  const EMAIL_BY_NAME = {'Cristóbal':'cl@leabogados.cl','Erasmo':'ee@leabogados.cl','Martín':'mc@leabogados.cl','Martina':'mp@leabogados.cl','Rodrigo':'rd@leabogados.cl'}
+  const EMAIL_BY_NAME = equipoPorNombre()
   const toEmail = x => { if(!x) return null; const s=String(x).trim(); return s.includes('@')?s.toLowerCase():(EMAIL_BY_NAME[s]||null) }
   const myEmail = (user?.email||'').toLowerCase()
   const studioEmails = useMemo(()=>{ const set=new Set(); const resp=toEmail(client?.abogado_responsable); if(resp) set.add(resp); det.forEach(e=>{ const em=toEmail(e.created_by); if(em) set.add(em) }); if(BRAND.casillaAgente) set.add(BRAND.casillaAgente); set.delete(myEmail); return [...set] },[client?.abogado_responsable, det, myEmail])
@@ -28479,7 +28499,7 @@ function RendicionEmailModal({r, client, user, expenses, clientEntities=[], sale
   const asuntoMulti = lang => lang==='en' ? `Expense Reports ${_todas.map(x=>`No. ${x.correlativo||'?'}`).join(' and ')} — ${client?.name||''}` : `Rendiciones de gastos ${_todas.map(x=>`N° ${x.correlativo||'?'}`).join(' y ')} — ${client?.name||''}`
   const [asunto,setAsunto] = useState(_txt?.asunto || (_multi ? asuntoMulti('es') : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`))
   const [lang,setLang] = useState(_borr?.lang||r?._carry?.lang||'es')
-  const [firma,setFirma] = useState(FIRMA_DEFAULTS[(user?.email||'').toLowerCase()] || {nombre:user?.name||'', cargo:'Abogado', telefono:''})
+  const [firma,setFirma] = useState(firmaDefault(user?.email) || {nombre:user?.name||'', cargo:'Abogado', telefono:''})
   const [showFirma,setShowFirma] = useState(false)
   const [sending,setSending] = useState(false)
   const buildHTML = () => {
@@ -28839,7 +28859,7 @@ Saludos cordiales,`
               <input value={firma[k]||''} onChange={e=>setFirma(f=>({...f,[k]:e.target.value}))} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
             </div>
           ))}
-        </div><div style={{fontSize:10,color:C.textSoft,marginTop:6}}>Se guarda para tus próximos correos. El correo incluye el logo de Liberona Escala.</div></>}
+        </div><div style={{fontSize:10,color:C.textSoft,marginTop:6}}>Se guarda para tus próximos correos. El correo incluye el logo de {BRAND.nombre}.</div></>}
       </div>
       {!(asPage&&isDesktop)&&<details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -32595,7 +32615,7 @@ function UsersView({onClose}) {
           </div>)}
           <div style={{background:C.bgSoft,borderRadius:10,padding:'12px 14px'}}>
             <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:10}}>Agregar usuario</div>
-            <Fld label='Email (@leabogados.cl)'><Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder='nombre@leabogados.cl'/></Fld>
+            <Fld label={`Email (@${BRAND.emailDominio})`}><Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder={`nombre@${BRAND.emailDominio}`}/></Fld>
             <Fld label='Nombre'><Inp value={newName} onChange={e=>setNewName(e.target.value)} placeholder='Nombre completo'/></Fld>
             <Fld label='Rol'>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -33141,11 +33161,11 @@ function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[
 // Asistente de redacción legal con IA (claudeCall). Redacta en el FORMATO del estudio; el usuario valida/edita (compuerta humana).
 const ESTUDIO_BRIEF = `Eres redactor del estudio jurídico chileno ${BRAND.nombre} (práctica corporativa y tributaria). Socios: ${BRAND.socios}. Membrete/firma del estudio: "${BRAND.direccionFirma}, ${BRAND.ciudad}", "${BRAND.telefono}", "${BRAND.web}". Escribe en español jurídico chileno, formal, claro y preciso. El estudio factura SIEMPRE exento de IVA; los honorarios se expresan en UF. Usa SOLO los datos que entregue el usuario; si falta un dato clave (honorarios, alcance, nombres), déjalo marcado como [completar] en vez de inventarlo. Devuelve solo el documento, sin comentarios ni explicaciones.`
 const TIPOS_REDACCION = [
-  {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "Liberona Escala Abogados tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "Liberona Escala Abogados".`},
+  {k:'propuesta', lbl:'Propuesta de honorarios', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una PROPUESTA DE SERVICIOS PROFESIONALES con la estructura exacta del estudio:\n· Encabezado: "Propuesta de Servicios Profesionales" + subtítulo con el tipo de asesoría; destinatario(s) y empresa; "PRESENTE"; "Santiago, <fecha>"; "CONFIDENCIAL"; "Ref.: Propuesta de Servicios Legales - <tema>"; "De mi consideración:".\n· Intro: "${BRAND.nombre} tiene el agrado de someter a su consideración la presente propuesta de servicios profesionales. El objeto de nuestro encargo es...".\n· "I. Alcance de los Servicios" (subsecciones A/B e ítems numerados según corresponda).\n· "II. Honorarios Profesionales" (Honorario Fijo / Retainer en UF; Honorario de Éxito / Success Fee como % si aplica).\n· "III. Forma de Pago" (ej. Retainer 50% a la aceptación y 50% al cierre; "la facturación se realizará mediante factura exenta de IVA").\n· "IV. Condiciones y Exclusiones" (no incluye litigios/arbitrajes salvo indicación expresa; un cambio sustancial de alcance requiere revisión de honorarios; los gastos de terceros —derechos notariales, CBR, certificados— son de cargo del cliente).\n· Cierre cordial + firma de un Socio (Cristóbal Liberona o Erasmo Escala), bajo él "Socio" y "${BRAND.nombre}".`},
   {k:'memo', lbl:'Memo', max:2200, sys:`${ESTUDIO_BRIEF}\n\nRedacta un MEMORÁNDUM legal: membrete del estudio ("CONFIDENCIAL", fecha, dirección, teléfono, leabogados.cl), una exposición ordenada de los hechos, el análisis jurídico/tributario aplicable y conclusiones/recomendaciones.`},
-  {k:'informe', lbl:'Informe tributario', max:3000, sys:`${ESTUDIO_BRIEF}\n\nRedacta un INFORME / OPINIÓN LEGAL TRIBUTARIA sobre la materia específica que indique el usuario, con la estructura y el estándar del estudio:\n· Encabezado: "Santiago, <fecha>"; destinatario ("Señores <X>", "Presente"); "Ref.: Opinión legal – <materia>"; "De nuestra consideración:".\n· Intro: "En nuestra calidad de asesores legales de <Sociedad>, RUT <X>, ... hemos examinado <la documentación/materia>...".\n· "I. Antecedentes y alcance de la revisión" (hechos, contratos y documentos tenidos a la vista).\n· "II. Marco normativo y análisis" (subsecciones II.1, II.2…; CITA las normas chilenas pertinentes —DL 824 sobre Impuesto a la Renta, DL 825 sobre IVA y sus artículos, Código Tributario, circulares/oficios del SII—; cuando haya requisitos copulativos, analízalos UNO A UNO y cierra cada uno, cuando corresponda, con "Este requisito se encuentra satisfecho").\n· "III. Conclusiones" (numeradas; usa el estándar "en términos jurídicamente razonables").\n· "IV. Reservas y limitaciones" (opinión emitida solo desde una perspectiva jurídica, sobre los antecedentes a la fecha, bajo estándar de razonabilidad jurídica, sin garantía de resultado ni pronunciamiento sobre la actuación futura del SII, en beneficio exclusivo del destinatario).\n· Firma de un Socio (Cristóbal Liberona o Erasmo Escala), "Socio", "Liberona Escala Abogados".\nSALVAGUARDA CRÍTICA: NUNCA inventes números de artículos, oficios, circulares ni jurisprudencia. Si no estás seguro de una cita normativa exacta, escríbela como [verificar cita]. Si falta un dato clave (norma, hechos, RUT), márcalo como [completar].`},
+  {k:'informe', lbl:'Informe tributario', max:3000, sys:`${ESTUDIO_BRIEF}\n\nRedacta un INFORME / OPINIÓN LEGAL TRIBUTARIA sobre la materia específica que indique el usuario, con la estructura y el estándar del estudio:\n· Encabezado: "Santiago, <fecha>"; destinatario ("Señores <X>", "Presente"); "Ref.: Opinión legal – <materia>"; "De nuestra consideración:".\n· Intro: "En nuestra calidad de asesores legales de <Sociedad>, RUT <X>, ... hemos examinado <la documentación/materia>...".\n· "I. Antecedentes y alcance de la revisión" (hechos, contratos y documentos tenidos a la vista).\n· "II. Marco normativo y análisis" (subsecciones II.1, II.2…; CITA las normas chilenas pertinentes —DL 824 sobre Impuesto a la Renta, DL 825 sobre IVA y sus artículos, Código Tributario, circulares/oficios del SII—; cuando haya requisitos copulativos, analízalos UNO A UNO y cierra cada uno, cuando corresponda, con "Este requisito se encuentra satisfecho").\n· "III. Conclusiones" (numeradas; usa el estándar "en términos jurídicamente razonables").\n· "IV. Reservas y limitaciones" (opinión emitida solo desde una perspectiva jurídica, sobre los antecedentes a la fecha, bajo estándar de razonabilidad jurídica, sin garantía de resultado ni pronunciamiento sobre la actuación futura del SII, en beneficio exclusivo del destinatario).\n· Firma de un Socio (Cristóbal Liberona o Erasmo Escala), "Socio", "${BRAND.nombre}".\nSALVAGUARDA CRÍTICA: NUNCA inventes números de artículos, oficios, circulares ni jurisprudencia. Si no estás seguro de una cita normativa exacta, escríbela como [verificar cita]. Si falta un dato clave (norma, hechos, RUT), márcalo como [completar].`},
   {k:'presentacion', lbl:'Presentación', max:2600, sys:`${ESTUDIO_BRIEF}\n\nRedacta el GUION/ESQUEMA de una PRESENTACIÓN profesional del estudio (para convertir a láminas) sobre la materia que indique el usuario. Estructura: portada (título + cliente + fecha); agenda; luego una lámina por sección con el formato "Lámina N — <título>" y 3-5 viñetas concisas; cierra con conclusiones/próximos pasos y una lámina de contacto del estudio. Si es una presentación de servicios/honorarios, refleja el alcance y la estructura de honorarios (UF, factura exenta de IVA). Marca datos faltantes como [completar].`},
-  {k:'plan', lbl:'Plan de acción', max:2400, sys:`${ESTUDIO_BRIEF}\n\nRedacta un PLAN DE ACCIÓN / HOJA DE RUTA para la materia que indique el usuario, con la estructura del estudio:\n· Encabezado: "CONFIDENCIAL"; "Santiago, <fecha>"; destinatario/cliente; "Ref.: Plan de acción – <materia>".\n· "Objetivo": 1-2 frases con el resultado que se busca lograr.\n· "Etapas" numeradas (I, II, III…). Cada etapa con: un título; las acciones concretas (viñetas); el RESPONSABLE de cada acción (Estudio / Cliente / Notaría / SII / Conservador de Bienes Raíces / contador, según corresponda); y un PLAZO o hito estimado.\n· "Consideraciones legales y tributarias clave": requisitos, riesgos y contingencias a tener presentes.\n· "Próximos pasos inmediatos": las primeras 2-3 acciones para arrancar de inmediato.\n· Firma de un Socio (Cristóbal Liberona o Erasmo Escala), "Socio", "Liberona Escala Abogados".\nSi falta un dato clave (plazos exactos, montos, normas), márcalo como [completar]. NO inventes cifras, plazos legales ni números de norma; si no estás seguro de una cita, escríbela como [verificar cita].`},
+  {k:'plan', lbl:'Plan de acción', max:2400, sys:`${ESTUDIO_BRIEF}\n\nRedacta un PLAN DE ACCIÓN / HOJA DE RUTA para la materia que indique el usuario, con la estructura del estudio:\n· Encabezado: "CONFIDENCIAL"; "Santiago, <fecha>"; destinatario/cliente; "Ref.: Plan de acción – <materia>".\n· "Objetivo": 1-2 frases con el resultado que se busca lograr.\n· "Etapas" numeradas (I, II, III…). Cada etapa con: un título; las acciones concretas (viñetas); el RESPONSABLE de cada acción (Estudio / Cliente / Notaría / SII / Conservador de Bienes Raíces / contador, según corresponda); y un PLAZO o hito estimado.\n· "Consideraciones legales y tributarias clave": requisitos, riesgos y contingencias a tener presentes.\n· "Próximos pasos inmediatos": las primeras 2-3 acciones para arrancar de inmediato.\n· Firma de un Socio (Cristóbal Liberona o Erasmo Escala), "Socio", "${BRAND.nombre}".\nSi falta un dato clave (plazos exactos, montos, normas), márcalo como [completar]. NO inventes cifras, plazos legales ni números de norma; si no estás seguro de una cita, escríbela como [verificar cita].`},
   {k:'minuta', lbl:'Minuta de reunión', max:1600, sys:`${ESTUDIO_BRIEF}\n\nRedacta una MINUTA DE REUNIÓN: encabezado (cliente, fecha, asistentes), puntos tratados numerados, acuerdos/decisiones y próximos pasos con responsables. Concisa y accionable.`},
   {k:'clausula', lbl:'Cláusula', max:1400, sys:`${ESTUDIO_BRIEF}\n\nRedacta la o las CLÁUSULAS contractuales que pida el usuario, precisas y ejecutables bajo derecho chileno. Si aporta valor, ofrece alternativas de redacción.`},
   {k:'correo', lbl:'Correo', max:1100, sys:`${ESTUDIO_BRIEF}\n\nRedacta un CORREO profesional (al cliente o contraparte) en el tono del estudio, claro y cordial. Empieza con "Asunto: ...".`},
@@ -34395,7 +34415,7 @@ async function escanearTareasGmail(clients=[], onProgress){
   const hoyISO=new Date().toISOString().slice(0,10); const out=[]
   for(let i=0;i<correos.length;i+=20){
     const batch=correos.slice(i,i+20); if(onProgress) onProgress(correos.length===0?0:Math.min(correos.length,i),correos.length)
-    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -34432,7 +34452,7 @@ async function capturaHorasFuentes(token, clients=[], dias=2){
   const norm = s => _normTxt(s)
   const genericDom = d => /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|protonmail)\./.test(d+'.') || ['gmail.com','hotmail.com','outlook.com','yahoo.com','icloud.com','live.com'].includes(d)
   const activos = clients.filter(c=>c.status!=='Terminado')
-  const cliByEmail = raw => { const em=String(raw||'').toLowerCase().trim(); if(!em.includes('@')||em.endsWith('@leabogados.cl')) return null
+  const cliByEmail = raw => { const em=String(raw||'').toLowerCase().trim(); if(!em.includes('@')||esCorreoOficina(em)) return null
     let c=activos.find(x=>String(x.email||'').toLowerCase()===em); if(c) return String(c.id)
     const dom=em.split('@')[1]||''; if(dom&&!genericDom(dom)){ c=activos.find(x=>String(x.email||'').toLowerCase().split('@')[1]===dom); if(c) return String(c.id) }
     return null }
@@ -34490,7 +34510,7 @@ async function escanearCarteraGmail(clients=[], proyectos=[], onProgress){
   const hoyISO=new Date().toISOString().slice(0,10); const out=[]
   for(let i=0;i<correos.length;i+=20){
     const batch=correos.slice(i,i+20)
-    const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide UNA de estas tres: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}; (c) COMPROMISO o PLAZO concreto con FECHA cierta para un PROYECTO existente (una entrega acordada, un vencimiento, una reunión o audiencia fijada por el correo) → {"tipo":"hito","proyecto_id":"<id de la lista>","titulo":"compromiso en pocas palabras","fecha":"YYYY-MM-DD","fuente":"Remitente — Asunto"}. Solo usa "hito" si el correo fija una fecha real y concreta (no un "a la brevedad"). Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas ni fechas que no estén en el correo.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide UNA de estas tres: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}; (c) COMPROMISO o PLAZO concreto con FECHA cierta para un PROYECTO existente (una entrega acordada, un vencimiento, una reunión o audiencia fijada por el correo) → {"tipo":"hito","proyecto_id":"<id de la lista>","titulo":"compromiso en pocas palabras","fecha":"YYYY-MM-DD","fuente":"Remitente — Asunto"}. Solo usa "hito" si el correo fija una fecha real y concreta (no un "a la brevedad"). Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas ni fechas que no estén en el correo.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
       const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -34571,7 +34591,7 @@ async function escanearCarteraCalendario(clients=[], proyectos=[]){
   const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:String(c.id),nombre:c.name}))
   const proyList=proyectos.filter(p=>p.activo!==false).map(p=>({id:String(p.id),cliente_id:String(p.cliente_id||''),nombre:p.nombre_proyecto}))
   const hoyISO=new Date().toISOString().slice(0,10)
-  const prompt=`Eres asistente de un abogado del estudio Liberona Escala Abogados. Te paso EVENTOS del calendario (título, fecha, asistentes, ubicación), CLIENTES y PROYECTOS activos. Para cada evento que claramente corresponda a un cliente/proyecto (audiencia, reunión, vencimiento, hito), devuelve {"tipo":"hito","proyecto_id":"<id de la lista o null>","cliente_id":"<id o null>","titulo":"...","fecha":"YYYY-MM-DD"}. Enlaza a un PROYECTO existente por su cliente siempre que puedas. Ignora eventos personales o irrelevantes. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nEVENTOS:\n${JSON.stringify(evs)}`
+  const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso EVENTOS del calendario (título, fecha, asistentes, ubicación), CLIENTES y PROYECTOS activos. Para cada evento que claramente corresponda a un cliente/proyecto (audiencia, reunión, vencimiento, hito), devuelve {"tipo":"hito","proyecto_id":"<id de la lista o null>","cliente_id":"<id o null>","titulo":"...","fecha":"YYYY-MM-DD"}. Enlaza a un PROYECTO existente por su cliente siempre que puedas. Ignora eventos personales o irrelevantes. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nEVENTOS:\n${JSON.stringify(evs)}`
   try{
     const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2000,messages:[{role:'user',content:prompt}]})
     const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -34955,7 +34975,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
     const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
     for(let i=0;i<ambig.length;i+=25){
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
-      const prompt=`Eres asistente del estudio de abogados Liberona Escala Abogados (@leabogados.cl). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
+      const prompt=`Eres asistente del estudio de abogados ${BRAND.nombre} (@${BRAND.emailDominio}). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
         const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
         const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -43003,6 +43023,7 @@ export default function App() {
   const [brandV,setBrandV]=useState(0)   // bump al cargar la identidad del estudio desde la DB (Etapa 2 multi-tenant) → re-render de la chrome
   // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
   // En demo va neutro ('FirmDesk', marca del producto) para no exponer el nombre del estudio a un prospecto.
+  useEffect(()=>{ if(user?.email) cargarEquipo(user.email) },[user?.email])   // equipo del estudio (nombre ↔ correo principal)
   useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[brandV])
   // Nombre de la app instalada (pantalla de inicio del iPhone, Dock del Mac): el del estudio, no el del producto. El teléfono lo
   // lee al agregarla, desde la etiqueta apple-mobile-web-app-title y el manifiesto (aquí armado con los datos del estudio).
@@ -43394,6 +43415,7 @@ export default function App() {
         setActualRole(rm.data.rol); setUserRole(rm.data.rol)
         if(rm.data.rol==='limited') _aTareasSoloAlEntrar(); else _rolInicial.current=false
         loadSocios(rm.data.estudio_id)
+        await cargarEquipo(email)   // equipo y firmas listos antes de dibujar las vistas
         return { role:rm.data.rol, name:rm.data.nombre || (email||'').split('@')[0], estudio_id:rm.data.estudio_id }
       }
     }catch(_){}
@@ -45418,7 +45440,7 @@ export default function App() {
       if(dest && r.dteXml && await appConfirm(`Factura emitida (folio ${r.folio}).\n¿Enviarla ahora al cliente (${dest})?`)){
         try{
           const sale=mejorVenta(fact, sales, fact?.client_id)
-          const firma=FIRMA_DEFAULTS[(user?.email||'').toLowerCase()]||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
+          const firma=firmaDefault(user?.email)||{nombre:user?.name||'',cargo:'Abogado',telefono:''}
           const cliNom=(clients||[]).find(c=>String(c.id)===String(fact?.client_id))?.name||''
           const bodyTxt=`${saludoCli(cliNom)},\n\n`+facturaCorreoBody({...fact,invoice_no:String(r.folio)}, sale)
           const html=facturaCorreoHtml(bodyTxt, firma, false)
