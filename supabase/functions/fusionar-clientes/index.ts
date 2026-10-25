@@ -8,6 +8,7 @@
 // Auth: usuario @leabogados.cl con JWT (misma política que clientes-drive-sync).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -40,7 +41,7 @@ serve(async (req) => {
   const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const { data: u } = await sb.auth.getUser(jwt);
   const email = (u?.user?.email || "").toLowerCase();
-  if (!email.endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
+  if (!esDelDominio(email)) return json({ error: "No autorizado" }, 403);
 
   const survivor = String(body.survivor_id || "");
   const loser = String(body.loser_id || "");
