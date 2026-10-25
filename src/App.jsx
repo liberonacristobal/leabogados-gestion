@@ -43186,7 +43186,7 @@ export default function App() {
     _setModal(m)
   },[tab,navTo,goBack,pagina])
   // Solo demo: la prueba automática (scripts/smoke-demo.mjs) recorre las vistas con la misma navegación de la app.
-  useEffect(()=>{ if(DEMO) window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth} },[navTo,setModal,goBack])
+  useEffect(()=>{ if(DEMO||window.__pruebaCarga) window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth} },[navTo,setModal,goBack])   // __pruebaCarga: la pone solo la prueba de carga real simulada
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
   const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
