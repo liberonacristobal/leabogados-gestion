@@ -151,6 +151,16 @@ La falla recurrente (día entero 2026-10-01): tomé un número derivado —una v
 
 Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
 
+## REGLA DE ORO: cero suposiciones — la cifra la calcula la app y la confirma otro
+
+Nace del 25-10-2026: presenté «15 cuotas sin emitir, $16,1M» con una consulta propia que no aplicaba toda la regla del radar (eran 7 por $10,0M), y propuse reclamar la Factura N° 323 de BDA sin ver el correo donde Rodrigo explicaba que eran comisiones ya registradas. La regla de prueba positiva existía y no bastó: estos pasos son **obligatorios**, no criterio.
+
+1. **La cifra sale de la función de la app, no de una consulta mía.** Todo número o pendiente sobre un concepto de la app (radar, por cobrar, vencido, saldo, rendir, notaría, trabajos detenidos) se obtiene con la MISMA función que usa la app: el helper de `_shared` o el modo prueba (dryRun) de la función del servidor. Si no existe función, se rotula «estimación propia, sin la regla de la app» y no se presenta como hallazgo.
+2. **Contexto del negocio antes de proponer una acción.** Antes de sugerir algo sobre un cliente o tercero (reclamar, cobrar, cerrar, castigar), buscar si ya hay un acuerdo o explicación: correos (contacto@ y la casilla del socio), learnings, bitácora, notas y memoria. Si no lo busqué, no propongo la acción.
+3. **Revisión independiente antes de entregar un análisis.** Un análisis con hallazgos (auditoría, diagnóstico, «qué falta») lo verifica un revisor aparte que recibe los datos y la pregunta, no mi conclusión, y baja a las filas. Se entrega solo lo que sobrevive, separado en «confirmado (con su fuente)» y «por verificar».
+4. **Cada falso positivo deja su prueba.** Todo falso positivo encontrado, en la app o en mi análisis, se corrige en la regla (no en la vista) y queda como caso en `tests/` (anonimizado), para que no vuelva.
+5. **Cada afirmación con su fuente.** Archivo:línea, función o filas consultadas. Sin fuente = «por verificar», nunca un hecho.
+
 ## REGLA DE ORO: coherencia de datos entre vistas (una cifra, una fuente, un dueño)
 
 Prioridad #1 del usuario: **la misma cifra se ve igual entre por donde se entre** (Inicio, Oficina, Facturación, Por socio, Inteligencia, ficha, correos, exportaciones). Reforzada 2026-10-19 al alinear Por socio e Inteligencia.
