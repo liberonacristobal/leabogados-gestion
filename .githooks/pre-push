@@ -1,0 +1,5 @@
+#!/bin/sh
+# Antes de publicar: build, pruebas de las reglas y recorrido de la demo (npm run verificar).
+# Para saltarla en una emergencia: SIN_VERIFICAR=1 git push
+[ "$SIN_VERIFICAR" = "1" ] && exit 0
+npm run verificar --silent || { echo "\n✗ Publicación detenida: la verificación falló (arriba el detalle)."; exit 1; }

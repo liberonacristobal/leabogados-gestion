@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, Component } from 'react'
 import { createPortal } from 'react-dom'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
-import mammoth from 'mammoth'
-import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
   getClients, getBilling, selectAll,
@@ -26,7 +22,12 @@ import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos } from '../supabase/functions/_shared/ventasReglas.js'
+import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
+// Lectores de PDF y Word: se cargan la primera vez que se lee un documento (no en la apertura de la app; pesan cerca de 1 MB).
+let _pdfjsP=null
+const cargarPdfjs=()=> _pdfjsP || (_pdfjsP=Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker?url')]).then(([lib,w])=>{ lib.GlobalWorkerOptions.workerSrc=w.default; return lib }).catch(e=>{ _pdfjsP=null; throw e }))
+const cargarMammoth=()=> import('mammoth').then(m=>m.default||m)
 
 // LA CLAVE ANÓNIMA NO IDENTIFICA A NADIE: viaja en este mismo paquete. Las
 // funciones que mandan correo desde la cuenta del estudio exigen la sesión de
@@ -6024,7 +6025,7 @@ function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdi
       const r=await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
       if(r.ok){
         const buf=new Uint8Array(await r.arrayBuffer())
-        const pdf=await pdfjsLib.getDocument({data:buf}).promise
+        const pdf=await (await cargarPdfjs()).getDocument({data:buf}).promise
         let text=''
         for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const c=await pg.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
         if(text.trim()){
@@ -6802,7 +6803,7 @@ function SaleForm({asPage=false,afterHero=null,sale,clients:initialClients,clien
       let text = ''
       if(file.name.toLowerCase().endsWith('.pdf')) {
         const arrayBuf = await file.arrayBuffer()
-        const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuf)}).promise
+        const pdf = await (await cargarPdfjs()).getDocument({data: new Uint8Array(arrayBuf)}).promise
         for(let i=1; i<=pdf.numPages; i++) {
           const page = await pdf.getPage(i)
           const content = await page.getTextContent()
@@ -6810,7 +6811,7 @@ function SaleForm({asPage=false,afterHero=null,sale,clients:initialClients,clien
         }
       } else {
         const arrayBuf = await file.arrayBuffer()
-        const result = await mammoth.extractRawText({arrayBuffer: arrayBuf})
+        const result = await (await cargarMammoth()).extractRawText({arrayBuffer: arrayBuf})
         text = result.value
       }
       const apiData = await claudeCall({model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
@@ -29959,9 +29960,8 @@ const NOMBRE_DTE_CORTO={33:'Factura',34:'Factura exenta',56:'Nota de débito',61
 async function facturaDtePdfBase64(docXml, opts={}){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const bwip = await _loadBwip()
-  // Los textos del XML vienen escapados («A &amp; B»): se imprimen como los lee el cliente.
-  const unx=v=>v.replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')
-  const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?unx(m[1].trim()):'' }
+  // Los textos del XML vienen escapados («A &amp; B»): se imprimen como los lee el cliente (regla única desescaparXml).
+  const g=(t,s=docXml)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?desescaparXml(m[1].trim()):'' }
   const ted=(docXml.match(/<TED[\s\S]*?<\/TED>/)||[''])[0]
   const idDoc=(docXml.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(docXml.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(docXml.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(docXml.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
   const detalles=[...docXml.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
@@ -30916,7 +30916,7 @@ function DriveImporter({clients,billing,onImported,onClose,clientEntities}){
         const arrayBuf=await binRes.arrayBuffer()
         let raw=''
         try{
-          const pdfDoc=await pdfjsLib.getDocument({data:arrayBuf}).promise
+          const pdfDoc=await (await cargarPdfjs()).getDocument({data:arrayBuf}).promise
           for(let p=1;p<=pdfDoc.numPages;p++){const page=await pdfDoc.getPage(p);const tc=await page.getTextContent();raw+=tc.items.map(i=>i.str).join(' ')+'\n'}
         }catch(e){raw=new TextDecoder('latin1').decode(arrayBuf)}
         const parsed=parseInvoice(raw)
@@ -31091,7 +31091,7 @@ function PDFUploader({clients,billing,onImported,onClose,onClientsUpdate,clientE
     reader.onload = async(e)=>{
       try {
         const typedArr = new Uint8Array(e.target.result)
-        const pdfDoc = await pdfjsLib.getDocument({data:typedArr}).promise
+        const pdfDoc = await (await cargarPdfjs()).getDocument({data:typedArr}).promise
         let text = ''
         for(let p=1;p<=pdfDoc.numPages;p++){
           const page = await pdfDoc.getPage(p)
@@ -32989,11 +32989,11 @@ async function leerDriveTextoSA(file){   // lee un archivo de Drive a texto vía
   const bin = atob(d.base64||''); const buf = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i)
   const isGDoc = file.mimeType==='application/vnd.google-apps.document'
   if(!isGDoc && (file.mimeType==='application/pdf'||(file.name||'').toLowerCase().endsWith('.pdf'))){
-    const pdf = await pdfjsLib.getDocument({data:buf}).promise
+    const pdf = await (await cargarPdfjs()).getDocument({data:buf}).promise
     let text=''; for(let i=1;i<=pdf.numPages;i++){ const p=await pdf.getPage(i); const c=await p.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
     return text
   }
-  const r = await mammoth.extractRawText({arrayBuffer:buf.buffer}); return r.value||''
+  const r = await (await cargarMammoth()).extractRawText({arrayBuffer:buf.buffer}); return r.value||''
 }
 async function leerDriveTexto(file){   // lee un archivo de Drive a texto plano (gdoc/docx vía mammoth, pdf vía pdfjs) — mismo patrón que extractFromFile
   const id=file.id, mt=file.mimeType||'', nm=(file.name||'').toLowerCase()
@@ -33003,12 +33003,12 @@ async function leerDriveTexto(file){   // lee un archivo de Drive a texto plano 
     : `https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`
   const buf = await driveFetchBufAuth(url)
   if(!isGDoc && (mt==='application/pdf'||nm.endsWith('.pdf'))){
-    const pdf = await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise
+    const pdf = await (await cargarPdfjs()).getDocument({data:new Uint8Array(buf)}).promise
     let text=''
     for(let i=1;i<=pdf.numPages;i++){ const page=await pdf.getPage(i); const c=await page.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
     return text
   }
-  const r = await mammoth.extractRawText({arrayBuffer:buf})
+  const r = await (await cargarMammoth()).extractRawText({arrayBuffer:buf})
   return r.value||''
 }
 function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[], onClose}){
@@ -42978,6 +42978,8 @@ export default function App() {
       return }
     _setModal(m)
   },[tab,navTo,goBack,pagina])
+  // Solo demo: la prueba automática (scripts/smoke-demo.mjs) recorre las vistas con la misma navegación de la app.
+  useEffect(()=>{ if(DEMO) window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth} },[navTo,setModal,goBack])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
   const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
