@@ -10,6 +10,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
 const APP_URL = "https://gestion.leabogados.cl";
@@ -19,11 +20,11 @@ const CRON_SECRET = Deno.env.get("HORAS_FACTURAR_SECRET") || Deno.env.get("CRON_
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const NOMBRE: Record<string,string> = { CL:"Cristóbal", EE:"Erasmo", MC:"Martín", MP:"Martina", RD:"Rodrigo" };
-const EMAIL:  Record<string,string> = { CL:"cl@leabogados.cl", EE:"ee@leabogados.cl", MC:"mc@leabogados.cl", MP:"mp@leabogados.cl", RD:"rd@leabogados.cl" };
-const INI_DE_EMAIL: Record<string,string> = { "cl@leabogados.cl":"CL","ee@leabogados.cl":"EE","mc@leabogados.cl":"MC","mp@leabogados.cl":"MP","rd@leabogados.cl":"RD" };
+let NOMBRE: Record<string,string> = {};
+let EMAIL: Record<string,string> = {};
+let INI_DE_EMAIL: Record<string,string> = {};
 const norm = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
-const EMAIL_BY_NAME: Record<string,string> = {}; Object.keys(NOMBRE).forEach(ini=>{ EMAIL_BY_NAME[norm(NOMBRE[ini])] = EMAIL[ini]; });
+let EMAIL_BY_NAME: Record<string,string> = {};
 
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
@@ -38,6 +39,7 @@ async function sendMail(to:string, subject:string, html:string){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); NOMBRE = eq.nombrePorIni; EMAIL = eq.porIni; INI_DE_EMAIL = eq.iniDe; EMAIL_BY_NAME = {}; Object.keys(NOMBRE).forEach(ini=>{ EMAIL_BY_NAME[norm(NOMBRE[ini])] = EMAIL[ini]; }); }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);

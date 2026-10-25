@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { enviarPush } from "../_shared/push.ts";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -73,15 +74,7 @@ const cors = (req: Request) => {
   };
 };
 
-const EMAILS: Record<string, string> = {
-  "Martín": "mc@leabogados.cl",
-  "Martin": "mc@leabogados.cl",
-  "Martina": "mp@leabogados.cl",
-  "Rodrigo": "rd@leabogados.cl",
-  "Erasmo": "ee@leabogados.cl",
-  "Cristóbal": "cl@leabogados.cl",
-  "Cristobal": "cl@leabogados.cl",
-};
+
 
 // Envío por SMTP robusto (denomailer) — reemplaza la implementación a mano que fallaba con "Bad resource ID".
 async function sendViaSMTP(to: string, subject: string, html: string, fromName = "Liberona Escala Abogados", replyTo?: string) {
@@ -206,10 +199,13 @@ serve(async (req) => {
     if (!recipientName && !esCierreConReporte) {
       return new Response(JSON.stringify({ skipped: true, reason: "Sin destinatario" }), { status: 200 });
     }
-    const ADMINS = ["cl@leabogados.cl", "ee@leabogados.cl"];
+    // Equipo del estudio (miembros): correo por nombre (tolera «Martin», «Cristobal») y admins.
+    const eq = await cargarEquipo(SB_URL, SERVICE_KEY);
+    const ADMINS: string[] = eq.admins;
+    const correoDe = eq.correoDe;
     // Remitente (para excluirlo del CC): en terminada = quien cerró (task.who).
-    const fromEmailEarly = EMAILS[tipo === "delegada" ? (task.delegated_by || by) : tipo === "terminada" ? (task.who || by) : by] || "";
-    let toEmail = EMAILS[recipientName] || "";
+    const fromEmailEarly = correoDe(tipo === "delegada" ? (task.delegated_by || by) : tipo === "terminada" ? (task.who || by) : by) || "";
+    let toEmail = correoDe(recipientName) || "";
     let ccEmail: string[] = [];
     if (esCierreConReporte) {
       // Reporte de cierre de un limited: SIEMPRE avisa a los admins (aunque el que asignó falte o sea el mismo que cerró).
@@ -303,7 +299,7 @@ serve(async (req) => {
     let fromPerson = by;
     if (tipo === "delegada") fromPerson = task.delegated_by || by;
     else if (tipo === "terminada") fromPerson = task.who || by;
-    const fromEmail = EMAILS[fromPerson];
+    const fromEmail = correoDe(fromPerson);
     const fromName = fromEmail ? `${fromPerson} - Liberona Escala Abogados` : "Liberona Escala Abogados";
     // "terminada" puede traer adjuntos (reporte de cierre) → sendMail (soporta adjuntos + from/replyTo).
     // El resto (nueva/delegada) sigue por sendViaSMTP, sin cambios.

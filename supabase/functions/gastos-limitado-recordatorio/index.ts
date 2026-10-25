@@ -11,6 +11,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
 const APP_URL = "https://gestion.leabogados.cl";
@@ -20,11 +21,7 @@ const CRON_SECRET = Deno.env.get("GASTOS_LIMITADO_SECRET") || Deno.env.get("CRON
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const LIMITADOS = [
-  { ini:"MC", nombre:"Martín",  email:"mc@leabogados.cl" },
-  { ini:"MP", nombre:"Martina", email:"mp@leabogados.cl" },
-  { ini:"RD", nombre:"Rodrigo", email:"rd@leabogados.cl" },
-];
+let LIMITADOS: { ini: string; nombre: string; email: string }[] = [];
 
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
@@ -39,6 +36,7 @@ async function sendMail(to:string, subject:string, html:string){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); LIMITADOS = eq.limitados.map((m: { ini: string; nombre: string; email: string }) => ({ ini: m.ini, nombre: m.nombre, email: m.email })); }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);

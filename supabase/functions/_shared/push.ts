@@ -7,6 +7,7 @@
 // Horario de silencio 21:00–8:00 (hora de Chile): lo que llega de noche queda en push_cola y sale junto a las 8:00
 // (función push, action 'cola'). Las causas en tabla no esperan: son del mismo día.
 import webpush from "npm:web-push@3.6.7";
+import { ESTUDIO_ID } from "./equipo.js";
 
 export interface AvisoPush { titulo: string; cuerpo: string; url?: string; etiqueta?: string }
 export type TipoPush = "tareas" | "causas" | "fondos" | "notaria" | "clientes" | "pagos" | "normativa" | "sistema" | "prueba";
@@ -27,12 +28,14 @@ export const enSilencio = (d = new Date()) => { const h = horaChile(d); return h
 
 const _norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 
-// Correos de las personas del equipo por su nombre (clients.abogado_responsable, sales.responsible): tabla miembros.
+// Correos de las personas del equipo por su nombre (clients.abogado_responsable, sales.responsible): tabla miembros, solo de este
+// estudio (otra fila con el mismo nombre de pila en otro estudio no recibe el aviso); incluye sus alias, porque la suscripción
+// queda con el correo con que la persona entró.
 export async function emailsDeNombres(sbUrl: string, serviceKey: string, nombres: (string | null | undefined)[]): Promise<string[]> {
   const ns = [...new Set(nombres.map((n) => _norm(n || "")).filter(Boolean))];
   if (!ns.length) return [];
   try {
-    const r = await fetch(`${sbUrl}/rest/v1/miembros?select=nombre,email`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+    const r = await fetch(`${sbUrl}/rest/v1/miembros?select=nombre,email&estudio_id=eq.${encodeURIComponent(ESTUDIO_ID)}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
     const ms: { nombre: string; email: string }[] = r.ok ? await r.json() : [];
     return ms.filter((m) => m.email && ns.some((n) => _norm(m.nombre) === n || _norm(m.nombre).split(" ")[0] === n)).map((m) => m.email);
   } catch (_) { return []; }

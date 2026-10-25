@@ -13,6 +13,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
+import { cargarEquipo, sinTildes } from "../_shared/equipo.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
@@ -20,10 +21,6 @@ const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("RESUMEN_LUNES_SECRET") || Deno.env.get("CRON_SECRET") || "";
 
-const ADMINS = [
-  { name: "Cristóbal", alt: ["Cristobal"], email: "cl@leabogados.cl" },
-  { name: "Erasmo", alt: [], email: "ee@leabogados.cl" },
-];
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -170,6 +167,9 @@ serve(async (req) => {
     const dryRun = !!body.dryRun;
     const testTo = typeof body.testTo === "string" ? body.testTo : null;
     const sent: unknown[] = [];
+    // Destinatarios: los admins del estudio (miembros), con su nombre también sin tildes para calzar tareas antiguas.
+    const ADMINS = (await cargarEquipo(SB_URL, SB_KEY)).miembros.filter((m) => m.rol === "admin")
+      .map((m) => ({ name: m.nombre, alt: [sinTildes(m.nombre)].filter((x) => x !== m.nombre), email: m.email }));
 
     for (const adm of ADMINS) {
       const nombres = [adm.name, ...adm.alt];

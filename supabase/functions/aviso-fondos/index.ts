@@ -14,14 +14,17 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const APP = "https://gestion.leabogados.cl";
 
-const SOCIOS: Record<string, string> = { "Cristóbal": "cl@leabogados.cl", "Erasmo": "ee@leabogados.cl" };
-const OTRO: Record<string, string> = { "Cristóbal": "Erasmo", "Erasmo": "Cristóbal" };
+// Socios del estudio (miembros.es_socio): nombre → correo, y el otro socio que va en copia. PRIMER_SOCIO recibe lo que no es de un socio.
+let SOCIOS: Record<string, string> = {};
+let OTRO: Record<string, string> = {};
+let PRIMER_SOCIO = "";
 const CC_DESDE = 4;          // después del tercer aviso, copia al otro socio
 const SEGUIMIENTO_DIAS = 15;
 
@@ -45,7 +48,7 @@ function etiqueta(e: Record<string, unknown>) {
   return esc(t) + ot;
 }
 // Quién cargó el gasto: created_by guarda el nombre (equipo) o el correo (socios); sin autor + OT = vino del estado de la notaría.
-const NOMBRE_DE: Record<string, string> = { "cl@leabogados.cl": "Cristóbal", "ee@leabogados.cl": "Erasmo", "mc@leabogados.cl": "Martín", "mp@leabogados.cl": "Martina", "rd@leabogados.cl": "Rodrigo" };
+let NOMBRE_DE: Record<string, string> = {};
 const quienCargo = (e: Record<string, unknown>) => { const by = String(e.created_by || "").trim(); if (by) return NOMBRE_DE[by.toLowerCase()] || by; return /\d/.test(String(e.ot_number || "")) ? "la notaría" : ""; };
 const unir = (xs: string[]) => xs.length <= 1 ? (xs[0] || "") : xs.slice(0, -1).join(", ") + " y " + xs[xs.length - 1];
 const esNotaPend = (e: Record<string, unknown>) => e.category === "Notaria" && /\d/.test(String(e.ot_number || "")) && !e.notaria_render_id && !e.notaria_liquidado_at;
@@ -61,6 +64,7 @@ async function enviar(to: string, cc: string | undefined, subject: string, html:
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  { const eq = await cargarEquipo(SB_URL, SB_KEY); const ss: { nombre: string; email: string }[] = eq.socios; SOCIOS = Object.fromEntries(ss.map((m) => [m.nombre, m.email])); OTRO = Object.fromEntries(ss.map((m) => [m.nombre, ss.find((o) => o.email !== m.email)?.nombre || ""])); PRIMER_SOCIO = ss[0]?.nombre || ""; NOMBRE_DE = eq.nombreDe; }   // equipo del estudio (miembros)
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
   // deno-lint-ignore no-explicit-any
   let body: any = {};
@@ -112,7 +116,7 @@ serve(async (req) => {
       const saldo = fondosT - gastos.reduce((a, e) => a + N(e.amount), 0);
       if (saldo > -1) continue;
       const abg = c.abogado_responsable || respDe[c.id] || null;
-      const dest = abg && SOCIOS[abg] ? abg : "Cristóbal";   // clientes de abogados no socios o sin abogado → Cristóbal
+      const dest = abg && SOCIOS[abg] ? abg : PRIMER_SOCIO;   // clientes de abogados no socios o sin abogado → el primer socio
       (negPorAbg[dest] ||= { n: 0, total: 0 }); negPorAbg[dest].n++; negPorAbg[dest].total += -saldo;
 
       // Pausa / solicitud reciente

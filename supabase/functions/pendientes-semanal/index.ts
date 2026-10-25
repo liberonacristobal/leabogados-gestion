@@ -4,6 +4,7 @@ import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { trabajosSinFacturar } from "../_shared/ventasReglas.js";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 // Correo semanal "Pendientes de tus clientes" por abogado responsable.
 // ALCANCE (definido con el usuario): SOLO lo pendiente del cliente del abogado —
@@ -19,8 +20,9 @@ const CRON_SECRET = Deno.env.get("PENDIENTES_SEMANAL_SECRET") || Deno.env.get("C
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const EMAIL: Record<string,string> = { "Cristóbal":"cl@leabogados.cl", "Erasmo":"ee@leabogados.cl", "Martín":"mc@leabogados.cl", "Martina":"mp@leabogados.cl", "Rodrigo":"rd@leabogados.cl" };
-const NAME_OF_EMAIL: Record<string,string> = Object.fromEntries(Object.entries(EMAIL).map(([n,e])=>[e,n]));
+let EMAIL: Record<string,string> = {};
+let NAME_OF_EMAIL: Record<string,string> = {};
+let ADMINS_EQ: string[] = [];
 
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
@@ -36,6 +38,7 @@ async function sendMail(to:string, subject:string, html:string){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); EMAIL = eq.porNombre; NAME_OF_EMAIL = eq.nombreDe; ADMINS_EQ = eq.admins.map((e: string) => eq.nombreDe[e]); }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -98,7 +101,7 @@ serve(async (req) => {
     const cli = (id:any)=> (clients||[]).find((c:any)=>String(c.id)===String(id));
     const cname = (id:any)=> cli(id)?.name || "Cliente";
     const respDeCliente = (cid:any)=> cli(cid)?.abogado_responsable || null;
-    const ADMINS = ["Cristóbal","Erasmo"];   // lo sin responsable se informa a ambos admins
+    const ADMINS = ADMINS_EQ;   // lo sin responsable se informa a ambos admins
 
     const hoyCL = new Date().toLocaleDateString("en-CA",{ timeZone:"America/Santiago" });
     const t0 = Date.parse(hoyCL);

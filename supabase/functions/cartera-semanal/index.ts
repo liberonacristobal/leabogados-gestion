@@ -3,6 +3,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -10,9 +11,9 @@ const CRON_SECRET = Deno.env.get("CARTERA_SEMANAL_SECRET") || Deno.env.get("CRON
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const NOMBRE: Record<string,string> = { CL:"Cristóbal", EE:"Erasmo", MC:"Martín", MP:"Martina", RD:"Rodrigo" };
-const EMAIL:  Record<string,string> = { CL:"cl@leabogados.cl", EE:"ee@leabogados.cl", MC:"mc@leabogados.cl", MP:"mp@leabogados.cl", RD:"rd@leabogados.cl" };
-const INI_DE_EMAIL: Record<string,string> = { "cl@leabogados.cl":"CL","ee@leabogados.cl":"EE","mc@leabogados.cl":"MC","mp@leabogados.cl":"MP","rd@leabogados.cl":"RD" };
+let NOMBRE: Record<string,string> = {};
+let EMAIL: Record<string,string> = {};
+let INI_DE_EMAIL: Record<string,string> = {};
 
 // Encabezados solo ASCII (denomailer rompe tildes en el subject). Quitar =20 de fin de línea.
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
@@ -49,6 +50,7 @@ function eventosDe(p:any, d:any){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); NOMBRE = eq.nombrePorIni; EMAIL = eq.porIni; INI_DE_EMAIL = eq.iniDe; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -125,7 +127,7 @@ serve(async (req) => {
     const porResp: Record<string, any[]> = {};
     for (const p of activos) { const r = p.responsable || "—"; (porResp[r] = porResp[r] || []).push(p); }
 
-    const FIRST: Record<string,string> = { CL:"Cristóbal", EE:"Erasmo", MC:"Martín", MP:"Martina", RD:"Rodrigo" };
+    const FIRST: Record<string,string> = NOMBRE;
     const tareasDe = (nombre:string) => d.tasks.filter((t:any)=> t.who===nombre || (Array.isArray(t.assignees)&&t.assignees.includes(nombre)));
 
     const digestDe = (ini:string) => {

@@ -10,9 +10,10 @@
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { enviarPush } from "../_shared/push.ts";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
-const SOCIOS = ["cl@leabogados.cl", "ee@leabogados.cl"];
+let SOCIOS: string[] = [];
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";           // = contacto@leabogados.cl
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
 const CRON_SECRET = Deno.env.get("ALERTA_CARTOLA_SECRET") || Deno.env.get("CRON_SECRET") || "";
@@ -39,6 +40,7 @@ async function sb(path: string): Promise<any[]> {
 }
 
 Deno.serve(async (req) => {
+  { const eq = await cargarEquipo(SB_URL, SB_KEY); SOCIOS = eq.socios.map((m: { email: string }) => m.email); }   // equipo del estudio (miembros)
   // deno-lint-ignore no-explicit-any
   let body: any = {};
   try { body = await req.json(); } catch { /* sin body */ }

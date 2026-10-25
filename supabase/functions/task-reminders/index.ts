@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -8,13 +9,7 @@ const CRON_SECRET = Deno.env.get("TASK_REMINDERS_SECRET") || Deno.env.get("CRON_
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const EMAILS: Record<string, string> = {
-  "Martín": "mc@leabogados.cl", "Martin": "mc@leabogados.cl",
-  "Martina": "mp@leabogados.cl",
-  "Rodrigo": "rd@leabogados.cl",
-  "Erasmo": "ee@leabogados.cl",
-  "Cristóbal": "cl@leabogados.cl", "Cristobal": "cl@leabogados.cl",
-};
+let correoDe: (nombre: string) => string = () => "";
 
 // Encabezados SOLO ASCII (denomailer rompe el encoded-word RFC 2047 con tildes → correo crudo). El cuerpo conserva tildes.
 const toAscii = (s: string) =>
@@ -35,6 +30,7 @@ const esc = (s: string) => String(s || "").replace(/&/g, "&amp;").replace(/</g, 
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); correoDe = eq.correoDe; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(() => ({}));
     if (!CRON_SECRET || body.secret !== CRON_SECRET) {
@@ -70,7 +66,7 @@ serve(async (req) => {
     const dryRun = !!body.dryRun;
     const sent: any[] = [];
     for (const [name, items] of Object.entries(byPerson)) {
-      const to = EMAILS[name];
+      const to = correoDe(name);
       if (!to) continue;
       const venc = items.filter((i) => i.bucket === "vencida").sort((a, b) => a.dd - b.dd);
       const pronto = items.filter((i) => i.bucket === "pronto").sort((a, b) => a.dd - b.dd);

@@ -13,6 +13,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -22,9 +23,9 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const OFICINA_ID = "055df2ad-fa4f-4293-9dc3-d7ab9a200774";   // cliente interno "Liberona Escala Abogados"
 
-const EMAIL_DE: Record<string,string> = { "Cristóbal":"cl@leabogados.cl", "Erasmo":"ee@leabogados.cl", "Martín":"mc@leabogados.cl", "Martina":"mp@leabogados.cl", "Rodrigo":"rd@leabogados.cl" };
+let EMAIL_DE: Record<string,string> = {};
 const norm = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
-const NOMBRE_DE_EMAIL: Record<string,string> = Object.fromEntries(Object.entries(EMAIL_DE).map(([n,e])=>[e,n]));
+let NOMBRE_DE_EMAIL: Record<string,string> = {};
 
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
 const qpSafe = (h:string) => String(h||"").replace(/[ \t]+$/gm,"");
@@ -41,6 +42,7 @@ const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); EMAIL_DE = eq.porNombre; NOMBRE_DE_EMAIL = eq.nombreDe; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);

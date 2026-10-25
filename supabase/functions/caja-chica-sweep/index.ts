@@ -3,6 +3,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { ESTUDIO_ID } from "../_shared/equipo.js";
 
 // Barrido diario de caja chica (espejo de calceCajaChica en App.jsx — misma regla, mantener ambas iguales):
 // 1) ENLAZA SOLO: caja registrada por un miembro ↔ transferencia a su RUT con el MISMO MONTO, hecha el MISMO DÍA de la caja o el
@@ -63,7 +64,7 @@ serve(async (req) => {
 
     const [{ data: estudio }, { data: miembros }, { data: petty }, { data: movs }, { data: concil }, { data: noCaja }, { data: avisados }] = await Promise.all([
       sb.from("estudios").select("nombre,dominio").limit(1).maybeSingle(),
-      sb.from("miembros").select("nombre,rut,email,es_socio"),
+      sb.from("miembros").select("nombre,rut,email,es_socio").eq("estudio_id", ESTUDIO_ID),
       sb.from("petty_cash").select("id,user_name,amount,delivered_at,movimiento_id,notes"),
       sb.from("cartola_movimientos").select("id,tipo,monto,monto_conciliado,fecha,rut_contraparte,es_interno,categoria,estado,descripcion").eq("tipo", "cargo").gte("fecha", desde),
       selectAll(()=>sb.from("conciliacion").select("movimiento_id").order("id")),
