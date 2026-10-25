@@ -8,6 +8,7 @@
 // Auth: CRON_SECRET en body.secret, o JWT @leabogados.cl. body.dryRun = no envía ni marca avisos.
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
+import { enviarPush } from "../_shared/push.ts";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -103,6 +104,7 @@ Deno.serve(async (req) => {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(asunto), content: avisar.map((p) => `${p.nombre}: ${p.st.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
     await client.close();
+    await enviarPush(SB_URL, SB_KEY, para, { titulo: avisar.length === 1 ? "Proceso automático con falla" : `${avisar.length} procesos automáticos con falla`, cuerpo: avisar.map((p) => p.nombre).slice(0, 3).join(" · "), url: "/?ir=procesos", etiqueta: "procesos" }, "sistema").catch(() => null);
     // Ya avisado: si guardar falla, no se responde error (el aviso ya salió); se reintenta guardar en la próxima revisión.
     for (const p of avisar) { p.st.avisado = true; prev.set(p.jobname, p.st); try { await guardar(p.jobname, p.st); } catch (e) { (resumen as any).error_guardar = String((e as Error).message || e); } }
     await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_avisada", table_name: "procesos_corridas", detail: JSON.stringify({ title: asunto, para, procesos: avisar.map((p) => p.jobname) }) }) }).catch(() => null);

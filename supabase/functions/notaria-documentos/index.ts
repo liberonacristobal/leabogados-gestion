@@ -17,6 +17,7 @@
 // body.leer = N lecturas con IA en esta corrida (por defecto 3); los extractos se leen siempre; body.releer = ids a releer.
 
 import { decodeBase64Url } from "jsr:@std/encoding@1/base64url";
+import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 import { todasRest } from "../_shared/paginar.js";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria, firmadoPorNotaria, sugerenciasDocumento, indiceNombres, clientesEnTexto, clienteDeLectura } from "../_shared/notariaDocsReglas.js";
@@ -161,7 +162,7 @@ Deno.serve(async (req) => {
 
     const [ots, clients, ents, previos, contactos, aprendidos] = await Promise.all([
       todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
-      todas("clients?select=id,name,rut,drive_folder_id,is_internal,is_colaborador"),
+      todas("clients?select=id,name,rut,drive_folder_id,is_internal,is_colaborador,abogado_responsable"),
       todas("client_entities?select=id,client_id,name,rut"),
       todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,ot_number,drive_file_id,drive_nombre,leido_at&origen=eq.notaria"),
       todas("contacts?select=id,client_id,nombre"),
@@ -172,7 +173,7 @@ Deno.serve(async (req) => {
     const clasificados = previos.filter((p) => p.cliente_id && ["guardado", "asignado"].includes(p.estado));
     const usadas = new Set<string>(clasificados.map((p) => String(p.ot_number || "")).filter(Boolean));
     const ctxSug = { ots, usadas, indice, clasificados };
-    const cli: Record<string, { name: string; drive_folder_id: string | null }> = Object.fromEntries(clients.map((c) => [c.id, c]));
+    const cli: Record<string, { name: string; drive_folder_id: string | null; abogado_responsable?: string | null }> = Object.fromEntries(clients.map((c) => [c.id, c]));
     const yaCod = new Set(previos.map((p) => p.codigo_validacion).filter(Boolean));
     const yaArch = new Set(previos.map((p) => `${p.gmail_id}|${p.archivo_nombre}`));
     // Nombres ya usados por cliente: dos documentos distintos con el mismo tipo, fecha y repertorio (dos declaraciones juradas) no se pisan.
@@ -290,7 +291,7 @@ Deno.serve(async (req) => {
           archivo_nombre: p.filename, mime: p.mimeType || null, tamano: p.body?.size || null, cliente_id: cid, expense_id: ot?.id || null, ot_number: ot?.ot_number || null,
           metodo: manual ? "manual" : ot ? "ot_tipo_fecha" : cid ? (est ? "ot_mismo_cliente" : "asunto_archivo") : null, estado, motivo, updated_at: new Date().toISOString(),
         };
-        const resumen = { asunto, archivo: p.filename, tipo: est?.tipo || null, fecha: est?.fecha || null, cliente: cid ? cli[cid]?.name : null, ot: ot?.ot_number || null };
+        const resumen = { asunto, archivo: p.filename, tipo: est?.tipo || null, fecha: est?.fecha || null, cliente: cid ? cli[cid]?.name : null, cid: cid || null, ot: ot?.ot_number || null };
         // Un PDF de logo o firma (imagen pegada como archivo) no es un documento.
         if ((p.body?.size || 0) < 15000 && /^image\d*\.|logo|firma/i.test(p.filename)) continue;
         if (estado === "guardado" && !dryRun) {
@@ -357,6 +358,17 @@ Deno.serve(async (req) => {
       }
     }
     if (!dryRun && res.guardados.length) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "notaria.documentos_guardados", table_name: "documentos_notaria", estudio_id: "lea", detail: { title: `${res.guardados.length} documento${res.guardados.length !== 1 ? "s" : ""} de la notaría guardado${res.guardados.length !== 1 ? "s" : ""} en la carpeta del cliente`, documentos: res.guardados } }) }).catch(() => null);
+    // Al teléfono del abogado de cada cliente: los documentos que la notaría envió y quedaron en su carpeta.
+    if (!dryRun && res.guardados.length) {
+      const porCli: Record<string, { tipo: string | null; archivo: string; cliente: string | null }[]> = {};
+      (res.guardados as { cid: string | null; tipo: string | null; archivo: string; cliente: string | null }[]).forEach((g) => { if (g.cid) (porCli[g.cid] = porCli[g.cid] || []).push(g); });
+      for (const [cid, gs] of Object.entries(porCli)) {
+        const a = await emailsDeNombres(SB_URL, SB_KEY, [cli[cid]?.abogado_responsable]);
+        if (!a.length) continue;
+        const cuerpo = gs.length === 1 ? `${gs[0].tipo || gs[0].archivo} · ${gs[0].cliente || ""}` : `${gs.length} documentos · ${gs[0].cliente || ""}`;
+        await enviarPush(SB_URL, SB_KEY, a, { titulo: "Documento de la notaría", cuerpo, url: `/?cliente=${cid}`, etiqueta: `notaria-${cid}` }, "notaria").catch(() => null);
+      }
+    }
     return json({ ok: true, dryRun, desde, remitentes, ...res, movidos, leidos, quedan: Math.max(0, todosPorLeer.length - res.leidos), n: { leidos: res.leidos, no_leidos: res.no_leidos, guardados: res.guardados.length, pendiente_ot: res.pendiente_ot.length, por_clasificar: res.por_clasificar.length, errores: res.errores.length } });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);

@@ -14,6 +14,7 @@
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { enviarPush } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -174,6 +175,8 @@ async function avisarCausa(o: { ON: boolean; dryRun: boolean; quien: string }, c
   else if (!o.ON) motivo = "aviso apagado (causas_tablas)";
   else if (!para.length) motivo = "sin destinatarios";
   else try { await enviar(para, cc, asunto, texto, CAJA(html)); enviado = true; } catch (e) { motivo = String((e as Error).message || e); }
+  // Al teléfono del abogado (si activó las notificaciones): la causa de hoy no espera el horario de silencio.
+  if (!o.dryRun && o.ON && para.length) await enviarPush(SB_URL, SB_KEY, para, { titulo: tipo === "cerca" ? "Se acerca la vista" : "Causa en tabla hoy", cuerpo: texto, url: "/?ir=causas", etiqueta: `causa-${c.id}` }, "causas").catch(() => null);
   if (!o.dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: o.quien, action: enviado ? `causas.${tipo}_avisada` : `causas.${tipo}_sin_aviso`, table_name: "causas", record_id: c.id, estudio_id: c.estudio_id, detail: { title: `${enviado ? "Aviso enviado" : "Aviso NO enviado"}: ${asunto}`, para, cc, motivo: motivo || null } }) }).catch(() => null);
   return { enviado, para, cc, motivo: motivo || null };
 }

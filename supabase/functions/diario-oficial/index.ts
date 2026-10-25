@@ -13,6 +13,7 @@
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -137,7 +138,7 @@ Deno.serve(async (req) => {
       }
     }
     // 2) Cruce con los extractos de la notaría. Se revisan los sin publicación y los que calzaron solo por cercanía de fechas.
-    const docs = await rest("documentos_notaria?and=(or(tipo_documento.ilike.*extracto*,archivo_nombre.ilike.*extracto*),or(do_estado.is.null,do_estado.neq.publicado,do_publicacion->>criterio.eq.cercania))&lectura=not.is.null&select=id,estudio_id,tipo_documento,repertorio,fecha_documento,recibido_at,lectura,do_estado&limit=500");
+    const docs = await rest("documentos_notaria?and=(or(tipo_documento.ilike.*extracto*,archivo_nombre.ilike.*extracto*),or(do_estado.is.null,do_estado.neq.publicado,do_publicacion->>criterio.eq.cercania))&lectura=not.is.null&select=id,estudio_id,cliente_id,tipo_documento,repertorio,fecha_documento,recibido_at,lectura,do_estado&limit=500");
     const res = { publicados: 0, pendientes: 0, vencidos: 0, sinRazonSocial: 0, lecturas: 0 };
     let cupoIA = Math.min(40, Number(body.lecturas) || 15);
     for (const d of docs) {
@@ -204,6 +205,11 @@ Deno.serve(async (req) => {
         : { base, vence, sociedad: sujeto, repertorio: repDoc || null };
       const antes = d.do_estado;
       await rest(`documentos_notaria?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ do_estado: estado, do_publicacion: pubData, do_revisado_at: new Date().toISOString() }) });
+      if (pub && antes !== "publicado" && d.cliente_id) {
+        const cl = (await rest(`clients?id=eq.${d.cliente_id}&select=name,abogado_responsable`).catch(() => []))?.[0];
+        const a = await emailsDeNombres(SB_URL, SB_KEY, [cl?.abogado_responsable]);
+        if (a.length) await enviarPush(SB_URL, SB_KEY, a, { titulo: "Publicado en el Diario Oficial", cuerpo: `${pub.nombre || cl?.name || "Extracto"} · ${String(pub.fecha || "").slice(0, 10).split("-").reverse().join("-")}`, url: `/?cliente=${d.cliente_id}`, etiqueta: `do-${d.id}` }, "clientes").catch(() => null);
+      }
       if (pub && antes !== "publicado") await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "notaria.diario_oficial_publicado", table_name: "documentos_notaria", record_id: d.id, estudio_id: d.estudio_id, detail: { title: `Publicado en el Diario Oficial: ${pub.nombre} · ${dmy(pub.fecha)} · CVE ${pub.cve}`, url: pub.url, criterio } }) }).catch(() => null);
     }
     return json({ ok: true, dias, leidos, revisados: docs.length, ...res });
