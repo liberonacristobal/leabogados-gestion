@@ -17,6 +17,8 @@ import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
+import { fgCliente, gastosPorRendirCli, grupoRendir } from "../_shared/gastosReglas.js";
+import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
 const APP = "https://gestion.leabogados.cl";
@@ -68,16 +70,17 @@ Deno.serve(async (req) => {
   const per = /^\d{4}-\d{2}$/.test(String(body.per || "")) ? String(body.per) : ymMas(hoy.slice(0, 7), -1);
   const desde = `${per}-01`, hasta = `${ymMas(per, 1)}-01`;
 
-  const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros, noEmitirRows, ufRows] = await Promise.all([
+  const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros, noEmitirRows, ufRows, cobertura] = await Promise.all([
     sbAll("billing?select=id,sale_id,client_id,invoice_no,status,due,issued_at,created_at,concept,amount,paid_amount,billing_type,deleted_at,receptor_rut,entity_id,dte_xml&deleted_at=is.null"),
     sbAll("sales?select=id,title,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
     sbAll("conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura"),
-    sbAll(`cartola_movimientos?select=id,tipo,monto,estado,es_interno,fecha&fecha=gte.${desde}&fecha=lt.${hasta}`),
-    sbAll("expenses?select=id,client_id,type,amount,category,no_descuenta_saldo,client_rendered_at,notaria_render_id,notaria_liquidado_at,ot_number,date&deleted_at=is.null"),
-    sbAll("rendiciones?select=tipo,estado_envio,anulada_at"),
+    sbAll(`cartola_movimientos?select=id,tipo,monto,monto_conciliado,estado,es_interno,fecha&fecha=gte.${desde}&fecha=lt.${hasta}`),
+    sbAll("expenses?select=id,client_id,type,amount,category,concept,no_descuenta_saldo,client_rendered_at,rendered_at,apertura_id,notaria_render_id,notaria_liquidado_at,ot_number,date&deleted_at=is.null"),
+    sbAll("rendiciones?select=tipo,client_id,sent_at,estado_envio,anulada_at"),
     sbAll("learnings?select=key,value&kind=eq.config&key=in.(aviso_cuotas,cierre_mes_avisar_a,agente_casilla)"),
     sbAll("miembros?select=email,nombre,rol"),
     sbAll("learnings?select=key&kind=eq.cuota_no_emitir"), sbAll("indicadores?select=fecha,valor&codigo=eq.uf&order=fecha"),
+    sbAll("rpc/cartola_cobertura"),
   ]);
   const saleById = new Map(sales.map((s) => [String(s.id), s]));
   const cliById = new Map(clients.map((c) => [String(c.id), c]));
@@ -114,24 +117,33 @@ Deno.serve(async (req) => {
   const saldo = (b: any) => ["Pagado", "Anulada"].includes(b.status) ? 0 : Math.max(0, montoFactura(b) - Math.max(Number(b.paid_amount) || 0, respaldo.get(String(b.id)) || 0));
   const porCobrar = emitMes.filter((b) => saldo(b) > 0);
   const facturadoMes = emitMes.reduce((a, b) => a + montoFactura(b), 0), porCobrarMonto = porCobrar.reduce((a, b) => a + saldo(b), 0);
-  // 3) Banco del mes por conciliar.
-  const pend = movs.filter((m) => (m.estado || "pendiente") === "pendiente" && !m.es_interno);
+  // 3) Banco del mes por conciliar: pendientes y abonos conciliados solo en parte (resto > $1.000), y hasta qué día llega la
+  // cartola de cada cuenta (si no llega a fin de mes, el «al día» no es tal).
+  const pend = movs.filter((m) => !m.es_interno && ((m.estado || "pendiente") === "pendiente" || (m.estado === "parcial" && m.tipo === "abono" && Math.abs(Number(m.monto) || 0) - (Number(m.monto_conciliado) || 0) > 1000)));
   const abPend = pend.filter((m) => m.tipo === "abono"), caPend = pend.filter((m) => m.tipo !== "abono");
-  // 4) Gastos DEL MES por rendir a clientes (regla de «Tu semana» acotada al mes), sin el cliente interno de la oficina.
+  const finMes = `${ymMas(per, 1)}-01`;
+  // Margen de 3 días: el fin de mes puede caer en fin de semana sin movimientos.
+  const limiteCob = new Date(new Date(finMes + "T12:00:00").getTime() - 4 * 864e5).toISOString().slice(0, 10);
+  const cortas = (Array.isArray(cobertura) ? cobertura : []).filter((c) => String(c.hasta || "") < limiteCob);
+  const coberturaTxt = cortas.length ? ` · cartola ${cortas.map((c) => `${c.rol || "cuenta"} hasta ${dmy(c.hasta)}`).join(", ")}` : "";
+  // 4) Rendir y pedir (misma regla que Rendir a clientes): clientes con gastos por rendir y saldo en contra de $1.000 o más, sin
+  // borrador armado. Aquí se rinde por trabajo, no por mes: un cliente con fondos a favor no tiene nada que hacer este mes.
   const internos = new Set(clients.filter((c) => c.is_internal).map((c) => String(c.id)));
-  const porRendir = gastos.filter((e) => e.type === "gasto" && !e.no_descuenta_saldo && !e.client_rendered_at && e.category !== "Apertura" && e.client_id && !internos.has(String(e.client_id)) && String(e.date || "") >= desde && String(e.date || "") < hasta);
-  const prMonto = porRendir.reduce((a, e) => a + (Number(e.amount) || 0), 0), prCli = new Set(porRendir.map((e) => String(e.client_id))).size;
-  // 5) Notaría (Deuda de la app): OT pendientes de liquidar + liquidaciones preparadas sin enviar.
-  const otPend = gastos.filter((e) => e.type !== "fondo" && e.category === "Notaria" && /\d/.test(String(e.ot_number || "")) && !e.notaria_render_id && !e.notaria_liquidado_at && (Number(e.amount) || 0) > 1);
-  const otMonto = otPend.reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  const armadas = new Set(rends.filter((r) => r.tipo === "cliente" && !r.anulada_at && !r.sent_at).map((r) => String(r.client_id)));
+  const pedir = clients.filter((c) => !internos.has(String(c.id))).map((c) => ({ c, n: gastosPorRendirCli(gastos, c.id).filter((e) => (Number(e.amount) || 0) !== 0).length, s: fgCliente(gastos, c.id).saldo }))
+    .filter((x) => grupoRendir({ n: x.n, s: x.s, armada: armadas.has(String(x.c.id)) }) === "pedir");
+  const prMonto = pedir.reduce((a, x) => a - x.s, 0), prCli = pedir.length;
+  // 5) Notaría: OT que se pueden liquidar (con fondos del cliente u oficina) y sin cliente; las que esperan fondos, aparte.
+  const nl = notariaPorLiquidar(gastos, { esOficina: (cid: string) => internos.has(String(cid)) });
+  const otN = nl.pagables.length + nl.sinCliente.length, otMonto = nl.montoPagables + nl.montoSinCliente;
   const liqSinEnviar = rends.filter((r) => r.tipo === "notaria" && !r.anulada_at && r.estado_envio === "por_enviar").length;
 
   const items = [
     { k: "Cuotas vencidas sin facturar", n: olv.length, d: olv.length ? `${olv.length} cuota${olv.length !== 1 ? "s" : ""} · ${olvMes} de ${MESES[Number(per.slice(5, 7)) - 1]}` : "al día", v: olv.length ? fmtCLP(olvMonto) : "", ir: "sinemitir", btn: "Ver el radar" },
     { k: `Facturas de ${MESES[Number(per.slice(5, 7)) - 1]} por cobrar`, n: porCobrar.length, d: emitMes.length ? `${porCobrar.length} de ${emitMes.length} emitidas · facturado ${fmtCLP(facturadoMes)}` : "sin facturas emitidas en el mes", v: porCobrar.length ? fmtCLP(porCobrarMonto) : "", ir: "cierre", btn: "Ver el cierre" },
-    { k: "Banco por conciliar", n: pend.length, d: pend.length ? `${abPend.length} abono${abPend.length !== 1 ? "s" : ""} y ${caPend.length} cargo${caPend.length !== 1 ? "s" : ""} del mes` : "al día", v: pend.length ? fmtCLP(pend.reduce((a, m) => a + Math.abs(Number(m.monto) || 0), 0)) : "", ir: "cobros", btn: "Ver el banco" },
-    { k: `Gastos de ${MESES[Number(per.slice(5, 7)) - 1]} por rendir`, n: porRendir.length, d: porRendir.length ? `${porRendir.length} gasto${porRendir.length !== 1 ? "s" : ""} de ${prCli} cliente${prCli !== 1 ? "s" : ""}` : "al día", v: porRendir.length ? fmtCLP(prMonto) : "", ir: "gastos", btn: "Ver gastos" },
-    { k: "Notaría", n: otPend.length + liqSinEnviar, d: otPend.length || liqSinEnviar ? [otPend.length ? `${otPend.length} OT por liquidar` : "", liqSinEnviar ? `${liqSinEnviar} liquidaci${liqSinEnviar !== 1 ? "ones" : "ón"} por enviar` : ""].filter(Boolean).join(" · ") : "al día", v: otPend.length ? fmtCLP(otMonto) : "", ir: "notaria", btn: "Ver notaría" },
+    { k: "Banco por conciliar", n: pend.length + cortas.length, d: (pend.length ? `${abPend.length} abono${abPend.length !== 1 ? "s" : ""} y ${caPend.length} cargo${caPend.length !== 1 ? "s" : ""} del mes` : "sin movimientos por conciliar") + coberturaTxt, v: pend.length ? fmtCLP(pend.reduce((a, m) => a + Math.abs(Number(m.monto) || 0), 0)) : "", ir: "cobros", btn: "Ver el banco" },
+    { k: "Rendir y pedir fondos", n: prCli, d: prCli ? `${prCli} cliente${prCli !== 1 ? "s" : ""} con gastos por rendir y saldo en contra` : "al día", v: prCli ? fmtCLP(prMonto) : "", ir: "rendir", btn: "Ver Rendir a clientes" },
+    { k: "Notaría", n: otN + liqSinEnviar, d: otN || liqSinEnviar || nl.esperan.length ? [nl.pagables.length ? `${nl.pagables.length} OT con fondos por liquidar` : "", nl.sinCliente.length ? `${nl.sinCliente.length} sin cliente` : "", liqSinEnviar ? `${liqSinEnviar} liquidaci${liqSinEnviar !== 1 ? "ones" : "ón"} por enviar` : "", nl.esperan.length ? `${nl.esperan.length} esperan fondos del cliente` : ""].filter(Boolean).join(" · ") : "al día", v: otN ? fmtCLP(otMonto) : "", ir: "notaria", btn: "Ver la deuda" },
   ];
   const nPend = items.filter((i) => i.n > 0).length;
   const cfgV = (k: string) => String(cfg.find((c) => c.key === k)?.value || "");
