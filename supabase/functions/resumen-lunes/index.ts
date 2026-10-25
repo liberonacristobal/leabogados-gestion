@@ -105,7 +105,8 @@ serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const saldo = (b: any) => ["Pagado", "Anulada", "Anulado"].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0));
     // deno-lint-ignore no-explicit-any
-    const porCobrarB = vivos.filter((b: any) => b.invoice_no && ["Pendiente", "Vencido"].includes(b.status));
+    // Misma regla que «Por cobrar» de la app (porCobrarBills): con folio, Pendiente/Vencido, sin reembolsos ni notas de crédito.
+    const porCobrarB = vivos.filter((b: any) => b.invoice_no && ["Pendiente", "Vencido"].includes(b.status) && !["reembolso", "nota_credito"].includes(b.billing_type));
     const emitidasSemanaArr = vivos.filter((b: Record<string, unknown>) => String(b.dte_emitido_at || "").slice(0, 10) >= hace7 && b.invoice_no);
     const emitidasSemana = emitidasSemanaArr.length;
     const porCobrar = porCobrarB.reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
