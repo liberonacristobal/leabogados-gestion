@@ -13,5 +13,7 @@ export default defineConfig({
     sourcemap: false,
     // El logo de la rendición debe quedar inline (data URI) para que el PDF imprima sin red.
     assetsInlineLimit: 20000,
+    // Librerías base en su propio archivo: no cambian entre publicaciones, así el teléfono las guarda y solo baja la app.
+    rollupOptions: { output: { manualChunks: id => /node_modules\/(react|react-dom|scheduler|@supabase)\//.test(id) ? 'base' : undefined } },
   }
 })
