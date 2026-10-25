@@ -8,6 +8,7 @@
 // (sin 'on' = solo cuenta lo pendiente). body.cliente_id = solo ese cliente; body.dryRun. Auth: CRON_SECRET o sesión del dominio.
 
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+import { todasRest } from "../_shared/paginar.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -26,12 +27,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  // deno-lint-ignore no-explicit-any
-  const out: any[] = [];
-  for (let i = 0; i < 50; i++) { const p = await rest(`${path}${path.includes("?") ? "&" : "?"}limit=1000&offset=${i * 1000}`); out.push(...p); if (p.length < 1000) break; }
-  return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, HS, path);
 // Misma conexión de Google que el agente de la notaría (drive_auth).
 let _tok = "", _exp = 0;
 async function token(): Promise<string> {

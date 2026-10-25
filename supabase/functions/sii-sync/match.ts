@@ -23,6 +23,7 @@
 // Requiere columnas sii_synced_at y sii_tipo_dte en billing.
 
 // deno-lint-ignore-file no-explicit-any
+import { selectAll } from '../_shared/paginar.js'
 import { createClient } from '@supabase/supabase-js'
 import type { VentaSII } from './rcv.ts'
 
@@ -48,11 +49,11 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   )
 
   const [progRes, cliRes, entRes, emitRes, folioRes] = await Promise.all([
-    supabase.from('billing').select('id,client_id,entity_id,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null),
+    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null).order('id')),
     supabase.from('clients').select('id,name,rut'),
-    supabase.from('client_entities').select('id,client_id,name,rut'),
-    supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']).is('deleted_at', null),
-    supabase.from('billing').select('invoice_no').not('invoice_no', 'is', null).is('deleted_at', null),
+    selectAll(() => supabase.from('client_entities').select('id,client_id,name,rut').order('id')),
+    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']).is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('billing').select('id,invoice_no').not('invoice_no', 'is', null).is('deleted_at', null).order('id')),
   ])
   const err = progRes.error || cliRes.error || entRes.error || emitRes.error || folioRes.error
   if (err) throw new Error('Error leyendo la base: ' + err.message)

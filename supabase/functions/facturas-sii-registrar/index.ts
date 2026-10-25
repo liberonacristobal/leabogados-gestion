@@ -10,6 +10,7 @@
 // (RUT sin cliente, cuotas de ventas distintas) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
 import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
+import { todasRest } from "../_shared/paginar.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -27,10 +28,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  // deno-lint-ignore no-explicit-any
-  const out: any[] = []; for (let i = 0; i < 50; i++) { const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } }); if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, H, path);
 // Cuotas que una factura sin venta cubre PROVISORIAMENTE: learnings cuota_no_emitir con value «cubierta:<factura>» (la misma
 // marca que excluye una cuota de la proyección de caja y del radar de cuotas sin facturar). Se liberan al aceptar/rechazar/cerrar.
 async function liberarCuotas(cuotas: string[] | undefined, billingId: string) {

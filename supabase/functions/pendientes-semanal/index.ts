@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { trabajosSinFacturar } from "../_shared/ventasReglas.js";
@@ -38,7 +39,6 @@ serve(async (req) => {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
 
     // ── Autorización: (a) cron con secreto → corrida completa (o prueba dirigida con testTo); (b) usuario @leabogados.cl → solo a él.
     let testTo: string | null = null;
@@ -79,10 +79,10 @@ serve(async (req) => {
       for (let att=0; att<4; att++){
         const res = await Promise.all([
           sb.from("clients").select("id,name,abogado_responsable"),
-          sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,due,issued_at,paid_at,deleted_at,billing_type,receptor_name,sii_synced_at,sii_tipo_dte,dte_track_id"),
-          sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]),
+          selectAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,due,issued_at,paid_at,deleted_at,billing_type,receptor_name,sii_synced_at,sii_tipo_dte,dte_track_id").order("id")),
+          selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]).order("id")),
           sb.from("anticipos").select("id,client_id,monto,fecha,nota"),
-          pageAll(()=>sb.from("conciliacion").select("anticipo_id,tipo_destino").eq("tipo_destino","anticipo").order("id")),
+          selectAll(()=>sb.from("conciliacion").select("anticipo_id,tipo_destino").eq("tipo_destino","anticipo").order("id")),
           sb.from("expenses").select("id,client_id,amount,concept,ot_number,date").eq("type","gasto").is("sale_id",null).is("deleted_at",null).is("apertura_id",null).eq("no_descuenta_saldo",false).not("client_id","is",null).gte("date","2026-06-01"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);
@@ -107,14 +107,14 @@ serve(async (req) => {
     const sinFactDe: Record<string, any[]> = {};
     if (BLOQ.has("sinfacturar")) {
       const [vs, bs, ufs, ne, dec] = await Promise.all([
-        pageAll(()=>sb.from("sales").select("id,client_id,title,status,deleted_at,moneda,amount_uf,amount_clp,cobro_type,cobro_config,area,responsible").order("id")),
-        pageAll(()=>sb.from("billing").select("id,sale_id,client_id,invoice_no,status,amount,due,issued_at,created_at,deleted_at,billing_type,concept").not("sale_id","is",null).order("id")),
-        pageAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo","uf").order("fecha")),
+        selectAll(()=>sb.from("sales").select("id,client_id,title,status,deleted_at,moneda,amount_uf,amount_clp,cobro_type,cobro_config,area,responsible").order("id")),
+        selectAll(()=>sb.from("billing").select("id,sale_id,client_id,invoice_no,status,amount,due,issued_at,created_at,deleted_at,billing_type,concept").not("sale_id","is",null).order("id")),
+        selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo","uf").order("fecha")),
         sb.from("learnings").select("key").eq("kind","cuota_no_emitir"),
         sb.from("learnings").select("key").eq("kind","trabajo_sin_facturar")]);
       if (vs.error || bs.error || ufs.error) throw new Error("No se pudieron cargar las ventas para «Trabajos sin facturar»");
       // El monto de una factura emitida es el del DTE (montoFactura lee MntTotal): se trae el XML solo de las emitidas.
-      const conXml = await pageAll(()=>sb.from("billing").select("id,dte_xml").not("sale_id","is",null).not("invoice_no","is",null).not("dte_xml","is",null).order("id"));
+      const conXml = await selectAll(()=>sb.from("billing").select("id,dte_xml").not("sale_id","is",null).not("invoice_no","is",null).not("dte_xml","is",null).order("id"));
       const mnt: Record<string,string> = {}; (conXml.data||[]).forEach((r:any)=>{ const m=String(r.dte_xml||"").match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); if (m) mnt[String(r.id)]=`<MntTotal>${m[1]}</MntTotal>`; });
       const billingV = (bs.data||[]).map((b:any)=> mnt[String(b.id)] ? { ...b, dte_xml: mnt[String(b.id)] } : b);
       const uf: Record<string,number> = {}; (ufs.data||[]).forEach((r:any)=>{ uf[String(r.fecha).slice(0,10)] = Number(r.valor)||0; });

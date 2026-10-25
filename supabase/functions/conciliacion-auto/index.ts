@@ -26,6 +26,7 @@
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, elegirAnticipo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
+import { todasRest } from "../_shared/paginar.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 import { nombreGenerico } from "../_shared/contrapartes.js";
 import { liqParaCargo } from "../_shared/notariaReglas.js";
@@ -47,12 +48,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
 }
 // Lecturas paginadas (PostgREST corta en 1.000 filas).
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  // deno-lint-ignore no-explicit-any
-  // Orden estable entre páginas (sin «order», Postgres no garantiza que las páginas no se pisen). miembros no tiene id.
-  const p2 = /[?&]order=/.test(path) || /^(miembros|rpc\/)/.test(path) ? path : `${path}${path.includes("?") ? "&" : "?"}order=id.asc`;
-  const out: any[] = []; for (let i = 0; i < 50; i++) { const r = await fetch(`${SB_URL}/rest/v1/${p2}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } }); if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`); const p = await r.json(); out.push(...p); if (p.length < 1000) break; } return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, H, path);
 const enLista = (ids: string[]) => `(${ids.map((x) => `"${x}"`).join(",")})`;
 
 Deno.serve(async (req) => {

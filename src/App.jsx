@@ -4189,8 +4189,8 @@ function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds
   const [ingAbonos,setIngAbonos] = useState([]) // cartola: abonos no internos
   useEffect(()=>{
     if(DEMO){ setIngConc((demoData.conciliacion||[]).filter(c=>['factura','anticipo'].includes(c.tipo_destino))); setIngAbonos((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return }
-    supabase.from('conciliacion').select('movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).then(({data})=>setIngConc(data||[]),()=>{})
-    supabase.from('cartola_movimientos').select('id,fecha,monto,monto_conciliado,cliente_id,categoria').eq('tipo','abono').neq('es_interno',true).then(({data})=>setIngAbonos(data||[]),()=>{})
+    selectAll(()=>supabase.from('conciliacion').select('movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).order('id')).then(({data})=>setIngConc(data||[]),()=>{})
+    selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,monto_conciliado,cliente_id,categoria').eq('tipo','abono').neq('es_interno',true).order('id')).then(({data})=>setIngAbonos(data||[]),()=>{})
   },[])
   // Accesos que aprenden: se ordenan por frecuencia de uso de ESTE usuario (cache instantáneo en localStorage) + registro durable en usage_events. Un punto verde marca el último abierto.
   const accUsoKey = `accesoUso_${user?.name||user?.email||'x'}`
@@ -13351,10 +13351,10 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const nrG = crNormRut   // normalizador único de RUT
   const efClientIdG = b => b.client_id || (b.receptor_rut ? (clientEntities.find(e=>nrG(e.rut)===nrG(b.receptor_rut))?.client_id) : null) || null
   const [abonos,setAbonos] = useState([])
-  useEffect(()=>{ if(DEMO){ setAbonos((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return } let alive=true; supabase.from('cartola_movimientos').select('*').eq('tipo','abono').neq('es_interno',true).order('fecha',{ascending:false}).then(({data})=>{ if(alive&&data) setAbonos(data) },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ if(DEMO){ setAbonos((demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno)); return } let alive=true; selectAll(()=>supabase.from('cartola_movimientos').select('*').eq('tipo','abono').neq('es_interno',true).order('fecha',{ascending:false}).order('id')).then(({data})=>{ if(alive&&data) setAbonos(data) },()=>{}); return ()=>{alive=false} },[])
   // Detalle de conciliación por factura (factura_id → movimiento + monto aplicado), para mostrar los abonos bajo cada factura.
   const [concFac,setConcFac] = useState([])
-  useEffect(()=>{ let alive=true; supabase.from('conciliacion').select('factura_id,movimiento_id,monto_aplicado').eq('tipo_destino','factura').then(({data})=>{ if(alive&&data) setConcFac(data) },()=>{}); return ()=>{alive=false} },[])
+  useEffect(()=>{ let alive=true; selectAll(()=>supabase.from('conciliacion').select('factura_id,movimiento_id,monto_aplicado').eq('tipo_destino','factura').order('id')).then(({data})=>{ if(alive&&data) setConcFac(data) },()=>{}); return ()=>{alive=false} },[])
   const abonosDe = b => concFac.filter(c=>String(c.factura_id)===String(b.id)).map(c=>({c, m:abonos.find(a=>String(a.id)===String(c.movimiento_id))})).filter(x=>x.m)
   const [pagosFor,setPagosFor] = useState(null)   // factura.id cuyo "Buscar pago" está abierto
   const [pagoBusy,setPagoBusy] = useState(false)
@@ -16929,7 +16929,7 @@ function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anti
     ;(async()=>{ try{
       const [{data:d},{data:m},{data:cf}]=await Promise.all([
         ro?Promise.resolve({data:[]}):supabase.from('sii_compras_docs').select('id,folio,tipo_dte,fecha_emision,emisor_rut,monto,proveedor_id,movimiento_id').in('proveedor_id',ids),
-        ro?Promise.resolve({data:[]}):supabase.from('cartola_movimientos').select('id,fecha,monto,tipo,rut_contraparte,categoria,estado,monto_conciliado,descripcion,es_interno').eq('tipo','cargo'),
+        ro?Promise.resolve({data:[]}):selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,tipo,rut_contraparte,categoria,estado,monto_conciliado,descripcion,es_interno').eq('tipo','cargo').order('id')),
         billIds.length?supabase.from('conciliacion').select('movimiento_id,factura_id').eq('tipo_destino','factura').in('factura_id',billIds):Promise.resolve({data:[]})])
       if(!vivo) return
       const mine=(m||[]).filter(x=>!x.es_interno&&ruts.has(_nRut(x.rut_contraparte)))
@@ -33563,8 +33563,8 @@ function PapeleraModal({clients=[],onClose,onChanged}){
   const cargar = async()=>{
     const [v,b,g] = await Promise.all([
       supabase.from('sales').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
-      supabase.from('billing').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
-      supabase.from('expenses').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).then(r=>r.data||[]),
+      selectAll(()=>supabase.from('billing').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).order('id')).then(r=>r.data||[]),
+      selectAll(()=>supabase.from('expenses').select('*').not('deleted_at','is',null).order('deleted_at',{ascending:false}).order('id')).then(r=>r.data||[]),
     ])
     setData({ventas:v,cobros:b,gastos:g})
   }

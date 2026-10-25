@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // AGENTE PMO (back-office). Barrido autonomo cross-cartera.
@@ -80,7 +81,6 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
     let dry = !esCron || !!body.dryRun;
     if (!esCron) {
@@ -94,13 +94,13 @@ serve(async (req) => {
 
     const [{ data: proys }, { data: exps }, { data: hitos }, { data: sugs }, { data: cli }, { data: cfg }, { data: ants }, { data: bills }] = await Promise.all([
       sb.from("proyectos_cartera").select("id,cliente_id,tipo,activo"),
-      pageAll(()=>sb.from("expenses").select("id,client_id,category,concept,date,created_at,proyecto_id,deleted_at,type").is("deleted_at",null).order("id")),
+      selectAll(()=>sb.from("expenses").select("id,client_id,category,concept,date,created_at,proyecto_id,deleted_at,type").is("deleted_at",null).order("id")),
       sb.from("proyecto_hitos").select("id,proyecto_id,titulo,hecho"),
       sb.from("pmo_sugerencias").select("origen,origen_id"),
       sb.from("clients").select("id,drive_folder_id"),
       sb.from("learnings").select("value").eq("kind", "config").eq("key", "pmo_cross_cartera").limit(1),
       sb.from("anticipos").select("id,client_id,fecha,nota,deleted_at"),
-      sb.from("billing").select("id,client_id,sale_id,paid_at,status,invoice_no,deleted_at"),
+      selectAll(()=>sb.from("billing").select("id,client_id,sale_id,paid_at,status,invoice_no,deleted_at").order("id")),
     ]);
     const activos = (proys || []).filter((p: any) => p.activo !== false && (!p.tipo || p.tipo === "proyecto"));
     const porCli: Record<string, any[]> = {};

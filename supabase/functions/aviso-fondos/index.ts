@@ -11,6 +11,7 @@
 // historial; body.fecha (YYYY-MM-DD) simula el día de carga.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -80,7 +81,7 @@ serve(async (req) => {
       if (String(cfg?.[0]?.value || "off").toLowerCase() !== "on") return json({ ok: true, skipped: "apagado" });
     }
     // deno-lint-ignore no-explicit-any
-    const pageAll = async (q: () => any) => { const out: any[] = []; for (let f = 0; ; f += 1000) { const r = await q().range(f, f + 999); if (r.error) throw new Error(r.error.message); out.push(...(r.data || [])); if (!r.data || r.data.length < 1000) break; } return out; };
+    const pageAll = async (q: () => any) => { const r = await selectAll(q); if (r.error) throw new Error(r.error.message); return r.data; };
     const hoy: string = /^\d{4}-\d{2}-\d{2}$/.test(String(body.fecha || "")) ? body.fecha : new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
 
     const clients = await pageAll(() => sb.from("clients").select("id,name,status,is_internal,abogado_responsable").order("id"));

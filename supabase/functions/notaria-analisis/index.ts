@@ -5,6 +5,7 @@
 // Interruptor learnings config notaria_analisis = 'on'. Auth: CRON_SECRET. body.dryRun = devuelve el HTML sin enviar.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { todasRest } from "../_shared/paginar.js";
 import { analisisNotaria } from "../_shared/notariaReglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 
@@ -22,17 +23,8 @@ const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]
 const dmy = (d: string) => { const m = String(d || "").slice(0, 10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
 
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  const p2 = /[?&]order=/.test(path) ? path : `${path}${path.includes("?") ? "&" : "?"}order=id.asc`;
-  // deno-lint-ignore no-explicit-any
-  const out: any[] = [];
-  for (let i = 0; i < 60; i++) {
-    const r = await fetch(`${SB_URL}/rest/v1/${p2}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } });
-    if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
-    const p = await r.json(); out.push(...p); if (p.length < 1000) break;
-  }
-  return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, H, path);
 
 Deno.serve(async (req) => {
   let body: Record<string, unknown> = {};

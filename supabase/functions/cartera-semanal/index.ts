@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -51,7 +52,6 @@ serve(async (req) => {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
 
     // ── Autorización: (a) cron con secreto → corrida completa (o prueba dirigida si trae testTo); (b) usuario @leabogados.cl → solo a él.
     let testTo: string | null = null;
@@ -86,10 +86,10 @@ serve(async (req) => {
         const res = await Promise.all([
           sb.from("proyectos_cartera").select("*").eq("activo",true),
           sb.from("clients").select("id,name"),
-          sb.from("billing").select("id,client_id,sale_id,status,billing_type,invoice_no,issued_at,paid_at,due,amount,deleted_at"),
+          selectAll(()=>sb.from("billing").select("id,client_id,sale_id,status,billing_type,invoice_no,issued_at,paid_at,due,amount,deleted_at").order("id")),
           sb.from("tasks").select("id,client_id,project_id,title,status,due,created_at,completed_at,who,assignees"),
           sb.from("anticipos").select("client_id,monto,fecha,estado"),
-          pageAll(()=>sb.from("expenses").select("client_id,date,rendered_at,created_at").is("deleted_at",null).order("id")),
+          selectAll(()=>sb.from("expenses").select("client_id,date,rendered_at,created_at").is("deleted_at",null).order("id")),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);   // data:[] (vacío legítimo) NO cuenta como fallo
         if (!fallo) return res;
