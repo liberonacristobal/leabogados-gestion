@@ -169,3 +169,20 @@ test('cuota programada + tramo emitido: «No es doble conteo» no vuelve a apare
   assert.equal(cuotaTramo(billing, sales).length, 1)
   assert.equal(cuotaTramo(billing, sales, new Set(['v1'])).length, 0)
 })
+
+test('abonos por identificar: sin los ya clasificados, el histórico ni los de personas del estudio', async () => {
+  const { abonosPorIdentificar } = await import('../supabase/functions/_shared/conciliacionReglas.js')
+  const m = (id, extra) => ({ id, tipo: 'abono', monto: 100000, estado: 'pendiente', fecha: '2026-09-01', ...extra })
+  const r = abonosPorIdentificar([m('a'), m('b', { categoria: 'Reembolso' }), m('c', { fecha: '2025-03-18' }), m('d', { rut_contraparte: '12.345.678-5' }), m('e', { cliente_id: 'x' }), m('f', { estado: 'conciliado' })], { rutsPropios: new Set(['123456785']) })
+  assert.deepEqual(r.map(x => x.id), ['a'])
+})
+
+test('notaría por liquidar: solo OT con fondos del cliente o sin cliente; las demás esperan fondos', async () => {
+  const { notariaPorLiquidar } = await import('../supabase/functions/_shared/notariaReglas.js')
+  const ot = (id, cid, amount, date) => ({ id, client_id: cid, type: 'gasto', category: 'Notaria', ot_number: String(400000 + id), amount, date })
+  const ex = [{ id: 90, client_id: 'a', type: 'fondo', amount: 100000 }, ot(1, 'a', 80000, '2026-10-01'), ot(2, 'a', 50000, '2026-10-02'), ot(3, 'b', 60000, '2026-10-01'), ot(4, null, 50000, '2025-12-01'), ot(5, 'of', 30000, '2026-10-03')]
+  const r = notariaPorLiquidar(ex, { esOficina: id => id === 'of' })
+  assert.deepEqual(r.pagables.map(e => e.id).sort(), [1, 5])
+  assert.deepEqual(r.esperan.map(e => e.id).sort(), [2, 3])
+  assert.deepEqual(r.sinCliente.map(e => e.id), [4])
+})

@@ -4,6 +4,7 @@ import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
+import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
 
 // Correo semanal "Tu semana" para el equipo limitado (Martín, Martina, Rodrigo).
 // Sobre lo que ELLOS ven/manejan: (1) Gastos sin rendir al cliente; (2) Caja chica por liquidar; (3) Tus tareas;
@@ -147,10 +148,13 @@ serve(async (req) => {
       if (persona===NOTARIA_USER) {
         // Martina maneja la notaría: ve TODAS las OT pendientes de liquidar a la notaría (no solo las que cargó ella).
         // Misma definición que la Deuda de la app (notariaPend): incluye las castigadas (no_descuenta_saldo), que igual se le deben a la notaría.
-        const otPend = expenses.filter((e:any)=> e.type!=="fondo" && e.category==="Notaria" && /\d/.test(String(e.ot_number||"")) && !e.notaria_render_id && !e.notaria_liquidado_at && (Number(e.amount)||0)>1);
+        // Solo lo que puede liquidar: OT con fondos del cliente (o de la oficina) y OT sin cliente. Las que esperan fondos van
+        // al aviso de fondos del abogado (regla única notariaPorLiquidar).
+        const internos = new Set((clients||[]).filter((c:any)=>c.is_internal).map((c:any)=>String(c.id)));
+        const nl = notariaPorLiquidar(expenses, { esOficina: (cid:string)=> internos.has(String(cid)) });
         // Liquidaciones a la notaría preparadas y aún sin enviar (no cuentan las anuladas ni las marcadas pagadas sin correo).
         const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && !r.anulada_at && r.estado_envio==="por_enviar"   /* filas antiguas sin estado = pagadas (misma regla que notaEstado en la app) */);
-        if (otPend.length || correosSinCerrar.length) notaria = { nOt:otPend.length, montoOt:otPend.reduce((s:number,e:any)=> s+(Number(e.amount)||0), 0), nCorreos:correosSinCerrar.length };
+        if (nl.pagables.length || nl.sinCliente.length || correosSinCerrar.length) notaria = { nOt:nl.pagables.length, montoOt:nl.montoPagables, nSinCli:nl.sinCliente.length, montoSinCli:nl.montoSinCliente, nEsperan:nl.esperan.length, nCorreos:correosSinCerrar.length };
       }
       // (5) Responsable de clientes: sus clientes = los de sus ventas (o abogado del cliente si la venta no tiene responsable).
       let cartera:any = null;
@@ -217,10 +221,11 @@ serve(async (req) => {
       if (!d.notaria) return "";
       const n = d.notaria;
       const partes:string[] = [];
-      if (n.nOt) partes.push(`<b style="color:${INK};">${n.nOt} OT sin liquidar</b> (${fmt(n.montoOt)})`);
+      if (n.nOt) partes.push(`<b style="color:${INK};">${n.nOt} OT con fondos por liquidar</b> (${fmt(n.montoOt)})`);
+      if (n.nSinCli) partes.push(`<b style="color:${INK};">${n.nSinCli} OT sin cliente</b> (${fmt(n.montoSinCli)})`);
       if (n.nCorreos) partes.push(`<b style="color:${INK};">${n.nCorreos} correo${n.nCorreos!==1?"s":""} a notaría sin cerrar</b>`);
       return `<div style="padding:24px 26px 4px;">${sec("3","Notaría",NV)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}. Pendiente la liquidación de las OT y el aviso a la notaría.</div>`+
+        `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}.${n.nEsperan ? ` ${n.nEsperan} OT más esperan fondos del cliente.` : ""}</div>`+
         cta("Ver notaría",NV,"gastos")+`</div>`;
     };
 
@@ -280,7 +285,7 @@ serve(async (req) => {
       const to = (esCron && body.enviarA) ? String(body.enviarA).toLowerCase().trim() : (testTo || EMAIL[nombre]);
       if (!to) continue;
       const d = datosDe(nombre);
-      const nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+d.notaria.nCorreos):0;
+      const nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+(d.notaria.nSinCli||0)+d.notaria.nCorreos):0;
       const nK=d.cartera?(d.cartera.bills.length+d.cartera.fondos.length+((d.cartera.com&&d.cartera.com.nListas)||0)):0;
       if (!testTo && !nC && !nT && !nN && !nK) continue;
       const html = armar(nombre, d);

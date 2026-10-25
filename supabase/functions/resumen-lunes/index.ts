@@ -15,6 +15,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { cargarEquipo, sinTildes } from "../_shared/equipo.js";
 import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
+import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
@@ -137,7 +138,10 @@ serve(async (req) => {
 
     // ── 3) CLIENTES: abonos por identificar (sin cliente, pendientes)
     // deno-lint-ignore no-explicit-any
-    const abonosSinCli = (movs || []).filter((m: any) => (m.monto || 0) > 0 && (m.estado || "pendiente") === "pendiente")
+    // Por identificar: regla única abonosPorIdentificar (sin categoría, dentro de la vida de la app, no de una persona del estudio).
+    const [{ data: rutsEq }, { data: estRut }] = await Promise.all([sb.from("miembros").select("rut"), sb.from("estudios").select("rut").limit(1)]);
+    const rutsPropios = new Set([...(rutsEq || []).map((r: { rut: string }) => r.rut), estRut?.[0]?.rut].filter(Boolean).map((r: string) => String(r).replace(/[^0-9kK]/g, "").toUpperCase()));
+    const abonosSinCli = abonosPorIdentificar(movs || [], { rutsPropios })
       .sort((a: Record<string, unknown>, b: Record<string, unknown>) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
 
     // ── HTML helpers (marca LIBERONA ESCALA)
