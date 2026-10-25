@@ -21,7 +21,12 @@ const rest = async (path: string, init: RequestInit = {}) => { const r = await f
 const TIPO_DOC: Record<string, [string, string]> = { oficio: ["Oficio", "Oficios"], circular: ["Circular", "Circulares"], resolucion: ["Resolución", "Resoluciones"] };
 
 async function cola(dryRun: boolean) {
-  const pend: { id: string; email: string; tipo: TipoPush; titulo: string; cuerpo: string; url: string }[] = await rest("push_cola?select=id,email,tipo,titulo,cuerpo,url&enviado_at=is.null&order=created_at.asc");
+  // Se reservan los pendientes ANTES de enviar (marca enviado_at solo donde sigue vacío): si dos corridas coinciden, cada aviso
+  // lo toma una sola y nunca sale repetido. En prueba solo se leen.
+  const pend: { id: string; email: string; tipo: TipoPush; titulo: string; cuerpo: string; url: string }[] = dryRun
+    ? await rest("push_cola?select=id,email,tipo,titulo,cuerpo,url&enviado_at=is.null&order=created_at.asc")
+    : await rest("push_cola?enviado_at=is.null&select=id,email,tipo,titulo,cuerpo,url,created_at", { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ enviado_at: new Date().toISOString() }) });
+  pend.sort((a, b) => String((a as { created_at?: string }).created_at || "").localeCompare(String((b as { created_at?: string }).created_at || "")));
   const porPersona: Record<string, typeof pend> = {};
   pend.forEach((p) => (porPersona[p.email] = porPersona[p.email] || []).push(p));
   const out: unknown[] = [];
@@ -33,7 +38,6 @@ async function cola(dryRun: boolean) {
     out.push({ email, n: ps.length, aviso });
     if (dryRun) continue;
     await enviarPush(SB_URL, SERVICE_KEY, [email], { ...aviso, etiqueta: "noche" }, tipo, { sinCola: true });
-    await rest(`push_cola?id=in.(${ps.map((p) => p.id).join(",")})`, { method: "PATCH", body: JSON.stringify({ enviado_at: new Date().toISOString() }) });
   }
   return { personas: out.length, avisos: pend.length, detalle: out };
 }
