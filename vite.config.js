@@ -6,7 +6,8 @@ import { execSync } from 'node:child_process'
 const build = (process.env.VERCEL_GIT_COMMIT_SHA || (()=>{ try{ return execSync('git rev-parse HEAD').toString().trim() }catch(_){ return '' } })() || 'local').slice(0,8)
 
 export default defineConfig({
-  plugins: [react()],
+  // version.json: la app abierta lo compara con su __BUILD__ para saber que hay una versión nueva (actualización automática).
+  plugins: [react(), { name: 'version-json', generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ v: build }) }) } }],
   define: { __BUILD__: JSON.stringify(build) },
   build: {
     outDir: 'dist',
