@@ -127,3 +127,13 @@ test('monto de una factura: manda el XML del SII', () => {
   assert.equal(montoFactura({ amount: 1000, dte_xml: '<Totales><MntTotal>1634180</MntTotal></Totales>' }), 1634180)
   assert.equal(montoFactura({ amount: 1000 }), 1000)
 })
+
+test('auditor: permisos de la base fuera de la regla', async () => {
+  const { hallazgos } = await import('../supabase/functions/_shared/saludDatos.js')
+  const r = hallazgos({ permisos: [{ tipo: 'tabla_sin_sesion', objeto: 'nueva', detalle: 'SELECT, TRUNCATE' }, { tipo: 'funcion_sin_sesion', objeto: 'f', detalle: '' }] })
+  const p = r.filter(x => x.detector === 'permiso_sin_sesion')
+  assert.equal(p.length, 2)
+  assert.equal(p[0].titulo, 'Tabla nueva con permisos para usuarios sin sesión (SELECT, TRUNCATE)')
+  assert.equal(p[0].clave, 'permiso_sin_sesion:tabla_sin_sesion:nueva')
+  assert.equal(hallazgos({}).filter(x => x.detector === 'permiso_sin_sesion').length, 0)
+})

@@ -199,11 +199,15 @@ export function hallazgos(d) {
     : add('subarriendo_por_facturar', x.a.id, `Subarriendo de ${perTexto(x.per)} pagado sin factura · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, periodo: x.per }))
   comprasObservadasSII(d.comprasObs, d.comprasObsVistas).forEach(x => add('compra_observada_sii', x.id, `Factura N° ${x.folio} de ${x.emisor_name || 'proveedor'} · proveedor observado por el SII${x.periodo ? ` · ${perTexto(x.periodo)}` : ''}`, Number(x.observado_iva) || 0, { folio: x.folio, periodo: x.periodo || null }))
   comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas).forEach(x => add('compra_plazo_reclamo', x.d.id, `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
+  // Permisos de la base fuera de la regla (rpc auditoria_permisos): la consola de Supabase crea tablas abiertas al rol sin sesión.
+  const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
+  ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
   honorarioDescuadrado(d.saludRows, d.billing, d.sales).forEach(v => add('honorario_descuadrado', v.id, `Honorario distinto de la suma de sus cuotas · ${nom(v.client_id)} · ${v.title || ''}`.trim(), (Number(v.amount_clp) || 0) - (Number(v.suma_cuotas) || 0), { venta: v.id, honorario: v.amount_clp, cuotas: v.suma_cuotas }))
   return out
 }
 
 export const DETECTOR_LBL = {
+  permiso_sin_sesion: 'Permisos de la base fuera de la regla',
   compra_observada_sii: 'Compras de proveedores observados por el SII',
   trabajo_terminado: 'Trabajos activos que parecen terminados', trabajo_detenido_saldo: 'Trabajos sin movimiento con saldo por cobrar',
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
