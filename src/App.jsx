@@ -43004,6 +43004,17 @@ export default function App() {
   // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
   // En demo va neutro ('FirmDesk', marca del producto) para no exponer el nombre del estudio a un prospecto.
   useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[brandV])
+  // Nombre de la app instalada (pantalla de inicio del iPhone, Dock del Mac): el del estudio, no el del producto. El teléfono lo
+  // lee al agregarla, desde la etiqueta apple-mobile-web-app-title y el manifiesto (aquí armado con los datos del estudio).
+  useEffect(()=>{ if(DEMO) return; try{
+    const nombre=BRAND.nombre, corto=BRAND.nombre
+    let m=document.querySelector('meta[name="apple-mobile-web-app-title"]'); if(!m){ m=document.createElement('meta'); m.name='apple-mobile-web-app-title'; document.head.appendChild(m) }
+    m.content=corto
+    const o=window.location.origin
+    const man={ name:nombre, short_name:corto, lang:'es-CL', start_url:o+'/', scope:o+'/', display:'standalone', background_color:'#F5F5F5', theme_color:C.accent,
+      icons:[{src:o+'/icon-192.png',sizes:'192x192',type:'image/png',purpose:'any'},{src:o+'/icon-512.png',sizes:'512x512',type:'image/png',purpose:'any'}] }
+    const l=document.querySelector('link[rel="manifest"]'); if(l) l.href=URL.createObjectURL(new Blob([JSON.stringify(man)],{type:'application/manifest+json'}))
+  }catch(_){} },[brandV])
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
@@ -43294,6 +43305,14 @@ export default function App() {
     return ()=>{ done=true }
   },[user])
   // Deep-link desde correos (?ir=): lleva al lugar exacto. cobros/sinasignar → Conciliación bancaria; duplicados → módulo Duplicados. Solo admin (limited no ve Conciliación).
+  // Aviso del teléfono tocado con la app ya abierta: el service worker manda su dirección (?ir=… / ?cliente=…) y se aplica con la
+  // misma lógica de los enlaces de los correos (en el iPhone el service worker no puede cambiar la dirección de la app).
+  const [deepLinkTick,setDeepLinkTick]=useState(0)
+  useEffect(()=>{ if(!('serviceWorker' in navigator)) return
+    const on=e=>{ const d=e.data||{}; if(d.tipo!=='abrir-aviso'||!d.url) return
+      try{ const u=new URL(d.url, window.location.origin); window.history.replaceState({},'',u.pathname+u.search) }catch(_){ return }
+      setDeepLinkTick(t=>t+1) }
+    navigator.serviceWorker.addEventListener('message',on); return ()=>navigator.serviceWorker.removeEventListener('message',on) },[])
   // Espera a que userRole esté resuelto (arranca null, async) para no borrar el parámetro antes de conocer el rol.
   useEffect(()=>{ if(DEMO||!user||!userRole) return
     try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
@@ -43317,13 +43336,13 @@ export default function App() {
       else if(ir==='procesos') setTab('procesos')
       else if(ir==='radar'){ try{ sessionStorage.setItem('abrir_radar','1') }catch(_){} setTab('inteligencia') }   // aviso de normativa del SII → Radar abierto   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
-  },[user,userRole])
+  },[user,userRole,deepLinkTick])
   // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).
   // Espera a que carguen los clientes; recién ahí abre y limpia la URL (handleOpenClientFicha busca el cliente en `clients`).
   useEffect(()=>{ try{ const cli=new URLSearchParams(window.location.search).get('cliente'); if(!cli||!clients.length) return
     try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
     handleOpenClientFicha(cli)
-  }catch(_){} },[clients,handleOpenClientFicha])
+  }catch(_){} },[clients,handleOpenClientFicha,deepLinkTick])
   // Deep-links del correo "Aviso de gastos sin fondos" (edge aviso-fondos):
   //   ?pedirfondos=<id>&monto=<n> → abre la solicitud de fondos al cliente ya armada.
   //   ?pausafondos=<id>           → "Ya lo hablé": pausa los avisos de ese cliente 15 días (learnings aviso_fondos_pausa).

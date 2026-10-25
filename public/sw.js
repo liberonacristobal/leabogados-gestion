@@ -1,11 +1,11 @@
-// Service worker de FirmDesk: SOLO notificaciones (no guarda copias de la app, así cada publicación se ve al instante).
+// Service worker de la app: SOLO notificaciones (no guarda copias de la app, así cada publicación se ve al instante).
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()))
 
 self.addEventListener('push', e => {
   let d = {}
   try { d = e.data ? e.data.json() : {} } catch (_) { d = { cuerpo: e.data ? e.data.text() : '' } }
-  e.waitUntil(self.registration.showNotification(d.titulo || 'FirmDesk', {
+  e.waitUntil(self.registration.showNotification(d.titulo || 'Aviso', {
     body: d.cuerpo || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
@@ -21,7 +21,8 @@ self.addEventListener('notificationclick', e => {
   e.waitUntil((async () => {
     const abiertas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     const app = abiertas.find(c => new URL(c.url).origin === self.location.origin)
-    if (app) { await app.focus(); try { await app.navigate(url) } catch (_) {} return }
+    // App abierta: se le pasa la dirección y ella abre la vista (el iPhone no permite cambiarla desde aquí).
+    if (app) { app.postMessage({ tipo: 'abrir-aviso', url }); await app.focus(); return }
     await self.clients.openWindow(url)
   })())
 })
