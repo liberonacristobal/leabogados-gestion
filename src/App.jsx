@@ -43127,6 +43127,17 @@ export default function App() {
   const rdLog=(accion,fn)=>async(...a)=>{ const r=await fn(...a); logActividad(accion,{detalle:a}); return r }   // Revisión de datos: cada resolución queda en la bitácora
   const [pagina,setPagina]=useState(null)        // página activa (tabs 'tarea'/'gasto'): mismo objeto {type,data} que antes recibía el modal, + prev (estado anterior dentro de la misma página)
   const pageClosingRef=useRef(false)             // evita doble goBack cuando un guardado llama setModal(null) dos veces (handler + handleSaveX)
+  // Actualización automática (sobre todo la app instalada en el iPhone, que no tiene «recargar»): cada 30 min y al volver a la app
+  // revisa /version.json; si hay una versión nueva, recarga al VOLVER a la app y solo en un momento seguro (sin formulario, página de
+  // edición ni modal abiertos, sin guardado en curso y sin un campo con el foco). La pestaña se recupera sola (fd_tab_actual).
+  const estadoRecargaRef=useRef({}); estadoRecargaRef.current={modal,pagina,tab,saving}
+  useEffect(()=>{ if(DEMO||BUILD_VERSION==='local') return
+    let hay=false
+    const seguro=()=>{ const s=estadoRecargaRef.current, a=document.activeElement; return !s.modal&&!s.pagina&&!s.saving&&!_TAB_PAGINAS.includes(s.tab)&&!(a&&(/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)||a.isContentEditable)) }
+    const revisar=async()=>{ if(hay) return; try{ const r=await fetch('/version.json',{cache:'no-store'}); if(!r.ok) return; const j=await r.json(); hay=!!j?.v&&j.v!==BUILD_VERSION }catch(_){} }
+    const onVis=async()=>{ if(document.visibilityState!=='visible') return; await revisar(); if(hay&&seguro()) window.location.reload() }
+    document.addEventListener('visibilitychange',onVis); const t=setInterval(revisar,30*60*1000)
+    return ()=>{ document.removeEventListener('visibilitychange',onVis); clearInterval(t) } },[])   // eslint-disable-line react-hooks/exhaustive-deps
   const [devEmail,setDevEmail]=useState(null)   // {client,amount,fecha,rend,rendN} → abre DevolucionEmailModal tras guardar una devolución
   const [openFichaId,setOpenFichaId]=useState(null)   // abrir la Ficha→Financiero de un cliente desde otra vista (ej. Facturación)
   const [carteraFocus,setCarteraFocus]=useState(null)   // abrir un proyecto puntual en Cartera desde el Inicio ("Mis proyectos")
