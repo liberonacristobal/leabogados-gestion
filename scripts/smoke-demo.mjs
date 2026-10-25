@@ -49,7 +49,8 @@ try {
       if (!RUIDO.test(txt)) errores.push(txt)
     })
     await page.goto(`${base}?demo=1`, { waitUntil: 'networkidle0', timeout: 60000 })
-    await page.waitForFunction(() => !!window.__demo, { timeout: 30000 })
+    const monto = await page.waitForFunction(() => !!window.__demo, { timeout: 20000 }).then(() => true, () => false)
+    if (!monto) { const t = await page.evaluate(() => document.body.innerText.slice(0, 200)); fallas.push({ vista: nombre, donde: 'al abrir la demo', error: errores[0] || t || 'la app no montó' }); await page.close(); continue }
     // Aviso de Novedades al entrar.
     await page.evaluate(() => { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Continuar')?.click() })
 
@@ -62,7 +63,7 @@ try {
       if (BLINDAJE.test(texto) || errores.length) {
         fallas.push({ vista: nombre, donde: etiqueta, error: errores[0] || (texto.match(BLINDAJE) || [''])[0] })
         // Recupera la app para seguir revisando el resto.
-        await page.goto(`${base}?demo=1`, { waitUntil: 'networkidle0' }); await page.waitForFunction(() => !!window.__demo)
+        await page.goto(`${base}?demo=1`, { waitUntil: 'networkidle0' }); await page.waitForFunction(() => !!window.__demo, { timeout: 20000 }).catch(() => {})
         await page.evaluate(() => { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Continuar')?.click() })
       }
     }
