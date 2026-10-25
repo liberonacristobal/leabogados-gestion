@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -60,18 +61,17 @@ serve(async (req) => {
     const soloNombres: string[] | null = (scope && scope !== "on") ? scope.split(/[,;]+/).map(s=>s.trim()).filter(Boolean) : null;
 
     // PostgREST corta en 1.000 filas: los gastos se traen por páginas (ya son más de 1.000).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const fetchAll = async () => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
           sb.from("clients").select("id,name,abogado_responsable,is_internal"),
-          pageAll(()=>sb.from("expenses").select("id,client_id,type,amount,concept,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at,apertura_id").is("deleted_at",null).order("id")),
+          selectAll(()=>sb.from("expenses").select("id,client_id,type,amount,concept,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at,apertura_id").is("deleted_at",null).order("id")),
           sb.from("petty_cash").select("user_name,amount"),
           sb.from("tasks").select("id,client_id,title,status,due,who,assignees,delegated_to,completed_at"),
           sb.from("rendiciones").select("user_name,tipo,estado_envio,sent_at,created_at,anulada_at"),
           sb.from("sales").select("id,client_id,responsible,status,deleted_at"),
-          pageAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,paid_amount,issued_at,due,billing_type,deleted_at").is("deleted_at",null).order("id")),
+          selectAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,paid_amount,issued_at,due,billing_type,deleted_at").is("deleted_at",null).order("id")),
           sb.from("terceros_pagos").select("id,proveedor_id,billing_id,estado,monto,liquido,factura_numero"),
           sb.from("proveedores").select("id,rut"),
           sb.from("miembros").select("nombre,rut"),

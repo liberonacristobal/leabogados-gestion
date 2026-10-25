@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -46,7 +47,6 @@ serve(async (req) => {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
     // Usuario @leabogados.cl → SIEMPRE simulación (no envía a clientes). Solo el cron con secreto envía de verdad.
     let dry = !esCron || !!body.dryRun;
@@ -64,10 +64,10 @@ serve(async (req) => {
     }
 
     const [{ data: bills }, { data: clientes }, { data: learn }, { data: concil }] = await Promise.all([
-      sb.from("billing").select("id,client_id,invoice_no,status,due,amount,paid_amount,dte_xml,billing_type,deleted_at"),
+      selectAll(()=>sb.from("billing").select("id,client_id,invoice_no,status,due,amount,paid_amount,dte_xml,billing_type,deleted_at").is("deleted_at",null).order("id")),
       sb.from("clients").select("id,name,email,status"),
       sb.from("learnings").select("kind,key,value").in("kind",["fd_auto","factura_recordado"]),
-      pageAll(()=>sb.from("conciliacion").select("factura_id,monto_aplicado,tipo_destino").eq("tipo_destino","factura").order("id")),
+      selectAll(()=>sb.from("conciliacion").select("factura_id,monto_aplicado,tipo_destino").eq("tipo_destino","factura").order("id")),
     ]);
     const liberados = new Set<string>(); const recMap:Record<string,string> = {};
     (learn||[]).forEach((r:any)=>{ if(r.kind==="fd_auto" && String(r.key).startsWith("cobranza:")) liberados.add(String(r.key).slice(9)); else if(r.kind==="factura_recordado") recMap[r.key]=r.value; });

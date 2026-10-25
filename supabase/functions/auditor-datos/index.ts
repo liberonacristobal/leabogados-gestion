@@ -9,6 +9,7 @@
 // Auth: CRON_SECRET. verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { todasRest } from "../_shared/paginar.js";
 import { hallazgos, DETECTOR_LBL } from "../_shared/saludDatos.js";
 import { trabajosDetenidos } from "../_shared/ventasReglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
@@ -33,17 +34,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
 // Lecturas paginadas con orden estable (PostgREST corta en 1.000 filas). Una lectura que falla corta la corrida: con una tabla
 // vacía por error, todos los casos abiertos se darían por resueltos.
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  const p2 = /[?&]order=/.test(path) ? path : `${path}${path.includes("?") ? "&" : "?"}order=id.asc`;
-  // deno-lint-ignore no-explicit-any
-  const out: any[] = [];
-  for (let i = 0; i < 50; i++) {
-    const r = await fetch(`${SB_URL}/rest/v1/${p2}`, { headers: { ...H, Range: `${i * 1000}-${i * 1000 + 999}` } });
-    if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
-    const p = await r.json(); out.push(...p); if (p.length < 1000) break;
-  }
-  return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, H, path);
 
 Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any

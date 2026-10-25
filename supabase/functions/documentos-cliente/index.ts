@@ -9,6 +9,7 @@
 // de un miembro activo del dominio de la oficina; o body.secret = CRON_SECRET (pruebas). verify_jwt=false.
 
 import { decodeBase64 } from "jsr:@std/encoding@1/base64";
+import { todasRest } from "../_shared/paginar.js";
 import { rsBonita } from "../_shared/notariaDocsReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
@@ -30,16 +31,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  // deno-lint-ignore no-explicit-any
-  const out: any[] = [];
-  for (let i = 0; i < 50; i++) {
-    const r = await fetch(`${SB_URL}/rest/v1/${path}${path.includes("?") ? "&" : "?"}order=id.asc`, { headers: { ...HS, Range: `${i * 1000}-${i * 1000 + 999}` } });
-    if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
-    const p = await r.json(); out.push(...p); if (p.length < 1000) break;
-  }
-  return out;
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, HS, path);
 let _tok = "", _exp = 0;
 async function token(): Promise<string> {
   if (_tok && _exp > Date.now() + 60000) return _tok;

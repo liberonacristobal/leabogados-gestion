@@ -163,21 +163,8 @@ export const deleteMatter = async (id) => {
   if (error) throw error
 }
 
-// Supabase corta cada select en 1.000 filas: las tablas que crecen (gastos, facturas, conciliación) se leen por páginas.
-// `build` arma la consulta desde cero en cada página y debe traer un orden estable (desempatar por id).
-export const selectAll = async (build, size = 1000) => {
-  let all = [], from = 0
-  for (;;) {
-    const qb = build()
-    if (typeof qb.range !== 'function') return await qb   // demo: el cliente simulado no pagina
-    const { data, error } = await qb.range(from, from + size - 1)
-    if (error) return { data: null, error }
-    all = all.concat(data || [])
-    if (!data || data.length < size) break
-    from += size
-  }
-  return { data: all, error: null }
-}
+// Lectura completa de tablas grandes (Supabase corta en 1.000 filas): fuente única compartida con las funciones del servidor.
+export { selectAll } from '../supabase/functions/_shared/paginar.js'
 
 // ─── COBROS ───────────────────────────────────────────────────────────────────
 export const getBilling = async () => {

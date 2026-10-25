@@ -11,6 +11,7 @@
 // body.testTo envía solo a esa dirección (prueba). Envía vía notify-task con la service key (igual que sii-sync).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
@@ -58,7 +59,6 @@ serve(async (req) => {
   try {
     const sb = createClient(SB_URL, SB_KEY);
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const todayCL = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }); // YYYY-MM-DD
     const t0 = Date.parse(todayCL);
     const hace7 = new Date(t0 - 7 * 86400000).toISOString().slice(0, 10);
@@ -66,21 +66,21 @@ serve(async (req) => {
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
     const { data: clients } = await sb.from("clients").select("id,name");
-    const { data: billsRaw, error: billsErr } = await pageAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
+    const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
-    const { data: movs } = await pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
+    const { data: movs } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
-    const { data: salesRaw } = await pageAll(()=>sb.from("sales").select("id,status").order("id"));
+    const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status").order("id"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
-    const { data: concRaw } = await pageAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
-    const { data: abRaw } = await pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
+    const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
+    const { data: abRaw } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
     const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
     // Facturas recibidas por pagar (misma regla y mismas marcas que Oficina › Compras).
     const [cpDocs, cpCargos, cpGastos, cpL, cpT] = await Promise.all([
-      pageAll(()=>sb.from("sii_compras_docs").select("id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,monto,movimiento_id").order("id")),
-      pageAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,rut_contraparte,estado,es_interno").eq("tipo","cargo").not("rut_contraparte","is",null).order("id")),
-      pageAll(()=>sb.from("expenses").select("amount,date").eq("type","gasto").is("deleted_at",null).gte("date","2026-05-01").order("id")),
+      selectAll(()=>sb.from("sii_compras_docs").select("id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,monto,movimiento_id").order("id")),
+      selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,rut_contraparte,estado,es_interno").eq("tipo","cargo").not("rut_contraparte","is",null).order("id")),
+      selectAll(()=>sb.from("expenses").select("amount,date").eq("type","gasto").is("deleted_at",null).gte("date","2026-05-01").order("id")),
       sb.from("learnings").select("kind,key").in("kind",["tarjeta_comercio","compra_pago_emisor","compra_pagada"]),
       sb.from("terceros_pagos").select("rut").is("comision_pct",null).not("rut","is",null)]);
     const cpK = (k: string) => (cpL.data || []).filter((r: { kind: string }) => r.kind === k).map((r: { key: string }) => String(r.key));

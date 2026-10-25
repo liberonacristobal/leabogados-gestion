@@ -7,6 +7,8 @@
 // La deuda y el cupón de contribuciones por rol NO se consultan: esa búsqueda de la TGR exige reCAPTCHA.
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
+import { todasRest } from "../_shared/paginar.js";
+
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
@@ -26,9 +28,8 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
 // deno-lint-ignore no-explicit-any
-async function todas(path: string): Promise<any[]> {
-  const out = []; for (let i = 0; ; i += 1000) { const p = await rest(`${path}${path.includes("?") ? "&" : "?"}limit=1000&offset=${i}`); out.push(...p); if (p.length < 1000) return out; }
-}
+// deno-lint-ignore no-explicit-any
+const todas = (path: string): Promise<any[]> => todasRest(SB_URL, H, path);
 
 Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any

@@ -9,6 +9,7 @@
 // 'notaria_semanal'); body.testTo=correo → prueba a uno; JWT @leabogados.cl → prueba a sí mismo;
 // body.dryRun=true → arma y devuelve, no envía.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -66,12 +67,11 @@ serve(async (req) => {
 
     // Todos los gastos vivos (para saldo por cliente) + clientes.
     // PostgREST corta en 1.000 filas: los gastos se traen por páginas (ya son más de 1.000).
-    const pageAll = async (q:()=>any) => { const out:any[]=[]; for (let from=0; ; from+=1000){ const r=await q().range(from, from+999); if (r.error) return { data:null, error:r.error }; out.push(...(r.data||[])); if (!r.data || r.data.length<1000) break } return { data:out, error:null } };
     const fetchAll = async () => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
-          pageAll(()=>sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date").is("deleted_at",null).order("id")),
+          selectAll(()=>sb.from("expenses").select("id,client_id,type,amount,no_descuenta_saldo,notaria_liquidado_at,client_rendered_at,rendered_at,ot_number,category,subcategory,materia,date").is("deleted_at",null).order("id")),
           sb.from("clients").select("id,name,abogado_responsable"),
         ]);
         const fallo = res.find((r:any)=> r.error || r.data===null);
