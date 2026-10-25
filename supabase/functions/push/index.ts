@@ -8,12 +8,12 @@
 // Los demás avisos los envían las funciones que ya avisan por correo (notify-task, conciliacion-auto, causas-tablas…) con
 // _shared/push.ts. Auth: sesión de una persona del dominio de la oficina, o CRON_SECRET en body.secret (cola, normativa).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { enviarPush, clavePublicaPush, type TipoPush } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
-const DOMINIO = "@leabogados.cl";
 const H = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" };
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     const sb = createClient(SB_URL, SERVICE_KEY);
     const { data: { user } } = await sb.auth.getUser(token);
     const email = (user?.email || "").toLowerCase();
-    if (!email.endsWith(DOMINIO)) return json({ error: "No autorizado" }, 403);
+    if (!esDelDominio(email)) return json({ error: "No autorizado" }, 403);
     if (body.action === "clave") {
       const clave = clavePublicaPush();
       return clave ? json({ clave }) : json({ error: "Las notificaciones aún no están configuradas en el servidor." }, 503);

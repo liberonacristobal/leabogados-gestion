@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -54,7 +55,7 @@ serve(async (req) => {
       const token = auth.replace(/^Bearer\s+/i,"");
       const { data:{ user } } = await sb.auth.getUser(token);
       const email = (user?.email || "").toLowerCase();
-      if (!email.endsWith("@leabogados.cl")) return new Response(JSON.stringify({ error:"No autorizado" }), { status:403, headers:{ "Content-Type":"application/json" } });
+      if (!esDelDominio(email)) return new Response(JSON.stringify({ error:"No autorizado" }), { status:403, headers:{ "Content-Type":"application/json" } });
       testTo = email;
     }
 

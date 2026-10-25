@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { enviarPush } from "../_shared/push.ts";
 
@@ -25,7 +26,6 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 //   · una persona del estudio, con su sesión iniciada;
 //   · el servidor, con la clave de servicio, que nunca sale del servidor.
 // ─────────────────────────────────────────────────────────────────────────────
-const DOMINIO = "@leabogados.cl";
 
 async function autorizar(req: Request): Promise<{ ok: true; quien: string } | { ok: false; motivo: string }> {
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
@@ -51,7 +51,7 @@ async function autorizar(req: Request): Promise<{ ok: true; quien: string } | { 
   } catch {
     return { ok: false, motivo: "No se pudo verificar la sesión" };
   }
-  if (!correo.endsWith(DOMINIO)) return { ok: false, motivo: "La cuenta no es del estudio" };
+  if (!esDelDominio(correo)) return { ok: false, motivo: "La cuenta no es del estudio" };
   return { ok: true, quien: correo };
 }
 

@@ -11,6 +11,7 @@
 // historial; body.fecha (YYYY-MM-DD) simula el día de carga.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -70,7 +71,7 @@ serve(async (req) => {
   if (!esCron) {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u } = await sb.auth.getUser(jwt);
-    if (!String(u?.user?.email || "").toLowerCase().endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
+    if (!esDelDominio(u?.user?.email || "")) return json({ error: "No autorizado" }, 403);
   }
   const dryRun = !!body.dryRun;
   const testTo = typeof body.testTo === "string" ? body.testTo : null;

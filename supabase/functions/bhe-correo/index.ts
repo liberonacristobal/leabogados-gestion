@@ -7,6 +7,7 @@
 // Auth: verify_jwt=false. Cron con secreto (body.secret === CRON_SECRET) o usuario @leabogados.cl con JWT.
 // Gmail con el refresh token permanente de drive_auth (igual que valores-contadora).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 import { parseBHE, elegirComisionesBHE } from "../_shared/comisionesReglas.js";
@@ -73,7 +74,7 @@ serve(async (req) => {
   if (!esCron) {
     const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u } = await sb.auth.getUser(jwt);
-    if (!(u?.user?.email || "").toLowerCase().endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
+    if (!esDelDominio(u?.user?.email || "")) return json({ error: "No autorizado" }, 403);
   }
   try {
     const dias = Math.min(400, Number(body.dias) || 45), dryRun = !!body.dryRun;

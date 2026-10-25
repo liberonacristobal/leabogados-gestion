@@ -6,6 +6,7 @@
 // 'notaria_alerta_sincliente' — ON por defecto, se apaga poniéndolo en 'off'); body.testTo=correo → prueba a uno;
 // JWT @leabogados.cl → prueba a sí mismo; body.dryRun=true → arma y devuelve, no envía.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -44,7 +45,7 @@ serve(async (req) => {
       const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
       const { data: u } = await sb.auth.getUser(jwt);
       const email = (u?.user?.email || "").toLowerCase();
-      if (!email.endsWith("@leabogados.cl")) return new Response(JSON.stringify({ error: "No autorizado" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      if (!esDelDominio(email)) return new Response(JSON.stringify({ error: "No autorizado" }), { status: 403, headers: { "Content-Type": "application/json" } });
       testTo = email;
     }
     const dryRun = !!body.dryRun;

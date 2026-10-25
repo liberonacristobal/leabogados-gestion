@@ -7,6 +7,7 @@
 // Interruptor del correo: learnings config 'vigilancia_procesos' = 'on'.
 // Auth: CRON_SECRET en body.secret, o JWT @leabogados.cl. body.dryRun = no envía ni marca avisos.
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { esDelDominio } from "../_shared/estudio.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { enviarPush } from "../_shared/push.ts";
 
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
   if (!esCron) {
     const tok = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const u = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${tok}` } }).then((r) => r.ok ? r.json() : null).catch(() => null);
-    if (!u?.email || !String(u.email).toLowerCase().endsWith("@leabogados.cl")) return json({ error: "No autorizado" }, 403);
+    if (!u?.email || !esDelDominio(u.email)) return json({ error: "No autorizado" }, 403);
   }
   const dryRun = !!body.dryRun;
   const MAX = 6;   // reintentos antes de avisar
