@@ -10,6 +10,7 @@
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
 import { leerAviso, calzarAviso, pistaMov, cuentaNorm, type Aviso } from "./avisos.ts";
 import { parseBHE, elegirComisionesBHE } from "../_shared/comisionesReglas.js";
+import { parteNuevaCorreo } from "../_shared/xmlTexto.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -353,7 +354,10 @@ Deno.serve(async (req) => {
       const pareceComprob = /comprobante|transferencia|operaci[oó]n express|pago realizado|abono/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`);
       // deno-lint-ignore no-explicit-any
       let fila: any = { gmail_id: gid, thread_id: m.threadId || null, recibido_at: recibido.toISOString(), de, de_nombre: nombreDe(m.from), para: m.to || null, asunto, cuerpo: cuerpo.slice(0, 8000), adjuntos: adjGuardados, cliente_id: cid, abogado, resumen: ia?.resumen || null, tipo: ia?.tipo || "otro", estado: "sin_accion", propuesta: {}, evidencia: [], ...(porNombre ? { motivo: "Cliente reconocido por el nombre" } : {}) };
-      const cta = cuentaEn(cuerpo);
+      // Cuenta escrita por el remitente: solo en la parte nueva del correo (lo citado suele ser nuestro, p. ej. la rendición con
+      // nuestra cuenta) y nunca una cuenta propia o el RUT del estudio.
+      const ctaLeida = cuentaEn(parteNuevaCorreo(cuerpo));
+      const cta = ctaLeida && !cuentasPropias.has(ctaLeida.cuenta) && !(rutEstudio && ctaLeida.rut && nRutB(ctaLeida.rut) === rutEstudio) ? ctaLeida : null;
       // Cuenta conocida por dominio del remitente; con correo genérico (gmail, etc.) se guarda por la dirección completa.
       const llaveCta = GENERICOS.test(dom) ? de : dom;
       const conocida = cta ? (cuentas || []).find((l: { key: string }) => l.key === llaveCta) : null;

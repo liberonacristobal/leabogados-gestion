@@ -45652,7 +45652,8 @@ export default function App() {
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-        <div className='apphead' style={{padding:'52px 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
+        {/* App instalada en el iPhone: el encabezado parte bajo la barra de estado (safe-area); si no, iOS desenfoca la fecha y el saludo. */}
+        <div className='apphead' style={{padding:'max(52px, calc(env(safe-area-inset-top, 0px) + 12px)) 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{position:'relative'}}>
             <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.14em',marginBottom:1}}>{fechaFull}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>

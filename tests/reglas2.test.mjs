@@ -141,3 +141,13 @@ test('radar de cuotas vencidas sin facturar: una sola regla para Facturación, e
   const cubierta = [...billing, f('e2', 's1', { invoice_no: '402', status: 'Pagado', issued_at: '2026-08-01', amount: 2000000 })]
   assert.equal(cuotasSinEmitir({ billing: cubierta, sales, hasta: '2026-11-01' }).length, 0)
 })
+
+test('correo: la cuenta citada de nuestra propia rendición no es la cuenta del remitente', async () => {
+  const { parteNuevaCorreo } = await import('../supabase/functions/_shared/xmlTexto.js')
+  const cita = 'De esta rendición resulta un saldo a su cargo de $52.700, que les agradeceremos transferir a la cuenta de:\r\nEstudio Demo Limitada\r\nRUT: 76.000.000-0\r\nBanco: Banco BICE\r\nCuenta Corriente: 1.000.001'
+  const outlook = `Estimada, muchas gracias, procederemos al pago.\r\nSaludos\r\n\r\nDe: Persona <p@estudio.cl>\r\nEnviado el: martes, 20 de octubre de 2026 10:31\r\nPara: X\r\nAsunto: Rendición\r\n\r\n${cita}`
+  const outlook2 = `Adjunto el comprobante.\r\n________________________________\r\nDe: Persona <p@estudio.cl>\r\nEnviado: martes, 20 de octubre de 2026 10:26\r\n${cita}`
+  const gmail = `Gracias.\n\nEl vie, 16 oct 2026 a la(s) 6:16 p.m., Persona (p@estudio.cl)\nescribió:\n\n> ${cita}`
+  for (const t of [outlook, outlook2, gmail]) assert.ok(!parteNuevaCorreo(t).includes('Cuenta Corriente'))
+  assert.equal(parteNuevaCorreo('Nuestra nueva cuenta: Cuenta Corriente 123456 Banco Itaú'), 'Nuestra nueva cuenta: Cuenta Corriente 123456 Banco Itaú')
+})
