@@ -194,86 +194,46 @@ serve(async (req) => {
     // Colores EXACTOS de la paleta C (tokens): accent, text/GRAFITO, muted/AZUL2, done/AZUL3, AZUL4; tealText/tealBg; soonText/soonBg; overdueText/overdueBg.
     const HAIR="#E4E8EB", INK="#3D3D3D", MUT="#537281", FAINT="#99ABB4", NV="#003C50";
     const TEAL="#155E6B", TEALBG="#DFF1F2", AMB="#854F0B", AMBBG="#FFF8E1", RED="#A32D2D", REDBG="#FCEBEB";
-    const sec = (n:string,label:string,color:string)=> `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 10px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${color};vertical-align:middle;">${n} · ${label}</span></div>`;
-    const cta = (txt:string,color:string,ir:string)=> `<div style="margin-top:12px;"><a href="https://gestion.leabogados.cl/?ir=${ir}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${txt} &rarr;</a></div>`;
-
-    const cajaHtml = (d:any) => {
-      if (!d.caja || (d.caja.nLiq===0)) return "";
-      const c = d.caja;
-      return `<div style="padding:16px 26px 4px;">${sec("1","Caja chica por liquidar",TEAL)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 14px;line-height:1.6;">Gastos de caja chica <b style="color:${INK};">pendientes de liquidación</b>.</div>`+
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${TEALBG};border-radius:12px;"><tr><td style="padding:14px 16px;"><div style="font-size:12.5px;color:${TEAL};font-weight:700;">${c.nLiq} gasto${c.nLiq!==1?"s":""} sin liquidar</div><div style="font-size:11px;color:${MUT};margin-top:3px;">Saldo en tu caja chica: <b style="color:${INK};">${fmt(c.saldo)}</b></div></td><td align="right" style="padding:14px 16px;white-space:nowrap;"><span style="font-size:16px;font-weight:800;color:${TEAL};">${fmt(c.montoLiq)}</span></td></tr></table>`+
-        cta("Liquidar caja chica",TEAL,"cajachica")+`</div>`;
-    };
-
-    const tareasHtml = (d:any) => {
-      if (!d.vencidas.length && !d.semana.length) return "";
-      const pill = (txt:string,bg:string,col:string)=> `<span style="display:inline-block;font-size:10.5px;font-weight:700;color:${col};background:${bg};border-radius:7px;padding:3px 9px;white-space:nowrap;">${esc(txt)}</span>`;
-      const tr = (x:any, venc:boolean)=> `<tr><td style="padding:10px 0;border-top:1px solid ${HAIR};"><div style="font-size:13.5px;font-weight:600;color:${INK};line-height:1.4;">${esc(x.t.title||"Tarea")}</div><div style="font-size:11px;color:${MUT};margin-top:2px;">${x.t.client_id?esc(cname(x.t.client_id))+" · ":""}${x.t.due?(venc?"venció":"vence")+" "+fDia(x.t.due):"sin fecha"}</div></td><td align="right" valign="top" style="padding:10px 0 10px 10px;border-top:1px solid ${HAIR};white-space:nowrap;">${venc?pill(x.d===-1?"ayer":`hace ${-x.d} d`,REDBG,RED):pill(x.d===0?"hoy":x.d===1?"mañana":`en ${x.d} d`,AMBBG,AMB)}</td></tr>`;
-      const rows = [...d.vencidas.map((x:any)=>tr(x,true)), ...d.semana.map((x:any)=>tr(x,false))].join("");
+    // Formato A (aprobado 25-10-2026): solo resumen en doble columna, una tarjeta por tema con cifra, una línea y su botón.
+    // El detalle está en la app; el correo nunca crece a una lista larga.
+    const dm = (d:Date)=> `${String(d.getUTCDate()).padStart(2,"0")}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+    const rangoCorto = `Semana del ${dm(_lun)} al ${dm(_dom)}-${_dom.getUTCFullYear()}`;
+    const SOFTBG="#F5F7F9";
+    const tile = (tit:string, cifra:string, linea:string, accion:string, ir:string, col=INK)=> `<td valign="top" width="50%" style="padding:5px;"><div style="background:${SOFTBG};border-radius:12px;padding:12px 13px;">`+
+      `<div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NV};">${esc(tit)}</div>`+
+      `<div style="font-size:20px;font-weight:800;color:${col};margin-top:4px;">${cifra}</div>`+
+      `<div style="font-size:11.5px;color:${MUT};margin-top:1px;">${linea}</div>`+
+      `<div style="margin-top:7px;"><a href="https://gestion.leabogados.cl/?ir=${ir}" style="font-size:12px;font-weight:700;color:${NV};text-decoration:none;">${esc(accion)} &rarr;</a></div></div></td>`;
+    const tarjetas = (d:any)=> {
+      const t:string[] = [];
       const nV=d.vencidas.length, nS=d.semana.length;
-      return `<div style="padding:24px 26px 4px;">${sec("2","Tareas de la semana",AMB)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">${nV?`<b style="color:${RED};">${nV} vencida${nV!==1?"s":""}</b>`:""}${nV&&nS?" · ":""}${nS?`${nS} esta semana`:""}.</div>`+
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`+
-        cta("Ver tareas",AMB,"tareas")+`</div>`;
-    };
-
-    const notariaHtml = (d:any) => {
-      if (!d.notaria) return "";
-      const n = d.notaria;
-      const partes:string[] = [];
-      if (n.nOt) partes.push(`<b style="color:${INK};">${n.nOt} OT con fondos por liquidar</b> (${fmt(n.montoOt)})`);
-      if (n.nSinCli) partes.push(`<b style="color:${INK};">${n.nSinCli} OT sin cliente</b> (${fmt(n.montoSinCli)})`);
-      if (n.nCorreos) partes.push(`<b style="color:${INK};">${n.nCorreos} correo${n.nCorreos!==1?"s":""} a notaría sin cerrar</b>`);
-      return `<div style="padding:24px 26px 4px;">${sec("3","Notaría",NV)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 12px;line-height:1.6;">${partes.join(" · ")}.${n.nEsperan ? ` ${n.nEsperan} OT más esperan fondos del cliente.` : ""}</div>`+
-        cta("Ver notaría",NV,"gastos")+`</div>`;
-    };
-
-    const filaHtml = (titulo:string, sub:string, monto:string, col:string)=> `<tr><td style="padding:9px 0;border-top:1px solid ${HAIR};"><div style="font-size:13.5px;font-weight:600;color:${INK};line-height:1.4;">${esc(titulo)}</div><div style="font-size:11px;color:${MUT};margin-top:2px;">${sub}</div></td><td align="right" valign="top" style="padding:9px 0 9px 10px;border-top:1px solid ${HAIR};white-space:nowrap;font-size:13.5px;font-weight:800;color:${col};">${monto}</td></tr>`;
-    const tabla = (rows:string)=> `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>`;
-    const dosBtn = (a:string,b:string,color:string,ir:string)=> `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;"><tr><td width="50%" style="padding-right:4px;"><a href="https://gestion.leabogados.cl/?ir=${ir}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${a} &rarr;</a></td><td width="50%" style="padding-left:4px;"><a href="https://gestion.leabogados.cl/?ir=${ir}" style="display:block;background:${color};color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">${b} &rarr;</a></td></tr></table>`;
-    const cobrarHtml = (d:any, n:string) => {
-      const c=d.cartera; if (!c || !c.bills.length) return "";
-      const venc = c.bills.filter((x:any)=> x.vence < hoyCL);
-      const rows = c.bills.slice(0,6).map((x:any)=> filaHtml(cname(x.b.client_id), `Factura N° ${esc(String(x.b.invoice_no).replace(/^factura\s*/i,""))} · ${x.vence<hoyCL?`<b style="color:${RED};">vencida desde el ${fDia(x.vence)}</b>`:`vence el ${fDia(x.vence)}`}`, fmt(x.saldo), x.vence<hoyCL?RED:INK)).join("");
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Cuentas por cobrar",RED)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">${c.bills.length} factura${c.bills.length!==1?"s":""} por cobrar${venc.length?` · <b style="color:${RED};">${venc.length} vencida${venc.length!==1?"s":""}</b>`:""}.</div>`+
-        tabla(rows)+cta("Recordar cobro",RED,"porcobrar")+`</div>`;
-    };
-    const fondosHtml = (d:any, n:string) => {
-      const c=d.cartera; if (!c || !c.fondos.length) return "";
-      const rows = c.fondos.slice(0,6).map((x:any)=> filaHtml(cname(x.cid), x.nPR?`${x.nPR} gasto${x.nPR!==1?"s":""} sin rendir · ${fmt(x.montoPR)}`:"sin gastos por rendir", x.saldo<0?"−"+fmt(-x.saldo):fmt(x.saldo), x.saldo<0?RED:INK)).join("");
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Fondos por solicitar",AMB)}`+
-        `<div style="font-size:12.5px;color:${MUT};margin:0 0 6px;line-height:1.6;">Clientes con saldo en contra.</div>`+
-        tabla(rows)+cta("Solicitar fondos",AMB,"porcobrar")+`</div>`;
-    };
-    const comisionesHtml = (d:any, n:string) => {
-      // Solo si hay comisiones por pagar (con acción: registrar la boleta). «Sujeto a cobro» es informativo: no va en el correo.
-      const k=d.cartera?.com; if (!k || !k.nListas) return "";
-      const txt = k.nListas
-        ? `<b style="color:${INK};">${k.nListas} comisi${k.nListas===1?"ón":"ones"} por pagar</b> · líquido ${fmt(k.liqListas)}. Registra tu boleta en la app.`
-        : `Sin comisiones por pagar. Sujeto a cobro: <b style="color:${INK};">${fmt(k.montoSujeto)}</b> en ${k.nSujeto} cuota${k.nSujeto!==1?"s":""}.`;
-      return `<div style="padding:24px 26px 4px;">${sec(n,"Comisiones",TEAL)}<div style="font-size:12.5px;color:${MUT};margin:0;line-height:1.6;">${txt}</div>${k.nListas?cta("Registrar boleta",TEAL,"comisiones"):""}</div>`;
+      if (nV||nS) { const fechas=[...new Set(d.semana.map((x:any)=>String(x.t.due||"").slice(0,10)))] as string[];
+        t.push(tile("Tareas", String(nV+nS), nV ? `<b style="color:${RED};">${nV} vencida${nV!==1?"s":""}</b>${nS?` · ${nS} esta semana`:""}` : (fechas.length===1 ? `vence${nS!==1?"n":""} el ${fDia(fechas[0])}` : "esta semana"), "Ver tareas", "tareas", nV?RED:INK)); }
+      if (d.caja && d.caja.nLiq) t.push(tile("Caja chica", fmt(d.caja.montoLiq), `${d.caja.nLiq} gasto${d.caja.nLiq!==1?"s":""} por liquidar`, "Liquidar", "cajachica"));
+      const c=d.cartera;
+      if (c && c.fondos.length) t.push(tile("Fondos por pedir", fmt(c.fondos.reduce((a:number,x:any)=>a-x.saldo,0)), `${c.fondos.length} cliente${c.fondos.length!==1?"s":""} en contra`, "Solicitar fondos", "porcobrar", RED));
+      if (c && c.bills.length) { const venc=c.bills.filter((x:any)=> x.vence < hoyCL).length;
+        t.push(tile("Por cobrar", fmt(c.bills.reduce((a:number,x:any)=>a+x.saldo,0)), venc ? `<b style="color:${RED};">${venc} vencida${venc!==1?"s":""}</b> de ${c.bills.length}` : `${c.bills.length} factura${c.bills.length!==1?"s":""} por vencer`, "Ver cobranza", "porcobrar", venc?RED:INK)); }
+      if (c && c.com && c.com.nListas) t.push(tile("Comisiones", fmt(c.com.liqListas), `${c.com.nListas} por pagar`, "Registrar boleta", "comisiones"));
+      if (d.notaria) { const n=d.notaria, nOt=n.nOt+(n.nSinCli||0);
+        t.push(tile("Notaría", nOt?`${nOt} OT`:`${n.nCorreos}`, nOt?`${fmt(n.montoOt+(n.montoSinCli||0))} por liquidar`:`correo${n.nCorreos!==1?"s":""} sin cerrar`, "Ver la deuda", "notaria")); }
+      if (!t.length) return "";
+      const filas:string[] = []; for (let i=0;i<t.length;i+=2) filas.push(`<tr>${t[i]}${t[i+1]||'<td width="50%"></td>'}</tr>`);
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas.join("")}</table>`;
     };
 
     const armar = (nombre:string, d:any) => {
-      // La rendición al cliente no es tarea del equipo limitado (ellos aportan la información); no se muestra esa sección.
-      // Numeración en orden de aparición (cada sección se oculta si no tiene datos).
-      let k=0; const num=(html:string)=> html ? html.replace(/>\d+ · /, `>${++k} · `) : "";
-      const cH=num(cajaHtml(d)), pH=num(cobrarHtml(d,"0")), fH=num(fondosHtml(d,"0")), mH=num(comisionesHtml(d,"0")), tH=num(tareasHtml(d)), nH=num(notariaHtml(d));
-      const algo = cH||pH||fH||mH||tH||nH;
+      const grid = tarjetas(d);
       return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;background:#ECEFF1;padding:22px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
+<body style="margin:0;background:#ECEFF1;padding:22px 10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
   <div style="background:${NV};padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
-  <div style="padding:26px 26px 10px;">
-    <div style="font-size:19px;color:${INK};font-weight:800;letter-spacing:-.3px;">Hola, ${esc(nombre)}</div>
-    <div style="font-size:12.5px;color:${MUT};margin-top:6px;line-height:1.55;"><span style="text-transform:uppercase;letter-spacing:.7px;font-size:10px;color:${FAINT};font-weight:700;">Resumen semanal · ${esc(rango)}</span></div>
+  <div style="padding:24px 17px 18px;">
+    <div style="padding:0 5px;"><div style="font-size:18px;color:${INK};font-weight:700;">Hola ${esc(nombre)}</div>
+    <div style="font-size:12.5px;color:${MUT};margin:4px 0 16px;">Pendientes · ${esc(rangoCorto)}</div></div>
+    ${grid || `<div style="padding:0 5px;font-size:13px;color:${FAINT};">Sin pendientes esta semana.</div>`}
   </div>
-  ${cH}${pH}${fH}${mH}${tH}${nH}
-  ${!algo?`<div style="padding:8px 26px 20px;font-size:13px;color:${FAINT};">Sin pendientes esta semana.</div>`:`<div style="height:8px;"></div>`}
-  <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
+  <div style="padding:14px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
     };
 
