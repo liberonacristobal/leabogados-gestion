@@ -164,7 +164,9 @@ export const deleteMatter = async (id) => {
 }
 
 // Lectura completa de tablas grandes (Supabase corta en 1.000 filas): fuente única compartida con las funciones del servidor.
-export { selectAll } from '../supabase/functions/_shared/paginar.js'
+// Importada Y re-exportada: este archivo la usa (getBilling) y App.jsx la importa desde aquí.
+import { selectAll } from '../supabase/functions/_shared/paginar.js'
+export { selectAll }
 
 // ─── COBROS ───────────────────────────────────────────────────────────────────
 export const getBilling = async () => {
