@@ -3444,11 +3444,50 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
   )
 }
 
+// Registro de errores en producción (tabla app_errores, admin la ve en Revisión de datos): vista, mensaje, pila y versión; nunca
+// datos de la pantalla. Una vez por mensaje y vista en cada sesión (un error en un render que se repite no inunda la tabla).
+const BUILD_VERSION = typeof __BUILD__!=='undefined' ? __BUILD__ : 'local'
+const _errVistos = new Set()
+const _ERR_RUIDO = /ResizeObserver loop|Failed to fetch|Load failed|NetworkError|AbortError|The operation was aborted|cancelad/i
+async function registrarError({origen='global', vista, err, stack}){
+  try{
+    const mensaje = String(err?.message || err || 'Error sin mensaje').slice(0,500)
+    if(DEMO || _ERR_RUIDO.test(mensaje)) return
+    const clave = `${vista||''}|${mensaje}`
+    if(_errVistos.has(clave) || _errVistos.size>=20) return
+    _errVistos.add(clave)
+    let usuario = null; try{ usuario = (await supabase.auth.getSession())?.data?.session?.user?.email || null }catch(_){}
+    if(!usuario) return   // sin sesión la tabla no acepta el registro
+    await supabase.from('app_errores').insert({ usuario, vista: vista||null, origen, mensaje,
+      stack: String(stack || err?.stack || '').slice(0,4000), version: BUILD_VERSION,
+      url: String(location.pathname+location.search).slice(0,300), dispositivo: String(navigator.userAgent||'').slice(0,300) })
+  }catch(_){}
+}
+if(typeof window!=='undefined' && !window.__errHook){ window.__errHook=true
+  window.addEventListener('error', e=>registrarError({origen:'global', err:e.error||e.message}))
+  window.addEventListener('unhandledrejection', e=>registrarError({origen:'promesa', err:e.reason}))
+}
+// Blindaje general (main.jsx): un error fuera de una pestaña (una página superpuesta, el menú) ya no deja la pantalla en negro.
+export class AppErrorBoundary extends Component {
+  constructor(p){ super(p); this.state={err:null} }
+  static getDerivedStateFromError(err){ return {err} }
+  componentDidCatch(err,info){ try{ console.error('App con error:', err, info) }catch(_){} registrarError({origen:'app', err, stack:`${err?.stack||''}\n${info?.componentStack||''}`}) }
+  render(){
+    if(this.state.err) return (
+      <div style={{padding:'24px 18px',maxWidth:460,margin:'80px auto 0',textAlign:'center',fontFamily:'system-ui,sans-serif'}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.overdueText,marginBottom:8}}>La app tuvo un problema</div>
+        <div style={{fontSize:13,color:C.muted,lineHeight:1.5,marginBottom:18}}>El error quedó registrado. Al recargar vuelves a la app.</div>
+        <button onClick={()=>location.reload()} style={{background:C.accent,color:'#fff',border:'none',borderRadius:10,padding:'10px 18px',fontSize:13,fontWeight:600,cursor:'pointer'}}>Recargar</button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 // Blindaje: si una vista lanza un error de render, mostramos un aviso recuperable en vez de dejar la app en blanco.
 class ViewErrorBoundary extends Component {
   constructor(p){ super(p); this.state={err:null} }
   static getDerivedStateFromError(err){ return {err} }
-  componentDidCatch(err,info){ try{ console.error('Vista con error:', err, info) }catch(_){} }
+  componentDidCatch(err,info){ try{ console.error('Vista con error:', err, info) }catch(_){} registrarError({origen:'vista', vista:this.props.vista, err, stack:`${err?.stack||''}\n${info?.componentStack||''}`}) }
   render(){
     if(this.state.err) return (
       <div style={{padding:'24px 18px',maxWidth:460,margin:'48px auto 0',textAlign:'center'}}>
@@ -11497,6 +11536,19 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
     Promise.all([supabase.from('sii_compras_docs').select('id,folio,tipo_dte,emisor_name,monto,sii_estado,fecha_recepcion').eq('sii_estado','PENDIENTE'),supabase.from('learnings').select('key').eq('kind','compra_sin_reclamo')])
       .then(([c,l])=>{ if(!v) return; setCpPend(c.data||[]); setCpVistas(new Set((l.data||[]).map(r=>String(r.key)))) },()=>{})
     return ()=>{v=false} },[])
+  // Errores de la app en los últimos 30 días (registrarError), agrupados por vista y mensaje. «Resuelto» los marca a todos.
+  const [appErr,setAppErr]=useState([])
+  useEffect(()=>{ if(DEMO) return; let v=true
+    const desde=new Date(Date.now()-30*864e5).toISOString()
+    supabase.from('app_errores').select('id,created_at,usuario,vista,origen,mensaje,version').is('resuelto_at',null).gte('created_at',desde).order('created_at',{ascending:false}).limit(500)
+      .then(({data})=>{ if(v) setAppErr(data||[]) },()=>{})
+    return ()=>{v=false} },[])
+  const errGrupos=useMemo(()=>{ const by={}
+    appErr.forEach(e=>{ const k=`${e.vista||''}|${e.mensaje}`; const g=(by[k]=by[k]||{k,vista:e.vista,origen:e.origen,mensaje:e.mensaje,ids:[],usuarios:new Set(),ult:e.created_at,version:e.version})
+      g.ids.push(e.id); if(e.usuario) g.usuarios.add(e.usuario.split('@')[0]) })
+    return Object.values(by) },[appErr])
+  const errResuelto=async g=>{ setAppErr(p=>p.filter(e=>!g.ids.includes(e.id))); if(DEMO) return
+    try{ const {data:{session}}=await supabase.auth.getSession(); await supabase.from('app_errores').update({resuelto_at:new Date().toISOString(),resuelto_por:session?.user?.email||null}).in('id',g.ids) }catch(_){} }
   // Compras de proveedores observados por el SII (W39), regla única SD.comprasObservadasSII (la misma del auditor nocturno).
   const [cpObs,setCpObs]=useState([]), [cpObsVistas,setCpObsVistas]=useState(()=>new Set())
   useEffect(()=>{ if(DEMO) return; let v=true
@@ -11576,7 +11628,7 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -11687,6 +11739,14 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{extra.length?`${extra.length+1} pagos desde el ${fmtFechaDMY(a.fecha)}`:`pago del ${fmtFechaDMY(a.fecha)}`} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
           {amt(fmt(pagado??(Number(a.monto)||0)),`cuotas ${fmt(sum)}`,C.greenText)}</div>
         {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id),extra.map(x=>x.id)); setCubiertasRD(p=>new Set([...p,String(a.id),...extra.map(x=>String(x.id))])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
+      </div>)}
+    </div>}
+    {errGrupos.length>0&&<div style={secBox}>{sh('Errores de la app',C.overdueText,errGrupos.length)}
+      {errGrupos.map(g=><div key={g.k} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={g.mensaje}>{g.mensaje}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{TAB_LABELS[g.vista]||g.vista||'Fuera de una vista'} · {[...g.usuarios].join(', ')||'—'} · {fmtFechaDMY(isoLocal(g.ult))}</div></div>
+          {amt(`${g.ids.length}`,g.ids.length===1?'vez':'veces',C.overdueText)}</div>
+        <div style={{display:'flex',gap:6,marginTop:7}}><button onClick={()=>errResuelto(g)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Resuelto</button></div>
       </div>)}
     </div>}
     {observadas.length>0&&<div style={secBox}>{sh('Compras de proveedores observados por el SII',C.overdueText,observadas.length)}
@@ -45426,7 +45486,7 @@ export default function App() {
         {loading&&!booted?(
           <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
         ):(
-          <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} onReset={()=>setTab('dashboard')}>
+          <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}><ViewErrorBoundary key={tab} vista={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&<Dashboard onRendirClientes={()=>{ navTo({tab:'expenses'}); setExpNav('rendirCli') }} proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/>}
             {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (

@@ -1,8 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { execSync } from 'node:child_process'
+
+// Versión del build (Vercel entrega el commit; en local, git): queda en cada error registrado (app_errores.version).
+const build = (process.env.VERCEL_GIT_COMMIT_SHA || (()=>{ try{ return execSync('git rev-parse HEAD').toString().trim() }catch(_){ return '' } })() || 'local').slice(0,8)
 
 export default defineConfig({
   plugins: [react()],
+  define: { __BUILD__: JSON.stringify(build) },
   build: {
     outDir: 'dist',
     sourcemap: false,
