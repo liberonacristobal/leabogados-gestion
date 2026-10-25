@@ -43023,7 +43023,6 @@ export default function App() {
   const [brandV,setBrandV]=useState(0)   // bump al cargar la identidad del estudio desde la DB (Etapa 2 multi-tenant) → re-render de la chrome
   // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
   // En demo va neutro ('FirmDesk', marca del producto) para no exponer el nombre del estudio a un prospecto.
-  useEffect(()=>{ if(user?.email) cargarEquipo(user.email) },[user?.email])   // equipo del estudio (nombre ↔ correo principal)
   useEffect(()=>{ try{ document.title = DEMO ? 'FirmDesk' : `${BRAND.nombre} · Gestión` }catch(_){} },[brandV])
   // Nombre de la app instalada (pantalla de inicio del iPhone, Dock del Mac): el del estudio, no el del producto. El teléfono lo
   // lee al agregarla, desde la etiqueta apple-mobile-web-app-title y el manifiesto (aquí armado con los datos del estudio).
