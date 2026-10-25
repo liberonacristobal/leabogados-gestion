@@ -4962,12 +4962,6 @@ function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds
         const CART_DOT={rojo:'#E24B4A',ambar:'#EF9F27',verde:'#1D9E75'}
         return (
           <div style={{padding:'0 20px 0'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em'}}>Accesos directos</span>
-              <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:2}}>
-                {['UF','CLP'].map(u=>{ const on=dashMoneda===u; return <span key={u} onClick={()=>setDashMoneda(u)} style={{fontSize:12,fontWeight:700,color:on?'#fff':C.done,background:on?C.accent:'transparent',borderRadius:18,padding:'4px 14px',cursor:'pointer',lineHeight:1}}>{u}</span> })}
-              </div>
-            </div>
             <div className='dash-acc' style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
               {[...accesos].sort((a,b)=>((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
                 <button key={id} onClick={()=>{bumpAcceso(id);onAcceso(id)}} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
@@ -5030,22 +5024,26 @@ function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
-              <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.5px'}}>Resultado del año</span>
+              <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.5px',whiteSpace:'nowrap'}}>Resultado del año</span>
               <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.5px'}}>{selYear}<span style={{fontSize:8,color:C.textSoft}}><Gl n='chevD'/></span></button>
               {yearMenu&&(
                 <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
                   {aniosDisponibles.map(y=>(<button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?C.azulBg:'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>))}
                 </div>
               )}
+              {/* UF/CLP: cambia la moneda de estas cifras (antes iba junto a «Accesos directos») */}
+              <div style={{display:'inline-flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:2,marginLeft:4}}>
+                {['UF','CLP'].map(u=>{ const on=dashMoneda===u; return <span key={u} onClick={()=>setDashMoneda(u)} style={{fontSize:10,fontWeight:700,color:on?'#fff':C.done,background:on?C.accent:'transparent',borderRadius:18,padding:'3px 9px',cursor:'pointer',lineHeight:1}}>{u}</span> })}
+              </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
               <button onClick={descargarResultado} title="Descargar imagen" aria-label="Descargar imagen" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
               <button onClick={imprimirResultado} title="Imprimir informe" aria-label="Imprimir informe" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               </button>
-              <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Ver detalle <Gl n='chevron'/></span>
+              <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}><span className='fecha-full'>Ver detalle</span><span className='fecha-short'>Detalle</span> <Gl n='chevron'/></span>
             </div>
           </div>
           <div style={{padding:'6px 20px 0'}}>
@@ -45663,10 +45661,10 @@ export default function App() {
         }
       `}</style>
       <div className='shell' style={{background:C.bg,minHeight:'100vh',position:'relative'}}>
-        {/* App instalada en el iPhone: el encabezado parte bajo la barra de estado (safe-area); si no, iOS desenfoca la fecha y el saludo. */}
-        <div className='apphead' style={{padding:'max(52px, calc(env(safe-area-inset-top, 0px) + 12px)) 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
+        {/* App instalada en el iPhone: el encabezado parte bajo la barra de estado (safe-area) y bajo la franja que iOS desenfoca debajo de ella. */}
+        <div className='apphead' style={{padding:'max(52px, calc(env(safe-area-inset-top, 0px) + 30px)) 20px 14px',position:'sticky',top:0,background:C.bg,zIndex:20}}>
           <div style={{position:'relative'}}>
-            <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.14em',marginBottom:1}}>{fechaFull}</div>
+            <div style={{fontSize:9,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.14em',marginBottom:4}}>{fechaFull}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{fontSize:22,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,lineHeight:1.1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>¡Hola <span style={{color:C.accent}}>{user?.name?.split(' ')[0]}</span>!</div>
               <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
