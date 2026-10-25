@@ -11385,6 +11385,17 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     </div> )
 }
 // Revisión de datos: la app caza sus propios descuadres desde los datos ya cargados (sin queries). Detector — te lleva al dato, no toca cifras.
+// Trabajos activos sin movimiento (regla única ventasReglas.trabajosDetenidos): lee las horas y las decisiones «Sigue activo»
+// (learnings trabajo_activo_ok) una vez y calcula en vivo. Lo usan Revisión de datos y Cobranza, con la misma cifra que el auditor nocturno.
+function useTrabajosDetenidos({sales=[],billing=[],expenses=[],tasks=[]}){
+  const [horasAct,setHorasAct]=useState([]), [activosOk,setActivosOk]=useState({})
+  useEffect(()=>{ if(DEMO) return; let v=true
+    Promise.all([supabase.from('horas').select('client_id,fecha'),supabase.from('learnings').select('key,value').eq('kind','trabajo_activo_ok')])
+      .then(([h,l])=>{ if(!v) return; setHorasAct(h.data||[]); setActivosOk(Object.fromEntries((l.data||[]).map(r=>[String(r.key),String(r.value||'')]))) },()=>{})
+    return ()=>{v=false} },[])
+  const hoyCL=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  return useMemo(()=>trabajosDetenidos({sales,billing,expenses,tasks,horas:horasAct,uf:ufFechaCache()||{},hoy:hoyCL,decididos:activosOk}),[sales,billing,expenses,tasks,horasAct,activosOk,hoyCL])
+}
 function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], expenses=[], tasks=[], onCerrarTrabajo, onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut, onCubrirCuotas}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
@@ -11493,14 +11504,11 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
       .then(([c,l])=>{ if(!v) return; setCpObs(c.data||[]); setCpObsVistas(new Set((l.data||[]).map(r=>String(r.key)))) },()=>{})
     return ()=>{v=false} },[])
   const observadas=useMemo(()=>SD.comprasObservadasSII(cpObs,cpObsVistas),[cpObs,cpObsVistas])
-  // Trabajos detenidos (regla única ventasReglas.trabajosDetenidos, la misma del auditor nocturno): parecen terminados o tienen saldo.
-  const [horasAct,setHorasAct]=useState([]), [activosOk,setActivosOk]=useState({}), [detHechos,setDetHechos]=useState(()=>new Set())
-  useEffect(()=>{ if(DEMO) return; let v=true
-    Promise.all([supabase.from('horas').select('client_id,fecha'),supabase.from('learnings').select('key,value').eq('kind','trabajo_activo_ok')])
-      .then(([h,l])=>{ if(!v) return; setHorasAct(h.data||[]); setActivosOk(Object.fromEntries((l.data||[]).map(r=>[String(r.key),String(r.value||'')]))) },()=>{})
-    return ()=>{v=false} },[])
+  // Trabajos detenidos (regla única ventasReglas.trabajosDetenidos vía useTrabajosDetenidos, la misma del auditor nocturno y de Cobranza).
+  const [detHechos,setDetHechos]=useState(()=>new Set())
   const hoyCL=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
-  const detenidos=useMemo(()=>trabajosDetenidos({sales,billing,expenses,tasks,horas:horasAct,uf:ufFechaCache()||{},hoy:hoyCL,decididos:activosOk}).filter(x=>!detHechos.has(String(x.s.id))),[sales,billing,expenses,tasks,horasAct,activosOk,detHechos,hoyCL])
+  const detTodos=useTrabajosDetenidos({sales,billing,expenses,tasks})
+  const detenidos=useMemo(()=>detTodos.filter(x=>!detHechos.has(String(x.s.id))),[detTodos,detHechos])
   const detTerm=detenidos.filter(x=>x.tipo==='terminado'), detSaldo=detenidos.filter(x=>x.tipo==='con_saldo')
   const sigueActivo=async x=>{ setDetHechos(p=>new Set([...p,String(x.s.id)])); if(DEMO) return; try{ await setLearningKV('trabajo_activo_ok',String(x.s.id),hoyCL); logActividad('ventas.sigue_activo',{tabla:'sales',id:x.s.id,detalle:{title:`«${x.s.title||'Trabajo'}» de ${cName(x.s.client_id)} sigue activo (sin movimiento desde ${fmtFechaDMY(x.ult)})`}}) }catch(_){} }
   const cerrarTrabajo=async x=>{ if(!onCerrarTrabajo) return; setDetHechos(p=>new Set([...p,String(x.s.id)])); try{ await onCerrarTrabajo(x.s) }catch(e){ setDetHechos(p=>{ const n=new Set(p); n.delete(String(x.s.id)); return n }); appAlert('No se pudo cerrar: '+(e.message||e)) } }
@@ -35270,7 +35278,7 @@ function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sending, nota
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen }){
+function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
@@ -35290,6 +35298,9 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
   const f0 = n => '$'+Math.round(n||0).toLocaleString('es-CL')
   const fM = n => fmtMill(n||0)   // compacto para la foto (hero + anillos); el detalle por factura mantiene el peso exacto
+  // Trabajo detenido con saldo (misma regla que Revisión de datos): sale_id → {ult, dias}. Marca tenue en la factura, sin otra cifra.
+  const detTrab = useTrabajosDetenidos({sales,billing,expenses,tasks})
+  const detPorVenta = useMemo(()=>Object.fromEntries(detTrab.filter(x=>x.tipo==='con_saldo').map(x=>[String(x.s.id),x])),[detTrab])
   useEffect(()=>{
     if(DEMO){ setRecMap({}); setOkCount({c4:3}); setAutoCli({}); setAutoGlobal(false); return }
     supabase.from('learnings').select('kind,key,value').in('kind',['factura_recordado','cobranza_ok','fd_auto','config','recordatorio_nota']).then(({data})=>{
@@ -35437,6 +35448,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
     const rs = rsDeFactura(b, clientEntities)
     const nEnt = (clientEntities||[]).filter(e=>String(e.client_id)===String(b.client_id)).length
     const showRs = !!rs && (nEnt>1 || _normTxt(rs)!==_normTxt(cn(b.client_id)))
+    const det = b.sale_id ? detPorVenta[String(b.sale_id)] : null
     const acciones=(<div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:5,width:isDesktop?'auto':'100%'}}>
           {b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}
           {onIrConciliacion&&<button onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.greenBg,color:C.greenText,fontSize:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Buscar pago <Gl n='chevron'/></button>}
@@ -35454,6 +35466,7 @@ function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], cur
           <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text,whiteSpace:'nowrap'}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
           <div><div style={kk}>{venc?'Vencida':'Vence en'}</div><div style={{...dv,color:sevCol}}>{venc?`${diasVenc} días`:(dl>0?`${dl} días`:'hoy')}</div></div>
         </div>
+        {det&&<div title={`«${det.s.title||'Trabajo'}» sin factura, gasto, tarea ni horas del cliente desde ${fmtFechaDMY(det.ult)}`} style={{fontSize:10.5,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Trabajo detenido desde {fmtFechaDMY(det.ult)}</div>}
       </div>
       <div style={{textAlign:'right',flexShrink:0}}>
         <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>
@@ -45470,7 +45483,7 @@ export default function App() {
             {tab==='cartera'&&userRole==='limited'&&<MiCarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} clients={clients} tasks={tasks} currentUserName={user?.name} resumenCom={resumenComLim} resumenCobro={resumenCobroLim} onMisComisiones={miProv?()=>navTo({tab:'misComisiones'}):null} onPorCobrar={resumenCobroLim?()=>navTo({tab:'porCobrarMios'}):null} proyEquipo={proyEquipo} proyHitos={proyHitos} expenses={expenses} onAddGasto={(c)=>setModal({type:'gastos',data:c})} onProponerVenta={(miProv||resumenCobroLim)?(v=>{ setPropEdit(v); navTo({tab:'proponerVenta'}) }):null} propuestas={(sales||[]).filter(x=>x&&!x.deleted_at&&x.status==='Propuesta'&&x.propuesta_de&&_normTxt(x.propuesta_de)===_normTxt(user?.name||''))} onClose={goBack} origen={origenNav('Inicio')} onOpenClientFicha={handleOpenClientFicha} onAddTaskForProject={(p)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}}}) }}/>}
             {tab==='cartera'&&userRole!=='limited'&&<CarteraView proyectos={proyectosCartera} setProyectos={setProyectosCartera} proyEquipo={proyEquipo} proySeguidores={proySeguidores} proyEntregables={proyEntregables} proyHitos={proyHitos} onSeguir={(pid,follow)=>handleSeguirProyecto(pid, INICIALES_RESP[user?.name]||'', follow)} onSetTipo={handleSetProyectoTipo} onAddEntregable={handleAddEntregable} onToggleEntregable={handleToggleEntregable} onMoverEntregable={handleMoverEntregable} onDelEntregable={handleDelEntregable} onAddHito={handleAddHito} onToggleHito={handleToggleHito} onDelHito={handleDelHito} onUpdHito={handleUpdHito} onReorderHitos={handleReorderHitos} onSeedPlan={handleSeedPlan} pmoOps={pmoOps} onSaveOperacion={handleSaveOperacion} onDelOperacion={handleDelOperacion} onAddMiembro={handleAddMiembro} onDelMiembro={handleDelMiembro} pmoSug={pmoSug} onAplicarEvidencia={handleAplicarEvidencia} onDescartarEvidencia={handleDescartarEvidencia} clients={clients} sales={sales} tasks={tasks} billing={billing} expenses={expenses} rendiciones={rendiciones} anticipos={anticipos} terceros={terceros} focusId={carteraFocus} onFocusHandled={()=>setCarteraFocus(null)} currentUserName={user?.name} userRole={userRole} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenSale={userRole==='admin'?(s)=>setModal({type:'sale',data:s}):null} onAddTaskForProject={(p,pre)=>{ const cli=clients.find(c=>String(c.id)===String(p.cliente_id)); setModal({type:'task',data:{preClient:cli||null, preProject:{id:p.id, name:p.nombre_proyecto}, preTitle:pre?.title||null, preDue:pre?.due||null}}) }} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})}/>}
             {tab==='horas'&&<HorasView clients={clients} sales={sales} tasks={tasks} terceros={terceros} billing={billing} currentUserName={user?.name} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})}/>}
-            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack} origen={origenNav('Inicio')}/>}
+            {tab==='cobranza'&&userRole==='admin'&&<CobranzaView billing={billing} clients={clients} sales={sales} clientEntities={clientEntities} expenses={expenses} tasks={tasks} currentUserName={user?.name} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onIrConciliacion={(b)=>navTo({tab:'conciliacion', concBuscar: b?(clients.find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||''):null})} onClose={goBack} origen={origenNav('Inicio')}/>}
             {tab==='repricing'&&userRole==='admin'&&<RepricingView sales={sales} clients={clients} onOpenClientFicha={handleOpenClientFicha} onClose={goBack} origen={origenNav('Inicio')}/>}
             {tab==='presupuestoOficina'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1100,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Oficina' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
