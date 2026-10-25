@@ -123,10 +123,35 @@ export function anticiposSubarriendo(anticipos, billing, sales, conciliacion) {
 // Facturas recibidas dentro del plazo de reclamo (Registro de Compras del SII en estado PENDIENTE): 8 días corridos desde la
 // recepción en el SII. vistas = las que alguien ya revisó sin reclamo (learnings compra_sin_reclamo). Reclamar se hace en el SII.
 export const PLAZO_RECLAMO_DIAS = 8
-export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set()) {
+// Fecha de Chile de un timestamp del SII (una fecha sin hora se toma tal cual: no es UTC).
+const _fechaCL = ts => { const x = String(ts || ''); if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return x; const t = new Date(x); return isNaN(t) ? x.slice(0, 10) : t.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }) }
+const _nrut = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
+// Comisiones del emisor aún sin factura (terceros_pagos sin factura_numero, mismo proveedor o RUT) que calzan con el monto de la
+// factura recibida (±0,5%, mínimo $1.000): todas juntas o UNA sola combinación posible (si hay más de una, no se adivina).
+export function comisionesQueCalzan(doc, terceros = []) {
+  const rut = _nrut(doc?.emisor_rut), monto = Number(doc?.monto) || 0, tol = Math.max(1000, monto * 0.005)
+  const cand = (terceros || []).filter(t => t && !String(t.factura_numero || '').trim() && t.estado !== 'anulado' && ((doc?.proveedor_id && String(t.proveedor_id || '') === String(doc.proveedor_id)) || (rut && _nrut(t.rut) === rut)))
+  if (!cand.length || !(monto > 0)) return null
+  const suma = xs => xs.reduce((a, t) => a + (Number(t.monto) || 0), 0)
+  if (Math.abs(suma(cand) - monto) <= tol) return cand
+  if (cand.length > 16) return null
+  let hit = null, n = 0
+  for (let mask = 1; mask < (1 << cand.length); mask++) { const xs = cand.filter((_, i) => mask & (1 << i)); if (Math.abs(suma(xs) - monto) <= tol) { n++; hit = xs; if (n > 1) return null } }
+  return hit
+}
+// Facturas recibidas dentro del plazo de reclamo (Registro de Compras del SII en estado PENDIENTE): 8 días corridos desde la
+// recepción en el SII (fecha de Chile). vistas = las que alguien ya revisó sin reclamo (learnings compra_sin_reclamo). Con
+// terceros: si calza con comisiones sin factura del emisor, va con su calce (la acción es enlazarlas, no reclamar). Con historial
+// (todas las compras): un proveedor habitual (3 facturas anteriores o más) con un monto dentro de lo suyo no se muestra.
+export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set(), { terceros = null, historial = null } = {}) {
   return (docs || []).filter(d => d && d.sii_estado === 'PENDIENTE' && d.fecha_recepcion && !vistas.has(String(d.id)) && Number(d.tipo_dte) !== 61)
-    .map(d => { const rec = String(d.fecha_recepcion).slice(0, 10), vence = new Date(new Date(rec + 'T12:00').getTime() + PLAZO_RECLAMO_DIAS * 864e5).toISOString().slice(0, 10); return { d, rec, vence, quedan: _dias(vence, hoy) } })
-    .filter(x => x.quedan >= 0).sort((a, b) => a.vence.localeCompare(b.vence))
+    .map(d => { const rec = _fechaCL(d.fecha_recepcion), vence = new Date(new Date(rec + 'T12:00').getTime() + PLAZO_RECLAMO_DIAS * 864e5).toISOString().slice(0, 10); return { d, rec, vence, quedan: _dias(vence, hoy), calce: terceros ? comisionesQueCalzan(d, terceros) : null } })
+    .filter(x => x.quedan >= 0)
+    .filter(x => { if (x.calce || !historial) return true
+      const prev = historial.filter(h => h && String(h.id) !== String(x.d.id) && _nrut(h.emisor_rut) === _nrut(x.d.emisor_rut) && String(h.fecha_emision || '') < String(x.d.fecha_emision || '9999'))
+      const maxPrev = Math.max(0, ...prev.map(h => Number(h.monto) || 0))
+      return !(prev.length >= 3 && (Number(x.d.monto) || 0) <= 2 * maxPrev) })
+    .sort((a, b) => a.vence.localeCompare(b.vence))
 }
 
 // Compras de proveedores observados por el SII («Documentos observados» del RCV, W39): su crédito de IVA está objetado en el F29.
@@ -199,7 +224,7 @@ export function hallazgos(d) {
     ? add('anticipo_por_aplicar', x.a.id, `Pago de subarriendo que calza con la Factura N° ${folioN(x.b.invoice_no)} · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, factura: x.b.id, periodo: x.per })
     : add('subarriendo_por_facturar', x.a.id, `Subarriendo de ${perTexto(x.per)} pagado sin factura · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, periodo: x.per }))
   comprasObservadasSII(d.comprasObs, d.comprasObsVistas).forEach(x => add('compra_observada_sii', x.id, `Factura N° ${x.folio} de ${x.emisor_name || 'proveedor'} · proveedor observado por el SII${x.periodo ? ` · ${perTexto(x.periodo)}` : ''}`, Number(x.observado_iva) || 0, { folio: x.folio, periodo: x.periodo || null }))
-  comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas).forEach(x => add('compra_plazo_reclamo', x.d.id, `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
+  comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas, { terceros: d.terceros || null, historial: d.comprasTodas || null }).forEach(x => add('compra_plazo_reclamo', x.d.id, x.calce ? `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · calza con ${x.calce.length} comisi${x.calce.length === 1 ? 'ón' : 'ones'} sin factura · enlazar antes del ${x.vence.split('-').reverse().join('-')}` : `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
   // Permisos de la base fuera de la regla (rpc auditoria_permisos): la consola de Supabase crea tablas abiertas al rol sin sesión.
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))

@@ -196,3 +196,27 @@ test('rendir a clientes: el grupo depende del saldo y de los gastos por rendir, 
   assert.equal(grupoRendir({ n: 1, s: -900, armada: false }), 'cero')
   assert.equal(grupoRendir({ n: 3, s: -50000, armada: true }), 'env')
 })
+
+test('factura recibida de un colaborador que calza con sus comisiones sin factura; proveedor habitual no se muestra', async () => {
+  const { comprasEnPlazoReclamo, comisionesQueCalzan } = await import('../supabase/functions/_shared/saludDatos.js')
+  const doc = { id: 'd1', folio: 323, tipo_dte: 34, sii_estado: 'PENDIENTE', fecha_recepcion: '2026-10-19T18:35:18Z', fecha_emision: '2026-10-19', emisor_rut: '78099865-2', proveedor_id: 'p1', monto: 4982883 }
+  const t = (id, monto, extra) => ({ id, monto, proveedor_id: 'p1', rut: '78.099.865-2', factura_numero: null, ...extra })
+  const terceros = [t(1, 434296), t(2, 1111800), t(3, 104231), t(4, 382662), t(5, 384038), t(6, 436400), t(7, 1047362), t(8, 1082284), t(9, 50000, { factura_numero: '300' })]
+  assert.equal(comisionesQueCalzan(doc, terceros).length, 8)   // caso real: 8 comisiones, $190 de diferencia
+  const r = comprasEnPlazoReclamo([doc], '2026-10-25', new Set(), { terceros, historial: [] })
+  assert.equal(r[0].calce.length, 8); assert.equal(r[0].vence, '2026-10-27')
+  const nes = { id: 'n4', folio: 400719, tipo_dte: 33, sii_estado: 'PENDIENTE', fecha_recepcion: '2026-10-20T15:00:00Z', fecha_emision: '2026-10-20', emisor_rut: '96.000.000-1', monto: 29013 }
+  const hist = [1, 2, 3].map(i => ({ id: 'h' + i, emisor_rut: '96000000-1', fecha_emision: `2026-0${i + 6}-01`, monto: 27000 }))
+  assert.equal(comprasEnPlazoReclamo([nes], '2026-10-25', new Set(), { terceros: [], historial: hist }).length, 0)
+  assert.equal(comprasEnPlazoReclamo([nes], '2026-10-25', new Set(), { terceros: [], historial: hist.slice(0, 2) }).length, 1)
+})
+
+test('trabajo detenido con saldo: un pago recibido es movimiento; para «parece terminado» no', async () => {
+  const { trabajosDetenidos } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 's1', client_id: 'c1', status: 'Activo', amount_clp: 797000, cobro_type: 'cuotas', created_at: '2025-09-01' }]
+  const billing = [{ sale_id: 's1', invoice_no: '180', status: 'Vencido', amount: 797000, paid_amount: 400000, issued_at: '2025-09-24' }]
+  const sin = trabajosDetenidos({ sales, billing, hoy: '2026-10-25' })
+  assert.equal(sin[0].tipo, 'con_saldo'); assert.equal(sin[0].ult, '2025-09-24')
+  const con = trabajosDetenidos({ sales, billing, pagos: [{ client_id: 'c1', fecha: '2026-05-20' }], hoy: '2026-10-25' })
+  assert.equal(con[0].ult, '2026-05-20'); assert.equal(con[0].dias, 158)   // caso real: 158 días, no 396
+})
