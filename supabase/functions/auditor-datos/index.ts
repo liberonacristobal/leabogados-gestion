@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
   const dryRun = !!body.dryRun;
   try {
-    const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos, compras, comprasVistas, comprasObs, comprasObsVistas, gastosAct, tareasAct, horasAct, activosOk, ufRows] = await Promise.all([
+    const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos, compras, comprasVistas, comprasObs, comprasObsVistas, gastosAct, tareasAct, horasAct, activosOk, ufRows, permisos] = await Promise.all([
       todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,due"),
       todas("sales?select=id,client_id,status,deleted_at,amount_uf,amount_clp,uf_value,year,month,cobro_type,cobro_config,area,title,moneda,created_at"),
       todas("anticipos?select=id,client_id,sale_id,monto,nota,estado"),
@@ -67,13 +67,14 @@ Deno.serve(async (req) => {
       todas("horas?select=client_id,fecha"),
       todas("learnings?select=key,value&kind=eq.trabajo_activo_ok"),
       todas("indicadores?select=fecha,valor&codigo=eq.uf&order=fecha.asc"),
+      todas("rpc/auditoria_permisos"),   // permisos de la base fuera de la regla (tablas o funciones abiertas sin sesión)
     ]);
     const hoyCL = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
     const ufMap: Record<string, number> = Object.fromEntries(ufRows.map((r: { fecha: string; valor: number }) => [String(r.fecha).slice(0, 10), Number(r.valor) || 0]));
     const detenidos = trabajosDetenidos({ sales, billing, uf: ufMap, expenses: gastosAct, tasks: tareasAct, horas: horasAct, hoy: hoyCL, decididos: Object.fromEntries(activosOk.map((r: { key: string; value: string }) => [String(r.key), String(r.value || '')])) });
     const nomCli: Record<string, string> = Object.fromEntries(clients.map((c) => [String(c.id), c.name]));
     const nomProv: Record<string, string> = Object.fromEntries(provs.map((p) => [String(p.id), p.nombre]));
-    const casos = hallazgos({ compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
+    const casos = hallazgos({ permisos, compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
     const vistos = new Set(casos.map((c) => c.clave));
     const abiertos = new Map(previos.map((p) => [p.clave, p]));
     const nuevos = casos.filter((c) => !abiertos.has(c.clave));
