@@ -67,10 +67,11 @@ export function ventasDup(sales) {
 }
 
 // Doble conteo cuota↔tramo: venta NO recurrente donde cuotas Programadas + facturas emitidas SUPERAN la venta.
-export function cuotaTramo(billing, sales) {
+// ignorados = ventas marcadas «No es doble conteo» (learnings data_health 'cuotatramo:<venta>'): no vuelven a aparecer.
+export function cuotaTramo(billing, sales, ignorados = new Set()) {
   const bySale = {}; (billing || []).forEach(b => { if (b.deleted_at || !b.sale_id) return; (bySale[String(b.sale_id)] = bySale[String(b.sale_id)] || []).push(b) })
   const out = []
-  ;(sales || []).forEach(s => { if (s.deleted_at || !['Activo', 'Terminado'].includes(s.status) || s.cobro_type === 'mensual') return
+  ;(sales || []).forEach(s => { if (s.deleted_at || !['Activo', 'Terminado'].includes(s.status) || s.cobro_type === 'mensual' || ignorados.has(String(s.id))) return
     const bs = bySale[String(s.id)] || []; if (!bs.length) return
     const prog = bs.filter(b => b.status === 'Programada').reduce((a, b) => a + montoFactura(b), 0)
     const emit = bs.filter(b => b.invoice_no && b.status !== 'Anulada').reduce((a, b) => a + montoFactura(b), 0)
@@ -184,7 +185,7 @@ export function hallazgos(d) {
   facDup(d.billing).forEach(x => add('factura_duplicada', x.rows.map(b => b.id).sort().join('+'), `Facturas posiblemente duplicadas · ${nom(x.cid)} · ${x.concept || ''}`.trim(), x.amount, { facturas: x.rows.map(b => b.id) }))
   montoNeDte(d.billing).forEach(x => add('monto_distinto_dte', x.b.id, `Factura N° ${folioN(x.b.invoice_no) || '—'} · monto distinto del DTE · ${nom(x.b.client_id)}`, x.dte - x.b.amount, { factura: x.b.id, monto: x.b.amount, dte: x.dte }))
   ventasDup(d.sales).forEach(a => add('venta_duplicada', a.map(s => s.id).sort().join('+'), `Ventas que podrían estar duplicadas · ${nom(a[0].client_id)}`, null, { ventas: a.map(s => s.id) }))
-  cuotaTramo(d.billing, d.sales).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
+  cuotaTramo(d.billing, d.sales, d.cuotaTramoNo || new Set()).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
   glosaConflict(d.coRows).forEach(x => add('glosa_conflicto', x.key, `Glosa con más de una categoría aprendida · ${x.key}`, null, { votos: x.votos }))
   huerfanas(d.billing).forEach(b => add('factura_sin_cliente', b.id, `Factura N° ${folioN(b.invoice_no)} sin cliente · ${b.receptor_name || ''}`.trim(), b.amount, { factura: b.id }))
   vencIncoh(d.billing).forEach(b => add('vencimiento_incoherente', b.id, `Factura N° ${folioN(b.invoice_no)} con vencimiento anterior a su emisión · ${nom(b.client_id)}`, b.amount, { factura: b.id, emision: b.issued_at, vence: b.due }))
