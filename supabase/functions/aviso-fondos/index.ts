@@ -15,6 +15,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
+import { UMBRAL_DEUDA, avisoFondosAplica, contadorAvisos } from "../_shared/fondosReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -114,7 +115,7 @@ serve(async (req) => {
       const gastos = es.filter((e) => e.type !== "fondo" && !e.no_descuenta_saldo);
       const fondosT = fondos.reduce((a, e) => a + N(e.amount), 0);
       const saldo = fondosT - gastos.reduce((a, e) => a + N(e.amount), 0);
-      if (saldo > -1) continue;
+      if (saldo > UMBRAL_DEUDA) continue;
       const abg = c.abogado_responsable || respDe[c.id] || null;
       const dest = abg && SOCIOS[abg] ? abg : PRIMER_SOCIO;   // clientes de abogados no socios o sin abogado → el primer socio
       (negPorAbg[dest] ||= { n: 0, total: 0 }); negPorAbg[dest].n++; negPorAbg[dest].total += -saldo;
@@ -132,13 +133,12 @@ serve(async (req) => {
       let acum = 0; const sinF: { e: Record<string, unknown>; sf: number }[] = [];
       for (const e of ord) { acum += N(e.amount); const sf = Math.min(N(e.amount), acum - fondosT); if (sf > 0 && N(e.amount) > 0) sinF.push({ e, sf }); }
       const desde = sinF.map((x) => String(x.e.date || "")).filter(Boolean).sort()[0] || "";
+      if (!avisoFondosAplica(saldo, sinF.map((x) => x.e))) continue;
 
       // Disparador y contador
       const cargaHoy = gastos.filter((e) => localDate(e.created_at) === hoy && N(e.amount) > 0);
-      const h = hist.filter((r) => String(r.client_id) === String(c.id) && String(r.fecha) > lastFondo && String(r.fecha) < hoy);
-      const seed = [...new Set(gastos.map((e) => String(e.date || "")).filter((d) => d && d > lastFondo && d < hoy))].sort();
-      const previos = h.length || seed.length;
-      const ultimoAviso = h.length ? h.map((r) => String(r.fecha)).sort().pop()! : (seed.pop() || "");
+      // El contador cuenta solo los avisos enviados de verdad (avisos_fondos); los días con gastos no son avisos.
+      const { n: nAviso, ultimo: ultimoAviso } = contadorAvisos(hist.filter((r) => String(r.client_id) === String(c.id)), lastFondo, hoy);
       let tipo = "";
       if (cargaHoy.length) tipo = "carga";
       else if (!ultimoAviso || diasEntre(ultimoAviso, hoy) >= SEGUIMIENTO_DIAS) tipo = "seguimiento";
@@ -149,7 +149,7 @@ serve(async (req) => {
       const disp = Math.max(0, fondosT - gastos.filter((e) => !esNotaPend(e)).reduce((a, e) => a + N(e.amount), 0));
       let used = 0; const otSin = pend.filter((e) => { if (used + N(e.amount) <= disp) { used += N(e.amount); return false; } return true; });
 
-      items.push({ c, abg, dest, deuda: -saldo, sinF, desde, dias: desde ? diasEntre(desde, hoy) : null, lastFondo, ultFondoMonto: fondos.filter((e) => String(e.date || "") === lastFondo).reduce((a, e) => a + N(e.amount), 0), fr: frVigente, tipo, n: previos + 1, ultimoAviso, cargaHoy, otSin });
+      items.push({ c, abg, dest, deuda: -saldo, sinF, desde, dias: desde ? diasEntre(desde, hoy) : null, lastFondo, ultFondoMonto: fondos.filter((e) => String(e.date || "") === lastFondo).reduce((a, e) => a + N(e.amount), 0), fr: frVigente, tipo, n: nAviso, ultimoAviso, cargaHoy, otSin });
     }
 
     // ── Correo por socio

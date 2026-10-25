@@ -151,3 +151,13 @@ test('correo: la cuenta citada de nuestra propia rendición no es la cuenta del 
   for (const t of [outlook, outlook2, gmail]) assert.ok(!parteNuevaCorreo(t).includes('Cuenta Corriente'))
   assert.equal(parteNuevaCorreo('Nuestra nueva cuenta: Cuenta Corriente 123456 Banco Itaú'), 'Nuestra nueva cuenta: Cuenta Corriente 123456 Banco Itaú')
 })
+
+test('aviso de fondos: el contador cuenta avisos enviados, no días con gastos; sin residuos ni histórico', async () => {
+  const { avisoFondosAplica, contadorAvisos } = await import('../supabase/functions/_shared/fondosReglas.js')
+  // Caso real: cliente sin avisos previos y muchos días con gastos → su primer aviso es el N° 1 (antes salía «Aviso N° 20»).
+  assert.deepEqual(contadorAvisos([], '2026-05-01', '2026-10-25'), { n: 1, ultimo: '' })
+  assert.deepEqual(contadorAvisos([{ fecha: '2026-10-01' }, { fecha: '2026-10-16' }, { fecha: '2026-04-01' }], '2026-05-01', '2026-10-25'), { n: 3, ultimo: '2026-10-16' })
+  assert.equal(avisoFondosAplica(-465, [{ date: '2026-09-01' }]), false)            // residuo bajo $1.000
+  assert.equal(avisoFondosAplica(-80000, [{ date: '2025-11-01' }]), false)          // solo gastos antes de la app
+  assert.equal(avisoFondosAplica(-80000, [{ date: '2025-11-01' }, { date: '2026-07-01' }]), true)
+})
