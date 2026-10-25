@@ -7,9 +7,10 @@
 // OFF=dry-run). Auth CRON_SECRET. Body opcional: {dryRun:true} devuelve el HTML sin enviar; {testTo:"x@.."} prueba.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
-const SOCIOS = ["cl@leabogados.cl", "ee@leabogados.cl"];
+let SOCIOS: string[] = [];
 const APP = "https://gestion.leabogados.cl";
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -56,6 +57,7 @@ async function sbAll(path: string): Promise<any[]> {
 }
 
 Deno.serve(async (req) => {
+  { const eq = await cargarEquipo(SB_URL, SB_KEY); SOCIOS = eq.socios.map((m: { email: string }) => m.email); }   // equipo del estudio (miembros)
   // deno-lint-ignore no-explicit-any
   let body: any = {};
   try { body = await req.json(); } catch { /* sin body */ }

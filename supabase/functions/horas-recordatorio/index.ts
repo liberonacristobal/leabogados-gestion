@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 // Recordatorio de viernes para cargar horas. Espejo de cartera-semanal (SMTP Gmail + cron con secreto + interruptor).
 // El estudio (nombre/remitente) va en una sola const → Fase 1 BRAND: parametrizable a futuro, hoy = tenant #1 (LEA).
@@ -14,9 +15,9 @@ const CRON_SECRET = Deno.env.get("HORAS_RECORDATORIO_SECRET") || Deno.env.get("C
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const NOMBRE: Record<string,string> = { CL:"Cristóbal", EE:"Erasmo", MC:"Martín", MP:"Martina", RD:"Rodrigo" };
-const EMAIL:  Record<string,string> = { CL:"cl@leabogados.cl", EE:"ee@leabogados.cl", MC:"mc@leabogados.cl", MP:"mp@leabogados.cl", RD:"rd@leabogados.cl" };
-const INI_DE_EMAIL: Record<string,string> = { "cl@leabogados.cl":"CL","ee@leabogados.cl":"EE","mc@leabogados.cl":"MC","mp@leabogados.cl":"MP","rd@leabogados.cl":"RD" };
+let NOMBRE: Record<string,string> = {};
+let EMAIL: Record<string,string> = {};
+let INI_DE_EMAIL: Record<string,string> = {};
 
 // Encabezados solo ASCII (denomailer rompe tildes en el subject).
 const toAscii = (s:string) => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[–—]/g,"-").replace(/[^\x20-\x7E]/g,"");
@@ -41,6 +42,7 @@ function semanaChile(){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); NOMBRE = eq.nombrePorIni; EMAIL = eq.porIni; INI_DE_EMAIL = eq.iniDe; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);

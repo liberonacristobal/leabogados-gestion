@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -16,8 +17,8 @@ const CRON_SECRET = Deno.env.get("NOTARIA_ALERTA_SECRET") || Deno.env.get("CRON_
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-// Destinatarios: Martina (quien carga) + admins.
-const DEST = ["mp@leabogados.cl", "cl@leabogados.cl", "ee@leabogados.cl"];
+// Destinatarios: quien carga la notaría (learnings config notaria_alerta_a) + los admins del estudio.
+let DEST: string[] = [];
 const DIAS_ALARMA = 3;
 
 const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
@@ -34,6 +35,7 @@ async function sendMail(to: string[], subject: string, html: string) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); const r = await fetch(`${SUPABASE_URL}/rest/v1/learnings?select=value&kind=eq.config&key=eq.notaria_alerta_a`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }).then((x) => x.ok ? x.json() : []).catch(() => []); const extra = String(r?.[0]?.value || "").split(/[,;\s]+/).filter((x: string) => x.includes("@")).map((x: string) => x.toLowerCase()); DEST = [...new Set([...extra, ...eq.admins])]; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);

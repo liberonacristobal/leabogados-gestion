@@ -3,6 +3,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cargarEquipo } from "../_shared/equipo.js";
 
 // Correo semanal "Tu semana" para el equipo limitado (Martín, Martina, Rodrigo).
 // Sobre lo que ELLOS ven/manejan: (1) Gastos sin rendir al cliente; (2) Caja chica por liquidar; (3) Tus tareas;
@@ -16,9 +17,9 @@ const CRON_SECRET = Deno.env.get("TU_SEMANA_SECRET") || Deno.env.get("CRON_SECRE
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const EMAIL: Record<string,string> = { "Cristóbal":"cl@leabogados.cl", "Erasmo":"ee@leabogados.cl", "Martín":"mc@leabogados.cl", "Martina":"mp@leabogados.cl", "Rodrigo":"rd@leabogados.cl" };
-const NAME_OF_EMAIL: Record<string,string> = Object.fromEntries(Object.entries(EMAIL).map(([n,e])=>[e,n]));
-const LIMITADOS = ["Martín","Martina","Rodrigo"];
+let EMAIL: Record<string,string> = {};
+let NAME_OF_EMAIL: Record<string,string> = {};
+let LIMITADOS: string[] = [];
 const CAJA_USERS = ["Martín","Martina"];   // quienes manejan caja chica
 const NOTARIA_USER = "Martina";
 const OFICINA_ID = "055df2ad-fa4f-4293-9dc3-d7ab9a200774";
@@ -36,6 +37,7 @@ async function sendMail(to:string, subject:string, html:string){
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin":"*", "Access-Control-Allow-Headers":"authorization, content-type" } });
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); EMAIL = eq.porNombre; NAME_OF_EMAIL = eq.nombreDe; LIMITADOS = eq.limitados.map((m: { nombre: string }) => m.nombre); }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
