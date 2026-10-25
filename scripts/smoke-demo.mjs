@@ -19,6 +19,8 @@ const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', '
   'flujoCaja', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'misComisiones', 'porCobrarMios']
 // Páginas y ventanas que se abren sin datos (desde menú o tarjetas).
 const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']
+// Detalles con datos: los tres primeros de cada tipo (ficha del cliente, venta, factura, gasto, tarea).
+const DETALLES = ['cliente', 'venta', 'factura', 'gasto', 'tarea']
 const VISTAS = [['escritorio', 1280, 900], ['celular', 375, 812]]
 const BLINDAJE = /Esta vista tuvo un problema|La app tuvo un problema/
 // Ruido conocido de la demo (sin red real) que no es un error de la app.
@@ -80,6 +82,10 @@ try {
     }
     for (const t of TABS.filter(t => !solo.length || solo.includes(t)))
       await revisar(`pestaña ${t}`, { fn: t => { window.__demo.setModal(null); window.__demo.navTo({ tab: t }) }, arg: t })
+    for (const d of DETALLES.filter(d => !solo.length || solo.includes(d))) for (const i of [0, 1, 2]) {
+      await revisar(`detalle ${d} ${i + 1}`, { fn: ([d, i]) => { window.__demo.setModal(null); window.__demo.setTab('dashboard'); setTimeout(() => window.__demo.abrir(d, i), 50) }, arg: [d, i] })
+      await page.evaluate(() => { window.__demo.setModal(null); window.__demo.setTab('dashboard') })
+    }
     for (const m of MODALES.filter(m => !solo.length || solo.includes(m))) {
       await revisar(`página ${m}`, { fn: m => { window.__demo.setTab('dashboard'); window.__demo.setModal({ type: m }) }, arg: m })
       await page.evaluate(() => window.__demo.setModal(null))
