@@ -121,3 +121,23 @@ test('período y cuota desde la glosa', () => {
   assert.deepEqual(periodoDeTexto('Asesoría legal 2/5'), { mes: null, anio: null, cuota: 2 })
   assert.equal(periodoDeTexto('Servicios oct. 2025').mes, 9)
 })
+
+test('radar de cuotas vencidas sin facturar: una sola regla para Facturación, el lunes y el cierre', async () => {
+  const { cuotasSinEmitir } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 's1', status: 'Activo', amount_clp: 3000000, cobro_type: 'cuotas' }, { id: 's2', status: 'Terminado', amount_clp: 1000000 }, { id: 's3', status: 'Activo', amount_clp: 900000 }]
+  const f = (id, sale, extra) => ({ id, sale_id: sale, amount: 1000000, ...extra })
+  const billing = [
+    f('e1', 's1', { invoice_no: '401', status: 'Pagado', issued_at: '2026-07-01' }),
+    f('p1', 's1', { status: 'Programada', due: '2026-10-01' }),          // vencida en el mes cerrado → entra
+    f('p2', 's1', { status: 'Programada', due: '2026-11-01' }),          // aún no vence → no
+    f('p3', 's2', { status: 'Programada', due: '2026-09-01' }),          // venta terminada → no
+    f('p4', 's3', { status: 'Programada', due: '2026-09-01' }),          // venta que nunca facturó → no
+    f('p5', 's1', { status: 'Programada', due: '2026-05-01' }),          // antes de la app → no
+  ]
+  const r = cuotasSinEmitir({ billing, sales, hasta: '2026-11-01' })
+  assert.deepEqual(r.map(b => b.id), ['p1'])
+  assert.equal(cuotasSinEmitir({ billing, sales, hasta: '2026-11-01', noEmitir: new Set(['p1']) }).length, 0)   // «No corresponde»
+  // Ya cubierta: lo facturado de la venta alcanza el total acordado → la programada no se cuenta.
+  const cubierta = [...billing, f('e2', 's1', { invoice_no: '402', status: 'Pagado', issued_at: '2026-08-01', amount: 2000000 })]
+  assert.equal(cuotasSinEmitir({ billing: cubierta, sales, hasta: '2026-11-01' }).length, 0)
+})

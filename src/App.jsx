@@ -21,7 +21,7 @@ import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
-import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos } from '../supabase/functions/_shared/ventasReglas.js'
+import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
 // Lectores de PDF y Word: se cargan la primera vez que se lee un documento (no en la apertura de la app; pesan cerca de 1 MB).
@@ -11264,21 +11264,8 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
 // Lo facturado de UNA venta medido en la moneda de su honorario (UF con la UF del día de cada documento). Fuente única para
 // «cuotas cubiertas» (flujo/radar) y «cuotas sin generar» (Revisión): ambos comparan MONTOS contra el plan, nunca cuántas filas hay.
 // null = no aplica (recurrente, sin plan) · ok:false = falta la UF de alguna fecha (no se infiere nada).
-function cuotasCubiertasVenta(billing=[], sales=[], ufFechas=null){
-  const uf=ufFechas||ufFechaCache()||{}
-  const out=new Map(), porVenta={}
-  ;(billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.sale_id&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type)) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
-  ;(sales||[]).forEach(s=>{ if(!s||s.deleted_at||s.status!=='Activo') return; const bs=porVenta[String(s.id)]; if(!bs) return
-    // Recurrentes (mensual / asesoría permanente): el monto de la venta es la cuota del mes, no el total → no aplica.
-    const cv=coberturaVenta(s,bs,uf); if(!cv) return
-    const {plan,usado,prog,ok}=cv
-    if(!ok||!prog.length) return
-    let exceso=usado+prog.reduce((a,x)=>a+x.uu,0)-plan
-    if(!(exceso>plan*0.03)) return
-    prog.sort((x,y)=>String(x.b.due||'').localeCompare(String(y.b.due||''))).forEach(({b,uu})=>{ if(exceso<=0||!(uu>0)) return; const t=Math.min(exceso,uu)
-      out.set(String(b.id), t>=uu*0.8 ? {total:true,m:Number(b.amount)||0} : {total:false,m:(Number(b.amount)||0)*t/uu}); exceso-=uu }) })
-  return out
-}
+// La regla vive en _shared/ventasReglas.js (la usan también el resumen del lunes y el cierre de mes); aquí, con la UF en caché.
+const cuotasCubiertasVenta=(billing=[], sales=[], ufFechas=null)=>_cuotasCubiertasVenta(billing, sales, ufFechas||ufFechaCache()||{})
 const FLUJO_DUDA_DIAS = 30
 // Flujo de caja a 8 semanas: UN solo cálculo para Inicio, Oficina y la página (mismas entradas → misma cifra en todas las vistas).
 function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null }){
@@ -15097,9 +15084,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
               // "Por revisar": acciones de higiene (antes KPIs falsos / alertas sueltas). Cada una lleva a su lugar real.
               // Radar "Cuotas vencidas sin facturar": programadas de meses CERRADOS (antes del actual), dentro de la vida de la app (2026-06-06), de ventas Activas, que no marcaste "no corresponde". Candidatas a emitir, por revisar.
               const _m1=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`
-              const _saleAct={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) _saleAct[String(s.id)]=s.status })
-              const _cubV=cuotasCubiertasVenta(billing,sales), _fact=ventasFacturando(billing)
-              const sinEmitirCands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&_saleAct[String(b.sale_id)]==='Activo'&&_fact.has(String(b.sale_id))&&b.due&&b.due>='2026-06-06'&&b.due<_m1&&!noEmitirSet.has(String(b.id))&&!_cubV.get(String(b.id))?.total)
+              const sinEmitirCands=cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:_m1})
               const sinEmitirN=sinEmitirCands.length
               const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
@@ -15500,8 +15485,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
           const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
-          const cubV=cuotasCubiertasVenta(billing,sales), fact=ventasFacturando(billing)
-          const cands=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&b.sale_id&&saleById[String(b.sale_id)]&&!saleById[String(b.sale_id)].deleted_at&&saleById[String(b.sale_id)].status==='Activo'&&fact.has(String(b.sale_id))&&b.due&&b.due>='2026-06-06'&&b.due<m1&&!noEmitirSet.has(String(b.id))&&!cubV.get(String(b.id))?.total)
+          const cands=cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1})
           const byCli={}; cands.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
           keys.forEach(k=>byCli[k].sort((x,y)=>String(x.due).localeCompare(String(y.due))))
@@ -43358,6 +43342,8 @@ export default function App() {
       else if(ir==='compras'){ setOficinaSub('compras'); setTab('presupuestoOficina') }   // resumen del lunes → Compras · Por pagar   // correo de pendientes → Trabajos sin facturar   // correo de cierre del día 6 → página Cierre de mes
       else if(ir==='cobranza') setTab('cobranza')
       else if(ir==='procesos') setTab('procesos')
+      else if(ir==='revision') setModal({type:'revisionDatos'})
+      else if(ir==='subarriendo') setTab('subarriendo')
       else if(ir==='radar'){ try{ sessionStorage.setItem('abrir_radar','1') }catch(_){} setTab('inteligencia') }   // aviso de normativa del SII → Radar abierto   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
   },[user,userRole,deepLinkTick])

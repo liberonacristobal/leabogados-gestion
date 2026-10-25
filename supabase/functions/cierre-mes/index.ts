@@ -2,7 +2,8 @@
 // Día 6 de cada mes: un solo correo a los socios con lo que falta para CERRAR el mes anterior, con enlace a cada cosa.
 // Reemplaza el aviso «Cuotas sin facturar» del día 6 (misma regla de cuotas olvidadas: solo trabajos que ya facturan).
 // Secciones (cada una con la misma definición que ya usa la app o los correos existentes):
-//   1. Cuotas sin facturar: programadas que quedaron atrás de una cuota posterior ya emitida (cuotasOlvidadas / aviso del día 6).
+//   1. Cuotas vencidas sin facturar: el radar de Facturación (regla única cuotasSinEmitir de _shared/ventasReglas.js), hasta el
+//      fin del mes que se cierra: incluye las cuotas del mes que no se emitieron y las de meses anteriores aún abiertas.
 //   2. Facturas del mes por cobrar: emitidas en el mes con saldo (montoFactura − máx(paid_amount, conciliado en banco)), como Cierre de mes.
 //   3. Banco por conciliar: abonos y cargos del mes en estado «pendiente» (Banco › Conciliación).
 //   4. Gastos del mes por rendir a clientes: gastos del mes cerrado aún sin rendir (regla de «Tu semana», acotada al mes: lo anterior
@@ -15,6 +16,7 @@
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
+import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
 
 const ESTUDIO = "Liberona Escala Abogados";
 const APP = "https://gestion.leabogados.cl";
@@ -37,17 +39,6 @@ const fmtRut = (r: string) => { const c = nr(r); if (c.length < 2) return String
 
 const cuotaN = (c: string) => { const m = String(c || "").match(/(\d+)\s*(?:\/|-|de)\s*(\d+)/); return m ? { n: +m[1], tot: +m[2] } : null; };
 const _MES: Record<string, number> = { enero: 1, ene: 1, febrero: 2, feb: 2, marzo: 3, mar: 3, abril: 4, abr: 4, mayo: 5, may: 5, junio: 6, jun: 6, julio: 7, jul: 7, agosto: 8, ago: 8, septiembre: 9, sept: 9, sep: 9, octubre: 10, oct: 10, noviembre: 11, nov: 11, diciembre: 12, dic: 12 };
-function concPeriodo(c: string): string | null {
-  const s = String(c || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  let m = s.match(/\b(20\d{2})[-/](0?[1-9]|1[0-2])\b/); if (m) return `${m[1]}-${String(+m[2]).padStart(2, "0")}`;
-  m = s.match(/\b(0?[1-9]|1[0-2])[-/](20\d{2})\b/); if (m) return `${m[2]}-${String(+m[1]).padStart(2, "0")}`;
-  const ym = s.match(/\b(20\d{2})\b/);
-  for (const k of Object.keys(_MES)) {
-    const mm = s.match(new RegExp("\\b" + k + "\\b\\.?\\s*(20\\d{2}|\\d{2})?"));
-    if (mm) { let y = mm[1] || (ym && ym[1]); if (!y) continue; if (String(y).length === 2) y = "20" + y; return `${y}-${String(_MES[k]).padStart(2, "0")}`; }
-  }
-  return null;
-}
 const dmy = (iso: string) => { const p = String(iso || "").slice(0, 10).split("-"); return (p.length === 3) ? `${p[2]}-${p[1]}-${p[0]}` : ""; };
 
 // deno-lint-ignore no-explicit-any
@@ -77,15 +68,16 @@ Deno.serve(async (req) => {
   const per = /^\d{4}-\d{2}$/.test(String(body.per || "")) ? String(body.per) : ymMas(hoy.slice(0, 7), -1);
   const desde = `${per}-01`, hasta = `${ymMas(per, 1)}-01`;
 
-  const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros] = await Promise.all([
-    sbAll("billing?select=id,sale_id,client_id,invoice_no,status,due,issued_at,concept,amount,paid_amount,billing_type,deleted_at,receptor_rut,entity_id&deleted_at=is.null"),
-    sbAll("sales?select=id,title"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
+  const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros, noEmitirRows, ufRows] = await Promise.all([
+    sbAll("billing?select=id,sale_id,client_id,invoice_no,status,due,issued_at,created_at,concept,amount,paid_amount,billing_type,deleted_at,receptor_rut,entity_id,dte_xml&deleted_at=is.null"),
+    sbAll("sales?select=id,title,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
     sbAll("conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura"),
     sbAll(`cartola_movimientos?select=id,tipo,monto,estado,es_interno,fecha&fecha=gte.${desde}&fecha=lt.${hasta}`),
     sbAll("expenses?select=id,client_id,type,amount,category,no_descuenta_saldo,client_rendered_at,notaria_render_id,notaria_liquidado_at,ot_number,date&deleted_at=is.null"),
     sbAll("rendiciones?select=tipo,estado_envio,anulada_at"),
     sbAll("learnings?select=key,value&kind=eq.config&key=in.(aviso_cuotas,cierre_mes_avisar_a,agente_casilla)"),
     sbAll("miembros?select=email,nombre,rol"),
+    sbAll("learnings?select=key&kind=eq.cuota_no_emitir"), sbAll("indicadores?select=fecha,valor&codigo=eq.uf&order=fecha"),
   ]);
   const saleById = new Map(sales.map((s) => [String(s.id), s]));
   const cliById = new Map(clients.map((c) => [String(c.id), c]));
@@ -97,35 +89,19 @@ Deno.serve(async (req) => {
     return null;
   };
 
-  // 1) Cuotas sin facturar — misma regla que el aviso anterior del día 6 (cuotasOlvidadas).
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Santiago" }));
-  const nmNow = now.getFullYear() * 12 + (now.getMonth() + 1);
+  // 1) Cuotas vencidas sin facturar: el radar de Facturación hasta el fin del mes que se cierra (regla única cuotasSinEmitir).
+  // Atraso en meses contado al mes siguiente al que se cierra (el correo sale el día 6): una cuota del mes cerrado lleva 1 mes.
+  const nmNow = (+per.slice(0, 4)) * 12 + (+per.slice(5, 7)) + 1;
   const atrasoMeses = (due: string) => { const p = String(due || "").slice(0, 7).split("-"); if (p.length < 2 || !p[0] || !p[1]) return 0; return Math.max(0, nmNow - ((+p[0]) * 12 + (+p[1]))); };
-  // deno-lint-ignore no-explicit-any
-  const bySale = new Map<string, any[]>();
-  for (const b of bills) { if (!b.sale_id || b.billing_type !== "honorarios") continue; const k = String(b.sale_id); let a = bySale.get(k); if (!a) { a = []; bySale.set(k, a); } a.push(b); }
-  // deno-lint-ignore no-explicit-any
-  const olv: any[] = [];
-  for (const arr of bySale.values()) {
-    const active = arr.filter((b) => b.status !== "Anulada" && b.billing_type !== "reembolso");
-    const emit = active.filter((b) => b.invoice_no);
-    if (!emit.length) continue;
-    const emitNs = emit.map((b) => { const x = cuotaN(b.concept); return x ? x.n : null; }).filter((n) => n != null) as number[];
-    const maxN = emitNs.length ? Math.max(...emitNs) : -1;
-    const emitPers = emit.map((b) => concPeriodo(b.concept)).filter(Boolean) as string[];
-    const maxPer = emitPers.length ? emitPers.slice().sort().slice(-1)[0] : "";
-    for (const b of active) {
-      if (b.invoice_no || b.status !== "Programada") continue;
-      const x = cuotaN(b.concept); const n = x ? x.n : null;
-      let hit = false;
-      if (n != null && maxN >= 0) hit = n < maxN;
-      else { const p = concPeriodo(b.concept); hit = !!(p && maxPer && p < maxPer); }
-      if (!hit) continue;
-      const s = saleById.get(String(b.sale_id)); const c = cliById.get(String(b.client_id)); const e = entOf(b);
-      olv.push({ clientId: String(b.client_id || ""), cli: (c && c.name) || "-", venta: (s && s.title) || "-", rs: (e && e.name) || "", rut: (e && e.rut) || b.receptor_rut || "",
-        cuota: x ? `Cuota ${x.n}/${x.tot}` : (b.concept || "cuota"), monto: Number(b.amount) || 0, venc: dmy(b.due), atraso: atrasoMeses(b.due) });
-    }
-  }
+  const uf = Object.fromEntries(ufRows.map((r) => [String(r.fecha), Number(r.valor)]));
+  const radar = cuotasSinEmitir({ billing: bills, sales, uf, noEmitir: new Set(noEmitirRows.map((r) => String(r.key))), hasta });
+  const olv = radar.sort((a, b) => String(a.due).localeCompare(String(b.due))).map((b) => {
+    const x = cuotaN(b.concept); const s = saleById.get(String(b.sale_id)); const c = cliById.get(String(b.client_id)); const e = entOf(b);
+    const tramo = String(b.concept || "").split(" — ").slice(1).join(" — ").trim();
+    return { clientId: String(b.client_id || ""), cli: (c && c.name) || "-", venta: (s && s.title) || "-", rs: (e && e.name) || "", rut: (e && e.rut) || b.receptor_rut || "",
+      cuota: x ? `Cuota ${x.n}/${x.tot}` : (tramo || b.concept || "cuota"), monto: Number(b.amount) || 0, venc: dmy(b.due), atraso: atrasoMeses(b.due), delMes: String(b.due || "").slice(0, 7) === per };
+  });
+  const olvMes = olv.filter((o) => o.delMes).length;
   const olvMonto = olv.reduce((a, o) => a + o.monto, 0);
 
   // 2) Facturas emitidas en el mes y su saldo (como Cierre de mes: montoFactura − máx(paid_amount, conciliado en banco)).
@@ -151,7 +127,7 @@ Deno.serve(async (req) => {
   const liqSinEnviar = rends.filter((r) => r.tipo === "notaria" && !r.anulada_at && r.estado_envio === "por_enviar").length;
 
   const items = [
-    { k: "Cuotas sin facturar", n: olv.length, d: olv.length ? `${olv.length} cuota${olv.length !== 1 ? "s" : ""} de trabajos que ya facturan` : "al día", v: olv.length ? fmtCLP(olvMonto) : "", ir: "sinemitir", btn: "Ver el radar" },
+    { k: "Cuotas vencidas sin facturar", n: olv.length, d: olv.length ? `${olv.length} cuota${olv.length !== 1 ? "s" : ""} · ${olvMes} de ${MESES[Number(per.slice(5, 7)) - 1]}` : "al día", v: olv.length ? fmtCLP(olvMonto) : "", ir: "sinemitir", btn: "Ver el radar" },
     { k: `Facturas de ${MESES[Number(per.slice(5, 7)) - 1]} por cobrar`, n: porCobrar.length, d: emitMes.length ? `${porCobrar.length} de ${emitMes.length} emitidas · facturado ${fmtCLP(facturadoMes)}` : "sin facturas emitidas en el mes", v: porCobrar.length ? fmtCLP(porCobrarMonto) : "", ir: "cierre", btn: "Ver el cierre" },
     { k: "Banco por conciliar", n: pend.length, d: pend.length ? `${abPend.length} abono${abPend.length !== 1 ? "s" : ""} y ${caPend.length} cargo${caPend.length !== 1 ? "s" : ""} del mes` : "al día", v: pend.length ? fmtCLP(pend.reduce((a, m) => a + Math.abs(Number(m.monto) || 0), 0)) : "", ir: "cobros", btn: "Ver el banco" },
     { k: `Gastos de ${MESES[Number(per.slice(5, 7)) - 1]} por rendir`, n: porRendir.length, d: porRendir.length ? `${porRendir.length} gasto${porRendir.length !== 1 ? "s" : ""} de ${prCli} cliente${prCli !== 1 ? "s" : ""}` : "al día", v: porRendir.length ? fmtCLP(prMonto) : "", ir: "gastos", btn: "Ver gastos" },
@@ -195,7 +171,7 @@ Deno.serve(async (req) => {
     <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;">Cierre de ${esc(mesNom(per))}</div>
     <div style="font-size:12.5px;color:${MUT};margin-top:6px;margin-bottom:18px;line-height:1.55;">${esc(holaEquipo(destino, miembros))}. ${nPend ? `Esto es lo que falta para cerrar ${esc(mesNom(per))}:` : `${esc(mesNom(per))} está al día.`}</div>
     ${sec("Por cerrar", NV)}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${items.map(filaItem).join("")}</table>
-    ${olv.length ? gap(22) + sec("Cuotas sin facturar", AMB) + detalle : ""}
+    ${olv.length ? gap(22) + sec("Cuotas vencidas sin facturar", AMB) + detalle : ""}
   </div>
   <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; ${ESTUDIO}</div></div>
 </div></body></html>`;
