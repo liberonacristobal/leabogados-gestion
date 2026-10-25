@@ -239,5 +239,5 @@ export const DETECTOR_LBL = {
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
   rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE',
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
-  vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado', anticipo_por_aplicar: 'Anticipo por aplicar', subarriendo_por_facturar: 'Subarriendo por facturar', compra_plazo_reclamo: 'Factura recibida en plazo de reclamo',
+  vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado', anticipo_por_aplicar: 'Anticipo por imputar', subarriendo_por_facturar: 'Subarriendo por facturar', compra_plazo_reclamo: 'Factura recibida en plazo de reclamo',
 }
