@@ -16,7 +16,7 @@ const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', '
   'repricing', 'cartera', 'presupuestoOficina', 'socios', 'proveedores', 'subarriendo', 'resultadoAnio', 'facturasDelMes', 'estadoResultados',
   'flujoCaja', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'misComisiones', 'porCobrarMios']
 // Páginas y ventanas que se abren sin datos (desde menú o tarjetas).
-const MODALES = ['revisionDatos', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']
+const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']
 const VISTAS = [['escritorio', 1280, 900], ['celular', 375, 812]]
 const BLINDAJE = /Esta vista tuvo un problema|La app tuvo un problema/
 // Ruido conocido de la demo (sin red real) que no es un error de la app.

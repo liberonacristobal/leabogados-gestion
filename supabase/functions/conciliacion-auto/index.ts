@@ -26,6 +26,7 @@
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
 import { normRut, folioN, elegirFactura, elegirCombo, elegirFondo, elegirAnticipo, delMes, pareceFondo, rachaCargo, repartoContadora } from "../_shared/conciliacionReglas.js";
+import { enviarPush } from "../_shared/push.ts";
 import { todasRest } from "../_shared/paginar.js";
 import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../_shared/comisionesReglas.js";
 import { nombreGenerico } from "../_shared/contrapartes.js";
@@ -577,6 +578,17 @@ Deno.serve(async (req) => {
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: d.proveedor_id ? `proveedores.${d.proveedor_id}.factura` : "compras.pago_enlazado", table_name: "sii_compras_docs", record_id: d.id, estudio_id: "lea", detail: { title: `Factura de compra N° ${d.folio} de ${d.emisor_name || "proveedor"} ↔ pago del ${dmy(m.fecha)} (conciliación automática)`, monto, movimiento: m.id } }) }).catch(() => null);
       }
     } catch (e) { compras.error = String((e as Error).message || e); }
+    // Pagos que entraron y se conciliaron solos en esta corrida → al teléfono de los socios (si activaron las notificaciones).
+    if (!dryRun && hechos.length) {
+      try {
+        const hs = hechos as { cliente?: string; monto: number }[];
+        const total = hs.reduce((a, h) => a + (Number(h.monto) || 0), 0);
+        const admins = (await todas("miembros?select=email&rol=eq.admin")).map((x: { email: string }) => x.email);
+        await enviarPush(SB_URL, SB_KEY, admins, hs.length === 1
+          ? { titulo: "Pago recibido", cuerpo: `${hs[0].cliente || "Cliente"} · ${fmt(hs[0].monto)} · conciliado`, url: "/?ir=cobros", etiqueta: "pagos" }
+          : { titulo: `${hs.length} pagos recibidos`, cuerpo: `${fmt(total)} · ${hs.slice(0, 3).map((h) => h.cliente || "Cliente").join(", ")}${hs.length > 3 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "pagos" });
+      } catch { /* avisar no frena la conciliación */ }
+    }
     return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, notaria: nota, compras_sii: compras, nombres_por_rut: nombres });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
