@@ -64,14 +64,17 @@ serve(async (req) => {
 
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
-    const { data: clients } = await sb.from("clients").select("id,name");
+    const { data: clients } = await sb.from("clients").select("id,name,abogado_responsable");
     const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,issued_at,created_at,billing_type,dte_xml,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
     const { data: movs } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
-    const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf").order("id"));
+    const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,title,client_id,responsible").order("id"));
     const { data: ufRaw } = await selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo", "uf").order("fecha"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
+    // Trabajos por cerrar: lo que dejó el auditor nocturno (misma regla que Revisión de datos), sin los ya marcados «Sigue activo».
+    const { data: detRaw } = await sb.from("auditoria_hallazgos").select("detector,monto,prueba").in("detector", ["trabajo_terminado", "trabajo_detenido_saldo"]).is("resuelto_at", null);
+    const { data: activoOkRaw } = await sb.from("learnings").select("key").eq("kind", "trabajo_activo_ok");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
     const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
     const { data: abRaw } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
@@ -171,6 +174,16 @@ serve(async (req) => {
     const ADMINS = (await cargarEquipo(SB_URL, SB_KEY)).miembros.filter((m) => m.rol === "admin")
       .map((m) => ({ name: m.nombre, alt: [sinTildes(m.nombre)].filter((x) => x !== m.nombre), email: m.email }));
 
+    // Cada trabajo va a su abogado si es socio; los de otro abogado, al primer socio.
+    const activoOk = new Set((activoOkRaw || []).map((r: { key: string }) => String(r.key)));
+    // deno-lint-ignore no-explicit-any
+    const ventaPorId = new Map((salesRaw || []).map((v: any) => [String(v.id), v]));
+    // deno-lint-ignore no-explicit-any
+    const detenidos = (detRaw || []).map((h: any) => ({ h, v: ventaPorId.get(String(h.prueba?.venta || "")) })).filter((x: any) => x.v && x.v.status === "Activo" && !activoOk.has(String(x.v.id)));
+    // deno-lint-ignore no-explicit-any
+    const abgDe = (v: any) => v.responsible || (clients || []).find((c: any) => String(c.id) === String(v.client_id))?.abogado_responsable || "";
+    const APP = "https://gestion.leabogados.cl";
+
     for (const adm of ADMINS) {
       const nombres = [adm.name, ...adm.alt];
       // Tareas del admin
@@ -235,6 +248,23 @@ serve(async (req) => {
         bloques.push(sec("#FFF8E1", svgIco(AMB, ICO_FACT), "Facturas recibidas por pagar", `${porPagarCompras.length} &middot; ${fm(tot)}`, AMB, filas + `<a href="https://gestion.leabogados.cl/?ir=compras" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver compras &rsaquo;</a>`));
       }
 
+      // 6) Trabajos por cerrar (sin cuotas ni saldo, más de 90 días sin movimiento) y sin movimiento con saldo por cobrar.
+      // deno-lint-ignore no-explicit-any
+      const misDet = detenidos.filter((x: any) => { const a = abgDe(x.v); return nombres.includes(a) || (!ADMINS.some((o) => [o.name, ...o.alt].includes(a)) && adm === ADMINS[0]); });
+      if (misDet.length) {
+        // deno-lint-ignore no-explicit-any
+        const term = misDet.filter((x: any) => x.h.detector === "trabajo_terminado").sort((a: any, b: any) => String(a.h.prueba?.ult || "").localeCompare(String(b.h.prueba?.ult || "")));
+        // deno-lint-ignore no-explicit-any
+        const saldo = misDet.filter((x: any) => x.h.detector === "trabajo_detenido_saldo");
+        const btn = (txt: string, href: string, pri: boolean) => `<a href="${href}" style="display:inline-block;font-size:11px;font-weight:700;text-decoration:none;border-radius:7px;padding:5px 10px;${pri ? `color:#fff;background:${A};` : `color:${A};border:1px solid #D5DDE1;margin-left:4px;`}">${txt}</a>`;
+        // deno-lint-ignore no-explicit-any
+        const filaT = (x: any) => `<div style="padding:7px 0;border-top:1px solid #F5F7F9;"><div style="font-size:12.5px;color:#3D3D3D;"><b style="color:${A}">${esc(cname(x.v.client_id) || "Cliente")}</b> &mdash; ${esc(x.v.title || "Trabajo")}</div><div style="font-size:11px;color:${MUT};margin-top:1px;">sin movimiento desde ${fmtFecha(x.h.prueba?.ult || "")}</div><div style="margin-top:5px;">${btn("Cerrar", `${APP}/?cerrartrabajo=${x.v.id}`, true)}${btn("Sigue activo", `${APP}/?sigueactivo=${x.v.id}`, false)}</div></div>`;
+        // deno-lint-ignore no-explicit-any
+        const filaS = (x: any) => rowT(`<b style="color:${A}">${esc(cname(x.v.client_id) || "Cliente")}</b> &mdash; ${esc(x.v.title || "Trabajo")} &middot; sin movimiento desde ${fmtFecha(x.h.prueba?.ult || "")}`, fm(Number(x.h.monto) || 0), RED);
+        const chip = [term.length ? `${term.length} por cerrar` : "", saldo.length ? `${saldo.length} con saldo` : ""].filter(Boolean).join(" &middot; ");
+        bloques.push(sec("#FFF8E1", svgIco(AMB, ICO_PROY), "Trabajos sin movimiento", chip, AMB, term.map(filaT).join("") + saldo.map(filaS).join("") + (saldo.length ? `<a href="${APP}/?ir=cobranza" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver en Cobranza &rsaquo;</a>` : "")));
+      }
+
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
 
       const subject = `Resumen del lunes · ${fmtFecha(todayCL)}`;
@@ -249,7 +279,7 @@ serve(async (req) => {
   <div style="background:#F5F7F9;padding:14px 24px;text-align:center;font-size:10px;color:#537281;line-height:1.6;"><b style="color:#003C50;">Liberona Escala Abogados</b> &middot; gestion.leabogados.cl<br/>Resumen semanal autom&aacute;tico &middot; cada lunes</div>
 </div></body></html>`;
 
-      if (dryRun) { sent.push({ to: adm.email, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, cobradoAno, cobPct, cobradoSemana, venceSem, venceSemN, sinEmitir: sinEmitirN, abonosSinCli: abonosSinCli.length, bloques: bloques.length, html }); continue; }
+      if (dryRun) { sent.push({ to: adm.email, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, cobradoAno, cobPct, cobradoSemana, venceSem, venceSemN, sinEmitir: sinEmitirN, abonosSinCli: abonosSinCli.length, trabajosSinMovimiento: misDet.length, bloques: bloques.length, html }); continue; }
       const dest = testTo || adm.email;
       await enviar(dest, subject, html);
       sent.push({ to: dest, vencidas: venc.length, porVencer: pronto.length, emitidasSemana, abonosSinCli: abonosSinCli.length });

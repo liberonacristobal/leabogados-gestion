@@ -11739,6 +11739,10 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
   const detTerm=detenidos.filter(x=>x.tipo==='terminado'), detSaldo=detenidos.filter(x=>x.tipo==='con_saldo')
   const sigueActivo=async x=>{ setDetHechos(p=>new Set([...p,String(x.s.id)])); if(DEMO) return; try{ await setLearningKV('trabajo_activo_ok',String(x.s.id),hoyCL); logActividad('ventas.sigue_activo',{tabla:'sales',id:x.s.id,detalle:{title:`«${x.s.title||'Trabajo'}» de ${cName(x.s.client_id)} sigue activo (sin movimiento desde ${fmtFechaDMY(x.ult)})`}}) }catch(_){} }
   const cerrarTrabajo=async x=>{ if(!onCerrarTrabajo) return; setDetHechos(p=>new Set([...p,String(x.s.id)])); try{ await onCerrarTrabajo(x.s) }catch(e){ setDetHechos(p=>{ const n=new Set(p); n.delete(String(x.s.id)); return n }); appAlert('No se pudo cerrar: '+(e.message||e)) } }
+  // Agrupados por abogado (responsable de la venta, si no el del cliente): cada uno cierra los suyos de una vez.
+  const abgDe=x=>x.s.responsible||clients.find(c=>String(c.id)===String(x.s.client_id))?.abogado_responsable||'Sin abogado'
+  const detTermPorAbg=Object.entries(detTerm.reduce((m,x)=>{ (m[abgDe(x)]=m[abgDe(x)]||[]).push(x); return m },{})).sort((a,b)=>b[1].length-a[1].length)
+  const cerrarVarios=async(abg,xs)=>{ if(!(await appConfirm({title:`Cerrar ${xs.length} trabajos de ${abg}`,message:'Quedan como Terminados. El estado se puede volver a cambiar desde cada venta.',confirmText:`Cerrar los ${xs.length}`}))) return; for(const x of xs) await cerrarTrabajo(x) }
   const decidirObservada=async(x,decision)=>{ setCpObsVistas(p=>new Set([...p,String(x.id)])); if(DEMO) return; try{ await setLearningKV('compra_observada_vista',String(x.id),JSON.stringify({decision,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); logActividad('compras.observada_decidida',{tabla:'sii_compras_docs',id:x.id,detalle:{title:`Factura N° ${x.folio} de ${x.emisor_name||'proveedor'} (observada por el SII): ${decision==='rectificar'?'se rectifica el F29':'se acredita el crédito'}`}}) }catch(_){} }
   const enReclamo=useMemo(()=>SD.comprasEnPlazoReclamo(cpPend,new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),cpVistas),[cpPend,cpVistas])
   const sinReclamo=async x=>{ setCpVistas(p=>new Set([...p,String(x.d.id)])); if(DEMO) return; try{ await setLearningKV('compra_sin_reclamo',String(x.d.id),JSON.stringify({fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})})); logActividad('compras.sin_reclamo',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · revisada sin reclamo`}}) }catch(_){} }
@@ -11940,14 +11944,21 @@ function RevisionDatosModal({onConsumeAnticipos, billing=[], clients=[], clientE
       </div>)}
     </div>}
     {detTerm.length>0&&<div style={secBox}>{sh('Trabajos activos que parecen terminados',C.soonText,detTerm.length)}
-      {detTerm.map(x=><div key={x.s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.s.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s.title||'Trabajo'}</div></div>
-          {amt(`${x.dias} días`,`desde ${fmtFechaDMY(x.ult)}`,C.soonText)}</div>
-        <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
-          {onCerrarTrabajo&&<button onClick={()=>cerrarTrabajo(x)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Cerrar trabajo</button>}
-          <button onClick={()=>sigueActivo(x)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Sigue activo</button>
+      {detTermPorAbg.map(([abg,xs])=><div key={abg}>
+        <div style={{display:'flex',alignItems:'center',gap:8,margin:'8px 0 2px'}}>
+          <span style={{...pillPersonaSty(personChip(abg),false),cursor:'default',fontSize:10.5,padding:'2px 9px'}}>{abg}</span>
+          <span style={{fontSize:11,color:C.muted}}>{xs.length} trabajo{xs.length!==1?'s':''}</span><span style={{flex:1}}/>
+          {onCerrarTrabajo&&xs.length>1&&<button onClick={()=>cerrarVarios(abg,xs)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Cerrar los {xs.length}</button>}
         </div>
+        {xs.map(x=><div key={x.s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
+          <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.s.client_id)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s.title||'Trabajo'}</div></div>
+            {amt(`${x.dias} días`,`desde ${fmtFechaDMY(x.ult)}`,C.soonText)}</div>
+          <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
+            {onCerrarTrabajo&&<button onClick={()=>cerrarTrabajo(x)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Cerrar trabajo</button>}
+            <button onClick={()=>sigueActivo(x)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Sigue activo</button>
+          </div>
+        </div>)}
       </div>)}
     </div>}
     {enReclamo.length>0&&<div style={secBox}>{sh('Facturas recibidas en plazo de reclamo',C.soonText,enReclamo.length)}
@@ -43353,6 +43364,22 @@ export default function App() {
     try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
     handleOpenClientFicha(cli)
   }catch(_){} },[clients,handleOpenClientFicha,deepLinkTick])
+  // Deep-links del correo del lunes (trabajos por cerrar, regla del auditor nocturno): ?cerrartrabajo=<venta> pide confirmar y la
+  // deja Terminada; ?sigueactivo=<venta> guarda la decisión (learnings trabajo_activo_ok, la misma de Revisión de datos). Solo socios.
+  useEffect(()=>{ try{ const qs=new URLSearchParams(window.location.search), cid=qs.get('cerrartrabajo'), aid=qs.get('sigueactivo'); if((!cid&&!aid)||!salesAll.length||userRole!=='admin') return
+    try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+    const s=salesAll.find(x=>String(x.id)===String(cid||aid)); if(!s) return appAlert('No encontré ese trabajo.')
+    const cli=clients.find(c=>String(c.id)===String(s.client_id))?.name||'el cliente', hoy=isoLocal(Date.now())
+    ;(async()=>{
+      if(aid){ if(!DEMO) await setLearningKV('trabajo_activo_ok',String(s.id),hoy); logActividad('ventas.sigue_activo',{tabla:'sales',id:s.id,detalle:{title:`«${s.title||'Trabajo'}» de ${cli} sigue activo`}}); return appAlert(`«${s.title||'Trabajo'}» de ${cli} queda activo.`) }
+      if(s.status!=='Activo') return appAlert(`«${s.title||'Trabajo'}» de ${cli} ya está ${String(s.status||'').toLowerCase()}.`)
+      if(!(await appConfirm({title:`Cerrar «${s.title||'Trabajo'}»`,message:`${cli} · queda como Terminado. El estado se puede volver a cambiar desde la venta.`,confirmText:'Cerrar trabajo'}))) return
+      if(!DEMO){ const {error}=await supabase.from('sales').update({status:'Terminado',updated_at:new Date().toISOString()}).eq('id',s.id)
+        if(error) return appAlert('No se pudo cerrar: '+error.message) }
+      setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado'}:x))
+      logActividad('ventas.cerrar_trabajo',{tabla:'sales',id:s.id,detalle:{title:`«${s.title||'Trabajo'}» de ${cli} cerrado desde el correo del lunes`}})
+    })()
+  }catch(_){} },[salesAll,clients,userRole,deepLinkTick])
   // Deep-links del correo "Aviso de gastos sin fondos" (edge aviso-fondos):
   //   ?pedirfondos=<id>&monto=<n> → abre la solicitud de fondos al cliente ya armada.
   //   ?pausafondos=<id>           → "Ya lo hablé": pausa los avisos de ese cliente 15 días (learnings aviso_fondos_pausa).
