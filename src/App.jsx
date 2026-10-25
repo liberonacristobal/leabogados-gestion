@@ -43490,13 +43490,17 @@ export default function App() {
     setLoading(true)
     // Cada query reporta si falló (en vez de tragar el error y dejar [] → ceros falsos que invitan a recargar y duplicar).
     const loadErrs=[]
-    const q=(label,builder)=>builder.then(({data,error})=>{ if(error){ loadErrs.push(label); return [] } return data||[] })
+    // Cada carga falla por su cuenta (error de Supabase o excepción): las demás llegan igual y el aviso dice cuál faltó.
+    // Antes, una excepción en una sola (2026-10-24, facturas) dejaba vacía toda la app: clientes, ventas, gastos y tareas.
+    const falla=(label,e)=>{ loadErrs.push(label); registrarError({origen:'carga',vista:label,err:e}); return [] }
+    const q=(label,builder)=>Promise.resolve(builder).then(({data,error})=>error?falla(label,error):(data||[]),e=>falla(label,e))
+    const qp=(label,prom)=>Promise.resolve(prom).then(d=>d||[],e=>falla(label,e))
     Promise.all([
       q('caja chica', supabase.from('petty_cash').select('*').order('created_at',{ascending:false})),
       q('rendiciones', supabase.from('rendiciones').select('*').order('created_at',{ascending:false})),
-      getClients(),
+      qp('clientes', getClients()),
       q('ventas', supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false})),
-      getBilling(),
+      qp('facturas', getBilling()),
       q('gastos', selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id'))),
       q('tareas', supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false})),
       q('razones sociales', supabase.from('client_entities').select('*')),
