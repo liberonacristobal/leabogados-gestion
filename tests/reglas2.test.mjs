@@ -186,3 +186,13 @@ test('notaría por liquidar: solo OT con fondos del cliente o sin cliente; las d
   assert.deepEqual(r.esperan.map(e => e.id).sort(), [2, 3])
   assert.deepEqual(r.sinCliente.map(e => e.id), [4])
 })
+
+test('rendir a clientes: el grupo depende del saldo y de los gastos por rendir, no del mes', async () => {
+  const { fgCliente, gastosPorRendirCli, grupoRendir } = await import('../supabase/functions/_shared/gastosReglas.js')
+  const ex = [{ client_id: 'a', type: 'fondo', amount: 500000 }, { client_id: 'a', type: 'gasto', amount: 200000 }, { client_id: 'b', type: 'gasto', amount: 300000 }, { client_id: 'b', type: 'gasto', amount: 50000, apertura_id: 'x' }]
+  const g = cid => grupoRendir({ n: gastosPorRendirCli(ex, cid).length, s: fgCliente(ex, cid).saldo, armada: false })
+  assert.equal(g('a'), 'favor')   // con fondos a favor: nada que pedir este mes
+  assert.equal(g('b'), 'pedir')   // debe $300.000 (lo de apertura no suma)
+  assert.equal(grupoRendir({ n: 1, s: -900, armada: false }), 'cero')
+  assert.equal(grupoRendir({ n: 3, s: -50000, armada: true }), 'env')
+})

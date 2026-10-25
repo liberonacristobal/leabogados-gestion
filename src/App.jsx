@@ -21,6 +21,7 @@ import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
+import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../supabase/functions/_shared/gastosReglas.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
@@ -1750,17 +1751,11 @@ async function logCargaSII({tipo, n=0, user, period=null, files=[]}){
 // a favor del cliente, gasto si nos debe, $0 = cerrado) y los movimientos de antes quedan con apertura_id = esa fila → siguen
 // visibles e intactos, pero ya no suman al saldo ni se rinden. Deshacer = borrar la apertura (apertura_id vuelve a null).
 const CORTE_APERTURA = '2026-06-01'
-const cuentaEnSaldo = e => !e?.apertura_id
 // Abono conciliado solo en parte (ej. $2.320.000 con $566.460 aplicados a una factura): el resto sigue por resolver.
 // Umbral $1.000 para no reabrir diferencias de UF/redondeo. Monto pendiente = monto − conciliado.
 const abonoConResto = m => !!m && m.tipo==='abono' && !m.es_interno && String(m.estado)==='parcial' && (Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0))>1000
 const restoAbono = m => abonoConResto(m) ? Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0) : (Number(m?.monto)||0)
 // Fuente única para "fondos − gastos" de un cliente. Siempre con guarda ||0 (nunca NaN).
-function fgCliente(expenses, clientId){
-  let fondos=0, gastos=0
-  ;(expenses||[]).forEach(e=>{ if(e.client_id!==clientId || !cuentaEnSaldo(e)) return; if(e.type==='fondo') fondos+=(e.amount||0); else if(!e.no_descuenta_saldo) gastos+=(e.amount||0) })
-  return {fondos, gastos, saldo:fondos-gastos}
-}
 const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId).saldo
 // Solicitud de fondos ↔ depósito (FUENTE ÚNICA: Solicitar fondos y Rendir a cliente). Depósito = fondo del cliente con fecha ≥ la
 // solicitud (si la solicitud trae monto, el más parecido ±2%). Una solicitud ya cerrada (recibido_at) no se vuelve a evaluar.
@@ -20994,7 +20989,6 @@ const fmtSaldoG = v => (Number(v)<0?'−':'')+fmt(Math.abs(Number(v)||0))
 // Gastos del cliente aún no rendidos: fuente única (Gastos, ficha y Cartola).
 // Caja chica por liquidar de una persona (FUENTE ÚNICA: Caja chica, Inicio y «Tu semana»): gastos que pagó con SU caja (no los que pagó el cliente o la oficina) y que aún no liquida. Incluye notaría si la pagó con su caja.
 const gastosPorLiquidarCaja = (expenses,persona) => (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&!e.rendered_at&&!e.paid_by_client&&e.created_by===persona)
-const gastosPorRendirCli = (expenses,cid) => (expenses||[]).filter(e=>String(e.client_id)===String(cid)&&e.type==='gasto'&&!e.no_descuenta_saldo&&!e.client_rendered_at&&cuentaEnSaldo(e)&&e.category!=='Apertura')
 // Responsable de cada cliente para rendir y pedir fondos: ficha; si no, la venta más reciente (fuente única de Rendir a cliente y sus conteos).
 function respClientes(clients, sales){ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m }
 // Lunes de la semana en curso (dd del corte semanal de los borradores preparados).
@@ -22249,7 +22243,7 @@ function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], exp
       const reqSt=req?estadoSolicitud(req,expenses):null
       const pedido=req&&reqSt&&reqSt.k!=='rec'?{req,dias:reqSt.dias,vencido:reqSt.k==='sin'}:null
       const prep = esPreparadoCli(pr, lunesISO)
-      const grp = armada?'env' : n>0&&s<=-1000?'pedir' : n>0&&s>=1000?'favor' : n>0?'cero' : s<=-1000?'dep' : 'aldia'
+      const grp = grupoRendir({n,s,armada})
       return {c, prep, n, m, desde:fechas[0]||null, sinFecha, nRS, s, armada, ultEnv, pedido, grp, term:c.status==='Terminado', abg:respDe[String(c.id)]||'Sin abogado'}
     })
   },[clients,expenses,rendiciones,reqs,respDe,lunesISO])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -22771,7 +22765,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
-    else if(navTo==='rendirCli'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
+    else if(navTo==='rendirCli'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }
+    else if(navTo==='rendirPedir'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('pedir'); setRendAbg('Todos'); setRendSub('rendir') }   // correo de cierre › «Rendir y pedir»   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
     onNavDone&&onNavDone()
   },[navTo])
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
@@ -43356,7 +43351,9 @@ export default function App() {
     try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
       // Vistas del equipo limitado (correo "Tu semana"): disponibles para todos.
-      if(ir==='gastos'||ir==='notaria') return setTab('expenses')
+      if(ir==='gastos') return setTab('expenses')
+      if(ir==='notaria'){ setTab('expenses'); return setExpNav('deuda') }   // correo › Deuda de notaría
+      if(ir==='rendir'){ setTab('expenses'); return setExpNav('rendirPedir') }   // correo de cierre › Rendir a clientes · Rendir y pedir
       if(ir==='cajachica') return setTab('cajachica')
       if(ir==='tareas') return setTab('tasks')
       if(ir==='causas') return setTab('causas')
