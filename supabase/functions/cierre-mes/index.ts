@@ -16,7 +16,7 @@
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
-import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
+import { cuotasSinEmitir, recibidoACuenta } from "../_shared/ventasReglas.js";
 import { fgCliente, gastosPorRendirCli, grupoRendir } from "../_shared/gastosReglas.js";
 import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
 
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
   const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros, noEmitirRows, ufRows, cobertura] = await Promise.all([
     sbAll("billing?select=id,sale_id,client_id,invoice_no,status,due,issued_at,created_at,concept,amount,paid_amount,billing_type,deleted_at,receptor_rut,entity_id,dte_xml&deleted_at=is.null"),
-    sbAll("sales?select=id,title,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
+    sbAll("sales?select=id,title,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,area,cobro_config"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
     sbAll("conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura"),
     sbAll(`cartola_movimientos?select=id,tipo,monto,monto_conciliado,estado,es_interno,fecha&fecha=gte.${desde}&fecha=lt.${hasta}`),
     sbAll("expenses?select=id,client_id,type,amount,category,concept,no_descuenta_saldo,client_rendered_at,rendered_at,apertura_id,notaria_render_id,notaria_liquidado_at,ot_number,date&deleted_at=is.null"),
@@ -98,11 +98,12 @@ Deno.serve(async (req) => {
   const atrasoMeses = (due: string) => { const p = String(due || "").slice(0, 7).split("-"); if (p.length < 2 || !p[0] || !p[1]) return 0; return Math.max(0, nmNow - ((+p[0]) * 12 + (+p[1]))); };
   const uf = Object.fromEntries(ufRows.map((r) => [String(r.fecha), Number(r.valor)]));
   const radar = cuotasSinEmitir({ billing: bills, sales, uf, noEmitir: new Set(noEmitirRows.map((r) => String(r.key))), hasta });
+  const recib = radar.length ? recibidoACuenta(radar, await sbAll(`anticipos?select=sale_id,monto,estado&estado=eq.disponible&sale_id=in.(${[...new Set(radar.map((b) => String(b.sale_id)))].join(",")})`), sales) : new Map();
   const olv = radar.sort((a, b) => String(a.due).localeCompare(String(b.due))).map((b) => {
     const x = cuotaN(b.concept); const s = saleById.get(String(b.sale_id)); const c = cliById.get(String(b.client_id)); const e = entOf(b);
     const tramo = String(b.concept || "").split(" — ").slice(1).join(" — ").trim();
     return { clientId: String(b.client_id || ""), cli: (c && c.name) || "-", venta: (s && s.title) || "-", rs: (e && e.name) || "", rut: (e && e.rut) || b.receptor_rut || "",
-      cuota: x ? `Cuota ${x.n}/${x.tot}` : (tramo || b.concept || "cuota"), monto: Number(b.amount) || 0, venc: dmy(b.due), atraso: atrasoMeses(b.due), delMes: String(b.due || "").slice(0, 7) === per };
+      cuota: x ? `Cuota ${x.n}/${x.tot}` : (tramo || b.concept || "cuota"), monto: Number(b.amount) || 0, venc: dmy(b.due), recibido: recib.get(String(b.id)) || 0, atraso: atrasoMeses(b.due), delMes: String(b.due || "").slice(0, 7) === per };
   });
   const olvMes = olv.filter((o) => o.delMes).length;
   const olvMonto = olv.reduce((a, o) => a + o.monto, 0);
@@ -169,7 +170,7 @@ Deno.serve(async (req) => {
     const rows = its.slice().sort((a, b) => b.atraso - a.atraso).map((o, i) => {
       const col = o.atraso >= 2 ? RED : AMB, bg = o.atraso >= 2 ? REDBG : AMBBG, bt = i === 0 ? "" : `border-top:1px solid ${HAIR};`;
       const rsLine = [esc(o.venta), o.rs ? `<span style="color:${NV};font-weight:600;">${esc(o.rs)}</span>` : "", o.rut ? esc(fmtRut(o.rut)) : ""].filter(Boolean).join(" &middot; ");
-      return `<tr><td valign="top" style="padding:9px 0;${bt}"><div style="font-size:13px;font-weight:700;color:${INK};">${esc(o.cuota)}${o.venc ? ` <span style="font-weight:400;color:${col};">&middot; venció ${o.venc}</span>` : ""}</div><div style="font-size:12px;color:${MUT};margin-top:2px;">${rsLine}</div></td><td valign="top" align="right" style="padding:9px 0 9px 12px;white-space:nowrap;${bt}"><span style="font-size:13px;font-weight:700;color:${INK};">${fmtCLP(o.monto)}</span><div style="margin-top:3px;"><span style="font-size:10.5px;font-weight:700;color:${col};background:${bg};border-radius:9px;padding:1px 7px;">${o.atraso} mes${o.atraso !== 1 ? "es" : ""}</span></div></td></tr>`;
+      return `<tr><td valign="top" style="padding:9px 0;${bt}"><div style="font-size:13px;font-weight:700;color:${INK};">${esc(o.cuota)}${o.venc ? ` <span style="font-weight:400;color:${col};">&middot; venció ${o.venc}</span>` : ""}</div><div style="font-size:12px;color:${MUT};margin-top:2px;">${rsLine}</div>${o.recibido ? `<div style="font-size:12px;color:${MUT};margin-top:2px;">${fmtCLP(o.recibido)} ya recibido a cuenta</div>` : ""}</td><td valign="top" align="right" style="padding:9px 0 9px 12px;white-space:nowrap;${bt}"><span style="font-size:13px;font-weight:700;color:${INK};">${fmtCLP(o.monto)}</span><div style="margin-top:3px;"><span style="font-size:10.5px;font-weight:700;color:${col};background:${bg};border-radius:9px;padding:1px 7px;">${o.atraso} mes${o.atraso !== 1 ? "es" : ""}</span></div></td></tr>`;
     }).join("");
     const link = cid ? `<a href="${APP}/?cliente=${cid}" style="display:inline-block;margin-top:6px;font-size:12px;font-weight:700;color:${NV};text-decoration:none;">Ver ${esc(cli)} &rarr;</a>` : "";
     return `<div style="font-size:12.5px;font-weight:700;color:${NV};margin:0 0 2px;">${esc(cli)}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>${link}${gap(16)}`;

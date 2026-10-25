@@ -239,3 +239,15 @@ test('subarriendo: el pago del mes cubre solo la factura de ese mes, exacta y ú
   const conc = anticiposSubarriendo([ant('a6', 'junio')], [fac('489', 'Junio')], sales, [{ tipo_destino: 'factura', factura_id: '489' }])
   assert.equal(conc.length, 0)                 // ya conciliada en el banco: no se cubre dos veces
 })
+
+test('cuotas por emitir: lo recibido a cuenta del mismo trabajo, por orden de vencimiento', async () => {
+  const { recibidoACuenta } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 's1' }, { id: 'sub', cobro_config: { subarriendo: true } }]
+  const cuotas = [{ id: 'c4', sale_id: 's1', amount: 1000000, due: '2026-10-01' }, { id: 'c3', sale_id: 's1', amount: 1220850, due: '2026-09-01' }, { id: 'm', sale_id: 'sub', amount: 1080000, due: '2026-07-01' }]
+  const ants = [{ sale_id: 's1', monto: 410972, estado: 'disponible' }, { sale_id: 's1', monto: 50000, estado: 'consumido' }, { sale_id: 's2', monto: 99, estado: 'disponible' }, { sale_id: 'sub', monto: 1080000, estado: 'disponible' }]
+  const r = recibidoACuenta(cuotas, ants, sales)
+  assert.equal(r.get('c3'), 410972)            // la más antigua primero
+  assert.equal(r.get('c4'), undefined)
+  assert.equal(r.get('m'), undefined)          // subarriendo: cada pago es de su mes
+  assert.equal(recibidoACuenta(cuotas, [{ sale_id: 's1', monto: 3000000, estado: 'disponible' }], sales).get('c4'), 1000000) // tope = monto de la cuota
+})
