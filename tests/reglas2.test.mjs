@@ -220,3 +220,22 @@ test('trabajo detenido con saldo: un pago recibido es movimiento; para «parece 
   const con = trabajosDetenidos({ sales, billing, pagos: [{ client_id: 'c1', fecha: '2026-05-20' }], hoy: '2026-10-25' })
   assert.equal(con[0].ult, '2026-05-20'); assert.equal(con[0].dias, 158)   // caso real: 158 días, no 396
 })
+
+test('subarriendo: el pago del mes cubre solo la factura de ese mes, exacta y única', async () => {
+  const { anticiposSubarriendo } = await import('../supabase/functions/_shared/saludDatos.js')
+  const sales = [{ id: 's1', cobro_config: { subarriendo: true } }, { id: 's2', area: 'Asesoría' }]
+  const ant = (id, mes, monto = 1080000, sale_id = 's1') => ({ id, sale_id, monto, estado: 'disponible', nota: `Subarriendo ${mes} 2026 (pago sin factura)` })
+  const fac = (id, mes, extra = {}) => ({ id, sale_id: 's1', invoice_no: id, status: 'Pendiente', amount: 1080000, concept: `Subarrendamiento oficina — Mensual ${mes} 2026`, ...extra })
+  const r = anticiposSubarriendo(
+    [ant('a6', 'junio'), ant('a7', 'julio'), ant('a8', 'agosto', 900000), ant('a9', 'septiembre'), ant('x', 'junio', 1080000, 's2')],
+    [fac('489', 'Junio'), fac('490', 'Agosto'), fac('491', 'Septiembre'), fac('492', 'Septiembre')],
+    sales, [])
+  const por = Object.fromEntries(r.map(x => [x.a.id, x]))
+  assert.equal(por.a6.tipo, 'aplicar'); assert.equal(por.a6.b.id, '489')
+  assert.equal(por.a7.tipo, 'emitir')          // julio sin factura: no se cubre otra
+  assert.equal(por.a8, undefined)              // monto distinto: lo ve una persona
+  assert.equal(por.a9, undefined)              // dos facturas del mes: ambiguo
+  assert.equal(por.x, undefined)               // venta que no es subarriendo
+  const conc = anticiposSubarriendo([ant('a6', 'junio')], [fac('489', 'Junio')], sales, [{ tipo_destino: 'factura', factura_id: '489' }])
+  assert.equal(conc.length, 0)                 // ya conciliada en el banco: no se cubre dos veces
+})

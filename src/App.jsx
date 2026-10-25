@@ -7098,7 +7098,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       setPropuestaStep(null)
       setPropuestaData(null)
     } catch(err) {
-      setPropError(err.message||'Error al aplicar la propuesta.')
+      setPropError(err.message||'Error al guardar la propuesta.')
     }
     setPropCreating(false)
   }
@@ -10311,7 +10311,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
       {ab&&ps.map(fila)}</div> }
   // Por aprobar agrupado: cada fila = un tipo de decisión, con su cantidad y a dónde lleva.
   const BANDEJA_TIPO={cuenta_bancaria:'Cuentas bancarias por confirmar',factura_sin_registrar:'Facturas por registrar',factura_sin_venta:'Facturas sin venta',fondo_por_registrar:'Fondos por registrar',comprobante:'Comprobantes por revisar',pedido_cliente:'Pedidos de clientes',respaldo_gasto:'Respaldos de gastos',boleta_honorarios:'Boletas de honorarios',liquidacion_notaria:'Liquidaciones de la notaría'}
-  const HALLAZGO_TIPO={permiso_sin_sesion:'Permisos de la base fuera de la regla',compra_observada_sii:'Compras de proveedores observados por el SII',trabajo_terminado:'Trabajos activos que parecen terminados',trabajo_detenido_saldo:'Trabajos sin movimiento con saldo por cobrar',compra_plazo_reclamo:'Facturas recibidas en plazo de reclamo',cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por aplicar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
+  const HALLAZGO_TIPO={permiso_sin_sesion:'Permisos de la base fuera de la regla',compra_observada_sii:'Compras de proveedores observados por el SII',trabajo_terminado:'Trabajos activos que parecen terminados',trabajo_detenido_saldo:'Trabajos sin movimiento con saldo por cobrar',compra_plazo_reclamo:'Facturas recibidas en plazo de reclamo',cuota_tramo:'Cuotas programadas que superan la venta',glosa_conflicto:'Glosa con dos categorías aprendidas',anticipo_por_aplicar:'Anticipos por imputar',subarriendo_por_facturar:'Subarriendo pagado sin factura'}
   const paFilas=(()=>{ if(!pa) return []; const out=[]
     const gb={}; pa.bandeja.forEach(r=>{ const k=r.estado==='sospechoso'?'sospechoso':r.tipo||'otro'; (gb[k]=gb[k]||[]).push(r) })
     Object.entries(gb).forEach(([k,rs])=>{ const folios=['factura_sin_registrar','factura_sin_venta'].includes(k)?rs.map(r=>(String(r.asunto||'').match(/N° ?(\d+)/)||[])[1]).filter(Boolean):[]
@@ -11984,7 +11984,7 @@ function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, billing=[]
         <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.a.client_id)}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{SD.perTexto(x.per)} · {x.tipo==='aplicar'?`Factura N° ${folioN(x.b.invoice_no)}`:'pendiente de emisión'}</div></div>
           {amt(fmt(Number(x.a.monto)||0),x.tipo==='aplicar'?'calce exacto':'sin factura',x.tipo==='aplicar'?C.greenText:C.soonText)}</div>
-        {x.tipo==='aplicar'&&onConsumeAnticipos&&<button onClick={async()=>{ await onConsumeAnticipos([x.a.id],x.b.id); setAntSubDone(p=>new Set([...p,String(x.a.id)])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Aplicar a la Factura N° {folioN(x.b.invoice_no)}</button>}
+        {x.tipo==='aplicar'&&onConsumeAnticipos&&<button onClick={async()=>{ await onConsumeAnticipos([x.a.id],x.b.id); setAntSubDone(p=>new Set([...p,String(x.a.id)])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir la Factura N° {folioN(x.b.invoice_no)}</button>}
       </div>)}
     </div>}
     {cuotasSinGen.length>0&&<div style={secBox}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
@@ -12045,7 +12045,7 @@ function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, billing=[]
       return <div style={secBox}>{sh('Banco · plata contada dos veces o de más',C.overdueText,n)}
         {doble.length>0&&<><div style={{fontSize:10,color:C.textSoft,margin:'4px 0 2px'}}>pago a proveedor registrado como comisión y además como gasto · se cuenta dos veces</div>{doble.map(m=>movFila(m,'comisión pagada + gasto'))}</>}
         {sobre.length>0&&<><div style={{fontSize:10,color:C.textSoft,margin:'8px 0 2px'}}>conciliado por más de lo que entró o salió del banco</div>{sobre.map(m=>movFila(m,`conciliado ${fmt(concBy[String(m.id)]||0)}`))}</>}
-        {atras.length>0&&<><div style={{fontSize:10,color:C.textSoft,margin:'8px 0 2px'}}>la cifra conciliada no está al día con lo aplicado</div>{atras.map(m=>movFila(m,`marcado ${fmt(m.monto_conciliado||0)} · aplicado ${fmt(concBy[String(m.id)]||0)}`))}</>}
+        {atras.length>0&&<><div style={{fontSize:10,color:C.textSoft,margin:'8px 0 2px'}}>la cifra conciliada no está al día con lo imputado</div>{atras.map(m=>movFila(m,`marcado ${fmt(m.monto_conciliado||0)} · aplicado ${fmt(concBy[String(m.id)]||0)}`))}</>}
         {sinBanco.length>0&&<><div style={{fontSize:10,color:C.textSoft,margin:'8px 0 2px'}}>comisión marcada pagada sin su transferencia del banco</div>{sinBanco.slice(0,30).map(t=><div key={t.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{t.proveedor||'Proveedor'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>pagada {t.pagado_at?fmtFechaDMY(t.pagado_at):'—'}</div></div><span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(Number(t.monto)||0)}</span></div>)}</>}
       </div> })()}
     </div>
@@ -14861,7 +14861,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                 </div>
               )})}
               {calcesSugeridos.revisar.length>0&&<div style={{marginTop:4}}>
-                <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginBottom:6,display:'flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12' y2='17'/></svg>Revisar · no se aplican solos</div>
+                <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginBottom:6,display:'flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.soon} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12' y2='17'/></svg>Revisar · no se concilian solos</div>
                 {calcesSugeridos.revisar.map(({abono:m,facturas})=>{
                   const cliName=clients.find(c=>String(c.id)===String(m.cliente_id))?.name||m.nombre_contraparte||'—'
                   const rol=(m.rol_cuenta==='gastos'?'GASTOS':'HONORARIOS')
@@ -15266,7 +15266,7 @@ function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities
                         <div style={{...SEC_LBL,marginBottom:6}}>Notas de crédito del SII</div>
                         {(()=>{ const items=ncResolver||[]
                           if(ncResolver==null) return <div style={{fontSize:11,color:C.muted}}>Revisando…</div>
-                          if(!items.length) return <div style={{fontSize:11,color:C.muted}}>Sin notas de crédito por resolver — las del SII ya están aplicadas a su factura.</div>
+                          if(!items.length) return <div style={{fontSize:11,color:C.muted}}>Sin notas de crédito por resolver — las del SII ya están imputadas a su factura.</div>
                           return (<>
                             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                               <span style={{width:26,height:26,borderRadius:8,background:'#FAECE7',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={14} c={C.coralText}/></span>
@@ -16435,7 +16435,7 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
           <div><span style={fl}>N° Factura</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder='367...' style={inp}/></div>
           <div><span style={fl}>Fecha emisión</span><input type='date' value={issued} onChange={e=>setIssued(e.target.value)} style={inp}/></div>
         </div>
-        <div style={{background:C.ambarBg,borderRadius:8,padding:'9px 11px',fontSize:11,color:C.soonText,lineHeight:1.45,marginBottom:14}}>Registra <strong>1 factura Pagada</strong> por {fmt(total)} (la que emitiste en el SII), <strong>anula</strong> las cuotas seleccionadas y aplica los anticipos disponibles del cliente.</div>
+        <div style={{background:C.ambarBg,borderRadius:8,padding:'9px 11px',fontSize:11,color:C.soonText,lineHeight:1.45,marginBottom:14}}>Registra <strong>1 factura Pagada</strong> por {fmt(total)} (la que emitiste en el SII), <strong>anula</strong> las cuotas seleccionadas e imputa los anticipos disponibles del cliente.</div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
           <button disabled={busy||!sel.size} onClick={confirmar} style={{flex:2,height:44,borderRadius:10,border:'none',background:(sel.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&!busy)?'pointer':'default'}}>{busy?'Asignando…':'Asignar y anular programadas'}</button>
@@ -19128,7 +19128,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
       estilarHeader(g)
       g.getCell('A1').note='Acepta RUT con o sin puntos/guión (ej: 76.123.456-7 o 761234567)'
       g.getCell('D1').note='Monto en pesos, mayor a 0 y sin decimales'
-      g.getCell('I1').note='sí = pagado con cargo a la caja chica · no = pagado por el cliente. Déjalo vacío si no aplica.'
+      g.getCell('I1').note='sí = pagado con cargo a la caja chica · no = pagado por el cliente. Déjalo vacío si no corresponde.'
       for(let r=2;r<=200;r++){ g.getCell('F'+r).dataValidation={type:'list',allowBlank:true,formulae:[cats]}; g.getCell('I'+r).dataValidation={type:'list',allowBlank:true,formulae:['"sí,no"']} }
 
       // Hoja Fondos
@@ -20819,7 +20819,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               </div>}
               
               <div style={{display:'flex',gap:8,marginTop:2}}>
-                {(()=>{ const dud=corregirSel().filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const needRev=dud>0&&concilOpen!=='act'; return <button disabled={guardando||nCorr===0} onClick={()=>needRev?setConcilOpen('act'):aplicarCorregir()} title={needRev?'Revisa los calces por glosa parcial antes de aplicar':''} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:13,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:needRev?C.soonText:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?(needRev?`Revisar ${dud} dudosos`:`Corregir las ${nCorr}`):'Nada que corregir')}</button> })()}
+                {(()=>{ const dud=corregirSel().filter(a=>a.via==='cliente'&&(a.score||0)<2).length; const needRev=dud>0&&concilOpen!=='act'; return <button disabled={guardando||nCorr===0} onClick={()=>needRev?setConcilOpen('act'):aplicarCorregir()} title={needRev?'Revisa los calces por glosa parcial antes de guardar':''} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:13,fontWeight:700,cursor:nCorr?'pointer':'default',border:'none',background:needRev?C.soonText:C.azulInfo,color:'#fff',opacity:(guardando||!nCorr)?.5:1}}>{guardando?'…':(nCorr?(needRev?`Revisar ${dud} dudosos`:`Corregir las ${nCorr}`):'Nada que corregir')}</button> })()}
                 <button disabled={guardando||nNuev===0} onClick={aplicarImportar} style={{flex:1,padding:'11px 8px',borderRadius:8,fontSize:13,fontWeight:700,cursor:nNuev?'pointer':'default',border:'none',background:C.greenText,color:'#fff',opacity:(guardando||!nNuev)?.5:1}}>{guardando?'…':`Importar las ${nNuev}`}</button>
               </div>
             </div>
@@ -30855,7 +30855,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       // Near-dup: carpetas que se parecen a un cliente ya existente (typo). NO se crean; se resuelven a mano abajo, en la lista de nuevos.
       if(revN){ const rl=(prev.needsReview||[]).slice(0,8).map(r=>`"${r.folder}" ≈ ${r.maybe}`).join('; '); partes.push(`OJO · ${revN} carpeta${revN!==1?'s':''} se parece${revN!==1?'n':''} a un cliente existente y NO se crearán (revísalas abajo): ${rl}${revN>8?'…':''}`) }
       if(!addN && !termN){ setSyncMsg(`Nada que incorporar ni archivar. ${revN} carpeta(s) parecida(s) a un cliente existente quedaron para revisar abajo (no se crean duplicados).`); setSyncing(false); return }
-      if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Confirmar los cambios? Es reversible.`)){ setSyncMsg('Cancelado — no se aplicó nada.'); setSyncing(false); return }
+      if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Confirmar los cambios? Es reversible.`)){ setSyncMsg('Cancelado — no se cambió nada.'); setSyncing(false); return }
       // 2) Aplicar de verdad.
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(error) throw error
@@ -36765,7 +36765,7 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
   const cliDe = id => (clients||[]).find(c=>String(c.id)===String(id))
   const ventaDe = b => (sales||[]).find(s=>String(s.id)===String(b.sale_id))
   const exportar = () => { const esc=c=>{ const x=String(c==null?'':c); return /[",\n;]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x }
-    const rows=[['Tipo','Cliente','Trabajo','Factura','Emitida','Vence','Monto']].concat(d.bills.map(b=>['Honorarios',cliDe(b.client_id)?.name||'',ventaDe(b)?.title||b.concept||'',`N° ${folioN(b.invoice_no)}`,fmtFechaDMY(String(b.issued_at||'').slice(0,10)),fmtFechaDMY(venceBill(b)),Math.round(saldoBill(b))]),d.gastos.map(x=>['Gastos por reembolsar',x.c.name,'','','','',Math.round(-x.saldo)]),d.sinFac.flatMap(g=>g.pagos.map(p=>['Pago sin factura',cliDe(g.client_id)?.name||'',g.venta?.title||'',p.aplicado?(p.nc?`Aplicado a cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'Aplicado a cuotas'):'Pendiente de imputación',fmtFechaDMY(String(p.a.fecha||'').slice(0,10)),'',Math.round(Number(p.a.monto)||0)])))
+    const rows=[['Tipo','Cliente','Trabajo','Factura','Emitida','Vence','Monto']].concat(d.bills.map(b=>['Honorarios',cliDe(b.client_id)?.name||'',ventaDe(b)?.title||b.concept||'',`N° ${folioN(b.invoice_no)}`,fmtFechaDMY(String(b.issued_at||'').slice(0,10)),fmtFechaDMY(venceBill(b)),Math.round(saldoBill(b))]),d.gastos.map(x=>['Gastos por reembolsar',x.c.name,'','','','',Math.round(-x.saldo)]),d.sinFac.flatMap(g=>g.pagos.map(p=>['Pago sin factura',cliDe(g.client_id)?.name||'',g.venta?.title||'',p.aplicado?(p.nc?`Imputado a cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'Imputado a cuotas'):'Pendiente de imputación',fmtFechaDMY(String(p.a.fecha||'').slice(0,10)),'',Math.round(Number(p.a.monto)||0)])))
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download='por_cobrar_mis_clientes.csv'; document.body.appendChild(a); a.click(); a.remove() }
   const card = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
   const num = {fontVariantNumeric:'tabular-nums'}
@@ -36808,7 +36808,7 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
         <div style={{display:'flex',alignItems:'baseline',marginBottom:6}}><span style={{...SEC_LBL,flex:1}}>Pagos recibidos sin factura</span><b style={{fontSize:12.5,color:C.accent,...num}}>{fmt(d.sinFacTot)}</b></div>
         <div style={{...card,overflow:'hidden'}}>
           {d.sinFac.map(g=>{ const c=cliDe(g.client_id), ab=abiertoSF.has(g.key)
-            const estado = g.nPorImputar===0 ? `aplicado${g.pagos.length!==1?'s':''} a ${g.cuotas||'cuotas'} · factura pendiente de emisión` : g.nAplic===0 ? 'pendientes de imputación' : `${g.nAplic} aplicado${g.nAplic!==1?'s':''} · ${g.nPorImputar} por imputar`
+            const estado = g.nPorImputar===0 ? `imputado${g.pagos.length!==1?'s':''} a ${g.cuotas||'cuotas'} · factura pendiente de emisión` : g.nAplic===0 ? 'pendientes de imputación' : `${g.nAplic} imputado${g.nAplic!==1?'s':''} · ${g.nPorImputar} por imputar`
             const estadoM = g.nPorImputar===0 ? `${g.cuotas?g.cuotas.replace(/^(la|las) /,''):'cuotas'} · sin factura` : g.nAplic===0 ? 'por imputar a cuotas' : `${g.nPorImputar} por imputar`
             const toggle = () => setAbiertoSF(p=>{ const n=new Set(p); n.has(g.key)?n.delete(g.key):n.add(g.key); return n })
             return (<div key={g.key}>
@@ -36818,7 +36818,7 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
                 <><span style={{fontSize:13,fontWeight:700,color:C.text,...num,flexShrink:0}}>{fmt(g.total)}</span><span style={{color:C.done,flexShrink:0,display:'inline-flex',transform:ab?'rotate(-90deg)':'rotate(90deg)'}}><Gl n='chevron'/></span></>,
                 toggle)}
               {ab&&g.pagos.map(p=><div key={p.a.id} style={{display:'flex',alignItems:'center',gap:10,padding:isDesktop?'7px 14px 7px 62px':'7px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}>
-                <div style={{flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span style={{color:C.text}}>{fmtFechaDMY(String(p.a.fecha||'').slice(0,10))}</span> <span style={{color:C.muted}}>· {p.aplicado?(p.nc?`${isDesktop?'aplicado a ':''}cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'aplicado a cuotas'):'pendiente de imputación'}</span></div>
+                <div style={{flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span style={{color:C.text}}>{fmtFechaDMY(String(p.a.fecha||'').slice(0,10))}</span> <span style={{color:C.muted}}>· {p.aplicado?(p.nc?`${isDesktop?'imputado a ':''}cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'imputado a cuotas'):'pendiente de imputación'}</span></div>
                 <span style={{fontWeight:600,color:C.text,...num,flexShrink:0}}>{fmt(p.a.monto)}</span></div>)}
             </div>) })}
         </div>
@@ -38598,7 +38598,7 @@ function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAddHito, 
         }catch(_){} } }
       onApplied&&onApplied(proyecto.id, campos)
       onClose()
-    }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo aplicar.')); setSaving(false) }
+    }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo guardar.')); setSaving(false) }
   }
 
   const box = { fontSize:13, color:C.text, lineHeight:1.5, background:C.bgSoft||'#F5F7F9', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 10px', width:'100%', boxSizing:'border-box' }
@@ -40164,7 +40164,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
     // Si un saldo a favor ya se consumió (anticipo aplicado a una cuota), no se puede deshacer: borrar el vínculo
     // dejaría el movimiento "por conciliar" otra vez y podría generar un segundo anticipo por la misma plata.
     const antConsumido = rows.some(r=>{ if(r.tipo_destino!=='anticipo'||!r.anticipo_id) return false; const a=(anticipos||[]).find(x=>String(x.id)===String(r.anticipo_id)); return a && a.estado!=='disponible' })
-    if(antConsumido){ appAlert('No se puede deshacer: el saldo a favor ya se aplicó a una cuota. Revierte primero esa aplicación.'); return }
+    if(antConsumido){ appAlert('No se puede deshacer: el saldo a favor ya se imputó a una cuota. Revierte primero esa imputación.'); return }
     if(!(await appConfirm('¿Deshacer lo conciliado en este movimiento? Vuelve a quedar por resolver.'))) return
     setBusy(mov.id)
     try{
@@ -41194,7 +41194,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
   const exportConc = ()=>{ try{
       const rows=[['Fecha','Cuenta','Nombre banco','RUT','Cliente','Monto','Estado','Factura']]
       movs.filter(m=>m.tipo==='abono'&&!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).forEach(m=>{ const cc=concByMov[m.id]||[]; const fac=cc.find(c=>c.tipo_destino==='factura'); const fb=fac&&billing.find(b=>String(b.id)===String(fac.factura_id))
-        const est=cc.length?(fac?'Conciliado':'Aplicado'):(m.cliente_id?'Por conciliar':'Sin identificar')
+        const est=cc.length?(fac?'Conciliado':'Imputado'):(m.cliente_id?'Por conciliar':'Sin identificar')
         rows.push([fmtFechaDMY(m.fecha),m.rol_cuenta==='gastos'?'Gastos':'Honorarios',m.nombre_contraparte||'',m.rut_contraparte||'',cmap[m.cliente_id]||'',m.monto||0,est,fb?`N° ${folioN(fb.invoice_no)||''}`:'']) })
       const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
       const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`conciliacion_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
@@ -41389,7 +41389,7 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
           </div>
         </div> })()}
       <div style={{padding:'2px 2px 6px'}}>
-        {[['Comisión Recibida','asignable a un tercero'],['Subarrendamiento','se aplica a la cuota del mes'],['Reembolso a la oficina','algo que adelantamos y nos devuelven'],['Otros','otro ingreso']].map(([sub,hint])=>{
+        {[['Comisión Recibida','asignable a un tercero'],['Subarrendamiento','se imputa a la cuota del mes'],['Reembolso a la oficina','algo que adelantamos y nos devuelven'],['Otros','otro ingreso']].map(([sub,hint])=>{
           const esCom=sub==='Comisión Recibida'; const comOpen=esCom&&ingComFor===m.id; const conSug=esCom&&provSug&&ingProvCambiar!==m.id
           return <div key={sub}>
             <div onClick={busy===m.id?undefined:()=>{ if(esCom){ setIngComFor(comOpen?null:m.id); setIngProvQ(''); setIngProvCambiar(null) } else if(sub==='Subarrendamiento') cobroSubarriendo(m); else ingresoOficina(m,sub,null) }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}>
@@ -41562,8 +41562,8 @@ function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChi
                             : m.categoria
                               ? (()=>{ const t=TAG_STY[m.categoria]||{bg:C.bgWarm,color:C.grisText}; return <button onClick={()=>setTagFor(m.id)} title='Tocar para cambiar categoría' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:t.bg,color:t.color,border:'none'}}>{tagTxt(m.categoria)}</button> })()
                               : (m.tipo==='cargo'
-                                  ? <>{(()=>{ const sg=tipoSugerido(m); return sg?<button onClick={()=>setCategoria(m,sg)} title='Categoría aprendida del mismo pagador — confirma para aplicar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:C.azulBg,color:C.accent,border:'none'}}><Sparkle/> ¿{sg}?</button>:null })()}<button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
-                                  : (()=>{ const sg=tipoSugerido(m); return <>{sg&&<button onClick={()=>setCategoria(m,sg)} title='Sugerencia aprendida — confirma para aplicar' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:C.azulBg,color:C.accent,border:'none'}}><Sparkle/> ¿{sg}?</button>}<button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Clasificar…</button></> })())
+                                  ? <>{(()=>{ const sg=tipoSugerido(m); return sg?<button onClick={()=>setCategoria(m,sg)} title='Categoría aprendida del mismo pagador — confirma para usarla' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:C.azulBg,color:C.accent,border:'none'}}><Sparkle/> ¿{sg}?</button>:null })()}<button onClick={()=>setCategoria(m,'Gastos Oficina')} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 10px',cursor:'pointer',background:C.azulBg,color:C.azulInfo,border:'none'}}>Gastos Oficina</button><button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Otra…</button></>
+                                  : (()=>{ const sg=tipoSugerido(m); return <>{sg&&<button onClick={()=>setCategoria(m,sg)} title='Sugerencia aprendida — confirma para usarla' style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',cursor:'pointer',background:C.azulBg,color:C.accent,border:'none'}}><Sparkle/> ¿{sg}?</button>}<button onClick={()=>setTagFor(m.id)} style={{fontSize:10,color:C.muted,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Clasificar…</button></> })())
                         )})()}
                       </div>
                 )}
@@ -43713,7 +43713,7 @@ export default function App() {
       if(esGasto){ await supabase.from('expenses').update({proyecto_id:p.id}).eq('id',sug.origenId); setExpenses(xs=>xs.map(x=>x.id===sug.origenId?{...x,proyecto_id:p.id}:x)); if(!auto&&sug.conceptKey) learnPut('pmo_tramite_hito', sug.conceptKey, sug.hitoTitulo) }
       else if(!auto&&sug.conceptKey) learnPut('pmo_doc_hito', sug.conceptKey, sug.hitoTitulo)
       await _resolverSug(p,sug,'aceptada',auto)
-    }catch(e){ appAlert('No se pudo aplicar: '+(e.message||e)) }
+    }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
   }
   const handleDescartarEvidencia = async (p, sug) => { try{ await _resolverSug(p,sug,'descartada') }catch(e){} }
   // Biblioteca de pasos configurable (pmo_operaciones): guardar/crear y eliminar operaciones. Vendible: cada estudio arma la suya.
@@ -44856,7 +44856,7 @@ export default function App() {
         const { data, error:be } = await supabase.from('billing').update({paid_amount:nuevoPagado,updated_at:new Date().toISOString()}).eq('id',billingId).select().single()
         if(be)throw be
         setBilling(p=>p.map(x=>x.id===data.id?{...data,clients:clients.find(c=>c.id===data.client_id)}:x))
-        appAlert(`Abono aplicado: ${fmt(consumido)}. La factura queda pendiente por ${fmt((fac.amount||0)-nuevoPagado)} (no se marcó pagada).`)
+        appAlert(`Abono imputado: ${fmt(consumido)}. La factura queda pendiente por ${fmt((fac.amount||0)-nuevoPagado)} (no se marcó pagada).`)
       }
     }catch(e){appAlert('Error: '+e.message)}
   },[clients,billing,anticipos])
@@ -44888,7 +44888,7 @@ export default function App() {
       const nb=await getBilling().catch(()=>null); if(nb)setBilling(nb)
       const {data:na}=await supabase.from('anticipos').select('*').order('fecha',{ascending:false}); if(na)setAnticipos(na)
       const parcial=pieces.some(p=>!p.cubre)
-      appAlert(`Anticipo aplicado a ${pieces.length} factura${pieces.length!==1?'s':''}${parcial?' (la última quedó parcial)':''}${remaining>0?`. Sobrante de ${fmt(remaining)} quedó como anticipo disponible.`:'.'}`)
+      appAlert(`Anticipo imputado a ${pieces.length} factura${pieces.length!==1?'s':''}${parcial?' (la última quedó parcial)':''}${remaining>0?`. Sobrante de ${fmt(remaining)} quedó como anticipo disponible.`:'.'}`)
     }catch(e){appAlert('Error al asignar el anticipo: '+(e.message||e))}
   },[anticipos,billing,clients])
 

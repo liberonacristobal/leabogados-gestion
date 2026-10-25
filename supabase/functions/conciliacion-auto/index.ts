@@ -22,6 +22,9 @@
 // regla de Banco) se enlaza y sus OT quedan pagadas con la fecha del cargo. Sin RUT conocido o con monto distinto, lo ve una persona.
 // COMPRAS DEL SII ↔ PAGOS: la factura de compra con un solo cargo del mismo RUT y monto al peso en su ventana (calcesCompraPago)
 // queda con su pago (sii_compras_docs.movimiento_id). Es trazabilidad: no cambia la conciliación del cargo.
+// SUBARRIENDO: el pago del mes que entró sin factura (anticipo «Subarriendo <mes>») cubre la factura de ese mismo mes cuando se
+// emite, si calza exacto y único por los dos lados (anticiposSubarriendo, la regla de Revisión de datos). Mismas escrituras que
+// «Cubrir la Factura N°» de la app; se deshace desde la factura.
 // Modos (body): dryRun = calcula sin escribir · backtest = recorre lo ya conciliado y compara qué habría hecho.
 // Interruptor: learnings config conciliacion_auto = 'on' (sin 'on' = solo dry-run). Auth: CRON_SECRET. verify_jwt=false.
 
@@ -32,6 +35,7 @@ import { pagarT, reajusteBHEPago, estadoComision, calcesPagoComision } from "../
 import { nombreGenerico } from "../_shared/contrapartes.js";
 import { liqParaCargo } from "../_shared/notariaReglas.js";
 import { calcesCompraPago } from "../_shared/comprasReglas.js";
+import { anticiposSubarriendo, perTexto } from "../_shared/saludDatos.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -561,6 +565,32 @@ Deno.serve(async (req) => {
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "banco.notaria_enlazada", table_name: "rendiciones", record_id: liq.id, estudio_id: "lea", detail: { title: `Pago a la notaría ${fmt(monto)} del ${dmy(fecha)} ↔ liquidación del ${dmy(liq.created_at)} (conciliación automática)`, movimiento: m.id, fecha, pagado: monto, liquidacion: liq.total } }) }).catch(() => null);
       }
     } catch (e) { nota.error = String((e as Error).message || e); }
+    // ── Subarriendo: pago del mes ↔ su factura ──
+    const subarr = { cubiertas: [] as unknown[], error: null as string | null };
+    try {
+      const salesS = (await todas("sales?select=id,area,cobro_config&deleted_at=is.null")).filter((x) => x.cobro_config?.subarriendo === true || x.area === "Subarriendo");
+      if (salesS.length) {
+        const sids = enLista(salesS.map((x) => x.id));
+        const [antS, facS] = await Promise.all([
+          todas(`anticipos?select=id,client_id,sale_id,monto,fecha,nota,estado&sale_id=in.${sids}`),
+          todas(`billing?select=id,client_id,sale_id,invoice_no,status,amount,paid_amount,paid_at,concept,billing_type,deleted_at,payment_ref,reconciled_at&sale_id=in.${sids}`),
+        ]);
+        const fids = facS.map((b) => b.id);
+        const concS = fids.length ? await todas(`conciliacion?select=factura_id,tipo_destino&tipo_destino=eq.factura&factura_id=in.${enLista(fids)}`) : [];
+        for (const x of anticiposSubarriendo(antS, facS, salesS, concS).filter((y) => y.tipo === "aplicar")) {
+          const { a, b, per } = x;
+          subarr.cubiertas.push({ factura: folioN(b.invoice_no), periodo: per, monto: Math.round(Number(a.monto) || 0), pago: a.fecha });
+          if (dryRun) continue;
+          try {
+            const okA = await rest(`anticipos?id=eq.${a.id}&estado=eq.disponible`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ estado: "consumido", billing_id: b.id }) });
+            if (!okA?.length) { subarr.cubiertas.pop(); continue; }
+            const ahora = new Date().toISOString();
+            await rest(`billing?id=eq.${b.id}`, { method: "PATCH", body: JSON.stringify({ status: "Pagado", paid_amount: b.amount, paid_at: b.paid_at || a.fecha, payment_method: "Transferencia", payment_ref: b.payment_ref || "Anticipo conciliado en banco", reconciled_at: b.reconciled_at || ahora, updated_at: ahora }) });
+          } catch (e) { subarr.cubiertas.pop(); subarr.error = String((e as Error).message || e); continue; }
+          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "anticipo.consumido_auto", table_name: "billing", record_id: b.id, estudio_id: "lea", detail: { title: `Pago de subarriendo de ${perTexto(per)} (${fmt(a.monto)} del ${dmy(a.fecha)}) cubre la Factura N° ${folioN(b.invoice_no)} (conciliación automática)`, anticipo: a.id, factura: b.id } }) }).catch(() => null);
+        }
+      }
+    } catch (e) { subarr.error = String((e as Error).message || e); }
     // ── Facturas de compra del SII ↔ pagos del banco ──
     const compras = { enlazadas: [] as unknown[], error: null as string | null };
     try {
@@ -599,7 +629,7 @@ Deno.serve(async (req) => {
         }
       } catch { /* avisar no frena la conciliación */ }
     }
-    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, notaria: nota, compras_sii: compras, nombres_por_rut: nombres });
+    return json({ ok: true, enviado: !dryRun, dryRun, conciliados: hechos.length, hechos, dudas, fondos_por_registrar: fpr, pagos_comisiones: com, cargos_recurrentes: car, tarjeta_uber: tc, notaria: nota, compras_sii: compras, subarriendo: subarr, nombres_por_rut: nombres });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   } finally {
