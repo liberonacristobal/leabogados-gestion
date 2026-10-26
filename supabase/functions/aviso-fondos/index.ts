@@ -96,6 +96,11 @@ serve(async (req) => {
     const frs = await pageAll(() => sb.from("fund_requests").select("client_id,enviada_at,monto").order("id"));
     const hist = await pageAll(() => sb.from("avisos_fondos").select("client_id,fecha,tipo,n").order("id"));
     const { data: pausas } = await sb.from("learnings").select("key,value,updated_at").eq("kind", "aviso_fondos_pausa");
+    // El seguimiento cada 15 días sale por correo hasta learnings config aviso_fondos_seguimiento_hasta (decisión del 26-10-2026:
+    // 31-12-2026); después queda solo en la tarjeta «Fondos por pedir» del correo del lunes. Sin fecha configurada, sigue.
+    const { data: segCfg } = await sb.from("learnings").select("value").eq("kind", "config").eq("key", "aviso_fondos_seguimiento_hasta").limit(1);
+    const segHasta = String(segCfg?.[0]?.value || "").trim();
+    const conSeguimiento = !/^\d{4}-\d{2}-\d{2}$/.test(segHasta) || hoy <= segHasta;
 
     // deno-lint-ignore no-explicit-any
     const respDe: Record<string, string> = {};
@@ -141,7 +146,7 @@ serve(async (req) => {
       const { n: nAviso, ultimo: ultimoAviso } = contadorAvisos(hist.filter((r) => String(r.client_id) === String(c.id)), lastFondo, hoy);
       let tipo = "";
       if (cargaHoy.length) tipo = "carga";
-      else if (!ultimoAviso || diasEntre(ultimoAviso, hoy) >= SEGUIMIENTO_DIAS) tipo = "seguimiento";
+      else if (conSeguimiento && (!ultimoAviso || diasEntre(ultimoAviso, hoy) >= SEGUIMIENTO_DIAS)) tipo = "seguimiento";
       if (!tipo) continue;
 
       // OT de notaría que no se pueden pagar por falta de fondos (misma regla que "Seleccionar con fondos")

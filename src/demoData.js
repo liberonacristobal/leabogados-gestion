@@ -211,6 +211,9 @@ export const demoData = {
     { id:'x5c', client_id:'c5', type:'gasto', amount:8000, concept:'Copia autorizada de escritura', category:'Notaria', date:'2026-10-08', created_by:'Martina' },
     { id:'x6', client_id:'c6', type:'gasto', amount:60000,  concept:'Certificados',             category:'Registro Civil', date:'2026-05-20', created_by:'Martina', },
     // Caja chica (gastos por persona, varios sin liquidar)
+    // Caja chica de Martín ya liquidada (rc1): página de la liquidación con su anexo.
+    { id:'xcc1', client_id:'c1', type:'gasto', amount:18500, concept:'Movilización — notaría', category:'Movilización', date:'2026-09-12', created_by:'Martín', rendered_at:'2026-09-30T12:00:00', render_id:'rc1', paid_by_client:false },
+    { id:'xcc2', client_id:'c3', type:'gasto', amount:6400, concept:'Fotocopias', category:'Otro', date:'2026-09-20', created_by:'Martín', rendered_at:'2026-09-30T12:00:00', render_id:'rc1', paid_by_client:false },
     { id:'x7',  client_id:'c3', type:'gasto', amount:140000, concept:'Diario Oficial — publicación', category:'Diario Oficial', date:'2026-06-02', created_by:'Martín',  rendered_at:null },
     { id:'x7b', client_id:'c3', type:'gasto', amount:210000, concept:'Inscripción de extracto en CBR', category:'CBR',            date:'2026-06-04', created_by:'Martín',  rendered_at:null },
     { id:'x8',  client_id:'c3', type:'gasto', amount:90000,  concept:'Fotocopias y trámites',        category:'Otro',           date:'2026-06-05', created_by:'Martín',  rendered_at:null },
@@ -426,6 +429,7 @@ export const demoData = {
     { id:'conf40', movimiento_id:'movf40', tipo_destino:'factura', factura_id:'b40', anticipo_id:null, monto_aplicado:12000000, origen:'demo', marco_pago:true },
   ],
   rendiciones: [
+    { id:'rc1', periodo:'septiembre 2026', total:24900, n_gastos:2, n_clientes:2, created_at:'2026-09-30T12:00:00', user_name:'Martín', fondo_recibido:300000, gastado:275100, saldo_caja:24900 },
     { id:'rb1', tipo:'cliente', client_id:'c3', total:253065, n_gastos:3, created_at:'2026-10-19T14:00:00', user_name:'Martina', project:null },
     { id:'rb2', tipo:'cliente', client_id:'c1', total:120000, n_gastos:2, created_at:'2026-10-20T10:00:00', user_name:'Cristóbal', project:null },
     { id:'rn0', tipo:'notaria', periodo:'agosto 2026', total:320000, n_gastos:5, ot_numbers:'48120, 48125, 48131, 48140, 48144', estado_envio:'enviada', sent_at:'2026-08-20', created_at:'2026-08-20T15:00:00', user_name:'Martina', movimiento_id:'movn0' },

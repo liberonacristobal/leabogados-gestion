@@ -10,7 +10,7 @@ import webpush from "npm:web-push@3.6.7";
 import { ESTUDIO_ID } from "./equipo.js";
 
 export interface AvisoPush { titulo: string; cuerpo: string; url?: string; etiqueta?: string }
-export type TipoPush = "tareas" | "causas" | "fondos" | "notaria" | "clientes" | "pagos" | "normativa" | "sistema" | "prueba";
+export type TipoPush = "tareas" | "causas" | "fondos" | "notaria" | "clientes" | "pagos" | "normativa" | "sistema" | "cajachica" | "prueba";
 const SIN_SILENCIO: TipoPush[] = ["causas"];
 
 let listo: boolean | null = null;

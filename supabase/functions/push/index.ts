@@ -1,6 +1,8 @@
 // Edge Function: push — notificaciones al teléfono (Web Push).
 //   · action 'clave'     → la clave pública VAPID con que el teléfono se suscribe (sesión del dominio).
 //   · action 'probar'    → notificación de prueba a los dispositivos de quien llama (sesión del dominio).
+//   · action 'avisar'    → (sesión del dominio) un aviso de la app a los socios (miembros admin), sin quien lo envía. Solo los
+//                          tipos de AVISAR_TIPOS: hoy la liquidación de caja chica (decisión del 26-10-2026: al teléfono, no por correo).
 //   · action 'cola'      → (cron 8:00) envía lo que llegó de noche, agrupado por persona (push_cola).
 //   · action 'normativa' → (cron, tras cada ronda de normativa) oficios, circulares y resoluciones nuevos del SII (sii_novedades
 //                          sin push_at, con fecha de los últimos 7 días: una carga histórica no dispara avisos) a learnings config
@@ -18,6 +20,7 @@ const H = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Conten
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const rest = async (path: string, init: RequestInit = {}) => { const r = await fetch(`${SB_URL}/rest/v1/${path}`, { ...init, headers: { ...H, ...(init.headers || {}) } }); if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`); const t = await r.text(); return t ? JSON.parse(t) : null; };
+const AVISAR_TIPOS: TipoPush[] = ["cajachica"];
 const TIPO_DOC: Record<string, [string, string]> = { oficio: ["Oficio", "Oficios"], circular: ["Circular", "Circulares"], resolucion: ["Resolución", "Resoluciones"] };
 
 async function cola(dryRun: boolean) {
@@ -78,6 +81,15 @@ Deno.serve(async (req) => {
     if (body.action === "clave") {
       const clave = clavePublicaPush();
       return clave ? json({ clave }) : json({ error: "Las notificaciones aún no están configuradas en el servidor." }, 503);
+    }
+    if (body.action === "avisar") {
+      const tipo = String(body.tipo || "") as TipoPush;
+      if (!AVISAR_TIPOS.includes(tipo)) return json({ error: "Tipo de aviso no permitido" }, 400);
+      const titulo = String(body.titulo || "").slice(0, 80), cuerpo = String(body.cuerpo || "").slice(0, 180), url = String(body.url || "/");
+      if (!titulo || !url.startsWith("/")) return json({ error: "Aviso incompleto" }, 400);
+      const admins: string[] = (await rest("miembros?select=email&rol=eq.admin")).map((m: { email: string }) => String(m.email || "").toLowerCase()).filter((e: string) => e && e !== email);
+      const r = await enviarPush(SB_URL, SERVICE_KEY, admins, { titulo, cuerpo, url, etiqueta: String(body.etiqueta || tipo).slice(0, 60) }, tipo);
+      return json({ ok: true, a: admins, ...r });
     }
     if (body.action === "probar") {
       const r = await enviarPush(SB_URL, SERVICE_KEY, [email], { titulo: "Notificaciones activadas", cuerpo: "Desde ahora los avisos de la app llegan a este dispositivo.", url: "/?ir=tareas", etiqueta: "prueba" }, "prueba", { sinCola: true });
