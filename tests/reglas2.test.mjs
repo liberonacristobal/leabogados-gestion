@@ -277,3 +277,17 @@ test('venta del gasto: aprendido por venta o nombre, coherente, y la glosa gené
   // Sin regla por razón social: la razón social de facturación no dice de qué trabajo es el gasto.
   assert.notEqual(sugerirVentaGasto({ client_id: 'cli', concept: 'Copia', entity_id: 'rs5' }, V, { billing: [{ sale_id: 'b', entity_id: 'rs5' }] }).regla, 'rs')
 })
+
+test('revisión: gasto con razón social de otro cliente y trabajo terminado que sigue recibiendo gastos', async () => {
+  const { gastoRsAjena, terminadaConGastos } = await import('../supabase/functions/_shared/saludDatos.js')
+  const ents = [{ id: 'rsA', client_id: 'A' }, { id: 'rsB', client_id: 'B' }]
+  const r = gastoRsAjena([{ id: 1, client_id: 'A', entity_id: 'rsA' }, { id: 2, client_id: 'A', entity_id: 'rsB' }, { id: 3, client_id: 'A', entity_id: 'rsX' }, { id: 4, client_id: 'A', entity_id: 'rsB', deleted_at: 'x' }], ents)
+  assert.deepEqual(r.map(e => e.id), [2])   // razón social desconocida o gasto borrado: no es hallazgo
+  const sales = [{ id: 't', status: 'Terminado' }, { id: 'a', status: 'Activo' }]
+  const ex = [{ id: 1, sale_id: 't', created_at: '2026-10-20T10:00:00Z', date: '2026-10-06', amount: 5000 }, { id: 2, sale_id: 't', created_at: '2026-08-01T10:00:00Z', date: '2026-07-01', amount: 9 }, { id: 3, sale_id: 'a', created_at: '2026-10-20T10:00:00Z', date: '2026-10-20', amount: 1 },
+    { id: 5, sale_id: 't', created_at: '2026-10-13T10:00:00Z', date: '2025-07-31', amount: 7 }]   // gasto antiguo reimportado hace poco: no cuenta
+  const t = terminadaConGastos(sales, ex, '2026-10-25')
+  assert.equal(t.length, 1); assert.deepEqual(t[0].gastos.map(e => e.id), [1]); assert.equal(t[0].ultimo, '2026-10-06')   // solo gastos de los últimos 30 días
+  assert.equal(terminadaConGastos(sales, ex, '2026-10-25', { ok: { t: '2026-10-21' } }).length, 0)   // «Sigue terminado» el 21: lo anterior no vuelve
+  assert.equal(terminadaConGastos(sales, ex, '2026-10-25', { ok: { t: '2026-10-19' } }).length, 1)   // lo cargado después, sí
+})
