@@ -6,10 +6,12 @@
 // 'auditor_datos' = 'on'. Sin 'on' registra igual los casos pero no envía. body.dryRun = calcula sin escribir ni enviar.
 // Quedan solo en la app las revisiones que dependen de la UF del día (cuotas fantasma, cuotas sin generar, saldo a favor que cubre
 // cuotas) y el cruce de RUT por nombre del banco.
-// Auth: CRON_SECRET. verify_jwt=false.
+// body.backtestVentaGasto = recorre los gastos que ya tienen trabajo y compara qué habría sugerido la regla de venta del gasto
+// (sin escribir nada). Auth: CRON_SECRET. verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { todasRest } from "../_shared/paginar.js";
+import { sugerirVentaGasto, VENTA_REAL } from "../_shared/ventaGastoReglas.js";
 import { hallazgos, DETECTOR_LBL } from "../_shared/saludDatos.js";
 import { trabajosDetenidos } from "../_shared/ventasReglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
@@ -43,6 +45,34 @@ Deno.serve(async (req) => {
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
   const dryRun = !!body.dryRun;
+  if (body.backtestVentaGasto) {
+    try {
+      const [ex, sa, bi, le, cl] = await Promise.all([
+        todas("expenses?select=id,client_id,sale_id,date,entity_id,concept,type,category&deleted_at=is.null&order=id"),
+        todas("sales?select=id,client_id,status,deleted_at,title,entity_id,created_at,activated_at,updated_at&order=id"),
+        todas("billing?select=sale_id,entity_id,deleted_at&sale_id=not.is.null&order=id"),
+        todas("learnings?select=key,value,meta&kind=eq.gasto_proyecto&order=id"),
+        todas("clients?select=id,is_internal&order=id"),
+      ]);
+      const interno = new Set(cl.filter((c) => c.is_internal).map((c) => String(c.id)));
+      const vPor: Record<string, unknown[]> = {}; sa.filter(VENTA_REAL).forEach((s) => { (vPor[String(s.client_id)] = vPor[String(s.client_id)] || []).push(s); });
+      const conV = ex.filter((e) => e.sale_id && !interno.has(String(e.client_id)) && (vPor[String(e.client_id)] || []).some((s: any) => String(s.id) === String(e.sale_id)));
+      // deno-lint-ignore no-explicit-any
+      const res: any = { total: conV.length, dudosos: 0, antes: { acierta: 0, falla: 0, nada: 0 }, ahora: { acierta: 0, falla: 0, nada: 0 }, porRegla: {}, fallas: [] };
+      for (const e of conV) {
+        const vs = vPor[String(e.client_id)] as any[];
+        if (vs.length < 2 || vs.filter((s) => s.status === "Activo").length === 1) continue;   // única / única activa: igual que antes
+        res.dudosos++;
+        const otros = ex.filter((h) => h.id !== e.id && String(h.client_id) === String(e.client_id));
+        const a0 = sugerirVentaGasto(e, vs, {}), a1 = sugerirVentaGasto(e, vs, { aprendidos: body.sinAprendido ? [] : le, hermanos: otros, billing: bi });
+        const k = (r: any) => !r.venta ? "nada" : String(r.venta.id) === String(e.sale_id) ? "acierta" : "falla";
+        res.antes[k(a0)]++; res.ahora[k(a1)]++;
+        const pr = res.porRegla[a1.regla] = res.porRegla[a1.regla] || { acierta: 0, falla: 0, nada: 0 }; pr[k(a1)]++;
+        if (k(a1) === "falla" && res.fallas.length < 25) res.fallas.push({ id: e.id, regla: a1.regla, concepto: String(e.concept || "").slice(0, 60), fecha: e.date });
+      }
+      return json(res);
+    } catch (e) { return json({ error: String((e as Error).message || e) }, 500); }
+  }
   try {
     const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos, compras, comprasVistas, comprasObs, comprasObsVistas, gastosAct, tareasAct, horasAct, activosOk, ufRows, permisos, ctNoRows, pagosCli, comprasTodas] = await Promise.all([
       todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,due"),

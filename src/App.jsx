@@ -22,6 +22,7 @@ import * as SD from '../supabase/functions/_shared/saludDatos.js'
 const { dteMontoTotal, montoFactura } = SD
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../supabase/functions/_shared/gastosReglas.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
+import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../supabase/functions/_shared/ventaGastoReglas.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
@@ -966,7 +967,6 @@ const rsDisplay = s => s ? String(s).trim().toUpperCase() : s
 // Razón social del SII (suele venir en MAYÚSCULAS) → Title Case para mostrar, sin tocar el dato (canon nombres).
 const titleCase = s => { if(!s) return s; return String(s).trim().toLowerCase().replace(/(^|[\s.\-'/(])([a-záéíóúñü])/g, (_,p,c)=>p+c.toUpperCase()).replace(/\b(Y|De|Del|La|Las|Los|E|En)\b/g, m=>m.toLowerCase()) }
 // Clave de glosa para aprender gasto→proyecto: palabras significativas (≥4) ordenadas, así "Certificado dominio CBR" matchea independiente del orden.
-const glosaKey = s => _normTxt(s).split(' ').filter(w=>w.length>=4).slice(0,5).sort().join(' ')
 // Clave de SERIE de facturas: glosa base sin "cuota N/M", "N/M", meses, años → para agrupar hermanas (1/3, 2/3, 3/3; o las mensuales) y no dejarlas huérfanas.
 const _MESES_SERIE = /\b(ene(ro)?|feb(rero)?|mar(zo)?|abr(il)?|may(o)?|jun(io)?|jul(io)?|ago(sto)?|sept?(iembre)?|oct(ubre)?|nov(iembre)?|dic(iembre)?|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi
 const serieKey = concept => String(concept||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
@@ -9509,9 +9509,18 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
 // cliente (no Propuesta/Rechazada/Borrador). Fuente única de la sugerencia: se vincula sola solo cuando no hay duda (aprendido,
 // única venta, única activa); lo demás se propone y se confirma. La razón social de la venta es la de FACTURACIÓN (puede no ser la
 // del requirente de la OT), por eso no es automática.
-const VENTA_REAL = s => !!s && !s.deleted_at && !['Propuesta','Rechazada','Borrador'].includes(s.status)
-const _STOP_TRAB = new Set(['gastos','gasto','notariales','notarial','notaria','para','sobre','desde','spa','ltda','limitada','sociedad','acciones','anonima','asesoria','legal','legales','servicios','permanente','provision','fondos','fondo','conciliacion','bancaria','copia','copias','certificado','autorizacion','poder','especial','mandato','escritura','publica','protocolizacion','documentos','contrato','grupo','trabajo','varios','cliente','cuota','reduccion','junta','extraordinaria','accionistas','socios'])
-const _toksTrab = s => _norm(s).split(/[^a-z0-9]+/).filter(t=>t.length>=4&&!_STOP_TRAB.has(t)).map(t=>t.slice(0,5))
+// Lo aprendido gasto→trabajo (learnings gasto_proyecto), cargado una vez para toda la app; aprenderVentaGasto lo suma al momento.
+let _aprVenta=null, _aprVentaProm=null
+function useAprendidosVenta(){
+  const [a,setA]=useState(_aprVenta||[])
+  useEffect(()=>{ if(DEMO) return; let v=true
+    if(!_aprVentaProm) _aprVentaProm=selectAll(()=>supabase.from('learnings').select('key,value,meta').eq('kind','gasto_proyecto').order('id')).then(r=>{ _aprVenta=(r&&r.data)||[]; return _aprVenta },()=>[])
+    _aprVentaProm.then(x=>{ if(v) setA(x) }); return ()=>{ v=false } },[])
+  return a
+}
+const aprenderVentaGasto=(e,venta)=>{ const gk=glosaKey(e?.concept||''); if(!gk||!e?.client_id||!(venta?.title||e.project)) return
+  const row={kind:'gasto_proyecto',key:`${e.client_id}::${gk}`,value:venta?.title||e.project,meta:{...(venta?.id||e.sale_id?{sale_id:venta?.id||e.sale_id}:{}),...(e.entity_id?{entity_id:e.entity_id}:{})}}
+  learnPut(row.kind,row.key,row.value,row.meta); if(_aprVenta) _aprVenta.push(row) }
 // Proyecto que hereda un fondo/gasto creado por la app (conciliación, carga masiva) SOLO si no hay duda: el de la factura,
 // el que viene escrito y calza con una venta, o la única venta / única activa del cliente. Con duda queda sin proyecto y se asigna en la ficha.
 function proyectoSeguro(clientId, sales, {saleId=null, titulo=null}={}){
@@ -9521,21 +9530,6 @@ function proyectoSeguro(clientId, sales, {saleId=null, titulo=null}={}){
   if(!v && titulo){ const t=String(titulo).trim().toLowerCase(); v=vs.find(s=>(s.title||'').trim().toLowerCase()===t) || null; if(!v) return {} }   // proyecto escrito que no es una venta: se respeta tal cual
   if(!v){ const act=vs.filter(s=>s.status==='Activo'); v = vs.length===1 ? vs[0] : (act.length===1 ? act[0] : null) }
   return v ? {sale_id:v.id, project:v.title} : {}
-}
-function sugerirVentaGasto(e, ventas, aprendidoSaleId){
-  if(aprendidoSaleId){ const v=ventas.find(s=>String(s.id)===String(aprendidoSaleId)); if(v) return {venta:v, regla:'aprendido', auto:true, porque:'Así lo vinculaste antes'} }
-  if(!ventas.length) return {venta:null, regla:'sinventa', auto:false, porque:'El cliente no tiene ventas'}
-  if(ventas.length===1) return {venta:ventas[0], regla:'unica', auto:true, porque:'Única venta del cliente'}
-  const act = ventas.filter(s=>s.status==='Activo')
-  if(act.length===1) return {venta:act[0], regla:'activa', auto:true, porque:'Única venta activa'}
-  const g = new Set(_toksTrab([e.concept,e.subconcept,e.materia,e.project].filter(Boolean).join(' ')))
-  const sc = ventas.map(s=>({s,hit:[...new Set(_toksTrab(s.title).filter(t=>g.has(t)))]})).sort((a,b)=>b.hit.length-a.hit.length)
-  if(sc[0].hit.length && (sc.length===1 || sc[0].hit.length>sc[1].hit.length)) return {venta:sc[0].s, regla:'texto', auto:false, porque:'El texto coincide con el trabajo'}
-  const f = e.date ? String(e.date).slice(0,10) : null
-  if(f){ const vig = ventas.filter(s=>{ const ini=String(s.activated_at||s.created_at||'').slice(0,10); const fin=s.status==='Activo'?'9999':String(s.updated_at||'').slice(0,10); return ini && ini<=f && fin>=f })
-    if(vig.length===1) return {venta:vig[0], regla:'vigente', auto:false, porque:`Única venta vigente el ${fmtFechaDMY(f)}`} }
-  if(e.entity_id){ const rs=(act.length?act:ventas).filter(s=>String(s.entity_id)===String(e.entity_id)); if(rs.length===1) return {venta:rs[0], regla:'rs', auto:false, porque:'Misma razón social'} }
-  return {venta:null, regla:'decidir', auto:false, porque:`${ventas.length} trabajos posibles`}
 }
 
 // «¿Cuánto se puede retirar?» (Socios). Dos lecturas en paralelo, ambas desde la fuente:
@@ -19293,9 +19287,7 @@ function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],billing=[
   // Proyecto aprendido por cliente + sociedad de la OT (learnings 'notaria_proyecto': `${client_id}::${entity_id|compareciente}` → sale_id).
   const [notaProyL,setNotaProyL] = useState({})
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_proyecto').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setNotaProyL(m) },()=>{}) },[notaria])
-  // Descripción → venta aprendida al asignar en la ficha (learnings 'gasto_venta': `${client_id}::${glosaKey}`): alimenta la sugerencia.
-  const [gastoVentaL,setGastoVentaL] = useState({})
-  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','gasto_venta').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setGastoVentaL(m) },()=>{}) },[])
+  const aprVenta = useAprendidosVenta()   // lo aprendido gasto→trabajo (regla única sugerirVentaGasto)
   const [notaAlias,setNotaAlias] = useState([])   // learnings kind 'notaria_alias': key (requirente/frase) → value (client_id)
   useEffect(()=>{ if(!notaria||DEMO) return; supabase.from('learnings').select('key,value').eq('kind','notaria_alias').order('updated_at',{ascending:true}).then(({data})=>setNotaAlias(data||[]),()=>{}) },[notaria])
   // Glosas aprendidas por tipo de trámite (materia normalizada → glosa a rendir). Se aprende al editar una glosa en el preview.
@@ -19721,8 +19713,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if(r.sale_id && vs.some(v=>String(v.id)===String(r.sale_id))) return {need:false, sale:r.sale_id, vs}
     const k=proyKey(r), l=k&&notaProyL[k]; if(l && vs.some(v=>String(v.id)===String(l))) return {need:false, sale:l, vs}
     const ps=proyectoSeguro(r.client_id, sales, {titulo:r.proyecto}); if(ps.sale_id) return {need:false, sale:ps.sale_id, vs}
-    const gl = r.noSug ? null : (gastoVentaL[`${r.client_id}::${glosaKey(glosaFinal(r))}`] || gastoVentaL[`${r.client_id}::${glosaKey(r.concepto||'')}`] || null)
-    const sug = r.noSug ? null : sugerirVentaGasto({concept:glosaFinal(r),subconcept:r.subconcepto,materia:r.materia,date:r.fecha}, vs, gl).venta
+    const sug = r.noSug ? null : sugerirVentaGasto({client_id:r.client_id,entity_id:r.entity_id||null,concept:glosaFinal(r),subconcept:r.subconcepto,materia:r.materia,date:r.fecha}, vs, {aprendidos:aprVenta,hermanos:expenses}).venta
     return {need:true, vs, sug, sale:sug?sug.id:undefined}
   }
   const sinProyNota = r => { const p=proyDe(r); return p.need && !p.sug }
@@ -25618,15 +25609,17 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const rsList = (clientEntities||[]).filter(e=>e.client_id===f.client_id)
   // Asociar siempre a una RS por defecto: con una sola, se asigna sola si venía sin asignar.
   useEffect(()=>{ if(rsList.length===1 && !f.entity_id) setF(p=>({...p,entity_id:rsList[0].id})) },[f.client_id])
-  // Aprendizaje glosa→proyecto: si el gasto no tiene proyecto, sugiere el aprendido para esa glosa (mismo cliente).
+  // Trabajo sugerido si el gasto no tiene proyecto: regla única sugerirVentaGasto (aprendido, mismo día, razón social, texto…);
+  // sin venta que calce, el último proyecto escrito para esa glosa.
+  const aprVenta = useAprendidosVenta()
   const [sugProy,setSugProy] = useState(null)
   useEffect(()=>{
     if(isFondo || f.project || !f.concept || !f.client_id){ setSugProy(null); return }
-    const gk=glosaKey(f.concept); if(!gk){ setSugProy(null); return }
-    let alive=true
-    supabase.from('learnings').select('value').eq('kind','gasto_proyecto').eq('key',`${f.client_id}::${gk}`).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(alive) setSugProy(data&&data[0]?.value||null) },()=>{})
-    return ()=>{alive=false}
-  },[f.concept,f.client_id,f.project,isFondo])
+    const vs=(sales||[]).filter(s=>String(s.client_id)===String(f.client_id)&&VENTA_REAL(s))
+    const r=sugerirVentaGasto({...f,id:expense?.id}, vs, {aprendidos:aprVenta,hermanos:expenses||[]})
+    const gk=glosaKey(f.concept), ult=gk?[...aprVenta].reverse().find(x=>x.key===`${f.client_id}::${gk}`):null
+    setSugProy(r.venta?.title || ult?.value || null)
+  },[f.concept,f.client_id,f.project,f.date,f.entity_id,isFondo,aprVenta])
   // Aprendizaje glosa→subcategoría: la misma glosa recurrente (Jumbo, Uber) propone su subcategoría con un toque, sin re-tipear (regla "la app APRENDE").
   const [sugSub,setSugSub] = useState(null)
   useEffect(()=>{
@@ -26765,6 +26758,7 @@ function ConciliarFacturasModal({asPage=false, scope=[], sales=[], clients=[], c
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
 function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], tasks=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion, onAsociarTrabajo}){
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
+  const aprVenta = useAprendidosVenta()
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
   const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
@@ -26978,7 +26972,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
                   {e.entity_id&&onAsociarTrabajo&&tap(<span style={{color:C.muted}}>{entName(e.entity_id)}</span>)}
                 </> })()}
               {ultAsig?.ids.has(e.id)&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.greenBg,color:C.greenText,borderRadius:8,padding:'7px 10px',marginTop:5,fontSize:12}}><span>Asignados {ultAsig.n} · {fmt(ultAsig.monto)}</span><span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span></div>}
-              {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} onAsignar={asignar}/>}
+              {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} ctx={{aprendidos:aprVenta,hermanos:expenses}} onAsignar={asignar}/>}
               {((e.entity_id&&!onAsociarTrabajo)||!onAsociarTrabajo||(!e.entity_id&&!(clientEntities||[]).length))&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
             {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
             {(()=>{ const links=recorridoGasto(e,{conc,movById,expenses}).map(p=>({k:p.k, t:p.t, d:[p.fecha?fmtFechaDMY(p.fecha):null, p.d].filter(Boolean).join(' · '), on:p.mov&&onOpenConciliacion?()=>onOpenConciliacion(p.mov):p.fondo?()=>setDetG(p.fondo):null}))
@@ -27085,11 +27079,11 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
 const esPermanente = v => !!v && v.cobro_type==='mensual'
 const subproyectosCliente = (clientId, tasks=[], expenses=[]) => [...new Set([...(tasks||[]),...(expenses||[])].filter(x=>String(x.client_id)===String(clientId)&&x.subproject).map(x=>x.subproject.trim()))].sort((a,b)=>a.localeCompare(b,'es'))
 // otros: los demás movimientos del cliente sin proyecto. Al elegir el proyecto se listan (por descripción) para sumarlos al mismo.
-function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=[], onAsignar}){
+function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=[], ctx={}, onAsignar}){
   const [marc,setMarc] = useState(()=>new Set())
   const lote = items || (e ? [e] : [])
   const faltaV = lote.some(x=>!x.sale_id), faltaRS = ents.length>0 && lote.some(x=>!x.entity_id)
-  const sug = e ? sugerirVentaGasto(e, ventas, null) : {venta: ventas.length===1 ? ventas[0] : (ventas.filter(s=>s.status==='Activo').length===1 ? ventas.find(s=>s.status==='Activo') : null)}
+  const sug = e ? sugerirVentaGasto(e, ventas, ctx) : {venta: ventas.length===1 ? ventas[0] : (ventas.filter(s=>s.status==='Activo').length===1 ? ventas.find(s=>s.status==='Activo') : null)}
   const [v,setV] = useState(sug.venta?String(sug.venta.id):'')
   const rsDeV = id => { const s=ventas.find(x=>String(x.id)===String(id)); return s&&s.entity_id&&ents.some(en=>String(en.id)===String(s.entity_id)) ? String(s.entity_id) : (ents.length===1 ? String(ents[0].id) : '') }
   const [rs,setRs] = useState(rsDeV(v))
@@ -43168,7 +43162,7 @@ export default function App() {
     const antes=cambios.map(c=>({id:c.e.id, sale_id:c.e.sale_id||null, project:c.e.project||null, subproject:c.e.subproject||null, entity_id:c.e.entity_id||null}))
     try{
       if(!DEMO){ for(const c of cambios){ const {error}=await supabase.from('expenses').update(c.patch).eq('id',c.e.id); if(error) throw error }
-        if(v) cambios.filter(c=>c.patch.sale_id).forEach(c=>learnPut('gasto_venta',`${c.e.client_id}::${glosaKey(c.e.concept||'')}`,v.id,{})) }
+        if(v) cambios.filter(c=>c.patch.sale_id).forEach(c=>aprenderVentaGasto({...c.e,...c.patch},v)) }
       setExpenses(p=>p.map(x=>{ const c=cambios.find(y=>y.e.id===x.id); return c?{...x,...c.patch}:x }))
       logActividad(forzar?'gastos.proyecto_rs_corregido':'gastos.proyecto_rs_asignado',{tabla:'expenses',detalle:{n:cambios.length,proyecto:v?.title||null,subproyecto:subproject||null,razon_social:entityId||null,monto:cambios.reduce((a,c)=>a+(c.e.amount||0),0),...(forzar?{antes:antes.map(a=>({proyecto:a.project,razon_social:a.entity_id}))}:{})}})
       return async()=>{
@@ -44212,7 +44206,7 @@ export default function App() {
       if(error)throw error
       if(DEMO&&!data) data={...p,id:p.id||('demo-e-'+Date.now()),created_at:new Date().toISOString()}   // demo: la base simulada no devuelve la fila (antes quedaba un null en la lista)
       // Aprende glosa→proyecto: la próxima vez un gasto con la misma glosa sugiere este proyecto.
-      if(p.type==='gasto' && p.project && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_proyecto', `${p.client_id}::${gk}`, p.project, {}) }
+      if(p.type==='gasto' && p.project && p.concept) aprenderVentaGasto(p, p.sale_id?(sales||[]).find(s=>String(s.id)===String(p.sale_id)):null)
       // Aprende glosa→categoría: el Asistente IA de caja chica y la carga masiva la reusan (no repetir la clasificación).
       if(p.type==='gasto' && p.category && p.concept){ const gk=glosaKey(p.concept); if(gk) learnPut('gasto_categoria', gk, p.category) }
       // Aprende glosa→subcategoría: la misma glosa recurrente propone su subcategoría con un toque, sin re-tipear.
