@@ -7,7 +7,7 @@
 // la ficha la muestra preseleccionada y una persona la confirma con «Asignar». Nunca escribe en el gasto.
 // Mismo universo que «Gastos sin proyecto» (pendientes-semanal): gastos desde 01-06-2026, con cliente que no es el interno.
 // Modos (body): dryRun = no guarda · backtest = N gastos ya asignados que la regla no resolvía: esconde su trabajo y mide si la
-// IA lo encuentra (excluir = ids que no cuentan) · max = tope de gastos por corrida (40). Interruptor learnings config gastos_trabajo_ia = 'on'
+// IA lo encuentra (excluir = ids que no cuentan) · ids = prueba sobre esos gastos (sin guardar) · max = tope de gastos por corrida (40). Interruptor learnings config gastos_trabajo_ia = 'on'
 // (sin 'on' = solo dryRun). Auth: CRON_SECRET. verify_jwt=false.
 
 import { todasRest } from "../_shared/paginar.js";
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
   try {
     const cfg = await todas("learnings?select=value&kind=eq.config&key=eq.gastos_trabajo_ia&order=updated_at.desc");
     const backtest = Math.max(0, Math.min(40, Number(body.backtest) || 0));
-    const dryRun = !!body.dryRun || !!backtest || String(cfg[0]?.value || "") !== "on";
+    const dryRun = !!body.dryRun || !!backtest || (Array.isArray(body.ids) && body.ids.length > 0) || String(cfg[0]?.value || "") !== "on";
     const max = Math.max(1, Math.min(80, Number(body.max) || 40));
     const [ex, sa, cl, ents, le, prev, tareas, docsN, docsL] = await Promise.all([
       todas("expenses?select=id,client_id,sale_id,date,entity_id,concept,amount,ot_number,project,category,type,deleted_at,apertura_id,no_descuenta_saldo,created_by&deleted_at=is.null&order=id"),
@@ -91,6 +91,9 @@ Deno.serve(async (req) => {
     const nomRs = Object.fromEntries(ents.map((e) => [String(e.id), e.name]));
     const ventaDe = Object.fromEntries(sa.map((s) => [String(s.id), s]));
     const vPor: Record<string, any[]> = {}; sa.filter(VENTA_REAL).forEach((s) => { (vPor[String(s.client_id)] = vPor[String(s.client_id)] || []).push(s); });
+    // Trabajos aún no vigentes (Propuesta/Borrador): la IA los ve para no mandar el gasto a otro parecido (falso positivo 26-10:
+    // gastos de Osorno propuestos a Villarica porque «Puesta en marcha Osorno» seguía en Propuesta).
+    const noVig: Record<string, any[]> = {}; sa.filter((s) => !s.deleted_at && ["Propuesta", "Borrador"].includes(s.status)).forEach((s) => { (noVig[String(s.client_id)] = noVig[String(s.client_id)] || []).push(s); });
     const yaIa = new Set(prev.map((r) => String(r.key)));
     const esCand = (e: any) => e.type === "gasto" && !e.apertura_id && !e.no_descuenta_saldo && e.client_id && !interno.has(String(e.client_id)) && String(e.date || "") >= DESDE;
     const resuelve = (e: any, vs: any[], aprendidos: any[]) => { const r = sugerirVentaGasto(e, vs, { aprendidos, hermanos: ex.filter((h) => h.id !== e.id && String(h.client_id) === String(e.client_id)) }); return ["aprendido", "unica", "activa", "mismo_dia"].includes(r.regla) ? r : null; };
@@ -100,6 +103,7 @@ Deno.serve(async (req) => {
     const excluir = new Set((body.excluir || []).map(String));   // backtest: gastos cuyo trabajo se decidió con ayuda de la IA (no medirla contra sí misma)
     if (backtest) cand = ex.filter((e) => esCand(e) && e.sale_id && !excluir.has(String(e.id)) && (vPor[String(e.client_id)] || []).some((s) => String(s.id) === String(e.sale_id)) && (vPor[String(e.client_id)] || []).length > 1 && !resuelve({ ...e, sale_id: null }, vPor[String(e.client_id)], []))
       .sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, backtest);
+    else if (Array.isArray(body.ids) && body.ids.length) cand = ex.filter((e) => body.ids.map(String).includes(String(e.id)) && !e.sale_id);   // prueba dirigida (siempre dryRun)
     else cand = ex.filter((e) => esCand(e) && !e.sale_id && (vPor[String(e.client_id)] || []).length > 1 && !yaIa.has(String(e.id)) && !resuelve(e, vPor[String(e.client_id)], le)).slice(0, max);
 
     const porCli: Record<string, any[]> = {}; cand.forEach((e) => { (porCli[String(e.client_id)] = porCli[String(e.client_id)] || []).push(e); });
@@ -125,11 +129,11 @@ Deno.serve(async (req) => {
 
 TRABAJOS POSIBLES DEL CLIENTE (id · título · estado · creado):
 ${vs.map((s) => `${s.id} · ${s.title} · ${s.status} · ${dmy(String(s.activated_at || s.created_at || "").slice(0, 10))}`).join("\n")}
-${tcli.length ? `\nTAREAS DEL CLIENTE CON PROYECTO:\n${tcli.join("\n")}` : ""}${dcli.length ? `\n\nDOCUMENTOS DEL CLIENTE LEÍDOS POR LA APP:\n${dcli.join("\n")}` : ""}
+${(noVig[cid] || []).length ? `\nTRABAJOS NO DISPONIBLES (aún en Propuesta o Borrador; no se pueden elegir):\n${noVig[cid].map((s) => `${s.title} · ${s.status}`).join("\n")}\n` : ""}${tcli.length ? `\nTAREAS DEL CLIENTE CON PROYECTO:\n${tcli.join("\n")}` : ""}${dcli.length ? `\n\nDOCUMENTOS DEL CLIENTE LEÍDOS POR LA APP:\n${dcli.join("\n")}` : ""}
 
 ${lineas.join("\n\n")}
 
-Reglas: elige un id de la lista o null. «alta» solo si una evidencia concreta liga ESTE gasto con ese trabajo (mismo trámite o sociedad que gastos ya asignados a ese trabajo en fechas cercanas, un documento o un correo que lo nombra). «media» si calza con el patrón del cliente pero sin prueba específica. Si dos trabajos son igual de plausibles, null. Un trabajo Terminado solo si el gasto es de su período. La evidencia es UNA línea en español formal, con la fuente (fecha del gasto hermano, asunto del correo o documento); sin nombres de personas.
+Reglas: elige un id de la lista de trabajos posibles o null. Si el gasto corresponde a un trabajo NO DISPONIBLE, responde null y escribe en la evidencia «Corresponde a «título» (en Propuesta)»; nunca lo mandes a otro trabajo parecido. La ciudad de la notaría, del conservador o del tribunal no identifica el trabajo: decide por la sociedad o el trámite. «alta» solo si una evidencia concreta y específica liga ESTE gasto con ese trabajo (mismo trámite o sociedad que gastos ya asignados a ese trabajo en fechas cercanas, un documento o un correo que lo nombra). «media» si calza con el patrón del cliente pero sin prueba específica. Si dos trabajos son igual de plausibles, null. Un trabajo Terminado solo si el gasto es de su período. La evidencia es UNA línea en español formal, con la fuente (fecha del gasto hermano, asunto del correo o documento); sin nombres de personas.
 Responde SOLO un arreglo JSON: [{"id":"<id del gasto>","sale_id":"<id o null>","confianza":"alta|media|baja","evidencia":"..."}]`;
       try {
         const res = await ia(prompt);
