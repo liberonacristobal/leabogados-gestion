@@ -43803,9 +43803,21 @@ export default function App() {
       // Ventas en CLP: congelar la UF del día (la histórica de la fecha de venta) para que su equivalente en UF NO fluctúe. Al editar, se preserva la ya guardada.
       const ufHoyCache = readUFCache()?.value || null
       const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)>0?parseFloat(f.amount_uf):null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?((parseFloat(f.uf_value)||ufHoyCache)||null):(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)>0?parseFloat(f.amount_clp):null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
+      // Estado anterior (de la base, no del estado local): la bitácora registra quién crea, activa o cambia monto/año de una venta,
+      // porque eso mueve «Vendido» (antes una activación no dejaba rastro: 26-10-2026).
+      const {data:antes}= f.id&&!DEMO ? await supabase.from('sales').select('status,amount_uf,amount_clp,year,title').eq('id',f.id).maybeSingle() : {data:null}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
       setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      { const cli=clients.find(c=>String(c.id)===String(data.client_id))?.name||''
+        const monto=data.moneda==='CLP'?`$${Math.round(Number(data.amount_clp)||0).toLocaleString('es-CL')}`:`UF ${Number(data.amount_uf)||0}`
+        const cambios=[]
+        if(antes&&antes.status!==data.status) cambios.push(`${antes.status} → ${data.status}`)
+        if(antes&&(Number(antes.amount_uf)||0)!==(Number(data.amount_uf)||0)) cambios.push(`monto UF ${Number(antes.amount_uf)||0} → ${Number(data.amount_uf)||0}`)
+        if(antes&&(Number(antes.amount_clp)||0)!==(Number(data.amount_clp)||0)) cambios.push(`monto $${Math.round(Number(antes.amount_clp)||0).toLocaleString('es-CL')} → $${Math.round(Number(data.amount_clp)||0).toLocaleString('es-CL')}`)
+        if(antes&&Number(antes.year)!==Number(data.year)) cambios.push(`año ${antes.year} → ${data.year}`)
+        if(!f.id||cambios.length) logActividad(!f.id?'ventas.creada':(antes&&antes.status!==data.status&&data.status==='Activo'?'ventas.activada':'ventas.cambio'),{tabla:'sales',id:data.id,
+          detalle:{title:`«${data.title||'Venta'}» de ${cli}: ${!f.id?`creada en ${data.status} · ${monto}`:cambios.join(' · ')}`,cliente:data.client_id,estado:data.status,antes:antes?.status||null,monto_uf:data.amount_uf,monto_clp:data.amount_clp,year:data.year}}) }
       ensureProyectoCartera(data)   // si quedó Activa, aparece en el Panel de Cartera (idempotente)
       // Venta Activa → su cliente tiene carpeta en Drive. Cubre los clientes creados desde el formulario rápido de la venta
       // (no pasan por el editor de clientes). Se lee el cliente de la BD porque puede ser recién creado; sin alertas aquí.
@@ -44017,6 +44029,7 @@ export default function App() {
     if(error){appAlert('Error: '+error.message);return}
     setSales(p=>p.map(x=>x.id===s.id?{...x,status:'Rechazada'}:x))
     if(motivo) learnPut('venta_rechazo', s.id, motivo)   // "por qué perdimos" (métrica de conversión)
+    logActividad('ventas.rechazada',{tabla:'sales',id:s.id,detalle:{title:`«${s.title||'Venta'}»: ${s.status} → Rechazada${motivo?` · ${motivo}`:''}`,antes:s.status,estado:'Rechazada'}})
     setModal(null)
   },[])
 
