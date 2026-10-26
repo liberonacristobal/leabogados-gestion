@@ -6,7 +6,7 @@
 // a los servidores (verificado 24-10-2026): no se usa ni se intenta saltar. Solo se consultan las Cortes con causas activas.
 // Dos modos (crons de días hábiles): detección (cada hora, todas las salas de esas Cortes) y body.seguir (cada 15 minutos, solo
 // las salas donde hoy hay una causa nuestra). Aviso por correo desde la casilla de la oficina «Hola <abogado>,» al abogado
-// responsable con copia al dueño del cliente, a los no socios y a learnings config causas_avisar_a: (1) la causa está en la tabla
+// responsable con copia solo a learnings config causas_copia_a (decisión del 26-10-2026: hoy Martina): (1) la causa está en la tabla
 // de hoy; (2) se acerca su turno (se está viendo hasta 2 números antes). Cada cambio queda en causas_seguimiento. Una causa que
 // no aparece queda «Sin tabla hoy» (el Monitor solo muestra el día). Si el Monitor no se puede leer: «No se pudo revisar» y un
 // correo al día como máximo a learnings config causas_avisar_fallas. Interruptor learnings config causas_tablas = 'on' (sin 'on'
@@ -147,7 +147,7 @@ function buscarEnSala(c: any, s: Sala) {
 
 // Configuración, causas y destinatarios de los avisos (una sola regla para el Monitor y para el computador de la oficina).
 async function contexto(filtro: string) {
-  const cfg = await rest("learnings?kind=eq.config&key=in.(causas_tablas,causas_avisar_a,causas_avisar_fallas,agente_casilla)&select=key,value");
+  const cfg = await rest("learnings?kind=eq.config&key=in.(causas_tablas,causas_avisar_a,causas_copia_a,causas_avisar_fallas,agente_casilla)&select=key,value");
   const ON = String(cfg.find((c: { key: string }) => c.key === "causas_tablas")?.value || "").toLowerCase() === "on";
   const dom = String(cfg.find((c: { key: string }) => c.key === "agente_casilla")?.value || "").split("@")[1] || "";
   const lista = (k: string) => String(cfg.find((c: { key: string }) => c.key === k)?.value || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((e) => e && dom && e.endsWith("@" + dom));
@@ -162,15 +162,16 @@ async function contexto(filtro: string) {
   const correoDe = (n: string) => { const k = String(n || "").trim().toLowerCase(); if (!k) return null;
     const ms = miembros.filter((m: { email: string; nombre: string }) => String(m.nombre || "").toLowerCase().split(/\s+/)[0] === k.split(/\s+/)[0] && String(m.email || "").toLowerCase().endsWith("@" + dom));
     return ms.map((m: { email: string }) => m.email.toLowerCase()).sort((a: string, b: string) => a.length - b.length)[0] || null; };
-  // Equipo en copia (decisión del usuario 23-10): el abogado dueño del cliente y los miembros que no son socios, más causas_avisar_a.
-  const noSocios = [...new Set(miembros.filter((m: { rol: string }) => m.rol !== "admin").map((m: { nombre: string }) => correoDe(m.nombre)).filter(Boolean))] as string[];
+  // Copia: solo learnings config causas_copia_a (decisión del usuario 26-10-2026, reemplaza la del 23-10 que copiaba a todos los
+  // no socios y al dueño del cliente). causas_avisar_a queda como destinatario cuando la causa no tiene abogado ni dueño.
   const equipo = lista("causas_avisar_a");
-  // Para: el abogado de la causa (o el dueño del cliente); copia: dueño del cliente, no socios y causas_avisar_a.
+  const copia = lista("causas_copia_a");
+  // Para: el abogado de la causa (o el dueño del cliente); copia: causas_copia_a.
   // deno-lint-ignore no-explicit-any
   const destinos = (c: any) => {
     const aAbog = correoDe(c.abogado), aDueno = correoDe(duenoCli[c.client_id]);
     const para = (aAbog ? [aAbog] : aDueno ? [aDueno] : equipo.slice(0, 1)) as string[];
-    const cc = [...new Set([aDueno, ...noSocios, ...equipo].filter((e) => e && !para.includes(e as string)))] as string[];
+    const cc = [...new Set(copia.filter((e) => e && !para.includes(e as string)))] as string[];
     return { para, cc, nombreA: aAbog ? String(c.abogado).trim().split(/\s+/)[0] : String(duenoCli[c.client_id] || "").split(/\s+/)[0] || "equipo" };
   };
   return { ON, fallasA: lista("causas_avisar_fallas"), todas, miembros, nomCli, destinos };

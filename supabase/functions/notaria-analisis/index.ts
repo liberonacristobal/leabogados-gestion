@@ -1,12 +1,14 @@
 // Edge Function: notaria-analisis
-// Agente de análisis de la notaría: cada lunes, un correo INTERNO (a learnings config notaria_analisis_avisar_a) con el estado de
-// las OT por pagar, lo que se sale de lo habitual y lo que la historia enseña. Solo analiza: no registra, no paga ni escribe a la
-// notaría. Las cifras salen de la regla única analisisNotaria (../_shared/notariaReglas.js), la misma de Gastos › Notaría.
+// Agente de análisis de la notaría: cada lunes, un correo INTERNO a los socios (learnings config notaria_analisis_avisar_a) en el
+// formato de «Tu semana» (26-10-2026): una tarjeta por tema con la cifra, una línea y su botón — deuda con la notaría, OT que
+// esperan fondos del cliente, pago de la última liquidación y montos por confirmar. Lo de quien liquida la notaría (por liquidar,
+// montos por confirmar, documentos por clasificar) va en su «Tu semana». Solo analiza: no registra, no paga ni escribe a la
+// notaría. Las cifras salen de las reglas únicas analisisNotaria y notariaPorLiquidar (../_shared/notariaReglas.js).
 // Interruptor learnings config notaria_analisis = 'on'. Auth: CRON_SECRET. body.dryRun = devuelve el HTML sin enviar.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { todasRest } from "../_shared/paginar.js";
-import { analisisNotaria } from "../_shared/notariaReglas.js";
+import { analisisNotaria, notariaPorLiquidar } from "../_shared/notariaReglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -33,80 +35,64 @@ Deno.serve(async (req) => {
   if (!CRON_SECRET || (body.secret !== CRON_SECRET && bearer !== CRON_SECRET)) return json({ error: "No autorizado" }, 403);
   try {
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
-    const [expenses, rendiciones, clients, docs, cfg, miembros, ultMov] = await Promise.all([
+    const [expenses, rendiciones, clients, docs, cfg, miembros, cobertura] = await Promise.all([
       todas("expenses?select=id,client_id,type,category,ot_number,amount,date,concept,materia,notaria_render_id,notaria_liquidado_at,rendered_at,no_descuenta_saldo,apertura_id,deleted_at&deleted_at=is.null"),
       todas("rendiciones?select=id,tipo,created_at,anulada_at,movimiento_id,total,sent_at"),
       todas("clients?select=id,name,is_internal"),
       todas("documentos_notaria?select=id,estado&estado=in.(por_clasificar,pendiente_ot)"),
       todas("learnings?select=id,key,value&kind=eq.config&key=in.(notaria_analisis,notaria_analisis_avisar_a)"),
       todas("miembros?select=email,nombre&order=email.asc"),
-      fetch(`${SB_URL}/rest/v1/cartola_movimientos?select=fecha&order=fecha.desc&limit=1`, { headers: H }).then((r) => r.json()),
+      fetch(`${SB_URL}/rest/v1/rpc/cartola_cobertura`, { method: "POST", headers: H, body: "{}" }).then((r) => r.json()).catch(() => []),
     ]);
     // deno-lint-ignore no-explicit-any
     const cli = (id: unknown) => (clients || []).find((c: any) => String(c.id) === String(id));
     // deno-lint-ignore no-explicit-any
     const esOficina = (cid: unknown) => { const c: any = cli(cid); return !!c && !!c.is_internal; };
     const a = analisisNotaria({ expenses, rendiciones, hoy, esOficina });
-    // deno-lint-ignore no-explicit-any
-    const nom = (id: unknown) => (cli(id) as any)?.name || "Sin cliente";
     const cfgV = (k: string) => String((cfg || []).find((c: { key: string }) => c.key === k)?.value || "");
     const para = cfgV("notaria_analisis_avisar_a").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
-    const cartolaHasta = ultMov?.[0]?.fecha || null;
-    const nPorClas = (docs || []).filter((d: { estado: string }) => d.estado === "por_clasificar").length, nPendOt = (docs || []).filter((d: { estado: string }) => d.estado === "pendiente_ot").length;
-
-    // ── Molde del correo de marca (cierre-mes).
-    const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", MUT = "#66787F", FAINT = "#9DAEB4", AMB = "#9A6410";
-    const sec = (t: string, col = NV) => `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:0 0 8px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${col};">${t}</span></div>`;
-    const gap = `<div style="height:22px;line-height:22px;font-size:1px;">&nbsp;</div>`;
-    const filas = (rows: [string, string, string, string?][]) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows.map(([t, s, m, col], i) => { const bt = i ? `border-top:1px solid ${HAIR};` : ""; return `<tr><td valign="top" style="padding:10px 0;${bt}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${t}</div>${s ? `<div style="font-size:12px;color:${MUT};margin-top:2px;">${s}</div>` : ""}</td><td valign="top" align="right" style="padding:10px 0 10px 12px;white-space:nowrap;font-size:13.5px;font-weight:700;color:${col || INK};${bt}">${m}</td></tr>`; }).join("")}</table>`;
-    const link = (t: string, q: string) => `<a href="${APP}/${q}" style="color:${NV};font-weight:700;text-decoration:none;">${t} &rarr;</a>`;
-
-    const liq = a.ultimaLiq;
-    const nOtLiq = liq ? expenses.filter((e: { notaria_render_id: string }) => String(e.notaria_render_id) === String(liq.id)).length : 0;
-    const estado: [string, string, string, string?][] = [
-      ["OT por pagar a la notaría", `${a.pend.length} OT de ${a.nClientes} clientes &middot; ${link("Ver notaría", "?ir=notaria")}`, fm(a.total)],
-      ["Fondo de clientes para esas OT", `${a.clientes.filter((c: { disp: number; oficina: boolean }) => !c.oficina && c.disp > 0).length} clientes con fondo disponible`, fm(a.cubre)],
-    ];
-    if (liq) estado.push([`Liquidación del ${dmy(liq.created_at)}`, `${nOtLiq} OT &middot; ${liq.sent_at ? "enviada" : "sin enviar"} &middot; ${liq.movimiento_id ? "pagada" : `sin pago en la cartola${cartolaHasta ? ` al ${dmy(cartolaHasta)}` : ""}`}`, fm(liq.total), liq.movimiento_id ? INK : AMB]);
-
-    const conf: [string, string, string, string?][] = [];
-    if (a.largas.length) { const l0 = a.largas[0]; conf.push([`${a.largas.length} OT con más de ${a.demora.max} días por pagar`, `más que la liquidación más lenta desde que existe la app &middot; la más antigua, OT ${esc(String(l0.ot_number))} del ${dmy(l0.date)}`, fm(a.largas.reduce((s: number, e: { amount: number }) => s + (Number(e.amount) || 0), 0))]); }
-    a.sinFondo.slice(0, 4).forEach((c: { cid: string; ots: unknown[]; ot: number; fondo: number }) => conf.push([`${esc(nom(c.cid))} &middot; ${c.ots.length} OT sin fondo disponible`, c.fondo > 0 ? "fondo depositado ya usado" : "nunca ha depositado fondos", fm(c.ot)]));
-    if (a.sinFondo.length > 4) conf.push([`${a.sinFondo.length - 4} clientes más sin fondo disponible`, "", fm(a.sinFondo.slice(4).reduce((s: number, c: { ot: number }) => s + c.ot, 0))]);
+    const nl = notariaPorLiquidar(expenses, { esOficina });
+    // Hasta qué día llega la cartola de la cuenta de gastos (desde donde se paga a la notaría): sin cartola, el pago no se puede ver.
     // deno-lint-ignore no-explicit-any
-    a.fuera.forEach((x: any) => conf.push([`OT ${esc(String(x.e.ot_number))} &middot; ${esc(x.tipo.toLowerCase())}`, `${esc(nom(x.e.client_id))} &middot; lo habitual es ${fm(x.med)} &middot; confirmar con la OT`, fm(x.e.amount)]));
-    if (nPorClas || nPendOt) conf.push([`${nPorClas} documentos de la notaría por clasificar`, nPendOt ? `${nPendOt} esperan su OT` : "", ""]);
+    const cobG = (Array.isArray(cobertura) ? cobertura : []).filter((x: any) => x.rol === "gastos").map((x: any) => String(x.hasta || "").slice(0, 10)).sort().pop() || null;
 
-    const reglas: [string, string, string, string?][] = [
-      ["1. Cliente de la OT por el RUT de la sociedad", "nunca por el RUT de un abogado del estudio", ""],
-      ["2. Liquidación preparada los días 15 y 30", "con las OT que cubre el fondo del cliente &middot; la revisa y la envía Martina", ""],
-      ["3. Solicitud de fondos a los 60 días sin fondo", `hoy: ${a.sinFondo60.length} OT por ${fm(a.sinFondo60.reduce((s: number, e: { amount: number }) => s + (Number(e.amount) || 0), 0))}`, ""],
-      ["4. OT por confirmar antes de liquidar", "monto mayor a 3 veces lo habitual del acto", ""],
-      ["5. Aviso de liquidación sin pago a los 10 días", "el enlace del pago a su liquidación ya existe", ""],
-    ];
-    const tops = a.actos.filter((x: { tipo: string; n: number }) => x.tipo !== "Otro" && x.n >= 15).slice(0, 4);
-    const aprend: [string, string, string, string?][] = [
-      ["Demora de pago de una OT", `mediana desde que existe la app &middot; la mitad entre ${a.demora.p25} y ${a.demora.p75} días &middot; ${a.demora.n} OT`, `${a.demora.mediana} días`],
-      // deno-lint-ignore no-explicit-any
-      ...tops.map((x: any) => [esc(x.tipo), `${x.n} OT &middot; entre ${fm(x.min)} y ${fm(x.max)}`, fm(x.mediana)] as [string, string, string]),
-    ];
+    // ── Formato A de «Tu semana»: tarjetas en doble columna (cifra, una línea, botón). El detalle está en la app.
+    const NV = "#003C50", HAIR = "#E4E8EB", INK = "#3D3D3D", MUT = "#537281", FAINT = "#99ABB4", AMB = "#854F0B", RED = "#A32D2D", GRN = "#0F6E56", SOFTBG = "#F5F7F9";
+    const tile = (tit: string, cifra: string, linea: string, accion: string, ir: string, col = INK) => `<td valign="top" width="50%" style="padding:5px;"><div style="background:${SOFTBG};border-radius:12px;padding:12px 13px;">` +
+      `<div style="font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NV};">${esc(tit)}</div>` +
+      `<div style="font-size:20px;font-weight:800;color:${col};margin-top:4px;">${cifra}</div>` +
+      `<div style="font-size:11.5px;color:${MUT};margin-top:1px;">${linea}</div>` +
+      `<div style="margin-top:7px;"><a href="${APP}/?ir=${ir}" style="font-size:12px;font-weight:700;color:${NV};text-decoration:none;">${esc(accion)} &rarr;</a></div></div></td>`;
+    const suma = (xs: { amount: number }[]) => xs.reduce((s: number, e: { amount: number }) => s + (Number(e.amount) || 0), 0);
+    const t: string[] = [];
+    const porLiq = nl.pagables.length + nl.sinCliente.length;   // misma cifra que la tarjeta «Notaría» de «Tu semana» de quien liquida
+    t.push(tile("Por pagar", fm(a.total), `${a.pend.length} OT${porLiq ? ` · ${porLiq} por liquidar` : ""}`, "Ver la deuda", "notaria"));
+    if (a.sinFondo60.length) t.push(tile("Esperan fondos", fm(suma(a.sinFondo60)), `${a.sinFondo60.length} OT con más de 60 días`, "Pedir fondos", "rendir", RED));
+    const liq = a.ultimaLiq;
+    if (liq) {
+      const f = String(liq.created_at || "").slice(0, 10);
+      const [lin, col] = liq.movimiento_id ? [`${dmy(f)} · pagada`, GRN]
+        : (!cobG || cobG < f) ? [`${dmy(f)} · falta la cartola`, AMB]
+        : [`${dmy(f)} · <b style="color:${RED};">sin pago en la cartola</b>`, RED];
+      t.push(tile("Última liquidación", fm(liq.total), lin, "Abrir Banco", "cobros", col === GRN ? INK : col));
+    }
+    if (a.fuera.length) t.push(tile("Por confirmar", fm(a.fuera.reduce((s: number, x: { e: { amount: number } }) => s + (Number(x.e.amount) || 0), 0)), `${a.fuera.length} OT sobre 3 veces lo habitual`, "Revisar OT", "notaria", AMB));
+    const filasT: string[] = []; for (let i = 0; i < t.length; i += 2) filasT.push(`<tr>${t[i]}${t[i + 1] || '<td width="50%"></td>'}</tr>`);
     const lunes = (() => { const d = new Date(hoy + "T12:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10); })();
-    const asunto = `Análisis de la notaría · semana del ${dmy(lunes)}`;
+    const asunto = `Notaría · semana del ${dmy(lunes)}`;
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#ECEFF1;margin:0;padding:22px 12px;">
-<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
-  <div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="${APP}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
-  <div style="padding:26px 26px 20px;">
-    <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;">Notaría: semana del ${dmy(lunes)}</div>
-    <div style="font-size:12.5px;color:${MUT};margin-top:6px;margin-bottom:18px;line-height:1.55;">${esc(holaEquipo(para, miembros))}. Este es el análisis de la notaría de esta semana:</div>
-    ${sec("Estado")}${filas(estado)}
-    ${conf.length ? gap + sec("Por confirmar", AMB) + filas(conf) : ""}
-    ${gap}${sec("Reglas propuestas")}${filas(reglas)}
-    ${gap}${sec("Lo que la app aprendió")}${filas(aprend)}
+<body style="margin:0;background:#ECEFF1;padding:22px 10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 26px rgba(0,44,64,.09);">
+  <div style="background:${NV};padding:20px 28px;text-align:center;"><img src="${APP}/le-logo-blanco.png" alt="Liberona Escala Abogados" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div>
+  <div style="padding:24px 17px 18px;">
+    <div style="padding:0 5px;"><div style="font-size:18px;color:${INK};font-weight:700;">${esc(holaEquipo(para, miembros))}</div>
+    <div style="font-size:12.5px;color:${MUT};margin:4px 0 16px;">Notaría · semana del ${dmy(lunes)}</div></div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filasT.join("")}</table>
   </div>
-  <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; Liberona Escala Abogados</div></div>
+  <div style="padding:14px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl · Liberona Escala Abogados</div></div>
 </div></body></html>`;
-    const res = { ok: true, ot: a.pend.length, total: a.total, cubre: a.cubre, por_confirmar: conf.length, demora: a.demora };
+    void docs;   // documentos por clasificar: van en «Tu semana» de quien liquida la notaría
+    const res = { ok: true, ot: a.pend.length, total: a.total, pagables: nl.pagables.length, esperan60: a.sinFondo60.length, por_confirmar: a.fuera.length, cartola_gastos: cobG, demora: a.demora };
     if (body.dryRun) return json({ ...res, dryRun: true, subject: asunto, para, html });
     if (cfgV("notaria_analisis").trim().toLowerCase() !== "on") return json({ ...res, enviado: false, motivo: "interruptor apagado (learnings config notaria_analisis != on)" });
     const to = body.testTo ? [String(body.testTo)] : para;

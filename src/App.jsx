@@ -1146,6 +1146,26 @@ const saldoCajaChica = (pettyCash, expenses, userName) => {
   return entregado - gastado
 }
 
+// Anexo de una liquidación de caja chica (decisión del 26-10-2026): estadísticas con lo que la app ya tiene, de manera anexa.
+// Gasto de caja chica = la misma regla que saldoCajaChica (gasto cargado por la persona, sin paid_by_client). Meses = los 6
+// últimos hasta el de la liquidación; el promedio es sobre los meses con gasto.
+const anexoCajaChica = (expenses, clients, persona, gastosLiq, hasta) => {
+  const sum = xs => xs.reduce((a,e)=>a+(Number(e.amount)||0),0)
+  const deCaja = (expenses||[]).filter(e=>!e.deleted_at&&e.type==='gasto'&&e.created_by===persona&&!e.paid_by_client)
+  const porCat = {}; (gastosLiq||[]).forEach(e=>{ const k=e.category||'Otro'; (porCat[k]=porCat[k]||[]).push(e) })
+  const categorias = Object.entries(porCat).map(([cat,xs])=>({cat,n:xs.length,total:sum(xs)})).sort((a,b)=>b.total-a.total)
+  const fin = String(hasta||isoLocal(Date.now())).slice(0,7), [y,m] = fin.split('-').map(Number), meses = []
+  for(let i=5;i>=0;i--){ const d=new Date(y,m-1-i,1); meses.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) }
+  const mesDe = e => String(e.date||'').slice(0,7)
+  const porMes = meses.map(k=>{ const xs=deCaja.filter(e=>mesDe(e)===k); return {mes:k, etiqueta:`${MES_C[Number(k.slice(5,7))-1]} ${k.slice(0,4)}`, n:xs.length, total:sum(xs)} })
+  const conGasto = porMes.filter(x=>x.n>0)
+  const promedio = conGasto.length ? Math.round(conGasto.reduce((a,x)=>a+x.total,0)/conGasto.length) : 0
+  const enVentana = deCaja.filter(e=>mesDe(e)>=meses[0]&&mesDe(e)<=fin)
+  const porCli = {}; enVentana.forEach(e=>{ const k=e.client_id||'__sin__'; (porCli[k]=porCli[k]||[]).push(e) })
+  const clientes = Object.entries(porCli).map(([k,xs])=>({ id:k==='__sin__'?null:k, name:k==='__sin__'?'Sin cliente':((clients||[]).find(c=>String(c.id)===String(k))?.name||'—'), n:xs.length, total:sum(xs) })).sort((a,b)=>b.total-a.total).slice(0,5)
+  return { categorias, porMes, promedio, clientes }
+}
+
 // Calce caja chica ↔ transferencia del banco. FUENTE ÚNICA: panel "Revisión de caja chica", registro del miembro (enlace al instante)
 // y, en espejo, el edge caja-chica-sweep. Regla del usuario (2026-10-09): MISMO MONTO y transferencia el MISMO DÍA de la caja o el
 // ANTERIOR = la misma caja → se enlaza sola (si hay varias iguales se aparean en orden: son equivalentes). Excepción de seguridad:
@@ -2871,7 +2891,8 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
       // Trazabilidad: avisar a los admin cuando un limited liquida su caja chica (no cuando liquida un admin). No bloquea.
       // Resumen de caja para la liquidación (fuente única saldoCajaChica): fondo recibido · gastado · saldo; si es negativo, lo puso de su bolsillo → a reembolsar.
       const fondoTot=miCaja.reduce((a,p)=>a+(p.amount||0),0), gastadoTot=fondoTot-saldoCaja, cubierto=Math.max(0,-saldoCaja)
-      if(!adminNombres.includes(me)){ try{ sendMailServer({to:adminEmails, subject:`${me} liquidó su caja chica · ${fmtCLP(totalReal)}`, html:`<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a"><b>${me}</b> liquidó su caja chica.<br>Período ${periodo} · ${marcados.length} gasto(s) · <b>${fmtCLP(totalReal)}</b>.${cubierto>0?`<br><b style="color:#A32D2D">Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}</b>`:''}</div>`, text:`${me} liquidó su caja chica. Período ${periodo}, ${marcados.length} gastos, ${fmtCLP(totalReal)}.${cubierto>0?` Cubierto por ${me} — a reembolsar ${fmtCLP(cubierto)}.`:''}`}).catch(()=>{}) }catch(_){} }
+      // Aviso a los socios al teléfono (decisión del 26-10-2026: ya no por correo); el PDF y el anexo quedan en la liquidación.
+      if(!adminNombres.includes(me)&&!DEMO){ try{ supabase.functions.invoke('push',{body:{action:'avisar',tipo:'cajachica',etiqueta:`liq-${renderId}`,titulo:'Liquidación de caja chica',cuerpo:`${me} · ${marcados.length} gasto${marcados.length!==1?'s':''} · ${fmtCLP(totalReal)}${cubierto>0?` · a reembolsar ${fmtCLP(cubierto)}`:''}`,url:`/?liquidacion=${renderId}`}}).catch(()=>{}) }catch(_){} }
       setSelected(new Set())
       setConfirmLiq(false)
       let correoOk = false
@@ -3034,17 +3055,9 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
           {ln('Gastado',fmtCLP(gastadoTot))}
           {saldoCaja<0 ? ln('Cubierto por ti · a reembolsar',fmtCLP(-saldoCaja),C.overdueText,true) : ln('Saldo disponible',fmtCLP(saldoCaja),C.greenText,true)}
         </div>
-        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
-          <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Se envía a</div>
-          <input value={enviarA} onChange={e=>setEnviarA(e.target.value)} placeholder='correo@oficina.cl' style={inp}/>
-          <div style={{fontSize:10.5,color:C.muted,margin:'4px 0 8px'}}>Administradores de la oficina (de la lista de miembros). Puedes cambiarlo.</div>
-          <input value={cc} onChange={e=>setCc(e.target.value)} placeholder='CC (opcional)' style={inp}/>
-        </div>
-        <ActBtn variant='primary' size='lg' full disabled={saving} onClick={()=>handleLiquidar(true)}>{saving?'Liquidando…':'Liquidar y enviar'}</ActBtn>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <ActBtn full disabled={saving} onClick={generatePDF} style={{color:C.accent}}>Descargar PDF</ActBtn>
-          <ActBtn full disabled={saving} onClick={()=>handleLiquidar(false)} style={{color:C.accent}}>Solo liquidar</ActBtn>
-        </div>
+        <ActBtn variant='primary' size='lg' full disabled={saving} onClick={()=>handleLiquidar(false)}>{saving?'Liquidando…':'Liquidar'}</ActBtn>
+        {!adminNombres.includes(me)&&<div style={{fontSize:11,color:C.muted,textAlign:'center'}}>Los socios reciben el aviso en el teléfono, con el PDF en la app.</div>}
+        <ActBtn full disabled={saving} onClick={generatePDF} style={{color:C.accent}}>Descargar PDF</ActBtn>
       </div>)
     return <FlujoPagina origen='Caja chica' titulo='Liquidar' ctx={`${gastosSel.length} gasto${gastosSel.length!==1?'s':''} · ${fmtCLP(totalLiq)}`} onBack={()=>{ if(!saving) setConfirmLiq(false) }} maxW={1060}>
       {isDesktop
@@ -3554,10 +3567,10 @@ function NotificacionesPagina({user, isAdmin}){
     'sin-soporte':['No disponibles en este navegador',C.muted,C.bgSoft], instalar:['Falta agregar la app al inicio',C.soonText,C.soonBg], cargando:['Revisando…',C.muted,C.bgSoft] }[estado]
   const btn = (txt,on,principal)=><button onClick={on} disabled={trabajando} style={{height:40,padding:'0 16px',borderRadius:10,border:principal?'none':`1px solid ${C.border}`,background:principal?C.accent:'#fff',color:principal?'#fff':C.accent,fontSize:13,fontWeight:700,cursor:trabajando?'default':'pointer',opacity:trabajando?.6:1}}>{txt}</button>
   // Tipos de aviso (mismos códigos que _shared/push.ts). Cada dispositivo apaga los que no quiere.
-  const avisos = [['tareas','Tareas','Asignadas o delegadas a ti, y terminadas de las que asignaste.'],['causas','Causas en tabla','Tu causa en la tabla del día y cuando se acerca su turno.'],
+  const avisos = [['tareas','Tareas','Asignadas o delegadas a ti, terminadas de las que asignaste y las que vencen hoy.'],['causas','Causas en tabla','Tu causa en la tabla del día y cuando se acerca su turno.'],
     ['fondos','Fondos recibidos','Fondos de tus clientes conciliados desde el banco.'],['notaria','Documentos de la notaría','Escrituras, extractos y cartas de tus clientes.'],
     ['clientes','Remates y Diario Oficial','Remate de la Tesorería o publicación de un cliente tuyo.'],
-    ...(isAdmin?[['pagos','Pagos recibidos','Pagos de clientes conciliados desde el banco.'],['normativa','Normativa del SII','Oficios, circulares y resoluciones nuevas.'],['sistema','Procesos y cartola','Un proceso automático falló o falta la cartola del banco.']]:[])]
+    ...(isAdmin?[['cajachica','Caja chica','Liquidaciones de caja chica del equipo.'],['pagos','Pagos recibidos','Pagos de clientes conciliados desde el banco.'],['normativa','Normativa del SII','Oficios, circulares y resoluciones nuevas.'],['sistema','Procesos y cartola','Un proceso automático falló o falta la cartola del banco.']]:[])]
   const cambiarTipo = async k=>{ const nv=tiposOff.includes(k)?tiposOff.filter(x=>x!==k):[...tiposOff,k]; setTiposOff(nv)
     if(DEMO||!endpoint) return; const {error}=await supabase.from('push_suscripciones').update({tipos_off:nv}).eq('endpoint',endpoint); if(error){ setTiposOff(tiposOff); setMsg({tipo:'error',texto:'No se pudo guardar: '+error.message}) } }
   return (
@@ -22799,10 +22812,12 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     let ok=0; for(const [email,grupo] of entries){ if(await enviarPedir1(email,grupo,modo)) ok++ }
     appAlert(txtResumenEnvio({ok, no:entries.length-ok, via:modo, que:ok===1?'aviso':'avisos'}))
   }
+  const [liqPend,setLiqPend]=useState(null)   // liquidación de caja chica por abrir (aviso del teléfono), hasta que carguen las liquidaciones
   // Puentes tras cargar notaría: navegar directo a la sub-vista pedida desde la pantalla de resultado (orphans / deuda / rendir).
   useEffect(()=>{ if(!navTo) return
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
     if(navTo&&navTo.cli){ const c=(clients||[]).find(x=>String(x.id)===String(navTo.cli)); if(c){ setHubOpen(false); if(isDesktop) setShowBuscarClientes(true); setSelectedClient(c) } }
+    if(navTo&&navTo.liq) setLiqPend(String(navTo.liq))   // aviso del teléfono de una liquidación de caja chica
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
@@ -22810,6 +22825,8 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     else if(navTo==='rendirPedir'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('pedir'); setRendAbg('Todos'); setRendSub('rendir') }   // correo de cierre › «Rendir y pedir»   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
     onNavDone&&onNavDone()
   },[navTo])
+  // Abre la liquidación pedida por el aviso del teléfono apenas están cargadas las liquidaciones.
+  useEffect(()=>{ if(!liqPend) return; const r=(rendiciones||[]).find(x=>String(x.id)===liqPend); if(r){ setLiqDetail(r); setLiqPend(null) } },[liqPend,rendiciones])
   // Ledger de cobros de la notaría (fuente única): cada gasto de notaría con su estado (pagada/en liquidación/por pagar) y error (sin cliente/duplicado), agrupado por carga masiva.
   const notaLedger = useMemo(()=>{
     const liqById={}; (notaLiquidaciones||[]).forEach(r=>{ liqById[String(r.id)]=r })
@@ -24576,6 +24593,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     const porCli={}; gs.forEach(e=>{ const k=e.client_id||'__sin__'; (porCli[k]=porCli[k]||[]).push(e) })
     const cub=r.saldo_caja!=null?Math.max(0,-r.saldo_caja):null
     const saldoHoy=r.user_name?saldoCajaChica(pettyCash,expenses,r.user_name):null
+    const anx=anexoCajaChica(expenses,clients,r.user_name,gs,isoLocal(r.created_at)||null)
     const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}
     const fila=(e)=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10.5,color:C.muted}}>{RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div><span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>)
     const page=<FlujoPagina origen='Gastos' titulo='Liquidación de caja chica' ctx={r.user_name||null} onBack={()=>setLiqDetail(null)} maxW={1120}>
@@ -24597,7 +24615,17 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
             {r.ot_numbers&&<div style={{padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,fontSize:11,color:C.muted}}>OT {r.ot_numbers}</div>}
             {saldoHoy!=null&&saldoHoy<0&&<div onClick={()=>onEntregarCaja&&onEntregarCaja(r.user_name,-saldoHoy)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.overdueText}}>Reembolso pendiente</div><div style={{fontSize:10.5,color:C.muted}}>Saldo de caja hoy</div></div><span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Entregar caja {fmt(-saldoHoy)} <Gl n='chevron'/></span></div>}
             {saldoHoy!=null&&saldoHoy>=0&&cub>0&&<div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`}}><span style={{fontSize:12.5,fontWeight:600,color:C.greenText}}>Reembolsado</span><span style={{fontSize:11,color:C.muted}}>saldo de caja hoy {fmt(saldoHoy)}</span></div>}
+            {gs.length>0&&<div onClick={async()=>{ try{ const b64=await liquidacionPdfBase64({me:r.user_name, periodo:r.periodo, gastos:gs, clients, resumen:r.saldo_caja!=null?{fondo:r.fondo_recibido, gastado:r.gastado, saldo:r.saldo_caja}:null, anexo:anx}); const a=document.createElement('a'); a.href='data:application/pdf;base64,'+b64; a.download=`Liquidacion ${r.user_name||''} ${r.periodo||''}`.replace(/[^\w\s-]/g,'').trim()+'.pdf'; a.click() }catch(e){ appAlert('No se pudo armar el PDF: '+(e?.message||e)) } }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><span style={{fontSize:12.5,fontWeight:600,color:C.accent}}>Descargar PDF</span><span style={{fontSize:11,color:C.muted}}>con el anexo</span></div>}
           </div>
+          {gs.length>0&&<div style={{...card,marginTop:12}}><div style={{...SEC_LBL,paddingBottom:4}}>Anexo · {r.user_name}</div>
+            <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'8px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`}}>Por categoría</div>
+            {anx.categorias.map(x=><div key={x.cat} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.cat} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}
+            <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'10px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`,marginTop:6}}>Caja chica por mes</div>
+            {anx.porMes.map(x=><div key={x.mes} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12}}><span style={{color:x.n?C.text:C.muted}}>{x.etiqueta} <span style={{color:C.muted}}>· {x.n} gasto{x.n!==1?'s':''}</span></span><span style={{fontWeight:600,color:x.n?C.text:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}
+            <div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 0 2px',fontSize:12,borderTop:`0.5px solid ${C.bgSoft}`,marginTop:2}}><span style={{fontWeight:700,color:C.text}}>Promedio mensual</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(anx.promedio)}</span></div>
+            {anx.clientes.length>0&&<><div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'10px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`,marginTop:6}}>Clientes con más gasto · 6 meses</div>
+            {anx.clientes.map(x=><div key={x.id||'sin'} onClick={()=>x.id&&onOpenClientFicha&&onOpenClientFicha(x.id)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12,cursor:x.id?'pointer':'default'}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.name} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}</>}
+          </div>}
         </div>
       </div>
     </FlujoPagina>
@@ -30435,7 +30463,7 @@ async function rendicionPdfBase64(r, client, expenses, clientEntities, user, att
   return doc.output('datauristring').split(',')[1]
 }
 // PDF de la liquidación de caja chica (jsPDF) → base64. Agrupado por cliente, mismo estilo que la rendición.
-async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo, resumen}){
+async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo, resumen, anexo}){
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
   const W = doc.internal.pageSize.getWidth()
@@ -30495,6 +30523,24 @@ async function liquidacionPdfBase64({me, periodo, gastos, clients, titulo, resum
   doc.text('Atentamente,', 40, y); y+=15
   doc.setFont('helvetica','bold'); doc.text(me||'', 40, y); y+=14
   doc.setFont('helvetica','normal'); doc.text(BRAND.nombre, 40, y)
+  // Anexo (anexoCajaChica): por categoría, caja chica por mes con su promedio y clientes con más gasto en 6 meses.
+  if(anexo&&(anexo.categorias||[]).length){
+    doc.addPage(); doc.setFillColor(0,60,80); doc.rect(0,0,W,52,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(14)
+    doc.text(`Anexo · ${me||''}`, 40, 32); let ay=86
+    const tabla=(tit,filas,pie)=>{ if(ay>660){ doc.addPage(); ay=60 }
+      doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(0,60,80); doc.text(tit.toUpperCase(), 40, ay); ay+=7
+      doc.setDrawColor(0,60,80); doc.setLineWidth(1); doc.line(40,ay,W-40,ay); ay+=16
+      filas.forEach(([a,b,c])=>{ if(ay>720){ doc.addPage(); ay=60 }
+        doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(String(a).slice(0,56), 40, ay)
+        doc.setTextColor(83,114,129); doc.text(String(b), W-170, ay, {align:'right'})
+        doc.setFont('helvetica','bold'); doc.setTextColor(61,61,61); doc.text(String(c), W-40, ay, {align:'right'}); ay+=17 })
+      if(pie){ doc.setDrawColor(228,232,235); doc.line(40,ay-8,W-40,ay-8); doc.setFont('helvetica','bold'); doc.setTextColor(61,61,61); doc.text(pie[0], 40, ay+4); doc.text(pie[1], W-40, ay+4, {align:'right'}); ay+=20 }
+      ay+=14 }
+    const g=n=>`${n} gasto${n!==1?'s':''}`
+    tabla('Por categoría · esta liquidación', anexo.categorias.map(x=>[x.cat, g(x.n), fmtN(x.total)]))
+    tabla('Caja chica por mes', anexo.porMes.map(x=>[x.etiqueta, g(x.n), fmtN(x.total)]), ['Promedio mensual', fmtN(anexo.promedio)])
+    if((anexo.clientes||[]).length) tabla('Clientes con más gasto · 6 meses', anexo.clientes.map(x=>[x.name, g(x.n), fmtN(x.total)]))
+  }
   return doc.output('datauristring').split(',')[1]
 }
 // xlsx-js-style: fork de SheetJS que SÍ escribe estilos de celda (colores, bordes, moneda). El xlsx plano no.
@@ -43420,6 +43466,12 @@ export default function App() {
       else if(ir==='subarriendo') setTab('subarriendo')
       else if(ir==='radar'){ try{ sessionStorage.setItem('abrir_radar','1') }catch(_){} setTab('inteligencia') }   // aviso de normativa del SII → Radar abierto   // correo del lunes → "Vence esta semana" abre Cobranza
     }catch(_){}
+  },[user,userRole,deepLinkTick])
+  // Aviso del teléfono de una liquidación de caja chica: ?liquidacion=<id> abre su página (con el PDF y el anexo).
+  useEffect(()=>{ if(!user||!userRole) return
+    try{ const id=new URLSearchParams(window.location.search).get('liquidacion'); if(!id) return
+      try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
+      setTab('expenses'); setExpNav({liq:id}) }catch(_){}
   },[user,userRole,deepLinkTick])
   // Deep-link a la ficha de un cliente (correo "cuotas sin facturar"): ?cliente=<id> → abre la ficha en Ventas (cotejo).
   // Espera a que carguen los clientes; recién ahí abre y limpia la URL (handleOpenClientFicha busca el cliente en `clients`).
