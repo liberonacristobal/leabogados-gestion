@@ -251,3 +251,29 @@ test('cuotas por emitir: lo recibido a cuenta del mismo trabajo, por orden de ve
   assert.equal(r.get('m'), undefined)          // subarriendo: cada pago es de su mes
   assert.equal(recibidoACuenta(cuotas, [{ sale_id: 's1', monto: 3000000, estado: 'disponible' }], sales).get('c4'), 1000000) // tope = monto de la cuota
 })
+
+test('venta del gasto: aprendido por venta o nombre, coherente, y la glosa genérica solo con su razón social', async () => {
+  const { sugerirVentaGasto, glosaKey } = await import('../supabase/functions/_shared/ventaGastoReglas.js')
+  const V = [{ id: 'a', title: 'Puesta en marcha Ovalle', status: 'Activo' }, { id: 'b', title: 'Administración SPV', status: 'Activo' }, { id: 'c', title: 'Reorganización', status: 'Terminado' }]
+  const k = c => `cli::${glosaKey(c)}`
+  const pat = 'Patente comercial Fortelio'
+  // Aprendido: por id (nuevo) o por nombre (filas antiguas); dos decisiones = se aplica sola.
+  let r = sugerirVentaGasto({ client_id: 'cli', concept: pat }, V, { aprendidos: [{ key: k(pat), value: 'Administración SPV' }, { key: k(pat), value: 'x', meta: { sale_id: 'b' } }] })
+  assert.equal(r.regla, 'aprendido'); assert.equal(r.venta.id, 'b'); assert.equal(r.auto, true)
+  // Si alguna vez fue a otro trabajo, no se sugiere por aprendido.
+  r = sugerirVentaGasto({ client_id: 'cli', concept: pat }, V, { aprendidos: [{ key: k(pat), value: 'Administración SPV' }, { key: k(pat), value: 'Puesta en marcha Ovalle' }] })
+  assert.notEqual(r.regla, 'aprendido')
+  // Glosa genérica: sin razón social no cuenta lo aprendido; con la misma razón social, sí.
+  const man = 'Gastos notariales — Mandato judicial amplio'
+  const ap = [{ key: k(man), value: 'x', meta: { sale_id: 'a', entity_id: 'rs1' } }]
+  assert.notEqual(sugerirVentaGasto({ client_id: 'cli', concept: man }, V, { aprendidos: ap }).regla, 'aprendido')
+  assert.notEqual(sugerirVentaGasto({ client_id: 'cli', concept: man, entity_id: 'rs2' }, V, { aprendidos: ap }).regla, 'aprendido')
+  assert.equal(sugerirVentaGasto({ client_id: 'cli', concept: man, entity_id: 'rs1' }, V, { aprendidos: ap }).venta.id, 'a')
+  // Mismo día: el Uber del día de las escrituras va al trabajo de esas escrituras (no a otro de otra razón social).
+  const her = [{ id: 'h1', client_id: 'cli', sale_id: 'a', date: '2026-07-14', entity_id: 'rs1' }, { id: 'h2', client_id: 'cli', sale_id: 'b', date: '2026-07-14', entity_id: 'rs9' }]
+  r = sugerirVentaGasto({ id: 'g', client_id: 'cli', concept: 'Uber a la notaría', date: '2026-07-14', entity_id: 'rs1' }, V, { hermanos: her })
+  assert.equal(r.regla, 'mismo_dia'); assert.equal(r.venta.id, 'a')
+  assert.equal(sugerirVentaGasto({ id: 'g', client_id: 'cli', concept: 'Uber a la notaría', date: '2026-07-14' }, V, { hermanos: her }).regla === 'mismo_dia', false) // dos trabajos ese día: no decide
+  // Sin regla por razón social: la razón social de facturación no dice de qué trabajo es el gasto.
+  assert.notEqual(sugerirVentaGasto({ client_id: 'cli', concept: 'Copia', entity_id: 'rs5' }, V, { billing: [{ sale_id: 'b', entity_id: 'rs5' }] }).regla, 'rs')
+})
