@@ -120,6 +120,25 @@ export function anticiposSubarriendo(anticipos, billing, sales, conciliacion) {
   return out
 }
 
+// Gasto con razón social de OTRO cliente (la razón social es de otra ficha): queda mal en su rendición y en su factura.
+export const gastoRsAjena = (expenses, ents) => {
+  const duenio = new Map((ents || []).map(e => [String(e.id), String(e.client_id)]))
+  return (expenses || []).filter(e => e && !e.deleted_at && e.entity_id && e.client_id && duenio.has(String(e.entity_id)) && duenio.get(String(e.entity_id)) !== String(e.client_id))
+}
+// Trabajo Terminado que sigue recibiendo gastos: gastos con FECHA en los últimos `dias` → reabrirlo o pasarlos a otro trabajo.
+// No por fecha de carga: las reimportaciones dejan created_at reciente en gastos antiguos (falso positivo 25-10-2026). ok =
+// { sale_id: fecha «Sigue terminado» }: vuelve a aparecer solo con gastos cargados después de esa fecha.
+export function terminadaConGastos(sales, expenses, hoy, { dias = 30, ok = {} } = {}) {
+  const lim = new Date(new Date(String(hoy).slice(0, 10) + 'T12:00:00').getTime() - dias * 864e5).toISOString().slice(0, 10)
+  const term = new Map((sales || []).filter(s => s && !s.deleted_at && s.status === 'Terminado').map(s => [String(s.id), s]))
+  const g = {}
+  ;(expenses || []).forEach(e => { if (!e || e.deleted_at || !e.sale_id || !term.has(String(e.sale_id))) return
+    const f = String(e.date || '').slice(0, 10), c = String(e.created_at || f).slice(0, 10), k = String(e.sale_id)
+    if (!f || f < lim || f > String(hoy).slice(0, 10) || (ok[k] && c <= String(ok[k]).slice(0, 10))) return
+    const x = g[k] = g[k] || { s: term.get(k), gastos: [], monto: 0, ultimo: '' }; x.gastos.push(e); x.monto += Number(e.amount) || 0; if (f > x.ultimo) x.ultimo = f })
+  return Object.values(g).sort((a, b) => b.ultimo.localeCompare(a.ultimo))
+}
+
 // Facturas recibidas dentro del plazo de reclamo (Registro de Compras del SII en estado PENDIENTE): 8 días corridos desde la
 // recepción en el SII. vistas = las que alguien ya revisó sin reclamo (learnings compra_sin_reclamo). Reclamar se hace en el SII.
 export const PLAZO_RECLAMO_DIAS = 8
@@ -225,6 +244,8 @@ export function hallazgos(d) {
     : add('subarriendo_por_facturar', x.a.id, `Subarriendo de ${perTexto(x.per)} pagado sin factura · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, periodo: x.per }))
   comprasObservadasSII(d.comprasObs, d.comprasObsVistas).forEach(x => add('compra_observada_sii', x.id, `Factura N° ${x.folio} de ${x.emisor_name || 'proveedor'} · proveedor observado por el SII${x.periodo ? ` · ${perTexto(x.periodo)}` : ''}`, Number(x.observado_iva) || 0, { folio: x.folio, periodo: x.periodo || null }))
   comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas, { terceros: d.terceros || null, historial: d.comprasTodas || null }).forEach(x => add('compra_plazo_reclamo', x.d.id, x.calce ? `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · calza con ${x.calce.length} comisi${x.calce.length === 1 ? 'ón' : 'ones'} sin factura · enlazar antes del ${x.vence.split('-').reverse().join('-')}` : `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
+  gastoRsAjena(d.gastos, d.clientEntities).forEach(e => add('gasto_rs_ajena', e.id, `Gasto con razón social de otro cliente · ${nom(e.client_id)} · ${String(e.concept || '').slice(0, 60)}`.trim(), e.amount, { gasto: e.id, entidad: e.entity_id, fecha: e.date }))
+  terminadaConGastos(d.sales, d.gastos, d.hoy || new Date().toISOString().slice(0, 10), { ok: d.terminadaOk || {} }).forEach(x => add('terminada_con_gastos', x.s.id, `Trabajo terminado que sigue recibiendo gastos · ${nom(x.s.client_id)} · ${x.s.title || ''}`.trim(), x.monto, { venta: x.s.id, gastos: x.gastos.map(e => e.id), ultimo: x.ultimo }))
   // Permisos de la base fuera de la regla (rpc auditoria_permisos): la consola de Supabase crea tablas abiertas al rol sin sesión.
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
@@ -234,6 +255,7 @@ export function hallazgos(d) {
 
 export const DETECTOR_LBL = {
   permiso_sin_sesion: 'Permisos de la base fuera de la regla',
+  gasto_rs_ajena: 'Gasto con razón social de otro cliente', terminada_con_gastos: 'Trabajo terminado que sigue recibiendo gastos',
   compra_observada_sii: 'Compras de proveedores observados por el SII',
   trabajo_terminado: 'Trabajos activos que parecen terminados', trabajo_detenido_saldo: 'Trabajos sin movimiento con saldo por cobrar',
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
