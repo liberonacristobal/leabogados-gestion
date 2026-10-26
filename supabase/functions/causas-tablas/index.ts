@@ -11,6 +11,11 @@
 // no aparece queda «Sin tabla hoy» (el Monitor solo muestra el día). Si el Monitor no se puede leer: «No se pudo revisar» y un
 // correo al día como máximo a learnings config causas_avisar_fallas. Interruptor learnings config causas_tablas = 'on' (sin 'on'
 // revisa y guarda pero no envía). body.causa_id / body.client_id = solo esas («Revisar ahora»); body.dryRun = no guarda ni envía.
+// Desde el 26-10-2026 la revisión principal la hace el computador de la oficina (scripts/pjud-local, modo local: Programación de
+// Salas con días de anticipación + body.monitor con las salas leídas); aquí se aplica la misma regla (procesarMonitor). El 403
+// del Monitor era el ritmo de consultas (con 2 s entre cada una no rechaza). body.vigilar (cron 07:15, días hábiles): si el
+// computador no revisó, el servidor revisa el Monitor del día como respaldo; el aviso de falla sale solo si una causa no se
+// pudo revisar por ninguna fuente, y si el computador lleva más de un día hábil sin revisar se avisa aparte.
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -56,12 +61,15 @@ async function rest(path: string, init: RequestInit = {}): Promise<any> {
 // ─── Monitor de Salas (salas.pjud.cl) ───
 const fallaRed = (e: Error): never => { throw new Error(e?.name === "TimeoutError" ? "salas.pjud.cl no respondió en 30 segundos" : `no se pudo conectar con salas.pjud.cl (${e?.message || e})`); };
 // GET/POST con las cookies de la sesión (Map) que el sitio entrega, igual que un navegador.
+// El sitio rechaza (403) las consultas seguidas: con 2 segundos entre cada una no rechaza ninguna (medido el 26-10-2026, 33
+// consultas de las 3 salas de La Serena; sin pausa, rechazó 10 de 16).
 async function monFetch(url: string, jar: Map<string, string>, body?: Record<string, string>, intento = 0): Promise<string> {
+  await pausa(2000);
   const r = await fetch(url, { method: body ? "POST" : "GET", body: body ? new URLSearchParams(body) : undefined, signal: AbortSignal.timeout(30000),
     headers: { "User-Agent": UA, ...(jar.size ? { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; ") } : {}), ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) } }).catch(fallaRed);
   for (const c of r.headers.getSetCookie?.() || []) { const kv = c.split(";")[0], i = kv.indexOf("="); if (i > 0) jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim()); }
   // El sitio rechaza a ratos consultas muy seguidas (403): se espera y se reintenta una vez.
-  if ((r.status === 403 || r.status >= 500) && intento < 1) { await r.body?.cancel(); await pausa(3000); return monFetch(url, jar, body, intento + 1); }
+  if ((r.status === 403 || r.status >= 500) && intento < 1) { await r.body?.cancel(); await pausa(8000); return monFetch(url, jar, body, intento + 1); }
   if (!r.ok) throw new Error(`salas.pjud.cl respondió con error ${r.status}`);
   return await r.text().catch(() => { throw new Error("salas.pjud.cl cortó la respuesta"); });
 }
@@ -183,6 +191,117 @@ async function avisarCausa(o: { ON: boolean; dryRun: boolean; quien: string }, c
 
 // ─── Computador de la oficina (scripts/pjud-local) ───
 // Consulta desde un computador de la oficina, donde pjud.cl responde sin captcha, solo las causas del estudio: Programación de
+// El Monitor de Salas leído (por el servidor o por el computador de la oficina) contra nuestras causas: avisos de «en tabla hoy»
+// y de turno cercano, seguimiento y estado de cada causa. Devuelve las causas que no se pudieron revisar.
+// deno-lint-ignore no-explicit-any
+async function procesarMonitor(k: any, causas: any[], salasPorCorte: Map<string, any>, o: { dryRun: boolean; quien: string; hoy: string; hora: string }, res: any) {
+  const { ON, nomCli, destinos } = k, { dryRun, quien, hoy, hora } = o;
+  // deno-lint-ignore no-explicit-any
+  const corteDe = (c: any) => esSuprema(c) ? "Corte Suprema" : c.corte_nombre;
+  // Revisiones ya anotadas hoy (para no repetir «Sin tabla hoy» en el seguimiento cada hora).
+  const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
+  const segHoy = new Set(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&select=causa_id`).catch(() => [])) || []).map((s: { causa_id: string }) => s.causa_id));
+  const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
+  const fallidas: { c: Record<string, string>; motivo: string }[] = [];
+  const origen = quien.startsWith("agente") ? "agente" : "manual", por = quien.startsWith("agente") ? null : quien;
+  const fuente = `Monitor de Salas, pjud.cl, revisado el ${dmy(hoy)} a las ${hora}`;
+
+  for (const c of causas) {
+    try {
+      const sc = salasPorCorte.get(corteDe(c));
+      if (!sc) throw new Error("sin Corte");
+      if (sc instanceof Error) throw sc;
+      let hit: { fila: Fila; tabla: string; viendo: number | null; sala: Sala } | null = null;
+      const malas: string[] = [];
+      for (const s of sc.salas.values()) {
+        if (s instanceof Error) { malas.push(s.message); continue; }
+        const h = buscarEnSala(c, s); if (h) { hit = { ...h, sala: s }; break; }
+      }
+      // Si alguna sala no se pudo leer y la causa no apareció en las demás, no se puede afirmar que no esté en tabla.
+      if (!hit && malas.length) throw new Error(malas[0]);
+      res.revisadas++;
+      const ahora = new Date().toISOString();
+      const patch: Record<string, unknown> = { ultima_revision_at: ahora, updated_at: ahora, ultima_error: null, ultima_error_at: null, ultima_fuente: "monitor" };
+      const t0 = c.ultima_tabla?.fecha === hoy && c.ultima_tabla?.fuente === "monitor" ? c.ultima_tabla : null;
+      if (!hit) {
+        if (!t0 && !segHoy.has(c.id)) await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: false, tabla: null, aviso: null, resultado: "Sin tabla hoy (Monitor de Salas)" });
+        if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+        continue;
+      }
+      const s = hit.sala, f = hit.fila;
+      const prox = { sala: s.nombre, sala_num: s.num, numero: String(f.orden), fecha: hoy, tabla: hit.tabla, caratula: f.caratulado, ingreso: f.rol, materia: f.materia,
+        estado_dia: f.estado, viendo: hit.viendo, hasta: s.hasta, horario: s.horario, video: s.video, ministros: s.ministros, fuente: "monitor", aviso_cerca: !!t0?.aviso_cerca, revisado_at: ahora };
+      res.en_tabla.push({ causa: `${c.rol}-${c.anio}`, corte: c.corte_nombre, ...prox });
+      const nueva = String(c.avisado_fecha || "").slice(0, 10) !== hoy;
+      const cerca = !prox.aviso_cerca && prox.viendo != null && f.orden > prox.viendo && f.orden - prox.viendo <= 2 && /en tabla/i.test(f.estado);
+      const { para, cc, nombreA } = destinos(c);
+      const rolL = `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`;
+      const avisar = async (tipo: string, asunto: string, texto: string, html: string) => {
+        const a = await avisarCausa({ ON, dryRun, quien }, c, para, cc, tipo, asunto, texto, html);
+        res.avisos.push({ tipo, causa: `${c.rol}-${c.anio}`, ...a });
+        return a;
+      };
+      let av: unknown = null;
+      if (nueva) {
+        av = await avisar("en_tabla", `Causa en tabla hoy: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${s.nombre}, número ${f.orden} de la tabla`,
+          `${c.caratula || nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${c.corte_nombre}, ${s.nombre}, N° ${f.orden} de la tabla de hoy (${f.estado}).`,
+          `${P(`Hola ${esc(nombreA)},`)}${P("La siguiente causa está en la tabla de hoy:")}${FILAS([["Causa", esc(c.caratula || f.caratulado)], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", rolL], ["Corte", esc(c.corte_nombre)], ["Sala", esc(s.nombre)], ["Tabla", esc(hit.tabla)], ["N° en la tabla", String(f.orden)], ["Estado", esc(f.estado)], ["Audiencia", s.horario ? `De ${esc(s.horario)} h` : ""], ["A verse", s.hasta ? `Hasta el N° ${esc(s.hasta)}` : ""], ["Se está viendo", prox.viendo ? `N° ${prox.viendo}` : ""], ["Integración", s.ministros.map(esc).join("<br>")], ["Videoconferencia", s.video ? `<a href="${esc(s.video)}" style="color:#003C50">Ingresar</a>` : ""], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: ${fuente}. La app sigue la sala y avisa cuando la causa esté próxima a verse. La vista quedó en el calendario de plazos de la app.`)}`);
+        if (!dryRun) await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre} · ${s.nombre} · N° ${f.orden}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: hoy, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
+        patch.avisado_fecha = hoy;
+      } else if (cerca) {
+        av = await avisar("cerca", `Se acerca la vista: Rol ${c.rol}-${c.anio} - ${s.nombre} - se está viendo el número ${prox.viendo} (la causa es el número ${f.orden})`,
+          `${c.corte_nombre}, ${s.nombre}: se está viendo el N° ${prox.viendo}; la causa Rol ${c.rol}-${c.anio} es la N° ${f.orden}.`,
+          `${P(`Hola ${esc(nombreA)},`)}${P(`En la ${esc(s.nombre)} de la ${esc(c.corte_nombre)} se está viendo el <b>N° ${prox.viendo}</b> de la tabla. La causa <b>Rol ${rolL}</b> es la <b>N° ${f.orden}</b>.`)}${FILAS([["Causa", esc(c.caratula || f.caratulado)], ["Cliente", esc(nomCli[c.client_id] || "")], ["Videoconferencia", s.video ? `<a href="${esc(s.video)}" style="color:#003C50">Ingresar</a>` : ""]])}${PIE(`Fuente: ${fuente}.`)}`);
+        prox.aviso_cerca = true;
+      }
+      patch.ultima_tabla = prox;
+      if (nueva || av || f.estado !== t0?.estado_dia)
+        await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: true, tabla: prox, aviso: av,
+          resultado: `En la tabla de hoy: ${s.nombre}, N° ${f.orden} (${f.estado})${prox.viendo ? ` · se está viendo el N° ${prox.viendo}` : ""}${av ? ((av as { enviado: boolean }).enviado ? (nueva ? " · aviso enviado" : " · aviso de turno próximo enviado") : ` · aviso NO enviado: ${(av as { motivo: string }).motivo}`) : ""}` });
+      if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+    } catch (e) {
+      const motivo = String((e as Error).message || e);
+      res.errores.push({ causa: `${c.rol}-${c.anio}`, error: motivo });
+      if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ ultima_error: motivo, ultima_error_at: new Date().toISOString() }) }).catch(() => null);
+      if (!segHoy.has(c.id)) await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: false, tabla: null, aviso: null, resultado: `No se pudo revisar: ${motivo}` });
+      fallidas.push({ c, motivo });
+    }
+  }
+  return fallidas;
+}
+
+// Motivo de una falla en palabras de la oficina (el detalle técnico queda en el seguimiento de la causa).
+const motivoLegible = (m: string) => /captcha|anti-robots/i.test(m) ? "El sitio del Poder Judicial pidió una verificación anti-robots"
+  : /error (403|5\d\d)/.test(m) ? "El sitio del Poder Judicial rechazó la consulta"
+  : /no respondió|no se pudo conectar|cortó/i.test(m) ? "El sitio del Poder Judicial no respondió" : "El sitio del Poder Judicial respondió algo distinto de lo esperado";
+// Horario de las revisiones del computador de la oficina (scripts/pjud-local/instalar.sh): la próxima, para el aviso.
+const HORARIO = { habil: ["06:30", "08:45", "12:30", "18:00"], domingo: ["19:00"] };
+const proximaRevision = (hoy: string, hora: string) => {
+  const d = new Date(`${hoy}T12:00:00`), dia = d.getDay();
+  const deHoy = dia >= 1 && dia <= 5 ? HORARIO.habil : dia === 0 ? HORARIO.domingo : [];
+  const sig = deHoy.find((h) => h > hora); if (sig) return `hoy a las ${sig}`;
+  return dia >= 1 && dia <= 4 ? `mañana a las ${HORARIO.habil[0]}` : dia === 5 || dia === 6 ? `el domingo a las ${HORARIO.domingo[0]}` : `mañana a las ${HORARIO.habil[0]}`;
+};
+// Aviso de falla (problema): qué pasó, qué significa y qué hacer. A causas_avisar_fallas, sin copia, como máximo uno al día.
+// deno-lint-ignore no-explicit-any
+async function avisarFallas(k: { fallasA: string[]; miembros: any[] }, fallidas: { c: Record<string, string>; motivo: string }[], hoy: string, hora: string) {
+  const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
+  const ya = await rest(`activity_log?action=eq.causas.falla_avisada&created_at=gte.${encodeURIComponent(desde)}&select=id&limit=1`).catch(() => []);
+  if (ya?.length) return { enviado: false, motivo: "ya se avisó hoy" };
+  let ok = false, motivo = "";
+  try {
+    const nombres = k.fallasA.map((e) => String(k.miembros.find((m: { email: string }) => String(m.email).toLowerCase() === e)?.nombre || e.split("@")[0]).split(/\s+/)[0]);
+    const filasH = fallidas.map((x) => `<tr><td style="padding:8px;border-top:1px solid #E4E8EB"><b>${esc(String(x.c.origen || "").split(" · ")[0] || x.c.caratula || `Rol ${x.c.rol}-${x.c.anio}`)}</b><div style="font-size:11.5px;color:#537281">Rol ${esc(x.c.rol)}-${x.c.anio} · ${esc(x.c.corte_nombre)}${x.c.abogado ? ` · ${esc(x.c.abogado)}` : ""}</div></td><td style="padding:8px;border-top:1px solid #E4E8EB;font-size:12px;color:#A32D2D;text-align:right">${esc(motivoLegible(x.motivo))}</td></tr>`).join("");
+    const n = fallidas.length;
+    await enviar(k.fallasA, [], `No se pudo revisar la tabla - ${n === 1 ? `Rol ${fallidas[0].c.rol}-${fallidas[0].c.anio}` : `${n} causas`} - ${dmy(hoy)}`,
+      `La revisión de las ${hora} no pudo confirmar en el Poder Judicial si ${n === 1 ? "la causa está" : "las causas están"} en tabla. Próxima revisión: ${proximaRevision(hoy, hora)}.`,
+      CAJA(`${P(`Hola ${esc(saludo(nombres))},`)}${P(`La revisión de las ${esc(hora)} <b style="color:#A32D2D">no pudo confirmar</b> en el Poder Judicial si ${n === 1 ? "la siguiente causa está" : `las siguientes ${n} causas están`} en tabla:`)}<table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D;margin:0 0 14px">${filasH}</table>${P(`<b>Qué significa:</b> no está confirmado si ${n === 1 ? "tiene" : "alguna tiene"} vista próxima. La próxima revisión automática es ${esc(proximaRevision(hoy, hora))}.`)}${P(`<b>Qué hacer:</b> si la vista puede ser pronto, revisar en <a href="https://www.pjud.cl" style="color:#003C50">pjud.cl</a> › Programación de Salas (Corte, libro y rol).`)}`));
+    ok = true;
+  } catch (e) { motivo = String((e as Error).message || e); }
+  await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "causas.falla_avisada", table_name: "causas", record_id: null, estudio_id: fallidas[0]?.c.estudio_id || "lea", detail: { title: `${ok ? "Aviso de falla enviado" : "Aviso de falla NO enviado"}: ${fallidas.length} causa${fallidas.length !== 1 ? "s" : ""} sin revisar`, para: k.fallasA, motivo: motivo || null } }) }).catch(() => null);
+  return { enviado: ok, para: k.fallasA, motivo: motivo || null };
+}
+
 // Salas por causa (la tabla con su fecha, con anticipación) y el Estado Diario de su tribunal (resoluciones del día). Pocas
 // consultas al día; si pjud.cl le pide captcha, se detiene y lo informa (nunca lo resuelve). Se identifica con su propia clave
 // (header x-pjud-local), cuya huella SHA-256 está en learnings config causas_local_token_sha256; la clave vive solo en ese equipo.
@@ -193,8 +312,11 @@ async function atenderLocal(body: any, token: string) {
   if (!token || !h?.[0]?.value || await sha256(token) !== String(h[0].value)) return json({ error: "No autorizado" }, 403);
   const quien = "agente-local", { fecha: hoy, hora } = ahoraCL();
   const k = await contexto("estado=eq.activa");
+  // seguir: solo las causas que hoy están en una tabla del Monitor y aún no se ven (el computador no consulta si no hay ninguna).
+  // deno-lint-ignore no-explicit-any
+  if (body.local === "pedido" && body.seguir) k.todas = k.todas.filter((c: any) => c.ultima_tabla?.fecha === hoy && c.ultima_tabla?.fuente === "monitor" && /en tabla/i.test(c.ultima_tabla?.estado_dia || ""));
   if (body.local === "pedido")
-    return json({ ok: true, hoy, causas: k.todas.map((c: Record<string, unknown>) => ({ id: c.id, rol: c.rol, anio: c.anio, instancia: c.instancia, corte_codigo: c.corte_codigo, corte_nombre: c.corte_nombre, libro_codigo: c.libro_codigo, libro_nombre: c.libro_nombre, caratula: c.caratula })) });
+    return json({ ok: true, hoy, causas: k.todas.map((c: Record<string, unknown>) => ({ id: c.id, rol: c.rol, anio: c.anio, instancia: c.instancia, corte_codigo: c.corte_codigo, corte_nombre: c.corte_nombre, libro_codigo: c.libro_codigo, libro_nombre: c.libro_nombre, caratula: c.caratula, ultima_tabla: (c.ultima_tabla as { fecha?: string } | null)?.fecha === hoy ? { sala_num: (c.ultima_tabla as { sala_num?: string }).sala_num || "" } : null })) });
   if (body.local !== "resultado") return json({ error: "Pedido desconocido" }, 400);
   const dryRun = !!body.dryRun;
   // deno-lint-ignore no-explicit-any
@@ -255,14 +377,32 @@ async function atenderLocal(body: any, token: string) {
     await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen: "agente", por: null, en_tabla: false, tabla: null, aviso: av, resultado: `Estado diario del ${dmy(r.fecha)}: ${n === 1 ? "1 resolución" : `${n} resoluciones`}${doc ? "" : r.reservada ? " (causa reservada)" : ""}${av.enviado ? " · aviso enviado" : ` · aviso NO enviado: ${av.motivo}`}` });
     if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ estado_diario_fecha: r.fecha }) }).catch(() => null);
   }
-  // Captcha o error general en el computador: aviso a causas_avisar_fallas, como máximo uno al día.
-  if ((body.captcha || body.error) && !dryRun && k.ON && k.fallasA.length) {
-    const ya = await rest(`activity_log?action=eq.causas.local_falla&created_at=gte.${encodeURIComponent(desde)}&select=id&limit=1`).catch(() => []);
-    if (!ya?.length) {
-      const motivo = body.captcha ? "pjud.cl pidió una verificación anti-robots (captcha); la consulta se detuvo sin responderla" : String(body.error);
-      let ok = false; try { await enviar(k.fallasA, [], `La consulta de causas desde el computador de la oficina se detuvo - ${dmy(hoy)}`, motivo, CAJA(`${P("Hola,")}${P(`La consulta de las causas en pjud.cl desde el computador de la oficina <b style="color:#A32D2D">se detuvo</b>.`)}${PIE(`Motivo: ${esc(motivo)}. Mientras tanto, el día de la vista sigue funcionando el Monitor de Salas.`)}`)); ok = true; } catch { /* queda en la bitácora */ }
-      await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: quien, action: "causas.local_falla", table_name: "causas", record_id: null, estudio_id: "lea", detail: { title: `Consulta desde el computador de la oficina detenida: ${motivo}`, aviso_enviado: ok } }) }).catch(() => null);
-    }
+  // Monitor de Salas leído por el computador: misma regla que el servidor (procesarMonitor).
+  const monOk = new Set<string>(); let fallMon: { c: Record<string, string>; motivo: string }[] = [];
+  if (Array.isArray(body.monitor)) {
+    // deno-lint-ignore no-explicit-any
+    const salasPorCorte = new Map<string, any>();
+    // deno-lint-ignore no-explicit-any
+    for (const x of body.monitor as any[]) salasPorCorte.set(String(x.corte), x.error ? new Error(String(x.error)) : { valor: "", salas: new Map((x.salas || []).map((sa: any) => [String(sa.num), sa.error ? new Error(String(sa.error)) : sa])) });
+    // deno-lint-ignore no-explicit-any
+    const causasMon = body.seguir ? k.todas.filter((c: any) => c.ultima_tabla?.fecha === hoy && c.ultima_tabla?.fuente === "monitor") : k.todas;
+    // deno-lint-ignore no-explicit-any
+    const resMon: any = { revisadas: 0, en_tabla: [], avisos: [], errores: [] };
+    fallMon = await procesarMonitor(k, causasMon, salasPorCorte, { dryRun, quien, hoy, hora }, resMon);
+    // deno-lint-ignore no-explicit-any
+    for (const c of causasMon) if (!fallMon.some((f: any) => f.c.id === c.id)) monOk.add(c.id);
+    Object.assign(out, { monitor: { revisadas: resMon.revisadas, en_tabla: resMon.en_tabla, errores: resMon.errores } }); out.avisos.push(...resMon.avisos);
+  }
+  // Falla = causas que no se pudieron revisar por NINGUNA de las dos fuentes (Programación de Salas y Monitor) en esta corrida.
+  // deno-lint-ignore no-explicit-any
+  const progOk = new Set<string>((Array.isArray(body.programacion) ? body.programacion : []).filter((r: any) => !r.error).map((r: any) => String(r.causa_id)));
+  if (!body.seguir && !dryRun && k.ON && k.fallasA.length) {
+    const motivoGen = body.captcha ? "pjud.cl pidió una verificación anti-robots (captcha)" : body.error ? String(body.error) : "";
+    // deno-lint-ignore no-explicit-any
+    const fallidas = k.todas.filter((c: any) => !progOk.has(c.id) && !monOk.has(c.id)).map((c: any) => ({ c, motivo: motivoGen || fallMon.find((f: any) => f.c.id === c.id)?.motivo
+      // deno-lint-ignore no-explicit-any
+      || (body.programacion || []).find((r: any) => r.causa_id === c.id)?.error || "sin respuesta" }));
+    if (fallidas.length) Object.assign(out, { falla: await avisarFallas(k, fallidas, hoy, hora) });
   }
   return json({ ok: true, dryRun, aviso: k.ON, ...out });
 }
@@ -283,6 +423,43 @@ Deno.serve(async (req) => {
     const dom = String(cas?.[0]?.value || "").split("@")[1];
     if (!u?.email || !dom || !String(u.email).toLowerCase().endsWith("@" + dom.toLowerCase())) return json({ error: "No autorizado" }, 403);
     quien = u.email;
+  }
+  // Vigilancia (cron de días hábiles, 07:15): si el computador de la oficina no hizo la revisión de la mañana, se avisa una vez
+  // al día a causas_avisar_fallas (un computador apagado o dormido no avisa por sí mismo).
+  if (body.vigilar && quien === "agente") {
+    try {
+      const { fecha: hoy, hora } = ahoraCL(), dia = new Date(`${hoy}T12:00:00`).getDay();
+      if (dia === 0 || dia === 6) return json({ ok: true, vigilar: "fin de semana" });
+      // El cron corre 10:15 y 11:15 UTC: con horario de verano o de invierno, una de las dos cae a las 07:15 de Chile.
+      if (hora < "07:10") return json({ ok: true, vigilar: "antes de las 07:10" });
+      const k = await contexto("estado=eq.activa");
+      if (!k.todas.length) return json({ ok: true, vigilar: "sin causas activas" });
+      const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
+      // deno-lint-ignore no-explicit-any
+      const corrio = k.todas.some((c: any) => String(c.programacion_at || "") >= desde);
+      if (corrio) return json({ ok: true, vigilar: "la revisión de la mañana corrió" });
+      // Respaldo: el servidor lee el Monitor de Salas del día (abajo, revisión normal). Solo si eso también falla sale el aviso
+      // (avisarFallas). Si el computador lleva más de un día hábil sin revisar, además se avisa (pierde el aviso anticipado).
+      // deno-lint-ignore no-explicit-any
+      const ultima = k.todas.map((c: any) => String(c.programacion_at || "")).sort().pop() || "";
+      const habilAnt = (() => { const d = new Date(`${hoy}T12:00:00`); do d.setDate(d.getDate() - 1); while ([0, 6].includes(d.getDay())); return d.toISOString().slice(0, 10); })();
+      if ((!ultima || ultima.slice(0, 10) < habilAnt) && !body.dryRun && k.ON && k.fallasA.length) {
+        const ya = await rest(`activity_log?action=eq.causas.local_no_corrio&created_at=gte.${encodeURIComponent(desde)}&select=id&limit=1`).catch(() => []);
+        if (!ya?.length) {
+          let ok = false, motivo = "";
+          try {
+            const nombres = k.fallasA.map((e) => String(k.miembros.find((m: { email: string }) => String(m.email).toLowerCase() === e)?.nombre || e.split("@")[0]).split(/\s+/)[0]);
+            const desdeTxt = ultima ? `desde el ${dmy(ultima.slice(0, 10))}` : "desde su instalación";
+            await enviar(k.fallasA, [], `El computador de la oficina no revisa las causas ${desdeTxt}`,
+              `El computador de la oficina no ha hecho la revisión de causas ${desdeTxt}. Sin ella no hay aviso anticipado de tablas.`,
+              CAJA(`${P(`Hola ${esc(saludo(nombres))},`)}${P(`El computador de la oficina <b style="color:#A32D2D">no ha hecho la revisión de causas ${desdeTxt}</b>.`)}${P("<b>Qué significa:</b> la tabla del día se sigue revisando desde la app, pero sin ese computador no hay aviso con días de anticipación (la Programación de Salas del Poder Judicial solo responde desde ahí).")}${P("<b>Qué hacer:</b> encender el computador o abrirlo; la revisión corre sola apenas despierta.")}`));
+            ok = true;
+          } catch (e) { motivo = String((e as Error).message || e); }
+          await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "causas.local_no_corrio", table_name: "causas", record_id: null, estudio_id: "lea", detail: { title: `Computador de la oficina sin revisar causas ${ultima ? `desde ${dmy(ultima.slice(0, 10))}` : ""} · aviso ${ok ? "enviado" : "NO enviado"}`, para: k.fallasA, motivo: motivo || null, hora } }) }).catch(() => null);
+        }
+      }
+      body.respaldo = true;   // sigue a la revisión normal del Monitor desde el servidor
+    } catch (e) { if (!body.respaldo) return json({ error: String((e as Error).message || e) }, 500); }
   }
   try {
     const dryRun = !!body.dryRun, seguir = !!body.seguir && quien === "agente";
@@ -333,92 +510,8 @@ Deno.serve(async (req) => {
     }
     for (const [corte, x] of salasPorCorte) if (!(x instanceof Error)) for (const s of x.salas.values()) res.salas.push(s instanceof Error ? { corte, error: s.message } : { corte, sala: s.nombre, tablas: s.tablas.map((t) => `${t.glosa} (${t.filas.length})`), viendo: s.viendo });
 
-    // Revisiones ya anotadas hoy (para no repetir «Sin tabla hoy» en el seguimiento cada hora).
-    const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
-    const segHoy = new Set(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&select=causa_id`).catch(() => [])) || []).map((s: { causa_id: string }) => s.causa_id));
-    const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
-    const fallidas: { c: Record<string, string>; motivo: string }[] = [];
-    const origen = quien === "agente" ? "agente" : "manual", por = quien === "agente" ? null : quien;
-    const fuente = `Monitor de Salas, pjud.cl, revisado el ${dmy(hoy)} a las ${hora}`;
-
-    for (const c of causas) {
-      try {
-        const sc = salasPorCorte.get(corteDe(c));
-        if (!sc) throw new Error("sin Corte");
-        if (sc instanceof Error) throw sc;
-        let hit: { fila: Fila; tabla: string; viendo: number | null; sala: Sala } | null = null;
-        const malas: string[] = [];
-        for (const s of sc.salas.values()) {
-          if (s instanceof Error) { malas.push(s.message); continue; }
-          const h = buscarEnSala(c, s); if (h) { hit = { ...h, sala: s }; break; }
-        }
-        // Si alguna sala no se pudo leer y la causa no apareció en las demás, no se puede afirmar que no esté en tabla.
-        if (!hit && malas.length) throw new Error(malas[0]);
-        res.revisadas++;
-        const ahora = new Date().toISOString();
-        const patch: Record<string, unknown> = { ultima_revision_at: ahora, updated_at: ahora, ultima_error: null, ultima_error_at: null, ultima_fuente: "monitor" };
-        const t0 = c.ultima_tabla?.fecha === hoy && c.ultima_tabla?.fuente === "monitor" ? c.ultima_tabla : null;
-        if (!hit) {
-          if (!t0 && !segHoy.has(c.id)) await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: false, tabla: null, aviso: null, resultado: "Sin tabla hoy (Monitor de Salas)" });
-          if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) });
-          continue;
-        }
-        const s = hit.sala, f = hit.fila;
-        const prox = { sala: s.nombre, sala_num: s.num, numero: String(f.orden), fecha: hoy, tabla: hit.tabla, caratula: f.caratulado, ingreso: f.rol, materia: f.materia,
-          estado_dia: f.estado, viendo: hit.viendo, hasta: s.hasta, horario: s.horario, video: s.video, ministros: s.ministros, fuente: "monitor", aviso_cerca: !!t0?.aviso_cerca, revisado_at: ahora };
-        res.en_tabla.push({ causa: `${c.rol}-${c.anio}`, corte: c.corte_nombre, ...prox });
-        const nueva = String(c.avisado_fecha || "").slice(0, 10) !== hoy;
-        const cerca = !prox.aviso_cerca && prox.viendo != null && f.orden > prox.viendo && f.orden - prox.viendo <= 2 && /en tabla/i.test(f.estado);
-        const { para, cc, nombreA } = destinos(c);
-        const rolL = `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`;
-        const avisar = async (tipo: string, asunto: string, texto: string, html: string) => {
-          const a = await avisarCausa({ ON, dryRun, quien }, c, para, cc, tipo, asunto, texto, html);
-          res.avisos.push({ tipo, causa: `${c.rol}-${c.anio}`, ...a });
-          return a;
-        };
-        let av: unknown = null;
-        if (nueva) {
-          av = await avisar("en_tabla", `Causa en tabla hoy: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${s.nombre}, número ${f.orden} de la tabla`,
-            `${c.caratula || nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${c.corte_nombre}, ${s.nombre}, N° ${f.orden} de la tabla de hoy (${f.estado}).`,
-            `${P(`Hola ${esc(nombreA)},`)}${P("La siguiente causa está en la tabla de hoy:")}${FILAS([["Causa", esc(c.caratula || f.caratulado)], ["Cliente", esc(nomCli[c.client_id] || "")], ["Rol", rolL], ["Corte", esc(c.corte_nombre)], ["Sala", esc(s.nombre)], ["Tabla", esc(hit.tabla)], ["N° en la tabla", String(f.orden)], ["Estado", esc(f.estado)], ["Audiencia", s.horario ? `De ${esc(s.horario)} h` : ""], ["A verse", s.hasta ? `Hasta el N° ${esc(s.hasta)}` : ""], ["Se está viendo", prox.viendo ? `N° ${prox.viendo}` : ""], ["Integración", s.ministros.map(esc).join("<br>")], ["Videoconferencia", s.video ? `<a href="${esc(s.video)}" style="color:#003C50">Ingresar</a>` : ""], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: ${fuente}. La app sigue la sala y avisa cuando la causa esté próxima a verse. La vista quedó en el calendario de plazos de la app.`)}`);
-          if (!dryRun) await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre} · ${s.nombre} · N° ${f.orden}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: hoy, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
-          patch.avisado_fecha = hoy;
-        } else if (cerca) {
-          av = await avisar("cerca", `Se acerca la vista: Rol ${c.rol}-${c.anio} - ${s.nombre} - se está viendo el número ${prox.viendo} (la causa es el número ${f.orden})`,
-            `${c.corte_nombre}, ${s.nombre}: se está viendo el N° ${prox.viendo}; la causa Rol ${c.rol}-${c.anio} es la N° ${f.orden}.`,
-            `${P(`Hola ${esc(nombreA)},`)}${P(`En la ${esc(s.nombre)} de la ${esc(c.corte_nombre)} se está viendo el <b>N° ${prox.viendo}</b> de la tabla. La causa <b>Rol ${rolL}</b> es la <b>N° ${f.orden}</b>.`)}${FILAS([["Causa", esc(c.caratula || f.caratulado)], ["Cliente", esc(nomCli[c.client_id] || "")], ["Videoconferencia", s.video ? `<a href="${esc(s.video)}" style="color:#003C50">Ingresar</a>` : ""]])}${PIE(`Fuente: ${fuente}.`)}`);
-          prox.aviso_cerca = true;
-        }
-        patch.ultima_tabla = prox;
-        if (nueva || av || f.estado !== t0?.estado_dia)
-          await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: true, tabla: prox, aviso: av,
-            resultado: `En la tabla de hoy: ${s.nombre}, N° ${f.orden} (${f.estado})${prox.viendo ? ` · se está viendo el N° ${prox.viendo}` : ""}${av ? ((av as { enviado: boolean }).enviado ? (nueva ? " · aviso enviado" : " · aviso de turno próximo enviado") : ` · aviso NO enviado: ${(av as { motivo: string }).motivo}`) : ""}` });
-        if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) });
-      } catch (e) {
-        const motivo = String((e as Error).message || e);
-        res.errores.push({ causa: `${c.rol}-${c.anio}`, error: motivo });
-        if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify({ ultima_error: motivo, ultima_error_at: new Date().toISOString() }) }).catch(() => null);
-        if (!segHoy.has(c.id)) await segPost({ causa_id: c.id, estudio_id: c.estudio_id, origen, por, en_tabla: false, tabla: null, aviso: null, resultado: `No se pudo revisar: ${motivo}` });
-        fallidas.push({ c, motivo });
-      }
-    }
-    // Aviso de falla: solo corridas programadas, a causas_avisar_fallas, sin copia y como máximo uno al día.
-    if (fallidas.length && quien === "agente" && !dryRun && ON && fallasA.length) {
-      const ya = await rest(`activity_log?action=eq.causas.falla_avisada&created_at=gte.${encodeURIComponent(desde)}&select=id&limit=1`).catch(() => []);
-      if (!ya?.length) {
-        let ok = false, motivo = "";
-        try {
-          const nombres = fallasA.map((e) => String(miembros.find((m: { email: string }) => String(m.email).toLowerCase() === e)?.nombre || e.split("@")[0]).split(/\s+/)[0]);
-          const filasH = fallidas.map((x) => `<tr><td style="padding:8px;border-top:1px solid #E4E8EB"><b>${esc(String(x.c.origen || "").split(" · ")[0] || x.c.caratula || `Rol ${x.c.rol}-${x.c.anio}`)}</b><div style="font-size:11.5px;color:#537281">Rol ${esc(x.c.rol)}-${x.c.anio} · ${esc(x.c.corte_nombre)} · ${esc(nomCli[x.c.client_id] || "")}</div></td><td style="padding:8px;border-top:1px solid #E4E8EB;color:#A32D2D;font-weight:600">${esc(x.motivo)}</td></tr>`).join("");
-          await enviar(fallasA, [], `No se pudo revisar la tabla de hoy - ${fallidas.length === 1 ? `Rol ${fallidas[0].c.rol}-${fallidas[0].c.anio}` : `${fallidas.length} causas`} - ${dmy(hoy)}`,
-            `No se pudo revisar si ${fallidas.length === 1 ? "la causa está" : "las causas están"} en la tabla de hoy.`,
-            CAJA(`${P(`Hola ${esc(saludo(nombres))},`)}${P(`<b style="color:#A32D2D">No se pudo revisar</b> si ${fallidas.length === 1 ? "la siguiente causa está" : `las siguientes ${fallidas.length} causas están`} en la tabla de hoy:`)}<table style="width:100%;border-collapse:collapse;font-size:13px;color:#3D3D3D">${filasH}</table>${PIE(`Se reintenta en la próxima revisión (${HORARIO_TXT}); este aviso se envía una vez al día. Fuente: Monitor de Salas, pjud.cl.`)}`));
-          ok = true;
-        } catch (e) { motivo = String((e as Error).message || e); }
-        await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "causas.falla_avisada", table_name: "causas", record_id: null, estudio_id: fallidas[0].c.estudio_id, detail: { title: `${ok ? "Aviso de falla enviado" : "Aviso de falla NO enviado"}: ${fallidas.length} causa(s) sin revisar`, para: fallasA, motivo: motivo || null } }) }).catch(() => null);
-        res.falla = { enviado: ok, para: fallasA, motivo: motivo || null };
-      }
-    }
+    const fallidas = await procesarMonitor({ ON, nomCli, destinos }, causas, salasPorCorte, { dryRun, quien, hoy, hora }, res);
+    if (fallidas.length && quien === "agente" && !dryRun && ON && fallasA.length) res.falla = await avisarFallas({ fallasA, miembros }, fallidas, hoy, hora);
     return json({ ok: true, dryRun, aviso: ON, ...res });
   } catch (e) {
     // La revisión completa no corrió: queda «Con falla» en Procesos (que reintenta) y en la bitácora.
