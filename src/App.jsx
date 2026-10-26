@@ -9399,7 +9399,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   // «Pagada por otra vía» = esa factura (learnings compra_pagada) · «Se paga con la tarjeta» = ese emisor (learnings compra_pago_emisor).
   const [ppx,setPpx]=useState(null)
   useEffect(()=>{ if(DEMO){ setPpx({gastos:[],tarjeta:[],emisores:new Set(),colab:new Set(),pagadas:new Set()}); return } let v=true
-    Promise.all([supabase.from('expenses').select('amount,date').eq('type','gasto').is('deleted_at',null).gte('date','2026-05-01'),
+    Promise.all([selectAll(()=>supabase.from('expenses').select('amount,date').eq('type','gasto').is('deleted_at',null).gte('date','2026-05-01').order('id')),
       supabase.from('learnings').select('kind,key').in('kind',['tarjeta_comercio','compra_pago_emisor','compra_pagada']),
       supabase.from('terceros_pagos').select('rut').is('comision_pct',null).not('rut','is',null)])
       .then(([g,l,t])=>{ if(!v) return; const L=l.data||[], k=x=>L.filter(r=>r.kind===x).map(r=>String(r.key))
@@ -9517,6 +9517,15 @@ function useAprendidosVenta(){
     if(!_aprVentaProm) _aprVentaProm=selectAll(()=>supabase.from('learnings').select('key,value,meta').eq('kind','gasto_proyecto').order('id')).then(r=>{ _aprVenta=(r&&r.data)||[]; return _aprVenta },()=>[])
     _aprVentaProm.then(x=>{ if(v) setA(x) }); return ()=>{ v=false } },[])
   return a
+}
+// Propuestas de la revisión semanal con IA (edge gastos-trabajo-ia, learnings gasto_venta_ia): { id del gasto: {sale_id, evidencia} }.
+let _iaVenta=null, _iaVentaProm=null
+function useIaVenta(){
+  const [m,setM]=useState(_iaVenta||{})
+  useEffect(()=>{ if(DEMO) return; let v=true
+    if(!_iaVentaProm) _iaVentaProm=selectAll(()=>supabase.from('learnings').select('key,value,meta').eq('kind','gasto_venta_ia').order('id')).then(r=>{ const o={}; ((r&&r.data)||[]).forEach(x=>{ o[String(x.key)]={sale_id:x.value,...(x.meta||{})} }); _iaVenta=o; return o },()=>({}))
+    _iaVentaProm.then(x=>{ if(v) setM(x) }); return ()=>{ v=false } },[])
+  return m
 }
 const aprenderVentaGasto=(e,venta)=>{ const gk=glosaKey(e?.concept||''); if(!gk||!e?.client_id||!(venta?.title||e.project)) return
   const row={kind:'gasto_proyecto',key:`${e.client_id}::${gk}`,value:venta?.title||e.project,meta:{...(venta?.id||e.sale_id?{sale_id:venta?.id||e.sale_id}:{}),...(e.entity_id?{entity_id:e.entity_id}:{})}}
@@ -25645,15 +25654,15 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   useEffect(()=>{ const propia=f.entity_id&&rsList.some(r=>r.id===f.entity_id); if(propia) return; const nueva=rsList.length===1?rsList[0].id:null; if((f.entity_id||null)!==nueva) setF(p=>({...p,entity_id:nueva})) },[f.client_id])
   // Trabajo sugerido si el gasto no tiene proyecto: regla única sugerirVentaGasto (aprendido, mismo día, razón social, texto…);
   // sin venta que calce, el último proyecto escrito para esa glosa.
-  const aprVenta = useAprendidosVenta()
+  const aprVenta = useAprendidosVenta(), iaVenta = useIaVenta()
   const [sugProy,setSugProy] = useState(null)
   useEffect(()=>{
     if(isFondo || f.project || !f.concept || !f.client_id){ setSugProy(null); return }
     const vs=(sales||[]).filter(s=>String(s.client_id)===String(f.client_id)&&VENTA_REAL(s))
-    const r=sugerirVentaGasto({...f,id:expense?.id}, vs, {aprendidos:aprVenta,hermanos:expenses||[]})
+    const r=sugerirVentaGasto({...f,id:expense?.id}, vs, {aprendidos:aprVenta,hermanos:expenses||[],ia:iaVenta})
     const gk=glosaKey(f.concept), ult=gk?[...aprVenta].reverse().find(x=>x.key===`${f.client_id}::${gk}`):null
     setSugProy(r.venta?.title || ult?.value || null)
-  },[f.concept,f.client_id,f.project,f.date,f.entity_id,isFondo,aprVenta])
+  },[f.concept,f.client_id,f.project,f.date,f.entity_id,isFondo,aprVenta,iaVenta])
   // Aprendizaje glosa→subcategoría: la misma glosa recurrente (Jumbo, Uber) propone su subcategoría con un toque, sin re-tipear (regla "la app APRENDE").
   const [sugSub,setSugSub] = useState(null)
   useEffect(()=>{
@@ -26792,7 +26801,7 @@ function ConciliarFacturasModal({asPage=false, scope=[], sales=[], clients=[], c
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
 function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], tasks=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion, onAsociarTrabajo}){
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
-  const aprVenta = useAprendidosVenta()
+  const aprVenta = useAprendidosVenta(), iaVenta = useIaVenta()
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
   const secT=k=>setSec(s=>({...s,[k]:!s[k]}))
   const [conc,setConc]=useState([]); const [movs,setMovs]=useState([]); const [loading,setLoading]=useState(true)
@@ -27006,7 +27015,7 @@ function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expe
                   {e.entity_id&&onAsociarTrabajo&&tap(<span style={{color:C.muted}}>{entName(e.entity_id)}</span>)}
                 </> })()}
               {ultAsig?.ids.has(e.id)&&ultAsig.n>1&&<div style={{display:'flex',alignItems:'baseline',gap:8,background:C.greenBg,color:C.greenText,borderRadius:8,padding:'7px 10px',marginTop:5,fontSize:12}}><span>Asignados {ultAsig.n} · {fmt(ultAsig.monto)}</span><span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span></div>}
-              {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} ctx={{aprendidos:aprVenta,hermanos:expenses}} onAsignar={asignar}/>}
+              {onAsociarTrabajo&&corrG?.id!==e.id&&(!v||!e.entity_id)&&<AsignarProyectoRS e={e} otros={sinProy.filter(x=>x.type===e.type)} ventas={(sales||[]).filter(s=>String(s.client_id)===String(e.client_id)&&VENTA_REAL(s))} ents={clientEntities||[]} subs={subproyectosCliente(e.client_id,tasks,expenses)} ctx={{aprendidos:aprVenta,hermanos:expenses,ia:iaVenta}} onAsignar={asignar}/>}
               {((e.entity_id&&!onAsociarTrabajo)||!onAsociarTrabajo||(!e.entity_id&&!(clientEntities||[]).length))&&<div style={{color:e.entity_id?C.muted:C.overdue,marginTop:1}}>{e.entity_id?(()=>{const ent=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id));return ent?ent.name:'Razón social asignada'})():'Sin razón social asignada'}</div>}</div>
             {/* Pago / depósito: de dónde viene o a dónde fue la plata (banco, notaría, caja chica, rendición, fondo que lo cubre). Cada enlace lleva al dato. */}
             {(()=>{ const links=recorridoGasto(e,{conc,movById,expenses}).map(p=>({k:p.k, t:p.t, d:[p.fecha?fmtFechaDMY(p.fecha):null, p.d].filter(Boolean).join(' · '), on:p.mov&&onOpenConciliacion?()=>onOpenConciliacion(p.mov):p.fondo?()=>setDetG(p.fondo):null}))
@@ -27145,6 +27154,7 @@ function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=[], ctx
           <option value=''>Razón social…</option>
           {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
         </select>}
+        {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
       </div>
       <div style={{marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:2}}><b style={{fontSize:11.5,color:C.text}}>Otros sin proyecto · ¿van a este mismo?</b><span onClick={()=>setMarc(extra.length===lista.length?new Set():new Set(lista.map(x=>x.id)))} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{extra.length===lista.length?'Desmarcar':'Marcar todos'}</span></div>
@@ -27169,6 +27179,7 @@ function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=[], ctx
         {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
       </select>}
       {btn}
+      {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
     </div>)
 }
 // Gastos y fondos de UNA venta (columna de la venta, bajo "Cobro de la venta"): el trabajo es el centro; cada movimiento abre su
@@ -43617,7 +43628,7 @@ export default function App() {
       q('adjuntos cobros', supabase.from('billing_attachments').select('id,billing_id')),
       q('anticipos', supabase.from('anticipos').select('*').order('fecha',{ascending:false})),
       q('proveedores', supabase.from('proveedores').select('*').order('nombre')),
-      q('cuentas por pagar', supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})),
+      q('cuentas por pagar', selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id'))),
       q('importaciones', supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10)),
       q('memoria de alias', supabase.from('import_aliases').select('*')),
       q('conciliación', selectAll(()=>supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id').order('id'))),
@@ -43944,7 +43955,7 @@ export default function App() {
             }
           }
           if(nuevos.length) await supabase.from('terceros_pagos').insert(nuevos)
-          const {data:nt} = await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+          const {data:nt} = await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id'))
           if(nt) setTerceros(nt)
         }catch(te){ if(te.message!=='__skip_reparto__') appAlert('La venta se guardó, pero hubo un problema al guardar el reparto de terceros: '+te.message) }
       }
@@ -44730,7 +44741,7 @@ export default function App() {
           }else if(previas.length){
             await supabase.from('terceros_pagos').delete().in('id',previas.map(t=>t.id))
           }
-          const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+          const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id'))
           if(nt) setTerceros(nt)
         }catch(te){ appAlert('El cobro se guardó, pero hubo un problema con la cuenta por pagar al proveedor: '+te.message) }
       }
@@ -45057,7 +45068,7 @@ export default function App() {
           estado: fac?.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null} })
       const {error}=await supabase.from('terceros_pagos').insert(payload)
       if(error)throw error
-      const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false})
+      const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id'))
       if(nt)setTerceros(nt)
       return true
     }catch(e){ appAlert('No se pudo asignar la factura: '+e.message); return false }
@@ -45437,7 +45448,7 @@ export default function App() {
       const cp={ sale_id:null, billing_id:fac.id, proveedor_id:prov.id, proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null,
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: fac.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
-      const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
+      const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')); if(nt)setTerceros(nt)
       // Fuente única del monto del externo = billing.monto_terceros (lo que lee/edita el editor de factura). Nuestro ingreso = amount − monto_terceros.
       try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }   // aprende el % por externo (ej. Rodrigo = 15)
@@ -45458,7 +45469,7 @@ export default function App() {
       const cp={ sale_id:null, billing_id:bill.id, proveedor_id:prov.id, proveedor:prov.razon_social||prov.nombre||null, rut:prov.rut||null,
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: bill.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
-      const {data:nt}=await supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}); if(nt)setTerceros(nt)
+      const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')); if(nt)setTerceros(nt)
       try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}   // fuente única del monto del externo
       if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }
     }catch(e){ appAlert('No se pudo asociar la factura al externo: '+(e.message||e)); return null }

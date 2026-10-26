@@ -82,7 +82,7 @@ serve(async (req) => {
       let last:any = null;
       for (let att=0; att<4; att++){
         const res = await Promise.all([
-          sb.from("clients").select("id,name,abogado_responsable"),
+          sb.from("clients").select("id,name,abogado_responsable,is_internal"),
           selectAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,due,issued_at,paid_at,deleted_at,billing_type,receptor_name,sii_synced_at,sii_tipo_dte,dte_track_id").order("id")),
           selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,monto_conciliado,n_operacion,nombre_contraparte,cliente_id,tipo,estado,es_interno").eq("tipo","abono").in("estado",["pendiente","parcial"]).order("id")),
           sb.from("anticipos").select("id,client_id,monto,fecha,nota"),
@@ -201,8 +201,9 @@ serve(async (req) => {
     });
 
     // ── (3) Gastos sin proyecto, por abogado responsable del cliente (sin responsable → ambos admins). Oficina fuera. ──
-    const OFICINA_ID = "055df2ad-fa4f-4293-9dc3-d7ab9a200774";
-    const esOficina = (cid:any)=> String(cid)===OFICINA_ID || /liberona\s+escala/i.test(cname(cid));
+    // La oficina = el cliente interno de la ficha (clients.is_internal), no un id ni un nombre escritos en el código.
+    const internos = new Set((clients||[]).filter((c:any)=> c.is_internal).map((c:any)=> String(c.id)));
+    const esOficina = (cid:any)=> internos.has(String(cid));
     const porCli: Record<string, any> = {};
     (sinProyRaw||[]).forEach((e:any)=>{ if (esOficina(e.client_id)) return; const k=String(e.client_id); const g=(porCli[k]=porCli[k]||{ cid:k, cli:cname(k), n:0, monto:0, desc:[] as string[] }); g.n++; g.monto+=Number(e.amount)||0; const d0=String(e.concept||"").replace(/^gastos notariales\s*[—–-]\s*/i,"").trim(); const d=d0.length>48?d0.slice(0,46).trim()+"…":d0; if(d && g.desc.length<2 && !g.desc.includes(d)) g.desc.push(d); });
     const sinProyDe: Record<string, any[]> = {};

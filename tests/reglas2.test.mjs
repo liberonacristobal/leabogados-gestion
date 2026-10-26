@@ -291,3 +291,14 @@ test('revisión: gasto con razón social de otro cliente y trabajo terminado que
   assert.equal(terminadaConGastos(sales, ex, '2026-10-25', { ok: { t: '2026-10-21' } }).length, 0)   // «Sigue terminado» el 21: lo anterior no vuelve
   assert.equal(terminadaConGastos(sales, ex, '2026-10-25', { ok: { t: '2026-10-19' } }).length, 1)   // lo cargado después, sí
 })
+
+test('venta del gasto: la propuesta de la revisión con IA se sugiere después de «mismo día» y solo con una venta vigente', async () => {
+  const { sugerirVentaGasto } = await import('../supabase/functions/_shared/ventaGastoReglas.js')
+  const V = [{ id: 'a', title: 'Puesta en marcha', status: 'Activo' }, { id: 'b', title: 'Administración', status: 'Activo' }]
+  const ia = { g: { sale_id: 'b', evidencia: 'Mismo trámite que el gasto del 14-07' } }
+  let r = sugerirVentaGasto({ id: 'g', client_id: 'c', concept: 'Poder especial', date: '2026-08-28' }, V, { ia })
+  assert.equal(r.regla, 'ia'); assert.equal(r.venta.id, 'b'); assert.match(r.porque, /Revisión con IA/)
+  r = sugerirVentaGasto({ id: 'g', client_id: 'c', concept: 'Poder especial', date: '2026-08-28' }, V, { ia, hermanos: [{ id: 'h', client_id: 'c', sale_id: 'a', date: '2026-08-28' }] })
+  assert.equal(r.regla, 'mismo_dia')   // la señal de la base manda sobre la IA
+  assert.notEqual(sugerirVentaGasto({ id: 'g', client_id: 'c', concept: 'Poder especial' }, V, { ia: { g: { sale_id: 'zzz' } } }).regla, 'ia')   // venta que ya no existe
+})

@@ -31,12 +31,13 @@ export function ventaAprendida(e, ventas = [], aprendidos = []) {
   return { venta: ventas.find(s => String(s.id) === unicos[0]), n: ids.length }
 }
 
-// Sugerencia. ctx = { aprendidos (learnings gasto_proyecto), hermanos (gastos del cliente con trabajo) }.
+// Sugerencia. ctx = { aprendidos (learnings gasto_proyecto), hermanos (gastos del cliente con trabajo), ia ({ id del gasto:
+// { sale_id, evidencia } } de la revisión semanal con IA, learnings gasto_venta_ia) }.
 // Orden: aprendido → única venta → única activa → mismo día (otro gasto del cliente de esa fecha y razón social ya tiene trabajo)
-// → texto. auto=true solo en aprendido (2+), única y única activa. Sin regla por razón social (la de facturación no es la de la
+// → revisión con IA → texto. auto=true solo en aprendido (2+), única y única activa. Sin regla por razón social (la de facturación no es la de la
 // OT) ni por «única vigente en la fecha»: en la prueba contra lo ya asignado (25-10-2026) acertaban 1 de 4 y 2 de 5.
 export function sugerirVentaGasto(e, ventas = [], ctx = {}) {
-  const { aprendidos = [], hermanos = [] } = ctx || {}
+  const { aprendidos = [], hermanos = [], ia = {} } = ctx || {}
   const ap = ventaAprendida(e, ventas, aprendidos)
   if (ap?.venta) return { venta: ap.venta, regla: 'aprendido', auto: ap.n >= 2, porque: ap.n >= 2 ? 'Así lo vinculaste antes' : 'Así lo vinculaste una vez' }
   if (!ventas.length) return { venta: null, regla: 'sinventa', auto: false, porque: 'El cliente no tiene ventas' }
@@ -51,6 +52,8 @@ export function sugerirVentaGasto(e, ventas = [], ctx = {}) {
     const vs = [...new Set(mismos.map(h => String(h.sale_id)))]
     if (vs.length === 1) return { venta: ventas.find(s => String(s.id) === vs[0]), regla: 'mismo_dia', auto: false, porque: `Mismo día que ${mismos.length} gasto${mismos.length !== 1 ? 's' : ''} de este trabajo` }
   }
+  const pia = e.id ? ia?.[String(e.id)] : null, vIa = pia?.sale_id ? ventas.find(s => String(s.id) === String(pia.sale_id)) : null
+  if (vIa) return { venta: vIa, regla: 'ia', auto: false, porque: `Revisión con IA: ${pia.evidencia || 'propuesta por confirmar'}` }
   const g = new Set(toksTrab([e.concept, e.subconcept, e.materia, e.project].filter(Boolean).join(' ')))
   const sc = ventas.map(s => ({ s, hit: [...new Set(toksTrab(s.title).filter(t => g.has(t)))] })).sort((a, b) => b.hit.length - a.hit.length)
   if (sc[0].hit.length && (sc.length === 1 || sc[0].hit.length > sc[1].hit.length)) return { venta: sc[0].s, regla: 'texto', auto: false, porque: 'El texto coincide con el trabajo' }
