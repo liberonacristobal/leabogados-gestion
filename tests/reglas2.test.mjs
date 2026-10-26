@@ -302,3 +302,11 @@ test('venta del gasto: la propuesta de la revisión con IA se sugiere después d
   assert.equal(r.regla, 'mismo_dia')   // la señal de la base manda sobre la IA
   assert.notEqual(sugerirVentaGasto({ id: 'g', client_id: 'c', concept: 'Poder especial' }, V, { ia: { g: { sale_id: 'zzz' } } }).regla, 'ia')   // venta que ya no existe
 })
+
+test('datos de pago del estudio: salen de la tabla estudios (igual que la cuenta que estaba escrita en el código)', async () => {
+  const { datosPago } = await import('../supabase/functions/_shared/equipo.js')
+  const est = { nombre_legal: 'Estudio Demo Limitada', rut: '77.000.000-0', pago: { honorarios: { banco: 'Banco Demo', email: 'pagos@demo.cl', cuenta: '1403834' }, gastos: { banco: 'Banco Demo', cuenta: '1383922' } } }
+  assert.deepEqual(datosPago(est), { razon: 'Estudio Demo Limitada', rut: '77.000.000-0', banco: 'Banco Demo', cuenta: '1403834', email: 'pagos@demo.cl' })
+  assert.equal(datosPago(est, 'gastos').cuenta, '1383922')
+  assert.deepEqual(datosPago(null), { razon: '', rut: '', banco: '', cuenta: '', email: '' })   // sin estudio: vacío, nunca otro estudio
+})

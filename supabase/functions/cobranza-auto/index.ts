@@ -2,12 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { datosPago, ESTUDIO_ID } from "../_shared/equipo.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Cobranza autónoma (Fase 3). DOBLE COMPUERTA: solo clientes LIBERADOS (learnings fd_auto:cobranza:<cid>)
 // Y con el interruptor global encendido (learnings config cobranza_auto). Default OFF. Usuario = simulación (no envía).
-const ESTUDIO = "Liberona Escala Abogados";
-const CUENTA = { razon:"Liberona Escala Abogados Limitada", rut:"77.700.387-9", banco:"Banco BICE", cuenta:"1403834", email:"contacto@leabogados.cl" };
+let ESTUDIO = "";
+// Nombre y datos de pago del estudio: de la tabla estudios (datosPago), cargados al inicio de cada corrida.
+let CUENTA = datosPago(null);
 const GAP = 7; // días mínimos entre recordatorios de una misma factura
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
@@ -47,6 +49,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(()=>({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: est } = await sb.from("estudios").select("nombre,nombre_legal,rut,pago").eq("id", ESTUDIO_ID).maybeSingle();
+    CUENTA = datosPago(est); ESTUDIO = est?.nombre || "";
     // PostgREST corta en 1.000 filas por consulta: las tablas grandes se traen por páginas (orden estable por id).
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
     // Usuario @leabogados.cl → SIEMPRE simulación (no envía a clientes). Solo el cron con secreto envía de verdad.

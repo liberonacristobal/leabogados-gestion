@@ -52,3 +52,10 @@ export async function cargarEquipo(sbUrl, serviceKey) {
   } catch (_) { /* respaldo */ }
   return armarEquipo(EQUIPO_RESPALDO)
 }
+
+// Datos para el pago por transferencia del estudio (tabla estudios: nombre_legal, rut, pago[rol]): fuente única de los correos
+// de cobro del servidor, en vez de la cuenta escrita en cada función. rol = 'honorarios' | 'gastos' | 'dolares'.
+export const datosPago = (est, rol = 'honorarios') => {
+  const p = (est && est.pago && est.pago[rol]) || {}
+  return { razon: String(est?.nombre_legal || ''), rut: String(est?.rut || ''), banco: String(p.banco || ''), cuenta: String(p.cuenta || ''), email: String(p.email || '') }
+}
