@@ -291,7 +291,6 @@ serve(async (req) => {
         t.push(tile("Por cobrar", fmt(c.bills.reduce((a:number,x:any)=>a+x.saldo,0)), venc ? `<b style="color:${RED};">${venc} vencida${venc!==1?"s":""}</b> de ${c.bills.length}` : `${c.bills.length} factura${c.bills.length!==1?"s":""} por vencer`, "Ver cobranza", d.socio?"cobranza":"porcobrar", venc?RED:INK)); }
       if (c && c.com && c.com.nListas) t.push(tile("Comisiones", fmt(c.com.liqListas), `${c.com.nListas} por pagar`, "Registrar boleta", "comisiones"));
       if (d.socio && of) { const a=of.an;
-        if (of.nSinCliente) t.push(tile("OT sin cliente", String(of.nSinCliente), fmt(of.montoSinCliente), "Asignar cliente", "notariasincliente", AMB));
         if (a.pend.length) t.push(tile("Notaría", fmt(a.total), `${a.pend.length} OT por pagar`, "Ver la deuda", "notaria"));
         if (of.sinEmitir.length) t.push(tile("Cuotas sin facturar", String(of.sinEmitir.length), "vencidas", "Revisar", "sinemitir"));
         if (of.abonos.length) t.push(tile("Abonos por identificar", fmt(of.abonos.reduce((s:number,m:any)=> s+(Number(m.monto)||0), 0)), `${of.abonos.length} abono${of.abonos.length!==1?"s":""} sin cliente`, "Identificar", "cobros"));
