@@ -48,6 +48,9 @@ try {
       const txt = partes.filter(Boolean).join(' ') || m.text()
       if (!RUIDO.test(txt)) errores.push(txt)
     })
+    // La demo no depende de internet: un servicio externo lento (p. ej. mindicador.cl) no debe colgar la prueba.
+    await page.setRequestInterception(true)
+    page.on('request', req => { const h = new URL(req.url()).hostname; (h === 'localhost' || h === '127.0.0.1' || req.url().startsWith('data:') || /fonts\.(googleapis|gstatic)\.com|cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com/.test(h)) ? req.continue() : req.abort() })
     await page.goto(`${base}?demo=1`, { waitUntil: 'networkidle0', timeout: 60000 })
     const monto = await page.waitForFunction(() => !!window.__demo, { timeout: 20000 }).then(() => true, () => false)
     if (!monto) { const t = await page.evaluate(() => document.body.innerText.slice(0, 200)); fallas.push({ vista: nombre, donde: 'al abrir la demo', error: errores[0] || t || 'la app no montó' }); await page.close(); continue }
