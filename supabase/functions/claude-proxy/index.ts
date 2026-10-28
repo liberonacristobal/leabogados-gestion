@@ -10,18 +10,13 @@
 // Contrato: POST { model?, max_tokens?, system?, messages:[{role,content}] }
 //  -> responde el JSON de Anthropic tal cual (el front lee data.content[0].text).
 
+import { esDelDominio } from "../_shared/estudio.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 
-// Equipo autorizado (mismos emails que loadUserRole/WHO_MAP en la app).
-const TEAM = [
-  "cl@leabogados.cl",
-  "ee@leabogados.cl",
-  "mc@leabogados.cl",
-  "mp@leabogados.cl",
-  "rd@leabogados.cl",
-];
+// Equipo autorizado: cualquier cuenta del dominio del estudio (fuente única _shared/estudio.ts, como las demás funciones). Antes era una
+// lista de cinco correos escrita aquí: dejaba fuera los alias de una persona y una incorporación nueva.
 
 // Solo modelos que la app usa hoy; cualquier otro cae al default seguro.
 const ALLOWED_MODELS = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
@@ -52,7 +47,7 @@ serve(async (req) => {
   if (!ANTHROPIC_API_KEY) return json({ error: "Falta configurar ANTHROPIC_API_KEY en el servidor" }, 500);
 
   const email = emailDelJwt(req);
-  if (!email || !TEAM.includes(email)) {
+  if (!esDelDominio(email)) {
     console.log(`[claude-proxy] acceso denegado (email: ${email || "sin email"})`);
     return json({ error: "No autorizado" }, 403);
   }
