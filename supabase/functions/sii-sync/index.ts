@@ -26,7 +26,16 @@ import { armarLibroVentas } from './libro.ts'
 import { bajarXmlEmitidos, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
 import { leerEnvioRecibido, armarRecepcionEnvio, armarResultadoDTE, armarEnvioRecibos } from './intercambio.ts'
 
-const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']
+const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']   // respaldo si la tabla miembros no responde
+// Admin = miembro con rol admin (tabla miembros): cubre los alias de cada socio y una incorporación; sin respuesta, la lista de respaldo.
+async function esAdminDelEstudio(email: string): Promise<boolean> {
+  const e = String(email || '').toLowerCase()
+  if (ADMINS.includes(e)) return true
+  try {
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/miembros?select=email&rol=eq.admin&email=eq.${encodeURIComponent(e)}`, { headers: { apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''}` } })
+    return r.ok && (await r.json()).length > 0
+  } catch { return false }
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -106,7 +115,7 @@ serve(async (req) => {
   const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
-  if (!cronOk && (!email || !ADMINS.includes(email))) {
+  if (!cronOk && (!email || !(await esAdminDelEstudio(email)))) {
     console.log(`[sii-sync] acceso denegado (email: ${email || 'sin email'})`)
     return json({ error: 'Solo administradores pueden usar el SII' }, 403)
   }

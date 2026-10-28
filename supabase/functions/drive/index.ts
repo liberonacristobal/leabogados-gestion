@@ -11,6 +11,7 @@
 //   search   -> { files:[{id,name,mimeType,modifiedTime}] }
 //   download -> { base64, mime }   (un Google Doc se exporta a .docx; el resto va tal cual)
 
+import { esDelDominio } from "../_shared/estudio.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
@@ -18,10 +19,7 @@ const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const TEAM = [
-  "cl@leabogados.cl", "ee@leabogados.cl", "mc@leabogados.cl",
-  "mp@leabogados.cl", "rd@leabogados.cl",
-];
+// Equipo autorizado: cualquier cuenta del dominio del estudio (_shared/estudio.ts), no una lista de correos escrita aquí.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -74,7 +72,7 @@ serve(async (req) => {
   if (!CLIENT_ID || !CLIENT_SECRET) return json({ error: "Falta configurar GOOGLE_OAUTH_CLIENT_ID/SECRET en el servidor" }, 500);
 
   const email = emailDelJwt(req);
-  if (!email || !TEAM.includes(email)) {
+  if (!esDelDominio(email)) {
     console.log(`[drive] acceso denegado (email: ${email || "sin email"})`);
     return json({ error: "No autorizado" }, 403);
   }
