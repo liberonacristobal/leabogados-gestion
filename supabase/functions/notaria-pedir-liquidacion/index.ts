@@ -1,4 +1,4 @@
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 
 // notaria-pedir-liquidacion — recordatorio para pedir a la notaría su liquidación (días de config, hoy 15 y 30 de cada mes).
 // Si el día cae sábado, domingo o feriado (tabla `feriados`), sale el DÍA HÁBIL SIGUIENTE. Corre por cron cada día hábil;

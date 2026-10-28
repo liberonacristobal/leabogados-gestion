@@ -9,7 +9,7 @@
 // body.backtestVentaGasto = recorre los gastos que ya tienen trabajo y compara qué habría sugerido la regla de venta del gasto
 // (sin escribir nada). Auth: CRON_SECRET. verify_jwt=false.
 
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { todasRest } from "../_shared/paginar.js";
 import { sugerirVentaGasto, VENTA_REAL } from "../_shared/ventaGastoReglas.js";
 import { hallazgos, DETECTOR_LBL } from "../_shared/saludDatos.js";

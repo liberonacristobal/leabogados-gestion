@@ -13,7 +13,7 @@
 // Interruptor learnings config aviso_cuotas = 'on' (el mismo del aviso anterior). body.per = 'AAAA-MM'; body.dryRun = devuelve el HTML
 // sin enviar; body.testTo = enviar solo a esa dirección. Auth: CRON_SECRET. verify_jwt=false.
 
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { cuotasSinEmitir, recibidoACuenta } from "../_shared/ventasReglas.js";

@@ -43447,6 +43447,7 @@ export default function App() {
   // Espera a que userRole esté resuelto (arranca null, async) para no borrar el parámetro antes de conocer el rol.
   useEffect(()=>{ if(DEMO||!user||!userRole) return
     try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
+      logActividad('correo.clic',{detalle:{title:`Abrió «${ir}» desde un correo o aviso`,destino:ir},completo:true})   // mide qué correos llevan a una acción (correos-resumen)
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
       // Vistas del equipo limitado (correo "Tu semana"): disponibles para todos.
       if(ir==='gastos') return setTab('expenses')
@@ -43477,6 +43478,7 @@ export default function App() {
   // Aviso del teléfono de una liquidación de caja chica: ?liquidacion=<id> abre su página (con el PDF y el anexo).
   useEffect(()=>{ if(!user||!userRole) return
     try{ const id=new URLSearchParams(window.location.search).get('liquidacion'); if(!id) return
+      logActividad('correo.clic',{detalle:{title:'Abrió una liquidación desde un aviso',destino:'liquidacion'},completo:true})
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
       setTab('expenses'); setExpNav({liq:id}) }catch(_){}
   },[user,userRole,deepLinkTick])
@@ -43489,6 +43491,7 @@ export default function App() {
   // Deep-links del correo del lunes (trabajos por cerrar, regla del auditor nocturno): ?cerrartrabajo=<venta> pide confirmar y la
   // deja Terminada; ?sigueactivo=<venta> guarda la decisión (learnings trabajo_activo_ok, la misma de Revisión de datos). Solo socios.
   useEffect(()=>{ try{ const qs=new URLSearchParams(window.location.search), cid=qs.get('cerrartrabajo'), aid=qs.get('sigueactivo'); if((!cid&&!aid)||!salesAll.length||userRole!=='admin') return
+    logActividad('correo.clic',{detalle:{title:'Abrió una acción del correo del lunes',destino:cid?'cerrartrabajo':'sigueactivo'},completo:true})
     try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
     const s=salesAll.find(x=>String(x.id)===String(cid||aid)); if(!s) return appAlert('No encontré ese trabajo.')
     const cli=clients.find(c=>String(c.id)===String(s.client_id))?.name||'el cliente', hoy=isoLocal(Date.now())
@@ -43506,6 +43509,7 @@ export default function App() {
   //   ?pedirfondos=<id>&monto=<n> → abre la solicitud de fondos al cliente ya armada.
   //   ?pausafondos=<id>           → "Ya lo hablé": pausa los avisos de ese cliente 15 días (learnings aviso_fondos_pausa).
   useEffect(()=>{ try{ const qs=new URLSearchParams(window.location.search); const pid=qs.get('pedirfondos'), zid=qs.get('pausafondos'); if((!pid&&!zid)||!clients.length) return
+    logActividad('correo.clic',{detalle:{title:'Abrió fondos desde un correo',destino:pid?'pedirfondos':'pausafondos'},completo:true})
     try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
     const c=clients.find(x=>String(x.id)===String(pid||zid)); if(!c) return
     if(pid){ const m=Math.round(Number(qs.get('monto'))||0)||null; setModal({type:'solicitarFondos',data:{client:c,sale:null,monto:m,responsable:c.abogado_responsable||null}}); return }
