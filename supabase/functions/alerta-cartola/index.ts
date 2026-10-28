@@ -90,14 +90,18 @@ Deno.serve(async (req) => {
   const conDia = (x: string) => `${DIA[new Date(x + "T12:00").getDay()]} ${dmy(x)}`;
   const uno = gap.length === 1;
   // El asunto dice hasta qué día llega la última cartola cargada (el dato que no se discute); los días que faltan van en el cuerpo.
-  const asunto = `Cartola BICE pendiente: cargada hasta el ${lastCov ? dmy(lastCov) : "—"}`;
-  const listaDias = gap.map((x) => `del ${conDia(x)}`).reduce((a, x, i, arr) => i === 0 ? x : i === arr.length - 1 ? `${a} y ${x}` : `${a}, ${x}`, "");
+  // Cada cartola se nombra por el día en que LLEGA (la que trae los movimientos del viernes llega el lunes), no por el día de sus
+  // movimientos: así se dice «falta la del lunes», que es el archivo que no llegó (corrección del 28-10-2026).
+  const llegadas = gap.map((x) => iso(sigHabil(new Date(x + "T12:00:00"))));
+  const corto = (x: string) => { const [, m, d] = x.split("-"); return `${DIA[new Date(x + "T12:00").getDay()]} ${+d}-${m}`; };
+  const asunto = uno ? `Cartola BICE pendiente del ${conDia(llegadas[0])}` : `Cartolas BICE pendientes: ${llegadas.map(corto).join(" y ")}`;
+  const listaDias = llegadas.map((x) => `del ${conDia(x)}`).reduce((a, x, i, arr) => i === 0 ? x : i === arr.length - 1 ? `${a} y ${x}` : `${a}, ${x}`, "");
   const miembros = await sb("miembros?select=email,nombre").catch(() => []);
   const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", TXT = "#3D3D3D", MUT = "#66787F", FAINT = "#9DAEB4", AMB = "#9A6410", AMBBG = "#FAF0DA";
   const P = (t: string, mb = 12) => `<div style="font-size:13.5px;color:${TXT};line-height:1.6;margin:0 0 ${mb}px;">${t}</div>`;
   const sec = (t: string, mt = 0) => `<div style="border-bottom:1px solid ${HAIR};padding-bottom:7px;margin:${mt}px 0 6px;"><span style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${NV};">${t}</span></div>`;
   const bt = (i: number) => i ? `border-top:1px solid ${HAIR};` : "";
-  const filas = gap.map((x, i) => `<tr><td style="padding:9px 0;${bt(i)}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${conDia(x).replace(/^./, (c) => c.toUpperCase())}</div></td><td align="right" style="padding:9px 0 9px 12px;white-space:nowrap;${bt(i)}"><span style="font-size:11px;font-weight:700;color:${AMB};background:${AMBBG};border-radius:9px;padding:2px 9px;">sin cartola</span></td></tr>`).join("")
+  const filas = gap.map((x, i) => `<tr><td style="padding:9px 0;${bt(i)}"><div style="font-size:13.5px;font-weight:700;color:${INK};">${conDia(llegadas[i]).replace(/^./, (c) => c.toUpperCase())}</div><div style="font-size:12px;color:${MUT};">trae los movimientos hasta el ${conDia(x)}</div></td><td align="right" style="padding:9px 0 9px 12px;white-space:nowrap;${bt(i)}"><span style="font-size:11px;font-weight:700;color:${AMB};background:${AMBBG};border-radius:9px;padding:2px 9px;">sin cartola</span></td></tr>`).join("")
     + (lastCov ? `<tr><td style="padding:9px 0;${bt(1)}"><div style="font-size:13.5px;color:${MUT};">Cartola cargada hasta</div></td><td align="right" style="padding:9px 0 9px 12px;white-space:nowrap;${bt(1)}font-size:13.5px;font-weight:700;color:${INK};">${dmy(lastCov)}</td></tr>` : "");
   const paso = (n: number, t: string) => `<tr><td valign="top" style="padding:5px 10px 5px 0;width:18px;"><span style="display:inline-block;width:18px;height:18px;border-radius:9px;background:#E6F1FB;color:${NV};font-size:11px;font-weight:800;text-align:center;line-height:18px;">${n}</span></td><td style="padding:5px 0;font-size:13px;color:${TXT};line-height:1.55;">${t}</td></tr>`;
   const pasos = paso(1, "Si la cartola llegó por otra vía, cárguenla en Banco con <b>«Cargar cartola»</b>.")
@@ -110,7 +114,7 @@ Deno.serve(async (req) => {
 <div style="padding:26px 26px 22px;">
 <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;margin-bottom:14px;">${uno ? "Cartola pendiente" : "Cartolas pendientes"}</div>
 ${P(`${holaEquipo(SOCIOS, miembros)}.`)}
-${P(`La última cartola cargada de la cuenta de honorarios del BICE llega hasta el ${lastCov ? conDia(lastCov) : "—"}. ${uno ? "Falta la cartola" : "Faltan las cartolas"} ${listaDias}: cada una llega la mañana del día hábil siguiente.`)}
+${P(`La última cartola cargada de la cuenta de honorarios del BICE llega hasta el ${lastCov ? conDia(lastCov) : "—"}. ${uno ? "Falta la cartola" : "Faltan las cartolas"} ${listaDias}.`)}
 ${P(`Mientras no se ${uno ? "cargue" : "carguen"}, los abonos y cargos de ${uno ? "ese día" : "esos días"} no aparecen en Banco: los pagos de clientes quedan sin conciliar y el saldo de la cuenta no está al día.`, 18)}
 ${sec("BICE · Cuenta honorarios")}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas}</table>
 ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${pasos}</table>
@@ -125,7 +129,7 @@ ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpaddin
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: toAscii(asunto), content: "Ver el contenido en formato HTML.", html: qpSafe(html) });
     await client.close();
-    await enviarPush(SB_URL, SB_KEY, [...SOCIOS], { titulo: uno ? "Falta la cartola del banco" : `Faltan ${gap.length} cartolas del banco`, cuerpo: uno ? `Cartola BICE del ${dmy(gap[0])} sin cargar` : `Días sin cartola: ${gap.slice(0, 4).map(dmy).join(", ")}${gap.length > 4 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "cartola" }, "sistema").catch(() => null);
+    await enviarPush(SB_URL, SB_KEY, [...SOCIOS], { titulo: uno ? "Falta la cartola del banco" : `Faltan ${gap.length} cartolas del banco`, cuerpo: uno ? `Cartola BICE del ${dmy(llegadas[0])} sin cargar` : `Cartolas sin cargar: ${llegadas.slice(0, 4).map(dmy).join(", ")}${llegadas.length > 4 ? "…" : ""}`, url: "/?ir=cobros", etiqueta: "cartola" }, "sistema").catch(() => null);
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
