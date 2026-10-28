@@ -315,14 +315,16 @@ serve(async (req) => {
         const botones = saldo ? btn("Ver en Cobranza", `${APP}/?ir=cobranza`) : btn("Cerrar", `${APP}/?cerrartrabajo=${x.v.id}`)+btn("Sigue activo", `${APP}/?sigueactivo=${x.v.id}`);
         return `<tr><td style="padding:9px 5px;border-top:1px solid ${HAIR};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td valign="top"><div style="font-size:13px;font-weight:700;color:${INK};">${esc(cname(x.v.client_id))} — ${esc(x.v.title||"Trabajo")}</div><div style="font-size:11.5px;color:${MUT};margin-top:1px;">sin movimiento desde ${fDia(x.h.prueba?.ult||"")}${saldo?" · con saldo por cobrar":""}</div><div>${botones}</div></td>${der}</tr></table></td></tr>`;
       }).join("");
-      return `<div style="padding:14px 5px 4px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NV};">Trabajos sin movimiento</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas}</table>`;
+      return oculta(`Trabajos sin movimiento · ${d.socio.detenidos.length}`, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas}</table>`);
     };
+    // Lista oculta: se abre al tocar el título (Apple Mail e iPhone); donde el correo no lo soporta, queda abierta.
+    const oculta = (titulo:string, cuerpo:string)=> `<details style="margin:10px 5px 0;"><summary style="cursor:pointer;background:${SOFTBG};border-radius:12px;padding:12px 13px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NV};">${titulo} &#9662;</summary>${cuerpo}</details>`;
     const listaFondos = (d:any)=> {
       const f = d.cartera?.fondos||[]; if (!f.length) return "";
       const APP = "https://gestion.leabogados.cl";
       const top = f.slice(0,5).map((x:any,i:number)=> `<tr><td style="padding:9px 5px;${i?`border-top:1px solid ${HAIR};`:""}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td valign="top"><div style="font-size:13px;font-weight:700;color:${INK};">${esc(cname(x.cid))}</div><div>${btn("Solicitar fondos", `${APP}/?pedirfondos=${x.cid}&monto=${Math.round(-x.saldo)}`)}</div></td><td valign="top" style="text-align:right;white-space:nowrap;font-size:13px;font-weight:700;color:${RED};padding-left:8px;">${fmt(-x.saldo)}</td></tr></table></td></tr>`).join("");
       const mas = f.length>5 ? `<tr><td style="padding:9px 5px;border-top:1px solid ${HAIR};font-size:12px;color:${MUT};">y ${f.length-5} cliente${f.length-5!==1?"s":""} más · <a href="${APP}/?ir=${d.socio?"rendir":"porcobrar"}" style="color:${NV};font-weight:700;text-decoration:none;">Ver todos &rarr;</a></td></tr>` : "";
-      return `<div style="padding:14px 5px 4px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NV};">Fondos por pedir · ${fmt(f.reduce((a:number,x:any)=>a-x.saldo,0))} · ${f.length} cliente${f.length!==1?"s":""}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${top}${mas}</table>`;
+      return oculta(`Fondos por pedir · ${fmt(f.reduce((a:number,x:any)=>a-x.saldo,0))} · ${f.length} cliente${f.length!==1?"s":""}`, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${top}${mas}</table>`);
     };
     const armar = (nombre:string, d:any) => {
       const grid = tarjetas(d) + listaFondos(d) + listaDetenidos(d);
