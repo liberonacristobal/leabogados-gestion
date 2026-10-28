@@ -84,7 +84,7 @@ serve(async (req) => {
           selectAll(()=>sb.from("expenses").select("id,client_id,type,amount,concept,materia,category,created_by,no_descuenta_saldo,client_rendered_at,rendered_at,paid_by_client,notaria_render_id,notaria_liquidado_at,ot_number,date,deleted_at,apertura_id").is("deleted_at",null).order("id")),
           sb.from("petty_cash").select("user_name,amount"),
           sb.from("tasks").select("id,client_id,title,status,due,who,assignees,delegated_to,completed_at"),
-          sb.from("rendiciones").select("user_name,tipo,estado_envio,sent_at,created_at,anulada_at"),
+          sb.from("rendiciones").select("id,user_name,tipo,estado_envio,sent_at,created_at,anulada_at,total,movimiento_id"),
           sb.from("sales").select("id,client_id,responsible,status,deleted_at"),
           selectAll(()=>sb.from("billing").select("id,client_id,sale_id,invoice_no,status,amount,paid_amount,issued_at,due,billing_type,deleted_at,created_at,concept").is("deleted_at",null).order("id")),
           sb.from("terceros_pagos").select("id,proveedor_id,billing_id,estado,monto,liquido,factura_numero"),
@@ -140,6 +140,20 @@ serve(async (req) => {
     // ── Datos de la oficina para los socios (mismas reglas únicas que el resumen del lunes, el análisis de la notaría y los
     // pendientes del primer lunes, que este correo reemplaza). Solo se cargan si hay un socio entre los destinatarios.
     const primerLunes = Number(hoyCL.slice(8,10)) <= 7;
+    // Regla 5: liquidación a la notaría enviada hace 10 días o más sin pago enlazado. Solo se afirma si la cartola de la cuenta de
+    // gastos está al día (cargada hasta hace 3 días como máximo); con la cartola atrasada el pago podría estar sin verse.
+    const cobGastos = await fetch(`${SUPABASE_URL}/rest/v1/rpc/cartola_cobertura`, { method:"POST", headers:{ apikey:SERVICE_KEY, Authorization:`Bearer ${SERVICE_KEY}`, "Content-Type":"application/json" }, body:"{}" }).then(r=>r.json()).catch(()=>[]);
+    const hastaGastos = ((Array.isArray(cobGastos)?cobGastos:[]).filter((x:any)=>x.rol==="gastos").map((x:any)=>String(x.hasta||"").slice(0,10)).sort().pop()) || null;
+    const cartolaAlDia = !!hastaGastos && (diasDe(hastaGastos) ?? 99) <= 3;
+    // Solo la liquidación reciente (10 a 45 días): lo anterior es historia con pagos que se revisaron aparte. Un cargo de la cuenta de
+    // gastos por el mismo monto, hasta 5 días antes o después del envío, cuenta como pago aunque no esté enlazado a la liquidación.
+    const candLiq = cartolaAlDia ? (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && !r.anulada_at && r.estado_envio==="enviada" && !r.movimiento_id && r.sent_at && (diasDe(String(r.sent_at).slice(0,10))||0) >= 10 && (diasDe(String(r.sent_at).slice(0,10))||0) <= 45) : [];
+    let liqSinPago:any[] = candLiq;
+    if (candLiq.length) {
+      const desdeC = candLiq.map((r:any)=>String(r.sent_at).slice(0,10)).sort()[0];
+      const cargosG = (await sb.from("cartola_movimientos").select("fecha,monto").eq("tipo","cargo").eq("rol_cuenta","gastos").gte("fecha", new Date(Date.parse(desdeC)-5*864e5).toISOString().slice(0,10))).data || [];
+      liqSinPago = candLiq.filter((r:any)=> !cargosG.some((c:any)=> Math.round(Number(c.monto))===Math.round(Number(r.total)) && Math.abs(Date.parse(String(c.fecha).slice(0,10))-Date.parse(String(r.sent_at).slice(0,10)))<=5*864e5));
+    }
     const cargarOficina = async () => {
       const lunesISO = _lun.toISOString().slice(0,10), lunesPrev = new Date(_lun.getTime()-7*864e5).toISOString().slice(0,10);
       const [vs, ufs, ne, dec, det, actOk, conc, abs, movs, rutsEq, estRut, conXml, sinProyRaw] = await Promise.all([
@@ -174,7 +188,7 @@ serve(async (req) => {
       const rutsPropios = new Set(([...(rutsEq.data||[]).map((r:any)=>r.rut), estRut.data?.[0]?.rut].filter(Boolean) as string[]).map((r:string)=> String(r).replace(/[^0-9kK]/g,"").toUpperCase()));
       const abonos = abonosPorIdentificar(movs.data||[], { rutsPropios });
       // Notaría: deuda total con la notaría (regla única analisisNotaria, la misma de la página Notaría).
-      const an = analisisNotaria({ expenses, rendiciones: [], hoy: hoyCL, esOficina });
+      const an = analisisNotaria({ expenses, rendiciones: rendiciones||[], hoy: hoyCL, esOficina });
       const nlOf = notariaPorLiquidar(expenses, { esOficina });
       // Trabajos sin movimiento: lo que dejó el auditor nocturno, sin los marcados «Sigue activo».
       const activoOk = new Set((actOk.data||[]).map((r:any)=> String(r.key)));
@@ -229,9 +243,11 @@ serve(async (req) => {
         // Liquidaciones a la notaría preparadas y aún sin enviar (no cuentan las anuladas ni las marcadas pagadas sin correo).
         const correosSinCerrar = (rendiciones||[]).filter((r:any)=> r.tipo==="notaria" && !r.anulada_at && r.estado_envio==="por_enviar"   /* filas antiguas sin estado = pagadas (misma regla que notaEstado en la app) */);
         // Montos por confirmar con la OT (más de 3 veces lo habitual del acto, regla analisisNotaria) y documentos de la notaría por clasificar.
-        const fuera = analisisNotaria({ expenses, rendiciones: [], hoy: hoyCL, esOficina: (cid:string)=> internos.has(String(cid)) }).fuera;
+        const anM = analisisNotaria({ expenses, rendiciones: rendiciones||[], hoy: hoyCL, esOficina: (cid:string)=> internos.has(String(cid)) });
+        const fuera = anM.fuera;   // solo trámites de tarifa fija (regla 4)
+        const largas = anM.largas||[];
         const nDocs = (docsNotaria||[]).filter((d:any)=> d.estado==="por_clasificar").length, nDocsOt = (docsNotaria||[]).filter((d:any)=> d.estado==="pendiente_ot").length;
-        if (nl.pagables.length || nl.sinCliente.length || correosSinCerrar.length || fuera.length || nDocs || nDocsOt) notaria = { nFuera:fuera.length, montoFuera:fuera.reduce((a:number,x:any)=>a+(Number(x.e.amount)||0),0), nDocs, nDocsOt, nOt:nl.pagables.length, montoOt:nl.montoPagables, nSinCli:nl.sinCliente.length, montoSinCli:nl.montoSinCliente, nEsperan:nl.esperan.length, nCorreos:correosSinCerrar.length };
+        if (nl.pagables.length || nl.sinCliente.length || correosSinCerrar.length || fuera.length || (primerLunes && largas.length) || nDocs || nDocsOt) notaria = { nLargas:largas.length, montoLargas:largas.reduce((a:number,e:any)=>a+(Number(e.amount)||0),0), diasLargas:anM.demora?.max||0, nFuera:fuera.length, montoFuera:fuera.reduce((a:number,x:any)=>a+(Number(x.e.amount)||0),0), nDocs, nDocsOt, nOt:nl.pagables.length, montoOt:nl.montoPagables, nSinCli:nl.sinCliente.length, montoSinCli:nl.montoSinCliente, nEsperan:nl.esperan.length, nCorreos:correosSinCerrar.length };
       }
       // (5) Responsable de clientes: sus clientes = los de sus ventas (o abogado del cliente si la venta no tiene responsable).
       let cartera:any = null;
@@ -291,6 +307,8 @@ serve(async (req) => {
         t.push(tile("Por cobrar", fmt(c.bills.reduce((a:number,x:any)=>a+x.saldo,0)), venc ? `<b style="color:${RED};">${venc} vencida${venc!==1?"s":""}</b> de ${c.bills.length}` : `${c.bills.length} factura${c.bills.length!==1?"s":""} por vencer`, "Ver cobranza", d.socio?"cobranza":"porcobrar", venc?RED:INK)); }
       if (c && c.com && c.com.nListas) t.push(tile("Comisiones", fmt(c.com.liqListas), `${c.com.nListas} por pagar`, "Registrar boleta", "comisiones"));
       if (d.socio && of) { const a=of.an;
+        if (primerLunes && a.largas.length) t.push(tile(`OT de más de ${a.demora?.max} días`, String(a.largas.length), fmt(a.largas.reduce((s:number,e:any)=>s+(Number(e.amount)||0),0)), "Pedir fondos o castigar", "notaria", AMB));
+        if (liqSinPago.length) t.push(tile("Liquidación sin pago", fmt(liqSinPago.reduce((s:number,r:any)=>s+(Number(r.total)||0),0)), `enviada ${fDia(String(liqSinPago[0].sent_at).slice(0,10))} · ${diasDe(String(liqSinPago[0].sent_at).slice(0,10))} días`, "Ver el pago", "notaria", RED));
         if (a.pend.length) t.push(tile("Notaría", fmt(a.total), `${a.pend.length} OT por pagar`, "Ver la deuda", "notaria"));
         if (of.sinEmitir.length) t.push(tile("Cuotas sin facturar", String(of.sinEmitir.length), "vencidas", "Revisar", "sinemitir"));
         if (of.abonos.length) t.push(tile("Abonos por identificar", fmt(of.abonos.reduce((s:number,m:any)=> s+(Number(m.monto)||0), 0)), `${of.abonos.length} abono${of.abonos.length!==1?"s":""} sin cliente`, "Identificar", "cobros"));
@@ -299,6 +317,9 @@ serve(async (req) => {
       if (d.notaria) { const n=d.notaria, nOt=n.nOt;
         if (nOt || n.nCorreos) t.push(tile("Notaría", nOt?`${nOt} OT`:`${n.nCorreos}`, nOt?`${fmt(n.montoOt)} por liquidar`:`correo${n.nCorreos!==1?"s":""} sin cerrar`, "Ver la deuda", "notaria"));
         if (n.nSinCli) t.push(tile("OT sin cliente", String(n.nSinCli), fmt(n.montoSinCli||0), "Asignar cliente", "notariasincliente", AMB));
+        if (n.nFuera) t.push(tile("Monto sobre lo habitual", `${n.nFuera} OT`, `${fmt(n.montoFuera)} · tarifa fija`, "Confirmar con la notaría", "notaria", AMB));
+        if (primerLunes && n.nLargas) t.push(tile(`OT de más de ${n.diasLargas} días`, String(n.nLargas), fmt(n.montoLargas), "Pedir fondos o castigar", "notaria", AMB));
+        if (liqSinPago.length) t.push(tile("Liquidación sin pago", fmt(liqSinPago.reduce((a:number,r:any)=>a+(Number(r.total)||0),0)), `enviada ${fDia(String(liqSinPago[0].sent_at).slice(0,10))} · ${diasDe(String(liqSinPago[0].sent_at).slice(0,10))} días`, "Ver el pago", "notaria", RED));
         if (n.nDocs || n.nDocsOt) t.push(tile("Documentos", String(n.nDocs || n.nDocsOt), n.nDocs ? `por clasificar${n.nDocsOt ? ` · ${n.nDocsOt} esperan su OT` : ""}` : "esperan su OT", "Clasificar", "notaria")); }
       if (!t.length) return "";
       const filas:string[] = []; for (let i=0;i<t.length;i+=2) filas.push(`<tr>${t[i]}${t[i+1]||'<td width="50%"></td>'}</tr>`);
