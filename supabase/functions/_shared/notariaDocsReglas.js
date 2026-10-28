@@ -121,13 +121,13 @@ export function sugerenciasDocumento(doc, { ots = [], usadas = new Set(), indice
 // una persona); si no, nombre, pero comparando cada compareciente POR SEPARADO (dos palabras del cliente en la misma persona) y
 // descartando notarios, testigos y a la gente de la oficina (que comparecen como testigos o solicitantes). Nombre de una sola palabra
 // solo cuenta contra una razón social, nunca contra el nombre de una persona.
-export function clienteDeLectura(lec, { indice = [], porRut = {}, excluir = [] } = {}) {
+export function clienteDeLectura(lec, { indice = [], porRut = {}, excluir = [], rutsExcluir = new Set() } = {}) {
   const rutN = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
   const fuera = new Set((excluir || []).map(x => norm(x).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean))
   const esOficina = n => { const t = norm(n).replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim(); return [...fuera].some(f => f && (t.includes(f) || f.split(' ').filter(w => w.length > 3).every(w => t.includes(w)))) }
-  const personas = (lec?.comparecientes || []).filter(p => p?.nombre && !/notari|testig|suplente|oficial/i.test(p.calidad || '') && !esOficina(p.nombre))
+  const personas = (lec?.comparecientes || []).filter(p => p?.nombre && !/notari|testig|suplente|oficial/i.test(p.calidad || '') && !esOficina(p.nombre) && !rutsExcluir.has(rutN(p.rut)))
   const socs = (lec?.sociedades || []).filter(s => s?.razon_social)
-  const ruts = [...personas, ...socs].map(x => rutN(x.rut)).filter(r => r.length >= 7)
+  const ruts = [...personas, ...socs].map(x => rutN(x.rut)).filter(r => r.length >= 7 && !rutsExcluir.has(r))
   const porR = [...new Set(ruts.map(r => porRut[r]).filter(Boolean))]
   if (porR.length === 1) return { client_id: porR[0], fuente: 'ia', motivo: 'RUT en la comparecencia' }
   const hits = new Set()

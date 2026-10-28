@@ -160,14 +160,18 @@ Deno.serve(async (req) => {
     const deNotaria = (de: string) => { const d = String(de || "").toLowerCase(); return remitentes.some((r) => d.includes(r.toLowerCase())); };
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-    const [ots, clients, ents, previos, contactos, aprendidos] = await Promise.all([
+    const [ots, clients, ents, previos, contactos, aprendidos, rutsAprendidos, miembrosRut] = await Promise.all([
       todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
       todas("clients?select=id,name,rut,drive_folder_id,is_internal,is_colaborador,abogado_responsable"),
       todas("client_entities?select=id,client_id,name,rut"),
       todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,ot_number,drive_file_id,drive_nombre,leido_at&origen=eq.notaria"),
       todas("contacts?select=id,client_id,nombre"),
       todas("learnings?kind=eq.notaria_parte&select=id,key,value"),
+      todas("learnings?kind=eq.notaria_rut&select=key,value"),
+      todas("miembros?select=rut"),
     ]);
+    // El RUT de una persona del estudio nunca identifica al cliente; el RUT que se confirmó a mano sí (regla 1, 28-10-2026).
+    const rutsEquipo = new Set(miembrosRut.map((m: { rut: string }) => rutN(m.rut)).filter((r: string) => r.length >= 7));
     // Sugerencias (fuente única con la página): OT ya usadas por un documento no cuentan; lo confirmado a mano se aprende.
     const indice = indiceNombres(clients, ents, contactos, aprendidos);
     const clasificados = previos.filter((p) => p.cliente_id && ["guardado", "asignado"].includes(p.estado));
@@ -339,7 +343,7 @@ Deno.serve(async (req) => {
       const vistos = new Set<string>();
       const actual = [...otraVez, ...extractos, ...sinLeer].filter((x) => !vistos.has(x.id) && vistos.add(x.id));
       const forzados = new Set([...otraVez, ...extractos].map((x) => x.id));
-      const porRut: Record<string, string> = {}; [...clients.map((c) => [c.rut, c.id]), ...ents.map((e) => [e.rut, e.client_id])].forEach(([r, id]) => { const k = rutN(r as string); if (k.length >= 7 && id) porRut[k] = String(id); });
+      const porRut: Record<string, string> = {}; [...clients.map((c) => [c.rut, c.id]), ...ents.map((e) => [e.rut, e.client_id]), ...rutsAprendidos.map((l: { key: string; value: string }) => [l.key, l.value])].forEach(([r, id]) => { const k = rutN(r as string); if (k.length >= 7 && id && !rutsEquipo.has(k)) porRut[k] = String(id); });
       const N = Math.min(10, Number(body.leer) || 3);
       // La gente de la oficina comparece como testigo o solicitante: nunca es el cliente.
       const equipoNombres = String(cfg.find((c: { key: string }) => c.key === "notaria_equipo_nombres")?.value || "").split(/[,;]/).map((x) => x.trim()).filter(Boolean);
@@ -347,7 +351,7 @@ Deno.serve(async (req) => {
         try {
           const lec = await leerConIA(await bajarDrive(d.drive_file_id));
           // Un extracto que ya tiene cliente no necesita sugerencia: solo se guarda su lectura.
-          const sugerencia = d.cliente_id && esExtracto(d) ? null : clienteDeLectura(lec, { indice, porRut, excluir: equipoNombres });
+          const sugerencia = d.cliente_id && esExtracto(d) ? null : clienteDeLectura(lec, { indice, porRut, excluir: equipoNombres, rutsExcluir: rutsEquipo });
           const cidS = sugerencia?.client_id || null;
           await rest(`documentos_notaria?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ lectura: lec, sugerencia, leido_at: new Date().toISOString(), ...(lec.acto && !d.tipo_documento ? { tipo_documento: String(lec.acto).toUpperCase() } : {}), updated_at: new Date().toISOString() }) });
           leidos.push({ archivo: d.archivo_nombre, acto: lec.acto, cliente: cidS ? cli[cidS]?.name : null });

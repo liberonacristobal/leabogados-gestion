@@ -1455,7 +1455,7 @@ function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], expenses=[
       if(!DEMO){ const {error}=await supabase.from('documentos_notaria').update({cliente_id:cid,estado:'asignado',motivo:null,updated_at:new Date().toISOString()}).in('id',ids); if(error) throw error }
       ds.forEach(d=>logActividad('notaria.documento_asignado',{tabla:'documentos_notaria',id:d.id,detalle:{title:`${_tipoDoc(d)} → ${nom(cid)}`,archivo:d.archivo_nombre,cliente:nom(cid)}}))
       // Lo confirmado a mano se aprende: la razón social que leyó la IA (si es una sola) queda como parte de ese cliente.
-      if(aprender&&!DEMO) ds.forEach(d=>{ const so=(d.lectura?.sociedades||[]).filter(x=>x?.razon_social); if(so.length===1) learnPut('notaria_parte',so[0].razon_social,String(cid)) })
+      if(aprender&&!DEMO) ds.forEach(d=>{ const so=(d.lectura?.sociedades||[]).filter(x=>x?.razon_social); if(so.length===1){ learnPut('notaria_parte',so[0].razon_social,String(cid)); const rt=String(so[0].rut||'').replace(/[^0-9kK]/g,'').toUpperCase(); if(rt.length>=7) learnPut('notaria_rut',rt,String(cid)) } })
       // El extracto publicado trae la razón social y el RUT de la sociedad: al asignarlo, queda como razón social del cliente.
       if(!DEMO) for(const d of ds){ const pb=d.do_publicacion; if(!pb?.rut||!pb?.nombre) continue
         const nueva=await aprenderRS(cid, fmtRutCL(pb.rut), rsBonita(_sinRut(pb.nombre)), clientEntities)

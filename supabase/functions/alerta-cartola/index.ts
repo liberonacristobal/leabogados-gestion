@@ -76,6 +76,20 @@ async function cuadre(): Promise<{ hallazgos: string[]; claves: string[] }> {
   return { hallazgos, claves };
 }
 
+// ── AVISOS QUE ESPERAN LA CARTOLA DE GASTOS (28-10-2026): la cuenta de gastos no trae archivo diario, se carga a mano. Un aviso del banco
+// de esa cuenta que lleva 3 días o más sin movimiento donde calzar (no lo muestra la cartola) quiere decir que la cartola está atrasada:
+// sin ella, los fondos de los clientes no se concilian. Se avisa una vez por conjunto de avisos.
+// deno-lint-ignore no-explicit-any
+async function avisosEsperan(): Promise<{ lista: any[]; ultima: string | null }> {
+  const movG = await sb("cartola_movimientos?select=cuenta,fecha&rol_cuenta=eq.gastos&order=fecha.desc&limit=1");
+  if (!movG.length) return { lista: [], ultima: null };
+  const cuentaG = String(movG[0].cuenta).replace(/\D/g, "").replace(/^0+/, "");
+  const limite = new Date(Date.now() - 3 * 86400000).toISOString();
+  const piso = new Date(Date.now() - 40 * 86400000).toISOString();
+  const av = await sb(`avisos_banco?select=id,monto,tipo,cuenta,fecha_hora,contraparte_nombre,mensaje&estado=eq.por_calzar&fecha_hora=lte.${limite}&fecha_hora=gte.${piso}&order=fecha_hora.asc`);
+  return { lista: av.filter((a: any) => String(a.cuenta || "").replace(/\D/g, "").replace(/^0+/, "") === cuentaG), ultima: String(movG[0].fecha).slice(0, 10) };
+}
+
 Deno.serve(async (req) => {
   { const eq = await cargarEquipo(SB_URL, SB_KEY); SOCIOS = eq.socios.map((m: { email: string }) => m.email); }   // equipo del estudio (miembros)
   // deno-lint-ignore no-explicit-any
@@ -138,7 +152,30 @@ Deno.serve(async (req) => {
       cuadreRes.enviado = true;
     }
   } catch (e) { cuadreRes = { hallazgos: [`No se pudo cuadrar: ${String((e as Error).message || e)}`], enviado: false }; }
-  if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov, cuadre: cuadreRes });
+  // Avisos del banco de la cuenta de gastos que esperan su cartola: aviso aparte, una vez por conjunto.
+  let esperanRes: { n: number; enviado: boolean } = { n: 0, enviado: false };
+  try {
+    const ev = await avisosEsperan();
+    esperanRes.n = ev.lista.length;
+    const cfgE = await sb("learnings?select=id,value&kind=eq.config&key=eq.alerta_cartola_avisos_esperan");
+    let yaE: string[] = []; try { yaE = JSON.parse(String(cfgE?.[0]?.value || "[]")); } catch { yaE = []; }
+    const nuevosE = ev.lista.filter((a: { id: string }) => !yaE.includes(a.id));
+    const onE = String((await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola"))?.[0]?.value || "off").trim().toLowerCase() === "on";
+    if (nuevosE.length && onE && !body.dryRun) {
+      const filasE = ev.lista.slice(0, 8).map((a: any) => `<div style="font-size:13.5px;color:#3D3D3D;line-height:1.5;padding:9px 0;border-top:1px solid #EAEEF0;"><b>${clp(Number(a.monto))}</b> · ${String(a.tipo) === "cargo" ? "cargo" : "abono"} · ${dmy(String(a.fecha_hora).slice(0, 10))}${a.contraparte_nombre ? ` · ${String(a.contraparte_nombre).replace(/[<>&]/g, "")}` : ""}</div>`).join("");
+      const htmlE = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#ECEFF1;margin:0;padding:22px 12px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;"><div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="${ESTUDIO}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div><div style="padding:26px 26px 22px;"><div style="font-size:18px;color:#1F2A30;font-weight:700;margin-bottom:14px;">La cartola de gastos está atrasada</div><div style="font-size:13.5px;color:#3D3D3D;line-height:1.6;margin-bottom:10px;">${ev.lista.length === 1 ? "Un aviso del banco lleva" : `${ev.lista.length} avisos del banco llevan`} 3 días o más sin movimiento donde calzar. La última cartola de la cuenta de gastos cargada llega hasta el ${ev.ultima ? dmy(ev.ultima) : "—"}. Mientras falte, los fondos de los clientes no se concilian.</div>${filasE}<div style="font-size:13.5px;color:#3D3D3D;line-height:1.6;padding:12px 0 0;border-top:1px solid #EAEEF0;">Descarguen la cartola de la cuenta de gastos desde el portal del banco y cárguenla en Banco con «Cargar cartola»: los avisos se unen solos a sus movimientos.</div><div style="margin-top:18px;"><a href="https://gestion.leabogados.cl/?ir=cobros" style="display:block;background:#003C50;color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">Ir a Banco &rarr;</a></div></div></div></body></html>`;
+      const clientE = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
+      await clientE.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: "La cartola de gastos esta atrasada", content: "Ver el contenido en formato HTML.", html: qpSafe(htmlE) });
+      await clientE.close();
+      await enviarPush(SB_URL, SB_KEY, [...SOCIOS], { titulo: "La cartola de gastos está atrasada", cuerpo: `${ev.lista.length} aviso${ev.lista.length !== 1 ? "s" : ""} del banco sin calzar · última cartola ${ev.ultima ? dmy(ev.ultima) : "—"}`, url: "/?ir=cobros", etiqueta: "cartola-gastos" }, "sistema").catch(() => null);
+      const hdrE = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" };
+      const valE = JSON.stringify([...new Set([...yaE, ...ev.lista.map((a: { id: string }) => a.id)])].slice(-80));
+      if (cfgE?.[0]?.id) await fetch(`${SB_URL}/rest/v1/learnings?id=eq.${cfgE[0].id}`, { method: "PATCH", headers: hdrE, body: JSON.stringify({ value: valE }) });
+      else await fetch(`${SB_URL}/rest/v1/learnings`, { method: "POST", headers: hdrE, body: JSON.stringify({ kind: "config", key: "alerta_cartola_avisos_esperan", value: valE, estudio_id: "lea" }) });
+      esperanRes.enviado = true;
+    }
+  } catch (e) { esperanRes = { n: -1, enviado: false }; }
+  if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov, cuadre: cuadreRes, esperan: esperanRes });
 
   // Interruptor de envío (base): learnings config alerta_cartola = 'on'
   const cfg = await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola");
@@ -183,7 +220,7 @@ ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpaddin
 <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; ${ESTUDIO}</div></div>
 </div></body></html>`;
 
-  if (!ON || body.dryRun) return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: false, cuadre: cuadreRes, motivo: body.dryRun ? "dry-run pedido" : "interruptor apagado (learnings config alerta_cartola != on) — dry-run", ...(body.dryRun ? { subject: asunto, html } : {}) });
+  if (!ON || body.dryRun) return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: false, cuadre: cuadreRes, esperan: esperanRes, motivo: body.dryRun ? "dry-run pedido" : "interruptor apagado (learnings config alerta_cartola != on) — dry-run", ...(body.dryRun ? { subject: asunto, html } : {}) });
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });

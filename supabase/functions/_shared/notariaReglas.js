@@ -43,6 +43,9 @@ export function disponibleNotaria(expenses, cid, { esOficina = () => false } = {
 // (mandato judicial antes que poder/mandato; uso de domicilio antes que autorización).
 const _ACTOS = [['Mandato judicial', /mandato judicial/], ['Uso de domicilio', /domicilio/], ['Poder o mandato especial', /poder|mandato/], ['Constitución de sociedad', /constituci/], ['Modificación de sociedad', /modificaci/], ['Acta de junta', /acta|junta|reduccion/], ['Compraventa o cesión', /compraventa|promesa|cesion/], ['Autorización de firma', /autoriz|firma/], ['Copia o certificado', /copia|certificad/], ['Finiquito o laboral', /finiquito|laboral|contrato de trabajo/], ['Mutuo o reconocimiento de deuda', /mutuo|deuda/], ['Arrendamiento', /arriendo|arrendamiento/], ['Posesión efectiva', /posesion efectiva|inventario/], ['Declaración jurada', /declaracion jurada|estado civil/]]
 export const tipoActoNotaria = e => { const t = `${e?.materia || ''} ${e?.concept || ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); const a = _ACTOS.find(([, re]) => re.test(t)); return a ? a[0] : 'Otro' }
+// Trámites de tarifa fija: su costo no depende del valor del bien, así que un monto sobre 3 veces lo habitual es un error probable.
+// Constituciones, modificaciones, compraventas, mutuos, arriendos y posesiones cobran según el valor y quedan fuera (28-10-2026).
+export const ACTOS_TARIFA_FIJA = new Set(['Mandato judicial', 'Uso de domicilio', 'Poder o mandato especial', 'Autorización de firma', 'Copia o certificado', 'Finiquito o laboral', 'Declaración jurada'])
 const _med = xs => { const a = xs.slice().sort((x, y) => x - y); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2) }
 const _q = (xs, p) => { const a = xs.slice().sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(p * (a.length - 1)))] : null }
 const _d = (a, b) => Math.round((new Date(String(a).slice(0, 10) + 'T12:00') - new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
@@ -66,7 +69,7 @@ export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde
   const cubre = clientes.filter(c => !c.oficina).reduce((a, c) => a + Math.min(c.disp, c.ot), 0)
   const sinFondo = clientes.filter(c => !c.oficina && c.cid !== '—' && c.disp <= 0).sort((a, b) => b.ot - a.ot)
   const largas = maxDemora != null ? pend.filter(e => _d(hoy, e.date) > maxDemora).sort((a, b) => String(a.date).localeCompare(String(b.date))) : []
-  const fuera = pend.map(e => ({ e, tipo: tipoActoNotaria(e), med: medDe(tipoActoNotaria(e)) })).filter(x => x.med && (Number(x.e.amount) || 0) > 3 * x.med)
+  const fuera = pend.map(e => ({ e, tipo: tipoActoNotaria(e), med: medDe(tipoActoNotaria(e)) })).filter(x => x.med && ACTOS_TARIFA_FIJA.has(x.tipo) && (Number(x.e.amount) || 0) > 3 * x.med)
   const sinFondo60 = pend.filter(e => { const c = clientes.find(x => x.cid === String(e.client_id || '—')); return c && !c.oficina && c.disp < c.ot && _d(hoy, e.date) > 60 })
   const liqs = (rendiciones || []).filter(r => r.tipo === 'notaria' && !r.anulada_at).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
   return {

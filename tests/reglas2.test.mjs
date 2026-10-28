@@ -310,3 +310,20 @@ test('datos de pago del estudio: salen de la tabla estudios (igual que la cuenta
   assert.equal(datosPago(est, 'gastos').cuenta, '1383922')
   assert.deepEqual(datosPago(null), { razon: '', rut: '', banco: '', cuenta: '', email: '' })   // sin estudio: vacío, nunca otro estudio
 })
+
+test('notaría, regla 4: solo los trámites de tarifa fija se marcan por monto sobre 3 veces lo habitual', async () => {
+  const { analisisNotaria } = await import('../supabase/functions/_shared/notariaReglas.js')
+  const mk = (i, concept, amount) => ({ id: `e${i}`, type: 'gasto', category: 'Notaria', concept, amount, date: '2026-09-01', client_id: 'c1', ot_number: String(100 + i) })
+  const base = [...Array(6)].map((_, i) => mk(i, 'Poder especial', 10000)).concat([...Array(6)].map((_, i) => mk(10 + i, 'Compraventa de inmueble', 50000)))
+  const raras = [mk(30, 'Poder especial', 80000), mk(31, 'Compraventa de inmueble', 400000)]
+  const r = analisisNotaria({ expenses: [...base, ...raras], rendiciones: [], hoy: '2026-10-28' })
+  assert.deepEqual(r.fuera.map(x => x.e.id), ['e30'])   // el poder sí; la compraventa cobra según el valor y no
+})
+
+test('notaría, regla 1: el RUT de una persona del estudio nunca identifica al cliente', async () => {
+  const { clienteDeLectura } = await import('../supabase/functions/_shared/notariaDocsReglas.js')
+  const lec = { comparecientes: [{ nombre: 'Persona Del Estudio', rut: '15.621.320-9', calidad: 'compareciente' }], sociedades: [{ razon_social: 'Sociedad Demo SpA', rut: '76.111.222-3' }] }
+  const porRut = { '156213209': 'c-abogado', '761112223': 'c-sociedad' }
+  assert.equal(clienteDeLectura(lec, { porRut })?.client_id, undefined, 'sin la exclusión, dos clientes distintos por RUT no se resuelven')
+  assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['156213209']) })?.client_id, 'c-sociedad')
+})
