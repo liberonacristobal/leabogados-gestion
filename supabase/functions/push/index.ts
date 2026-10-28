@@ -11,7 +11,7 @@
 // _shared/push.ts. Auth: sesión de una persona del dominio de la oficina, o CRON_SECRET en body.secret (cola, normativa).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { esDelDominio } from "../_shared/estudio.ts";
-import { enviarPush, clavePublicaPush, type TipoPush } from "../_shared/push.ts";
+import { enviarPush, clavePublicaPush, diagnosticarPush, type TipoPush } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const esCron = !!CRON_SECRET && body.secret === CRON_SECRET;
+    if (esCron && body.action === "diagnostico") return json({ ok: true, resultado: await diagnosticarPush(SB_URL, SERVICE_KEY, String(body.email || "cl@leabogados.cl").toLowerCase(), { titulo: "Diagnóstico de notificaciones", cuerpo: "Si ves este aviso, el teléfono recibe bien.", url: "/?ir=tareas", etiqueta: "diagnostico" }) });
     if (esCron && body.action === "cola") return json({ ok: true, ...(await cola(!!body.dryRun)) });
     if (esCron && body.action === "normativa") return json({ ok: true, ...(await normativa(!!body.dryRun)) });
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");

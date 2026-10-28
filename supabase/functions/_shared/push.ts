@@ -82,4 +82,24 @@ export async function enviarPush(sbUrl: string, serviceKey: string, emails: stri
   return { enviados, fallidos };
 }
 
+// Diagnóstico: envía un aviso a los dispositivos de un correo y devuelve lo que respondió el servicio de Apple/Google de cada uno.
+export async function diagnosticarPush(sbUrl: string, serviceKey: string, email: string, aviso: AvisoPush): Promise<unknown[]> {
+  if (!configurar()) return [{ error: "Sin claves VAPID en el servidor" }];
+  const H = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  const r = await fetch(`${sbUrl}/rest/v1/push_suscripciones?select=id,endpoint,p256dh,auth,activo,created_at&email=eq.${encodeURIComponent(email)}`, { headers: H });
+  const subs: { id: string; endpoint: string; p256dh: string; auth: string; activo: boolean; created_at: string }[] = r.ok ? await r.json() : [];
+  const out: unknown[] = [];
+  for (const s of subs) {
+    const base = { servicio: new URL(s.endpoint).host, activo: s.activo, creada: s.created_at };
+    try {
+      const res = await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(aviso), { TTL: 3600, urgency: "high" });
+      out.push({ ...base, estado: res.statusCode, cuerpo: String(res.body || "").slice(0, 200), cabeceras: res.headers });
+    } catch (e) {
+      const x = e as { statusCode?: number; body?: string; message?: string };
+      out.push({ ...base, error: x.message, estado: x.statusCode, cuerpo: String(x.body || "").slice(0, 300) });
+    }
+  }
+  return out;
+}
+
 export const clavePublicaPush = () => Deno.env.get("VAPID_PUBLIC_KEY") || "";
