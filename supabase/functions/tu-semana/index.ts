@@ -8,7 +8,6 @@ import { notariaPorLiquidar, analisisNotaria } from "../_shared/notariaReglas.js
 import { fgCliente, gastosPorRendirCli } from "../_shared/gastosReglas.js";
 import { cuotasSinEmitir, trabajosSinFacturar } from "../_shared/ventasReglas.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
-import { comprasPorPagar } from "../_shared/comprasReglas.js";
 
 // Correo semanal "Tu semana": el ÚNICO correo recurrente de la semana para cada persona (decisión del 26-10-2026), lunes 08:30.
 // Socios: además de lo suyo, notaría, cuotas sin emitir, compras por pagar, abonos por identificar y trabajos sin movimiento
@@ -174,15 +173,6 @@ serve(async (req) => {
       const porCobrarOf = cobrables.reduce((a:number,b:any)=> a+saldoBill(b), 0);
       const rutsPropios = new Set(([...(rutsEq.data||[]).map((r:any)=>r.rut), estRut.data?.[0]?.rut].filter(Boolean) as string[]).map((r:string)=> String(r).replace(/[^0-9kK]/g,"").toUpperCase()));
       const abonos = abonosPorIdentificar(movs.data||[], { rutsPropios });
-      // Facturas recibidas por pagar (misma regla y marcas que Oficina › Compras).
-      const [cpDocs, cpCargos, cpGastos, cpL, cpT] = await Promise.all([
-        selectAll(()=>sb.from("sii_compras_docs").select("id,folio,tipo_dte,fecha_emision,emisor_rut,emisor_name,monto,movimiento_id").order("id")),
-        selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,rut_contraparte,estado,es_interno").eq("tipo","cargo").not("rut_contraparte","is",null).order("id")),
-        selectAll(()=>sb.from("expenses").select("amount,date").eq("type","gasto").is("deleted_at",null).gte("date","2026-05-01").order("id")),
-        sb.from("learnings").select("kind,key").in("kind",["tarjeta_comercio","compra_pago_emisor","compra_pagada"]),
-        sb.from("terceros_pagos").select("rut").is("comision_pct",null).not("rut","is",null)]);
-      const cpK = (k:string)=> (cpL.data||[]).filter((r:any)=> r.kind===k).map((r:any)=> String(r.key));
-      const compras = (cpDocs.error || cpCargos.error) ? [] : comprasPorPagar({ docs: cpDocs.data||[], cargos: cpCargos.data||[], gastos: cpGastos.data||[], tarjetaReglas: cpK("tarjeta_comercio"), emisoresPago: new Set(cpK("compra_pago_emisor")), rutsColaboradores: new Set((cpT.data||[]).map((r:any)=> String(r.rut||"").toUpperCase().replace(/[^0-9K]/g,""))), pagadas: new Set(cpK("compra_pagada")), hoy: hoyCL });
       // Notaría: deuda total con la notaría (regla única analisisNotaria, la misma de la página Notaría).
       const an = analisisNotaria({ expenses, rendiciones: [], hoy: hoyCL, esOficina });
       // Trabajos sin movimiento: lo que dejó el auditor nocturno, sin los marcados «Sigue activo».
@@ -192,7 +182,7 @@ serve(async (req) => {
       const abgVenta = (v:any)=> v.responsible || (clients||[]).find((c:any)=> String(c.id)===String(v.client_id))?.abogado_responsable || "";
       // Gastos sin trabajo (primer lunes): por abogado del cliente; sin abogado, a ambos socios. Oficina fuera.
       const sinProy = (sinProyRaw.data||[]).filter((e:any)=> !esOficina(e.client_id));
-      return { sinEmitir, sinFact, cobradoSemana, porCobrarOf, abonos, compras, an, detenidos, abgVenta, sinProy };
+      return { sinEmitir, sinFact, cobradoSemana, porCobrarOf, abonos, an, detenidos, abgVenta, sinProy };
     };
     const quienesBase = testTo ? [ NAME_OF_EMAIL[testTo] || "Martín" ] : [...SOCIOS, ...LIMITADOS];
     const of = quienesBase.some((n:string)=> SOCIOS.includes(n)) ? await cargarOficina() : null;
@@ -292,7 +282,7 @@ serve(async (req) => {
     const tarjetas = (d:any)=> {
       const t:string[] = [];
       const nV=d.vencidas.length, nS=d.semana.length;
-      if (nV||nS) { const fechas=[...new Set(d.semana.map((x:any)=>String(x.t.due||"").slice(0,10)))] as string[];
+      if ((nV||nS) && !d.socio) { const fechas=[...new Set(d.semana.map((x:any)=>String(x.t.due||"").slice(0,10)))] as string[];
         t.push(tile("Tareas", String(nV+nS), nV ? `<b style="color:${RED};">${nV} vencida${nV!==1?"s":""}</b>${nS?` · ${nS} esta semana`:""}` : (fechas.length===1 ? `vence${nS!==1?"n":""} el ${fDia(fechas[0])}` : "esta semana"), "Ver tareas", "tareas", nV?RED:INK)); }
       if (d.caja && d.caja.nLiq) t.push(tile("Caja chica", fmt(d.caja.montoLiq), `${d.caja.nLiq} gasto${d.caja.nLiq!==1?"s":""} por liquidar`, "Liquidar", "cajachica"));
       const c=d.cartera;
@@ -302,14 +292,13 @@ serve(async (req) => {
       if (c && c.com && c.com.nListas) t.push(tile("Comisiones", fmt(c.com.liqListas), `${c.com.nListas} por pagar`, "Registrar boleta", "comisiones"));
       if (d.socio && of) { const a=of.an;
         if (a.pend.length) t.push(tile("Notaría", fmt(a.total), `${a.pend.length} OT por pagar`, "Ver la deuda", "notaria"));
-        if (of.sinEmitir.length) t.push(tile("Cuotas sin emitir", String(of.sinEmitir.length), "vencidas", "Revisar", "sinemitir"));
-        if (of.compras.length) t.push(tile("Compras por pagar", fmt(of.compras.reduce((s:number,x:any)=> s+x.falta, 0)), `${of.compras.length} factura${of.compras.length!==1?"s":""} recibida${of.compras.length!==1?"s":""}`, "Ver compras", "compras"));
+        if (of.sinEmitir.length) t.push(tile("Cuotas sin facturar", String(of.sinEmitir.length), "vencidas", "Revisar", "sinemitir"));
         if (of.abonos.length) t.push(tile("Abonos por identificar", fmt(of.abonos.reduce((s:number,m:any)=> s+(Number(m.monto)||0), 0)), `${of.abonos.length} abono${of.abonos.length!==1?"s":""} sin cliente`, "Identificar", "cobros"));
         if (d.socio.nSinProy) t.push(tile("Gastos sin trabajo", String(d.socio.nSinProy), fmt(d.socio.montoSinProy), "Asignar", "gastos"));
         if (d.socio.sinFact.length) t.push(tile("Trabajos sin facturar", String(d.socio.sinFact.length), "sin factura emitida", "Revisar", "sinfacturar")); }
       if (d.notaria) { const n=d.notaria, nOt=n.nOt+(n.nSinCli||0);
         if (nOt || n.nCorreos) t.push(tile("Notaría", nOt?`${nOt} OT`:`${n.nCorreos}`, nOt?`${fmt(n.montoOt+(n.montoSinCli||0))} por liquidar`:`correo${n.nCorreos!==1?"s":""} sin cerrar`, "Ver la deuda", "notaria"));
-        if (n.nFuera) t.push(tile("Por confirmar", fmt(n.montoFuera), `${n.nFuera} OT sobre 3 veces lo habitual`, "Revisar con la OT", "notaria", AMB));
+        if (n.nFuera) t.push(tile("Montos por confirmar", fmt(n.montoFuera), `${n.nFuera} OT sobre el monto habitual`, "Confirmar con la notaría", "notaria", AMB));
         if (n.nDocs || n.nDocsOt) t.push(tile("Documentos", String(n.nDocs || n.nDocsOt), n.nDocs ? `por clasificar${n.nDocsOt ? ` · ${n.nDocsOt} esperan su OT` : ""}` : "esperan su OT", "Clasificar", "notaria")); }
       if (!t.length) return "";
       const filas:string[] = []; for (let i=0;i<t.length;i+=2) filas.push(`<tr>${t[i]}${t[i+1]||'<td width="50%"></td>'}</tr>`);
@@ -347,6 +336,10 @@ serve(async (req) => {
     const dryRun = !!body.dryRun;
     const sent:any[] = [];
     let nombres = [...quienesBase];
+    // Quien no recibe el correo (learnings config tu_semana_excluir, nombres separados por coma): decisión del 28-10-2026.
+    const { data: exc } = await sb.from("learnings").select("value").eq("kind","config").eq("key","tu_semana_excluir").maybeSingle();
+    const excluidos = String(exc?.value||"").split(/[,;]+/).map(x=>nTxt(x)).filter(Boolean);
+    nombres = nombres.filter(n=> !excluidos.includes(nTxt(n)));
     if (soloNombres) nombres = nombres.filter(n=> soloNombres.includes(n));
 
     for (const nombre of nombres) {

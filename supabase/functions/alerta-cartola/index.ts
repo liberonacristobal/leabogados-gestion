@@ -89,7 +89,8 @@ Deno.serve(async (req) => {
   const dmy = (x: string) => x.split("-").reverse().join("-");
   const conDia = (x: string) => `${DIA[new Date(x + "T12:00").getDay()]} ${dmy(x)}`;
   const uno = gap.length === 1;
-  const asunto = uno ? `Cartola BICE pendiente del ${dmy(gap[0])}` : `Cartolas BICE pendientes: ${gap.length} días`;
+  // El asunto dice hasta qué día llega la última cartola cargada (el dato que no se discute); los días que faltan van en el cuerpo.
+  const asunto = `Cartola BICE pendiente: cargada hasta el ${lastCov ? dmy(lastCov) : "—"}`;
   const listaDias = gap.map((x) => `del ${conDia(x)}`).reduce((a, x, i, arr) => i === 0 ? x : i === arr.length - 1 ? `${a} y ${x}` : `${a}, ${x}`, "");
   const miembros = await sb("miembros?select=email,nombre").catch(() => []);
   const NV = "#003C50", HAIR = "#EAEEF0", INK = "#1F2A30", TXT = "#3D3D3D", MUT = "#66787F", FAINT = "#9DAEB4", AMB = "#9A6410", AMBBG = "#FAF0DA";
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
 <div style="padding:26px 26px 22px;">
 <div style="font-size:18px;color:${INK};font-weight:700;letter-spacing:-.2px;margin-bottom:14px;">${uno ? "Cartola pendiente" : "Cartolas pendientes"}</div>
 ${P(`${holaEquipo(SOCIOS, miembros)}.`)}
-${P(`${uno ? "No ha llegado la cartola" : "No han llegado las cartolas"} de la cuenta de honorarios del BICE ${listaDias}.`)}
+${P(`La última cartola cargada de la cuenta de honorarios del BICE llega hasta el ${lastCov ? conDia(lastCov) : "—"}. ${uno ? "Falta la cartola" : "Faltan las cartolas"} ${listaDias}: cada una llega la mañana del día hábil siguiente.`)}
 ${P(`Mientras no se ${uno ? "cargue" : "carguen"}, los abonos y cargos de ${uno ? "ese día" : "esos días"} no aparecen en Banco: los pagos de clientes quedan sin conciliar y el saldo de la cuenta no está al día.`, 18)}
 ${sec("BICE · Cuenta honorarios")}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas}</table>
 ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${pasos}</table>
