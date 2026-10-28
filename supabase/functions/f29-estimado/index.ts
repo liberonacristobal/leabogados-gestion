@@ -102,6 +102,7 @@ Deno.serve(async (req) => {
       + `<p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(destino, miembros))}:</p>`
       + `<p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">Estimación del F29 de ${esc(mesNom(per))}, con vencimiento el ${dmy(vence)}:</p>`
       + `<table style="width:100%;border-collapse:collapse;font-size:13px">${filas}</table>`
+      + `<a href="https://gestion.leabogados.cl/?ir=calendario" style="display:block;background:#003C50;color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;margin:16px 0 0">Ir al Calendario tributario &rarr;</a>`
       + `<p style="font-size:12px;color:#537281;margin:16px 0 0">Fuente: Registro de Ventas del SII, boletas de honorarios registradas en la app y F29 de ${esc(mesNom(prev))}${e.iu == null ? " (sin los valores de la contadora de ese mes: el impuesto único no se pudo estimar)" : ""}.</p></div></body></html>`;
     const texto = `Estimacion del F29 de ${mesNom(per)} (vence ${dmy(vence)}): PPM ${fmt(e.ppm)} + retenciones ${fmt(e.ret)} + impuesto unico ${e.iu != null ? fmt(e.iu) : "sin dato"} = ${fmt(e.total)}.`;
 
