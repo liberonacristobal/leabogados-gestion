@@ -22818,6 +22818,7 @@ function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,onOpenMo
     setShowCargaPag(false); setNotaMenuOpen(false); setSelectedClient(null); setShowHistorial(false); setShowGastosOficina(false); setShowBuscarClientes(false); setShowReasignar(false); setShowRevision(false)
     if(navTo&&navTo.cli){ const c=(clients||[]).find(x=>String(x.id)===String(navTo.cli)); if(c){ setHubOpen(false); if(isDesktop) setShowBuscarClientes(true); setSelectedClient(c) } }
     if(navTo&&navTo.liq) setLiqPend(String(navTo.liq))   // aviso del teléfono de una liquidación de caja chica
+    if(navTo==='cajasEquipo'){ setHubOpen(false); setShowRevisar(true); setRevCaja(true) }
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
@@ -43452,6 +43453,8 @@ export default function App() {
       if(ir==='notaria'){ setTab('expenses'); return setExpNav('deuda') }   // correo › Deuda de notaría
       if(ir==='rendir'){ setTab('expenses'); return setExpNav('rendirPedir') }   // correo de cierre › Rendir a clientes · Rendir y pedir
       if(ir==='cajachica') return setTab('cajachica')
+      if(ir==='notariasincliente'){ setTab('expenses'); return setExpNav('orphans') }   // correo «Tu semana» › OT de notaría sin cliente
+      if(ir==='cajasequipo'&&userRole==='admin'){ setTab('expenses'); return setExpNav('cajasEquipo') }   // aviso de caja chica baja o en negativo › cajas del equipo
       if(ir==='tareas') return setTab('tasks')
       if(ir==='causas') return setTab('causas')
       if(userRole==='limited'&&ir==='porcobrar') return setTab('porCobrarMios')   // correo «Tu semana» del abogado: por cobrar, pedir fondos y rendir

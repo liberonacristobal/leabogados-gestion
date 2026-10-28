@@ -304,7 +304,9 @@ serve(async (req) => {
     // "terminada" puede traer adjuntos (reporte de cierre) → sendMail (soporta adjuntos + from/replyTo).
     // El resto (nueva/delegada) sigue por sendViaSMTP, sin cambios.
     if (tipo === "terminada") {
-      await sendMail({ to: toEmail, cc: ccEmail.length ? ccEmail : undefined, subject, html, fromName, replyTo: fromEmail, attachments });
+      // Tarea terminada: solo al teléfono (decisión del 28-10-2026) si quien la asignó tiene notificaciones activas; si no, sigue el correo.
+      const sub = await fetch(`${SB_URL}/rest/v1/push_suscripciones?select=id&activo=is.true&email=eq.${encodeURIComponent(String(toEmail).toLowerCase())}&limit=1`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }).then((r) => r.ok ? r.json() : []).catch(() => []);
+      if (!sub.length) await sendMail({ to: toEmail, cc: ccEmail.length ? ccEmail : undefined, subject, html, fromName, replyTo: fromEmail, attachments });
     } else {
       await sendViaSMTP(toEmail, subject, html, fromName, fromEmail);
     }

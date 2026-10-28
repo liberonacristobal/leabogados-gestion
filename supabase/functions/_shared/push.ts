@@ -12,6 +12,7 @@ import { ESTUDIO_ID } from "./equipo.js";
 export interface AvisoPush { titulo: string; cuerpo: string; url?: string; etiqueta?: string }
 export type TipoPush = "tareas" | "causas" | "fondos" | "notaria" | "clientes" | "pagos" | "normativa" | "sistema" | "cajachica" | "prueba";
 const SIN_SILENCIO: TipoPush[] = ["causas"];
+const INFORMATIVOS: TipoPush[] = ["notaria", "clientes"];
 
 let listo: boolean | null = null;
 function configurar(): boolean {
@@ -48,6 +49,11 @@ export async function enviarPush(sbUrl: string, serviceKey: string, emails: stri
   if (!lista.length) return { enviados: 0, fallidos: 0 };
   if (!configurar()) return { enviados: 0, fallidos: 0, sinClaves: true };
   const H = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+  // Avisos solo informativos (sin una acción que hacer): documentos de la notaría, remates y Diario Oficial. Apagados desde el
+  // 28-10-2026; se encienden con learnings config push_informativos = 'on'.
+  if (INFORMATIVOS.includes(tipo)) {
+    try { const r = await fetch(`${sbUrl}/rest/v1/learnings?select=value&kind=eq.config&key=eq.push_informativos&limit=1`, { headers: H }); const v = r.ok ? await r.json() : []; if (String(v?.[0]?.value || "").toLowerCase() !== "on") return { enviados: 0, fallidos: 0 }; } catch (_) { return { enviados: 0, fallidos: 0 }; }
+  }
   if (!opts.sinCola && enSilencio() && !SIN_SILENCIO.includes(tipo)) {
     try {
       await fetch(`${sbUrl}/rest/v1/push_cola`, { method: "POST", headers: H, body: JSON.stringify(lista.map((email) => ({ email, tipo, titulo: aviso.titulo, cuerpo: aviso.cuerpo, url: aviso.url || "/" }))) });
