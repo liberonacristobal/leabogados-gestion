@@ -43470,6 +43470,7 @@ export default function App() {
       else if(ir==='compras'){ setOficinaSub('compras'); setTab('presupuestoOficina') }   // resumen del lunes → Compras · Por pagar   // correo de pendientes → Trabajos sin facturar   // correo de cierre del día 6 → página Cierre de mes
       else if(ir==='cobranza') setTab('cobranza')
       else if(ir==='procesos') setTab('procesos')
+      else if(ir==='calendario') setTab('calendarioTrib')   // correo F29 estimado › Calendario tributario
       else if(ir==='revision') setModal({type:'revisionDatos'})
       else if(ir==='subarriendo') setTab('subarriendo')
       else if(ir==='radar'){ try{ sessionStorage.setItem('abrir_radar','1') }catch(_){} setTab('inteligencia') }   // aviso de normativa del SII → Radar abierto   // correo del lunes → "Vence esta semana" abre Cobranza
