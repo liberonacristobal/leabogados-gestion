@@ -25657,12 +25657,16 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
   const _Dmv = useIsDesktop()
   const [mv,setMv] = useState(()=>{ const m=String(expense.concept||'').match(/^Movilización (.+?)–(.+?)(?: para (.+))?$/); return {medio:expense.subcategory||medioMovDe(expense.concept), desde:m?m[1]:'', hasta:m?m[2]:'', motivo:m&&m[3]?m[3]:''} })
   const movDet = MEDIO_CON_DETALLE.has(mv.medio)
-  const movFalta = f.type!=='fondo' && f.category==='Movilización' && (!mv.medio || (movDet && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)))
+  // Trayecto y motivo se exigen al registrar, al pasar un gasto a Movilización, al tocar esos campos o al resolver una consulta.
+  // Un gasto antiguo con glosa libre («Uber of a notaría…») se puede seguir editando (cliente, proyecto, monto…) sin reescribirla.
+  const [mv0] = useState(mv)
+  const movExige = f.type!=='fondo' && f.category==='Movilización' && (expense.category!=='Movilización' || JSON.stringify(mv)!==JSON.stringify(mv0) || expense.revision_estado==='consultar')
+  const movFalta = movExige && (!mv.medio || (movDet && (!mv.desde.trim()||!mv.hasta.trim()||mv.motivo.trim().length<4)))
   // Trámite cuya glosa no dice de qué es (inmueble, sociedad o persona): mismo control que al registrar.
   const [deqE] = useDeQueAprendido()
   const detFalta = f.type!=='fondo' && CATS_DE_CLIENTE.has(f.category) && glosaSinDetalle(f.concept)
   // Al completar una movilización pendiente: glosa armada, medio en subcategoría, lo escrito antes a notas y la consulta queda resuelta.
-  const movPatch = () => { if(f.type==='fondo'||f.category!=='Movilización') return {}
+  const movPatch = () => { if(f.type==='fondo'||f.category!=='Movilización'||!movExige) return {}
     if(!movDet) return {subcategory:mv.medio||null, concept:String(f.concept||'').trim()||mv.medio, ...(f.revision_estado==='consultar'?{revision_estado:'consulta_resuelta',revisado_at:new Date().toISOString()}:{})}
     const concept=glosaMovilizacion(mv.desde,mv.hasta,mv.motivo), orig=String(f.concept||'').trim()
     const notas = orig&&orig!==concept&&!/^Movilización .+–/.test(orig)&&!String(f.notas||'').includes(orig) ? [f.notas,`Glosa original: ${orig}`].filter(Boolean).join(' · ') : (f.notas||null)
@@ -25770,10 +25774,10 @@ function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[],onSav
           {op.map(o=><button key={o} type='button' onClick={()=>up('concept',`${String(f.concept||'').trim()} · ${o}`)} style={{display:'inline-flex',alignItems:'center',height:26,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:500,background:C.azulTenue,color:C.accent,border:'1px solid transparent',cursor:'pointer',fontFamily:'inherit',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o}</button>)}
           <span style={{color:C.muted}}>{op.length?'o agrégalo en la descripción':'Agrega en la descripción el inmueble, la sociedad o fs/N°/año'}</span>
         </div> })()}
-      {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=!v.trim()||(k==='motivo'&&v.trim().length<4)
+      {!isFondo&&f.category==='Movilización'&&(()=>{ const fi=(k,label)=>{ const v=mv[k]||'', bad=movExige&&(!v.trim()||(k==='motivo'&&v.trim().length<4))
           return <FloatFld label={label} mb={0}><input value={v} onChange={e=>setMv(p=>({...p,[k]:e.target.value}))} style={{...fInp,borderColor:bad?C.overdueText:undefined}}/></FloatFld> }
         return (<div style={{display:'grid',gridTemplateColumns:_Dmv?'150px minmax(0,1fr) minmax(0,1fr)':'minmax(0,1fr) minmax(0,1fr)',gap:8,marginBottom:8}}>
-          <div style={{gridColumn:_Dmv?'auto':'1 / -1',minWidth:0}}><FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer',borderColor:mv.medio?undefined:C.overdueText}}><option value=''>Elegir medio</option>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld></div>
+          <div style={{gridColumn:_Dmv?'auto':'1 / -1',minWidth:0}}><FloatFld label='Medio' mb={0}><select value={mv.medio} onChange={e=>setMv(p=>({...p,medio:e.target.value}))} style={{...fInp,cursor:'pointer',borderColor:(mv.medio||!movExige)?undefined:C.overdueText}}><option value=''>Elegir medio</option>{MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)}</select></FloatFld></div>
           {movDet&&<>{fi('desde','Desde')}{fi('hasta','Hasta')}
           <div style={{gridColumn:'1 / -1'}}>{fi('motivo','Motivo (para qué fue)')}</div></>}
           {movFalta&&<div style={{gridColumn:'1 / -1',fontSize:11.5,color:C.overdueText,fontWeight:600}}>{mv.medio?'Completa desde, hasta y motivo para guardar':'Elige el medio para guardar'}</div>}
