@@ -161,13 +161,13 @@ serve(async (req) => {
 
     // ── Envío genérico (rendiciones / liquidaciones) con adjunto PDF, desde la cuenta de oficina ──
     if (payload && payload.mail) {
-      const { to, cc, subject, html, text, pdfBase64, pdfName, attachments } = payload.mail;
+      const { to, cc, subject, html, text, pdfBase64, pdfName, attachments, fromName } = payload.mail;
       if (!to || !subject) {
         return new Response(JSON.stringify({ error: "Falta to o subject" }), {
           status: 400, headers: { "Content-Type": "application/json", ...cors(req) },
         });
       }
-      await sendMail({ to, cc, subject, html, text, pdfBase64, pdfName, attachments });
+      await sendMail({ to, cc, subject, html, text, pdfBase64, pdfName, attachments, fromName: fromName ? String(fromName).slice(0, 60) : undefined });
       return new Response(JSON.stringify({ ok: true, sent_to: to, via: "servidor" }), {
         headers: { "Content-Type": "application/json", ...cors(req) },
       });
