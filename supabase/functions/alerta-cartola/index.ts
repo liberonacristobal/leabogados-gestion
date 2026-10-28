@@ -25,6 +25,7 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
 const qpSafe = (h: string) => String(h || "").replace(/[ \t]+$/gm, "");
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
+const dmy = (x: string) => x.split("-").reverse().join("-");
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hoy = () => { const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Santiago" })); d.setHours(0, 0, 0, 0); return d; };
 const MMM = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -37,6 +38,42 @@ async function sb(path: string): Promise<any[]> {
   // Una lectura que falla NO es «sin datos»: con la cobertura vacía saldrían ~20 días como faltantes y se darían por avisados.
   if (!r.ok) throw new Error(`${path.split("?")[0]}: ${r.status}`);
   return await r.json();
+}
+
+// ── CUADRE: cada archivo trae el total de movimientos, cargos y abonos y los saldos del período (desde el día 1 del mes). Si lo
+// cargado en Banco no calza con el archivo, o el saldo inicial no es el cierre del mes anterior, se perdió o sobra un movimiento
+// (corrección del 28-10-2026, pedida por el usuario tras un movimiento perdido en un cambio de mes).
+const clp = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
+// deno-lint-ignore no-explicit-any
+async function cuadre(): Promise<{ hallazgos: string[]; claves: string[] }> {
+  const desde = new Date(); desde.setDate(desde.getDate() - 75);
+  const cargas = await sb(`cartola_cargas?select=cuenta,fecha_desde,fecha_hasta,movimientos_n,total_cargos,total_abonos,saldo_inicial,saldo_final&rol_cuenta=eq.honorarios&saldo_final=not.is.null&fecha_hasta=gte.${iso(desde)}&order=fecha_hasta.desc`);
+  const porMes = new Map<string, any>();
+  for (const c of cargas) { const k = `${c.cuenta}|${String(c.fecha_desde).slice(0, 7)}`; if (!porMes.has(k)) porMes.set(k, c); }
+  const hallazgos: string[] = [], claves: string[] = [];
+  for (const c of porMes.values()) {
+    const movs = await sb(`cartola_movimientos?select=tipo,monto&cuenta=eq.${encodeURIComponent(c.cuenta)}&fecha=gte.${c.fecha_desde}&fecha=lte.${c.fecha_hasta}&limit=5000`);
+    const cargos = movs.filter((m: any) => m.tipo === "cargo").reduce((a: number, m: any) => a + Number(m.monto || 0), 0);
+    const abonos = movs.filter((m: any) => m.tipo === "abono").reduce((a: number, m: any) => a + Number(m.monto || 0), 0);
+    const dC = Number(c.total_cargos) - cargos, dA = Number(c.total_abonos) - abonos, dN = Number(c.movimientos_n) - movs.length;
+    const per = `${dmy(String(c.fecha_desde).slice(0, 10))} al ${dmy(String(c.fecha_hasta).slice(0, 10))}`;
+    if (Math.abs(dC) >= 1 || Math.abs(dA) >= 1 || dN !== 0) {
+      hallazgos.push(`Del ${per}: la cartola trae ${c.movimientos_n} movimientos (cargos ${clp(Number(c.total_cargos))}, abonos ${clp(Number(c.total_abonos))}) y en Banco hay ${movs.length} (cargos ${clp(cargos)}, abonos ${clp(abonos)}). ${dN > 0 ? `Faltan ${dN} movimiento${dN !== 1 ? "s" : ""}` : dN < 0 ? `Sobran ${-dN} movimiento${dN !== -1 ? "s" : ""}` : "Cambian los montos"}: ${dC !== 0 ? `cargos ${dC > 0 ? "faltan" : "sobran"} ${clp(Math.abs(dC))}` : ""}${dC !== 0 && dA !== 0 ? "; " : ""}${dA !== 0 ? `abonos ${dA > 0 ? "faltan" : "sobran"} ${clp(Math.abs(dA))}` : ""}.`);
+      claves.push(`${c.cuenta}|${c.fecha_desde}|${c.fecha_hasta}|${dN}|${dC}|${dA}`);
+    }
+    const calc = Number(c.saldo_inicial) + Number(c.total_abonos) - Number(c.total_cargos);
+    if (Math.abs(calc - Number(c.saldo_final)) >= 1) { hallazgos.push(`Del ${per}: el saldo final de la cartola (${clp(Number(c.saldo_final))}) no es el saldo inicial más abonos menos cargos (${clp(calc)}).`); claves.push(`${c.cuenta}|${c.fecha_desde}|${c.fecha_hasta}|saldo`); }
+  }
+  // Continuidad entre meses: el saldo inicial de un mes es el saldo final del último archivo del mes anterior.
+  const meses = [...porMes.values()].sort((a: any, b: any) => String(a.fecha_desde).localeCompare(String(b.fecha_desde)));
+  for (let i = 1; i < meses.length; i++) {
+    const a = meses[i - 1], b = meses[i];
+    if (a.cuenta === b.cuenta && Math.abs(Number(b.saldo_inicial) - Number(a.saldo_final)) >= 1) {
+      hallazgos.push(`Cambio de mes: el saldo inicial de ${dmy(String(b.fecha_desde).slice(0, 10))} (${clp(Number(b.saldo_inicial))}) no es el saldo final de la cartola anterior (${clp(Number(a.saldo_final))}): falta un movimiento entre ${dmy(String(a.fecha_hasta).slice(0, 10))} y ${dmy(String(b.fecha_desde).slice(0, 10))}.`);
+      claves.push(`${a.cuenta}|continuidad|${b.fecha_desde}`);
+    }
+  }
+  return { hallazgos, claves };
 }
 
 Deno.serve(async (req) => {
@@ -78,7 +115,30 @@ Deno.serve(async (req) => {
   if (body.dryRun && Array.isArray(body.diasPrueba)) { gap.length = 0; gap.push(...body.diasPrueba.map(String)); if (body.ultimaPrueba) lastCov = String(body.ultimaPrueba); }
   let avisados: string[] = []; try { avisados = JSON.parse(String(cfgAv?.[0]?.value || "[]")); } catch { avisados = []; }
   const nuevos = gap.filter((s) => !avisados.includes(s));
-  if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov });
+  // Cuadre de lo cargado contra el archivo: aviso aparte, una vez por hallazgo.
+  let cuadreRes: { hallazgos: string[]; enviado: boolean } = { hallazgos: [], enviado: false };
+  try {
+    const cu = await cuadre();
+    const cfgC = await sb("learnings?select=id,value&kind=eq.config&key=eq.alerta_cartola_cuadre");
+    let yaC: string[] = []; try { yaC = JSON.parse(String(cfgC?.[0]?.value || "[]")); } catch { yaC = []; }
+    const nuevosC = cu.claves.filter((k) => !yaC.includes(k));
+    cuadreRes = { hallazgos: cu.hallazgos, enviado: false };
+    const onC = String((await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola"))?.[0]?.value || "off").trim().toLowerCase() === "on";
+    if (nuevosC.length && onC && !body.dryRun) {
+      const hdrC = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" };
+      const lis = cu.hallazgos.map((h) => `<div style="font-size:13.5px;color:#3D3D3D;line-height:1.6;padding:9px 0;border-top:1px solid #EAEEF0;">${h}</div>`).join("");
+      const htmlC = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#ECEFF1;margin:0;padding:22px 12px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;"><div style="background:#003C50;padding:20px 28px;text-align:center;"><img src="https://gestion.leabogados.cl/le-logo-blanco.png" alt="${ESTUDIO}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0;"/></div><div style="padding:26px 26px 22px;"><div style="font-size:18px;color:#1F2A30;font-weight:700;margin-bottom:14px;">La cartola no cuadra con Banco</div><div style="font-size:13.5px;color:#3D3D3D;line-height:1.6;margin-bottom:10px;">Cada cartola trae el total de movimientos, cargos y abonos. Lo cargado en Banco no calza con ese total: falta o sobra algún movimiento.</div>${lis}<div style="font-size:13.5px;color:#3D3D3D;line-height:1.6;padding:12px 0 0;border-top:1px solid #EAEEF0;">Para corregirlo, vuelvan a cargar la cartola con «Cargar cartola»: los movimientos que faltan se agregan sin duplicar los que ya están.</div><div style="margin-top:18px;"><a href="https://gestion.leabogados.cl/?ir=cobros" style="display:block;background:#003C50;color:#fff;text-decoration:none;padding:11px;border-radius:9px;font-size:12.5px;font-weight:700;text-align:center;">Ir a Banco &rarr;</a></div></div></div></body></html>`;
+      const clientC = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
+      await clientC.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: [...SOCIOS], subject: "La cartola no cuadra con Banco", content: "Ver el contenido en formato HTML.", html: qpSafe(htmlC) });
+      await clientC.close();
+      await enviarPush(SB_URL, SB_KEY, [...SOCIOS], { titulo: "La cartola no cuadra con Banco", cuerpo: cu.hallazgos[0].slice(0, 150), url: "/?ir=cobros", etiqueta: "cartola-cuadre" }, "sistema").catch(() => null);
+      const valC = JSON.stringify([...new Set([...yaC, ...cu.claves])].slice(-60));
+      if (cfgC?.[0]?.id) await fetch(`${SB_URL}/rest/v1/learnings?id=eq.${cfgC[0].id}`, { method: "PATCH", headers: hdrC, body: JSON.stringify({ value: valC }) });
+      else await fetch(`${SB_URL}/rest/v1/learnings`, { method: "POST", headers: hdrC, body: JSON.stringify({ kind: "config", key: "alerta_cartola_cuadre", value: valC, estudio_id: "lea" }) });
+      cuadreRes.enviado = true;
+    }
+  } catch (e) { cuadreRes = { hallazgos: [`No se pudo cuadrar: ${String((e as Error).message || e)}`], enviado: false }; }
+  if (!nuevos.length && !body.dryRun) return json({ ok: true, gap: gap.length, nuevos: 0, ultima: lastCov, cuadre: cuadreRes });
 
   // Interruptor de envío (base): learnings config alerta_cartola = 'on'
   const cfg = await sb("learnings?select=value&kind=eq.config&key=eq.alerta_cartola");
@@ -123,7 +183,7 @@ ${sec("Cómo resolverlo", 22)}<table role="presentation" width="100%" cellpaddin
 <div style="padding:16px 26px;border-top:1px solid ${HAIR};text-align:center;"><div style="font-size:11px;color:${FAINT};">gestion.leabogados.cl &middot; ${ESTUDIO}</div></div>
 </div></body></html>`;
 
-  if (!ON || body.dryRun) return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: false, motivo: body.dryRun ? "dry-run pedido" : "interruptor apagado (learnings config alerta_cartola != on) — dry-run", ...(body.dryRun ? { subject: asunto, html } : {}) });
+  if (!ON || body.dryRun) return json({ ok: true, gap: gap.length, dias: gap, nuevos: nuevos.length, ultima: lastCov, enviado: false, cuadre: cuadreRes, motivo: body.dryRun ? "dry-run pedido" : "interruptor apagado (learnings config alerta_cartola != on) — dry-run", ...(body.dryRun ? { subject: asunto, html } : {}) });
 
   try {
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
