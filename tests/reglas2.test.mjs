@@ -327,3 +327,37 @@ test('notaría, regla 1: el RUT de una persona del estudio nunca identifica al c
   assert.equal(clienteDeLectura(lec, { porRut })?.client_id, undefined, 'sin la exclusión, dos clientes distintos por RUT no se resuelven')
   assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['156213209']) })?.client_id, 'c-sociedad')
 })
+
+import { planCarga } from '../supabase/functions/_shared/cartolaDedupe.js'
+test('carga de cartola: tres pagos idénticos el mismo día son tres filas, no se pierde ni se repite ninguno', () => {
+  const huella = () => null
+  const fila = (hash, extra = {}) => ({ hash, cuenta: 'A', tipo: 'abono', monto: 250000, fecha: '2026-10-13', n_operacion: null, ...extra })
+  // la base ya tiene los 3 y el archivo trae los mismos 3 con otro hash (cargados a mano): no se inserta ninguno
+  let r = planCarga([fila('x1'), fila('x2'), fila('x3')], [fila('a', { id: 1 }), fila('b', { id: 2 }), fila('c', { id: 3 })], huella)
+  assert.equal(r.nuevos.length, 0)
+  // la base tiene 2 y el archivo trae 3: entra solo la que falta
+  r = planCarga([fila('x1'), fila('x2'), fila('x3')], [fila('a', { id: 1 }), fila('b', { id: 2 })], huella)
+  assert.equal(r.nuevos.length, 1)
+  // el mismo hash ya cargado nunca se vuelve a insertar
+  assert.equal(planCarga([fila('a')], [fila('a', { id: 1 })], huella).nuevos.length, 0)
+})
+test('carga de cartola: la fila cargada a mano sin n° de operación recibe el del archivo', () => {
+  const huella = () => null
+  const r = planCarga([{ hash: 'n1', cuenta: 'A', tipo: 'cargo', monto: 300000, fecha: '2026-10-13', n_operacion: '555' }], [{ id: 9, hash: 'm1', cuenta: 'A', tipo: 'cargo', monto: 300000, fecha: '2026-10-13', n_operacion: null }], huella)
+  assert.equal(r.nuevos.length, 0)
+  assert.deepEqual(r.rellenar, [{ id: 9, n_operacion: '555' }])
+})
+test('carga de cartola: un código repetido con otro monto no confunde pagos distintos', () => {
+  const huella = () => null
+  const e = [{ id: 1, hash: 'a', cuenta: 'A', tipo: 'abono', monto: 250000, fecha: '2026-09-15', n_operacion: '4684450' }]
+  const r = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'abono', monto: 70000, fecha: '2026-09-15', n_operacion: '4684450' }], e, huella)
+  assert.equal(r.nuevos.length, 1)
+})
+test('carga de cartola: mismo monto y día a otra contraparte es otro pago y entra', () => {
+  const huella = () => null
+  const e = [{ id: 1, hash: 'a', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '21.138.928-1' }]
+  const otro = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '19.889.733-7' }], e, huella)
+  assert.equal(otro.nuevos.length, 1)
+  const igual = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '21138928-1' }], e, huella)
+  assert.equal(igual.nuevos.length, 0)
+})

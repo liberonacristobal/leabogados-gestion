@@ -14,6 +14,7 @@ import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../supabase/functions/_shared/conciliacionReglas.js'
 import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../supabase/functions/_shared/comisionesReglas.js'
 import { f29Estimado } from '../supabase/functions/_shared/f29Reglas.js'
+import { planCarga } from '../supabase/functions/_shared/cartolaDedupe.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
 import { liqParaCargo as _liqParaCargo, notariaPendientes, disponibleNotaria } from '../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
@@ -39228,17 +39229,13 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           // veces trunca distinto) → el hash NO calza y todo salía "nuevo". La única clave estable es cuenta|fecha|tipo|monto (montos y
           // fechas sí parsean bien: los totales cuadran). Comparación por MULTISET: si el banco ya tiene N con esa clave y el archivo trae M,
           // los primeros min(N,M) ya están (soporta 2 movimientos idénticos el mismo día, ej. dos $5.000.000 el 19-08 de clientes distintos).
-          let nuevosRows=rows
+          let nuevosRows=rows, rellenarOp=[]
           if(rows.length && minF){
             // Ventana ±5 días: la misma transferencia puede venir con otra fecha contable (glosa "el 19-06 a las 18:17" contabilizada el 22-06).
             const _dd=(f,n)=>{ const d=new Date(f+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
-            const {data:ex}=await supabase.from('cartola_movimientos').select('cuenta,fecha,tipo,monto,descripcion').eq('cuenta',res.cuenta).gte('fecha',_dd(minF,-5)).lte('fecha',_dd(maxF,5))
-            const usado=new Set()
-            // 1º por huella de la glosa (fecha y hora real de la transferencia); 2º por conteo cuenta|fecha|tipo|monto para lo que no trae hora.
-            const porHuella={}; (ex||[]).forEach((x,i)=>{ const h=huellaGlosa(x); if(h) (porHuella[h]=porHuella[h]||[]).push(i) })
-            const dupH=new Set(); rows.forEach((r,j)=>{ const h=huellaGlosa(r); if(!h) return; const i=(porHuella[h]||[]).find(i=>!usado.has(i)); if(i!==undefined){ usado.add(i); dupH.add(j) } })
-            const porDia={}; (ex||[]).forEach((x,i)=>{ if(usado.has(i)) return; const k=`${String(x.fecha).slice(0,10)}|${x.tipo}|${Math.round(x.monto||0)}`; (porDia[k]=porDia[k]||[]).push(i) })
-            nuevosRows=rows.filter((r,j)=>{ if(dupH.has(j)) return false; const k=`${r.fecha}|${r.tipo}|${Math.round(r.monto||0)}`; const l=porDia[k]; if(l&&l.length){ l.shift(); return false } return true })
+            const {data:ex}=await supabase.from('cartola_movimientos').select('id,hash,cuenta,fecha,tipo,monto,descripcion,n_operacion,rut_contraparte').eq('cuenta',res.cuenta).gte('fecha',_dd(minF,-5)).lte('fecha',_dd(maxF,5))
+            // Misma regla que la carga automática (_shared/cartolaDedupe.js): cada fila existente se consume una vez, nunca borra.
+            const plan=planCarga(rows,ex||[],huellaGlosa); nuevosRows=plan.nuevos; rellenarOp=plan.rellenar
           }
           const abo=rows.filter(r=>r.tipo==='abono'), car=rows.filter(r=>r.tipo==='cargo')
           const sumA=abo.reduce((a,r)=>a+r.monto,0), sumC=car.reduce((a,r)=>a+r.monto,0)
@@ -39253,7 +39250,7 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
           reps.push({ file:file.name, cuenta:res.cuenta, rol:res.rol_cuenta, ok:!res.error, error:res.error||null,
             nAbonos:abo.length, sumAbonos:sumA, nCargos:car.length, sumCargos:sumC,
             internos:rows.filter(r=>r.es_interno).length, sinId, total:rows.length, nuevos:nuevosRows.length, dup:rows.length-nuevosRows.length,
-            minF, maxF, nuevosRows, sospechosos, saldoInicial:res.saldoInicial??null, saldoFinal:res.saldoFinal??null, totalAbonos:res.totalAbonos??null, totalCargos:res.totalCargos??null,
+            minF, maxF, nuevosRows, rellenarOp, sospechosos, saldoInicial:res.saldoInicial??null, saldoFinal:res.saldoFinal??null, totalAbonos:res.totalAbonos??null, totalCargos:res.totalCargos??null,
             verA: res.totalAbonos!=null?{banco:res.totalAbonos,parsed:sumA,diff:sumA-res.totalAbonos}:null,
             verC: res.totalCargos!=null?{banco:res.totalCargos,parsed:sumC,diff:sumC-res.totalCargos}:null })
         }catch(e){ reps.push({ file:file.name, ok:false, error:e.message, nuevosRows:[] }) }
@@ -39273,10 +39270,11 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
       for(const en of (cargaPreview.entries||[])){
         try{
           const nuevosRows=en.nuevosRows||[]
+          for(const r of (en.rellenarOp||[])) await supabase.from('cartola_movimientos').update({n_operacion:r.n_operacion}).eq('id',r.id).is('n_operacion',null)   // la fila cargada sin n° de operación lo recibe del archivo
           for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
           // Registro de la carga con su cuenta y saldos (la carga manual no lo dejaba): alimenta la alerta de cartolas por cuenta.
           if(en.ok&&en.minF){ try{ await supabase.from('cartola_cargas').insert({ fecha_desde:en.minF, fecha_hasta:en.maxF, movimientos_n:en.total||0, origen:'manual', archivo:en.file||null, cuenta:en.cuenta||null, rol_cuenta:en.rol||null, saldo_inicial:en.saldoInicial, saldo_final:en.saldoFinal, total_cargos:en.totalCargos, total_abonos:en.totalAbonos, cargado_por:user?.email||null }) }catch(_){} }
-          const {nuevosRows:_omit, minF:_a, maxF:_b, total:_c, saldoInicial:_d, saldoFinal:_e, totalAbonos:_f, totalCargos:_g, ...rep}=en; reps.push(rep)
+          const {nuevosRows:_omit, rellenarOp:_ro, minF:_a, maxF:_b, total:_c, saldoInicial:_d, saldoFinal:_e, totalAbonos:_f, totalCargos:_g, ...rep}=en; reps.push(rep)
         }catch(e){ reps.push({ file:en.file, ok:false, error:e.message }) }
       }
       // Traspasos entre cuentas propias: internos solo con su movimiento espejo en la otra cuenta (función de la base).

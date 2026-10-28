@@ -6,6 +6,7 @@
 // SheetJS desde npm (el bundler de Supabase bloquea cdn.sheetjs.com). 0.18.5 lee el .xls binario de BICE idéntico (validado, dif 0).
 import * as XLSX from 'npm:xlsx@0.18.5'
 import { parseCartola, normRut, huellaGlosa } from './cartola.ts'
+import { planCarga } from '../_shared/cartolaDedupe.js'
 
 const SECRET = Deno.env.get('CARTOLA_SECRET') || ''
 const SB_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -90,30 +91,19 @@ Deno.serve(async (req) => {
     const fechas = movs.map(m => m.fecha).sort()
     const minF = fechas[0], maxF = fechas[fechas.length - 1]
     const dd = (f: string, n: number) => { const d = new Date(f + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
-    const existentes: { hash: string, cuenta: string, tipo: string, monto: number, descripcion: string, fecha: string, n_operacion: string | null }[] = await sbFetch(
-      `cartola_movimientos?select=hash,cuenta,tipo,monto,descripcion,fecha,n_operacion&fecha=gte.${dd(minF, -5)}&fecha=lte.${dd(maxF, 5)}`,
+    const existentes = await sbFetch(
+      `cartola_movimientos?select=id,hash,cuenta,tipo,monto,descripcion,fecha,n_operacion,rut_contraparte&fecha=gte.${dd(minF, -5)}&fecha=lte.${dd(maxF, 5)}`,
     )
-    const yaHay = new Set(existentes.filter(e => e.fecha >= minF && e.fecha <= maxF).map(e => e.hash))
-    // Huellas solo de lo existente que NO llega por hash en este archivo (antes se saltaba todo lo existente del rango,
-    // y lo cargado a mano sin n° de operación se volvía a insertar: 6 duplicados del 13-10-2026).
-    const entrantes = new Set(movs.map(m => m.hash))
-    // Cada existente se "consume" una sola vez (soporta dos movimientos idénticos legítimos el mismo día).
-    // Orden: 1) n° de operación de la misma cuenta; 2) huella de la glosa (fecha-hora real); 3) multiset cuenta|fecha|tipo|monto
-    // (misma regla que la carga manual de la app). Sin el 3), la carga automática del 15-10-2026 volvió a insertar 5 movimientos
-    // del 13-10 porque traía la glosa cortada ("el 12-10-2026 a las" sin hora) → ni hash ni huella calzaban.
-    const libres = existentes.map((e, i) => ({ e, i })).filter(x => !entrantes.has(x.e.hash))
-    const usados = new Set<number>()
-    const tomar = (pred: (e: typeof existentes[number]) => boolean) => { const x = libres.find(x => !usados.has(x.i) && pred(x.e)); if (x) { usados.add(x.i); return true } return false }
-    const mismo = (m: { cuenta: string, tipo: string, monto: number }, e: { cuenta: string, tipo: string, monto: number }) =>
-      e.cuenta === m.cuenta && e.tipo === m.tipo && Math.round(Number(e.monto) || 0) === Math.round(Number(m.monto) || 0)
-    const nuevos = movs.filter(m => {
-      if (yaHay.has(m.hash)) return false
-      if (m.n_operacion && tomar(e => mismo(m, e) && String(e.n_operacion || '') === String(m.n_operacion))) return false
-      const h = huellaGlosa(m)
-      if (h && tomar(e => huellaGlosa(e) === h)) return false
-      if (tomar(e => mismo(m, e) && String(e.fecha).slice(0, 10) === m.fecha)) return false
-      return true
-    })
+    // Regla única en _shared/cartolaDedupe.js (con sus pruebas): cada fila existente se consume una sola vez, así que pagos
+    // idénticos el mismo día se conservan todos; nunca borra. Lo ya cargado a mano sin n° de operación recibe el del archivo.
+    const { nuevos, rellenar } = planCarga(movs, existentes, huellaGlosa)
+    if (!body.dryRun) {
+      for (const r of rellenar) await sbFetch(`cartola_movimientos?id=eq.${r.id}&n_operacion=is.null`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ n_operacion: r.n_operacion }) }).catch(() => null)
+    }
+    if (body.dryRun) {
+      return json({ dryRun: true, total: movs.length, nuevos: nuevos.length, yaCargados: movs.length - nuevos.length, rellenar: rellenar.length,
+        detalleNuevos: nuevos.map((m: { fecha: string, tipo: string, monto: number }) => `${m.fecha} ${m.tipo} ${m.monto}`) })
+    }
 
     // --- Insert (con cliente_id resuelto por RUT, igual que la carga manual) ---
     let inserted = 0
