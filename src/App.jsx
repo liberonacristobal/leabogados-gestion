@@ -905,7 +905,15 @@ const PROMPT_PROPUESTA_IA = `Eres un experto extractor de datos de propuestas y 
 Devuelve: { cliente_nombre, cliente_rut, razon_social, area, proyecto, moneda, honorario_total, notas }`
 // La app aprende: cada decisión se guarda como conocimiento reutilizable (learnings) + registro de fricción (usage_events).
 // En modo demo el cliente Supabase es inerte, así que esto no-opera solo (no toca base real).
-const learnPut = (kind,key,value,meta) => { try{ supabase.from('learnings').insert({kind,key:String(key),value:value!=null?String(value):null,meta:meta||{}}).then(()=>{},()=>{}) }catch(e){} }
+// Aprendizaje nuevo: si ya existe la misma clave con el mismo valor y detalle, solo suma un uso y refresca la fecha (no repite la fila);
+// un valor distinto sí se agrega (el último gana en los lectores, y costo_oficina admite valores en conflicto a propósito).
+const learnPut = async (kind,key,value,meta) => { try{
+  const k=String(key), v=value!=null?String(value):null, m=meta||{}
+  const {data}=await supabase.from('learnings').select('id,hits,value,meta').eq('kind',kind).eq('key',k).limit(50)
+  const igual=(data||[]).find(r=>(r.value??null)===v && JSON.stringify(r.meta||{})===JSON.stringify(m))
+  if(igual) await supabase.from('learnings').update({hits:(igual.hits||0)+1,updated_at:new Date().toISOString()}).eq('id',igual.id)
+  else await supabase.from('learnings').insert({kind,key:k,value:v,meta:m})
+}catch(e){} }
 // Valor SINGLETON en learnings (config, interruptores): update si existe, insert si no. NO usar upsert
 // onConflict:'kind,key' — la tabla admite (kind,key) duplicados a propósito y ese upsert falla en silencio.
 async function setLearningKV(kind,key,value){
