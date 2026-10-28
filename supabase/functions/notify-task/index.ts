@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { enviarPush } from "../_shared/push.ts";
 import { cargarEquipo } from "../_shared/equipo.js";
 

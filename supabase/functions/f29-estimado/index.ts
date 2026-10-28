@@ -7,7 +7,7 @@
 // body.per = 'AAAA-MM' (otro período), body.forzar = no exige primer día hábil ni que no se haya enviado, body.dryRun = no envía
 // ni guarda. Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { f29Estimado } from "../_shared/f29Reglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 

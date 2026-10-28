@@ -7,7 +7,7 @@
 // SEGURIDAD: interruptor de envío en la base (learnings config alerta_cartola = 'on'). Sin 'on' = dry-run (no envía).
 // Auth: secreto compartido (ALERTA_CARTOLA_SECRET / CRON_SECRET, el mismo 'lea-cron-…' de los otros cron). verify_jwt=false.
 
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { enviarPush } from "../_shared/push.ts";
 import { cargarEquipo } from "../_shared/equipo.js";

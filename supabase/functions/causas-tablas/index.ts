@@ -18,7 +18,7 @@
 // pudo revisar por ninguna fuente, y si el computador lleva más de un día hábil sin revisar se avisa aparte.
 // Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { enviarPush } from "../_shared/push.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";

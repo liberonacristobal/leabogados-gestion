@@ -6,7 +6,7 @@
 // avisa UNA vez, solo a learnings config 'vigilancia_avisar_a' (hoy Cristóbal). Estado por proceso: learnings 'vigilancia_reintento'.
 // Interruptor del correo: learnings config 'vigilancia_procesos' = 'on'.
 // Auth: CRON_SECRET en body.secret, o JWT @leabogados.cl. body.dryRun = no envía ni marca avisos.
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { enviarPush } from "../_shared/push.ts";

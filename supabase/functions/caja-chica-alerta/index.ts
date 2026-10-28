@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { SMTPClient } from "../_shared/envios.ts";
 
 // Aviso diario de caja chica (cron 13:10): por cada persona con caja, saldo = entregado (petty_cash) − gastado (expenses tipo gasto,
 // sin paid_by_client) — la MISMA fórmula que saldoCajaChica en la app. Dos umbrales: 'negativo' (saldo < 0: puso plata de su bolsillo,
