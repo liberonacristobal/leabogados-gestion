@@ -11,6 +11,7 @@ import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_sh
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { desescaparXml } from '../../supabase/functions/_shared/xmlTexto.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
+import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 
 export const { dteMontoTotal, montoFactura } = SD
 
@@ -1105,5 +1106,159 @@ export async function sendGmailWithPdf(token, {to, cc, subject, bodyText, bodyHt
   })
   if(!res.ok){ const err=new Error('Gmail API '+res.status); err.code=res.status; throw err }
   return res.json()
+}
+
+// ── DETECCIÓN ÚNICA de "programada ya emitida" (fantasma/duplicada). Fuente única para: el conteo de duplicados
+//    (Facturación), el inline "Ya emitida" (Facturas del mes) y el panel de resolución (Conciliar). Así los 3 nunca divergen.
+//    Une DOS criterios: (a) por cuota/período del concepto (recurrentes de la app, tolera corrida de UF) y
+//    (b) por RUT/RS + monto ±5% + fecha ±60d (facturas traídas del SII con concepto genérico "Honorarios"). FIFO 1:1.
+export const _MESMAP_G = {enero:1,ene:1,febrero:2,feb:2,marzo:3,mar:3,abril:4,abr:4,mayo:5,may:5,junio:6,jun:6,julio:7,jul:7,agosto:8,ago:8,septiembre:9,sept:9,sep:9,octubre:10,oct:10,noviembre:11,nov:11,diciembre:12,dic:12}
+
+export const concPeriodoOf = c => { const s=(c||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); let m=s.match(/\b(20\d{2})[-\/](0?[1-9]|1[0-2])\b/); if(m) return `${m[1]}-${String(+m[2]).padStart(2,'0')}`; m=s.match(/\b(0?[1-9]|1[0-2])[-\/](20\d{2})\b/); if(m) return `${m[2]}-${String(+m[1]).padStart(2,'0')}`; const ym=s.match(/\b(20\d{2})\b/); for(const k of Object.keys(_MESMAP_G)){ const mm=s.match(new RegExp('\\b'+k+'\\b\\.?\\s*(20\\d{2}|\\d{2})?')); if(mm){ let y=mm[1]||(ym&&ym[1]); if(!y) continue; if(String(y).length===2) y='20'+y; return `${y}-${String(_MESMAP_G[k]).padStart(2,'0')}` } } return null }
+
+export const ADMIN_NAMES = ['Cristóbal','Erasmo']
+
+// CATÁLOGO de Costos de Oficina (presupuesto de la firma): 9 categorías con su desglose. Reconstruido del Presupuesto 2026.
+// Parametrizable por estudio (regla de oro): las personas van como MONTO dentro de Socios/Abogados/etc., no cableadas como subcategoría.
+export const CATS_OFICINA_CAT = [
+  { g:'Remuneraciones',          subs:['Socios','Abogados','Procurador','Abogado junior','Contadora','Aumentos y bonos'] },
+  { g:'Leyes sociales',          subs:['Cotizaciones','Mutual / cesantía','Gratificación'] },
+  { g:'Impuestos y patentes',    subs:['PPM','Patente municipal','Otros tributarios'] },
+  { g:'Arriendo y espacio',      subs:['Arriendo','Gastos comunes','Limpieza','Subarriendo'] },
+  { g:'Servicios y tecnología',  subs:['Cuentas (luz/agua/gas)','Internet','Telefonía','Google Workspace','ChatGPT','Software legal','FirmDesk','Respaldo / ciberseguridad'] },
+  { g:'Insumos de oficina',      subs:['Agua y bebidas','Café y supermercado','Artículos de oficina','Insumos tecnológicos'] },
+  { g:'Movilización y operación',subs:['Transporte / Uber','Tarjeta BIP','Estacionamiento','Varios'] },
+  { g:'Desarrollo de negocio',   subs:['Membresías','Regalos','Comidas y eventos','Almuerzos con clientes'] },
+  { g:'Seguros y contingencias', subs:['RC profesional','Seguro oficina','Provisión incobrables'] },
+]
+
+export const CATS_OFICINA_NUEVAS = CATS_OFICINA_CAT.map(c=>c.g)
+
+// Mapeo de las categorías VIEJAS a las 9 nuevas (para no perder los gastos ya clasificados). Las no listadas quedan igual.
+export const CAT_OFICINA_ALIAS = {
+  'Sueldos':'Remuneraciones','Bono':'Remuneraciones','Retiros':'Remuneraciones','Contadora':'Remuneraciones',
+  'Arriendo':'Arriendo y espacio','Gastos comunes':'Arriendo y espacio',
+  'Servicios':'Servicios y tecnología','Software':'Servicios y tecnología',
+  'Compras':'Insumos de oficina',
+}
+
+export const catOficinaNueva = c => CAT_OFICINA_ALIAS[String(c||'').trim()] || c
+
+// Calce caja chica ↔ transferencia del banco. FUENTE ÚNICA: panel "Revisión de caja chica", registro del miembro (enlace al instante)
+// y, en espejo, el edge caja-chica-sweep. Regla del usuario (2026-10-09): MISMO MONTO y transferencia el MISMO DÍA de la caja o el
+// ANTERIOR = la misma caja → se enlaza sola (si hay varias iguales se aparean en orden: son equivalentes). Excepción de seguridad:
+// si el monto coincide con un sueldo/bono ya conciliado a esa persona, se confirma (no se enlaza solo). Todo lo demás se PROPONE:
+// monto exacto a ±3 días · monto distinto (la caja debe ser lo transferido) · dos cajas = una transferencia · una caja = dos transferencias.
+// movs: cargos de cartola_movimientos. conciliados: Set de movimiento_id con fila en `conciliacion`. sueldos: {persona:Set(montos)}.
+export const _ccDia = d => String(d||'').slice(0,10)
+
+// Glosa BICE de una transferencia: "...a cuenta 94087392 B.Santande, Nombre, Rut X, el 22-09-2026 a las 13:21:33". Trae la fecha/hora REAL
+// de la transferencia (el movimiento puede contabilizarse al día hábil siguiente) y la cuenta de destino. Si no viene, null.
+export function _glosaTransf(desc){ const t=String(desc||''); const f=t.match(/\bel (\d{2})-(\d{2})-(\d{4})/); const h=t.match(/a las (\d{1,2}:\d{2})/); const c=t.match(/a cuenta (\d{3,})/)
+  return { fecha:f?`${f[3]}-${f[2]}-${f[1]}`:null, hora:h?h[1]:null, cuenta:c?c[1].slice(-4):null } }
+
+export const _ccFechas = m => { const g=_glosaTransf(m?.descripcion).fecha; return [...new Set([_ccDia(m?.fecha),g].filter(Boolean))] }   // fecha contable + fecha real de la glosa
+
+export const _ccDias = (a,b) => Math.round((new Date(_ccDia(a)+'T00:00')-new Date(_ccDia(b)+'T00:00'))/86400000)   // a − b, en días
+
+// Caja chica marcada "[ajuste]" en la nota: movimiento contable de la caja (p.ej. un reembolso pagado dos veces) que NO tiene transferencia;
+// no se cruza con el banco ni aparece como "sin transferencia". Cuenta igual en el saldo.
+export const _ccEsAjuste = p => /\[ajuste\]/i.test(String(p?.notes||''))
+
+export function calceCajaChica(petty, movs, {equipo, conciliados=new Set(), sueldos={}, hoy}={}){
+  const porRut={}; (equipo||EQUIPO_CFG||[]).forEach(s=>{ const k=_rutK(s.rut); if(k) porRut[k]=s.nombre })
+  const nombres=new Set(Object.values(porRut).map(_norm))
+  const quien = m => porRut[_rutK(m.rut_contraparte)]
+  const monto = x => Math.round(Math.abs(Number(x?.amount??x?.monto)||0))
+  const ligados=new Set((petty||[]).map(p=>p.movimiento_id).filter(Boolean).map(String))
+  const cajas=(petty||[]).filter(p=>!p.movimiento_id&&monto(p)>0&&p.delivered_at&&nombres.has(_norm(p.user_name))&&!String(p.notes||'').includes('mov:')&&!_ccEsAjuste(p))
+    .sort((a,b)=>_ccDia(a.delivered_at).localeCompare(_ccDia(b.delivered_at)))
+  const cargos=(movs||[]).filter(m=>m.tipo==='cargo'&&!m.es_interno&&quien(m)&&!ligados.has(String(m.id))&&!conciliados.has(String(m.id))&&!['conciliado','parcial','interno'].includes(String(m.estado||'')))
+    .sort((a,b)=>_ccDia(a.fecha).localeCompare(_ccDia(b.fecha)))
+  const usadosM=new Set(), usadosP=new Set(), auto=[], sugeridos=[]
+  const esSueldo = (persona,mt) => !!sueldos[_norm(persona)]?.has(mt)
+  const dist = (m,p) => Math.min(..._ccFechas(m).map(f=>Math.abs(_ccDias(f,p.delivered_at))))
+  const libres = (p,dMax=3) => cargos.filter(m=>!usadosM.has(m.id)&&_norm(quien(m))===_norm(p.user_name)&&dist(m,p)<=dMax)
+  // 1) Automático: mismo monto, transferencia el mismo día o el anterior.
+  cajas.forEach(p=>{ const c=libres(p,1).find(m=>monto(m)===monto(p)&&_ccFechas(m).some(f=>[0,-1].includes(_ccDias(f,p.delivered_at)))); if(!c) return
+    usadosM.add(c.id); usadosP.add(p.id)
+    if(esSueldo(p.user_name,monto(c))) sugeridos.push({tipo:'exacto',cajas:[p],cargos:[c],motivo:'mismo monto que su sueldo · confirma'})
+    else auto.push({petty:p,cargo:c}) })
+  // 2) Monto exacto a ±3 días.
+  cajas.filter(p=>!usadosP.has(p.id)).forEach(p=>{ const c=libres(p).find(m=>monto(m)===monto(p)); if(!c) return
+    usadosM.add(c.id); usadosP.add(p.id); const d=_ccDias(_glosaTransf(c.descripcion).fecha||c.fecha,p.delivered_at)
+    sugeridos.push({tipo:'exacto',cajas:[p],cargos:[c],motivo:`transferencia ${Math.abs(d)} día${Math.abs(d)===1?'':'s'} ${d<0?'antes':'después'}`}) })
+  // 3) Dos cajas = una transferencia (±3 días, suma exacta).
+  cajas.filter(p=>!usadosP.has(p.id)).forEach((p,i,arr)=>{ if(usadosP.has(p.id)) return
+    for(const q of arr.slice(i+1)){ if(usadosP.has(q.id)||_norm(q.user_name)!==_norm(p.user_name)||Math.abs(_ccDias(q.delivered_at,p.delivered_at))>3) continue
+      const c=libres(p).find(m=>monto(m)===monto(p)+monto(q)); if(!c) continue
+      usadosM.add(c.id); usadosP.add(p.id); usadosP.add(q.id); sugeridos.push({tipo:'fusionar',cajas:[p,q],cargos:[c],motivo:'dos cajas suman esta transferencia'}); return } })
+  // 4) Una caja = dos transferencias (±3 días, suma exacta).
+  cajas.filter(p=>!usadosP.has(p.id)).forEach(p=>{ const ls=libres(p)
+    for(let i=0;i<ls.length;i++) for(let j=i+1;j<ls.length;j++) if(monto(ls[i])+monto(ls[j])===monto(p)&&!usadosP.has(p.id)){
+      usadosM.add(ls[i].id); usadosM.add(ls[j].id); usadosP.add(p.id); sugeridos.push({tipo:'dividir',cajas:[p],cargos:[ls[i],ls[j]],motivo:'la caja llegó en dos transferencias'}) } })
+  // 5) Monto distinto (±30%, ±3 días): la caja se ajusta a lo transferido (la diferencia suele ser lo que el miembro cubrió de su bolsillo).
+  cajas.filter(p=>!usadosP.has(p.id)).forEach(p=>{ const c=libres(p).filter(m=>Math.abs(monto(m)-monto(p))<=0.3*Math.max(monto(m),monto(p))).sort((a,b)=>Math.abs(monto(a)-monto(p))-Math.abs(monto(b)-monto(p)))[0]; if(!c) return
+    usadosM.add(c.id); usadosP.add(p.id); const dif=monto(c)-monto(p)
+    sugeridos.push({tipo:'ajustar',cajas:[p],cargos:[c],motivo:`se transfirió ${dif>0?'más':'menos'} (${dif>0?'+':'−'}${fmtN(Math.abs(dif))}) · la caja queda en lo transferido`}) })
+  const h=hoy||new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const cajasSinTransf=cajas.filter(p=>!usadosP.has(p.id)).map(p=>({petty:p,dias:_ccDias(h,p.delivered_at)}))
+  // Transferencias sin caja: solo las de los últimos 60 días (lo antiguo sin conciliar es historia, no un pendiente del miembro).
+  const transfSinCaja=cargos.filter(m=>!usadosM.has(m.id)&&_ccDias(h,m.fecha)<=60).map(m=>({cargo:m,persona:quien(m),dias:_ccDias(h,m.fecha),esCaja:m.categoria==='Caja chica',posibleSueldo:esSueldo(quien(m),monto(m))}))
+  return { auto, sugeridos, cajasSinTransf, transfSinCaja }
+}
+
+export const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+export const _rutK = s => String(s||'').replace(/[^0-9kK]/g,'').toLowerCase()
+
+// Proyecto que hereda un fondo/gasto creado por la app (conciliación, carga masiva) SOLO si no hay duda: el de la factura,
+// el que viene escrito y calza con una venta, o la única venta / única activa del cliente. Con duda queda sin proyecto y se asigna en la ficha.
+export function proyectoSeguro(clientId, sales, {saleId=null, titulo=null}={}){
+  if(!clientId) return {}
+  const vs=(sales||[]).filter(s=>String(s.client_id)===String(clientId)&&VENTA_REAL(s))
+  let v = saleId ? vs.find(s=>String(s.id)===String(saleId)) : null
+  if(!v && titulo){ const t=String(titulo).trim().toLowerCase(); v=vs.find(s=>(s.title||'').trim().toLowerCase()===t) || null; if(!v) return {} }   // proyecto escrito que no es una venta: se respeta tal cual
+  if(!v){ const act=vs.filter(s=>s.status==='Activo'); v = vs.length===1 ? vs[0] : (act.length===1 ? act[0] : null) }
+  return v ? {sale_id:v.id, project:v.title} : {}
+}
+
+export const CATS_LEGALES = ['notaria','cbr','diario oficial','registro civil','fondo','otro']
+
+// Acuse de pago: confirma al cliente que recibimos el pago de una factura (al conciliar el abono). Formato oficina, vía la cuenta del estudio.
+export async function acusePagoEmail(to, {folio, monto, fecha}){
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const texto=`Estimados,\n\nEspero que estén muy bien. Confirmamos la recepción del pago de ${folio} por ${monto}${fecha?`, con fecha ${fecha}`:''}. Agradecemos su pago.\n\nSaludos cordiales,\n${BRAND.nombre}`
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:18px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="26" style="height:26px"/></div><div style="padding:22px;color:#1a1a1a;font-size:14px;line-height:1.6">Estimados,<br><br>Espero que estén muy bien. Confirmamos la recepción del pago de <b>${esc(folio)}</b> por <b>${esc(monto)}</b>${fecha?`, con fecha <b>${esc(fecha)}</b>`:''}. Agradecemos su pago.<br><br>Saludos cordiales,<br><b>${BRAND.nombre}</b></div><div style="padding:14px 22px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio}</div></div>`
+  return enviarComoUsuario({to, subject:`Confirmación de pago — ${folio}`, html, text:texto})
+}
+
+// dteMontoTotal / montoFactura (monto REAL = MntTotal del DTE; sin XML, el programado) viven en _shared/saludDatos.js.
+// Glosa legible de una factura: los ítems de su DTE (lo que vio el cliente); sin XML, el concepto.
+export function glosaFactura(b){ const p=b?.dte_xml?parseDteFactura(b.dte_xml):null; const it=(p?.items||[]).map(i=>[i.nmb,i.dsc].filter(Boolean).join(' · ')).filter(Boolean); return it.length?it.join(' + '):(b?.concept||'') }
+
+// Parser LIVIANO del DTE (sin jsPDF/timbre): datos para la ficha inline de previsualización. Devuelve null si no hay DTE.
+export function parseDteFactura(dteXml){
+  const doc = splitSetDTE(dteXml||'')[0] || dteXml || ''
+  if(!doc) return null
+  const g=(t,s=doc)=>{ const m=s.match(new RegExp('<'+t+'>([\\s\\S]*?)</'+t+'>')); return m?m[1].trim():'' }
+  const idDoc=(doc.match(/<IdDoc>[\s\S]*?<\/IdDoc>/)||[''])[0], emi=(doc.match(/<Emisor>[\s\S]*?<\/Emisor>/)||[''])[0], rec=(doc.match(/<Receptor>[\s\S]*?<\/Receptor>/)||[''])[0], tot=(doc.match(/<Totales>[\s\S]*?<\/Totales>/)||[''])[0]
+  const detalles=[...doc.matchAll(/<Detalle>[\s\S]*?<\/Detalle>/g)].map(m=>m[0])
+  return {
+    folio:g('Folio',idDoc), fch:g('FchEmis',idDoc),
+    rutE:g('RUTEmisor',emi), rznE:g('RznSoc',emi),
+    rutR:g('RUTRecep',rec), rznR:g('RznSocRecep',rec),
+    exe:+g('MntExe',tot)||0, total:+g('MntTotal',tot)||0,
+    items:detalles.map(d=>({ nmb:g('NmbItem',d), dsc:g('DscItem',d), mnt:+g('MontoItem',d)||0 }))
+  }
+}
+
+// Extrae el texto plano de un mensaje de Gmail (formato full). Prioriza text/plain; si no, quita el HTML.
+export function extraerTextoGmail(msg){
+  const dec = s => { try{ return decodeURIComponent(escape(atob(String(s||'').replace(/-/g,'+').replace(/_/g,'/')))) }catch(_){ try{ return atob(String(s||'').replace(/-/g,'+').replace(/_/g,'/')) }catch(e){ return '' } } }
+  const walk = (p,mime) => { if(!p) return ''; if(p.mimeType===mime && p.body?.data) return dec(p.body.data); if(p.parts) return p.parts.map(x=>walk(x,mime)).join(' '); return '' }
+  let t = walk(msg?.payload,'text/plain')
+  if(!t.trim()){ t = walk(msg?.payload,'text/html').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ') }
+  return t.replace(/\r?\n/g,' ').replace(/&nbsp;/g,' ').trim()
 }
 
