@@ -7,7 +7,7 @@ const p2 = n => String(n).padStart(2, '0')
 const isoDe = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
 export const ymMas = (ym, n) => { const [Y, M] = String(ym).split('-').map(Number), d = new Date(Y, M - 1 + n, 1); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}` }
 export const finDeMes = ym => { const [Y, M] = String(ym).split('-').map(Number); return isoDe(new Date(Y, M, 0)) }
-export const diasA = (desde, hasta) => Math.round((new Date(hasta + 'T12:00') - new Date(desde + 'T12:00')) / 86400000)
+export const diasA = (desde, hasta) => Math.round((+new Date(hasta + 'T12:00') - +new Date(desde + 'T12:00')) / 86400000)
 
 export function crearCalendario(feriados = new Set()) {
   const esDiaHabil = dt => { const w = dt.getDay(); if (w === 0 || w === 6) return false; return !feriados.has(isoDe(dt)) }

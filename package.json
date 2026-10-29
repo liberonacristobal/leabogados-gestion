@@ -10,7 +10,7 @@
     "test": "node --test tests/*.test.mjs",
     "verificar": "vite build && npm run lint && npm run tipos && npm test && npm run smoke",
     "lint": "eslint --quiet src",
-    "tipos": "tsc -p tsconfig.tipos.json"
+    "tipos": "tsc -p tsconfig.tipos.json && tsc -p tsconfig.reglas.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",

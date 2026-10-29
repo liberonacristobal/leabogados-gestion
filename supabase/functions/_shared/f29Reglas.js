@@ -38,6 +38,7 @@ export function f29TasaDeclarada(declarados, per) {
   return best ? Number(best[0]) / 100 : null
 }
 // declarados = { 'AAAA-MM': { tasa_ppm, impuesto_unico, total } } (tabla f29_declarados, solo administradores).
+/** @param {{per: string, docs: any, boletas: any, valores: any, declarados?: any, tasa?: number | null}} a */
 export function f29Estimado({ per, docs, boletas, valores, declarados = null, tasa = null }) {
   tasa = tasa ?? f29TasaDeclarada(declarados, per) ?? TASA_PPM
   const { base, n: nDocs } = f29Base(docs, per)

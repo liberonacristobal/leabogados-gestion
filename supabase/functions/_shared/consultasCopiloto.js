@@ -293,7 +293,7 @@ export function crearConsultas({ cargarComprasSII, comprasEnPlazoReclamo, compra
   }
 
   const tabla = { compras_sii: comprasSII, f29, calendario_cliente: calendarioCli, obligaciones_estudio: obligacionesEstudio, notaria_pendiente: notariaPendiente, causas: causasTool, resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
-  return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
+  return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (/** @type {any} */ (e)?.message || 'error') } } }
 }
 
 // Bucle de la conversación: la IA pide consultas, la app las resuelve, hasta que redacta la respuesta (máximo `maxVueltas`).

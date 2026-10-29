@@ -4,7 +4,7 @@
 const normRut = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '')
 const folioN = no => String(no || '').replace(/^factura\s*/i, '').trim()
 const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
-const _dias = (a, b) => Math.round((new Date(String(a).slice(0, 10) + 'T12:00') - new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
+const _dias = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 // Inicio de la facturación en la app: lo anterior es histórico importado (sin XML ni envío), no se audita como error.
 export const APP_DESDE = '2026-06-06'
 
@@ -159,7 +159,7 @@ export function terminadaConGastos(sales, expenses, hoy, { dias = 30, ok = {} } 
 // recepción en el SII. vistas = las que alguien ya revisó sin reclamo (learnings compra_sin_reclamo). Reclamar se hace en el SII.
 export const PLAZO_RECLAMO_DIAS = 8
 // Fecha de Chile de un timestamp del SII (una fecha sin hora se toma tal cual: no es UTC).
-const _fechaCL = ts => { const x = String(ts || ''); if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return x; const t = new Date(x); return isNaN(t) ? x.slice(0, 10) : t.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }) }
+const _fechaCL = ts => { const x = String(ts || ''); if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return x; const t = new Date(x); return isNaN(+t) ? x.slice(0, 10) : t.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' }) }
 const _nrut = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
 // Comisiones del emisor aún sin factura (terceros_pagos sin factura_numero, mismo proveedor o RUT) que calzan con el monto de la
 // factura recibida (±0,5%, mínimo $1.000): todas juntas o UNA sola combinación posible (si hay más de una, no se adivina).
@@ -178,7 +178,7 @@ export function comisionesQueCalzan(doc, terceros = []) {
 // recepción en el SII (fecha de Chile). vistas = las que alguien ya revisó sin reclamo (learnings compra_sin_reclamo). Con
 // terceros: si calza con comisiones sin factura del emisor, va con su calce (la acción es enlazarlas, no reclamar). Con historial
 // (todas las compras): un proveedor habitual (3 facturas anteriores o más) con un monto dentro de lo suyo no se muestra.
-export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set(), { terceros = null, historial = null } = {}) {
+export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set(), { terceros = /** @type {any} */ (null), historial = /** @type {any} */ (null) } = {}) {
   return (docs || []).filter(d => d && d.sii_estado === 'PENDIENTE' && d.fecha_recepcion && !vistas.has(String(d.id)) && Number(d.tipo_dte) !== 61)
     .map(d => { const rec = _fechaCL(d.fecha_recepcion), vence = new Date(new Date(rec + 'T12:00').getTime() + PLAZO_RECLAMO_DIAS * 864e5).toISOString().slice(0, 10); return { d, rec, vence, quedan: _dias(vence, hoy), calce: terceros ? comisionesQueCalzan(d, terceros) : null } })
     .filter(x => x.quedan >= 0)

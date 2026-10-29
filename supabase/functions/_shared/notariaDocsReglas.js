@@ -28,7 +28,7 @@ export function firmadoPorNotaria(texto, firmas) {
 // OT de la liquidación que corresponde al documento: misma fecha y el tipo de documento contenido en la glosa de la OT
 // (al menos 2/3 de sus palabras, y todas si son dos o menos). Varias el mismo día (cinco prendas «sobre vehículos», «sobre
 // acciones»…) → la que calza más palabras, si es una sola. Sin OT ese día → a ±3 días solo con TODAS las palabras (dos o más) y única.
-const _dias = (a, b) => Math.round((new Date(a + 'T12:00') - new Date(b + 'T12:00')) / 864e5)
+const _dias = (a, b) => Math.round((+new Date(a + 'T12:00') - +new Date(b + 'T12:00')) / 864e5)
 export function otParaDocumento(doc, ots) {
   if (!doc?.fecha || !doc?.tipo) return null
   const tt = [...new Set(toks(doc.tipo))]; if (!tt.length) return null
