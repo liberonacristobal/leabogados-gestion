@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { BRAND, C, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
-import { clienteDeCorreo, clienteDePedido, montoSolicitado, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
+import { clienteDeCorreo, clienteDePedido, esFormularioFondos, montoSolicitado, pedidoDeSolicitud, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { chipBtn, driveToken, estadoSolicitud, logActividad, nombresMiembros, okDB, registrarError, setLearningKV } from './compartido.jsx'
 
 const DIAS = 14
@@ -66,6 +66,26 @@ export async function detectarSolicitudesFondos(clients) {
   return out.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
 }
 
+const adjuntos = p => !p ? [] : [...(p.filename ? [p.filename] : []), ...(p.parts || []).flatMap(adjuntos)]
+
+// Formulario de fondos por rendir en el hilo del pedido: respuesta de una persona del equipo con el Word adjunto. El hilo se busca por el
+// Message-ID del pedido (igual en todas las casillas), así lo encuentra quien reciba el pedido en copia o en directo.
+async function buscarFormulario(token, mid, dom) {
+  const h = { Authorization: 'Bearer ' + token }
+  const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent('rfc822msgid:' + mid.replace(/[<>]/g, ''))}&maxResults=1`, { headers: h })
+  if (!r.ok) return null
+  const m = ((await r.json()).messages || [])[0]; if (!m) return null
+  const t = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${m.threadId}?format=full`, { headers: h })
+  if (!t.ok) return null
+  for (const msg of (await t.json()).messages || []) {
+    const H = {}
+    ;(msg.payload?.headers || []).forEach(x => { H[x.name.toLowerCase()] = x.value })
+    const de = emailsDe(H.from)[0] || ''
+    if (de.endsWith(dom) && adjuntos(msg.payload).some(esFormularioFondos)) return { fecha: isoLocal(Number(msg.internalDate)), por: de }
+  }
+  return null
+}
+
 // Pedido interno: un correo entre el equipo («FxR», «fondos por rendir») con una lista «cliente: concepto: monto». Una fila por línea.
 // Solo correos de personas del equipo hacia el equipo (no la casilla de la oficina ni nada que salga a un cliente).
 export async function detectarPedidosInternos(clients) {
@@ -116,6 +136,7 @@ const PILL = {
   rec: { t: 'Recibida', bg: C.greenBg, c: C.greenText },
   ped: { t: 'Pedido interno', bg: C.soonBg, c: C.soonText },
   por: { t: 'Por solicitar', bg: C.soonBg, c: C.soonText },
+  frm: { t: 'Formulario listo', bg: C.azulBg, c: C.azulInfo },
 }
 const TABS = [['reg', 'Por registrar'], ['esp', 'Esperando'], ['rec', 'Recibidas']]
 const segBtn = on => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.bgSoft, color: on ? '#fff' : C.muted, fontFamily: 'inherit' })
@@ -153,7 +174,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     const cs = (clients || []).filter(c => !c.is_internal).slice(0, 4)
     setDet(cs.slice(0, 2).map((c, i) => ({ id: 'demo' + i, asunto: i ? 'Provisión de fondos' : 'Solicitud de fondos', fecha: i ? '2026-10-28' : '2026-10-27', para: '', cc: '', client_id: String(c.id), monto: i ? 300000 : 1200000 })))
     setPed([{ id: 'dp0', cliente: cs[0]?.name || 'Cliente', concepto: 'Puesta en marcha', monto: 2000000, client_id: cs[0] ? String(cs[0].id) : null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }, { id: 'dp1', cliente: 'Zeta', concepto: 'Reorganización', monto: 1500000, client_id: null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }])
-    setPedReg([{ id: 'dq0', client_id: cs[1] ? String(cs[1].id) : null, concepto: 'Inscripción', monto: 2000000, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }])
+    setPedReg([{ id: 'dq0', client_id: cs[1] ? String(cs[1].id) : null, concepto: 'Inscripción', monto: 2000000, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo', formulario: { fecha: '2026-10-13', por: 'martina@demo' } }])
     setReqs(cs.slice(2).map((c, i) => ({ id: 'dr' + i, client_id: String(c.id), monto: i ? 700000 : 800000, asunto: 'Solicitud de fondos por rendir', enviada_por: i ? 'Cristóbal' : 'Erasmo', enviada_at: i ? '2026-10-15T12:00:00Z' : '2026-10-22T12:00:00Z', recibido_at: null })))
   }, [clients.length])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -178,6 +199,25 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     return () => { vivo = false }
   }, [cacheKey])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (DEMO || !pedReg.length) return
+    let vivo = true
+    ;(async () => {
+      const token = await driveToken(); if (!token) return
+      const dom = '@' + String(BRAND.emailDominio || '').toLowerCase(), hace45 = isoLocal(Date.now() - 45 * 86400000)
+      for (const p of pedReg.filter(x => !x.formulario && String(x.fecha) >= hace45).slice(0, 15)) {
+        const ck = 'fd_form_' + p.id
+        try { const c = sessionStorage.getItem(ck); if (c && Date.now() - Number(c) < 20 * 60000) continue } catch (_) { /* sin almacenamiento */ }
+        const f = await buscarFormulario(token, String(p.id).split('|')[0], dom)
+        try { sessionStorage.setItem(ck, String(Date.now())) } catch (_) { /* sin almacenamiento */ }
+        if (!f || !vivo) continue
+        const { id, ...resto } = p
+        await setLearningKV(PEDIDO, id, JSON.stringify({ ...resto, formulario: f }))
+        setPedReg(a => a.map(x => x.id === id ? { ...x, formulario: f } : x))
+      }
+    })().catch(e => { if (e?.code !== 401) registrarError({ origen: 'accion', vista: PEDIDO, err: e }) })
+    return () => { vivo = false }
+  }, [pedReg.length])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (DEMO) return
     let vivo = true
     const desde = new Date(Date.now() - 90 * 86400000).toISOString()
@@ -196,7 +236,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const ped0 = (r, fecha) => (reqs || []).some(x => String(x.client_id) === String(r.client_id) && Number(x.monto) === Number(r.monto) && String(x.enviada_at || '').slice(0, 10) >= fecha)
   const filas = [
     ...(ped || []).map(it => ({ k: 'ped', tab: 'reg', id: 'p' + it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
-    ...(pedReg || []).filter(r => !ped0(r, r.fecha)).map(it => ({ k: 'por', tab: 'esp', id: 'q' + it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
+    ...(pedReg || []).filter(r => !ped0(r, r.fecha)).map(it => ({ k: it.formulario ? 'frm' : 'por', tab: 'esp', id: 'q' + it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
     ...(det || []).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
     ...(reqs || []).map(r => {
       const st = estadoSolicitud(r, expenses)
@@ -257,8 +297,12 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     quitaPed(f.it.id); setBusy(null)
   }
   const historia = f => {
-    if (f.k === 'ped' || f.k === 'por') return [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(f.fecha), q: f.ruta }, { ok: false, t: f.k === 'ped' ? 'Aún no registrado en la app' : 'Aún sin solicitud al cliente' }]
-    const pasos = [{ ok: true, t: 'Solicitud enviada', d: fmtFechaDMY(f.fecha), q: f.por }]
+    const frmPaso = fr => fr ? { ok: true, t: 'Formulario preparado', d: fmtFechaDMY(fr.fecha), q: quienEs(fr.por) } : { ok: false, t: 'Formulario aún sin preparar' }
+    if (f.k === 'ped') return [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(f.fecha), q: f.ruta }, { ok: false, t: 'Aún no registrado en la app' }]
+    if (f.k === 'por' || f.k === 'frm') return [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(f.fecha), q: f.ruta }, frmPaso(f.it.formulario), { ok: false, t: 'Aún sin solicitud al cliente' }]
+    const pd = pedidoDeSolicitud(pedReg, { client_id: f.client_id, monto: f.monto, fecha: f.fecha })
+    const pasos = pd ? [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(pd.fecha), q: ruta(pd) }, ...(pd.formulario ? [frmPaso(pd.formulario)] : [])] : []
+    pasos.push({ ok: true, t: 'Solicitud enviada', d: fmtFechaDMY(f.fecha), q: f.por })
     if (f.k === 'det') pasos.push({ ok: false, t: 'Aún no registrada en la app' })
     else if (f.k === 'rec') pasos.push({ ok: true, t: 'Depósito recibido', d: fmtFechaDMY(f.st?.dep?.date || String(f.r?.recibido_at || '').slice(0, 10)) })
     else pasos.push({ ok: false, t: `Sin depósito · ${f.st?.dias ?? 0} días` })
