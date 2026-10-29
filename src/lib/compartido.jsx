@@ -7121,3 +7121,49 @@ export const comisPorPagarAnteriores = sc => { const yAct=new Date().getFullYear
 export let _resultadoInicio = null
 export const publicarResultadoInicio = v => { _resultadoInicio = v }
 
+// RUT: normalizador ÚNICO de toda la app = el de cartola (crNormRut): mayúscula, solo dígitos + K (sin puntos, espacios ni guion).
+// Antes esta copia conservaba el guion y usaba minúscula (outlier): fallaba dedupe/match entre "12345678-9" y "123456789".
+export const normRut = crNormRut
+
+// Clientes EXISTENTES parecidos a un nombre NUEVO (misma regla que el detector) → alarma que BLOQUEA la creación
+// para no duplicar (prevención > fusión). Incluye ocasionales (un dup contra un ocasional también importa); excluye interno y la propia ficha.
+export function clientesParecidos(name, clients=[], excludeId=null){
+  const n=_normTxt(name); if(!n) return []
+  const toks=n.split(' ').filter(w=>w.length>1)
+  const out=[]
+  for(const c of (clients||[])){
+    if(!c||!c.name||c.deleted_at||c.is_internal||(excludeId!=null&&String(c.id)===String(excludeId))) continue
+    const cn=_normTxt(c.name); if(!cn) continue
+    const ct=cn.split(' ').filter(w=>w.length>1)
+    let tipo=null
+    if(cn===n) tipo='exacto'
+    else { const short=toks.length<=ct.length?toks:ct, long=toks.length<=ct.length?ct:toks
+      if(short.length>=2 && short.every(t=>long.includes(t))) tipo='contenido'
+      else if(toks.length===ct.length && Math.min(n.length,cn.length)>=6 && _lev(n,cn)<=2) tipo='typo' }
+    if(tipo) out.push({cliente:c, tipo})
+  }
+  const rank={exacto:0,contenido:1,typo:2}
+  out.sort((a,b)=>rank[a.tipo]-rank[b.tipo])
+  return out
+}
+
+export const _tipoDupLbl = t => t==='exacto'?'idéntico':t==='contenido'?'muy similar':'posible typo'
+
+export const Sel = ({value,onChange,options,placeholder,style}) => (
+  <select value={value} onChange={onChange} style={{width:'100%',height:36,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,boxSizing:'border-box',...style}}>
+    {placeholder&&<option value=''>{placeholder}</option>}
+    {options.map(o=><option key={o} value={o}>{o}</option>)}
+  </select>
+)
+
+export const Txt = (p) => <textarea {...p} rows={2} style={{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:14,resize:'none',boxSizing:'border-box',outline:'none'}}/>
+
+// Página genérica para flujos que antes eran modales (Carga masiva, Generar reporte, Redactar con IA, Plazos, Revisión de datos):
+// mismo header que Tarea/Gasto y el cuerpo a todo el ancho útil (escritorio) o columna (móvil).
+// Página superpuesta: un flujo que se abre desde otra ventana/página (p. ej. Asignar anticipo, la venta) se muestra como PÁGINA
+// a pantalla completa ('‹ origen | flujo'), sin tapar la barra lateral en escritorio.
+export function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
+  const isDesktop=useIsDesktop()
+  return createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:650,background:C.bg,overflowY:'auto'}}><FlujoPagina origen={origen} titulo={titulo} ctx={ctx} onBack={onBack} maxW={maxW}>{children}</FlujoPagina></div>, document.body)
+}
+
