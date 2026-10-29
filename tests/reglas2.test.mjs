@@ -409,6 +409,20 @@ test('escrituras rechazadas por la base se avisan; lecturas, éxitos y el propio
 
 import { glosaConflict } from '../supabase/functions/_shared/saludDatos.js'
 test('glosa en conflicto: cada aprendizaje vale por sus usos (hits), no por filas; retiros y sueldos del mismo destinatario no son conflicto', () => {
-  const r = glosaConflict([{ key: 'k1', value: 'Arriendo', hits: 20 }, { key: 'k1', value: 'Servicios', hits: 2 }, { key: 'k2', value: 'Retiros', hits: 3 }, { key: 'k2', value: 'Sueldos', hits: 3 }])
-  assert.equal(r.length, 1); assert.equal(r[0].key, 'k1'); assert.deepEqual(r[0].votos[0], { cat: 'Arriendo', n: 20 })
+  const r = glosaConflict([{ key: 'k1', value: 'Arriendo', hits: 5 }, { key: 'k1', value: 'Servicios', hits: 4 }, { key: 'k0', value: 'Arriendo', hits: 20 }, { key: 'k0', value: 'Servicios', hits: 2 }, { key: 'k2', value: 'Retiros', hits: 3 }, { key: 'k2', value: 'Sueldos', hits: 3 }])
+  assert.equal(r.length, 1); assert.equal(r[0].key, 'k1'); assert.deepEqual(r[0].votos[0], { cat: 'Arriendo', n: 5 })   // k0 tiene mayoría clara (91%): no pregunta
+})
+
+import { votoGlosa } from '../supabase/functions/_shared/saludDatos.js'
+test('glosa: una clasificación antigua ya corregida no genera conflicto; solo el empate reciente pregunta', () => {
+  const hoy = Date.parse('2026-10-28'), dia = 86400000, f = d => new Date(hoy - d * dia).toISOString()
+  // antes Arriendo (10 usos, hace 200 días); desde entonces Servicios (3 usos recientes) → gana lo vigente, sin preguntar
+  const a = votoGlosa([{ key: 'k', value: 'Arriendo', hits: 10, updated_at: f(200) }, { key: 'k', value: 'Servicios', hits: 3, updated_at: f(10) }], hoy)
+  assert.equal(a.k.category, 'Servicios'); assert.equal(a.k.ambiguo, false)
+  // empate real en los últimos 90 días: pregunta
+  const b = votoGlosa([{ key: 'k', value: 'Arriendo', hits: 4, updated_at: f(20) }, { key: 'k', value: 'Servicios', hits: 4, updated_at: f(5) }], hoy)
+  assert.equal(b.k.ambiguo, true)
+  // sin uso reciente se vota con todo el historial
+  const c = votoGlosa([{ key: 'k', value: 'Arriendo', hits: 9, updated_at: f(300) }, { key: 'k', value: 'Servicios', hits: 1, updated_at: f(200) }], hoy)
+  assert.equal(c.k.category, 'Arriendo'); assert.equal(c.k.ambiguo, false)
 })

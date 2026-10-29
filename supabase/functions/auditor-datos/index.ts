@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
       todas("cartola_movimientos?select=id,fecha,monto,tipo,nombre_contraparte,descripcion,estado,monto_conciliado,es_interno"),
       todas("petty_cash?select=id,movimiento_id,amount&movimiento_id=not.is.null"),
       todas("client_entities?select=id,client_id,rut,name"),
-      todas("learnings?select=id,key,value,hits&kind=eq.costo_oficina"),
+      todas("learnings?select=id,key,value,hits,updated_at&kind=eq.costo_oficina"),
       todas("v_ventas_salud?select=*&order=id.asc"),
       todas("clients?select=id,name"),
       todas("proveedores?select=id,nombre"),

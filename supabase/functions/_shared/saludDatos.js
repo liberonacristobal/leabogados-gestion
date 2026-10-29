@@ -85,9 +85,25 @@ export function cuotaTramo(billing, sales, ignorados = new Set()) {
 // Clave del diccionario costo_oficina que guardó más de una categoría → la sugerencia sale no determinista. No cuenta la cuenta de
 // una persona que recibe retiros, sueldo y bonos: eso lo decide el monto (redondo = retiro del socio), no la glosa.
 const _CAT_PERSONA = new Set(['Retiros', 'Sueldos', 'Bono', 'Otros'])
-export function glosaConflict(coRows) {
-  const m = {}; (coRows || []).forEach(r => { if (!r.key) return; const cat = String(r.value || '').trim(); if (!cat) return; (m[r.key] = m[r.key] || {})[cat] = (m[r.key][cat] || 0) + (Number(r.hits) > 0 ? Number(r.hits) : 1) })
-  return Object.entries(m).filter(([, v]) => Object.keys(v).length > 1 && !Object.keys(v).every(c => _CAT_PERSONA.has(c))).map(([k, v]) => ({ key: k, votos: Object.entries(v).sort((a, b) => b[1] - a[1]).map(([cat, n]) => ({ cat, n })) }))
+// Voto de cada glosa del diccionario costo_oficina: cuenta los usos (hits) y, si la clave se usó en los últimos 90 días, decide solo
+// con esos usos (una clasificación antigua ya corregida no genera conflicto). Ambiguo = ningún valor llega al 62% de los usos vigentes.
+const _VENTANA_DIAS = 90
+export function votoGlosa(coRows, hoy = Date.now()) {
+  const porClave = {}
+  ;(coRows || []).forEach(r => { if (!r.key) return; const cat = String(r.value || '').trim(); if (!cat) return; (porClave[r.key] = porClave[r.key] || []).push({ cat, n: Number(r.hits) > 0 ? Number(r.hits) : 1, t: Date.parse(r.updated_at) || 0, sub: r.meta && r.meta.subcategory || null }) })
+  const out = {}
+  Object.entries(porClave).forEach(([k, filas]) => {
+    const recientes = filas.filter(f => f.t >= hoy - _VENTANA_DIAS * 86400000)
+    const base = recientes.length ? recientes : filas
+    const v = {}; base.forEach(f => { v[f.cat] = v[f.cat] || { n: 0, sub: null, t: 0 }; v[f.cat].n += f.n; if (f.sub && f.t >= v[f.cat].t) v[f.cat].sub = f.sub; v[f.cat].t = Math.max(v[f.cat].t, f.t) })
+    const arr = Object.entries(v).sort((a, b) => b[1].n - a[1].n || b[1].t - a[1].t)
+    const tot = arr.reduce((a, x) => a + x[1].n, 0)
+    out[k] = { category: arr[0][0], subcategory: arr[0][1].sub, ambiguo: arr.length > 1 && arr[0][1].n / tot < 0.62, votos: arr.map(([cat, x]) => ({ cat, n: x.n })) }
+  })
+  return out
+}
+export function glosaConflict(coRows, hoy = Date.now()) {
+  return Object.entries(votoGlosa(coRows, hoy)).filter(([, v]) => v.ambiguo && !v.votos.every(x => _CAT_PERSONA.has(x.cat))).map(([k, v]) => ({ key: k, votos: v.votos }))
 }
 
 // Emitidas sin cliente asignado: no cuentan en el por cobrar de nadie.
