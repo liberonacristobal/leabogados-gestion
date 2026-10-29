@@ -506,3 +506,12 @@ test('Counsel AI: por facturar y trabajos detenidos usan las reglas de ventas', 
   const t = await ej('trabajos_detenidos', {})
   assert.equal(t.resumen.con_saldo, 1); assert.equal(t.resumen.mayores[0].por_cobrar, '$300.000')
 })
+
+test('Counsel AI: el resultado del año es el que publica Inicio, con su plano; sin cálculo no inventa', async () => {
+  const secs = [{ t: 'Ventas', pct: 97, uf: 'UF 17.481', clp: '$700.000.000', lines: [['Meta del año', 'UF 18.000', '$720.000.000']] }, { t: 'Cobrado propio', uf: 'UF 8.072', clp: '$330.000.000', lines: [] }]
+  const ej = crearConsultas({ ..._datosCopiloto(), leerResultado: () => ({ anio: 2026, secs, at: Date.parse('2026-10-29T15:00:00Z') }) })
+  const r = await ej('resultado_anio', {})
+  assert.equal(r.resumen.anio, 2026); assert.equal(r.resumen.secciones[0].uf, 'UF 17.481'); assert.equal(r.resumen.secciones[0].avance, '97%')
+  assert.match(r.resumen.plano, /depósitos conciliados por fecha del depósito/); assert.equal(r.tarjeta.lineas[1].valor, 'UF 8.072 · $330.000.000')
+  assert.match((await crearConsultas({ ..._datosCopiloto(), leerResultado: () => null })('resultado_anio', {})).error, /Abre Inicio/)
+})

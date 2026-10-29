@@ -15,6 +15,7 @@ export const HERRAMIENTAS = [
   { name: 'ficha_cliente', description: 'Datos de un cliente: RUT, estado, responsable, contacto, razones sociales, contactos, ventas activas, proyectos y tareas abiertas.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
   { name: 'ventas_cliente', description: 'Ventas y propuestas de un cliente con monto, lo facturado y lo que falta por facturar.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
   { name: 'por_facturar', description: 'Lo que falta por facturar: cuotas programadas de meses cerrados sin emitir y trabajos activos con plan sin facturar.', input_schema: { type: 'object', properties: {} } },
+  { name: 'resultado_anio', description: 'Resultado del año tal como lo muestra Inicio: vendido, facturado, cobrado propio, margen del ejercicio y cobranza, en UF y en pesos, con su meta. Úsala para «cuánto vendimos», «cuánto hemos facturado», «cuánto cobramos», «cómo vamos este año», «margen». Trae el año que está elegido en Inicio.', input_schema: { type: 'object', properties: {} } },
   { name: 'trabajos_detenidos', description: 'Trabajos activos sin movimiento en 90 días: con saldo por cobrar o que parecen terminados.', input_schema: { type: 'object', properties: {} } },
 ]
 
@@ -42,7 +43,7 @@ export const AYUDA = [
   { tema: 'Mis proyectos', claves: ['proyecto', 'proyectos', 'cartera'], donde: 'Mis proyectos', tab: 'cartera' },
 ]
 
-export function crearConsultas({ clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
+export function crearConsultas({ leerResultado, clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
   const dia = String(hoy || new Date().toISOString()).slice(0, 10)
   const reales = clients.filter(c => c && !c.is_internal)
 
@@ -187,7 +188,18 @@ export function crearConsultas({ clients = [], billing = [], expenses = [], task
     }
   }
 
-  const tabla = { deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
+  const resultadoAnio = async () => {
+    const r = leerResultado ? await leerResultado() : null
+    if (!r || !Array.isArray(r.secs) || !r.secs.length) return { error: 'Inicio todavía no calculó el resultado del año. Abre Inicio y vuelve a preguntar.' }
+    const hora = new Date(r.at || Date.now()).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' })
+    return {
+      resumen: { anio: r.anio, calculado_a_las: hora, plano: 'Mismo cálculo de Inicio › Resultado del año. Facturado = honorarios emitidos en el año (monto del DTE). Cobrado propio = depósitos conciliados por fecha del depósito, sin subarriendo ni reembolsos; las UF usan la UF del día de cada movimiento.',
+        secciones: r.secs.map(x => ({ nombre: x.t, avance: x.pct == null ? null : `${x.pct}%`, uf: x.uf, pesos: x.clp, detalle: (x.lines || []).map(l => ({ concepto: l[0], uf: l[1], pesos: l[2] })) })), nota: 'Si preguntan por otro año, dilo: aquí está el año elegido en Inicio.' },
+      tarjeta: { titulo: `Resultado ${r.anio}`, lineas: r.secs.map(x => ({ n: x.t, sub: x.pct == null ? '' : `${x.pct}%${x.t === 'Ventas' ? ' de la meta' : x.t === 'Cobranza' ? ' de la meta de cobranza' : /^Facturado/.test(x.t) ? ' de lo vendido' : /^(Margen|Pérdida)/.test(x.t) ? ' sobre los ingresos' : ''}`, valor: `${x.uf} · ${x.clp}`, destino: { tab: 'dashboard' } })), total: null, fuente: `Fuente: la misma cifra de Inicio › Resultado del año, a las ${hora}. Cobrado = depósitos conciliados por fecha del depósito.` },
+    }
+  }
+
+  const tabla = { resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
   return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
 }
 
