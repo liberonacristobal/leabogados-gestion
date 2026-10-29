@@ -1,6 +1,6 @@
 // Base compartida de la app: paleta, marca, formatos, iconos, diálogos y el interruptor móvil↔escritorio.
 // Todo lo que cualquier pantalla necesita vive aquí para que las pantallas puedan salir de App.jsx y cargarse por separado.
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 
 // Paleta corporativa. soon (#C77F18) = ámbar oficial de aviso: único color cálido permitido,
 // para estados Propuesta/Prospecto/Borrador, próximo a vencer y costo de terceros.
@@ -195,3 +195,10 @@ export const CUENTA_HONORARIOS = { razon:BRAND.nombreLegal, rut:BRAND.rut, banco
 
 // El anfitrión de diálogos (DialogHost, en App.jsx) se registra aquí al montarse.
 export const setDialogHost = fn => { _dialogHost = fn }
+
+// Pantalla que se descarga la primera vez que se abre (no en el arranque de la app). Mientras llega no se ve nada: las pantallas
+// ya tienen su propia carga, y un recuadro intermedio solo agregaría un parpadeo.
+export const lazyVista = (cargar, nombre) => {
+  const L = lazy(() => cargar().then(m => ({ default: m[nombre] })))
+  return props => <Suspense fallback={null}><L {...props} /></Suspense>
+}

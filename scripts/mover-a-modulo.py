@@ -63,8 +63,10 @@ def modulos_lib():
     out = {}
     for f in os.listdir(d):
         if f.endswith(('.jsx', '.js')) and os.path.join(d, f) != dest_path:
-            for n in re.findall(r'^export (?:const|function|let|class) ([A-Za-z_$][\w$]*)', open(os.path.join(d, f)).read(), re.M):
-                out[n] = f
+            txt = open(os.path.join(d, f)).read()
+            for n in re.findall(r'^export (?:async\s+)?(?:const|function|let|class) ([A-Za-z_$][\w$]*)', txt, re.M): out[n] = f
+            for grupo in re.findall(r'^export const \{([^}]*)\}', txt, re.M):
+                for n in re.findall(r'[A-Za-z_$][\w$]*', re.sub(r':\s*[A-Za-z_$][\w$]*', '', grupo)): out[n] = f
     return out
 ya_en_lib = modulos_lib()
 names_app = names - set(ya_en_lib)
@@ -107,84 +109,125 @@ for _ in range(10):
                 agregar.add(o)
     if not agregar: break
     mover |= cierre(agregar)
+vista = '--vista' in flags
+if vista:
+    # lo que otros bloques de App.jsx también usan va a lib/compartido.jsx; el resto viaja con la vista
+    fuera = [n for n in names_app if n not in mover]
+    usados_fuera = set(x for x in mover if x not in semillas and any(x in dep[o] for o in fuera))
+    compartido = cierre(usados_fuera) & mover
+    compartido -= set(semillas)
+    privado = mover - compartido
+else:
+    compartido, privado = set(), mover
 total = sum(rng[n][1] - rng[n][0] for n in mover)
-print(f'{len(mover)} bloques, {total} líneas -> src/{destino}')
+print(f'{len(mover)} bloques, {total} líneas -> src/{destino}' + (f' ({len(privado)} propios, {len(compartido)} a lib/compartido.jsx)' if vista else ''))
 if prueba:
-    print(', '.join(sorted(mover, key=lambda n: rng[n][0]))[:1500]); sys.exit(0)
+    print('propios:', ', '.join(sorted(privado, key=lambda n: rng[n][0]))[:600])
+    if vista: print('compartidos:', ', '.join(sorted(compartido, key=lambda n: rng[n][0]))[:800])
+    sys.exit(0)
 
-# importaciones de App.jsx (para deducir cuáles necesita el módulo nuevo)
 app_txt = '\n'.join(src)
-imports = []  # (nombre local, línea de origen especificador, módulo)
+imports = []
 for m in re.finditer(r'^import\s+(.+?)\s+from\s+[\'"]([^\'"]+)[\'"]', app_txt, re.M | re.S):
     cuerpo, mod = m.group(1), m.group(2)
     if mod.startswith('./lib/') or cuerpo.strip().startswith('*'): continue
     for part in re.findall(r'[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?', cuerpo.replace('{', ' ').replace('}', ' ')):
-        loc = part.split(' as ')[-1].strip()
-        imports.append((loc, part.strip(), mod))
+        imports.append((part.split(' as ')[-1].strip(), part.strip(), mod))
+nss = re.findall(r'^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+[\'"]([^\'"]+)[\'"]', app_txt, re.M)
 
-cuerpo_nuevo = []
-orden = sorted(mover, key=lambda n: rng[n][0])
-vistos = set(); unicos = []
-for n in orden:
-    if rng[n] in vistos: continue
-    vistos.add(rng[n]); unicos.append(n)
-orden_imp = orden
-orden = unicos
-for n in orden:
-    a, b = rng[n]
-    blk = src[a:b]
-    while blk and not blk[-1].strip(): blk.pop()
-    for t, l in enumerate(blk):
-        if decl.match(l) or re.match(r'^const\s*\{', l):
-            if not l.startswith('export '): blk[t] = 'export ' + l
-            break
-    cuerpo_nuevo += blk + ['']
-nuevo_txt = '\n'.join(cuerpo_nuevo)
+def ident(n, t): return re.search(r'(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))' + re.escape(n) + r'(?![\w$])', t)
 
 def reescribir(mod):
     if mod.startswith('./'): return '../' + mod[2:] + ('.js' if mod in ('./cartola',) else '')
     if mod.startswith('../'): return '../' + mod
     return mod
-por_modulo = {}
-for loc, part, mod in imports:
-    if re.search(r'(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))' + re.escape(loc) + r'(?![\w$])', nuevo_txt):
-        por_modulo.setdefault(mod, []).append(part)
-lineas_imp = []
-for mod, partes in por_modulo.items():
-    default = [p for p in partes if p in ('React',)]
-    named = [p for p in partes if p not in default]
-    if mod in ('react', 'react-dom') or not mod.startswith('.'):
-        if default and not named: lineas_imp.append(f"import {default[0]} from '{mod}'")
-        else: lineas_imp.append(f"import {{ {', '.join(named)} }} from '{reescribir(mod)}'")
-    elif mod.startswith('../') or mod.startswith('./'):
-        # la base de lib/ vive en src/lib: './x' -> '../x'
-        lineas_imp.append(f"import {{ {', '.join(named)} }} from '{reescribir(mod)}'" if named else f"import '{reescribir(mod)}'")
-# base y otros módulos lib
-usados_lib = {}
-for n, f in ya_en_lib.items():
-    if re.search(r'(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))' + re.escape(n) + r'(?![\w$])', nuevo_txt):
-        usados_lib.setdefault(f, []).append(n)
-for f, ns in sorted(usados_lib.items()):
-    lineas_imp.append(f"import {{ {', '.join(sorted(ns))} }} from '{'./' if destino.startswith('lib/') else '../lib/'}{f}'")
-# import * as (SD) y similares
-for m in re.finditer(r'^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+[\'"]([^\'"]+)[\'"]', app_txt, re.M):
-    if re.search(r'(?<![\w$.])' + re.escape(m.group(1)) + r'\.', nuevo_txt):
-        lineas_imp.append(f"import * as {m.group(1)} from '{reescribir(m.group(2))}'")
 
-cab = f"// Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.\n" + '\n'.join(lineas_imp) + '\n\n'
-modo = 'a' if os.path.exists(dest_path) else 'w'
-with open(dest_path, modo) as f:
-    f.write(('\n' if modo == 'a' else '') + (cab if modo == 'w' else '') + nuevo_txt + '\n')
+def escribir_modulo(path, nombres, extra_lib=()):
+    orden = sorted(nombres, key=lambda n: rng[n][0])
+    vistos = set(); unicos = []
+    for n in orden:
+        if rng[n] in vistos: continue
+        vistos.add(rng[n]); unicos.append(n)
+    cuerpo = []
+    for n in unicos:
+        a, b = rng[n]
+        blk = src[a:b]
+        while blk and not blk[-1].strip(): blk.pop()
+        for t, l in enumerate(blk):
+            if decl.match(l) or re.match(r'^const\s*\{', l):
+                if not l.startswith('export '): blk[t] = 'export ' + l
+                break
+        cuerpo += blk + ['']
+    txt = '\n'.join(cuerpo)
+    por_modulo = {}
+    for loc, part, mod in imports:
+        if ident(loc, txt): por_modulo.setdefault(mod, []).append(part)
+    lin = []
+    for mod, partes in por_modulo.items():
+        default = [p for p in partes if p == 'React']
+        named = [p for p in partes if p not in default]
+        if default and not named: lin.append(f"import {default[0]} from '{mod}'")
+        else: lin.append(f"import {{ {', '.join(named)} }} from '{reescribir(mod)}'")
+    for loc, mod in nss:
+        if ident(loc, txt): lin.append(f"import * as {loc} from '{reescribir(mod)}'")
+    pre = './' if path.startswith('lib/') else '../lib/'
+    usados = {}
+    for n, f in ya_en_lib.items():
+        if ident(n, txt): usados.setdefault(f, []).append(n)
+    for n in extra_lib:
+        if ident(n, txt): usados.setdefault('compartido.jsx', []).append(n)
+    for f, ns in sorted(usados.items()):
+        if path == 'lib/' + f: continue
+        lin.append(f"import {{ {', '.join(sorted(set(ns)))} }} from '{pre}{f}'")
+    full = os.path.join(ROOT, 'src', path)
+    if os.path.exists(full):
+        # módulo existente: solo se agregan las importaciones que le faltan, justo después de las que ya tiene
+        actual = open(full).read()
+        ya = set()
+        for m in re.finditer(r'^import\s+(.+?)\s+from\s+[\'"][^\'"]+[\'"]', actual, re.M | re.S):
+            for part in re.findall(r'[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?', m.group(1).replace('{', ' ').replace('}', ' ').replace('*', ' ')):
+                ya.add(part.split(' as ')[-1].strip())
+        faltan_imp = []
+        for l in lin:
+            m = re.match(r"import \{ (.+) \} from '(.+)'", l)
+            if m:
+                partes = [x.strip() for x in m.group(1).split(',') if x.strip().split(' as ')[-1] not in ya]
+                if partes: faltan_imp.append(f"import {{ {', '.join(partes)} }} from '{m.group(2)}'")
+            elif l.startswith('import * as '):
+                if l.split()[3] not in ya: faltan_imp.append(l)
+        ultimo = 0
+        for m in re.finditer(r'^import\s+.+?\s+from\s+[\'"][^\'"]+[\'"][^\n]*\n', actual, re.M | re.S): ultimo = m.end()
+        actual = actual[:ultimo] + ''.join(l + '\n' for l in faltan_imp) + actual[ultimo:]
+        with open(full, 'w') as f: f.write(actual.rstrip('\n') + '\n\n' + txt + '\n')
+    else:
+        cab = '// Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.\n' + '\n'.join(lin) + '\n\n'
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, 'w') as f: f.write(cab + txt + '\n')
+    # solo se importan desde App los nombres que el módulo realmente exporta (las variables `let` de una línea compartida no)
+    exportados = set(re.findall(r'^export (?:async\s+)?(?:const|function|let|class) ([A-Za-z_$][\w$]*)', open(full).read(), re.M))
+    for grupo in re.findall(r'^export const \{([^}]*)\}', open(full).read(), re.M):
+        exportados |= set(re.findall(r'[A-Za-z_$][\w$]*', re.sub(r':\s*[A-Za-z_$][\w$]*', '', grupo)))
+    return [n for n in dict.fromkeys(orden) if n in exportados]
 
-# quitar de App.jsx y agregar la importación
+nombres_comp = []
+if compartido: nombres_comp = escribir_modulo('lib/compartido.jsx', compartido)
+nombres_priv = escribir_modulo(destino, privado, extra_lib=nombres_comp)
+
 quitar = set()
 for n in mover:
-    a, b = rng[n]
-    quitar.update(range(a, b))
+    a, b = rng[n]; quitar.update(range(a, b))
 rest = [l for i, l in enumerate(src) if i not in quitar]
 s = '\n'.join(rest)
-nombres_imp = list(dict.fromkeys(orden_imp))
-imp = "import { " + ', '.join(nombres_imp) + " } from './" + destino.replace('src/', '') + "'\n"
-s = s.replace("import { createPortal } from 'react-dom'\n", "import { createPortal } from 'react-dom'\n" + imp, 1)
+ancla = "import { createPortal } from 'react-dom'\n"
+nuevo = ''
+if vista:
+    nuevo_imp = "import { " + ', '.join(nombres_comp) + " } from './lib/compartido.jsx'\n" if nombres_comp else ''
+    nuevo_lazy = ''.join(f"const {comp} = lazyVista(() => import('./{destino}'), '{comp}')\n" for comp in semillas)
+    s = s.replace(ancla, ancla + nuevo_imp, 1)
+    ult = 0
+    for m in re.finditer(r"^import\s+.+?\s+from\s+['\"][^'\"]+['\"][^\n]*\n|^\} from '[^']+'\n", s, re.M | re.S): ult = max(ult, m.end())
+    s = s[:ult] + nuevo_lazy + s[ult:]
+else:
+    s = s.replace(ancla, ancla + "import { " + ', '.join(dict.fromkeys(nombres_priv)) + " } from './" + destino + "'\n", 1)
 open(APP, 'w').write(s)
 print('listo:', len(src), '->', len(rest), 'líneas en App.jsx')
