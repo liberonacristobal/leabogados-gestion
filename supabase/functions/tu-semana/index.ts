@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
 import { notariaPorLiquidar, analisisNotaria } from "../_shared/notariaReglas.js";
 import { fgCliente, gastosPorRendirCli } from "../_shared/gastosReglas.js";
+import { dteMontoTotal } from "../_shared/saludDatos.js";
 import { cuotasSinEmitir, trabajosSinFacturar } from "../_shared/ventasReglas.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 
@@ -108,7 +109,7 @@ serve(async (req) => {
       for (let i=0; i<ids.length; i+=200) {
         const part = ids.slice(i,i+200);
         const [{ data: xs }, { data: cs }] = await Promise.all([ sb.from("billing").select("id,dte_xml").in("id",part), sb.from("conciliacion").select("factura_id,monto_aplicado").in("factura_id",part) ]);
-        (xs||[]).forEach((x:any)=>{ const m=String(x.dte_xml||"").match(/<MntTotal>(\d+)<\/MntTotal>/); if (m) xmlTot[x.id]=Number(m[1]); });
+        (xs||[]).forEach((x:any)=>{ const t=dteMontoTotal(x.dte_xml); if (t!=null) xmlTot[x.id]=t; });   // total del DTE con la regla única (_shared/saludDatos)
         (cs||[]).forEach((c:any)=>{ aplic[c.factura_id]=(aplic[c.factura_id]||0)+(Number(c.monto_aplicado)||0); });
       }
     }
