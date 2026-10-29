@@ -71,6 +71,19 @@ export function pedidosInternos(texto) {
   return out;
 }
 
+// Adjunto que es el formulario de fondos por rendir (Word o PDF): «Solicitud Fondos por Rendir <cliente>.docx».
+export function esFormularioFondos(nombre) {
+  const n = _nrm(nombre);
+  return /\.(docx?|pdf)$/.test(n) && /fondos? por rendir|solicitud.*fondos/.test(n);
+}
+
+// Pedido interno que dio origen a una solicitud: mismo cliente y monto, anterior o del mismo día; si hay varios, el más reciente.
+export function pedidoDeSolicitud(pedidos, sol) {
+  return (pedidos || [])
+    .filter((p) => String(p.client_id) === String(sol.client_id) && Number(p.monto) === Number(sol.monto) && String(p.fecha || '') <= String(sol.fecha || ''))
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0] || null;
+}
+
 // Cliente de un pedido interno: el nombre escrito («Geslog») dentro del nombre de un cliente vigente, o al revés; solo si es uno.
 export function clienteDePedido(txt, clients) {
   const p = _nrm(txt);
