@@ -4663,16 +4663,33 @@ export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[],
   const noRev=activas.filter(c=>c.ultima_error&&!enTabla.includes(c)).length
   return {items, hoy, seguimiento:activas.length-enTabla.length-noRev, noRev, elegidas, oblTxt:elegidas.map(o=>o.tipo==='DJ'?`DJ ${o.formulario}`:o.tipo==='PATENTE'?'Patente':o.tipo).join(' · ')} }
 
+// Lo que el calendario de un cliente lee de la base (la ficha y Counsel AI usan la misma lectura).
+export async function cargarFuentesCalCliente(clientId){
+  const [d,p,o,l]=await Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
+    supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId),
+    supabase.from('documentos_lectura').select('id,drive_file_id,nombre,plazos').eq('client_id',clientId).not('plazos','is',null)])
+  return {docs:d.data||[], plazos:p.data||[], obl:o.data||[], lect:l.data||[]}
+}
+// Calendario completo de un cliente para Counsel AI: mismas fuentes y misma función que la ficha (calendarioCliente).
+export async function calendarioDeCliente(clientId){
+  if(DEMO) return calendarioCliente({props:_DEMO_PROPIEDADES.filter(p=>p.client_id===clientId), causas:_DEMO_CAUSAS.filter(c=>c.client_id===clientId), docs:[], plazos:[], obl:[], dj:[], lect:[]})
+  const [pr,ca,f,tr]=await Promise.all([supabase.from('propiedades').select('*').eq('client_id',clientId).limit(2000), supabase.from('causas').select('*').neq('estado','terminada').eq('client_id',clientId), cargarFuentesCalCliente(clientId), cargarCalTrib()])
+  return calendarioCliente({props:pr.data||[], causas:ca.data||[], ...f, dj:tr?.dj||[]})
+}
+// Causas activas (de un cliente o de todos) con su última revisión, para Counsel AI.
+export async function causasActivas(clientId=null){
+  if(DEMO) return _DEMO_CAUSAS.filter(c=>!clientId||c.client_id===clientId)
+  let q=supabase.from('causas').select('*').neq('estado','terminada').order('created_at',{ascending:true})
+  if(clientId) q=q.eq('client_id',clientId)
+  return (await q).data||[]
+}
 // Fuentes del calendario del cliente que no trae la ficha: extractos por publicar, plazos y obligaciones elegidas (+ DJ del estudio).
 export function useCalCliente(clientId){
   const [f,setF]=useState(null), [dj,setDj]=useState([])
   useEffect(()=>{ let v=true; cargarCalTrib().then(x=>{ if(v) setDj(x.dj||[]) })
     if(DEMO){ const f40=isoLocal(Date.now()+40*864e5)   // ejemplo inventado: un plazo que el lector encontró en un contrato
       setF({docs:[], plazos:[], obl:[], lect:[{id:'dl1',drive_file_id:'demo-arriendo',nombre:'Contrato de arriendo bodega.pdf',plazos:[{titulo:'Término del arriendo',fecha:f40,cita:'El presente contrato tendrá una duración de un año a contar de su firma.',estado:'propuesto'}]}]}); return ()=>{ v=false } }
-    Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
-      supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId),
-      supabase.from('documentos_lectura').select('id,drive_file_id,nombre,plazos').eq('client_id',clientId).not('plazos','is',null)])
-      .then(([d,p,o,l])=>{ if(v) setF({docs:d.data||[], plazos:p.data||[], obl:o.data||[], lect:l.data||[]}) },()=>{ if(v) setF({docs:[], plazos:[], obl:[], lect:[]}) })
+    cargarFuentesCalCliente(clientId).then(r=>{ if(v) setF(r) },()=>{ if(v) setF({docs:[], plazos:[], obl:[], lect:[]}) })
     return ()=>{ v=false } },[clientId])
   // Elegir/quitar una obligación tributaria del cliente (queda guardada: no se vuelve a preguntar).
   const alternar=useCallback(async(tipo,formulario,detalle)=>{ const ex=(f?.obl||[]).find(o=>o.tipo===tipo&&String(o.formulario||'')===String(formulario||''))

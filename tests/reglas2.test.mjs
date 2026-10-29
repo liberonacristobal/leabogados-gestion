@@ -515,3 +515,27 @@ test('Counsel AI: el resultado del año es el que publica Inicio, con su plano; 
   assert.match(r.resumen.plano, /depósitos conciliados por fecha del depósito/); assert.equal(r.tarjeta.lineas[1].valor, 'UF 8.072 · $330.000.000')
   assert.match((await crearConsultas({ ..._datosCopiloto(), leerResultado: () => null })('resultado_anio', {})).error, /Abre Inicio/)
 })
+
+import { analisisNotaria as _an, notariaPorLiquidar as _npl } from '../supabase/functions/_shared/notariaReglas.js'
+test('Counsel AI: notaría pendiente, obligaciones, calendario de cliente y causas', async () => {
+  const d = _datosCopiloto()
+  d.expenses = [{ client_id: 'c1', type: 'fondo', amount: 500000 }, { client_id: 'c1', type: 'gasto', category: 'Notaria', ot_number: '100', amount: 200000, date: '2026-10-10' },
+    { client_id: 'c2', type: 'gasto', category: 'Notaria', ot_number: '101', amount: 100000, date: '2026-10-11' }, { client_id: null, type: 'gasto', category: 'Notaria', ot_number: '102', amount: 50000, date: '2026-10-12' }]
+  d.analisisNotaria = _an; d.notariaPorLiquidar = _npl; d.rendiciones = []
+  d.cal = { alertas: [{ sev: 0, t: 'F29 de septiembre sin pago registrado · venció el 20-10-2026', fecha: '2026-10-20' }], vencimientos: [{ fecha: '2026-11-20', t: 'F29 de octubre', s: '' }, { fecha: '2026-10-01', t: 'Pasado', s: '' }] }
+  d.calendarioDeCliente = async id => ({ items: id === 'c2' ? [{ fecha: '2026-11-05', t: 'Vista en tabla · Rol 19-2025', s: 'C.A. de La Serena', vencido: false }] : [], seguimiento: 2, noRev: 0, oblTxt: 'F29' })
+  d.causasActivas = async id => [{ client_id: 'c2', caratula: 'DÍAZ / SII', rol: '19', anio: 2025, corte_nombre: 'Corte de Apelaciones de La Serena', abogado: 'Cristóbal', estado: 'activa', ultima_revision_at: '2026-10-28', ultima_tabla: null }].filter(x => !id || x.client_id === id)
+  d.estadoCausa = () => ['Sin tabla']
+  const ej = crearConsultas(d)
+  const n = await ej('notaria_pendiente', {})
+  assert.equal(n.resumen.ot_por_pagar, 3); assert.equal(n.resumen.monto_por_pagar, '$350.000')
+  assert.equal(n.resumen.se_pueden_pagar_ahora.monto, '$200.000'); assert.equal(n.resumen.esperan_fondos_del_cliente.monto, '$100.000'); assert.equal(n.resumen.sin_cliente.monto, '$50.000')
+  const o = await ej('obligaciones_estudio', {})
+  assert.equal(o.resumen.alertas[0].urgencia, 'vencida'); assert.deepEqual(o.resumen.proximos_vencimientos.map(x => x.que), ['F29 de octubre'])   // el vencimiento pasado no es «próximo»
+  assert.equal((await crearConsultas({ ...d, cal: null })('obligaciones_estudio', {})).error.includes('todavía no carga'), true)
+  const c = await ej('calendario_cliente', { cliente: 'Andes' })
+  assert.equal(c.resumen.proximos_60_dias[0].que, 'Vista en tabla · Rol 19-2025'); assert.equal(c.resumen.proximos_60_dias[0].fecha, '05-11-2026')
+  const ca = await ej('causas', { cliente: 'Andes' })
+  assert.equal(ca.resumen.causas[0].rol, '19-2025'); assert.equal(ca.resumen.causas[0].estado, 'Sin tabla'); assert.equal(ca.tarjeta.lineas[0].valor, 'Sin tabla')
+  assert.equal((await ej('causas', {})).resumen.causas_activas, 1)
+})
