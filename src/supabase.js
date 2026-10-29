@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { vigilarEscrituras } from './vigilanteEscrituras.js'
+import { BRAND } from './lib/base.jsx'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -68,7 +69,7 @@ export const connectDrivePermanente = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent' },
+      queryParams: { hd: BRAND.emailDominio, access_type: 'offline', prompt: 'consent' },
       scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
       redirectTo: window.location.origin,
     },
@@ -81,7 +82,7 @@ export const connectCalendarioEstudio = () => {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'consent select_account' },
+      queryParams: { hd: BRAND.emailDominio, access_type: 'offline', prompt: 'consent select_account' },
       scopes: 'https://www.googleapis.com/auth/calendar',
       redirectTo: window.location.origin,
     },
@@ -263,7 +264,7 @@ export const connectDrive = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      queryParams: { hd: 'leabogados.cl', access_type: 'offline', prompt: 'select_account' },
+      queryParams: { hd: BRAND.emailDominio, access_type: 'offline', prompt: 'select_account' },
       scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
       redirectTo: window.location.origin,
     }
