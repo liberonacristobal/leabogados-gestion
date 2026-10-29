@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop } from '../lib/base.jsx'
-import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, RendicionModal, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
+import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
+import { RendicionModal } from '../lib/rendiciones.jsx'
 
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.

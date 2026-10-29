@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Buscador, CAT_COLORS, ContactoTab, DriveIcon, EstadoCuentaTab, FichaTabs, FinancieroTab, FlujoPagina, FotoCliente, NOMBRE_CLI, RendicionEmailModal, RendicionModal, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, CAT_COLORS, ContactoTab, DriveIcon, EstadoCuentaTab, FichaTabs, FinancieroTab, FlujoPagina, FotoCliente, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 
 export function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
   const [emailRend,setEmailRend] = useState(null)
