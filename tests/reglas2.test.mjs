@@ -406,3 +406,9 @@ test('escrituras rechazadas por la base se avisan; lecturas, éxitos y el propio
   await new Promise(r => setTimeout(r, 5))
   assert.equal(avisos.length, 2)
 })
+
+import { glosaConflict } from '../supabase/functions/_shared/saludDatos.js'
+test('glosa en conflicto: cada aprendizaje vale por sus usos (hits), no por filas; retiros y sueldos del mismo destinatario no son conflicto', () => {
+  const r = glosaConflict([{ key: 'k1', value: 'Arriendo', hits: 20 }, { key: 'k1', value: 'Servicios', hits: 2 }, { key: 'k2', value: 'Retiros', hits: 3 }, { key: 'k2', value: 'Sueldos', hits: 3 }])
+  assert.equal(r.length, 1); assert.equal(r[0].key, 'k1'); assert.deepEqual(r[0].votos[0], { cat: 'Arriendo', n: 20 })
+})

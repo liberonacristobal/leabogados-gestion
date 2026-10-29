@@ -11666,7 +11666,7 @@ function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, billing=[]
   const [glDone,setGlDone]=useState(()=>new Set())  // claves de glosa ya definidas en esta sesión
   const [glPick,setGlPick]=useState({})     // key → categoría elegida en la compuerta
   const [glBusy,setGlBusy]=useState(null)
-  useEffect(()=>{ if(DEMO){ setCoRows(demoData.learnings_co||[]); return } supabase.from('learnings').select('key,value').eq('kind','costo_oficina').then(({data})=>{ if(data) setCoRows(data) },()=>{}) },[])
+  useEffect(()=>{ if(DEMO){ setCoRows(demoData.learnings_co||[]); return } supabase.from('learnings').select('key,value,hits').eq('kind','costo_oficina').then(({data})=>{ if(data) setCoRows(data) },()=>{}) },[])
   const rutMulti=useMemo(()=>SD.rutMulti(clientEntities),[clientEntities])
   const folioDup=useMemo(()=>SD.folioDup(billing),[billing])
   // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
@@ -39064,8 +39064,8 @@ function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[]
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','cargo_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ if(r.key&&r.value) m[r.key]=r.value }); setCargoCliLearn(m) },()=>{}) },[])
   const [costoOfiLearn,setCostoOfiLearn] = useState({})  // glosaKey → {category, subcategory} aprendido (costo de oficina recurrente: arriendo/sueldos/servicios vienen del banco cada mes)
   // Lectura DETERMINISTA por voto de mayoría (antes: sin order-by + overwrite → la sugerencia salía al azar entre Retiro/Sueldo). Si el reparto NO tiene mayoría clara (≥62%), la clave queda AMBIGUA → no se auto-sugiere, va a la compuerta (Revisión de datos · glosa en conflicto).
-  useEffect(()=>{ supabase.from('learnings').select('key,value,meta').eq('kind','costo_oficina').then(({data})=>{
-    const agg={}; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; (agg[r.key]=agg[r.key]||{})[r.value]=agg[r.key][r.value]||{n:0,sub:null}; agg[r.key][r.value].n++; if(r.meta&&r.meta.subcategory) agg[r.key][r.value].sub=r.meta.subcategory })
+  useEffect(()=>{ supabase.from('learnings').select('key,value,meta,hits').eq('kind','costo_oficina').then(({data})=>{
+    const agg={}; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; (agg[r.key]=agg[r.key]||{})[r.value]=agg[r.key][r.value]||{n:0,sub:null}; agg[r.key][r.value].n+=(Number(r.hits)>0?Number(r.hits):1); if(r.meta&&r.meta.subcategory) agg[r.key][r.value].sub=r.meta.subcategory })
     const m={}; Object.entries(agg).forEach(([k,vals])=>{ const arr=Object.entries(vals).sort((a,b)=>b[1].n-a[1].n); const tot=arr.reduce((a,x)=>a+x[1].n,0); const top=arr[0]; const ambiguo=arr.length>1 && top[1].n/tot<0.62; m[k]={category:top[0],subcategory:top[1].sub,ambiguo} })
     setCostoOfiLearn(m) },()=>{}) },[])
   // Cargo v2 — clasificador combo (Gasto Oficina / Gasto Cliente → categoría → subcategoría). Estado por movimiento.
