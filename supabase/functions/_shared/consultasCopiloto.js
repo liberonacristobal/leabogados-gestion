@@ -16,6 +16,10 @@ export const HERRAMIENTAS = [
   { name: 'ventas_cliente', description: 'Ventas y propuestas de un cliente con monto, lo facturado y lo que falta por facturar.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
   { name: 'por_facturar', description: 'Lo que falta por facturar: cuotas programadas de meses cerrados sin emitir y trabajos activos con plan sin facturar.', input_schema: { type: 'object', properties: {} } },
   { name: 'resultado_anio', description: 'Resultado del año tal como lo muestra Inicio: vendido, facturado, cobrado propio, margen del ejercicio y cobranza, en UF y en pesos, con su meta. Úsala para «cuánto vendimos», «cuánto hemos facturado», «cuánto cobramos», «cómo vamos este año», «margen». Trae el año que está elegido en Inicio.', input_schema: { type: 'object', properties: {} } },
+  { name: 'calendario_cliente', description: 'Lo que vence o tiene fecha para un cliente en los próximos 60 días: contribuciones, publicaciones en el Diario Oficial, causas en tabla, plazos de contratos y obligaciones tributarias elegidas. Úsala para «qué plazos tiene X», «qué vence de X».', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
+  { name: 'obligaciones_estudio', description: 'Obligaciones tributarias del estudio: alertas (F29, cotizaciones, declaraciones juradas y F22 sin pago o sin presentar) y próximos vencimientos. Úsala para «qué vence esta semana», «cómo vamos con el F29».', input_schema: { type: 'object', properties: {} } },
+  { name: 'notaria_pendiente', description: 'Notaría: OT por pagar, cuáles se pueden pagar con fondos del cliente, cuáles esperan fondos, OT sin cliente y última liquidación.', input_schema: { type: 'object', properties: {} } },
+  { name: 'causas', description: 'Causas activas con su estado en tabla y última revisión en pjud.cl; de un cliente o de todos.', input_schema: { type: 'object', properties: { cliente: { type: 'string', description: 'Opcional' } } } },
   { name: 'trabajos_detenidos', description: 'Trabajos activos sin movimiento en 90 días: con saldo por cobrar o que parecen terminados.', input_schema: { type: 'object', properties: {} } },
 ]
 
@@ -40,10 +44,11 @@ export const AYUDA = [
   { tema: 'Flujo de caja', claves: ['flujo de caja', 'flujo', 'proyeccion'], donde: 'Flujo de caja', tab: 'flujoCaja' },
   { tema: 'Calendario tributario y F29', claves: ['f29', 'impuestos', 'calendario tributario', 'vencimientos tributarios'], donde: 'Calendario tributario', tab: 'calendarioTrib' },
   { tema: 'Oportunidades, tendencias y socios', claves: ['oportunidades', 'tendencias', 'socios', 'inteligencia', 'servicios y precios'], donde: 'Inteligencia', tab: 'inteligencia' },
+  { tema: 'Causas y tabla de audiencias', claves: ['causa', 'causas', 'audiencia', 'audiencias', 'tabla', 'pjud', 'rol'], donde: 'Causas', tab: 'causas' },
   { tema: 'Mis proyectos', claves: ['proyecto', 'proyectos', 'cartera'], donde: 'Mis proyectos', tab: 'cartera' },
 ]
 
-export function crearConsultas({ leerResultado, clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
+export function crearConsultas({ cal, rendiciones = [], analisisNotaria, notariaPorLiquidar, calendarioDeCliente, causasActivas, estadoCausa, leerResultado, clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
   const dia = String(hoy || new Date().toISOString()).slice(0, 10)
   const reales = clients.filter(c => c && !c.is_internal)
 
@@ -119,8 +124,9 @@ export function crearConsultas({ leerResultado, clients = [], billing = [], expe
   const monto = (v, enUF) => enUF ? `UF ${num(v, 2)}` : clp(v)
 
   const dondeEsta = ({ tema }) => {
-    const q = nz(tema); if (!q) return { error: 'Falta el tema.' }
-    const puntaje = a => a.claves.reduce((p, c) => p + (q.includes(nz(c)) ? nz(c).length : 0), 0) + (nz(a.tema).split(' ').filter(w => w.length > 3 && q.includes(w)).length)
+    const q = nz(tema).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); if (!q) return { error: 'Falta el tema.' }
+    const pal = ' ' + q + ' '   // coincide por palabra completa: «rol» no calza dentro de «astrología»
+    const puntaje = a => a.claves.reduce((p, c) => p + (pal.includes(' ' + nz(c) + ' ') ? nz(c).length : 0), 0) + (nz(a.tema).split(' ').filter(w => w.length > 3 && pal.includes(' ' + w + ' ')).length)
     const r = AYUDA.map(a => ({ a, p: puntaje(a) })).filter(x => x.p > 0).sort((x, y) => y.p - x.p).slice(0, 3)
     if (!r.length) return { resumen: { encontrado: false, nota: 'No hay una sección registrada para eso.' }, tarjeta: null }
     return { resumen: { opciones: r.map(x => ({ tema: x.a.tema, donde: x.a.donde })) }, tarjeta: { titulo: 'Dónde está', lineas: r.map(x => ({ n: x.a.tema, sub: x.a.donde, valor: '', destino: { tab: x.a.tab } })), total: null, fuente: 'Toca una línea para ir a esa pantalla.' } }
@@ -199,7 +205,57 @@ export function crearConsultas({ leerResultado, clients = [], billing = [], expe
     }
   }
 
-  const tabla = { resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
+  const esOficina = cid => { const c = clients.find(x => String(x.id) === String(cid)); return !!c && (c.is_internal || /liberona\s+escala/i.test(c.name || '')) }
+
+  const calendarioCli = async ({ cliente }) => {
+    const f = buscarCliente(cliente); if (f.error) return { error: f.error }
+    const c = f.cliente, r = await calendarioDeCliente(c.id)
+    const items = (r.items || []).slice(0, 12)
+    const destino = { tipo: 'cliente', id: c.id }
+    return {
+      resumen: { cliente: c.name, proximos_60_dias: items.map(x => ({ fecha: dmy(x.fecha), que: x.t, detalle: x.s || null, vencido: !!x.vencido })), causas_sin_novedad: r.seguimiento || 0, causas_sin_revisar: r.noRev || 0, obligaciones_elegidas: r.oblTxt || null, al: dmy(dia) },
+      tarjeta: items.length ? { titulo: `Calendario · ${c.name}`, lineas: items.map(x => ({ n: x.t, sub: x.s || '', valor: dmy(x.fecha) + (x.vencido ? ' · vencido' : ''), destino })), total: null, fuente: `Fuente: el calendario de la ficha del cliente (próximos 60 días), al ${dmy(dia)}.` } : null,
+    }
+  }
+
+  const obligacionesEstudio = () => {
+    if (!cal) return { error: 'El calendario tributario todavía no carga. Intenta de nuevo en unos segundos.' }
+    const alertas = (cal.alertas || []).slice(0, 8), venc = (cal.vencimientos || []).filter(v => v.fecha >= dia).slice(0, 6)
+    return {
+      resumen: { alertas: alertas.map(a => ({ que: a.t, urgencia: a.sev === 0 ? 'vencida' : 'por vencer', fecha: dmy(a.fecha) })), proximos_vencimientos: venc.map(v => ({ fecha: dmy(v.fecha), que: v.t })), al: dmy(dia) },
+      tarjeta: [alertas.length ? { titulo: 'Alertas tributarias', lineas: alertas.map(a => ({ n: a.t, sub: a.sev === 0 ? 'Vencida' : 'Por vencer', valor: dmy(a.fecha), destino: { tab: 'calendarioTrib' } })), total: null, fuente: 'Fuente: Calendario tributario del estudio.' } : null,
+        venc.length ? { titulo: 'Próximos vencimientos', lineas: venc.map(v => ({ n: v.t, sub: v.s || '', valor: dmy(v.fecha), destino: { tab: 'calendarioTrib' } })), total: null, fuente: 'Fuente: Calendario tributario del estudio.' } : null].filter(Boolean),
+    }
+  }
+
+  const notariaPendiente = () => {
+    const a = analisisNotaria({ expenses, rendiciones, hoy: dia, esOficina }), l = notariaPorLiquidar(expenses, { esOficina })
+    const mayores = a.clientes.filter(c => c.cid !== '—').sort((x, y) => y.ot - x.ot).slice(0, 5)
+    const liq = a.ultimaLiq
+    const resumen = { ot_por_pagar: a.pend.length, monto_por_pagar: clp(a.total), clientes_con_ot: a.nClientes, se_pueden_pagar_ahora: { ot: l.pagables.length, monto: clp(l.montoPagables) }, esperan_fondos_del_cliente: { ot: l.esperan.length, monto: clp(l.montoEsperan) }, sin_cliente: { ot: l.sinCliente.length, monto: clp(l.montoSinCliente) },
+      ot_con_demora_mayor_a_la_habitual: a.largas.length, ot_fuera_de_lo_habitual: a.fuera.length, ultima_liquidacion: liq ? { fecha: dmy(liq.created_at), total: clp(liq.total), enviada: liq.sent_at ? dmy(liq.sent_at) : null } : null,
+      mayores_clientes: mayores.map(c => ({ cliente: nombreCli(c.cid), ot: clp(c.ot), disponible: clp(Math.max(0, c.disp)) })), al: dmy(dia) }
+    if (!a.pend.length) return { resumen, tarjeta: null }
+    const d = { tab: 'expenses' }
+    return { resumen, tarjeta: { titulo: 'Notaría', lineas: [
+      { n: 'OT por pagar', sub: `${a.nClientes} cliente${a.nClientes === 1 ? '' : 's'}`, valor: `${a.pend.length} · ${clp(a.total)}`, destino: d },
+      { n: 'Se pueden pagar ahora', sub: 'con fondos del cliente', valor: `${l.pagables.length} · ${clp(l.montoPagables)}`, destino: d },
+      { n: 'Esperan fondos del cliente', sub: '', valor: `${l.esperan.length} · ${clp(l.montoEsperan)}`, destino: d },
+      { n: 'Sin cliente', sub: 'por asignar', valor: `${l.sinCliente.length} · ${clp(l.montoSinCliente)}`, destino: d },
+      ...(liq ? [{ n: 'Última liquidación', sub: `del ${dmy(liq.created_at)}`, valor: clp(liq.total), destino: d }] : [])], total: null, fuente: `Fuente: OT de notaría sin liquidar, con las reglas de Gastos › Notaría, al ${dmy(dia)}.` } }
+  }
+
+  const causasTool = async ({ cliente }) => {
+    let c = null; if (cliente) { const f = buscarCliente(cliente); if (f.error) return { error: f.error }; c = f.cliente }
+    const rows = (await causasActivas(c ? c.id : null)) || []
+    const lista = rows.slice(0, 10).map(x => ({ caratula: String(x.caratula || '').trim().slice(0, 60), rol: x.rol ? `${x.rol}-${x.anio}` : 'sin rol aún', corte: x.corte_nombre || null, abogado: x.abogado || null, estado: estadoCausa ? estadoCausa(x)[0] : x.estado, ultima_revision: x.ultima_revision_at ? dmy(x.ultima_revision_at) : null, en_tabla: x.ultima_tabla && x.ultima_tabla.fecha ? dmy(x.ultima_tabla.fecha) : null, cliente: x.client_id ? nombreCli(x.client_id) : null }))
+    return {
+      resumen: { causas_activas: rows.length, causas: lista, al: dmy(dia) },
+      tarjeta: lista.length ? { titulo: c ? `Causas · ${c.name}` : 'Causas activas', lineas: lista.map(x => ({ n: x.caratula || 'Causa', sub: `${x.corte ? x.corte.replace(/^Corte de Apelaciones de /, 'C.A. de ') + ' · ' : ''}${x.rol === 'sin rol aún' ? 'Sin rol aún' : 'Rol ' + x.rol}${x.ultima_revision ? ' · revisada ' + x.ultima_revision : ''}`, valor: x.en_tabla ? `En tabla ${x.en_tabla}` : x.estado, destino: { tab: 'causas' } })), total: null, fuente: `Fuente: revisión diaria de pjud.cl, al ${dmy(dia)}.` } : null,
+    }
+  }
+
+  const tabla = { calendario_cliente: calendarioCli, obligaciones_estudio: obligacionesEstudio, notaria_pendiente: notariaPendiente, causas: causasTool, resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
   return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
 }
 

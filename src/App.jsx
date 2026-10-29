@@ -6,7 +6,7 @@ import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
 import { _adminsEstudioCache, cargarAdminsEstudio, _nRut, tituloProv, pctBHE, esBoletaProv, fechaBHE, abrirDocumento, saldoComisiones, _diasDesde, correoMarcaHtml, driveTrash, Attachments, nCuotaDe } from './lib/compartido.jsx'
 import { enMiLista, agendarTareaCalendar, TaskPreview, escanearTareasGmail } from './lib/compartido.jsx'
 import { IconSection, urgency, anio4ISO, urgencyColor, planDeVenta, esFacturada, huecoFIFO, cuotasOlvidadas, _lev, detectarClientesDuplicados, _MESES_SERIE, serieKey, driveBtn, ddItem, recorridoGasto, saldoDelta, DriveIcon, _aprVenta, useAprendidosVenta, _iaVenta, useIaVenta, periodoF29, CAL_CL, _ymMas, _finDeMes, _habilDesde, _mesNom, _diasA, venceCalTrib, _montosConcepto, _pagosDe, _pagoCal, _djFecha, calendarioEstudio, CAL_CLI_DIAS, CONTRIB_CUOTAS, OBL_CLIENTE, calendarioCliente, useCalCliente, _calTribP, _DEMO_CALTRIB, cargarCalTrib, useCalTrib, FichaTabs, ContactoTab, DestinatarioFacturasCard, EstadoCuentaTab, subproyectosCliente, AsignarProyectoRS, _MES_AB, CotejoVenta, FinancieroTab, recordarCobroFactura, FotoCliente, CORTES_PJUD, LIBROS_PJUD, _libroLegible, _corteCorta, _rolTxt, _DEMO_CAUSAS, useCausas, _estadoCausa, CausaFila, CausasVenta, _DEMO_PROPIEDADES, usePropiedades, _ordRol, _nomProp, _GRUPO_DESTINO, PropiedadesVenta } from './lib/compartido.jsx'
-import { useTrabajosDetenidos } from './lib/compartido.jsx'
+import { useTrabajosDetenidos, calendarioDeCliente, causasActivas } from './lib/compartido.jsx'
 import { TIT_PAG, isAssignee, ventaUFmesDe, margenDeSale } from './lib/compartido.jsx'
 import { cargarMammoth, useArrastre, DocumentosDrive, esPermanente, PREC_FOLDERS, leerDriveTextoSA, CART_DOT, SEÑAL_COL, facturaEmitida, carteraMovimiento, cartDias, cartDiasPlazo } from './lib/compartido.jsx'
 import { daysLeftB, EstadoFacturaChip, cargarFeriadosCL, cuotaOrdOf, reconcileProgramada, rutsDeFactura, matchProgEmitidas, rolledDueMap, rsDeFactura, currentMonth, TIPOS_FACTURA, tipoFacturaLbl, fInp, WHO_LIST, restoreScroll, catSinClienteVenta, MESES_LG, _billingCambio, avisarBillingCambio, _ventaAprP, useVentaAprendida, aprenderVenta, asignarVentaFactura, AsignarVentaFactura, _noEmitirP, useNoEmitirSet, cuotasCubiertasVenta, FacturarBloqueModal, CubrirCuotasModal, CUENTA_GASTOS_DEFAULT, cuentaTxt, cuentaHtml, DATOS_PAGO_TXT, DATOS_PAGO_HTML, recordatorioCobro, facturaPdfAdjunto, facturaNombreArchivo, descargarPdfU8, verFacturaPdf, ventaNombre, mejorVenta, _RX_CUOTA, _esPagoLabel, facturaGlosaPartes, CORREO_DESPEDIDA, facturaCorreoBody, _correoToP, facturaCorreoShell, facturaCorreoHtml, driveCarpetaFacturacion } from './lib/compartido.jsx'
@@ -30,7 +30,7 @@ import { RETENCION_BHE, tasaBHE, pagarT, reajusteBHEPago, estadoComision } from 
 import { f29Estimado } from '../supabase/functions/_shared/f29Reglas.js'
 import { planCarga } from '../supabase/functions/_shared/cartolaDedupe.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
-import { liqParaCargo as _liqParaCargo, notariaPendientes, disponibleNotaria } from '../supabase/functions/_shared/notariaReglas.js'
+import { liqParaCargo as _liqParaCargo, notariaPendientes, disponibleNotaria, analisisNotaria, notariaPorLiquidar } from '../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
 import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
@@ -15725,7 +15725,7 @@ const publicarResultadoInicio = v => { _resultadoInicio = v }
 const leerResultadoInicio = () => _resultadoInicio
 // Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
 // propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
-function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], billing=[], expenses=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onIrTab, onClose }){
+function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], billing=[], expenses=[], rendiciones=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onIrTab, onClose }){
   const [q,setQ] = useState('')
   const [busy,setBusy] = useState(false)
   const [hist,setHist] = useState([])
@@ -15733,6 +15733,7 @@ function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], 
   const esAdmin = role==='admin'
   const ufHoy = useUF().uf||0
   const abiertoEn = useRef(Date.now()).current
+  const { cal } = useCalTrib(esAdmin?expenses:null)   // calendario tributario del estudio: mismas alertas que Inicio y Calendario tributario
   const detenidos = useTrabajosDetenidos(esAdmin?{sales,billing,expenses,tasks}:{})   // misma regla y misma cifra que Revisión de datos y Cobranza
   const miIni = INICIALES_RESP[user?.name]||null
   const NOMBRE_INI = { CL:'Cristóbal', EE:'Erasmo', MC:'Martín', MP:'Martina', RD:'Rodrigo' }
@@ -15785,6 +15786,7 @@ ${brief()}`
         const aprendidos = async kind => DEMO ? new Set() : new Set(((await supabase.from('learnings').select('key').eq('kind',kind)).data||[]).map(r=>String(r.key)))
         const ejecutar = crearConsultas({ clients, billing, expenses, tasks, sales, clientEntities, proyectos:proyectosCartera, uf, hoy:hoyCL, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN, detenidos,
           cargarContactos: async id => DEMO ? [] : ((await supabase.from('contacts').select('nombre,cargo,email,telefono,principal').eq('client_id',id).is('baja_at',null)).data||[]),
+          cal, rendiciones, analisisNotaria, notariaPorLiquidar, calendarioDeCliente, causasActivas, estadoCausa:_estadoCausa,
           leerResultado: async () => { const t0=Date.now(); while(Date.now()-t0<10000){ const r=leerResultadoInicio(); if(r&&r.at>=abiertoEn) return r; await new Promise(f=>setTimeout(f,250)) } return leerResultadoInicio() },   // espera a que Inicio (visible u oculto) publique el cálculo de este momento
           calcCuotasSinEmitir: async () => cuotasSinEmitir({ billing, sales, uf, noEmitir:await aprendidos('cuota_no_emitir'), hasta:hoyCL.slice(0,8)+'01' }),
           calcTrabajosSinFacturar: async () => trabajosSinFacturar({ sales, billing, uf, ufHoy, hoy:hoyCL, noEmitir:await aprendidos('cuota_no_emitir'), decididos:await aprendidos('trabajo_sin_facturar') }) })
@@ -19026,7 +19028,7 @@ export default function App() {
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
         {copilotoOpen&&tab!=='dashboard'&&userRole==='admin'&&<div style={{display:'none'}} aria-hidden='true'>{dashboardEl}</div>}
-        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} clientEntities={clientEntities} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} clientEntities={clientEntities} rendiciones={rendiciones} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<PaginaSobre origen='Anticipo' titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAntApp.client_id))?.name||null} onBack={()=>setCubrirAntApp(null)}><CubrirCuotasModal asPage anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/></PaginaSobre>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
