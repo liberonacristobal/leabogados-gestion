@@ -361,3 +361,20 @@ test('carga de cartola: mismo monto y día a otra contraparte es otro pago y ent
   const igual = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '21138928-1' }], e, huella)
   assert.equal(igual.nuevos.length, 0)
 })
+
+import { propuestaFondoRendicion } from '../supabase/functions/_shared/gastosReglas.js'
+test('Banco: abono de un cliente con rendición enviada y saldo por cubrir propone acreditar el fondo', () => {
+  const expenses = [{ client_id: 'c1', type: 'gasto', amount: 900000 }, { client_id: 'c1', type: 'fondo', amount: 200000 }]
+  const rend = { id: 'r1', tipo: 'cliente', client_id: 'c1', sent_at: '2026-10-16T12:00:00+00:00', anulada_at: null, movimiento_id: null }
+  const mov = { tipo: 'abono', cliente_id: 'c1', monto: 636812, monto_conciliado: 0, fecha: '2026-10-26', categoria: null }
+  const p = propuestaFondoRendicion({ mov, expenses, rendiciones: [rend] })
+  assert.equal(p.rend.id, 'r1'); assert.equal(p.porCubrir, 700000); assert.equal(p.queda, 63188)
+  // sin rendición enviada antes del depósito, anulada, ya pagada, o con categoría puesta: no propone
+  assert.equal(propuestaFondoRendicion({ mov: { ...mov, fecha: '2026-10-15' }, expenses, rendiciones: [rend] }), null)
+  assert.equal(propuestaFondoRendicion({ mov, expenses, rendiciones: [{ ...rend, anulada_at: '2026-10-20' }] }), null)
+  assert.equal(propuestaFondoRendicion({ mov, expenses, rendiciones: [{ ...rend, movimiento_id: 'm9' }] }), null)
+  assert.equal(propuestaFondoRendicion({ mov: { ...mov, categoria: 'Provisión de gastos' }, expenses, rendiciones: [rend] }), null)
+  // cliente sin saldo por cubrir o abono interno: no propone
+  assert.equal(propuestaFondoRendicion({ mov, expenses: [{ client_id: 'c1', type: 'fondo', amount: 5000 }], rendiciones: [rend] }), null)
+  assert.equal(propuestaFondoRendicion({ mov: { ...mov, es_interno: true }, expenses, rendiciones: [rend] }), null)
+})
