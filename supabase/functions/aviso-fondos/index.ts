@@ -16,6 +16,7 @@ import { selectAll } from "../_shared/paginar.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
 import { UMBRAL_DEUDA, avisoFondosAplica, contadorAvisos } from "../_shared/fondosReglas.js";
+import { fgCliente, cuentaEnSaldo } from "../_shared/gastosReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -116,10 +117,10 @@ serve(async (req) => {
     for (const c of clients) {
       if (c.is_internal || /liberona\s+escala/i.test(c.name || "") || c.status === "Terminado") continue;
       const es = porCli[c.id] || [];
-      const fondos = es.filter((e) => e.type === "fondo" && !e.no_descuenta_saldo);
-      const gastos = es.filter((e) => e.type !== "fondo" && !e.no_descuenta_saldo);
-      const fondosT = fondos.reduce((a, e) => a + N(e.amount), 0);
-      const saldo = fondosT - gastos.reduce((a, e) => a + N(e.amount), 0);
+      // Fondos − gastos con la regla única de la app (fgCliente): lo resumido en un corte de apertura no suma y solo se excluyen los gastos no_descuenta_saldo.
+      const fondos = es.filter((e) => e.type === "fondo" && cuentaEnSaldo(e));
+      const gastos = es.filter((e) => e.type !== "fondo" && !e.no_descuenta_saldo && cuentaEnSaldo(e));
+      const { fondos: fondosT, saldo } = fgCliente(es.map((e) => ({ ...e, amount: N(e.amount) })), c.id);
       if (saldo > UMBRAL_DEUDA) continue;
       const abg = c.abogado_responsable || respDe[c.id] || null;
       const dest = abg && SOCIOS[abg] ? abg : PRIMER_SOCIO;   // clientes de abogados no socios o sin abogado → el primer socio
