@@ -8,7 +8,7 @@ import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
-export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones,onOpenClientFicha,onEditExpense}) {
+export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserName,currentUserEmail,pettyCash,setPettyCash,rendiciones,setRendiciones,onOpenClientFicha,onEditExpense,onAdd}) {
   expenses = (expenses||[]).filter(Boolean)   // blindaje: una fila vacía no debe tumbar la vista
   const me = currentUserName || ''
   const isDesktop = useIsDesktop()   // escritorio: PENDIENTES y CAJA lado a lado; móvil: pestañas (idéntico a antes)
@@ -532,7 +532,10 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
         </Modal>
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
-        <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,marginBottom:12}}>Caja chica</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:12}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Caja chica</div>
+          {onAdd&&<button type='button' onClick={onAdd} style={chipBtn('primary')}>+ Registrar gasto</button>}
+        </div>
         {!isDesktop&&<div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:3,border:`1px solid ${C.border}`}}>
           {[['liquidar','POR LIQUIDAR'],['caja','HISTORIAL']].map(([id,lbl])=>{ const on=tab===id; return (
             <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:'8px 0',borderRadius:8,border:'none',
