@@ -442,23 +442,23 @@ const _datosCopiloto = () => ({
   tasks: [{ id: 't1', title: 'A', due: '2026-10-01', status: 'Activo', assignees: ['Martina'] }, { id: 't2', title: 'B', due: '2026-12-01', status: 'Activo', assignees: ['Martina'] }, { id: 't3', title: 'C', due: '2026-10-10', status: 'Terminado', assignees: ['Martín'] }],
   hoy: '2026-10-28', fgCliente: _fgC, gastosPorRendirCli: _gpr, saldoBill: _saldoB, esVencidaB: b => b.status === 'Vencido', porCobrarBills: _porCobrarB, folioN: x => String(x),
 })
-test('Counsel AI: deuda de un cliente = facturas por cobrar + gastos por cubrir, con las funciones de la app', () => {
+test('Counsel AI: deuda de un cliente = facturas por cobrar + gastos por cubrir, con las funciones de la app', async () => {
   const ej = crearConsultas(_datosCopiloto())
-  const r = ej('deuda_cliente', { cliente: 'Schröder' })       // sin tilde ni «Familia»: igual lo encuentra
+  const r = await ej('deuda_cliente', { cliente: 'Schröder' })       // sin tilde ni «Familia»: igual lo encuentra
   assert.equal(r.resumen.cliente, 'Familia Schroder'); assert.equal(r.resumen.deuda_total, '$676.812')
   assert.equal(r.resumen.facturas_por_cobrar, '$0'); assert.equal(r.resumen.gastos_por_cubrir, '$676.812'); assert.equal(r.resumen.gastos_sin_rendir, '$40.000')
   assert.equal(r.tarjeta.total.valor, '$676.812'); assert.equal(r.tarjeta.lineas.length, 3)
-  assert.match(ej('deuda_cliente', { cliente: 'Comercial' }).error, /2 clientes/)   // ambiguo: pide precisar, no adivina
-  assert.match(ej('deuda_cliente', { cliente: 'Inexistente' }).error, /No encontré/)
-  assert.match(ej('otra_cosa', {}).error, /no existe/)
+  assert.match((await ej('deuda_cliente', { cliente: 'Comercial' })).error, /2 clientes/)   // ambiguo: pide precisar, no adivina
+  assert.match((await ej('deuda_cliente', { cliente: 'Inexistente' })).error, /No encontré/)
+  assert.match((await ej('otra_cosa', {})).error, /no existe/)
 })
-test('Counsel AI: por cobrar total suma las partes y lista los mayores', () => {
-  const r = crearConsultas(_datosCopiloto())('por_cobrar', { top: 3 })
+test('Counsel AI: por cobrar total suma las partes y lista los mayores', async () => {
+  const r = await crearConsultas(_datosCopiloto())('por_cobrar', { top: 3 })
   assert.equal(r.resumen.por_cobrar_total, '$1.300.000'); assert.equal(r.resumen.vencido, '$800.000')   // 800.000 + 500.000; vencido = el saldo de la vencida
   assert.equal(r.resumen.mayores[0].cliente, 'Comercial Andes SpA'); assert.equal(r.tarjeta.total.valor, '$1.300.000')
 })
-test('Counsel AI: tareas vencidas por responsable, sin las terminadas ni las de plazo futuro', () => {
-  const r = crearConsultas(_datosCopiloto())('tareas_vencidas', {})
+test('Counsel AI: tareas vencidas por responsable, sin las terminadas ni las de plazo futuro', async () => {
+  const r = await crearConsultas(_datosCopiloto())('tareas_vencidas', {})
   assert.equal(r.resumen.tareas_vencidas, 1); assert.deepEqual(r.resumen.por_responsable, [{ responsable: 'Martina', tareas: 1 }])
 })
 test('Counsel AI: el bucle resuelve la consulta que pide la IA y devuelve la tarjeta; sin consulta responde directo', async () => {
@@ -473,4 +473,36 @@ test('Counsel AI: el bucle resuelve la consulta que pide la IA y devuelve la tar
   assert.equal(directo.tarjetas.length, 0); assert.equal(directo.texto, 'No tengo esa consulta.')
   const bucle = await resolverConIA({ llamar: async () => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'x', name: 'tareas_vencidas', input: {} }] }), sistema: 's', mensajes: [], ejecutar: ej, maxVueltas: 2 })
   assert.equal(bucle.agotado, true)   // la IA no puede quedarse pidiendo consultas para siempre
+})
+
+import { coberturaVenta as _cobV, cuotasSinEmitir as _cse, trabajosSinFacturar as _tsf } from '../supabase/functions/_shared/ventasReglas.js'
+const _datosVentas = () => {
+  const d = _datosCopiloto()
+  d.sales = [{ id: 's1', client_id: 'c2', title: 'Constitución de sociedad', status: 'Activo', moneda: 'CLP', amount_clp: 1500000, created_at: '2026-06-10' }, { id: 's2', client_id: 'c2', title: 'Propuesta antigua', status: 'Rechazado', moneda: 'CLP', amount_clp: 400000, created_at: '2026-01-10' }]
+  d.billing = [...d.billing, { id: 'b4', client_id: 'c2', sale_id: 's1', invoice_no: '30', status: 'Pagado', amount: 1000000, issued_at: '2026-07-01' }, { id: 'b5', client_id: 'c2', sale_id: 's1', status: 'Programada', amount: 500000, due: '2026-08-15', concept: 'Cuota 2' }]
+  d.clientEntities = [{ client_id: 'c2', name: 'Comercial Andes SpA', rut: '76.000.000-1' }]
+  d.proyectos = [{ cliente_id: 'c2', nombre_proyecto: 'Constitución', estado: 'En curso', responsable: 'CL', activo: true }]
+  d.coberturaVenta = _cobV; d.uf = {}
+  d.cargarContactos = async id => id === 'c2' ? [{ nombre: 'Ana Pérez', cargo: 'Gerente', email: 'ana@example.com', telefono: '+56 9 1111 1111', principal: true }] : []
+  d.calcCuotasSinEmitir = async () => _cse({ billing: d.billing, sales: d.sales, uf: {}, noEmitir: new Set(), hasta: '2026-10-01' })
+  d.calcTrabajosSinFacturar = async () => _tsf({ sales: d.sales, billing: d.billing, uf: {}, ufHoy: 0, hoy: '2026-10-28', noEmitir: new Set(), decididos: new Set() })
+  d.detenidos = [{ s: d.sales[0], tipo: 'con_saldo', dias: 120, porCobrar: 300000 }]
+  return d
+}
+test('Counsel AI: dónde está algo, ficha y ventas de un cliente', async () => {
+  const ej = crearConsultas(_datosVentas())
+  const d = await ej('donde_esta', { tema: '¿Dónde cargo una cartola?' })
+  assert.equal(d.tarjeta.lineas[0].sub, 'Banco › Cargar cartola'); assert.equal(d.tarjeta.lineas[0].destino.tab, 'conciliacion')
+  assert.equal((await ej('donde_esta', { tema: 'astrología' })).resumen.encontrado, false)   // no inventa pantallas
+  const f = await ej('ficha_cliente', { cliente: 'Andes' })
+  assert.equal(f.resumen.contactos[0].nombre, 'Ana Pérez'); assert.equal(f.resumen.ventas_activas, 1); assert.equal(f.resumen.proyectos_activos[0].nombre, 'Constitución'); assert.equal(f.resumen.razones_sociales[0].rut, '76.000.000-1')
+  const v = await ej('ventas_cliente', { cliente: 'Andes' })
+  assert.equal(v.resumen.ventas[0].monto_acordado, '$1.500.000'); assert.equal(v.resumen.ventas[0].facturado, '$1.000.000'); assert.equal(v.resumen.ventas[0].por_facturar, '$500.000')
+})
+test('Counsel AI: por facturar y trabajos detenidos usan las reglas de ventas', async () => {
+  const ej = crearConsultas(_datosVentas())
+  const p = await ej('por_facturar', {})
+  assert.equal(p.resumen.cuotas_sin_emitir, 1); assert.equal(p.resumen.monto_cuotas_sin_emitir, '$500.000')
+  const t = await ej('trabajos_detenidos', {})
+  assert.equal(t.resumen.con_saldo, 1); assert.equal(t.resumen.mayores[0].por_cobrar, '$300.000')
 })
