@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { BRAND, C, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
-import { clienteDeCorreo, clienteDePedido, esFormularioFondos, montoSolicitado, pedidoDeSolicitud, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
+import { clienteDeCorreo, clienteDePedido, confirmaPago, esFormularioFondos, montoSolicitado, pedidoDeSolicitud, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { chipBtn, driveToken, estadoSolicitud, logActividad, nombresMiembros, okDB, registrarError, setLearningKV } from './compartido.jsx'
 
 const DIAS = 14
@@ -19,6 +19,8 @@ const textoPlano = p => {
 }
 const sinCita = t => String(t || '').split(/\n(?:El .{5,80} escribi[oó]:|On .{5,80} wrote:|>)/)[0]
 
+const MSG = 'fondos_msg'         // learnings: key = id de la solicitud (fund_requests), value = Message-ID del correo enviado (para leer la respuesta del cliente)
+const CONF = 'fondos_confirma'   // learnings: key = id de la solicitud, value = JSON {estado: 'confirmo'|'no', fecha, texto, msg} (decisión sobre la respuesta del cliente)
 const PEDIDO = 'fondos_pedido'   // learnings: key = «Message-ID del correo|n° de línea» (igual en todas las casillas), value = JSON {estado, client_id, monto, concepto, de, para, fecha}
 
 const emailsDe = h => [...String(h || '').matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map(m => m[0].toLowerCase())
@@ -59,7 +61,7 @@ export async function detectarSolicitudesFondos(clients) {
       // Ya registrada por otra vía (el módulo «Solicitar fondos» o la rendición): mismo cliente y monto dentro de 2 días.
       const t0 = new Date(fecha + 'T12:00').getTime()
       if ((frs || []).some(f => String(f.client_id) === client_id && Number(f.monto) === monto && Math.abs(new Date(f.enviada_at).getTime() - t0) <= 2 * 86400000)) return
-      out.push({ id, asunto, fecha, para: para.join(','), cc: cc.join(','), client_id, monto })
+      out.push({ id, asunto, fecha, para: para.join(','), cc: cc.join(','), client_id, monto, mid: String(H['message-id'] || '').trim() })
     } catch (_) { /* un correo ilegible no frena a los demás */ }
   }
   for (let i = 0; i < nuevos.length; i += 8) await Promise.all(nuevos.slice(i, i + 8).map(meta))
@@ -84,6 +86,28 @@ async function buscarFormulario(token, mid, dom) {
     if (de.endsWith(dom) && adjuntos(msg.payload).some(esFormularioFondos)) return { fecha: isoLocal(Number(msg.internalDate)), por: de }
   }
   return null
+}
+
+// Respuesta del cliente en el hilo de la solicitud: el mensaje más reciente de alguien de fuera del equipo, posterior al envío, que dice que ya
+// pagó o trae un comprobante. Se devuelve solo para que una persona la confirme.
+async function buscarRespuesta(token, mid, dom, desdeMs) {
+  const h = { Authorization: 'Bearer ' + token }
+  const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent('rfc822msgid:' + mid.replace(/[<>]/g, ''))}&maxResults=1`, { headers: h })
+  if (!r.ok) return null
+  const m = ((await r.json()).messages || [])[0]; if (!m) return null
+  const t = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${m.threadId}?format=full`, { headers: h })
+  if (!t.ok) return null
+  let mejor = null
+  for (const msg of (await t.json()).messages || []) {
+    const H = {}
+    ;(msg.payload?.headers || []).forEach(x => { H[x.name.toLowerCase()] = x.value })
+    const de = emailsDe(H.from)[0] || '', ms = Number(msg.internalDate)
+    if (!de || de.endsWith(dom) || !(ms > desdeMs)) continue
+    const texto = sinCita(textoPlano(msg.payload)) || String(msg.snippet || '')
+    if (!confirmaPago(texto, adjuntos(msg.payload))) continue
+    if (!mejor || ms > mejor.ms) mejor = { ms, fecha: isoLocal(ms), msg: String(H['message-id'] || msg.id).trim(), texto: texto.replace(/\s+/g, ' ').trim().slice(0, 90) }
+  }
+  return mejor
 }
 
 // Pedido interno: un correo entre el equipo («FxR», «fondos por rendir») con una lista «cliente: concepto: monto». Una fila por línea.
@@ -137,6 +161,7 @@ const PILL = {
   ped: { t: 'Pedido interno', bg: C.soonBg, c: C.soonText },
   por: { t: 'Por solicitar', bg: C.soonBg, c: C.soonText },
   frm: { t: 'Formulario listo', bg: C.azulBg, c: C.azulInfo },
+  cnf: { t: 'Cliente confirmó', bg: C.azulBg, c: C.azulInfo },
 }
 const TABS = [['reg', 'Por registrar'], ['esp', 'Esperando'], ['rec', 'Recibidas']]
 const segBtn = on => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.bgSoft, color: on ? '#fff' : C.muted, fontFamily: 'inherit' })
@@ -152,6 +177,9 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const [pedReg, setPedReg] = useState([])     // pedidos registrados que aún no se piden al cliente
   const [eleg, setEleg] = useState({})         // cliente elegido a mano por pedido
   const [nombres, setNombres] = useState({})
+  const [msgs, setMsgs] = useState({})         // id de solicitud → Message-ID del correo enviado
+  const [confs, setConfs] = useState({})       // id de solicitud → decisión sobre la respuesta del cliente
+  const [sug, setSug] = useState({})           // id de solicitud → respuesta del cliente por confirmar
   const cacheKey = `fd_fondos_correo_${user?.email || ''}`
   useEffect(() => {
     let vivo = true
@@ -175,12 +203,19 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     setDet(cs.slice(0, 2).map((c, i) => ({ id: 'demo' + i, asunto: i ? 'Provisión de fondos' : 'Solicitud de fondos', fecha: i ? '2026-10-28' : '2026-10-27', para: '', cc: '', client_id: String(c.id), monto: i ? 300000 : 1200000 })))
     setPed([{ id: 'dp0', cliente: cs[0]?.name || 'Cliente', concepto: 'Puesta en marcha', monto: 2000000, client_id: cs[0] ? String(cs[0].id) : null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }, { id: 'dp1', cliente: 'Zeta', concepto: 'Reorganización', monto: 1500000, client_id: null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }])
     setPedReg([{ id: 'dq0', client_id: cs[1] ? String(cs[1].id) : null, concepto: 'Inscripción', monto: 2000000, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo', formulario: { fecha: '2026-10-13', por: 'martina@demo' } }])
+    setSug({ dr0: { fecha: '2026-10-23', texto: 'Ya transferido. Muchas gracias', msg: 'demo' } })
     setReqs(cs.slice(2).map((c, i) => ({ id: 'dr' + i, client_id: String(c.id), monto: i ? 700000 : 800000, asunto: 'Solicitud de fondos por rendir', enviada_por: i ? 'Cristóbal' : 'Erasmo', enviada_at: i ? '2026-10-15T12:00:00Z' : '2026-10-22T12:00:00Z', recibido_at: null })))
   }, [clients.length])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (DEMO) return
     let vivo = true
     nombresMiembros().then(m => { if (vivo) setNombres(m || {}) })
+    supabase.from('learnings').select('kind,key,value').in('kind', [MSG, CONF]).then(({ data }) => {
+      if (!vivo) return
+      const m = {}, c = {}
+      ;(data || []).forEach(l => { if (l.kind === MSG) m[String(l.key)] = l.value; else { try { c[String(l.key)] = JSON.parse(l.value) } catch (_) { /* decisión ilegible: se vuelve a preguntar */ } } })
+      setMsgs(m); setConfs(c)
+    }, () => {})
     supabase.from('learnings').select('key,value').eq('kind', PEDIDO).then(({ data }) => {
       if (!vivo) return
       setPedReg((data || []).map(l => { try { return { id: l.key, ...JSON.parse(l.value) } } catch (_) { return null } }).filter(x => x && x.estado === 'por_solicitar'))
@@ -218,6 +253,24 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     return () => { vivo = false }
   }, [pedReg.length])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (DEMO || !reqs || !Object.keys(msgs).length) return
+    let vivo = true
+    ;(async () => {
+      const token = await driveToken(); if (!token) return
+      const dom = '@' + String(BRAND.emailDominio || '').toLowerCase()
+      const pend = reqs.filter(r => msgs[String(r.id)] && confs[String(r.id)]?.estado !== 'confirmo' && estadoSolicitud(r, expenses).k !== 'rec').slice(0, 15)
+      for (const r of pend) {
+        const ck = 'fd_resp_' + r.id
+        try { const c = sessionStorage.getItem(ck); if (c && Date.now() - Number(c) < 20 * 60000) continue } catch (_) { /* sin almacenamiento */ }
+        const f = await buscarRespuesta(token, msgs[String(r.id)], dom, new Date(r.enviada_at).getTime())
+        try { sessionStorage.setItem(ck, String(Date.now())) } catch (_) { /* sin almacenamiento */ }
+        if (!f || !vivo || confs[String(r.id)]?.msg === f.msg) continue   // ya decidida esa misma respuesta
+        setSug(a => ({ ...a, [String(r.id)]: f }))
+      }
+    })().catch(e => { if (e?.code !== 401) registrarError({ origen: 'accion', vista: CONF, err: e }) })
+    return () => { vivo = false }
+  }, [reqs, msgs])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (DEMO) return
     let vivo = true
     const desde = new Date(Date.now() - 90 * 86400000).toISOString()
@@ -240,7 +293,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     ...(det || []).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
     ...(reqs || []).map(r => {
       const st = estadoSolicitud(r, expenses)
-      return { k: st.k, tab: st.k === 'rec' ? 'rec' : 'esp', id: 'r' + r.id, r, st, client_id: r.client_id, monto: r.monto, asunto: r.asunto, fecha: String(r.enviada_at || '').slice(0, 10), por: r.enviada_por || '' }
+      return { k: st.k !== 'rec' && confs[String(r.id)]?.estado === 'confirmo' ? 'cnf' : st.k, tab: st.k === 'rec' ? 'rec' : 'esp', id: 'r' + r.id, r, st, client_id: r.client_id, monto: r.monto, asunto: r.asunto, fecha: String(r.enviada_at || '').slice(0, 10), por: r.enviada_por || '' }
     }),
   ]
   if (!filas.length) return null
@@ -258,6 +311,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
       const res = await supabase.from('fund_requests').insert(fila).select(COLS).single()
       if (!okDB(res, 'registrar la solicitud de fondos')) return
       setReqs(p => [res.data, ...(p || [])])
+      if (it.mid && res.data?.id) { try { await setLearningKV(MSG, res.data.id, it.mid); setMsgs(a => ({ ...a, [String(res.data.id)]: it.mid })) } catch (e) { registrarError({ origen: 'accion', vista: MSG, err: e }) } }
       try { await setLearningKV(CLAVE, it.id, 'registrada') } catch (e) { registrarError({ origen: 'accion', vista: CLAVE, err: e }) }
       logActividad('fondos.solicitud_enviada', { tabla: 'clients', id: it.client_id, detalle: { cliente: nombre(it.client_id), title: 'Solicitud detectada en el correo', monto: it.monto } })
       quita(it.id)
@@ -296,6 +350,18 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     } catch (e) { registrarError({ origen: 'accion', vista: PEDIDO, err: e }) }
     quitaPed(f.it.id); setBusy(null)
   }
+  const decidir = async (f, estado) => {
+    const r = f.r, c = sug[String(r.id)]; if (!c) return
+    setBusy(f.id)
+    try {
+      const v = { estado, fecha: c.fecha, texto: c.texto, msg: c.msg }
+      if (!DEMO) {
+        await setLearningKV(CONF, r.id, JSON.stringify(v))
+        if (estado === 'confirmo') logActividad('fondos.cliente_confirmo', { tabla: 'fund_requests', id: r.id, detalle: { cliente: nombre(r.client_id), title: 'El cliente confirmó el pago', monto: r.monto } })
+      }
+      setConfs(a => ({ ...a, [String(r.id)]: v })); setSug(a => { const n = { ...a }; delete n[String(r.id)]; return n })
+    } catch (e) { registrarError({ origen: 'accion', vista: CONF, err: e }) } finally { setBusy(null) }
+  }
   const historia = f => {
     const frmPaso = fr => fr ? { ok: true, t: 'Formulario preparado', d: fmtFechaDMY(fr.fecha), q: quienEs(fr.por) } : { ok: false, t: 'Formulario aún sin preparar' }
     if (f.k === 'ped') return [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(f.fecha), q: f.ruta }, { ok: false, t: 'Aún no registrado en la app' }]
@@ -303,6 +369,8 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     const pd = pedidoDeSolicitud(pedReg, { client_id: f.client_id, monto: f.monto, fecha: f.fecha })
     const pasos = pd ? [{ ok: true, t: 'Pedido interno', d: fmtFechaDMY(pd.fecha), q: ruta(pd) }, ...(pd.formulario ? [frmPaso(pd.formulario)] : [])] : []
     pasos.push({ ok: true, t: 'Solicitud enviada', d: fmtFechaDMY(f.fecha), q: f.por })
+    const cf = f.r && confs[String(f.r.id)]
+    if (cf?.estado === 'confirmo') pasos.push({ ok: true, t: 'Cliente confirmó', d: fmtFechaDMY(cf.fecha), q: cf.texto ? `«${cf.texto}»` : '' })
     if (f.k === 'det') pasos.push({ ok: false, t: 'Aún no registrada en la app' })
     else if (f.k === 'rec') pasos.push({ ok: true, t: 'Depósito recibido', d: fmtFechaDMY(f.st?.dep?.date || String(f.r?.recibido_at || '').slice(0, 10)) })
     else pasos.push({ ok: false, t: `Sin depósito · ${f.st?.dias ?? 0} días` })
@@ -343,6 +411,13 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
                 <button type='button' disabled={busy === f.id} onClick={() => descartar(f.it)} style={chipBtn()}>No es solicitud</button>
               </div>}
             </div>
+            {f.r && sug[String(f.r.id)] && f.k !== 'rec' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', margin: '0 0 8px 8px', fontSize: 11.5 }}>
+              <span style={{ minWidth: 0, flex: '1 1 160px', color: C.text }}><b>El cliente respondió:</b> «{sug[String(f.r.id)].texto}» · {fmtFechaDMY(sug[String(f.r.id)].fecha)}</span>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button type='button' disabled={busy === f.id} onClick={() => decidir(f, 'confirmo')} style={chipBtn('primary')}>Confirmó</button>
+                <button type='button' disabled={busy === f.id} onClick={() => decidir(f, 'no')} style={chipBtn()}>No</button>
+              </div>
+            </div>}
             {abre && <div style={{ display: 'grid', gap: 3, padding: '0 0 8px 8px' }}>
               {historia(f).map((p, j) => <div key={j} style={{ fontSize: 11.5, color: p.ok ? C.text : C.textSoft }}>{p.t}{p.d ? ` · ${p.d}` : ''}{p.q ? ` · ${p.q}` : ''}</div>)}
             </div>}
