@@ -22,6 +22,7 @@ import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { trabajosDetenidos } from '../../supabase/functions/_shared/ventasReglas.js'
 import { f29Estimado } from '../../supabase/functions/_shared/f29Reglas.js'
+import { CAL_CL, CONTRIB_CUOTAS, ymMas as _ymMas, finDeMes as _finDeMes, diasA as _diasA, crearCalendario, djFecha as _djFecha } from '../../supabase/functions/_shared/calendarioReglas.js'
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando, trabajosSinFacturar } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
@@ -235,8 +236,10 @@ export const daysLeft = d => { if(!d) return null; return Math.round((new Date(d
 // Feriados de Chile (fuente: api.boostr.cl / apis.digital.gob.cl). Se cargan al iniciar y se cachean; si la API no responde,
 // el cálculo del día hábil cae a solo fin de semana (comportamiento anterior, seguro).
 export const FERIADOS_CL = new Set()   // 'YYYY-MM-DD'
+const _calCL = crearCalendario(FERIADOS_CL)   // fechas legales compartidas con la sincronización de Google Calendar
+export const _esDiaHabil = _calCL.esDiaHabil, _habilDesde = _calCL.habilDesde, venceCalTrib = _calCL.venceCalTrib
+export { CAL_CL, CONTRIB_CUOTAS, _ymMas, _finDeMes, _diasA, _djFecha }
 
-export const _esDiaHabil = dt => { const w=dt.getDay(); if(w===0||w===6) return false; const s=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; return !FERIADOS_CL.has(s) }
 
 // Vencimiento de pago = ÚLTIMO DÍA HÁBIL del mes de emisión si se emite dentro de los primeros 10 días;
 // si se emite después del día 10, salta al último día hábil del mes SIGUIENTE. Día hábil = ni fin de semana ni feriado (Chile).
@@ -4504,20 +4507,14 @@ export const periodoF29 = e => { const m=String(e?.concept||'').match(/(\d{2})-(
 // Qué obligaciones tiene el estudio = tabla obligaciones_tributarias (client_id null); DJ con su fecha = sii_dj_vencimientos (resolución
 // del SII del año); presentadas = obligaciones_cumplidas. F29 y cotizaciones se dan por pagadas con el gasto del período (periodoF29),
 // y se cuadran contra el correo «VALORES» de la contadora (learnings valores_contadora, key = período AAAA-MM).
-export const CAL_CL = { F29:{dia:20}, COT:{dia:13}, F22:{mes:4,dia:30}, PATENTE:{meses:[1,7]}, valoresHasta:16, avisoDias:1 }
 
-export const _ymMas = (ym,n) => { const [Y,M]=String(ym).split('-').map(Number), d=new Date(Y,M-1+n,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }
 
-export const _finDeMes = ym => { const [Y,M]=String(ym).split('-').map(Number); return isoLocal(new Date(Y,M,0)) }
 
-export const _habilDesde = iso => { const d=new Date(String(iso).slice(0,10)+'T12:00'); for(let i=0;i<10&&!_esDiaHabil(d);i++) d.setDate(d.getDate()+1); return isoLocal(d) }
 
 export const _mesNom = ym => { const N=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const [Y,M]=String(ym).split('-'); return `${N[+M-1]||''} ${Y}` }
 
-export const _diasA = (desde,hasta) => Math.round((new Date(hasta+'T12:00')-new Date(desde+'T12:00'))/86400000)
 
 // Vencimiento del pago del período `per` (se paga el mes siguiente).
-export const venceCalTrib = (tipo, per) => _habilDesde(`${_ymMas(per,1)}-${String(CAL_CL[tipo].dia).padStart(2,'0')}`)
 
 // Montos «$12.345» escritos en el concepto del pago (retenciones de boletas que van en el costo de cada boleta).
 export const _montosConcepto = s => [...String(s||'').matchAll(/\$\s?(\d{1,3}(?:\.\d{3})+|\d+)/g)].reduce((a,m)=>a+Number(m[1].replace(/\./g,'')),0)
@@ -4529,9 +4526,6 @@ export const _pagoCal = (expenses, tipo, per) => { const l=tipo==='F29'?_pagosDe
   return {monto:l.reduce((a,e)=>a+(Number(e.amount)||0),0), fecha:l.map(e=>String(e.date||'').slice(0,10)).sort().pop(), concepto:l.map(e=>e.concept||'').filter(Boolean).join(' · '), ids:l.map(e=>e.id)} }
 
 // Vencimiento de una DJ del estudio: la fila de la resolución cuyo detalle más se parece al de la obligación (1948 tiene una fecha por tipo de sociedad).
-export const _djFecha = (o, dj) => { const rows=(dj||[]).filter(r=>String(r.formulario)===String(o.formulario)&&r.fecha); if(!rows.length) return null
-  const w=new Set(_normTxt(o.detalle||'').split(' ').filter(x=>x.length>3)), sc=r=>_normTxt(r.detalle||'').split(' ').filter(x=>w.has(x)).length
-  return rows.slice().sort((a,b)=>sc(b)-sc(a)||String(a.fecha).localeCompare(String(b.fecha)))[0] }
 
 export function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cumplidas=[], expenses=[], docs=[], boletas=[], hoy}={}){
   hoy = hoy || isoLocal(Date.now())
@@ -4636,7 +4630,6 @@ export function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cum
 // mismas fechas legales del calendario del estudio (CAL_CL, venceCalTrib, _djFecha).
 export const CAL_CLI_DIAS = 60
 
-export const CONTRIB_CUOTAS = [['04','1ª'],['06','2ª'],['09','3ª'],['11','4ª']]
 
 export const OBL_CLIENTE = [['F29',null,'F29 mensual'],['F22',null,'F22 anual'],['DJ','1879','DJ 1879 · retenciones de honorarios'],['DJ','1887','DJ 1887 · sueldos'],['DJ','1948','DJ 1948 · retiros de socios'],['PATENTE',null,'Patente municipal']]
 

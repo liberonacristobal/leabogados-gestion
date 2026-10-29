@@ -555,3 +555,35 @@ test('Counsel AI: compras del SII (plazo de reclamo y observadas) y estado del F
   const f = await ej('f29', {})
   assert.equal(f.resumen.proximo.estado, 'estimado del mes cerrado'); assert.equal(f.resumen.proximo.monto, '$900.000'); assert.equal(f.resumen.ultimos_periodos[0].pagado.monto, '$1.121.390'); assert.match(f.resumen.nota, /no tiene el F29 presentado/)
 })
+
+import { crearCalendario, ymMas as _ymM, djFecha as _djF, CAL_CL as _CALCL } from '../supabase/functions/_shared/calendarioReglas.js'
+test('calendario: F29 el 20 y cotizaciones el 13 del mes siguiente, al día hábil siguiente si cae en fin de semana o feriado', () => {
+  const c = crearCalendario(new Set(['2026-11-20']))   // feriado inventado para probar el corrimiento
+  assert.equal(crearCalendario().venceCalTrib('F29', '2026-10'), '2026-11-20')   // viernes
+  assert.equal(c.venceCalTrib('F29', '2026-10'), '2026-11-23')                    // feriado → lunes
+  assert.equal(crearCalendario().venceCalTrib('COT', '2026-10'), '2026-11-13')
+  assert.equal(crearCalendario().habilDesde('2026-11-28'), '2026-11-30')          // sábado → lunes
+  assert.equal(_ymM('2026-12', 1), '2027-01')
+  const dj = [{ formulario: '1948', fecha: '2027-03-16', detalle: 'Sociedades de personas' }, { formulario: '1948', fecha: '2027-03-23', detalle: 'Sociedades anónimas' }]
+  assert.equal(_djF({ formulario: '1948', detalle: 'DJ 1948 · retiros de socios, sociedades de personas' }, dj).fecha, '2027-03-16')
+  assert.equal(_CALCL.F29.dia, 20)
+})
+
+import { armarEventos as _armarEv } from '../supabase/functions/_shared/calendarioEventos.js'
+test('calendario de Google: tributario, causas en tabla, plazos, contribuciones y Diario Oficial, sin lo vencido ni lo ya presentado', () => {
+  const ev = _armarEv({ hoy: '2026-10-29', obl: [{ tipo: 'F29', activo: true }, { tipo: 'COT', activo: true }, { tipo: 'F22', activo: true }, { tipo: 'DJ', formulario: '1948', detalle: 'retiros de socios sociedades de personas', activo: true }],
+    dj: [{ anio_tributario: 2027, formulario: '1948', fecha: '2027-03-16', detalle: 'Sociedades de personas' }], cumplidas: [{ clave: 'F22-2026' }],
+    causas: [{ id: 'c1', estado: 'activa', rol: '19', anio: 2025, caratula: 'DÍAZ / SII', corte_nombre: 'Corte de Apelaciones de La Serena', client_id: 'k1', abogado: 'Cristóbal', ultima_tabla: { fecha: '2026-11-30', sala: 'Primera Sala', numero: 12 } }, { id: 'c2', estado: 'activa', rol: '18', anio: 2025, ultima_tabla: { fecha: '2026-10-01' } }],
+    plazos: [{ id: 'p1', titulo: 'Término del arriendo', fecha: '2026-12-15', estado: 'pendiente', client_id: 'k1' }, { id: 'p2', titulo: 'Hecho', fecha: '2026-12-16', estado: 'cumplido' }],
+    props: [{ client_id: 'k1', rol: '1-2', deuda_contribuciones: 0 }, { client_id: 'k1', rol: '1-3', deuda_contribuciones: 5000 }], clientes: [{ id: 'k1', name: 'Javiera Díaz' }],
+    docs: [{ id: 'd1', cliente_id: 'k1', do_estado: 'pendiente', do_publicacion: { vence: '2026-11-10' } }] })
+  const por = t => ev.filter(e => e.tipo === t)
+  assert.ok(por('tributario').some(e => e.clave === 'F29-2026-10' && e.fecha === '2026-11-20')); assert.ok(por('tributario').some(e => e.clave === 'COT-2026-10' && e.fecha === '2026-11-13'))
+  assert.ok(!por('tributario').some(e => e.clave === 'F22-2026')); assert.ok(por('tributario').some(e => e.clave === 'F22-2027'))   // la ya presentada no entra
+  assert.ok(por('tributario').some(e => /Declaraciones juradas 1948/.test(e.titulo) && e.fecha === '2027-03-16'))
+  assert.deepEqual(por('causa').map(e => e.titulo), ['Vista en tabla · Rol 19-2025'])   // la de octubre ya pasó
+  assert.match(por('causa')[0].descripcion, /Cliente: Javiera Díaz/)
+  assert.deepEqual(por('plazo').map(e => e.fecha), ['2026-12-15']); assert.deepEqual(por('diario_oficial').map(e => e.fecha), ['2026-11-10'])
+  assert.ok(por('contribuciones').some(e => e.fecha === '2026-11-30' && /2 roles de 1 clientes/.test(e.descripcion)))
+  assert.ok(ev.every(e => e.fecha >= '2026-10-29'))
+})
