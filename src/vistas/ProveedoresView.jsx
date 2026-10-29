@@ -5,7 +5,7 @@ import { demoData } from '../demoData'
 import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
 export function _simTipo(aRaw,bRaw){
@@ -134,7 +134,7 @@ export function CorreoBoletaPage({prov, bm, lineas=[], user, onBack, onSent}){
     if(bm.file) return {base64:await aB64(bm.file), name:nombre, mime:'application/pdf'}
     if(bm.storage_path&&!DEMO){ const {data}=await supabase.storage.from('documentos').download(bm.storage_path); if(data) return {base64:await aB64(data), name:nombre, mime:'application/pdf'} }
     return null }
-  const guardarBorrador = async () => { if(!DEMO&&bm.bheId){ try{ await setLearningKV('correo_boleta',String(bm.bheId),body) }catch(_){} } appAlert('Borrador guardado.') }
+  const guardarBorrador = async () => { if(!DEMO&&bm.bheId){ try{ await setLearningKV('correo_boleta',String(bm.bheId),body) }catch(e){registrarError({origen:'accion',vista:'correo_boleta',err:e})} } appAlert('Borrador guardado.') }
   const enviar = async () => {
     if(!para.trim()){ appAlert('Falta a quién enviarlo (Para).'); return }
     setSending(true)
@@ -386,7 +386,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const pagosLibresDe = id => cargosDe(id).filter(pagoLibre)
   const pagadasSinBancoDe = id => esEquipo(id) ? [] : tercDe(id).filter(t=>est(t)==='pagada'&&!t.movimiento_id)
   const marcar = async (m, prov, on, silencioso=false) => {
-    if(!DEMO){ try{ await supabase.from('learnings').delete().eq('kind','pago_prov_por_identificar').eq('key',String(m.id)); if(on) await supabase.from('learnings').insert({kind:'pago_prov_por_identificar',key:String(m.id),value:'Trabajo por identificar'}) }catch(_){} }
+    if(!DEMO){ try{ await supabase.from('learnings').delete().eq('kind','pago_prov_por_identificar').eq('key',String(m.id)); if(on) await supabase.from('learnings').insert({kind:'pago_prov_por_identificar',key:String(m.id),value:'Trabajo por identificar'}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
     setMarcas(p=>{ const n={...p}; if(on) n[m.id]='Trabajo por identificar'; else delete n[m.id]; return n })
     if(!silencioso) logActividad(`proveedores.${prov.id}.marca`,{tabla:'cartola_movimientos',id:m.id,detalle:{title:on?`Pago del ${dm(m.fecha)}: trabajo por identificar`:`Pago del ${dm(m.fecha)}: se quitó la marca`,monto:Math.abs(Number(m.monto)||0)}})
   }
@@ -818,7 +818,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
       const saleDe=sid=>(sales||[]).find(x=>String(x.id)===String(sid)), cliIdDe=sid=>saleDe(sid)?.client_id
       const irCli=sid=>{ const c=cliIdDe(sid); if(c&&onOpenClientFicha) onOpenClientFicha(c) }
       const irVenta=sid=>{ const sv=saleDe(sid); if(!ro&&sv&&onOpenSale) onOpenSale(sv); else irCli(sid) }
-      const verComis=sid=>{ const c=cliIdDe(sid); setCliF(c?String(c):null); setCf('todas'); setNVer(30); setTimeout(()=>{ try{ document.getElementById('pv-comisiones')?.scrollIntoView({behavior:'smooth',block:'start'}) }catch(_){} },60) }
+      const verComis=sid=>{ const c=cliIdDe(sid); setCliF(c?String(c):null); setCf('todas'); setNVer(30); setTimeout(()=>{ try{ document.getElementById('pv-comisiones')?.scrollIntoView({behavior:'smooth',block:'start'}) }catch(e){registrarError({origen:'accion',vista:'cuadre_nota',err:e})} },60) }
       const lnk=(txt,on,col)=>on?<span onClick={e=>{e.stopPropagation();on()}} style={{color:col||C.accent,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.border,textUnderlineOffset:2}}>{txt}</span>:<span>{txt}</span>
       const boletaLnk=t=>{ const bh=bheDe(t); return bh?lnk(`la boleta N° ${bh.folio}`,bh.storage_path?()=>abrirDocumento(bh.storage_path):null):'una comisión' }
       const txtDe=x=> x.tipo==='banco' ? {t:lnk(`Transferencia del ${dmy(csAll.find(m=>String(m.id)===String(x.mid))?.fecha||x.ts?.[0]?.pagado_at)}`,(!ro&&onIrBanco)?()=>onIrBanco(x.mid):()=>verComis(x.sid),C.text),

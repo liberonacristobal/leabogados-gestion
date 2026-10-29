@@ -132,7 +132,7 @@ function BitacoraUltima({prefijo, render}){
 // Bitácora de cargas del SII (sii_import_batches): TODA carga deja registro (XML lo hace vía ensureBatch; PDF/Drive/Excel pasan por aquí). Nunca bloquea.
 async function logCargaSII({tipo, n=0, user, period=null, files=[]}){
   if(DEMO) return
-  try{ await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period, docs_total:n, skipped:0, files, counts:n?{cre:n}:{}, tipo }) }catch(_){}
+  try{ await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period, docs_total:n, skipped:0, files, counts:n?{cre:n}:{}, tipo }) }catch(e){registrarError({origen:'accion',vista:'sii_import_batches',err:e})}
 }
 
 // CORTE DE APERTURA: lo anterior al corte se resume en UN movimiento "Saldo de apertura" (category 'Apertura': fondo si queda
@@ -1303,7 +1303,7 @@ function ModulosModal({ onChange }){
     const next = new Set(off); willOff?next.add(m.id):next.delete(m.id); setOff(next)
     if(willOff) MODULOS_OFF.add(m.id); else MODULOS_OFF.delete(m.id)
     onChange&&onChange()
-    if(!DEMO){ setBusy(true); try{ await setLearningKV('fd_modulo_off',m.id,willOff?'off':'on') }catch(_){}; setBusy(false) }
+    if(!DEMO){ setBusy(true); try{ await setLearningKV('fd_modulo_off',m.id,willOff?'off':'on') }catch(e){registrarError({origen:'accion',vista:'fd_modulo_off',err:e})}; setBusy(false) }
   }
   return (
     <div>
@@ -1445,11 +1445,11 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
     const nItem = (ef.item||'').trim() || r.item
     const patch = {item:nItem, monto:nMonto, desde:nDesde, monto_prev:nPrev}
     setRows(p=>p.map(x=>x.id===r.id?{...x,...patch}:x)); setEdId(null)
-    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id),'guardar el costo') }catch(_){} }
+    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id),'guardar el costo') }catch(e){registrarError({origen:'accion',vista:'costos_oficina',err:e})} }
   }
   const borrar = async r => { if(!await appConfirm(`Quitar "${r.item}" de ${r.categoria}?`)) return
     setRows(p=>p.filter(x=>x.id!==r.id)); setEdId(null)
-    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({activo:false}).eq('id',r.id),'quitar el costo') }catch(_){} }
+    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({activo:false}).eq('id',r.id),'quitar el costo') }catch(e){registrarError({origen:'accion',vista:'costos_oficina',err:e})} }
   }
   const agregar = async cat => {
     const item=(af.item||'').trim(); const monto=Math.max(0,Math.round(parseFloat(af.monto)||0))
@@ -1607,7 +1607,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
     setPpx(p=>modo==='tarjeta'?{...p,emisores:new Set([...p.emisores,rut])}:{...p,pagadas:new Set([...p.pagadas,String(x.d.id)])})
     if(DEMO) return; const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
     try{ if(modo==='tarjeta') await setLearningKV('compra_pago_emisor',rut,JSON.stringify({modo:'tarjeta',nombre:x.d.emisor_name||'',fecha:hoy})); else await setLearningKV('compra_pagada',String(x.d.id),JSON.stringify({motivo:'Pagada por otra vía',fecha:hoy}))
-      logActividad('compras.por_pagar',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · ${modo==='tarjeta'?'se paga con la tarjeta':'pagada por otra vía'}`}}) }catch(_){} }
+      logActividad('compras.por_pagar',{tabla:'sii_compras_docs',id:x.d.id,detalle:{title:`Factura N° ${x.d.folio} de ${x.d.emisor_name||'proveedor'} · ${modo==='tarjeta'?'se paga con la tarjeta':'pagada por otra vía'}`}}) }catch(e){registrarError({origen:'accion',vista:'compra_pagada',err:e})} }
   const nR=r=>String(r||'').replace(/[.\s-]/g,'').toLowerCase()
   const dmy=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
   const tipoLbl=t=>({33:'Afecta',34:'Exenta',56:'Nota débito',61:'Nota crédito'})[Number(t)]||('DTE '+t)
@@ -2271,7 +2271,7 @@ function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=
         const text=borradorPedidoBoleta(p), subject=asuntoPedidoBoleta(p)
         const via=DEMO?'usuario':await enviarComoUsuario({to, subject, html:correoMarcaHtml(text,'Boleta de honorarios',firma,false), text, que:'El pedido de boleta'})
         if(!via){ setBusy(null); return }
-        if(!DEMO&&p.proveedor_id&&to!==p.para){ try{ await setLearningKV('proveedor_email',String(p.proveedor_id),to) }catch(_){} }
+        if(!DEMO&&p.proveedor_id&&to!==p.para){ try{ await setLearningKV('proveedor_email',String(p.proveedor_id),to) }catch(e){registrarError({origen:'accion',vista:'proveedor_email',err:e})} }
         await hecho(r,{estado:'espera',motivo:`Pedido enviado el ${fmtFechaDMY(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}))} · boleta por recibir`},'boleta_pedida')
         appAlert(txtEnviado(via,{que:'Pedido de boleta',g:'o',para:to}))
       } else if(a==='definir_documento'){
@@ -2944,7 +2944,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
   const descartarPendiente=async()=>{
     if(!pending?.token){ onClose&&onClose(); return }
     if(!await appConfirm('¿Descartar esta propuesta? Significa que NO son el mismo cliente; no se fusiona.')) return
-    try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(_){}
+    try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
     onClose&&onClose()
   }
   const ejecutar=async()=>{
@@ -2956,7 +2956,7 @@ function FusionarModal({clients=[], billing=[], sales=[], expenses=[], tasks=[],
     try{
       const {data,error}=await supabase.functions.invoke('fusionar-clientes',{body:{survivor_id:survId,loser_id:loserId}})
       if(error) throw error; if(data?.error) throw new Error(data.error)
-      if(pending?.token){ try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(_){} }
+      if(pending?.token){ try{ await supabase.from('learnings').delete().eq('kind','merge_pending').eq('key',pending.token) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
       setRes({...data,_s:s,_l:l,_ks:ks,_kl:kl}); onMerged&&onMerged()
     }catch(e){ setMsg('Error al fusionar: '+(e.message||e)) }
     setBusy(false)
@@ -4701,15 +4701,15 @@ function SolicitarFondosModal({client:clientProp, clients=[], sale, montoInicial
       if(via==='reauth'){ setSending(false); return }   // el aviso «NO se envió» + reingreso lo da enviarComoUsuario
       if(via===null){ setSending(false); return }
       if(client?.id){
-        try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(_){}
-        if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
-        try{ await supabase.from('learnings').delete().eq('kind','cuenta_gastos').eq('key','estudio'); await supabase.from('learnings').insert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(cta)}) }catch(_){}
+        try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(e){registrarError({origen:'accion',vista:'factura_to',err:e})}
+        if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(e){registrarError({origen:'accion',vista:'factura_cc',err:e})}
+        try{ await supabase.from('learnings').delete().eq('kind','cuenta_gastos').eq('key','estudio'); await supabase.from('learnings').insert({kind:'cuenta_gastos',key:'estudio',value:JSON.stringify(cta)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
         // Los correos ingresados quedan como contactos del cliente → sugeridos en todo correo futuro (compartido con FacturaEmailModal).
-        try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!esCorreoOficina(e)&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(_){}
+        try{ const ya=new Set(contacts.map(c=>(c.email||'').toLowerCase())); const nuevos=[...new Set([para.trim(),...cc].map(e=>String(e).trim().toLowerCase()).filter(e=>e&&e.includes('@')&&!esCorreoOficina(e)&&!ya.has(e)))]; if(nuevos.length) await supabase.from('contacts').insert(nuevos.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))) }catch(e){registrarError({origen:'accion',vista:'contacts',err:e})}
       }
       // Registro permanente de la solicitud (historial + cruce con el depósito): nada sin rastro.
       try{ const {error:frErr}=await supabase.from('fund_requests').insert({ client_id:client?.id||null, sale_id:sale?.id||null, monto:+monto||0, asunto, para:para.trim(), cc:cc.join(','), enviada_por:user?.name||null, n_adjuntos:extras.length })
-        if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:client?.id,detalle:{cliente:client?.name,title:'Solicitud de fondos enviada',monto:+monto||0}}) }catch(_){}
+        if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:client?.id,detalle:{cliente:client?.name,title:'Solicitud de fondos enviada',monto:+monto||0}}) }catch(e){registrarError({origen:'accion',vista:'fund_requests',err:e})}
       appAlert(txtEnviado(via,{que:'Solicitud de fondos', g:'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
     }catch(e){ appAlert('Error al enviar: '+(e.message||e)) }
     setSending(false)
@@ -5478,7 +5478,7 @@ function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
   // Compuerta fuzzy: la carpeta se parece a un cliente existente → vincular (aprende alias, no crea) o marcar como nuevo.
   const vincularFolder = async (f) => {
     if(!f._maybe) return
-    try{ await supabase.from('learnings').insert({kind:'cliente_folder',key:nrmCliente(f.name),value:f._maybe.id}) }catch(_){}
+    try{ await supabase.from('learnings').insert({kind:'cliente_folder',key:nrmCliente(f.name),value:f._maybe.id}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
     setNewClients(list=>list.filter(x=>x.id!==f.id))
     setSyncMsg(`"${f.name}" vinculada a ${f._maybe.name} — no se crea duplicado. La app lo recuerda.`)
   }
@@ -6485,7 +6485,7 @@ function UsersView({onClose}) {
   const saveRole = async(id,role) => {
     if(!okDB(await supabase.from('user_roles').update({role}).eq('id',id),'cambiar el rol')) return
     const em=users.find(u=>u.id===id)?.email   // doble escritura: `miembros` es la fuente tenant-aware que lee el login
-    if(em) try{ okDB(await supabase.from('miembros').update({rol:role}).eq('email',em.toLowerCase()),'cambiar el rol del miembro') }catch(_){}
+    if(em) try{ okDB(await supabase.from('miembros').update({rol:role}).eq('email',em.toLowerCase()),'cambiar el rol del miembro') }catch(e){registrarError({origen:'accion',vista:'miembros',err:e})}
     setUsers(p=>p.map(u=>u.id===id?{...u,role}:u))
   }
 
@@ -6502,7 +6502,7 @@ function UsersView({onClose}) {
     if(!await appConfirm('¿Eliminar este usuario?')) return
     const em=users.find(u=>u.id===id)?.email
     if(!okDB(await supabase.from('user_roles').delete().eq('id',id),'quitar al usuario')) return
-    if(em) try{ okDB(await supabase.from('miembros').delete().eq('email',em.toLowerCase()),'quitar al miembro') }catch(_){}
+    if(em) try{ okDB(await supabase.from('miembros').delete().eq('email',em.toLowerCase()),'quitar al miembro') }catch(e){registrarError({origen:'accion',vista:'miembros',err:e})}
     setUsers(p=>p.filter(u=>u.id!==id))
   }
 
@@ -7222,7 +7222,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
       const txt = (await leerDriveTextoSA(file)).slice(0,7000)
       setPrecSel(file); setPrecTxt(txt)
       // aprende: el precedente que usas sube en el ranking (se ofrece primero la próxima vez)
-      try{ if(precFromIndex&&file.usos!=null) await supabase.from('precedentes_index').update({usos:(file.usos||0)+1}).eq('file_id',file.id) }catch(_){}
+      try{ if(precFromIndex&&file.usos!=null) await supabase.from('precedentes_index').update({usos:(file.usos||0)+1}).eq('file_id',file.id) }catch(e){registrarError({origen:'accion',vista:'precedentes_index',err:e})}
     }catch(e){ manejarDriveErr(e) }
     setPrecReading(false)
   }
@@ -7233,7 +7233,7 @@ function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEntities=[]
     setClauBusy(false)
   }
   useEffect(()=>{ if(tipo==='clausula'&&clauLib===null) cargarClausulas() },[tipo])   // carga la biblioteca al entrar a Cláusula
-  const usarClausula = (c)=>{ setPrecSel({name:c.titulo}); setPrecTxt(c.texto||''); try{ supabase.from('clausulas').update({usos:(c.usos||0)+1}).eq('id',c.id) }catch(_){} }
+  const usarClausula = (c)=>{ setPrecSel({name:c.titulo}); setPrecTxt(c.texto||''); try{ supabase.from('clausulas').update({usos:(c.usos||0)+1}).eq('id',c.id) }catch(e){registrarError({origen:'accion',vista:'clausulas',err:e})} }
   const buscarDocClausula = async()=>{
     if(clauBusy) return
     setClauBusy(true); setPrecErr(null); setPrecNeedAuth(false); setExtrMsg(null); setClauDocs(null)
@@ -7521,8 +7521,8 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql en Supabase.':(e?.message||'No se pudo guardar.')) }
     setSaving(false)
   }
-  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ if(!okDB(await supabase.from('plazos').update({estado:nv}).eq('id',p.id),'actualizar el plazo')) return; logActividad(nv==='cumplido'?'plazos.cumplido':'plazos.reabierto',{tabla:'plazos',id:p.id,detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
-  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ if(!okDB(await supabase.from('plazos').delete().eq('id',p.id),'borrar el plazo')) return; logActividad('plazos.borrado',{detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
+  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ if(!okDB(await supabase.from('plazos').update({estado:nv}).eq('id',p.id),'actualizar el plazo')) return; logActividad(nv==='cumplido'?'plazos.cumplido':'plazos.reabierto',{tabla:'plazos',id:p.id,detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(e){registrarError({origen:'accion',vista:'plazos',err:e})}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
+  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ if(!okDB(await supabase.from('plazos').delete().eq('id',p.id),'borrar el plazo')) return; logActividad('plazos.borrado',{detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(e){registrarError({origen:'accion',vista:'plazos',err:e})}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
   const agregarManual=async()=>{
     if(!mF.titulo.trim()||mSaving) return
     setMSaving(true); setExtErr(null)
@@ -7665,13 +7665,13 @@ function LearningCenter({clients=[], onClose}){
   const togG = k => setOpenG(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
   const grupos = useMemo(()=>{ if(!rows) return null; const g={}; rows.forEach(r=>{ if(!KINDS[r.kind]) return; (g[r.kind]=g[r.kind]||[]).push(r) }); return Object.keys(KINDS).filter(k=>g[k]).map(k=>({k,...KINDS[k],items:g[k]})) },[rows])
   const keyTxt = r => r.kind==='gasto_proyecto' ? (String(r.key).split('::')[1]||r.key) : r.key
-  const olvidar = async r => { if(!DEMO){ try{ await supabase.from('learnings').delete().eq('id',r.id) }catch(_){} } setRows(p=>(p||[]).filter(x=>x.id!==r.id)) }
+  const olvidar = async r => { if(!DEMO){ try{ await supabase.from('learnings').delete().eq('id',r.id) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} } setRows(p=>(p||[]).filter(x=>x.id!==r.id)) }
   const editar = r => { setEdId(r.id); setEdVal(r.value||''); setEdSub(r.meta&&r.meta.subcategory||'') }
   const cancelar = () => { setEdId(null); setEdVal(''); setEdSub('') }
   const guardar = async r => {
     const nv = (edVal||'').trim(); if(!nv) return
     const nm = r.kind==='costo_oficina' ? {...(r.meta||{}), subcategory:(edSub||'').trim()||undefined} : r.meta
-    if(!DEMO){ try{ await supabase.from('learnings').update({value:nv,meta:nm,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(_){} }
+    if(!DEMO){ try{ await supabase.from('learnings').update({value:nv,meta:nm,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
     setRows(p=>(p||[]).map(x=>x.id===r.id?{...x,value:nv,meta:nm}:x)); cancelar()
   }
   if(grupos===null) return <div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>
@@ -8681,7 +8681,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose, orige
     return `<div style='max-width:600px;margin:0 auto;padding:26px 30px;font-family:DM Sans,Arial,sans-serif;color:#3D3D3D'><div style='display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #003C50;padding-bottom:14px;margin-bottom:22px'><div style='font-size:16px;font-weight:700;color:#003C50'>${BRAND.nombre}</div>${badge}</div><p style='font-size:13px;line-height:1.65'>Estimados,</p><p style='font-size:13px;line-height:1.65'>Espero que estén muy bien. En el marco de nuestra asesoría permanente, queremos proponerles una actualización del honorario mensual.</p><p style='font-size:13px;line-height:1.65'>Durante ${anio} la dedicación efectiva a sus asuntos ha promediado <b>${fh(r.avg)} al mes</b>, por sobre las <b>${fh(r.incl)}</b> contempladas en el plan actual de <b>${hoyStr} mensuales</b>. En consideración a ello, proponemos ajustar el honorario a <b>${nuevoStr} mensuales</b>, a partir del próximo período.</p><p style='font-size:13px;line-height:1.65'>Quedamos atentos a comentar los detalles y a cualquier ajuste que estimen pertinente.</p><p style='font-size:13px;line-height:1.65'>Saludos cordiales,<br><b>${BRAND.nombre}</b></p>${footer}</div>`
   }
   const verCarta = r => {
-    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'ver').catch(()=>{}) }catch(_){} }
+    setDecid(d=>({...d,[r.cid]:'ver'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'ver').catch(()=>{}) }catch(e){registrarError({origen:'accion',vista:'repricing_decision',err:e})} }
     const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Propuesta de reajuste — ${cn(r.cid).replace(/</g,'&lt;')}</title><style>@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:#003C50;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer}</style></head><body style='margin:0;background:#fff'>${cartaInner(r,false)}<button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
     const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() }
   }
@@ -8694,11 +8694,11 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose, orige
     setSendingCid(r.cid)
     try{
       const via = await enviarComoUsuario({ to:to.trim(), subject:`Propuesta de actualización de honorarios — ${BRAND.nombre}`, html:cartaInner(r,true), text:'Adjuntamos nuestra propuesta de actualización del honorario mensual.' })
-      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await setLearningKV('repricing_decision',String(r.cid),'enviado') }catch(_){} }; appAlert(txtEnviado(via,{que:'Propuesta',g:'a',para:to.trim()})) }
+      if(via){ setDecid(d=>({...d,[r.cid]:'enviado'})); if(!DEMO){ try{ await setLearningKV('repricing_decision',String(r.cid),'enviado') }catch(e){registrarError({origen:'accion',vista:'repricing_decision',err:e})} }; appAlert(txtEnviado(via,{que:'Propuesta',g:'a',para:to.trim()})) }
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)) }
     setSendingCid(null)
   }
-  const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'descartado').catch(()=>{}) }catch(_){} } }
+  const descartar = r => { setDecid(d=>({...d,[r.cid]:'descartado'})); if(!DEMO){ try{ setLearningKV('repricing_decision',String(r.cid),'descartado').catch(()=>{}) }catch(e){registrarError({origen:'accion',vista:'repricing_decision',err:e})} } }
   const visibles = recos.filter(r=>decid[r.cid]!=='descartado')
 
   return (
@@ -9718,7 +9718,7 @@ export default function App() {
   },[setModal])
   // Cerrar el editor de cliente: si está como PÁGINA (tab editCliente) vuelve al lugar exacto (goBack); si aún fuera un modal, lo cierra.
   const closeClientEditor=useCallback(()=>{ if(tab==='editCliente') goBack(); else setModal(null) },[tab,goBack])
-  const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(_){} return next }) },[])
+  const recordRecent=useCallback((item)=>{ if(!item||!item.id||item.type==='view') return; setNavRecents(p=>{ const next=[{type:item.type,id:item.id,label:item.label},...p.filter(x=>!(x.type===item.type&&String(x.id)===String(item.id)))].slice(0,6); try{localStorage.setItem('nav_recents',JSON.stringify(next))}catch(e){registrarError({origen:'accion',vista:'petty_cash',err:e})} return next }) },[])
   // Página "Prioridades financieras": estado en App (se abre desde el menú Finanzas del sidebar y ⌘K). La página vive dentro del Dashboard (early-return), así que abrir = ir a Inicio + prioOpen.
   const [prioOpen,setPrioOpen]=useState(false)
   const abrirPrioridades=useCallback(()=>{ setTab('dashboard'); setPrioOpen(true) },[setTab])
@@ -9804,7 +9804,7 @@ export default function App() {
       const {data,error}=await supabase.functions.invoke('clientes-drive-sync',{body:{}})
       if(!alive||error||data?.error) return
       const c=await getClients(); if(alive&&c) setClients(c)
-    }catch(_){} })()
+    }catch(e){registrarError({origen:'accion',vista:'clientes-drive-sync',err:e})} })()
     return ()=>{alive=false} },[userRole])
   // Confirmar fusión propuesta: el abogado responsable abre el link del correo (?merge=token) → revisa las dos fichas y aprueba/descarta.
   useEffect(()=>{ if(DEMO||!user) return; let done=false
@@ -9888,7 +9888,7 @@ export default function App() {
       setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado'}:x))
       logActividad('ventas.cerrar_trabajo',{tabla:'sales',id:s.id,detalle:{title:`«${s.title||'Trabajo'}» de ${cli} cerrado desde el correo del lunes`}})
     })()
-  }catch(_){} },[salesAll,clients,userRole,deepLinkTick])
+  }catch(e){registrarError({origen:'accion',vista:'sales',err:e})} },[salesAll,clients,userRole,deepLinkTick])
   // Deep-links del correo "Aviso de gastos sin fondos" (edge aviso-fondos):
   //   ?pedirfondos=<id>&monto=<n> → abre la solicitud de fondos al cliente ya armada.
   //   ?pausafondos=<id>           → "Ya lo hablé": pausa los avisos de ese cliente 15 días (learnings aviso_fondos_pausa).
@@ -9899,7 +9899,7 @@ export default function App() {
     if(pid){ const m=Math.round(Number(qs.get('monto'))||0)||null; setModal({type:'solicitarFondos',data:{client:c,sale:null,monto:m,responsable:c.abogado_responsable||null}}); return }
     const hasta=isoLocal(Date.now()+15*86400000)
     setLearningKV('aviso_fondos_pausa',String(c.id),hasta).then(()=>{ logActividad('fondos.aviso_pausado',{tabla:'clients',id:c.id,detalle:{cliente:c.name,hasta}}); appAlert(`Listo: los avisos de fondos de ${c.name} quedan pausados hasta el ${fmtFechaDMY(hasta)}.`) })
-  }catch(_){} },[clients])
+  }catch(e){registrarError({origen:'accion',vista:'aviso_fondos_pausa',err:e})} },[clients])
   const [paletteOpen,setPaletteOpen]=useState(false)
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
@@ -10456,7 +10456,7 @@ export default function App() {
         const hoy = Date.parse(new Date().toISOString().slice(0,10))
         const learn = items.map(it=>({ titulo:it.titulo, dias: it.due?Math.round((Date.parse(it.due)-hoy)/86400000):null, nota:it.nota||'' }))
         await setLearningKV('propuesta_tareas', String(area||'General'), JSON.stringify(learn))
-      }catch(_){}
+      }catch(e){registrarError({origen:'accion',vista:'propuesta_tareas',err:e})}
       setModal(null)
       appAlert(`${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}.\n`+(via?txtEnviado(via,{que:'Correo', para:to}):to?`El correo NO se envió.\n\n${TXT_REINGRESO()}`:'Sin correo: el responsable no tiene correo registrado.'))
     }catch(e){ appAlert('Error: '+(e?.message||e)) }
@@ -10678,7 +10678,7 @@ export default function App() {
           const resto=todas.slice(1).map(c=>c.id); if(resto.length){ q=await supabase.from('conciliacion').delete().in('id',resto); if(q.error) throw q.error }
         } else if((cP||[]).length){ const {error}=await supabase.from('conciliacion').update({gasto_id:orig.id}).in('id',cP.map(c=>c.id)); if(error) throw error }
         // Proyecto y venta de antes del reparto (guardados en la bitácora al repartir).
-        let antes=null; try{ const {data:lg}=await supabase.from('activity_log').select('detail').eq('action','fondos.repartido').eq('record_id',orig.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); antes=lg?.detail?JSON.parse(lg.detail).antes||null:null }catch(_){}
+        let antes=null; try{ const {data:lg}=await supabase.from('activity_log').select('detail').eq('action','fondos.repartido').eq('record_id',orig.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); antes=lg?.detail?JSON.parse(lg.detail).antes||null:null }catch(e){registrarError({origen:'accion',vista:'activity_log',err:e})}
         patchO={amount:total, ...(antes&&'project' in antes?{project:antes.project, sale_id:antes.sale_id||null}:{})}
         let r=await supabase.from('expenses').update(patchO).eq('id',orig.id); if(r.error) throw r.error
         r=await supabase.from('expenses').update({deleted_at:ahora}).in('id',ids); if(r.error) throw r.error
@@ -10897,7 +10897,7 @@ export default function App() {
       if(error) throw error
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:clientId,entity_id:null}:e))
       // Aprende para futuras cargas: el nombre crudo (src_name) de cada gasto asignado → este cliente, igual que el modal de carga.
-      try{ const nombres=[...new Set(ids.map(id=>(expenses||[]).find(x=>x.id===id)?.src_name).filter(Boolean).map(n=>String(n).toLowerCase().trim()).filter(n=>n.length>1))]; nombres.forEach(n=>handleLearnAlias(n,clientId)) }catch(_){}
+      try{ const nombres=[...new Set(ids.map(id=>(expenses||[]).find(x=>x.id===id)?.src_name).filter(Boolean).map(n=>String(n).toLowerCase().trim()).filter(n=>n.length>1))]; nombres.forEach(n=>handleLearnAlias(n,clientId)) }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})}
       // Trazabilidad: registra cada reasignación (from→to). No rompe si la tabla expense_audit no existe aún.
       // Bitácora: cada asignación (también la de los limited desde «Gastos sin cliente») queda con quién la hizo y desde dónde venía.
       try{ const cn=clientId?(clients||[]).find(c=>String(c.id)===String(clientId))?.name||null:null
@@ -10905,13 +10905,13 @@ export default function App() {
       try{
         const rows = ids.map(id=>{ const e=(expenses||[]).find(x=>x.id===id); return { expense_id:id, from_client_id:e?.client_id||null, to_client_id:clientId, concept:e?.concept||null, amount:e?.amount??null, moved_by:user?.name||null } }).filter(r=>String(r.from_client_id)!==String(r.to_client_id))
         if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) }
-      }catch(_){}
+      }catch(e){registrarError({origen:'accion',vista:'expense_audit',err:e})}
       // Deshacer: devuelve cada gasto al cliente (y razón social) que tenía antes — no a "sin cliente" (antes perdía el cliente
       // de origen al deshacer una reasignación entre clientes). Deja la vuelta en la bitácora.
       setUndoToast({msg: ids.length>1?`Cliente asignado a ${ids.length} gastos`:'Cliente asignado', onUndo:async()=>{
         for(const pv of previos){ await supabase.from('expenses').update({client_id:pv.client_id, entity_id:pv.entity_id}).eq('id',pv.id) }
         setExpenses(p=>p.map(e=>{ const pv=previos.find(x=>x.id===e.id); return pv?{...e,client_id:pv.client_id,entity_id:pv.entity_id}:e }))
-        try{ const rows=previos.filter(pv=>String(pv.client_id)!==String(clientId)).map(pv=>({expense_id:pv.id,from_client_id:clientId,to_client_id:pv.client_id,concept:pv.concept,amount:pv.amount,moved_by:user?.name||null})); if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(_){}
+        try{ const rows=previos.filter(pv=>String(pv.client_id)!==String(clientId)).map(pv=>({expense_id:pv.id,from_client_id:clientId,to_client_id:pv.client_id,concept:pv.concept,amount:pv.amount,moved_by:user?.name||null})); if(rows.length){ const {data}=await supabase.from('expense_audit').insert(rows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(e){registrarError({origen:'accion',vista:'expense_audit',err:e})}
       }})
     }catch(e){ appAlert('Error: '+e.message) }
   },[expenses,clients,handleLearnAlias])
@@ -10924,8 +10924,8 @@ export default function App() {
     if(!await appConfirm(`${rows.length} gasto(s) con categoría de oficina (${cats.slice(0,4).join(', ')}${cats.length>4?'…':''}) están en otro cliente.\n\n¿Moverlos al cliente Oficina (${ofi.name})? Es reversible (Deshacer).`)) return
     const prev=rows.map(r=>({id:r.id,client_id:r.client_id||null,entity_id:r.entity_id||null})); const ids=rows.map(r=>r.id)
     try{ const {error}=await supabase.from('expenses').update({client_id:ofi.id,entity_id:null}).in('id',ids); if(error) throw error; setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,client_id:ofi.id,entity_id:null}:e)) }catch(e){ appAlert('No se pudo mover: '+(e.message||e)); return }
-    try{ const auditRows=prev.filter(pr=>String(pr.client_id||'')!==String(ofi.id)).map(pr=>({expense_id:pr.id,from_client_id:pr.client_id,to_client_id:ofi.id,moved_by:user?.name||null})); if(auditRows.length){ const {data}=await supabase.from('expense_audit').insert(auditRows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(_){}
-    setUndoToast({msg:`${ids.length} gasto${ids.length!==1?'s':''} movido${ids.length!==1?'s':''} a Oficina`, onUndo: async()=>{ for(const pr of prev){ try{ await supabase.from('expenses').update({client_id:pr.client_id,entity_id:pr.entity_id}).eq('id',pr.id) }catch(_){} } setExpenses(p=>p.map(e=>{ const pr=prev.find(x=>x.id===e.id); return pr?{...e,client_id:pr.client_id,entity_id:pr.entity_id}:e })) }})
+    try{ const auditRows=prev.filter(pr=>String(pr.client_id||'')!==String(ofi.id)).map(pr=>({expense_id:pr.id,from_client_id:pr.client_id,to_client_id:ofi.id,moved_by:user?.name||null})); if(auditRows.length){ const {data}=await supabase.from('expense_audit').insert(auditRows).select(); if(data) setExpenseAudit(p=>[...data,...(p||[])].slice(0,200)) } }catch(e){registrarError({origen:'accion',vista:'expense_audit',err:e})}
+    setUndoToast({msg:`${ids.length} gasto${ids.length!==1?'s':''} movido${ids.length!==1?'s':''} a Oficina`, onUndo: async()=>{ for(const pr of prev){ try{ await supabase.from('expenses').update({client_id:pr.client_id,entity_id:pr.entity_id}).eq('id',pr.id) }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})} } setExpenses(p=>p.map(e=>{ const pr=prev.find(x=>x.id===e.id); return pr?{...e,client_id:pr.client_id,entity_id:pr.entity_id}:e })) }})
   },[clients])
 
   // Consulta pendiente sobre un gasto (misma marca que la fila del movimiento): queda en Gastos › Revisar › «Por consultar».
@@ -11036,9 +11036,9 @@ export default function App() {
           const fname=`${prefix} · ${f.name}`.slice(0,250)
           const up=await driveUpload(token, folders.tareas, file, fname)
           await supabase.from('task_attachments').insert({task_id:taskId, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null})
-        }catch(_){}
+        }catch(e){registrarError({origen:'accion',vista:'task_attachments',err:e})}
       }
-    }catch(_){}
+    }catch(e){registrarError({origen:'accion',vista:'task_attachments',err:e})}
   },[clients,user])
 
   // Reprogramar una tarea (arrastrar a otro día o deslizar en el celular): se ve al instante y se guarda por detrás; si falla, vuelve.
@@ -11199,7 +11199,7 @@ export default function App() {
             }else{
               await supabase.from('terceros_pagos').insert({...fields,created_by:user?.name||null})
             }
-            if(comP>0){ try{ await setLearningKV('tercero_comision_pct', String(_terceroProv), String(comP)) }catch(_){} }   // aprende el % por externo
+            if(comP>0){ try{ await setLearningKV('tercero_comision_pct', String(_terceroProv), String(comP)) }catch(e){registrarError({origen:'accion',vista:'tercero_comision_pct',err:e})} }   // aprende el % por externo
           }else if(previas.length){
             await supabase.from('terceros_pagos').delete().in('id',previas.map(t=>t.id))
           }
@@ -11578,7 +11578,7 @@ export default function App() {
         const patch={}
         if(row.sale_id && !real?.sale_id) patch.sale_id=row.sale_id
         if(row.entity_id && !real?.entity_id) patch.entity_id=row.entity_id
-        if(Object.keys(patch).length){ try{ await supabase.from('billing').update({...patch,updated_at:new Date().toISOString()}).eq('id',realId); setBilling(p=>p.map(b=>b.id===realId?{...b,...patch}:b)) }catch(_){} }
+        if(Object.keys(patch).length){ try{ await supabase.from('billing').update({...patch,updated_at:new Date().toISOString()}).eq('id',realId); setBilling(p=>p.map(b=>b.id===realId?{...b,...patch}:b)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})} }
       }
       // Comisiones de la programada: el trigger de la base las pasa a la factura real al registrar replaced_by_id. Se guardan sus ids para Deshacer.
       const movidas=realId?(terceros||[]).filter(t=>String(t.billing_id)===String(progId)).map(t=>t.id):[]
@@ -11617,8 +11617,8 @@ export default function App() {
         for(const x of alta){ try{ const u=await handleReplaceProgramada(x.prog.id, x.posterior?.id||null, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} }
         await setLearningKV('config','fantasma_barrido_last', new Date().toISOString())
         if(undos.length){ const tot=alta.reduce((a,x)=>a+(x.monto||0),0)
-          setUndoToast({msg:`Concilié ${undos.length} cuota${undos.length!==1?'s':''} ya emitida${undos.length!==1?'s':''} · ${fmt(tot)} · deshacer`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) }
-      }catch(_){}
+          setUndoToast({msg:`Concilié ${undos.length} cuota${undos.length!==1?'s':''} ya emitida${undos.length!==1?'s':''} · ${fmt(tot)} · deshacer`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(e){registrarError({origen:'accion',vista:'config',err:e})} } }}) }
+      }catch(e){registrarError({origen:'accion',vista:'config',err:e})}
     })()
   },[fantasmaResults,actualRole,billing.length,sales.length])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -11643,7 +11643,7 @@ export default function App() {
         if(row) setBilling(p=>p.some(x=>x.id===id)?p:[row,...p])
         for(const a of antPrev){ await supabase.from('anticipos').update({estado:a.estado,billing_id:a.billing_id}).eq('id',a.id) }
         if(antPrev.length) setAnticipos(p=>p.map(a=>{ const pr=antPrev.find(x=>x.id===a.id); return pr?{...a,estado:pr.estado,billing_id:pr.billing_id}:a }))
-        if(concPrev.length){ try{ await supabase.from('conciliacion').insert(concPrev) }catch(_){} }
+        if(concPrev.length){ try{ await supabase.from('conciliacion').insert(concPrev) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }
       }}
       if(opts.silent) return u
       setModal(null)
@@ -11746,7 +11746,7 @@ export default function App() {
       if(antLig.length){ const aids=antLig.map(a=>a.id); await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',aids); setAnticipos(p=>p.map(a=>aids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
       // Borrar conciliaciones de estas facturas (restaurar en el Undo).
       let concPrev=[]
-      try{ const {data}=await supabase.from('conciliacion').select('*').in('factura_id',arr); concPrev=data||[] }catch(_){}
+      try{ const {data}=await supabase.from('conciliacion').select('*').in('factura_id',arr); concPrev=data||[] }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})}
       if(concPrev.length) await supabase.from('conciliacion').delete().in('factura_id',arr)
       const {error}=await supabase.from('billing').update({deleted_at:new Date().toISOString()}).in('id',arr)
       if(error)throw error
@@ -11756,7 +11756,7 @@ export default function App() {
         setBilling(p=>{ const have=new Set(p.map(x=>x.id)); return [...rows.filter(r=>!have.has(r.id)),...p] })
         for(const a of antPrev){ await supabase.from('anticipos').update({estado:a.estado,billing_id:a.billing_id}).eq('id',a.id) }
         if(antPrev.length) setAnticipos(p=>p.map(a=>{ const pr=antPrev.find(x=>x.id===a.id); return pr?{...a,estado:pr.estado,billing_id:pr.billing_id}:a }))
-        if(concPrev.length){ try{ await supabase.from('conciliacion').insert(concPrev) }catch(_){} }
+        if(concPrev.length){ try{ await supabase.from('conciliacion').insert(concPrev) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }
       }})
     }catch(e){appAlert('Error: '+e.message)}
   },[billing,anticipos])
@@ -11787,7 +11787,7 @@ export default function App() {
       for(const r of rows){ const { error } = await supabase.from('billing').update({status:'Pagado', paid_at:pa(r)}).eq('id',r.id); if(error) throw error; await handleConciliarTerceros(r.id) }   // FLIP comisiones al depurar (estas facturas ya estaban saldadas por conciliación)
       setBilling(p=>p.map(b=>{ const r=rows.find(x=>x.id===b.id); return r?{...b,status:'Pagado',paid_at:pa(r)}:b }))
     }catch(e){ appAlert('No se pudo depurar: '+(e.message||e)); return }
-    setUndoToast({msg:`${rows.length} factura${rows.length!==1?'s':''} marcada${rows.length!==1?'s':''} como pagada${rows.length!==1?'s':''}`, onUndo: async()=>{ for(const pr of prev){ try{ await supabase.from('billing').update({status:pr.status,paid_at:pr.paid_at}).eq('id',pr.id) }catch(_){} } setBilling(p=>p.map(b=>{ const pr=prev.find(x=>x.id===b.id); return pr?{...b,status:pr.status,paid_at:pr.paid_at}:b })) }})
+    setUndoToast({msg:`${rows.length} factura${rows.length!==1?'s':''} marcada${rows.length!==1?'s':''} como pagada${rows.length!==1?'s':''}`, onUndo: async()=>{ for(const pr of prev){ try{ await supabase.from('billing').update({status:pr.status,paid_at:pr.paid_at}).eq('id',pr.id) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})} } setBilling(p=>p.map(b=>{ const pr=prev.find(x=>x.id===b.id); return pr?{...b,status:pr.status,paid_at:pr.paid_at}:b })) }})
   },[handleConciliarTerceros])
 
   // Deshacer un pago marcado por error: la factura vuelve a Pendiente (sin fecha de pago) y
@@ -11855,7 +11855,7 @@ export default function App() {
     if(cli && row.rut){ const nrx=nr(row.rut)
       let ent=(clientEntities||[]).find(e=>String(e.client_id)===String(cli.id)&&nr(e.rut)===nrx)
       if(!ent){ try{ const {data:q}=await supabase.from('client_entities').select('id,rut,name,client_id').eq('client_id',cli.id); ent=(q||[]).find(e=>nr(e.rut)===nrx) }catch(_){} }   // no la tiene el estado local → mira la base
-      if(!ent){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:cli.id,rut:row.rut,name:row.receptor||null}).select().single(); if(ne) ent=ne }catch(_){} }   // no existe → crearla (sin pisar nombre bueno; RUT único)
+      if(!ent){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:cli.id,rut:row.rut,name:row.receptor||null}).select().single(); if(ne) ent=ne }catch(e){registrarError({origen:'accion',vista:'client_entities',err:e})} }   // no existe → crearla (sin pisar nombre bueno; RUT único)
       entId=ent?.id||null }
     let created=null
     try{
@@ -11912,8 +11912,8 @@ export default function App() {
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')); if(nt)setTerceros(nt)
       // Fuente única del monto del externo = billing.monto_terceros (lo que lee/edita el editor de factura). Nuestro ingreso = amount − monto_terceros.
-      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}
-      if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }   // aprende el % por externo (ej. Rodrigo = 15)
+      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',fac.id); setBilling(p=>p.map(b=>b.id===fac.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
+      if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(e){registrarError({origen:'accion',vista:'tercero_comision_pct',err:e})} }   // aprende el % por externo (ej. Rodrigo = 15)
     }catch(e){ appAlert('La factura se registró, pero no se pudo crear la cuenta por pagar al externo: '+(e.message||e)) }
     return {factura:fac, proveedor:prov}
   },[clients,clientEntities,proveedores,handleIngresarSII,user])
@@ -11932,8 +11932,8 @@ export default function App() {
         tipo_costo:'clp', valor:payable, monto:payable, comision_pct: pct||null, comision_monto: comision||null, estado: bill.status==='Pagado'?'por_pagar':'pendiente', created_by:user?.name||null }
       const {error}=await supabase.from('terceros_pagos').insert(cp); if(error)throw error
       const {data:nt}=await selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')); if(nt)setTerceros(nt)
-      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(_){}   // fuente única del monto del externo
-      if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(_){} }
+      try{ await supabase.from('billing').update({monto_terceros:payable, ...(pct>0?{billing_type:'externo'}:{}), updated_at:new Date().toISOString()}).eq('id',bill.id); setBilling(p=>p.map(b=>b.id===bill.id?{...b,monto_terceros:payable,...(pct>0?{billing_type:'externo'}:{})}:b)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}   // fuente única del monto del externo
+      if(pct>0){ try{ await setLearningKV('tercero_comision_pct', String(prov.id), String(pct)) }catch(e){registrarError({origen:'accion',vista:'tercero_comision_pct',err:e})} }
     }catch(e){ appAlert('No se pudo asociar la factura al externo: '+(e.message||e)); return null }
     return {proveedor:prov}
   },[proveedores,terceros,user])
@@ -11971,7 +11971,7 @@ export default function App() {
       setEmitirPreview(null)
       // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.
       let driveMsg=''
-      if(r.dteXml){ try{ const dr=await subirFacturaADrive(ep.billId, r.dteXml); if(dr.rows?.length){ setBillingAttachments(p=>[...p,...dr.rows]); driveMsg='\nPDF y XML guardados en Drive (adjuntos a la factura).' } else if(dr.sinDrive){ driveMsg='\n(Conecta Drive para guardar el PDF y XML automáticamente.)' } else if(dr.err){ driveMsg=`\n(No se pudo guardar en Drive: ${dr.err})` } }catch(_){} }
+      if(r.dteXml){ try{ const dr=await subirFacturaADrive(ep.billId, r.dteXml); if(dr.rows?.length){ setBillingAttachments(p=>[...p,...dr.rows]); driveMsg='\nPDF y XML guardados en Drive (adjuntos a la factura).' } else if(dr.sinDrive){ driveMsg='\n(Conecta Drive para guardar el PDF y XML automáticamente.)' } else if(dr.err){ driveMsg=`\n(No se pudo guardar en Drive: ${dr.err})` } }catch(e){registrarError({origen:'accion',vista:'billing',err:e})} }
       // Automatización emitir→enviar: si el cliente tiene destinatario recordado, ofrece mandar la factura de inmediato (con PDF del DTE). Compuerta humana.
       const fact=(billing||[]).find(x=>String(x.id)===String(ep.billId))
       let dest=null
@@ -12319,7 +12319,7 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='notificaciones'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Notificaciones' onBack={()=>setModal(null)} maxW={640}><NotificacionesPagina user={user} isAdmin={userRole==='admin'}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='plazos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Plazos y obligaciones' onBack={()=>setModal(null)} maxW={1120}><PlazosModal clients={clients} onClose={()=>setModal(null)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='revisionDatos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisión de datos' onBack={()=>setModal(null)} maxW={1120}><RevisionDatosModal onQuitarRsGasto={rdLog('revision.quitarRsGasto',async(e)=>{ const {error}=await supabase.from('expenses').update({entity_id:null}).eq('id',e.id); if(error) throw error; setExpenses(p=>p.map(x=>x.id===e.id?{...x,entity_id:null}:x)) })} onReabrirTrabajo={rdLog('revision.reabrirTrabajo',async(s)=>{ const {error}=await supabase.from('sales').update({status:'Activo',updated_at:new Date().toISOString()}).eq('id',s.id); if(error) throw error; setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Activo'}:x)) })} onEnlazarComisiones={rdLog('revision.enlazarComisiones',async(doc,ids)=>{ if(DEMO) return; const patch={factura_numero:String(doc.folio),factura_fecha:doc.fecha_emision||null}; const {error}=await supabase.from('terceros_pagos').update(patch).in('id',ids); if(error) throw error; setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,...patch}:t)) })} expenses={expenses} tasks={tasks} onCerrarTrabajo={rdLog('revision.cerrarTrabajo',async(s)=>{ const {error}=await supabase.from('sales').update({status:'Terminado',updated_at:new Date().toISOString()}).eq('id',s.id); if(error) throw error; setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado'}:x)) })} onCubrirCuotas={handleCubrirCuotas} onConsumeAnticipos={handleConsumeAnticipos} billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} conciliacion={conciliacion} terceros={terceros} onOpenMov={handleOpenConciliacion} onResolverDupAnticipo={rdLog('revision.resolverDupAnticipo',handleResolverDupAnticipo)} onOpenClientFicha={(id)=>handleOpenClientFicha(id)} onOpenFactura={(b)=>setModal({type:'billing',data:b})} onGuardarClientRut={rdLog('revision.guardarClientRut',async(clientId,rut)=>{ await supabase.from('clients').update({rut,updated_at:new Date().toISOString()}).eq('id',clientId); setClients(p=>p.map(x=>String(x.id)===String(clientId)?{...x,rut}:x)) })} onPasarTerminado={rdLog('revision.pasarTerminado',async(s,honorario)=>{ await supabase.from('sales').update({status:'Terminado',amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',s.id); setSales(p=>p.map(x=>String(x.id)===String(s.id)?{...x,status:'Terminado',amount_clp:honorario}:x)) })} onActualizarHonorario={rdLog('revision.actualizarHonorario',async(saleId,honorario)=>{ await supabase.from('sales').update({amount_clp:honorario,updated_at:new Date().toISOString()}).eq('id',saleId); setSales(p=>p.map(x=>String(x.id)===String(saleId)?{...x,amount_clp:honorario}:x)) })} onFixVencimiento={rdLog('revision.fixVencimiento',async(b)=>{ if(!b?.issued_at) return; const nd=dueFromIssued(b.issued_at); const ns=esVencidaB({...b,due:nd})?'Vencido':(b.status==='Vencido'?'Pendiente':b.status); await supabase.from('billing').update({due:nd,status:ns,updated_at:new Date().toISOString()}).eq('id',b.id); setBilling(p=>p.map(x=>String(x.id)===String(b.id)?{...x,due:nd,status:ns}:x)) })} onResolverCuotaTramo={rdLog('revision.resolverCuotaTramo',async(s,mode,exceso)=>{
-          if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(_){} } return }
+          if(mode==='ignorar'){ if(!DEMO){ try{ await setLearningKV('data_health','cuotatramo:'+s.id,'distintos') }catch(e){registrarError({origen:'accion',vista:'data_health',err:e})} } return }
           // reducir: bajar las cuotas Programadas por el exceso, la más antigua primero (FIFO, como cuotasCubiertasVenta: el tramo ya
           // emitido reemplaza a la cuota que vencía antes); si llega a 0 se anula. Reversible (guarda el estado previo en learnings).
           const progs=billing.filter(b=>String(b.sale_id)===String(s.id)&&b.status==='Programada'&&!b.deleted_at).sort((a,b)=>String(a.due||'9999').localeCompare(String(b.due||'9999')))
@@ -12327,16 +12327,16 @@ export default function App() {
           for(const b of progs){ if(rem<=0) break; const cur=Math.round(montoFactura(b)); const cut=Math.min(rem,cur); const na=cur-cut; rem-=cut; changes.push({id:b.id, from:cur, to:na, del:na<=0}) }
           if(!changes.length) return
           if(!DEMO){ for(const c of changes){ await supabase.from('billing').update(c.del?{deleted_at:new Date().toISOString()}:{amount:c.to,updated_at:new Date().toISOString()}).eq('id',c.id) }
-            try{ await setLearningKV('data_health','cuotatramo_undo:'+s.id,JSON.stringify(changes)) }catch(_){} }
+            try{ await setLearningKV('data_health','cuotatramo_undo:'+s.id,JSON.stringify(changes)) }catch(e){registrarError({origen:'accion',vista:'data_health',err:e})} }
           setBilling(p=>p.map(x=>{ const c=changes.find(cc=>String(cc.id)===String(x.id)); return c?(c.del?{...x,deleted_at:new Date().toISOString()}:{...x,amount:c.to}):x }))
         })} onResolverGlosa={rdLog('revision.resolverGlosa',async(key,categoria)=>{ if(DEMO) return
           // deja la clave con UN solo valor canónico: borra las filas en conflicto e inserta la elegida. No toca gastos ya clasificados; corrige la sugerencia futura.
-          try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(_){}
-        })} onRetirarFantasmas={rdLog('revision.retirarFantasmas',async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(_){} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(_){} } }}) })} onDismissFantasma={rdLog('revision.dismissFantasma',async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(_){} })}/><div style={{marginTop:12}}><BitacoraLista prefijo='revision.' titulo='Resueltas · historial' etiquetas={{'revision.resolverDupAnticipo':'Anticipo duplicado resuelto','revision.guardarClientRut':'RUT guardado en la ficha','revision.pasarTerminado':'Venta pasada a Terminado','revision.actualizarHonorario':'Honorario ajustado a lo facturado','revision.fixVencimiento':'Vencimiento corregido','revision.resolverCuotaTramo':'Cuota programada + tramo resuelto','revision.resolverGlosa':'Glosa definida','revision.retirarFantasmas':'Cuotas ya emitidas retiradas','revision.dismissFantasma':'Cuota marcada como pendiente'}} vacio='Aún no hay resoluciones registradas.'/></div></FlujoPagina>}
+          try{ await supabase.from('learnings').delete().eq('kind','costo_oficina').eq('key',key); await supabase.from('learnings').insert({kind:'costo_oficina',key,value:categoria,updated_at:new Date().toISOString()}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
+        })} onRetirarFantasmas={rdLog('revision.retirarFantasmas',async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} } }}) })} onDismissFantasma={rdLog('revision.dismissFantasma',async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} })}/><div style={{marginTop:12}}><BitacoraLista prefijo='revision.' titulo='Resueltas · historial' etiquetas={{'revision.resolverDupAnticipo':'Anticipo duplicado resuelto','revision.guardarClientRut':'RUT guardado en la ficha','revision.pasarTerminado':'Venta pasada a Terminado','revision.actualizarHonorario':'Honorario ajustado a lo facturado','revision.fixVencimiento':'Vencimiento corregido','revision.resolverCuotaTramo':'Cuota programada + tramo resuelto','revision.resolverGlosa':'Glosa definida','revision.retirarFantasmas':'Cuotas ya emitidas retiradas','revision.dismissFantasma':'Cuota marcada como pendiente'}} vacio='Aún no hay resoluciones registradas.'/></div></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='ajuste'&&<FlujoPagina origen={origenCli(pagina.data?.name)} titulo='Ajustar saldo' ctx={origenCli(pagina.data?.name)!==pagina.data?.name?(pagina.data?.name||null):null} onBack={()=>setModal(null)} maxW={980}><AjusteModal asPage expenses={expenses} client={pagina.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);logActividad('clientes.ajuste_saldo',{tabla:'clients',id:f.client_id,detalle:{monto:f.amount,motivo:f.concept}});setModal(null)}} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='conciliar'&&<FlujoPagina origen={origenCli(pagina.data?.client?.name)} titulo='Duplicados' ctx={origenCli(pagina.data?.client?.name)!==pagina.data?.client?.name?(pagina.data?.client?.name||null):null} onBack={()=>setModal(null)} maxW={1180}><ConciliarFacturasModal asPage scope={pagina.data?.client?billing.filter(b=>String(b.client_id)===String(pagina.data.client.id)):billing} clientId={pagina.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='clienteDrive'&&<FlujoPagina origen={origenNav('Clientes')} titulo='Sincronización con Drive' onBack={()=>setModal(null)} maxW={980}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onChanged={async()=>{const c=await getClients();setClients(c)}} onClose={()=>setModal(null)}/></FlujoPagina>}
-        {tab==='flujo'&&pagina?.type==='fusionarClientes'&&<FlujoPagina origen={origenCli(clients.find(c=>String(c.id)===String(pagina.data?.preA))?.name)} titulo={pagina.pending?'Confirmar fusión':'Fusionar clientes'} onBack={()=>setModal(null)} maxW={760}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={pagina.pending||null} preA={pagina.data?.preA||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(_){}}}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='fusionarClientes'&&<FlujoPagina origen={origenCli(clients.find(c=>String(c.id)===String(pagina.data?.preA))?.name)} titulo={pagina.pending?'Confirmar fusión':'Fusionar clientes'} onBack={()=>setModal(null)} maxW={760}><FusionarModal clients={clients} billing={billing} sales={sales} expenses={expenses} tasks={tasks} clientEntities={clientEntities} proyectosCartera={proyectosCartera} user={user} pending={pagina.pending||null} preA={pagina.data?.preA||null} onClose={()=>setModal(null)} onMerged={async()=>{try{const c=await getClients();if(c)setClients(c)}catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})}}}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='sale'&&(()=>{ const d=pagina.data||{}; const cli=d.client_id?clients.find(c=>String(c.id)===String(d.client_id)):null
           const titulo=d._activandoPropuesta?'Activar propuesta':d.id?(d.status==='Propuesta'?'Propuesta':d.status==='Borrador'?'Borrador':'Venta'):(d.status==='Propuesta'?'Nueva propuesta':'Nueva venta')
           const live=d.id?sales.find(x=>String(x.id)===String(d.id)):null

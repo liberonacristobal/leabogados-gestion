@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
-import { AsignarClienteInline, Modal, NOTA_DIRIGIDO, _fechaISO, canonOtNN, cargarAdminsEstudio, claudeCall, driveCall, enviarComoUsuario, learnPut, normRut, pillPersonaSty, proyectoSeguro, saldoCliente, setLearningKV, txtEnviado, useAprendidosVenta } from '../lib/compartido.jsx'
+import { AsignarClienteInline, Modal, NOTA_DIRIGIDO, _fechaISO, canonOtNN, cargarAdminsEstudio, claudeCall, driveCall, enviarComoUsuario, learnPut, normRut, pillPersonaSty, proyectoSeguro, saldoCliente, setLearningKV, txtEnviado, useAprendidosVenta, registrarError } from '../lib/compartido.jsx'
 
 // Compareciente vacío o de relleno ("N/A", "S/N", "-"): no identifica a nadie → no se propaga ni se aprende como alias.
 export const sinNombreReal = s => !String(s||'').replace(/^\s*(n\/?a\.?|s\/?n|sin (nombre|datos)|-+)\s*$/i,'').trim()
@@ -333,7 +333,7 @@ export function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],bi
   // Aprende: requirente → cliente (learning notaria_alias), para que la próxima OT de ese requirente venga sugerida.
   const learnNota = async (row, clientId) => {
     const key=String(row?.requirente||'').trim(); if(sinNombreReal(key)||!clientId||DEMO) return
-    try{ await supabase.from('learnings').insert({kind:'notaria_alias',key,value:String(clientId)}); setNotaAlias(p=>[...p,{key,value:String(clientId)}]) }catch(_){}
+    try{ await supabase.from('learnings').insert({kind:'notaria_alias',key,value:String(clientId)}); setNotaAlias(p=>[...p,{key,value:String(clientId)}]) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
   }
 
   // Nivel 4: lote a Claude (Opus) para nombres sin resolver + corrección de conceptos.
@@ -516,7 +516,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
     if(!pick) return
     const nr = normRut(pick.rut); if(!nr) return
     if((clientEntities||[]).some(e=>normRut(e.rut)===nr)) return   // ese RUT ya está cargado → no duplicar (regla anti-duplicados)
-    try{ await supabase.from('client_entities').insert({client_id:clientId, name:pick.nombre, rut:pick.rut}); onClientsUpdate&&onClientsUpdate() }catch(_){}
+    try{ await supabase.from('client_entities').insert({client_id:clientId, name:pick.nombre, rut:pick.rut}); onClientsUpdate&&onClientsUpdate() }catch(e){registrarError({origen:'accion',vista:'client_entities',err:e})}
   }
   // Abogado de la notaría → miembro del estudio (para el responsable del cliente).
   const abogadoNotaMap = raw => { const s=catNorm(raw).replace(/\s/g,''); if(!s||s==='ninguno'||s==='total') return null; if(s.includes('escalamarcet')||s.includes('erasmo')) return 'Erasmo'; if(s.includes('campero')||s.includes('martin')) return 'Martín'; if(s.includes('liberonapena')||s.includes('cristobal')) return 'Cristóbal'; return null }
@@ -524,7 +524,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const setRespNota = async (row, clientId) => {
     if(!notaria || DEMO || !clientId || !row?.abogadoResp) return
     const c = clients.find(x=>String(x.id)===String(clientId)); if(!c || (c.abogado_responsable||'').trim()) return
-    try{ await supabase.from('clients').update({abogado_responsable:row.abogadoResp}).eq('id',clientId); onClientsUpdate&&onClientsUpdate() }catch(_){}
+    try{ await supabase.from('clients').update({abogado_responsable:row.abogadoResp}).eq('id',clientId); onClientsUpdate&&onClientsUpdate() }catch(e){registrarError({origen:'accion',vista:'clients',err:e})}
   }
 
   // Buscar en Drive: busca el compareciente en los documentos y SUBE por las carpetas hasta una cuyo nombre sea un cliente.

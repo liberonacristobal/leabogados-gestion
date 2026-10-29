@@ -12,7 +12,7 @@ import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
@@ -49,7 +49,7 @@ export async function conciliarPagoComisiones(m, ids, sum){
   const {error:e2}=await supabase.from('terceros_pagos').update({estado:'pagado',pagado_at:String(m.fecha).slice(0,10),movimiento_id:m.id}).in('id',ids)
   if(e2){ await supabase.from('conciliacion').delete().eq('id',cc.id); throw e2 }
   try{ const {data:rs}=await supabase.from('terceros_pagos').select('id,monto,liquido,retencion,bhe_id').in('id',ids)
-    for(const t of (rs||[])){ const pt=reajusteBHEPago(t,m.fecha); if(pt) await supabase.from('terceros_pagos').update(pt).eq('id',t.id) } }catch(_){}
+    for(const t of (rs||[])){ const pt=reajusteBHEPago(t,m.fecha); if(pt) await supabase.from('terceros_pagos').update(pt).eq('id',t.id) } }catch(e){registrarError({origen:'accion',vista:'terceros_pagos',err:e})}
   const aplicado=(Number(m.monto_conciliado)||0)+sum
   const estado=(Math.abs(Number(m.monto)||0)-aplicado)<=1?'conciliado':'parcial'
   const {error:e3}=await supabase.from('cartola_movimientos').update({categoria:m.categoria||'Proveedor',monto_conciliado:aplicado,estado}).eq('id',m.id)
@@ -575,12 +575,12 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           for(const r of (en.rellenarOp||[])) await supabase.from('cartola_movimientos').update({n_operacion:r.n_operacion}).eq('id',r.id).is('n_operacion',null)   // la fila cargada sin n° de operación lo recibe del archivo
           for(let i=0;i<nuevosRows.length;i+=200){ const { error } = await supabase.from('cartola_movimientos').upsert(nuevosRows.slice(i,i+200),{onConflict:'hash',ignoreDuplicates:true}); if(error) throw error }
           // Registro de la carga con su cuenta y saldos (la carga manual no lo dejaba): alimenta la alerta de cartolas por cuenta.
-          if(en.ok&&en.minF){ try{ await supabase.from('cartola_cargas').insert({ fecha_desde:en.minF, fecha_hasta:en.maxF, movimientos_n:en.total||0, origen:'manual', archivo:en.file||null, cuenta:en.cuenta||null, rol_cuenta:en.rol||null, saldo_inicial:en.saldoInicial, saldo_final:en.saldoFinal, total_cargos:en.totalCargos, total_abonos:en.totalAbonos, cargado_por:user?.email||null }) }catch(_){} }
+          if(en.ok&&en.minF){ try{ await supabase.from('cartola_cargas').insert({ fecha_desde:en.minF, fecha_hasta:en.maxF, movimientos_n:en.total||0, origen:'manual', archivo:en.file||null, cuenta:en.cuenta||null, rol_cuenta:en.rol||null, saldo_inicial:en.saldoInicial, saldo_final:en.saldoFinal, total_cargos:en.totalCargos, total_abonos:en.totalAbonos, cargado_por:user?.email||null }) }catch(e){registrarError({origen:'accion',vista:'cartola_cargas',err:e})} }
           const {nuevosRows:_omit, rellenarOp:_ro, minF:_a, maxF:_b, total:_c, saldoInicial:_d, saldoFinal:_e, totalAbonos:_f, totalCargos:_g, ...rep}=en; reps.push(rep)
         }catch(e){ reps.push({ file:en.file, ok:false, error:e.message }) }
       }
       // Traspasos entre cuentas propias: internos solo con su movimiento espejo en la otra cuenta (función de la base).
-      try{ await supabase.rpc('emparejar_traspasos_propios',{}) }catch(_){}
+      try{ await supabase.rpc('emparejar_traspasos_propios',{}) }catch(e){registrarError({origen:'accion',vista:'cartola_cargas',err:e})}
       setReportes(reps); setCargaPreview(null)
       await cargar()
     }catch(e){ appAlert('Error al guardar: '+e.message) }
@@ -855,7 +855,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
   const marcaPago = (factura, aplicadoTotal) => factura.status!=='Pagado' && aplicadoTotal >= (factura.amount||0)-TOL
   // Registro auditable de quién concilió: update RESILIENTE (si la columna created_by aún no existe, falla en
   // silencio y NO rompe la conciliación). Lo llaman los reconciliar* tras crear cada fila. El 'cómo' va en origen, el 'cuándo' en created_at.
-  const marcaQuien = (crId)=>{ if(!crId||!user?.email) return; try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',crId).then(()=>{},()=>{}) }catch(_){} }
+  const marcaQuien = (crId)=>{ if(!crId||!user?.email) return; try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',crId).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }
   // Aplica un abono (o su resto) a una factura: crea fila conciliacion, marca la factura y avanza el estado del movimiento.
   const reconciliar = async(mov, factura, origen='manual')=>{
     if(busy) return
@@ -1129,7 +1129,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     try{
       await supabase.from('expenses').update({ reembolso_fondo_id:fondoId }).in('id', gastoIds)
       setExpenses&&setExpenses(p=>p.map(e=>gastoIds.includes(e.id)?{...e,reembolso_fondo_id:fondoId}:e))
-    }catch(_){}
+    }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})}
   }
   const devolucionGastos = async(mov, gastoIds)=>{
     if(busy) return
@@ -1416,7 +1416,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id); if(me) throw me
       setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x)); setOfiFor&&setOfiFor(null)
-    }catch(e){ for(const c of creados){ try{ await supabase.from('conciliacion').delete().eq('id',c.conc); await supabase.from('expenses').delete().eq('id',c.gasto) }catch(_){} } appAlert('No se pudo repartir: '+(e.message||e)) }
+    }catch(e){ for(const c of creados){ try{ await supabase.from('conciliacion').delete().eq('id',c.conc); await supabase.from('expenses').delete().eq('id',c.gasto) }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})} } appAlert('No se pudo repartir: '+(e.message||e)) }
     setBusy(null)
   }
   // INGRESO de OFICINA: un abono que es ingreso de la firma (no de un cliente) — comisión recibida, subarriendo, reembolso, otros.
@@ -1723,7 +1723,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     const gl=String(m.descripcion||'')
     const cat=/notar/i.test(gl)?'Notaria':/conservador|\bcbr\b/i.test(gl)?'CBR':/registro civil/i.test(gl)?'Registro Civil':'Otro'
     await gastoPorCuentaCliente(m, clientId, ents.length===1?ents[0].id:null, ('Gasto por cuenta del cliente · '+gl).slice(0,200), cat)
-    try{ await supabase.from('cartola_movimientos').update({ categoria:'Cliente' }).eq('id',m.id); setMovs(p=>p.map(x=>x.id===m.id?{...x,categoria:'Cliente'}:x)) }catch(_){}
+    try{ await supabase.from('cartola_movimientos').update({ categoria:'Cliente' }).eq('id',m.id); setMovs(p=>p.map(x=>x.id===m.id?{...x,categoria:'Cliente'}:x)) }catch(e){registrarError({origen:'accion',vista:'cartola_movimientos',err:e})}
     setCcFam(p=>({...p,[m.id]:undefined})); setCcCat(p=>({...p,[m.id]:undefined})); setCcQ(p=>({...p,[m.id]:''}))
   }
   const quitarCargoCliente = async(m) => {
@@ -2486,7 +2486,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       if(!DEMO){ const {error}=await supabase.from('petty_cash').delete().in('id',x.ps.map(p=>p.id)); if(error) throw error }
       setPettyCash&&setPettyCash(p=>(p||[]).filter(y=>!x.ps.some(z=>z.id===y.id)))
     }catch(e){ appAlert('No se pudo quitar: '+(e.message||e)) } }
-  const marcarNoCajaCC = async(m)=>{ setCcNoCaja(p=>new Set([...p,String(m.id)])); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','cc_no_caja').eq('key',String(m.id)); await supabase.from('learnings').insert({kind:'cc_no_caja',key:String(m.id),value:'admin'}) }catch(_){} }
+  const marcarNoCajaCC = async(m)=>{ setCcNoCaja(p=>new Set([...p,String(m.id)])); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','cc_no_caja').eq('key',String(m.id)); await supabase.from('learnings').insert({kind:'cc_no_caja',key:String(m.id),value:'admin'}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
   // Acciones de confirmación (compuerta). Ajustar/fusionar/dividir dejan la caja = lo transferido, con nota y bitácora; nada se pierde.
   const confirmarCC = async(s)=>{
     if(busy) return

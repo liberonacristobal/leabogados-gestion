@@ -7,7 +7,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Fuente única: estado de una fila del import → categoría corta (para conteos por archivo y batch). No duplicar este mapa.
 export const CAT_IMPORT = {programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',sin_respaldo:'sinpdf',error:'err',sin_dte:'err',sin_factura:'err'}
@@ -1537,7 +1537,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const dd=x=>{ const d=x.paid_at||x.due; return (d&&fecha)?Math.abs((new Date(d)-new Date(fecha))/86400000):0 }
     return (billing||[]).filter(x=>!x.deleted_at&&!x.invoice_no&&x.billing_type==='comision'&&x.status==='Anticipada'&&String(x.client_id)===String(cliId)&&dd(x)<=60).sort((a,b)=>dd(a)-dd(b))[0]||null }
   // Marca una carga (staging) como registrada/descartada por folio — al pasar de "sin registrar" a factura real. Silencioso.
-  const marcarStaged = async(folio, estado='registrada', billingId=null)=>{ if(!folio) return; try{ await supabase.from('sii_cargas_docs').update({estado, billing_id:billingId||null, updated_at:new Date().toISOString()}).eq('folio',String(folio)).eq('estado','sin_registrar') }catch(_){} }
+  const marcarStaged = async(folio, estado='registrada', billingId=null)=>{ if(!folio) return; try{ await supabase.from('sii_cargas_docs').update({estado, billing_id:billingId||null, updated_at:new Date().toISOString()}).eq('folio',String(folio)).eq('estado','sin_registrar') }catch(e){registrarError({origen:'accion',vista:'sii_cargas_docs',err:e})} }
   // Cuántas cargas quedaron sin registrar (badge del hub). Tolera que la tabla aún no exista.
   const contarSinRegistrar = async()=>{ try{
       if(DEMO){ setSinRegN(0); setSiiSinCli([]); return }
@@ -1559,7 +1559,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
     const fEmis=(d&&(d.match(/<FchEmis>([^<]+)<\/FchEmis>/)||[])[1])||b.issued_at||''
     const carpeta=await driveCarpetaFacturacion(token, periodoISO||fEmis)   // carpeta real por año/mes de la emisión
-    try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(_){}
+    try{ await supabase.from('billing_attachments').delete().eq('billing_id',b.id).eq('uploaded_by','Respaldo SII') }catch(e){registrarError({origen:'accion',vista:'billing_attachments',err:e})}
     const yaEnDrive = await driveBuscarEnCarpeta(token, carpeta, fname)   // dedup real contra Drive: si ya está, enlaza (no re-sube)
     let fileId, url, nombre=fname, subido=false
     if(yaEnDrive.length){ fileId=yaEnDrive[0].id; url=yaEnDrive[0].webViewLink||null }
@@ -1634,7 +1634,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
           const td=P.tipo
           const dteTot=P.total
           const fixAmt = dteTot&&Math.round(dteTot)!==Math.round(b.amount||0) ? {amount:dteTot} : {}
-          try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,dte_xml:d,...(fixAmt.amount!=null?{amount:dteTot}:{}),...(td?{sii_tipo_dte:td}:{})}:x)) }catch(_){}
+          try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,dte_xml:d,...(fixAmt.amount!=null?{amount:dteTot}:{}),...(td?{sii_tipo_dte:td}:{})}:x)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
           // Paso 2: respaldo (PDF a Drive) vía helper único. Si falla, la factura IGUAL quedó registrada — solo falta el respaldo (no es error de la factura).
           try{
             const { url, subido } = await adjuntarRespaldoDrive(token, b, d, periodoISO)
@@ -1663,7 +1663,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
           glosa:r.glosa||null, doc_json:{doc:r.doc, row:r.row}, client_id:r.clienteId||null,
           estado:'sin_registrar', created_by:user?.name||null, updated_at:new Date().toISOString() }))
         if(stage.length){ await supabase.from('sii_cargas_docs').upsert(stage,{onConflict:'folio,tipo_dte'}); contarSinRegistrar() }
-      }catch(_){}
+      }catch(e){registrarError({origen:'accion',vista:'sii_cargas_docs',err:e})}
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
     setProcResp(false)
@@ -1680,7 +1680,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
         if(ya){
           // La factura YA tiene folio (ej. viene de un adelanto): enlaza y, si le falta el XML, ADJÚNTASELO
           // (antes solo enlazaba y el XML quedaba huérfano → la factura no aparecía en "Por enviar").
-          if(!ya.dte_xml && s.doc_json?.doc){ try{ await supabase.from('billing').update({dte_xml:s.doc_json.doc, updated_at:new Date().toISOString()}).eq('id',ya.id); if(setBilling) setBilling(p=>p.map(b=>b.id===ya.id?{...b,dte_xml:s.doc_json.doc}:b)) }catch(_){} }
+          if(!ya.dte_xml && s.doc_json?.doc){ try{ await supabase.from('billing').update({dte_xml:s.doc_json.doc, updated_at:new Date().toISOString()}).eq('id',ya.id); if(setBilling) setBilling(p=>p.map(b=>b.id===ya.id?{...b,dte_xml:s.doc_json.doc}:b)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})} }
           marcarStaged(s.folio,'registrada',ya.id); continue
         }
         const row=s.doc_json?.row || {folio:s.folio, rut:s.receptor_rut, receptor:s.receptor_name, monto:s.monto, fechaEmision:s.fecha_emision, tipoDte:s.tipo_dte, concepto:s.glosa}
@@ -1728,7 +1728,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   const ensureBatch = async () => {
     if(batchIdRef.current) return batchIdRef.current
     const s=respaldoSummaryRef.current||{}
-    try{ const {data}=await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:s.period||null, docs_total:s.docs_total||0, skipped:s.skipped||0, files:s.files||[], counts:s.counts||{}, tipo:s.tipo||'xml' }).select('id').single(); batchIdRef.current=data?.id||null }catch(_){}
+    try{ const {data}=await supabase.from('sii_import_batches').insert({ created_by:user?.name||null, period:s.period||null, docs_total:s.docs_total||0, skipped:s.skipped||0, files:s.files||[], counts:s.counts||{}, tipo:s.tipo||'xml' }).select('id').single(); batchIdRef.current=data?.id||null }catch(e){registrarError({origen:'accion',vista:'sii_import_batches',err:e})}
     setRespaldoBatchId(batchIdRef.current)
     return batchIdRef.current
   }
@@ -1743,7 +1743,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     setCreandoFac(item.row.folio)
     try{
       const fac = await onIngresarSII({...item.row, doc:item.doc, ...(saleId?{sale_id:saleId}:{}), import_batch_id:(await ensureBatch())}, clienteId)   // crea el batch al registrar (no en el preview) + liga la factura (a la venta existente si se pasó saleId)
-      if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(_){} }
+      if(fac?.id){ try{ const token=await driveToken(); if(token){ const carpeta=await driveCarpetaFacturacion(token, item.row.fechaEmision||''); const r=await facturaDtePdfBase64(item.doc); const fname='Factura '+r.folio+' - '+String(r.rznR||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'; const yaEnDrive=await driveBuscarEnCarpeta(token,carpeta,fname); let fileId,url2; if(yaEnDrive.length){fileId=yaEnDrive[0].id;url2=yaEnDrive[0].webViewLink||null}else{const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const up=await driveUpload(token,carpeta,new File([u8],fname,{type:'application/pdf'}),fname); fileId=up.id;url2=up.webViewLink||null} await supabase.from('billing_attachments').delete().eq('billing_id',fac.id).eq('uploaded_by','Respaldo SII'); await supabase.from('billing_attachments').insert({billing_id:fac.id,drive_file_id:fileId,name:fname,url:url2,uploaded_by:'Respaldo SII'}) } }catch(e){registrarError({origen:'accion',vista:'billing_attachments',err:e})} }
       const cliName=fac?.client_id?((clients||[]).find(c=>String(c.id)===String(fac.client_id))?.name||item.row.receptor):item.row.receptor
       setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'creada',cliente:cliName,monto:item.row.monto,sinCliente:!fac?.client_id,_fac:fac}:r))   // por IDENTIDAD (no por índice): idx venía del grupo 'nuevas', no del array completo → marcaba la fila equivocada y la registrada se quedaba NUEVA. _fac = la factura creada (para el link "Ver factura")
       if(fac?.id) marcarStaged(item.row.folio,'registrada',fac.id)
@@ -1773,7 +1773,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       if(e2) throw e2
       if(setBilling&&ins) setBilling(p=>[...p, ins])
       // Enlaza el DTE de la NC (sii_cargas_docs) a su fila recién creada → deja de figurar "sin enlazar".
-      if(item.siiId&&ins?.id){ try{ await supabase.from('sii_cargas_docs').update({billing_id:ins.id}).eq('id',item.siiId) }catch(_){} }
+      if(item.siiId&&ins?.id){ try{ await supabase.from('sii_cargas_docs').update({billing_id:ins.id}).eq('id',item.siiId) }catch(e){registrarError({origen:'accion',vista:'sii_cargas_docs',err:e})} }
       setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'nc_hecha'}:r))
       setNcConfirm(null); onRefresh&&onRefresh()
     }catch(e){ appAlert('No se pudo anular / registrar la nota de crédito: '+(e.message||e)) }
@@ -2004,7 +2004,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
         const via=await enviarComoUsuario({to:dest, subject:`Factura ${folio}`, html, text:body, ...(pdf?{pdfBase64:pdf.base64, pdfName:`Factura ${folio}.pdf`}:{})}, batchModo)
         if(via===null){ err++; continue }
         const at=new Date().toISOString()
-        try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id),'marcar la factura como enviada') }catch(_){}
+        try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id),'marcar la factura como enviada') }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
         setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at}:x))
         ok++
       }catch(_){ err++ }
@@ -2016,7 +2016,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   const onUnsendFactura = async (b) => {
     const cli=clients.find(c=>String(c.id)===String(b.client_id))
     if(!await appConfirm(`¿Marcar la Factura N° ${folioN(b.invoice_no)||b.folio||''} como NO enviada?\nVuelve a "Por enviar"${cli?.name?` (${cli.name})`:''}. Útil si el envío fue una prueba.`)) return
-    try{ okDB(await supabase.from('billing').update({email_sent_at:null}).eq('id',b.id),'marcar la factura como no enviada') }catch(_){}
+    try{ okDB(await supabase.from('billing').update({email_sent_at:null}).eq('id',b.id),'marcar la factura como no enviada') }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
     setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:null}:x))
   }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
@@ -2041,7 +2041,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   // Radar "Cuotas vencidas sin facturar": programadas de meses cerrados que no se emitieron. noEmitirSet = las que el usuario marcó "no corresponde" (aprende y deja de marcarlas).
   const [noEmitirSet,setNoEmitirSet] = useState(()=>new Set())
   useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>{ setNoEmitirSet(new Set((data||[]).map(r=>String(r.key)))) },()=>{}) },[])
-  const marcarNoEmitir = async(bill)=>{ setNoEmitirSet(p=>new Set([...p,String(bill.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('cuota_no_emitir',String(bill.id),'1') }catch(_){} } }
+  const marcarNoEmitir = async(bill)=>{ setNoEmitirSet(p=>new Set([...p,String(bill.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('cuota_no_emitir',String(bill.id),'1') }catch(e){registrarError({origen:'accion',vista:'cuota_no_emitir',err:e})} } }
   const [siiBuscaFor,setSiiBuscaFor] = useState(null)   // {id, hechos, total} mientras "Buscar en SII" sincroniza el período de una cuota del radar
   // Trabajos sin facturar (regla única trabajosSinFacturar, _shared/ventasReglas.js; la usa también el correo de pendientes):
   // decidirTrabajo guarda la respuesta (learnings trabajo_sin_facturar) y el trabajo deja de aparecer aquí y en el correo.
@@ -2049,7 +2049,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key').eq('kind','trabajo_sin_facturar').then(({data})=>{ setTsfDecididos(new Set((data||[]).map(r=>String(r.key)))) },()=>{}) },[])
   const ufTsf = useUF().uf || 0
   const trabajosSF = useMemo(()=>trabajosSinFacturar({ sales, billing, uf: ufFechaCache()||{}, ufHoy: ufTsf, hoy: new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}), noEmitir: noEmitirSet, decididos: tsfDecididos }),[sales,billing,ufTsf,noEmitirSet,tsfDecididos])
-  const decidirTrabajo = async(sale, estado, motivo)=>{ setTsfDecididos(p=>new Set([...p,String(sale.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('trabajo_sin_facturar',String(sale.id),JSON.stringify({estado,motivo,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),quien:user?.email||null})); logActividad('facturacion.trabajo_sin_facturar',{tabla:'sales',id:sale.id,detalle:{title:`${sale.title||'Trabajo'} · ${motivo}`}}) }catch(_){} } }
+  const decidirTrabajo = async(sale, estado, motivo)=>{ setTsfDecididos(p=>new Set([...p,String(sale.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('trabajo_sin_facturar',String(sale.id),JSON.stringify({estado,motivo,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),quien:user?.email||null})); logActividad('facturacion.trabajo_sin_facturar',{tabla:'sales',id:sale.id,detalle:{title:`${sale.title||'Trabajo'} · ${motivo}`}}) }catch(e){registrarError({origen:'accion',vista:'trabajo_sin_facturar',err:e})} } }
   const [selected,setSelected] = useState(()=>new Set())
   const toggleSel = id => setSelected(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
   const clearSel = () => setSelected(new Set())
@@ -2244,7 +2244,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     try{
       const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:aplicado,origen:'manual',marco_pago:cubre}).select().single()
       if(ins.error) throw ins.error
-      if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(_){} }   // auditoría: quién concilió (resiliente si la columna no existe) — alinea con persistPagoFactura/marcaQuien
+      if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }   // auditoría: quién concilió (resiliente si la columna no existe) — alinea con persistPagoFactura/marcaQuien
       setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:aplicado}])   // refleja el saldo nuevo en vivo
       const movAplicado=(m.monto_conciliado||0)+aplicado
       const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
@@ -2278,7 +2278,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     try{
       const ins=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'factura',factura_id:b.id,monto_aplicado:resto,origen:'manual',marco_pago:true}).select().single()
       if(ins.error) throw ins.error
-      if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(_){} }
+      if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }
       setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:resto}])
       const movAplicado=(m.monto_conciliado||0)+resto
       await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:movAplicado}).eq('id',m.id)
@@ -2330,8 +2330,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   // Recordar cobro desde la Facturación global: correo al cliente (busca su email por client_id) con compuerta de confirmación.
   // Resuelve el correo del cliente igual que los envíos de facturas: ficha → correo aprendido (factura_to) → contactos.
   const resolverCorreoCliente = async(clientId, cl)=>{ let to=(cl?.email||'').trim()
-    if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(_){} }
-    if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(_){} }
+    if(!to){ try{ const {data}=await supabase.from('learnings').select('value').eq('kind','factura_to').eq('key',String(clientId)).maybeSingle(); if(data?.value) to=String(data.value).split(/[,;]/)[0].trim() }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
+    if(!to){ try{ const {data}=await supabase.from('contacts').select('email,principal').eq('client_id',clientId); const c=(data||[]).find(x=>x.principal&&x.email)||(data||[]).find(x=>x.email); if(c) to=String(c.email).trim() }catch(e){registrarError({origen:'accion',vista:'contacts',err:e})} }
     return to }
   const recordarCobro = async(b)=>{
     const cl=clients.find(c=>String(c.id)===String(b.client_id))
@@ -2343,7 +2343,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   // Envía el recordatorio ya previsualizado (desde el modal de vista previa). La nota se guarda por cliente.
   const enviarRecordatorio = async({b, to, nota})=>{
     const r=recordatorioCobro(b, nota)
-    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(_){}; const cid=String(b.client_id||''); if(cid){ try{ await setLearningKV('recordatorio_nota',cid,String(nota||'')); setRecNotaMap(m=>({...m,[cid]:String(nota||'')})) }catch(_){} }; setRecPreview(null); appAlert(txtEnviado(via,{que:`Recordatorio (${r.nivel})`,para:to})) } }
+    try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(b.id),at); setRecordadoMap(m=>({...m,[String(b.id)]:at})) }catch(e){registrarError({origen:'accion',vista:'recordatorio_nota',err:e})}; const cid=String(b.client_id||''); if(cid){ try{ await setLearningKV('recordatorio_nota',cid,String(nota||'')); setRecNotaMap(m=>({...m,[cid]:String(nota||'')})) }catch(e){registrarError({origen:'accion',vista:'recordatorio_nota',err:e})} }; setRecPreview(null); appAlert(txtEnviado(via,{que:`Recordatorio (${r.nivel})`,para:to})) } }
     catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
   }
   // Recordatorio de cobro por TANDA (desde el Cierre de mes): una sola compuerta que lista los destinatarios;
@@ -2356,7 +2356,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const modo=await modoEnvioLote(dest.length)
     if(modo==='cancelar'){ appAlert(txtResumenEnvio({ok:0,no:dest.length,que:'recordatorios'})); return }
     let ok=0
-    for(const d of dest){ try{ const ad=await facturaPdfAdjunto(d.b); const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text, attachments:ad?[ad]:null}, modo); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(_){}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(_){} }
+    for(const d of dest){ try{ const ad=await facturaPdfAdjunto(d.b); const via=await enviarComoUsuario({to:d.to, subject:d.r.subject, html:d.r.html, text:d.r.text, attachments:ad?[ad]:null}, modo); if(via){ ok++; const at=new Date().toISOString(); try{ await setLearningKV('factura_recordado',String(d.b.id),at) }catch(e){registrarError({origen:'accion',vista:'factura_recordado',err:e})}; setRecordadoMap(m=>({...m,[String(d.b.id)]:at})) } }catch(e){registrarError({origen:'accion',vista:'factura_recordado',err:e})} }
     appAlert(txtResumenEnvio({ok, no:dest.length-ok, via:modo, que:ok===1?'recordatorio':'recordatorios'})+(sinCorreo>0?`\n(${sinCorreo} sin correo en la ficha, omitido${sinCorreo!==1?'s':''}.)`:''))
   }
   // Acuse de pago: confirma al cliente que recibimos el pago de una factura ya pagada/conciliada.
@@ -4437,15 +4437,15 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
       const baseAdj = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
       const adjuntos = [...baseAdj, ...extras.map(a=>({base64:a.base64,name:a.name,mime:a.mime}))]   // factura(s) + documentos adicionales
       const bodyTxt=cuerpoFull()   // ya incluye las cuentas (segmentos), en el orden correcto
-      if(pedirFondo){ try{ await setLearningKV('cuenta_gastos','estudio',JSON.stringify(ctaGastos)) }catch(_){} }   // recuerda la cuenta de gastos ingresada
+      if(pedirFondo){ try{ await setLearningKV('cuenta_gastos','estudio',JSON.stringify(ctaGastos)) }catch(e){registrarError({origen:'accion',vista:'cuenta_gastos',err:e})} }   // recuerda la cuenta de gastos ingresada
       // La factura sale SIEMPRE desde el correo del usuario. Si su Gmail venció, NO cae a la oficina: se le pide reentrar y reintentar (control sobre el remitente).
       const via = await enviarComoUsuario({to:para.trim(),cc:cc.join(','),subject:asunto,html:buildHtml(),text:bodyTxt,attachments:adjuntos, soloUsuario:true, que:'La factura'})
       if(via==='reauth'){ setSending(false); return }   // el aviso «NO se envió» + reingreso lo da enviarComoUsuario
       if(via===null){ setSending(false); return }
       const viaServer = via==='oficina'
-      if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(_){}
-      if(para.trim()&&client?.id) try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(_){}   // aprende el destinatario de facturas de este cliente
-      if(client?.id) try{ await setLearningKV('factura_msg',msgKey(lang),_tok(body,lang)) }catch(_){}   // la base del próximo envío = este (último enviado), por cliente+proyecto; tokens {folios}/{total}/{periodo} se refrescan
+      if(cc.length) try{ await setLearningKV('factura_cc',String(client.id),cc.join(',')) }catch(e){registrarError({origen:'accion',vista:'factura_cc',err:e})}
+      if(para.trim()&&client?.id) try{ await setLearningKV('factura_to',String(client.id),para.trim()) }catch(e){registrarError({origen:'accion',vista:'factura_to',err:e})}   // aprende el destinatario de facturas de este cliente
+      if(client?.id) try{ await setLearningKV('factura_msg',msgKey(lang),_tok(body,lang)) }catch(e){registrarError({origen:'accion',vista:'factura_msg',err:e})}   // la base del próximo envío = este (último enviado), por cliente+proyecto; tokens {folios}/{total}/{periodo} se refrescan
       // Guarda a los destinatarios (Para + CC) como PERSONAS del cliente si son nuevos, para que queden en la ficha
       // (no repetir: la app aprende quién recibe facturas). No pisa contactos existentes.
       if(client?.id){ try{
@@ -4453,9 +4453,9 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
         const nuevos=[para.trim(),...cc].map(e=>e.trim()).filter(e=>e&&e.includes('@')&&!esCorreoOficina(e)&&!yaMails.has(e.toLowerCase()))
         const dedup=[...new Set(nuevos.map(e=>e.toLowerCase()))]
         if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
-      }catch(_){} }
+      }catch(e){registrarError({origen:'accion',vista:'contacts',err:e})} }
       const at=new Date().toISOString()
-      for(const f of listF){ try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id),'marcar la factura como enviada') }catch(_){}; onSent&&onSent(f.id,at) }
+      for(const f of listF){ try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id),'marcar la factura como enviada') }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}; onSent&&onSent(f.id,at) }
       appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
     }catch(e){ appAlert(txtNoEnviado('La factura', e.message||String(e))) }
     setSending(false)

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, liquidacionPdfBase64, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado } from '../lib/compartido.jsx'
+import { ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, liquidacionPdfBase64, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
@@ -89,7 +89,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
   }
   const noEsCaja = async(cargo)=>{
     setMisNoCaja(p=>new Set([...p,String(cargo.id)]))
-    try{ await supabase.from('learnings').delete().eq('kind','cc_no_caja').eq('key',String(cargo.id)); await supabase.from('learnings').insert({kind:'cc_no_caja',key:String(cargo.id),value:me}) }catch(_){}
+    try{ await supabase.from('learnings').delete().eq('kind','cc_no_caja').eq('key',String(cargo.id)); await supabase.from('learnings').insert({kind:'cc_no_caja',key:String(cargo.id),value:me}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
   }
   const [fCat,setFCat] = useState('')
   const [pettyQ,setPettyQ] = useState('')            // buscador libre de pendientes
@@ -220,7 +220,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
 
   const aplicarCliente = async(e,client_id) => {
     if(!client_id) return
-    try{ okDB(await supabase.from('expenses').update({client_id}).eq('id',e.id),'asignar el cliente al gasto') }catch(_){}
+    try{ okDB(await supabase.from('expenses').update({client_id}).eq('id',e.id),'asignar el cliente al gasto') }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})}
     if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,client_id}:x))
     const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_cliente',gk,client_id)
     setPickCliFor(null)
@@ -230,7 +230,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
     const patch={category}
     // Movilización = siempre de la oficina: si el gasto no tiene cliente, lo asigna al cliente interno (Liberona Escala).
     if(category==='Movilización' && !e.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) patch.client_id=ofi.id }
-    try{ okDB(await supabase.from('expenses').update(patch).eq('id',e.id),'guardar la categoría del gasto') }catch(_){}
+    try{ okDB(await supabase.from('expenses').update(patch).eq('id',e.id),'guardar la categoría del gasto') }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})}
     if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
     const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_categoria',gk,category)
     setPickCatFor(null)
@@ -278,7 +278,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
       // Resumen de caja para la liquidación (fuente única saldoCajaChica): fondo recibido · gastado · saldo; si es negativo, lo puso de su bolsillo → a reembolsar.
       const fondoTot=miCaja.reduce((a,p)=>a+(p.amount||0),0), gastadoTot=fondoTot-saldoCaja, cubierto=Math.max(0,-saldoCaja)
       // Aviso a los socios al teléfono (decisión del 26-10-2026: ya no por correo); el PDF y el anexo quedan en la liquidación.
-      if(!adminNombres.includes(me)&&!DEMO){ try{ supabase.functions.invoke('push',{body:{action:'avisar',tipo:'cajachica',etiqueta:`liq-${renderId}`,titulo:'Liquidación de caja chica',cuerpo:`${me} · ${marcados.length} gasto${marcados.length!==1?'s':''} · ${fmtCLP(totalReal)}${cubierto>0?` · a reembolsar ${fmtCLP(cubierto)}`:''}`,url:`/?liquidacion=${renderId}`}}).catch(()=>{}) }catch(_){} }
+      if(!adminNombres.includes(me)&&!DEMO){ try{ supabase.functions.invoke('push',{body:{action:'avisar',tipo:'cajachica',etiqueta:`liq-${renderId}`,titulo:'Liquidación de caja chica',cuerpo:`${me} · ${marcados.length} gasto${marcados.length!==1?'s':''} · ${fmtCLP(totalReal)}${cubierto>0?` · a reembolsar ${fmtCLP(cubierto)}`:''}`,url:`/?liquidacion=${renderId}`}}).catch(()=>{}) }catch(e){registrarError({origen:'accion',vista:'push',err:e})} }
       setSelected(new Set())
       setConfirmLiq(false)
       let correoOk = false
