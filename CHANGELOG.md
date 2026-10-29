@@ -1,3 +1,4 @@
+- 2026-10-29 · Código: el dominio que sugiere el ingreso con Google sale de la marca del estudio (BRAND.emailDominio) en vez de estar escrito en el código. Sin cambios visibles.
 - 2026-10-29 · Uso con mala señal: la app abre sin conexión (guarda solo sus archivos, nunca cifras) y una franja avisa «Sin conexión. No se pueden guardar cambios.» hasta que vuelve la señal.
 - 2026-10-29 · Mantenimiento: aviso mensual automático de dependencias desactualizadas (Dependabot, agrupadas, máximo 3 abiertas).
 - 2026-10-29 · Código: las cifras de venta (UF y pesos, recurrentes x12, costo de terceros, redondeo que cuadra) viven en src/lib/cifras.js, con tipos revisados en cada verificación (npm run tipos) y 8 pruebas nuevas. Se corrigió un caso borde: el costo de una venta ausente ya no rompe, da 0.
