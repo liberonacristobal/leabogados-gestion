@@ -24,6 +24,8 @@ import { trabajosDetenidos } from '../../supabase/functions/_shared/ventasReglas
 import { f29Estimado } from '../../supabase/functions/_shared/f29Reglas.js'
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando, trabajosSinFacturar } from '../../supabase/functions/_shared/ventasReglas.js'
+import { connectDrive } from '../supabase'
+import { estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 
 export const { dteMontoTotal, montoFactura } = SD
 
@@ -6356,5 +6358,717 @@ export async function escanearTareasGmail(clients=[], onProgress){
     }catch(_){}
   }
   return out
+}
+
+// ─── CAJA CHICA VIEW (limited) ─────────────────────────────────────────────
+// Administradores del estudio desde `miembros` (rol admin), UNA dirección por persona: la más corta del dominio del estudio
+// (miembros trae alias: cl@ y cristobal.liberona@ y un gmail). Misma regla que la edge caja-chica-alerta. Cacheado por sesión.
+export let _adminsEstudioCache=null, _adminsEstudioP=null
+
+export function cargarAdminsEstudio(){
+  if(_adminsEstudioCache) return Promise.resolve(_adminsEstudioCache)
+  if(!_adminsEstudioP) _adminsEstudioP = Promise.resolve(supabase.from('miembros').select('email,rol,nombre').eq('rol','admin')).then(({data})=>{
+    const dom=String(BRAND.dominio||'').toLowerCase().replace(/^.*?@/,'').replace(/^gestion\./,'')
+    const por={}; (data||[]).forEach(a=>{ const em=String(a.email||'').toLowerCase(); if(!em.includes('@')) return; const k=String(a.nombre||em).split(' ')[0]; (por[k]=por[k]||[]).push(em) })
+    _adminsEstudioCache=Object.entries(por).map(([nombre,ems])=>{ const d=dom?ems.filter(e=>e.endsWith('@'+dom)):[]; return {nombre, email:(d.length?d:ems).sort((x,y)=>x.length-y.length)[0]} })
+    return _adminsEstudioCache }).catch(()=>[])
+  return _adminsEstudioP
+}
+
+// ─── PROVEEDORES (catálogo + ficha de proveedores, costos de terceros) ──────
+export const _nRut = r => String(r||'').replace(/[^0-9kK]/g,'').toLowerCase()
+
+// Nombre a mostrar de un proveedor (fuente única; antes copiado en 7 lugares).
+export const tituloProv = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
+
+export const pctBHE = t => `${(t*100).toLocaleString('es-CL',{maximumFractionDigits:2})} %`
+
+export const esBoletaProv = p => p?.documento==='boleta'
+
+// Costo de una comisión nueva de quien emite boleta. % y UF: lo pactado es lo que RECIBE (líquido) → costo = líquido ÷ (1 − tasa).
+// Monto fijo ($): se ingresa el costo (bruto) → líquido = bruto × (1 − tasa). Quien factura: monto tal cual.
+// Fecha que fija la tasa: la del pago si ya se pagó; si no, el vencimiento, pero nunca una fecha pasada (una cuota atrasada se pagará este año).
+export const fechaBHE = (pagadaEn, vence) => { const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}); return pagadaEn ? String(pagadaEn).slice(0,10) : (vence&&String(vence).slice(0,10)>hoy ? String(vence).slice(0,10) : hoy) }
+
+// Abre el PDF de una boleta guardada (bucket privado `documentos`, link firmado de 2 min). La ventana se abre antes del await (iPhone).
+export const abrirDocumento = async path => { if(!path) return; const w=window.open('','_blank')
+  const {data,error}=await supabase.storage.from('documentos').createSignedUrl(path,120)
+  if(error||!data?.signedUrl){ w&&w.close(); appAlert('No se pudo abrir el archivo: '+(error?.message||'sin enlace')); return }
+  if(w) w.location.href=data.signedUrl; else window.location.href=data.signedUrl }
+
+// Estado de una comisión (FUENTE ÚNICA): 'pagada' (ya se le pagó) · 'por_pagar' (el cliente ya pagó esa cuota) · 'por_devengar' (el cliente aún no la paga).
+// Se deriva de la factura del cliente y no solo del flag guardado: si la cuota está Pagada, la comisión queda por pagar aunque el flag
+// (que mueve handleConciliarTerceros) no haya alcanzado a cambiar. `b` = la cuota del cliente (billing) o null si la comisión no tiene cuota.
+// Una cuota 'Anticipada' (cubierta por un anticipo del cliente, p. ej. Rodrigo Macho que paga sin factura) ya está cobrada → su comisión se debe.
+// Saldos de comisiones (fuente única para Inicio, Oficina y Proveedores). Excluye las de cuotas borradas o anuladas.
+export function saldoComisiones(terceros=[], billing=[]){
+  const byId=new Map((billing||[]).map(b=>[String(b.id),b]))
+  const r={pagada:0,porPagar:0,porDevengar:0,total:0,provsPorPagar:new Set(),desfasadas:[],porPagarDesde:null,porPagarAnio:{}}
+  ;(terceros||[]).forEach(t=>{ if(!t) return
+    const b=t.billing_id?byId.get(String(t.billing_id)):null
+    if(t.billing_id&&(!b||b.status==='Anulada'||b.deleted_at)) return
+    const m=Number(t.monto)||0, e=estadoComision(t,b)
+    r.total+=m
+    if(e==='pagada') r.pagada+=m
+    else if(e==='por_pagar'){ r.porPagar+=m; r.provsPorPagar.add(String(t.proveedor_id)); if(t.estado!=='por_pagar') r.desfasadas.push(t)
+      const d=String(b?.paid_at||'').slice(0,10); if(d&&(!r.porPagarDesde||d<r.porPagarDesde)) r.porPagarDesde=d
+      // año en que nació la deuda = cuando pagó el cliente (o se emitió/creó si no hay pago registrado)
+      const y=+String(b?.paid_at||b?.issued_at||b?.due||t.created_at||'').slice(0,4); if(y>1990) r.porPagarAnio[y]=(r.porPagarAnio[y]||0)+m }
+    else r.porDevengar+=m })
+  return r
+}
+
+export const _diasDesde = iso => { const s=String(iso||'').slice(0,10); if(!/^\d{4}-\d\d-\d\d$/.test(s)) return null; return Math.round((Date.now()-new Date(s+'T12:00').getTime())/864e5) }
+
+// Correo de la boleta de honorarios a la oficina (miembro del equipo con comisiones): sale desde su cuenta, con la boleta adjunta,
+// el detalle de lo que cobra, bruto/retención/líquido y sus datos de pago DENTRO del recuadro. Va a los administradores (miembros).
+// Mismo formato de marca que los demás correos de la app (franja con logo, recuadro de datos, firma).
+export function correoMarcaHtml(text, titulo, firma, useCid=false){
+  const A='#003C50',A4='#E4E8EB',MUTED='#537281',BG='#F7F9FA'
+  const logoW=useCid?'cid:lealogow':`${location.origin}${BRAND.logo.blanco}`, logoC=useCid?'cid:lealogoc':`${location.origin}${BRAND.logo.color}`
+  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  let out='', box=[]
+  const flush=()=>{ if(box.length){ out+=`<div style="background-color:${BG};border:1px solid ${A4};border-radius:8px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.8">${box.map(l=>{ const i=l.lastIndexOf(': '); return i>0?`<div><span style="color:${MUTED}">${esc(l.slice(0,i))}:</span> <strong style="color:${A}">${esc(l.slice(i+2).trim())}</strong></div>`:`<div>${esc(l)}</div>` }).join('')}</div>`; box=[] } }
+  String(text).split('\n').forEach(l=>{ if(/^\s{2,}\S/.test(l)) box.push(l.trim()); else { flush(); out+= l.trim()?`<p style="margin:0 0 10px">${esc(l)}</p>`:'' } }); flush()
+  return `<div style="font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#3D3D3D;font-size:14px;line-height:1.6;max-width:600px;margin:0 auto"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${A}" style="background-color:${A};padding:18px 24px"><table width="100%"><tbody><tr><td style="vertical-align:middle"><img src="${logoW}" alt="${BRAND.nombre}" style="height:26px;display:block"/></td><td style="text-align:right;vertical-align:middle;color:#fff;font-size:12px;font-weight:600">${esc(titulo)}</td></tr></tbody></table></td></tr></tbody></table><div style="padding:24px;border:1px solid ${A4};border-top:none">${out}${firmaCorreoHtml(firma,logoC,'es')}</div></div>`
+}
+
+// Manda un archivo a la papelera de Drive.
+export async function driveTrash(token, fileId){
+  const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,{
+    method:'PATCH',
+    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({trashed:true})
+  })
+  if(r.status===401) throw new DriveAuthError()
+  if(!r.ok) throw new Error('Drive papelera '+r.status)
+}
+
+// Bloque "Archivos" reutilizable (tareas y gastos). Sube a Drive y registra en `table`.
+export function Attachments({table, idField, entityId, ensureEntityId, folderKind, namePrefix, user, onChange, inline}) {
+  const [items,setItems] = useState([])
+  const [busy,setBusy] = useState(false)
+  const inputRef = useRef(null)
+  useEffect(()=>{
+    if(!entityId) return
+    supabase.from(table).select('*').eq(idField,entityId).order('created_at',{ascending:true}).then(({data})=>setItems(data||[]))
+  },[entityId])
+  const reconnect = () => { appAlert('Tu acceso a Drive expiró. Te llevo a reconectar Drive; al volver, vuelve a adjuntar el archivo.'); connectDrive() }
+  const onPick = async(e) => {
+    const file = e.target.files?.[0]; if(!file) return
+    e.target.value=''
+    if(file.size > 15*1024*1024){ appAlert(`El archivo pesa ${(file.size/1048576).toFixed(1)} MB y supera el límite de 15 MB. Súbelo a Drive manualmente y pega el link como comentario.`); return }
+    setBusy(true)
+    try{
+      // Si no hay id todavía (tarea nueva), se crea silenciosamente antes de subir
+      let eid = entityId
+      if(!eid && ensureEntityId) eid = await ensureEntityId()
+      if(!eid) throw new Error('No se pudo preparar el registro')
+      const token = await driveToken()
+      if(!token){ reconnect(); return }
+      const folders = await driveAdjuntosFolders(token)
+      const folderId = folderKind==='tareas'?folders.tareas:folders.gastos
+      const fname = `${namePrefix} · ${file.name}`.slice(0,250)
+      const up = await driveUpload(token, folderId, file, fname)
+      const {data,error} = await supabase.from(table).insert({[idField]:eid, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
+      if(error) throw error
+      setItems(p=>[...p,data]); onChange&&onChange(1, data)
+    }catch(err){
+      if(err instanceof DriveAuthError || err?.code===401){ reconnect() }
+      else appAlert('Error al subir: '+(err.message||err))
+    }
+    setBusy(false)
+  }
+  const del = async(a) => {
+    if(!await appConfirm(a.storage_path?'¿Quitar este respaldo del gasto?':'¿Eliminar este archivo? Se enviará a la papelera de Drive.')) return
+    try{
+      if(a.storage_path){ await supabase.from(table).delete().eq('id',a.id); setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a); return }
+      const token = await driveToken()
+      if(token && a.drive_file_id){ try{ await driveTrash(token, a.drive_file_id) }catch(err){ if(err instanceof DriveAuthError){ reconnect(); return } } }
+      await supabase.from(table).delete().eq('id',a.id)
+      setItems(p=>p.filter(x=>x.id!==a.id)); onChange&&onChange(-1, a)
+    }catch(err){ appAlert('Error al eliminar: '+(err.message||err)) }
+  }
+  const fileRow = a => (
+    <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
+      <span style={{flexShrink:0}}>Adjunto</span>
+      {a.storage_path   // respaldo que adjuntó el agente desde el correo (bucket privado, no Drive)
+        ?<><span onClick={()=>abrirDocumento(a.storage_path)} style={{flex:1,fontSize:12,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</span>
+          <span onClick={()=>abrirDocumento(a.storage_path)} style={{fontSize:10,color:C.muted,cursor:'pointer',flexShrink:0}}>Abrir</span></>
+        :<><a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
+          <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a></>}
+      <button onClick={()=>del(a)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,flexShrink:0}}><Gl n='x'/></button>
+    </div>
+  )
+  const icon = busy?<Spin/>:<svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
+  // inline: el ícono se ubica en la misma línea que lo controla el padre (grid); la lista cae full-width debajo.
+  if(inline) return (<>
+    <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
+    <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{width:36,height:36,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
+      {icon}{items.length>0&&<span style={{position:'absolute',top:-5,right:-5,minWidth:15,height:15,borderRadius:8,background:C.accent,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{items.length}</span>}
+    </button>
+    {items.length>0&&<div style={{gridColumn:'1 / -1',marginTop:2}}>{items.map(fileRow)}</div>}
+  </>)
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Archivos {items.length>0&&`(${items.length})`}</div>
+      {items.map(fileRow)}
+      <input ref={inputRef} type='file' onChange={onPick} style={{display:'none'}}/>
+      <button onClick={()=>inputRef.current?.click()} disabled={busy} aria-label='Adjuntar archivo' title='Adjuntar archivo · máx. 15 MB · se guarda en Drive' style={{marginTop:8,width:40,height:44,borderRadius:8,border:`1px dashed ${C.border}`,background:'transparent',color:C.accent,cursor:busy?'default':'pointer',opacity:busy?.6:1,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+        {icon}
+      </button>
+    </div>
+  )
+}
+
+// «Por cobrar a mis clientes» (responsable limitado): FUENTE ÚNICA del acceso en Mi cartera y de su página.
+// Mis clientes = los de mis ventas (sales ya llega filtrado a las suyas) o donde soy el abogado responsable. Honorarios = porCobrarBills
+// (mismo criterio que la ficha y Cobranza); gastos = saldo en contra de fgCliente.
+// Número de cuota desde el concepto de la programada ("Cuota 3/8", "Cobro 2 (17.5 UF)").
+export const nCuotaDe = b => { const m=String(b?.concept||'').match(/(?:Cuota|Cobro)\s+(\d+)(?:\s*\/\s*(\d+))?/i); return m?{n:+m[1],de:m[2]?+m[2]:null}:null }
+
+// Gastos del cliente aún no rendidos: fuente única (Gastos, ficha y Cartola).
+// Caja chica por liquidar de una persona (FUENTE ÚNICA: Caja chica, Inicio y «Tu semana»): gastos que pagó con SU caja (no los que pagó el cliente o la oficina) y que aún no liquida. Incluye notaría si la pagó con su caja.
+export const gastosPorLiquidarCaja = (expenses,persona) => (expenses||[]).filter(e=>e.type==='gasto'&&!e.deleted_at&&!e.rendered_at&&!e.paid_by_client&&e.created_by===persona)
+
+// UF abreviada para KPIs (UF 9.800 / UF 6.309), sin decimales para no recargar.
+export const fmtUFk = n => `UF ${Math.round(n||0).toLocaleString('es-CL')}`
+
+// Inicio de una venta (YYYY-MM): el inicio del cobro mensual si está; si no, año/mes de la venta.
+export const inicioVentaYM = s => { const mi=String(s?.cobro_config?.mensualInicio||''); return /^\d{4}-\d{2}/.test(mi) ? mi.slice(0,7) : `${s?.year}-${String(s?.month||1).padStart(2,'0')}` }
+
+// ¿La venta cuenta en lo vendido del año y? Su año, y si es MENSUAL y sigue activa, también cada año en que se RENUEVA
+// (otros 12 meses desde el aniversario de su inicio), solo cuando el aniversario ya llegó. Fuente única para todo filtro "vendido del año".
+export const ventaCuentaEnAnio = (s, y) => {
+  if(!s) return false
+  if(Number(s.year)===Number(y)) return true
+  if(!esRecurrente(s) || Number(y)<=Number(s.year)) return false
+  const aniv=`${y}-${inicioVentaYM(s).slice(5,7)}`, hoyYM=new Date().toISOString().slice(0,7)
+  return aniv<=hoyYM
+}
+
+export async function fetchUFFechas(isos){
+  let m=ufFechaCache(); const done=Array.isArray(m.__anios)?m.__anios:[]
+  const anios=[...new Set((isos||[]).map(d=>String(d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))]
+  // El año en curso se vuelve a bajar si aún no trae la UF de hoy (si no, la serie quedaba congelada en la primera descarga).
+  const hoy=isoLocal(Date.now()), yHoy=hoy.slice(0,4)
+  for(const y of anios){ if(done.includes(y) && !(y===yHoy && !m[hoy])) continue
+    const t=await ufDeTabla(`${y}-01-01`,`${y}-12-31`)
+    if(t&&(y!==yHoy||t[hoy])){ Object.assign(m,t); if(!done.includes(y)) done.push(y); continue }
+    try{ const r=await fetch(`https://mindicador.cl/api/uf/${y}`); const j=await r.json(); (j&&j.serie||[]).forEach(s=>{ const d=String(s.fecha||'').slice(0,10); if(d&&s.valor>0) m[d]=s.valor }); if(!done.includes(y)) done.push(y) }catch(_){} }
+  m.__anios=done; try{ localStorage.setItem(_UF_FECHA_KEY,JSON.stringify(m)) }catch(_){}
+  return m
+}
+
+// Fuente ÚNICA del total mensual de Costos de Oficina: valor vigente de cada ítem en el mes ym (desde/monto_prev), ingresos restan.
+export function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0,7); return (rows||[]).reduce((a,r)=>{ const eff=(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; return a + (Number(eff)||0)*(r.es_ingreso?-1:1) },0) }
+
+// Flecha de las filas desplegables (Inicio y Proyección).
+export const ChevAb = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
+
+// Venta histórica del cliente (Activo+Terminado) en UF — fuente única ventaUF (UF congelada).
+export const ventaHistoricaUF = (clientId, sales, ufRef) => (sales||[]).filter(s=>String(s.client_id)===String(clientId)&&['Activo','Terminado'].includes(s.status)&&!s.deleted_at).reduce((a,s)=>a+ventaUF(s,ufRef),0)
+
+// UF por fecha de los documentos (caché de mindicador), para convertir lo facturado a UF con la UF de su día.
+export function useUFFechas(billing){
+  const [m,setM]=useState(()=>ufFechaCache())
+  useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b&&b.issued_at) ds.push(b.issued_at) }); if(!ds.length) return; let v=true; fetchUFFechas(ds).then(x=>{ if(v&&x) setM(x) }).catch(()=>{}); return ()=>{v=false} },[billing])
+  return m
+}
+
+export const FLUJO_DUDA_DIAS = 30
+
+export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, sales=null, noEmitir=null, ufFechas=null, semanas=8, hoy=new Date() }){
+  const DAY=86400000
+  const d0=new Date(hoy); d0.setHours(12,0,0,0)
+  const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
+  const tD=s=>{ const t=new Date(String(s||'').slice(0,10)+'T12:00:00').getTime(); return isNaN(t)?null:t }
+  const hoyT=d0.getTime(), monT=mon.getTime()
+  const wIdx=t=>t<monT?0:Math.floor((t-monT)/(7*DAY))
+  const med=a=>{ if(!a.length) return null; const x=[...a].sort((p,q)=>p-q), m=Math.floor(x.length/2); return x.length%2?x[m]:(x[m-1]+x[m])/2 }
+  const curYm=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}`
+  const vivas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso')
+  const pag=vivas.filter(b=>b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no).map(b=>({c:String(b.client_id||''),p:tD(b.paid_at),d:Math.round((tD(b.paid_at)-tD(b.issued_at))/DAY)})).filter(x=>x.p&&x.d>=0&&x.d<=365)
+  const ritmoEstudio=Math.round(med(pag.filter(x=>x.p>=hoyT-365*DAY).map(x=>x.d))??med(pag.map(x=>x.d))??30)
+  const grp={}; pag.forEach(x=>{ (grp[x.c]=grp[x.c]||[]).push(x) })
+  const ritmoDe={}, histDe={}
+  Object.entries(grp).forEach(([c,a])=>{ const u=a.sort((x,y)=>y.p-x.p).slice(0,12); histDe[c]=u.length; ritmoDe[c]=u.length>=3?Math.round(med(u.map(x=>x.d))):ritmoEstudio })
+  const ritmo=c=>ritmoDe[String(c||'')]??ritmoEstudio
+  const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
+  const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
+  const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
+  const cobros=[]   // cada cobro esperado con su fecha (t), también los que caen después de las 8 semanas → Proyección al 31-12
+  // Pagos ya recibidos sin factura (anticipo disponible): esa plata ya entró, así que rebaja las cuotas programadas más antiguas
+  // de su venta (o del cliente, si el anticipo no tiene venta). Solo falta emitir la factura. El subarriendo es mensual: un pago sin factura
+  // cubre solo la cuota de ESE mes (pago entre 15 días antes y 20 días después de su vencimiento), nunca la de otro mes.
+  const cubierto={}; let antTot=0
+  // Programadas que no son plata por facturar: venta no activa, marcadas «No corresponde», o ya cubiertas por lo facturado en su venta.
+  const saleSt={}; (sales||[]).forEach(x=>{ if(x&&!x.deleted_at) saleSt[String(x.id)]=x.status })
+  const cubV=sales?cuotasCubiertasVenta(billing,sales,ufFechas):new Map()
+  const fueraProg=b=>(sales&&b.sale_id&&saleSt[String(b.sale_id)]!=='Activo')||(noEmitir&&noEmitir.has(String(b.id)))||cubV.get(String(b.id))?.total
+  ;(anticipos||[]).filter(a=>a&&a.estado==='disponible'&&!a.billing_id&&Number(a.monto)>0).sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||''))).forEach(a=>{
+    let r=Number(a.monto)
+    const fa=new Date(String(a.fecha||'').slice(0,10)+'T12:00:00').getTime()
+    const mesOk=b=>{ const d=new Date(String(b.due||'').slice(0,10)+'T12:00:00').getTime(); return !isNaN(fa)&&!isNaN(d)&&fa>=d-15*86400000&&fa<=d+20*86400000 }
+    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&!fueraProg(b)&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id))&&(b.billing_type==='subarriendo'?mesOk(b):true))
+      .sort((x,y)=>String(x.due||'').localeCompare(String(y.due||''))).forEach(b=>{ if(r<1) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(!(m>0)) return; const u=Math.min(m,r); cubierto[b.id]=(cubierto[b.id]||0)+u; r-=u; antTot+=u }) })
+  vivas.forEach(b=>{
+    const c=C_(b.client_id)
+    if(['Pendiente','Vencido'].includes(b.status)&&b.invoice_no){ const m=saldoBill(b); if(!(m>0)) return
+      if(b.status==='Vencido') c.nVenc++
+      const base=tD(b.issued_at)??tD(b.due); if(base==null) return
+      const esp=base+c.ritmo*DAY
+      if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
+      const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:Math.max(esp,hoyT),m,k:'emit'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
+    if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
+      const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
+      if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
+      const tE=Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
+  })
+  const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
+  const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
+  let comFuera=0; const cfB={duda:0,sin:0}; const sinCuota=[]
+  const aplica=(b,monto)=>{ const s0=st[b.id], c=C_(b.client_id)
+    if(b.status==='Pagado'||s0?.pagadaAnt){ weeks[0].com+=monto; c.com+=monto; return }
+    if(!s0) return
+    if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; cfB[s0.fuera]=(cfB[s0.fuera]||0)+monto; return }
+    if(s0.w<semanas){ weeks[s0.w].com+=monto; c.com+=monto } }
+  ;(terceros||[]).forEach(t=>{ if(!t||t.estado==='pagado') return; const monto=Number(t.monto)||0; if(!(monto>0)) return
+    const b=t.billing_id?bById[String(t.billing_id)]:null
+    if(t.billing_id){ if(b) aplica(b,monto); return }
+    const ps=t.sale_id?(porVenta[String(t.sale_id)]||[]):[]
+    if(!ps.length){ sinCuota.push({prov:t.proveedor||'Colaborador',monto,sale_id:t.sale_id||null}); return }
+    const tot=ps.reduce((a,x)=>a+(st[x.id]?.m||0),0)||1
+    ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
+  // Oficina al costo bruto: los ingresos fijos del presupuesto (subarriendo) ya entran por su propia factura; restarlos aquí los contaba dos veces.
+  const oficinaSem=costosOficinaMes((costosOfiRows||[]).filter(r=>!r.es_ingreso))/4.3333
+  // Con costo real: cada semana lleva el costo mensual × la parte del calendario de pago que cae en sus días, desde hoy (lo ya pagado no se cuenta).
+  const ofDe=i=>{ if(!(costoOp&&costoOp.mensual>0&&costoOp.peso)) return oficinaSem; let v=0
+    for(let j=0;j<7;j++){ const d=new Date(monT+(i*7+j)*DAY); if(d.getTime()<hoyT) continue; const D=d.getDate(), last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); const k=D===last?30:(D>=30?null:D); if(k) v+=costoOp.mensual*(costoOp.peso[k]||0) }
+    return v }
+  let run=0; weeks.forEach((w,i)=>{ w.of=ofDe(i); w.sale=w.of+w.com; run+=w.entra-w.sale; w.run=run })
+  const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=weeks.reduce((a,w)=>a+w.of,0)
+  const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
+  const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
+  const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera).map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
+  return {weeks,cobros,fuera,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
+}
+
+// ─── POR SOCIO · motor único ────────────────────────────────────────────────
+// Regla de oro «coherencia de datos entre vistas» (CLAUDE.md): una cifra, una fuente, un dueño. Este motor es la ÚNICA
+// fuente de las cifras por socio (Facturación › Por socio e Inteligencia › Socios). Todo sale de partidas reales:
+//   Facturado      = facturas emitidas (con folio) + comisión de externos − reembolsos de gastos (− notas de crédito)
+//   Cobrado propio = cobrado de facturas + anticipos − reembolsos de gastos
+//   Ingreso real   = cobrado propio − comisiones pagadas + comisiones percibidas  (misma cuenta que Inicio)
+// Subarriendo («Sin socio») va aparte: no es honorario ni de ningún socio, no suma al Facturado ni al Ingreso real.
+// Factura por cuenta de un externo (terceros con comision_pct): solo lo nuestro — 'cext' al emitir, 'perc' al cobrar.
+// Caja = conciliacion.monto_aplicado por la fecha del depósito (igual que Inicio). Dueño de cada partida (socioDe): decisión
+// guardada (learnings 'socio_factura') → subarriendo = Sin socio → venta.responsible → cliente.abogado_responsable; lo que no es de
+// un socio va a «Sin socio». Reembolso dentro de una factura de honorarios = fondos ligados a ella (expenses.invoice_id).
+export const SIN_SOCIO = 'Sin socio'
+
+export const socioNorm = r => ADMIN_NAMES.includes(r) ? r : SIN_SOCIO
+
+export const socioDe = (b, {saleById={}, cliById={}, ov={}}={}) => socioNorm((b&&ov[String(b.id)]) || (b&&b.billing_type==='subarriendo'?SIN_SOCIO:null) || (b&&b.sale_id&&saleById[String(b.sale_id)]?.responsible) || (b&&cliById[String(b.client_id)]?.abogado_responsable))
+
+export const socioDeVenta = (s, {cliById={}}={}) => socioNorm((s&&s.responsible) || (s&&cliById[String(s.client_id)]?.abogado_responsable))
+
+export async function _psSelTodo(build){ let all=[], from=0; const SZ=1000; for(let i=0;i<50;i++){ const {data,error}=await build().range(from,from+SZ-1); if(error) throw error; if(!data||!data.length) break; all=all.concat(data); if(data.length<SZ) break; from+=SZ } return all }
+
+// Fuentes que no viven en el estado global de la app: conciliación, abonos del banco y decisiones guardadas.
+export function usePorSocioFuentes(){
+  const [f,setF]=useState({ic:[],ia:[],ov:{},hok:new Set(),gc:new Set(),ok:false})
+  useEffect(()=>{
+    if(DEMO){ setF({ic:(demoData.conciliacion||[]).filter(c=>['factura','anticipo'].includes(c.tipo_destino)), ia:(demoData.cartola_movimientos||[]).filter(m=>m.tipo==='abono'&&!m.es_interno), ov:{}, hok:new Set(), gc:new Set((demoData.conciliacion||[]).filter(c=>c.gasto_id).map(c=>String(c.gasto_id))), ok:true}); return }
+    let v=true
+    Promise.all([
+      _psSelTodo(()=>supabase.from('conciliacion').select('id,movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).order('id')),
+      _psSelTodo(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,cliente_id,categoria').eq('tipo','abono').neq('es_interno',true).order('id')),
+      supabase.from('learnings').select('kind,key,value').in('kind',['socio_factura','honorario_sin_gasto']).order('updated_at',{ascending:true}),
+      _psSelTodo(()=>supabase.from('conciliacion').select('id,gasto_id').not('gasto_id','is',null).order('id')),
+    ]).then(([ic,ia,l,gcs])=>{ if(!v) return; const ov={}, hok=new Set(); (l.data||[]).forEach(r=>{ if(r.kind==='socio_factura'&&r.value) ov[String(r.key)]=r.value; if(r.kind==='honorario_sin_gasto') hok.add(String(r.key)) }); setF({ic,ia,ov,hok,gc:new Set((gcs||[]).map(c=>String(c.gasto_id))),ok:true}) }).catch(()=>{ if(v) setF(p=>({...p,ok:true})) })
+    return ()=>{v=false}
+  },[])
+  return [f,setF]
+}
+
+export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],ic=[],ia=[],ov={},fondoExtra={}}){
+  const saleById={}; (sales||[]).forEach(s=>{ if(s) saleById[String(s.id)]=s })
+  const cliById={}; (clients||[]).forEach(c=>{ if(c) cliById[String(c.id)]=c })
+  const billById={}; (billing||[]).forEach(b=>{ if(b) billById[String(b.id)]=b })
+  const antById={}; (anticipos||[]).forEach(a=>{ if(a) antById[String(a.id)]=a })
+  const movById={}; (ia||[]).forEach(m=>{ if(m) movById[String(m.id)]=m })
+  const ctx={saleById,cliById,ov}
+  const ext={}; (terceros||[]).forEach(t=>{ if(t&&t.comision_pct!=null&&t.billing_id){ const e=(ext[String(t.billing_id)]=ext[String(t.billing_id)]||{com:0,mto:0}); e.com+=Number(t.comision_monto)||0; e.mto+=Number(t.monto)||0 } })
+  const fondoEn={}; (expenses||[]).forEach(e=>{ const inv=fondoExtra[String(e?.id)]||e?.invoice_id; if(e&&!e.deleted_at&&e.type==='fondo'&&inv) fondoEn[String(inv)]=(fondoEn[String(inv)]||0)+(Number(e.amount)||0) })
+  const fN=no=>no?`F${folioN(no)}`:''
+  const out=[]; const put=(s,k,d,soc,b,m,det,extra={})=>{ if(!(Math.abs(m)>=1)) return; out.push({s,k,d:String(d||'').slice(0,10),soc,cid:b?.client_id||extra.cid||null,doc:fN(b?.invoice_no),det:det||'',m,bid:b?.id||null,...extra}) }
+  ;(billing||[]).forEach(b=>{ if(!b||b.deleted_at||!b.invoice_no||['Anulada','Programada'].includes(b.status)) return
+    const soc=socioDe(b,ctx), mf=montoFactura(b), d=b.issued_at
+    if(b.billing_type==='subarriendo'){ put('f','sub',d,SIN_SOCIO,b,mf,b.concept); return }
+    if(b.billing_type==='nota_credito'){ put('f','nc',d,soc,b,-mf,b.concept); return }
+    const x=ext[String(b.id)]
+    if(b.billing_type!=='reembolso'&&x&&x.mto){ put('f','cext',d,soc,b,mf-x.mto,b.concept) }
+    else { put('f','emit',d,soc,b,mf,b.concept)
+      if(b.billing_type==='reembolso') put('f','reemb',d,soc,b,-mf,b.concept)
+      else if(fondoEn[String(b.id)]) put('f','reemb',d,soc,b,-Math.min(mf,fondoEn[String(b.id)]),'gasto dentro de honorarios') }
+    ;(terceros||[]).forEach(t=>{ if(t&&t.comision_pct==null&&String(t.billing_id||'')===String(b.id)) put('f','com',d,soc,b,-(Number(t.monto)||0),t.proveedor||'Colaborador') })
+  })
+  ;(ic||[]).forEach(cc=>{ const m=movById[String(cc.movimiento_id)]; if(!m) return; const monto=Number(cc.monto_aplicado)||0; if(monto<=0) return
+    if(cc.tipo_destino==='factura'){ const b=billById[String(cc.factura_id)]
+      if((b&&b.billing_type==='subarriendo')||m.categoria==='Subarriendo'){ put('c','sub',m.fecha,SIN_SOCIO,b,monto,b?.concept||'subarriendo',{mov:m.id,cid:m.cliente_id}); return }
+      const soc=b?socioDe(b,ctx):SIN_SOCIO
+      const x=b&&ext[String(b.id)]
+      if(b&&b.billing_type!=='reembolso'&&x&&(x.com+x.mto)>0){ put('c','perc',m.fecha,soc,b,monto*x.com/(x.com+x.mto),b.concept,{mov:m.id,cid:m.cliente_id}); return }
+      put('c','fac',m.fecha,soc,b,monto,b?.concept,{mov:m.id,cid:m.cliente_id})
+      if(b&&b.billing_type==='reembolso') put('c','reemb',m.fecha,soc,b,-monto,b.concept,{mov:m.id})
+      else if(b&&fondoEn[String(b.id)]){ const mf=montoFactura(b)||monto; put('c','reemb',m.fecha,soc,b,-monto*Math.min(1,fondoEn[String(b.id)]/mf),'gasto dentro de honorarios',{mov:m.id}) }
+    } else { const a=antById[String(cc.anticipo_id)]
+      const extra={mov:m.id,cid:a?.client_id||m.cliente_id}
+      if(m.categoria==='Subarriendo'){ put('c','sub',m.fecha,SIN_SOCIO,null,monto,'subarriendo sin factura',extra); return }
+      put('c','ant',m.fecha,a?socioNorm((a.sale_id&&saleById[String(a.sale_id)]?.responsible)||cliById[String(a.client_id)]?.abogado_responsable):SIN_SOCIO,null,monto,a?.nota||'pago sin factura',extra)
+    }
+  })
+  ;(terceros||[]).forEach(t=>{ if(!t||t.estado!=='pagado'||t.comision_pct!=null) return; const b=t.billing_id&&billById[String(t.billing_id)]
+    put('c','com',t.pagado_at,b?socioDe(b,ctx):socioNorm(t.sale_id&&saleById[String(t.sale_id)]?.responsible),b||null,-(Number(t.monto)||0),t.proveedor||'Colaborador',{cid:b?.client_id||(t.sale_id&&saleById[String(t.sale_id)]?.client_id)||null}) })
+  return out
+}
+
+// Vendido por socio (misma definición que metricasAnio de Inicio: Activo + Terminado, sin subarriendo, renovación anual de recurrentes).
+export function vendidoPorSocio(sales=[], clients=[], ufRef=0, y=new Date().getFullYear(), ym=null){
+  const cliById={}; (clients||[]).forEach(c=>{ if(c) cliById[String(c.id)]=c })
+  const items=[]
+  ;(sales||[]).forEach(s=>{ if(!s||s.deleted_at||!['Activo','Terminado'].includes(s.status)||esSubarriendo(s)||!ventaCuentaEnAnio(s,y)) return
+    const ini=inicioVentaYM(s), mes=esRecurrente(s)&&Number(s.year)<Number(y)?`${y}-${ini.slice(5,7)}`:ini
+    items.push({s, soc:socioDeVenta(s,{cliById}), m:ventaCLP(s,ufRef), ym:mes}) })
+  return items
+}
+
+// Catálogo del Comparativo («+ Agregar indicador»). per:'flujo' = depende de Mes/Año; 'hoy' = foto viva. f: '$' | 'n' | '%' | 'd'.
+export const PS_KPIS=[
+  {g:'Ingresos',k:'vend',l:'Vendido',ls:'Vendido',f:'$',per:'flujo'},
+  {g:'Ingresos',k:'fac',l:'Facturado',ls:'Facturado',f:'$',per:'flujo'},
+  {g:'Ingresos',k:'ireal',l:'Ingreso real',ls:'Ingreso real',f:'$',per:'flujo'},
+  {g:'Ingresos',k:'compag',l:'Comisiones pagadas',ls:'Com. pagadas',f:'$',per:'flujo'},
+  {g:'Ingresos',k:'comfac',l:'Comisiones de lo facturado',ls:'Com. facturado',f:'$',per:'flujo',extra:1},
+  {g:'Ingresos',k:'cext',l:'Comisión de externos',ls:'Com. externos',f:'$',per:'flujo',extra:1},
+  {g:'Ingresos',k:'perc',l:'Comisiones percibidas',ls:'Percibidas',f:'$',per:'flujo',extra:1},
+  {g:'Ingresos',k:'reemb',l:'Reembolsos de gastos',ls:'Reembolsos',f:'$',per:'flujo',extra:1},
+  {g:'Cobro · hoy',k:'pcob',l:'Por cobrar',ls:'Por cobrar',f:'$',per:'hoy'},
+  {g:'Cobro · hoy',k:'venc',l:'de eso, vencido',ls:'de eso, vencido',f:'$',per:'hoy',sub:1},
+  {g:'Cobro · hoy',k:'moro',l:'de eso, cartera morosa',ls:'de eso, morosa',f:'$',per:'hoy',sub:1},
+  {g:'Cobro · hoy',k:'pfat',l:'Por facturar atrasado',ls:'Por facturar',f:'$',per:'hoy'},
+  {g:'Gastos de clientes · hoy',k:'deuda',l:'Deuda de clientes por gastos',ls:'Deuda gastos',f:'$',per:'hoy'},
+  {g:'Gastos de clientes · hoy',k:'favor',l:'Fondos a favor de clientes',ls:'A favor',f:'$',per:'hoy',extra:1},
+  {g:'Ventas',k:'nven',l:'N.º de ventas',ls:'N.º ventas',f:'n',per:'flujo',extra:1},
+  {g:'Ventas',k:'tick',l:'Ticket promedio',ls:'Ticket',f:'$',per:'flujo',extra:1},
+  {g:'Ventas',k:'cact',l:'Clientes con venta',ls:'Clientes',f:'n',per:'flujo',extra:1},
+  {g:'Ventas',k:'conv',l:'Conversión de propuestas',ls:'Conversión',f:'%',per:'hoy',extra:1},
+  {g:'Ventas',k:'pipe',l:'Propuestas abiertas',ls:'Propuestas',f:'n',per:'hoy',extra:1},
+  {g:'Ventas',k:'mrr',l:'Recurrente al mes',ls:'Recurrente',f:'$',per:'hoy',extra:1},
+  {g:'Ventas',k:'comp',l:'Comprometido próximo año',ls:'Comprometido',f:'$',per:'hoy',extra:1},
+  {g:'Ventas',k:'dso',l:'Días de cobro (DSO)',ls:'DSO',f:'d',per:'flujo',extra:1},
+]
+
+export const PS_KPI_DEF=['vend','fac','ireal','compag','pcob','venc','moro','pfat','deuda']
+
+export const _lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v) }catch(_){ return d } }
+
+export const _lsSet=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(_){} }
+
+export const PS_RX_GASTO=/(gasto|reembols|notar|tramitaci|inscrip|conservador|cbr|derechos|provisi|timbre|publicaci|diario oficial)/i
+
+// Vista Por socio (Facturación › Por socio e Inteligencia › Socios): Resumen · Comparativo · Datos. Render aprobado 19-10-2026 (ABU5j4gotedSVCZJkE9kG2).
+export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],fantasmaIds=null,tabIni='res',onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
+  const isDesk=useIsDesktop()
+  const [fu,setFu]=usePorSocioFuentes()
+  const ufState=useUF(); const ufRef=ufState.uf||UF_FALLBACK
+  const noEmitir=useNoEmitirSet()
+  const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
+  const ufFechas=useUFFechas(bill)
+  const COLS=ADMIN_NAMES.concat([SIN_SOCIO])
+  const tinta={[ADMIN_NAMES[0]]:C.accent,[ADMIN_NAMES[1]]:C.tealText,[SIN_SOCIO]:C.soonText,Oficina:C.greenText}
+  const _now=new Date(); const curYM=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`
+  const [tab,setTab]=useState(tabIni)
+  const [ym,setYm]=useState(curYM)
+  const [vista,setVista]=useState('ytd')
+  const [ps,setPs0]=useState(()=>_lsGet('porsocio_ps',false)); const setPs=v=>{ setPs0(v); _lsSet('porsocio_ps',v) }
+  const [sec,setSec]=useState({f:false,c:false})
+  const [open,setOpen]=useState(null)
+  const [verTodo,setVerTodo]=useState(false)
+  const [mm,setMm]=useState('c')
+  const [rev,setRev]=useState(null)
+  const [kpis,setKpis0]=useState(()=>{ const v=_lsGet('porsocio_kpis',PS_KPI_DEF); return (Array.isArray(v)?v:PS_KPI_DEF).map(k=>({fneto:'fac',ext:'cext'})[k]||k).filter((k,i,a)=>PS_KPIS.some(x=>x.k===k)&&a.indexOf(k)===i) }); const setKpis=v=>{ setKpis0(v); _lsSet('porsocio_kpis',v) }
+  const [pick,setPick]=useState(false)
+  const [kopen,setKopen]=useState(null)
+  const [dat,setDat]=useState({sec:'f',con:'pre',soc:null,q:'',ord:'f',lim:40})
+  const [fondoExtra,setFondoExtra]=useState({})
+  const [ligando,setLigando]=useState(null)
+  const shift=n=>{ const [yy,mo]=ym.split('-').map(Number); const d=new Date(yy,mo-1+n,1); const nym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; if(nym<=curYM){ setYm(nym); setOpen(null); setKopen(null) } }
+  const y=Number(ym.slice(0,4)), mo=Number(ym.slice(5,7))
+  const MN=MES_L, mesLbl=`${MN[mo-1].charAt(0).toUpperCase()+MN[mo-1].slice(1)}`
+  const perLbl=p=>p==='mes'?`${mesLbl} ${y}`:(mo===1?`enero ${y}`:`ene–${MES_C[mo-1]} ${y}`)
+  const inPer=(d,p)=>{ const s=String(d||'').slice(0,7); return p==='mes'?s===ym:(s>=`${y}-01`&&s<=ym) }
+  const saleById=useMemo(()=>{const m={};(sales||[]).forEach(s=>{ if(s) m[String(s.id)]=s });return m},[sales])
+  const cliById=useMemo(()=>{const m={};(clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c });return m},[clients])
+  const billById=useMemo(()=>{const m={};(billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b });return m},[billing])
+  const ctx={saleById,cliById,ov:fu.ov}
+  const P=useMemo(()=>partidasPorSocio({billing,sales,clients,anticipos,terceros,expenses,ic:fu.ic,ia:fu.ia,ov:fu.ov,fondoExtra}),[billing,sales,clients,anticipos,terceros,expenses,fu,fondoExtra])
+  const V=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y),[sales,clients,ufRef,y])
+  // «Sin socio» dice de quién es: los abogados no socios dueños de sus partidas del año (venta.responsible → abogado del cliente).
+  const sinAbos=useMemo(()=>{ const set=new Set(); P.forEach(r=>{ if(r.soc!==SIN_SOCIO||r.k==='sub'||!String(r.d).startsWith(String(y))) return; const b=r.bid&&billById[String(r.bid)], sv=b&&b.sale_id&&saleById[String(b.sale_id)], a=(sv&&sv.responsible)||cliById[String(r.cid)]?.abogado_responsable; if(a&&!ADMIN_NAMES.includes(a)) set.add(a) }); return [...set].sort() },[P,y,billById,saleById,cliById])
+  const Ls=c=>c!==SIN_SOCIO?c:sinAbos.length===1?sinAbos[0]:sinAbos.length?'Otros':SIN_SOCIO   // encabezados angostos
+  const L=c=>c!==SIN_SOCIO?c:!sinAbos.length?SIN_SOCIO:sinAbos.length===1?`${SIN_SOCIO} · ${sinAbos[0]}`:'Otros abogados'
+  const F=useMemo(()=>flujoCajaProyectado({billing:bill,sales,anticipos,noEmitir,ufFechas}),[bill,sales,anticipos,noEmitir,ufFechas])
+  const sumP=(s,k,soc,p)=>P.reduce((a,r)=>a+((r.s===s&&(k==null||(Array.isArray(k)?k.includes(r.k):r.k===k))&&(!soc||r.soc===soc)&&inPer(r.d,p))?r.m:0),0)
+  const vend=(soc,p)=>V.reduce((a,x)=>a+((!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym)?x.m:0),0)
+  // [Vendido, Facturado, Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo (aparte)]
+  const KF=['emit','cext','reemb','nc'], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']
+  const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p)] }
+  const P$=v=>(v<0?'−':'')+fmt(Math.abs(Math.round(v)))
+  const FMT=v=>isDesk?P$(v):fmtMillLR(v)
+  const nm=cid=>cliById[String(cid)]?.name||'Sin cliente'
+  const irA=it=>{ if(it.mov&&onIrBanco) return onIrBanco(it.mov); if(it.k==='com'&&onIrProveedores) return onIrProveedores(); if(it.k==='sub'&&onIrSubarriendo) return onIrSubarriendo(); if(it.cid&&onOpenClientFicha) return onOpenClientFicha(it.cid) }
+  const irDatos=(soc,i,p)=>{ setVista(p); if(i===0){ setTab('cmp'); return } setDat(d=>({...d,sec:i===1?'f':'c',con:[null,'pre','cp','com','perc','pre','sub'][i],soc,lim:40})); setTab('dat') }
+  const lista=(items,tit)=>{ const tot=items.reduce((a,x)=>a+x.m,0), shown=verTodo?items:items.slice(0,8)
+    return <div style={{background:C.bgSoft}}>
+      <div style={{display:'flex',justifyContent:'space-between',padding:isDesk?'7px 16px':'7px 10px',...SEC_LBL,fontWeight:800}}><span>{tit} · {items.length}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{P$(tot)}</span></div>
+      {shown.map((x,j)=><div key={j} onClick={()=>irA(x)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:isDesk?'7px 16px':'7px 10px',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>
+        {diaGrande(x.d)}
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{nm(x.cid)}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[x.doc,isDesk?x.det:(x.doc?null:x.det)].filter(Boolean).join(' · ')}</div></div>
+        <span style={{fontSize:12.5,fontWeight:800,color:x.m<0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{P$(x.m)}</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>)}
+      {items.length>8&&<div onClick={()=>setVerTodo(v=>!v)} style={{textAlign:'center',padding:8,fontSize:11.5,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{verTodo?'Ver menos':`Ver las ${items.length}`}</div>}
+    </div> }
+
+  // ── Tarjetas: Oficina arriba, socios abajo · Octubre y Acumulado · pesos exactos (cuadran en toda dirección)
+  const pcY=(()=>{ const v=COLS.map(s=>card6(s,'ytd')[5]), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),1):v.map(()=>0) })()
+  const filasCard=[['ref','Vendido',0],['ref','Facturado',1],['sep','Cobrado propio',2],['','− Com. pagadas',3],['','+ Com. percibidas',4],['res','= Ingreso real',5]]
+  const tdC=(v,i,soc,p,col,big)=>{ const on=Math.abs(v)>=1; return <td onClick={on?()=>irDatos(soc,i,p):undefined} className={on?'er-c':undefined} style={{textAlign:'right',padding:'4px 0 4px 8px',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',cursor:on?'pointer':'default',fontSize:big?(isDesk?19:13.5):i===5?13.5:12,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.text,borderTop:i===5?`1.5px solid ${col}`:i===2?`1px solid ${C.border}`:i===6?`1px dashed ${C.border}`:'none'}}>{on?P$(v):'—'}</td> }
+  const cardSocio=(soc,col)=>{ const m=card6(soc,'mes'), a=card6(soc,'ytd'), pc=soc?pcY[COLS.indexOf(soc)]:0, filas=soc?filasCard:[...filasCard,['apt','Subarriendo',6]]
+    return <div key={soc||'of'} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'12px 16px 10px':'11px 12px 8px',minWidth:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:9,height:9,borderRadius:'50%',background:col,flexShrink:0}}/><span onClick={()=>{ setTab('res'); setPs(true); setSec({f:true,c:true}) }} style={{fontSize:11,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:col,cursor:'pointer'}}>{soc?L(soc):'Oficina'} <Gl n='chevron'/></span><span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.muted,whiteSpace:'nowrap'}}>{soc?`${pc}% del ingreso real${isDesk?' del año':''}`:'ingreso real del año'}</span></div>
+      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup><col style={{width:'40%'}}/><col style={{width:'28%'}}/><col style={{width:'32%'}}/></colgroup>
+        <thead><tr><th/>{[mesLbl,'Acumulado'].map(h=><th key={h} style={{fontSize:9.5,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',textAlign:'right',padding:'4px 0 4px 8px',color:C.muted,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>{filas.map(([cl,l,i])=><tr key={i}><td style={{fontSize:i===5?12.5:12,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.muted,padding:'4px 0',borderTop:i===5?`1.5px solid ${col}`:i===2?`1px solid ${C.border}`:i===6?`1px dashed ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</td>{tdC(m[i],i,soc,'mes',col,!soc&&i===5)}{tdC(a[i],i,soc,'ytd',col,!soc&&i===5)}</tr>)}</tbody></table></div> }
+  const cardOficinaAncha=()=>{ const m=card6(null,'mes'), a=card6(null,'ytd'), col=C.greenText, socsPc=COLS.map((s,i)=>`${L(s)} ${pcY[i]}%`).join(' · ')
+    const hdr=['Vendido','Facturado','Cobrado propio','− Com. pagadas','+ Com. percibidas','= Ingreso real','Subarriendo · aparte'], wH=['12%','11%','12%','12%','12%','12%','15%','14%']
+    return <div style={{gridColumn:'1/-1',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 16px 10px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/><span onClick={()=>{ setTab('res'); setPs(true); setSec({f:true,c:true}) }} style={{fontSize:11,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:col,cursor:'pointer'}}>Oficina <Gl n='chevron'/></span><span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.muted}}>{socsPc} del ingreso real del año</span></div>
+      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{wH.map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+        <thead><tr><th/>{hdr.map((h,i)=><th key={h} style={{fontSize:9.5,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',textAlign:'right',padding:'6px 0 6px 8px',color:i===6?C.done:C.muted,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>{[[mesLbl,m,'mes'],[`Acumulado ${y}`,a,'ytd']].map(([l,v,p],r)=><tr key={p}><td style={{fontSize:13,fontWeight:600,color:C.muted,padding:'6px 0',borderTop:r?`1px solid ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</td>{v.map((x,i)=>{ const on=Math.abs(x)>=1; return <td key={i} onClick={on?()=>irDatos(null,i,p):undefined} className={on?'er-c':undefined} style={{textAlign:'right',padding:'6px 0 6px 8px',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',cursor:on?'pointer':'default',fontSize:i===5?19:14,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.text,borderTop:r?`1px solid ${C.border}`:'none'}}>{on?P$(x):'—'}</td> })}</tr>)}</tbody></table></div> }
+
+  // ── Composición (plegada) y mes a mes: escritorio en pesos; celular en $M con cada columna cuadrada (redondearPartes)
+  // Fila sin clave = subtotal (suma de las filas anteriores); el subarriendo va aparte, debajo, sin sumar.
+  const FF=[['emit','','Facturas emitidas','Emitidas'],['cext','+','Comisión de externos','Com. externos'],['reemb','−','Reembolsos de gastos','Reembolsos'],['nc','−','Notas de crédito','NC']]
+  const FC=[['fac','','Cobrado de facturas','De facturas'],['ant','+','Anticipos','Anticipos'],['reemb','−','Reembolsos de gastos','Reembolsos'],[null,'=','Cobrado propio','Cobrado propio'],['com','−','Comisiones pagadas','Com. pagadas'],['perc','+','Comisiones percibidas','Percibidas']]
+  const colsT=ps?(isDesk?[null,...COLS]:COLS):[null]
+  const th={fontSize:isDesk?10:9,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:isDesk?'8px 12px':'8px 5px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}
+  const td={padding:isDesk?'8px 12px':'8px 5px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?(ps?12:12.5):11.5,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
+  const sgn={display:'inline-block',width:isDesk?13:10,textAlign:'center',fontWeight:700,color:C.muted}
+  const wCols=n=>n===1?['60%','40%']:n===3?['34%','22%','22%','22%']:['24%','19%','19%','19%','19%']
+  const valsCol=(s,keys,soc,p)=>{ const a=keys.map(k=>sumP(s,k,soc,p)); return isDesk?a:redondearPartes(a,1e5) }
+  const Comp=()=>{ const p=vista
+    const seccion=(s,lab,rows,netLab,aparte)=>{ const ab=sec[s], keys=rows.filter(r=>r[0]).map(r=>r[0]), cv=colsT.map(soc=>valsCol(s,keys,soc,p)); let ri=0
+      const apV=aparte?colsT.map(soc=>sumP(s,aparte,soc,p)):null, apO=aparte&&open&&open.s===s&&open.k===aparte
+      return <Fragment key={s}>
+        <tr onClick={()=>setSec(x=>({...x,[s]:!x[s]}))} style={{cursor:'pointer'}}><td colSpan={colsT.length+1} style={{padding:isDesk?'12px 16px 5px':'11px 8px 5px',...SEC_LBL,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{lab} <span style={{color:C.textSoft,display:'inline-block'}}><ChevAb open={ab}/></span></td></tr>
+        {ab&&rows.map(([k,sg,lg,sh])=>{ if(!k){ const sv=cv.map(a=>a.slice(0,ri).reduce((x,v)=>x+v,0)); return <tr key={lg}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.accent,fontWeight:700,background:C.bgSoft}}><span style={{...sgn,color:C.accent}}>{sg}</span>{ps&&isDesk?sh:(isDesk?lg:sh)}</td>{sv.map((v,j)=><td key={j} style={{...td,fontWeight:700,color:C.accent,background:C.bgSoft,paddingRight:j===sv.length-1?(isDesk?16:8):undefined}}>{FMT(v)}</td>)}</tr> }
+          const i=ri++; if(cv.every(a=>Math.abs(a[i])<1)) return null; const isO=open&&open.s===s&&open.k===k
+          return <Fragment key={k}><tr>
+            <td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.muted,fontWeight:600}}><span style={sgn}>{sg}</span>{ps&&isDesk?sh:(isDesk?lg:sh)}</td>
+            {cv.map((a,j)=>{ const v=Math.abs(a[i]), soc=colsT[j], sel=isO&&open.soc===soc; return <td key={j} onClick={v>=1?()=>{ setVerTodo(false); setOpen(o=>(o&&o.s===s&&o.k===k&&o.soc===soc)?null:{s,k,soc}) }:undefined} style={{...td,fontWeight:soc===null&&ps?800:700,color:v>=1?(soc===null&&ps?C.accent:C.text):C.done,cursor:v>=1?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===cv.length-1?(isDesk?16:8):undefined}}>{v>=1?FMT(v):'—'}</td> })}
+          </tr>{isO&&<tr><td colSpan={colsT.length+1} style={{padding:0}}>{lista(P.filter(r=>r.s===s&&r.k===k&&(!open.soc||r.soc===open.soc)&&inPer(r.d,p)).sort((a,b)=>Math.abs(b.m)-Math.abs(a.m)),`${open.soc?L(open.soc):'Oficina'} · ${lg}`)}</td></tr>}</Fragment> })}
+        <tr onClick={s==='f'?onIrBilling:onIrCobranza} style={{cursor:'pointer'}}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{...sgn,color:C.accent}}>=</span>{netLab} <Gl n='chevron'/></td>
+          {cv.map((a,j)=>{ const n=a.reduce((x,v)=>x+v,0); return <td key={j} style={{...td,fontWeight:800,fontSize:isDesk?(ps?12.5:14):12.5,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===cv.length-1?(isDesk?16:8):undefined}}>{FMT(n)}</td> })}</tr>
+        {apV&&apV.some(v=>Math.abs(v)>=1)&&<><tr><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.done,fontWeight:600,borderTop:`1px dashed ${C.border}`}}><span style={sgn}/>{isDesk?'Subarriendo · aparte':'Subarriendo'}</td>
+          {apV.map((v,j)=>{ const soc=colsT[j]; return <td key={j} onClick={Math.abs(v)>=1?()=>{ setVerTodo(false); setOpen(o=>(o&&o.s===s&&o.k===aparte&&o.soc===soc)?null:{s,k:aparte,soc}) }:undefined} style={{...td,color:C.done,fontWeight:600,borderTop:`1px dashed ${C.border}`,cursor:Math.abs(v)>=1?'pointer':'default',background:apO&&open.soc===soc?C.azulBg:undefined,paddingRight:j===apV.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td> })}</tr>
+          {apO&&<tr><td colSpan={colsT.length+1} style={{padding:0}}>{lista(P.filter(r=>r.s===s&&r.k===aparte&&(!open.soc||r.soc===open.soc)&&inPer(r.d,p)).sort((a,b)=>Math.abs(b.m)-Math.abs(a.m)),`${open.soc?L(open.soc):'Oficina'} · Subarriendo`)}</td></tr>}</>}
+      </Fragment> }
+    return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{wCols(colsT.length).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+      <thead><tr><th style={{...th,textAlign:'left'}}/>{colsT.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===colsT.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
+      <tbody>{seccion('f','Facturado',FF,'Facturado')}{seccion('c','Cobrado',FC,'Ingreso real','sub')}</tbody></table> }
+  const MesAMes=()=>{ const s=mm, nMes=mo
+    const ks=s==='c'?KI:KF
+    const cv=colsT.map(soc=>{ const a=Array.from({length:nMes},(_,i)=>P.reduce((x,r)=>x+((r.s===s&&ks.includes(r.k)&&(!soc||r.soc===soc)&&String(r.d).startsWith(`${y}-${String(i+1).padStart(2,'0')}`))?r.m:0),0)); return isDesk?a:redondearPartes(a,1e5) })
+    const socIdx=colsT.map((c,j)=>c?j:-1).filter(j=>j>=0)
+    return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(colsT.length===1?['60%','40%']:colsT.length===3?['28%','24%','24%','24%']:['24%','19%','19%','19%','19%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+      <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Mes</th>{colsT.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===colsT.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
+      <tbody>{Array.from({length:nMes},(_,k)=>nMes-1-k).map(i=>{ const vs=cv.map(a=>a[i]); const a0=socIdx.length>1?vs[socIdx[0]]:null, a1=socIdx.length>1?vs[socIdx[1]]:null, mx=a0==null?-1:(a0>=a1?socIdx[0]:socIdx[1]); const ymI=`${y}-${String(i+1).padStart(2,'0')}`, sel=vista==='mes'&&ym===ymI
+        return <tr key={i} onClick={()=>{ setYm(ymI); setVista('mes'); setOpen(null) }} className='er-c' style={{cursor:'pointer',background:sel?C.azulBg:undefined}}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.accent,fontWeight:700}}>{isDesk?mesTitulo(new Date(y,i,15)).split(' ')[0]:MES_C[i]}</td>
+          {vs.map((v,j)=><td key={j} style={{...td,fontWeight:colsT[j]===null?800:700,color:Math.abs(v)<1?C.done:colsT[j]===null?C.accent:(j===mx?tinta[colsT[j]]:C.text),paddingRight:j===vs.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td>)}</tr> })}
+        <tr><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>{y}</td>{cv.map((a,j)=><td key={j} style={{...td,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===cv.length-1?(isDesk?16:8):undefined}}>{FMT(a.reduce((x,v)=>x+v,0))}</td>)}</tr>
+      </tbody></table> }
+
+  // ── Para revisar (compuerta → aprende → no vuelve a preguntar)
+  const fondoEnFac=useMemo(()=>{ const m={}; (expenses||[]).forEach(e=>{ const inv=fondoExtra[String(e?.id)]||e?.invoice_id; if(e&&!e.deleted_at&&e.type==='fondo'&&inv) m[String(inv)]=true }); return m },[expenses,fondoExtra])
+  // Gasto dentro de una factura de honorarios: la factura menciona un gasto Y el cliente tiene un fondo sin depósito propio
+  // (sin conciliación) dentro de ±31 días de la emisión o el pago y menor que la factura → esa plata vino dentro de la factura.
+  // Si el fondo entró en su propia transferencia (conciliado), la factura es honorario puro y no se marca.
+  const fondoCand=useMemo(()=>{ const m={}; const dd=(a,b)=>Math.abs(new Date(String(a).slice(0,10))-new Date(String(b).slice(0,10)))/864e5
+    ;(billing||[]).forEach(b=>{ if(!b||b.deleted_at||!b.invoice_no||b.billing_type!=='honorarios'||b.status==='Anulada'||String(b.issued_at||'').slice(0,4)!==String(y)) return
+      if(!PS_RX_GASTO.test(String(b.concept||'')+' '+String((String(b.dte_xml||'').match(/<NmbItem>(.*?)<\/NmbItem>/)||[])[1]||''))) return
+      const mf=montoFactura(b)||Number(b.amount)||0
+      const fs=(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='fondo'&&String(e.client_id)===String(b.client_id)&&!e.invoice_id&&!fondoExtra[String(e.id)]&&!fu.gc.has(String(e.id))&&(Number(e.amount)||0)<mf&&[b.issued_at,b.paid_at].some(x=>x&&dd(x,e.date)<=31))
+      if(fs.length) m[String(b.id)]=fs })
+    return m },[billing,expenses,y,fondoExtra,fu.gc])
+  const revTram=useMemo(()=>(billing||[]).filter(b=>b&&fondoCand[String(b.id)]&&!fondoEnFac[String(b.id)]&&!fu.hok.has(String(b.id))),[billing,fondoCand,fondoEnFac,fu.hok])
+  const revCuo=useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!b.invoice_no&&b.issued_at&&!['Programada','Anulada'].includes(b.status)&&b.billing_type!=='reembolso'),[billing])
+  const revBda=useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(b.billing_type==='comision'||(b.sale_id&&/^comisi/i.test(String(saleById[String(b.sale_id)]?.title||''))))&&!fu.ov[String(b.id)]),[billing,saleById,fu.ov])
+  const esHonorario=async b=>{ setFu(f=>({...f,hok:new Set([...f.hok,String(b.id)])})); if(!DEMO){ await setLearningKV('honorario_sin_gasto',b.id,'1'); logActividad('honorario_sin_gasto',{tabla:'billing',id:b.id,detalle:b}) } }
+  const ligar=async(b,e)=>{ setFondoExtra(x=>({...x,[String(e.id)]:b.id})); setLigando(null); if(!DEMO){ const {error}=await supabase.from('expenses').update({invoice_id:b.id}).eq('id',e.id).is('invoice_id',null); if(error){ appAlert('No se pudo ligar el gasto: '+error.message); return } logActividad('fondo_ligado_factura',{tabla:'expenses',id:e.id,detalle:{invoice_no:b.invoice_no,monto:e.amount}}) } }
+  const asignar=async(b,soc)=>{ setFu(f=>({...f,ov:{...f.ov,[String(b.id)]:soc}})); if(!DEMO){ await setLearningKV('socio_factura',b.id,soc); logActividad('socio_factura',{tabla:'billing',id:b.id,detalle:{invoice_no:b.invoice_no,persona:soc}}) } }
+  const revTile=(k,ic,ibg,icol,lab,val,vcol)=>{ const on=rev===k; return <div key={k} onClick={()=>setRev(r=>r===k?null:k)} style={{background:C.card,border:`1px solid ${on?C.accent:C.border}`,borderRadius:10,padding:isDesk?'10px 16px':'10px 12px',display:'flex',gap:10,alignItems:'center',cursor:'pointer',minWidth:0}}>
+      <span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={15} c={icol}/></span>
+      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:15,fontWeight:800,color:vcol,fontVariantNumeric:'tabular-nums'}}>{val}</div></div><span style={{color:C.textSoft}}><ChevAb open={on}/></span></div> }
+  const grupoSocio=(arr,fn)=>COLS.map(soc=>{ const its=arr.filter(b=>socioDe(b,ctx)===soc); if(!its.length) return null; return <Fragment key={soc}><div style={{display:'flex',justifyContent:'space-between',padding:isDesk?'8px 16px':'8px 10px',fontSize:11,fontWeight:800,color:C.accent,borderTop:`1px solid ${C.border}`}}><span>{L(soc)} · {its.length}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{P$(its.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0))}</span></div>{its.map(fn)}</Fragment> })
+  const filaRev=(b,der,sub)=><div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:isDesk?'7px 16px':'7px 10px',borderTop:`1px solid ${C.border}`}}>
+      {diaGrande(b.issued_at)}
+      <div onClick={()=>b.client_id&&onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{nm(b.client_id)}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.invoice_no?`F${folioN(b.invoice_no)}`:b.status}{sub?` · ${sub}`:(isDesk&&b.concept?` · ${b.concept}`:'')}</div></div>
+      <span style={{fontSize:12.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{P$(montoFactura(b)||b.amount||0)}</span>{der}</div>
+  const btn=(t,on,prim)=><button onClick={e=>{ e.stopPropagation(); on() }} style={{fontSize:11,fontWeight:700,borderRadius:8,padding:'4px 9px',border:`1px solid ${prim?C.accent:C.border}`,background:prim?C.accent:C.card,color:prim?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>{t}</button>
+  const revDet=()=>{ if(!rev) return null
+    const caja=(t,body)=><div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}><div style={{padding:isDesk?'11px 16px':'10px 10px',borderBottom:`1px solid ${C.border}`,...SEC_LBL,fontWeight:800}}>{t}</div>{body}</div>
+    if(rev==='tram') return caja(isDesk?'Facturas de honorarios con señales de gasto y sin gasto ligado':'Gastos dentro de honorarios',revTram.length?grupoSocio(revTram,b=><Fragment key={b.id}>{filaRev(b,<span style={{display:'flex',gap:6}}>{btn(isDesk?'Es honorario':'Honorario',()=>esHonorario(b))}{btn(isDesk?'Ligar gasto':'Gasto',()=>setLigando(l=>l===b.id?null:b.id),true)}</span>,(()=>{ const e=(fondoCand[String(b.id)]||[])[0]; return e?`fondo sin depósito ${P$(e.amount)} del ${fmtFechaDMY(e.date)}`:null })())}
+        {ligando===b.id&&(()=>{ const fs=fondoCand[String(b.id)]||[]; return <div style={{background:C.bgSoft,padding:isDesk?'6px 16px 10px':'6px 10px 10px'}}>{fs.length?fs.map(e=><div key={e.id} onClick={()=>ligar(b,e)} className='er-c' style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 8px',borderRadius:8,cursor:'pointer',fontSize:12}}><span style={{color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(e.date)} · {e.concept||'Fondo'}</span><b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{P$(e.amount)}</b></div>):<div style={{fontSize:12,color:C.muted,padding:'4px 8px'}}>Este cliente no tiene fondos sin ligar. Regístralo en su ficha › Gastos.</div>}</div> })()}</Fragment>):<div style={{padding:14,fontSize:12,color:C.muted}}>Sin pendientes.</div>)
+    if(rev==='cuo') return caja(isDesk?'Cuotas con fecha de emisión y sin factura':'Cuotas sin factura',revCuo.length?grupoSocio(revCuo,b=>filaRev(b,<span style={{color:C.textSoft}}><Gl n='chevron'/></span>)):<div style={{padding:14,fontSize:12,color:C.muted}}>Sin pendientes.</div>)
+    if(rev==='bda') return caja(isDesk?'Comisiones que nos pagan: ¿de qué socio es el cliente?':'Comisiones por asignar',revBda.length?revBda.map(b=>filaRev(b,<span style={{display:'flex',gap:6}}>{ADMIN_NAMES.map(sn=>btn(sn,()=>asignar(b,sn)))}</span>)):<div style={{padding:14,fontSize:12,color:C.muted}}>Al día: todas tienen socio.</div>)
+    return null }
+  const sumB=a=>a.reduce((x,b)=>x+(montoFactura(b)||b.amount||0),0)
+  const ParaRevisar=()=><><div style={{...SEC_LBL,fontWeight:800,margin:'16px 2px 8px'}}>Para revisar</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:8}}>
+      {revTile('tram','alert',C.ambarBg,C.soonText,`Gastos dentro de honorarios · ${revTram.length}`,revTram.length?fmtMillLR(sumB(revTram)):'Al día',revTram.length?C.soonText:C.greenText)}
+      {revTile('cuo','file',C.azulBg,C.azulInfo,`Cuotas con fecha sin factura · ${revCuo.length}`,revCuo.length?fmtMillLR(sumB(revCuo)):'Al día',revCuo.length?C.azulInfo:C.greenText)}
+      {revTile('bda','users',C.greenBg,C.greenText,revBda.length?`Comisiones por asignar · ${revBda.length}`:'Comisiones por asignar',revBda.length?fmtMillLR(sumB(revBda)):'Al día',revBda.length?C.soonText:C.greenText)}
+    </div>{revDet()}</>
+
+  // ── Comparativo («+ Agregar indicador»)
+  const KV=useMemo(()=>{ const o={}; const z=()=>({[ADMIN_NAMES[0]]:0,[ADMIN_NAMES[1]]:0,[SIN_SOCIO]:0}); const add=(k,soc,v,it)=>{ (o[k]=o[k]||{v:z(),n:z(),it:[]}); o[k].v[soc]+=v; o[k].n[soc]++; if(it) o[k].it.push({...it,soc}) }
+    ;(bill||[]).forEach(b=>{ if(!b||b.deleted_at||!b.invoice_no||!['Pendiente','Vencido'].includes(b.status)||['reembolso','nota_credito'].includes(b.billing_type)) return; const sv=saldoBill(b); if(!(sv>0)) return; const soc=socioDe(b,ctx), it={d:b.issued_at,cid:b.client_id,doc:`F${folioN(b.invoice_no)}`,det:b.concept||'',m:sv}
+      add('pcob',soc,sv,it); if(b.status==='Vencido') add('venc',soc,sv,it) })
+    ;(F.fuera||[]).forEach(x=>{ const b=billById[String(x.id)]; if(!b) return; const soc=socioDe(b,ctx); add(x.tipo==='duda'?'moro':'pfat',soc,x.m,{d:b.issued_at||b.due,cid:b.client_id,doc:b.invoice_no?`F${folioN(b.invoice_no)}`:'',det:b.concept||'',m:x.m}) })
+    const porCli={}; (expenses||[]).forEach(e=>{ if(!e||e.deleted_at||!e.client_id) return; porCli[String(e.client_id)]=true })
+    Object.keys(porCli).forEach(cid=>{ const c=cliById[cid]; if(!c||/^liberona escala/i.test(String(c.name||''))) return; const s0=fgCliente(expenses,c.id).saldo; const soc=socioNorm(c.abogado_responsable); const it={d:null,cid:c.id,doc:'',det:'saldo de gastos',m:s0}
+      if(s0<-1) add('deuda',soc,-s0,{...it,m:-s0}); else if(s0>1) add('favor',soc,s0,it) })
+    return o },[bill,F,billById,expenses,cliById,fu.ov,saleById])
+  const kpiVal=(k,soc,p)=>{ const z=v=>v||0
+    if(k==='vend') return vend(soc,p)
+    if(k==='fac') return sumP('f',KF,soc,p)
+    if(k==='ireal') return sumP('c',KI,soc,p)
+    if(k==='compag') return -sumP('c','com',soc,p)
+    if(k==='comfac') return -sumP('f','com',soc,p)
+    if(k==='cext') return sumP('f','cext',soc,p)
+    if(k==='perc') return sumP('c','perc',soc,p)
+    if(k==='reemb') return -sumP('f','reemb',soc,p)
+    if(['pcob','venc','moro','pfat','deuda','favor'].includes(k)){ const o=KV[k]; return o?(soc?z(o.v[soc]):Object.values(o.v).reduce((a,v)=>a+v,0)):0 }
+    const its=V.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym))
+    if(k==='nven') return its.length
+    if(k==='tick') return its.length?its.reduce((a,x)=>a+x.m,0)/its.length:null
+    if(k==='cact') return new Set(its.map(x=>String(x.s.client_id))).size
+    const ss=(sales||[]).filter(s=>s&&!s.deleted_at&&!esSubarriendo(s)&&(!soc||socioDeVenta(s,{cliById})===soc))
+    if(k==='conv'){ const g=ss.filter(s=>s.activated_at).length, r=ss.filter(s=>s.status==='Rechazada').length; return (g+r)?g/(g+r)*100:null }
+    if(k==='pipe') return ss.filter(s=>s.status==='Propuesta').length
+    if(k==='mrr') return ss.filter(s=>esRecurrente(s)).reduce((a,s)=>a+ventaCLP(s,ufRef)/12,0)
+    if(k==='comp') return (bill||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&Number(String(b.due||'').slice(0,4))>y&&(!soc||socioDe(b,ctx)===soc)).reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
+    if(k==='dso'){ const ps2=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no&&inPer(b.paid_at,p)&&!['reembolso','nota_credito'].includes(b.billing_type)&&(!soc||socioDe(b,ctx)===soc)).map(b=>(new Date(b.paid_at)-new Date(b.issued_at))/864e5).filter(d=>d>=0&&d<400); return ps2.length?Math.round(ps2.reduce((a,d)=>a+d,0)/ps2.length):null }
+    return null }
+  const fK=(v,f)=>v==null?'—':f==='$'?(Math.abs(v)<1?'—':FMT(v)):f==='%'?`${Math.round(v)}%`:f==='d'?`${v} d`:String(Math.round(v))
+  const Comparativo=()=>{ const p=vista, cs=isDesk?[null,...COLS]:COLS, w=cs.length===3?['34%','22%','22%','22%']:['28%','18%','18%','18%','18%']
+    const orden=kpis.slice().sort((a,b)=>PS_KPIS.findIndex(x=>x.k===a)-PS_KPIS.findIndex(x=>x.k===b)); let g=null
+    return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>{isDesk?'Comparativo entre socios':'Comparativo'} · {perLbl(p)}</span><button onClick={()=>setPick(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${C.azulBd}`,background:C.azulBg,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{isDesk?'+ Agregar indicador':'+ Agregar'}</button></div>
+      {pick&&<div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(3,minmax(0,1fr))':'1fr 1fr',gap:'6px 14px',padding:isDesk?'10px 16px':'10px',borderBottom:`1px solid ${C.border}`}}>
+        {PS_KPIS.map((K,i)=>{ const nuevo=i===0||PS_KPIS[i-1].g!==K.g, on=kpis.includes(K.k); return <Fragment key={K.k}>{nuevo&&<div style={{gridColumn:'1/-1',...SEC_LBL,fontWeight:800,margin:'6px 0 2px'}}>{K.g}</div>}<button onClick={()=>setKpis(on?kpis.filter(x=>x!==K.k):[...kpis,K.k])} style={{textAlign:'left',fontSize:12,fontWeight:600,color:C.accent,background:on?C.azulBg:C.bgSoft,border:0,borderRadius:8,padding:'6px 10px',cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{on?'✓ ':'+ '}{K.l}</button></Fragment> })}</div>}
+      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{w.map((x,i)=><col key={i} style={{width:x}}/>)}</colgroup>
+        <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Indicador</th>{cs.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c?(isDesk?L(c):Ls(c)):'Oficina'}</th>)}</tr></thead>
+        <tbody>{orden.map(k=>{ const K=PS_KPIS.find(x=>x.k===k); if(!K) return null; const cap=K.g!==g; g=K.g; const ko=kopen&&kopen.k===k
+          const vals=cs.map(soc=>kpiVal(k,soc,p))
+          const its=KV[k]?.it||null
+          return <Fragment key={k}>
+            {cap&&<tr><td colSpan={cs.length+1} style={{padding:isDesk?'12px 16px 5px':'11px 8px 5px',...SEC_LBL,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{K.g}{K.per==='flujo'?` · ${perLbl(p)}`:''}</td></tr>}
+            <tr><td style={{...td,textAlign:'left',paddingLeft:K.sub?(isDesk?30:18):(isDesk?16:8),color:C.muted,fontWeight:K.sub?500:600}}>{isDesk?K.l:K.ls}<span onClick={()=>setKpis(kpis.filter(x=>x!==k))} style={{color:C.done,cursor:'pointer',marginLeft:6,fontWeight:700}}>×</span></td>
+              {vals.map((v,j)=>{ const soc=cs[j], clic=v!=null&&(its||['fac','ireal','compag','comfac','cext','perc','reemb'].includes(k)); const sel=ko&&kopen.soc===soc
+                return <td key={j} onClick={clic?()=>{ if(its){ setVerTodo(false); setKopen(o=>(o&&o.k===k&&o.soc===soc)?null:{k,soc}) } else { setDat(d=>({...d,sec:['fac','comfac','cext','reemb'].includes(k)?'f':'c',con:{compag:'com',comfac:'com',cext:'cext',perc:'perc',reemb:'reemb'}[k]||'pre',soc,lim:40})); setTab('dat') } }:undefined} style={{...td,fontWeight:soc===null?800:700,color:soc===null?C.accent:C.text,cursor:clic?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===vals.length-1?(isDesk?16:8):undefined}}>{fK(v,K.f)}{isDesk&&its&&soc&&KV[k]?.n[soc]?<span style={{fontSize:10,color:C.textSoft,fontWeight:600,marginLeft:4}}>{KV[k].n[soc]}</span>:null}</td> })}</tr>
+            {ko&&its&&<tr><td colSpan={cs.length+1} style={{padding:0}}>{lista(its.filter(x=>!kopen.soc||x.soc===kopen.soc).sort((a,b)=>b.m-a.m),`${kopen.soc?L(kopen.soc):'Oficina'} · ${K.l}`)}</td></tr>}
+          </Fragment> })}</tbody></table></div> }
+
+  // ── Datos crudos (partidas reales, monto en la columna de su socio)
+  const CON={f:{emit:'Facturas emitidas',cext:'Comisión de externos',reemb:'Reembolsos de gastos',nc:'Notas de crédito',com:'Comisiones de lo facturado',sub:'Subarriendo · aparte'},c:{fac:'Cobrado de facturas',ant:'Anticipos',reemb:'Reembolsos de gastos',com:'Comisiones pagadas',perc:'Comisiones percibidas',sub:'Subarriendo · aparte'}}
+  const SECL={f:'Facturado',c:'Cobrado'}
+  const Datos=()=>{ const p=vista, base=P.filter(r=>r.s===dat.sec&&inPer(r.d,p)&&(!dat.soc||r.soc===dat.soc)), presentes=[...new Set(base.map(r=>r.k))], q=_normTxt(dat.q||'')
+    const grupo=dat.con==='pre'?(dat.sec==='f'?KF:KI):dat.con==='cp'?KC:[dat.con]
+    let L=base.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q)))
+    L.sort((a,b)=>dat.ord==='m'?Math.abs(b.m)-Math.abs(a.m):String(b.d).localeCompare(String(a.d)))
+    const T={}; COLS.forEach(c=>T[c]=0); L.forEach(r=>T[r.soc]+=r.m)
+    const chip=(on,t,f)=><button key={t} onClick={f} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:0,cursor:'pointer',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted,whiteSpace:'nowrap'}}>{t}</button>
+    const tdD={padding:isDesk?'7px 10px':'7px 6px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12:11,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums',overflow:'hidden',textOverflow:'ellipsis'}
+    return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800}}>{SECL[dat.sec]} · partidas · {perLbl(p)}</span></div>
+      <div style={{display:'flex',gap:12,flexWrap:'wrap',padding:isDesk?'8px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`,fontSize:11.5,fontWeight:700}}>{COLS.map(c=><span key={c} style={{color:tinta[c],fontVariantNumeric:'tabular-nums'}}>{L(c)} {P$(T[c])}</span>)}<span style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>· Oficina {P$(COLS.reduce((a,c)=>a+T[c],0))}</span></div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:isDesk?'10px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`}}>
+        {chip(dat.sec==='f','Facturado',()=>setDat(d=>({...d,sec:'f',con:'pre',lim:40})))}{chip(dat.sec==='c','Cobrado',()=>setDat(d=>({...d,sec:'c',con:'pre',lim:40})))}
+        <span style={{width:6}}/>{[[null,'Todos'],...COLS.map(c=>[c,L(c)])].map(([k,l])=>chip(dat.soc===k,l,()=>setDat(d=>({...d,soc:k,lim:40}))))}
+        <input value={dat.q} onChange={e=>setDat(d=>({...d,q:e.target.value,lim:40}))} placeholder='Buscar cliente o folio' style={{flex:1,minWidth:isDesk?160:'100%',maxWidth:isDesk?260:'none',marginLeft:isDesk?'auto':0,fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px',color:C.text}}/></div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:isDesk?'10px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`}}>
+        {chip(dat.con==='pre',dat.sec==='f'?'Facturado':'Ingreso real',()=>setDat(d=>({...d,con:'pre',lim:40})))}{dat.sec==='c'&&chip(dat.con==='cp','Cobrado propio',()=>setDat(d=>({...d,con:'cp',lim:40})))}
+        {Object.entries(CON[dat.sec]).filter(([k])=>presentes.includes(k)).map(([k,l])=>chip(dat.con===k,l,()=>setDat(d=>({...d,con:k,lim:40}))))}
+        <span style={{marginLeft:'auto',display:'inline-flex',gap:4}}>{chip(dat.ord==='f','Fecha',()=>setDat(d=>({...d,ord:'f'})))}{chip(dat.ord==='m','Monto',()=>setDat(d=>({...d,ord:'m'})))}</span></div>
+      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
+        <colgroup>{(isDesk?['10%','22%','8%','21%','13%','13%','13%']:['66%','34%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+        <thead><tr>{(isDesk?['Fecha','Cliente','Folio','Concepto']:['Cliente']).map((h,i)=><th key={h} style={{...th,textAlign:'left',paddingLeft:i===0?(isDesk?16:10):undefined}}>{h}</th>)}{(isDesk?COLS:['Monto']).map((c,j,arr)=><th key={c} style={{...th,color:tinta[c]||C.accent,paddingRight:j===arr.length-1?(isDesk?16:10):undefined}}>{COLS.includes(c)?L(c):c}</th>)}</tr></thead>
+        <tbody>{L.slice(0,dat.lim).map((r,i)=><tr key={i} onClick={()=>irA(r)} className='er-c' style={{cursor:'pointer'}}>
+          {isDesk?<><td style={{...tdD,textAlign:'left',paddingLeft:16,color:C.muted}}>{fmtFechaDMY(r.d)}</td>
+          <td style={{...tdD,textAlign:'left',color:C.accent,fontWeight:700}} title={nm(r.cid)}>{nm(r.cid)}</td></>
+          :<td style={{...tdD,textAlign:'left',paddingLeft:10,whiteSpace:'normal'}}><div style={{color:C.accent,fontWeight:700,fontSize:11.5,lineHeight:1.25,overflowWrap:'anywhere'}}>{nm(r.cid)}</div><div style={{color:C.textSoft,fontSize:10.5,fontWeight:600,whiteSpace:'nowrap'}}>{fmtFechaDMY(r.d)}{r.doc?` · ${r.doc}`:''}</div></td>}
+          {isDesk&&<td style={{...tdD,textAlign:'left',color:C.muted}}>{r.doc||'—'}</td>}
+          {isDesk&&<td style={{...tdD,textAlign:'left',color:C.textSoft}} title={r.det}>{CON[r.s][r.k]}</td>}
+          {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,color:c===r.soc?(r.m<0?C.overdueText:C.text):C.done,paddingRight:j===COLS.length-1?16:undefined}}>{c===r.soc?P$(r.m):'·'}</td>)
+            :<td style={{...tdD,paddingRight:10,verticalAlign:'top',color:r.m<0?C.overdueText:C.text}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:tinta[r.soc],marginRight:5}}/>{P$(r.m)}</td>}
+        </tr>)}
+          <tr><td colSpan={isDesk?4:1} style={{...tdD,textAlign:'left',paddingLeft:isDesk?16:10,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>Total · {L.length} partidas</td>
+            {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===COLS.length-1?16:undefined}}>{P$(T[c])}</td>)
+              :<td style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:10}}>{P$(COLS.reduce((a,c)=>a+T[c],0))}</td>}</tr></tbody></table>
+      {L.length>dat.lim&&<div onClick={()=>setDat(d=>({...d,lim:d.lim+40}))} style={{textAlign:'center',padding:10,fontSize:12,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>Ver {Math.min(40,L.length-dat.lim)} más de {L.length}</div>}
+    </div> }
+
+  const exportar=()=>{ try{
+    const rows=[['Fecha','Socio','Sección','Concepto','Cliente','Folio','Detalle','Monto']]
+    P.filter(r=>inPer(r.d,'ytd')).sort((a,b)=>String(a.d).localeCompare(String(b.d))).forEach(r=>rows.push([fmtFechaDMY(r.d),L(r.soc),SECL[r.s],CON[r.s][r.k],nm(r.cid),r.doc,r.det,Math.round(r.m)]))
+    const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
+    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`por_socio_${ym}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+  }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
+
+  const seg=(opts,val,set)=><span style={{display:'inline-flex',background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:2,flex:isDesk?'none':(opts.length>2?'1 1 100%':'none')}}>{opts.map(([k,l])=><button key={k} onClick={()=>set(k)} style={{flex:isDesk?'none':1,fontSize:12,fontWeight:700,border:0,borderRadius:14,padding:'5px 13px',cursor:'pointer',background:val===k?C.accent:'transparent',color:val===k?'#fff':C.muted}}>{l}</button>)}</span>
+  const nb=(dis,on,ch)=><button disabled={dis} onClick={on} style={{width:30,height:30,borderRadius:9,border:`1px solid ${C.border}`,background:C.card,color:C.accent,cursor:dis?'default':'pointer',opacity:dis?.35:1}}><Gl n={ch}/></button>
+  if(!fu.ok) return <div style={{padding:24,fontSize:13,color:C.muted}}>Cargando…</div>
+  return (<div>
+    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',margin:'0 0 14px'}}>
+      {seg([['res','Resumen'],['cmp','Comparativo'],['dat','Datos']],tab,setTab)}
+      {seg([['mes','Mes'],['ytd','Año']],vista,v=>{ setVista(v); setOpen(null); setKopen(null) })}
+      <span style={{display:'inline-flex',alignItems:'center',gap:6,marginLeft:isDesk?'auto':0}}>{nb(false,()=>shift(-1),'chevL')}<span style={{minWidth:isDesk?124:96,textAlign:'center',fontSize:13.5,fontWeight:700,color:C.text}}>{perLbl(vista)}</span>{nb(ym===curYM,()=>shift(1),'chevron')}</span>
+      <button onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap',marginLeft:isDesk?0:'auto'}}>{isDesk?'Exportar ↓':'↓'}</button>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(3,minmax(0,1fr))':'1fr',gap:isDesk?12:8}}>
+      {isDesk?cardOficinaAncha():cardSocio(null,C.greenText)}
+      {COLS.map(c=>cardSocio(c,tinta[c]))}
+    </div>
+    {tab==='res'&&<div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(2,minmax(0,1fr))':'1fr',gap:isDesk?12:8,marginTop:16,alignItems:'start'}}>
+      <div style={{minWidth:0}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Composición · {perLbl(vista)}</span><button onClick={()=>setPs(!ps)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${ps?C.azulBd:C.border}`,background:ps?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{ps?'Cerrar por socio':'Abrir por socio'}</button></div>
+          {Comp()}
+        </div>
+        {ParaRevisar()}
+      </div>
+      <div style={{minWidth:0}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Mes a mes {y}</span><span style={{marginLeft:'auto',display:'inline-flex',background:C.bgSoft,borderRadius:12,padding:2}}>{[['c','Ingreso real'],['f','Facturado']].map(([k,l])=><button key={k} onClick={()=>setMm(k)} style={{fontSize:10.5,fontWeight:700,border:0,borderRadius:10,padding:'3px 9px',cursor:'pointer',background:mm===k?C.card:'transparent',color:mm===k?C.accent:C.muted,boxShadow:mm===k?`0 0 0 1px ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</button>)}</span></div>
+          {MesAMes()}
+        </div>
+      </div>
+    </div>}
+    {tab==='cmp'&&<div style={{marginTop:16}}>{Comparativo()}</div>}
+    {tab==='dat'&&<div style={{marginTop:16}}>{Datos()}</div>}
+  </div>)
 }
 
