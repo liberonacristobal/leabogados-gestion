@@ -1,0 +1,22 @@
+name: Verificar
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # El recorrido responde Supabase con datos de la demo; solo necesita la dirección y una llave de relleno.
+      - run: printf 'VITE_SUPABASE_URL=https://kibuwhtpoxrnfowfdolu.supabase.co\nVITE_SUPABASE_ANON_KEY=llave-de-relleno\n' > .env
+      # Mismo control que el pre-push: build, lint, pruebas de reglas y recorrido de la demo en Chrome sin ventana.
+      - run: npm run verificar
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
