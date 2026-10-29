@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Reconoce a qué cliente EXISTENTE apunta una propuesta (por el nombre del archivo de Drive). SOLO enlaza, NUNCA crea
 // (anti-duplicados / "no inventar datos"). Mira nombres de clientes y razones sociales (client_entities). Match conservador:
@@ -173,7 +173,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[
       const cid = m0?.client_id || saved?.client_id
       if(cid){ const direct=matchClientePropuesta(file.name, clients, clientEntities)
         if(!direct || String(direct.client_id)!==String(cid)){ const toks=_propTokens(file.name).filter(t=>t.length<=6)
-          for(const t of toks){ try{ const {data:ex}=await supabase.from('learnings').select('id').eq('kind','propuesta_alias').eq('key',t).order('updated_at',{ascending:false}).limit(1); if(!(ex&&ex.length)) await supabase.from('learnings').insert({kind:'propuesta_alias',key:t,value:String(cid)}) }catch(_){} }
+          for(const t of toks){ try{ const {data:ex}=await supabase.from('learnings').select('id').eq('kind','propuesta_alias').eq('key',t).order('updated_at',{ascending:false}).limit(1); if(!(ex&&ex.length)) await supabase.from('learnings').insert({kind:'propuesta_alias',key:t,value:String(cid)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
           if(toks.length) setDrvAlias(a=>{ const n={...a}; toks.forEach(t=>{ if(!n[t]) n[t]=String(cid) }); return n }) } } }
     setDrvBusy(null)
   }

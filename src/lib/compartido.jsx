@@ -389,7 +389,7 @@ export function resumenBitacora(x){
 export async function logActividad(action, {tabla=null, id=null, detalle=null, completo=false}={}){
   if(DEMO) return
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''))?String(id):null
-  try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(completo?detalle:resumenBitacora(detalle)) }) }catch(_){}
+  try{ await supabase.from('activity_log').insert({ user_email:_actorBitacora, action, table_name:tabla, record_id:uuid, detail:detalle==null?null:JSON.stringify(completo?detalle:resumenBitacora(detalle)) }) }catch(e){registrarError({origen:'accion',vista:'activity_log',err:e})}
 }
 
 // Equipo del estudio (tabla miembros): nombre ↔ correo principal, solo del estudio de quien entró. Fuente única para todo lo
@@ -2464,9 +2464,9 @@ export function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, 
       try{ await sendMailServer({to:para.trim(),cc:ccStr,subject:asunto,html:buildHtml(body,false),text:body,attachments:atts}); sent=true; via='oficina' }catch(e2){ err=e2 }
     }
     setSending(false)
-    if(sent){ try{ if(cc.length) await setLearningKV('rendicion_cc',String(client.id),cc.join(', ')) }catch(_){} try{ if((para||'').trim()) await setLearningKV('rendicion_para',String(client.id),para.trim()) }catch(_){}
+    if(sent){ try{ if(cc.length) await setLearningKV('rendicion_cc',String(client.id),cc.join(', ')) }catch(e){registrarError({origen:'accion',vista:'rendicion_para',err:e})} try{ if((para||'').trim()) await setLearningKV('rendicion_para',String(client.id),para.trim()) }catch(e){registrarError({origen:'accion',vista:'rendicion_para',err:e})}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
-      try{ if(rend?.id){ const now=new Date().toISOString(); if(!okDB(await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id),'registrar el envío de la devolución')) throw new Error('devolucion'); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
+      try{ if(rend?.id){ const now=new Date().toISOString(); if(!okDB(await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id),'registrar el envío de la devolución')) throw new Error('devolucion'); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(e){registrarError({origen:'accion',vista:'rendiciones',err:e})}
       appAlert(txtEnviado(via,{que:'Aviso de devolución de fondos', para:[para.trim(),...cc].filter(Boolean).join(', ')})+(comp?'\nCon el comprobante adjunto.':''))
       onClose&&onClose() }
     else avisoNoEnviado('La devolución de fondos', err?.message||String(err||''))
@@ -2844,10 +2844,10 @@ Saludos cordiales,`
         if(res.faltan>=1) appAlert(`El correo salió. La imputación entre trabajos quedó incompleta: ${fmt(res.faltan)} sin registrar${res.motivo?` (${res.motivo})`:''}. Regístrala en Gastos › Editar fondo › Repartir entre proyectos.`)
       }catch(e){ appAlert('El correo salió, pero no se pudo registrar la imputación entre trabajos: '+(e?.message||e)+'. Regístrala en Gastos › Editar fondo › Repartir entre proyectos.') } }
       const corr = conNum.map(x=>x.correlativo).join(' y ')
-      try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(_){}
+      try{ if(cc.length){ await supabase.from('learnings').delete().eq('kind','rendicion_cc').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_cc',key:String(r.client_id),value:cc.join(', '),meta:{}}) } }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       // Recordar el destinatario "Para" de la rendición → lo reusa la devolución (que va al mismo).
-      try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(_){}
-      try{ if(r.client_id && !adic.on && !_multi) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(_){}
+      try{ if((para||'').trim()){ await supabase.from('learnings').delete().eq('kind','rendicion_para').eq('key',String(r.client_id)); await supabase.from('learnings').insert({kind:'rendicion_para',key:String(r.client_id),value:para.trim(),meta:{}}) } }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
+      try{ if(r.client_id && !adic.on && !_multi) await setLearningKV('rendicion_msg', keyR(lang), _tokR(body,lang)) }catch(e){registrarError({origen:'accion',vista:'rendicion_msg',err:e})}
       // Fondos adicionales pedidos en la rendición: quedan en el historial de solicitudes (cruce con el depósito, avisos).
       // Lo que la rendición le pide transferir queda como solicitud de fondos (seguimiento hasta el depósito): saldo a su cargo + fondos
       // adicionales; con saldo a favor, solo lo adicional que exceda ese saldo. Se cierra sola cuando entra el depósito (Rendir a cliente).
@@ -2861,8 +2861,8 @@ Saludos cordiales,`
           const {error:frErr}= abierta?.id
             ? await supabase.from('fund_requests').update({ monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, enviada_at:new Date().toISOString() }).eq('id',abierta.id)
             : await supabase.from('fund_requests').insert({ client_id:r.client_id||null, monto:pedido, asunto, para:para.trim(), cc:ccStr, enviada_por:user?.name||null, n_adjuntos:1 })
-          if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:r.client_id,detalle:{cliente:client?.name,title:`Pedido en la rendición${corr?` N° ${corr}`:''}`,monto:pedido}}) }catch(_){} } }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
-      try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(_){}
+          if(frErr) console.error('fund_requests',frErr.message); else logActividad('fondos.solicitud_enviada',{tabla:'clients',id:r.client_id,detalle:{cliente:client?.name,title:`Pedido en la rendición${corr?` N° ${corr}`:''}`,monto:pedido}}) }catch(e){registrarError({origen:'accion',vista:'fund_requests',err:e})} } }   // la base de la próxima rendición de este cliente (mismo signo de saldo, idioma) = esta
+      try{ if(firma.nombre||firma.cargo||firma.telefono||firma.correo){ await supabase.from('learnings').delete().eq('kind','firma_correo').eq('key',myEmail); await supabase.from('learnings').insert({kind:'firma_correo',key:myEmail,value:JSON.stringify(firma),meta:{}}) } }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       const _paraTxt=[para.trim(),...cc].filter(Boolean).join(', ')
       appAlert(conAdjunto
         ? txtEnviado(viaRend,{que:conNum.length>1?`Rendiciones N° ${corr}`:`Rendición${corr?` N° ${corr}`:''}`, g:conNum.length>1?'as':'a', para:_paraTxt})+(conNum.length>1?' Con sus PDF adjuntos.':' Con el PDF adjunto.')
@@ -3452,7 +3452,7 @@ export async function reconcileProgramada(clientId, amount, issuedAt){
     try{ const {data:r}=await supabase.from('billing').select('id,amount').eq('client_id',clientId).is('deleted_at',null).neq('status','Programada').eq('issued_at',String(issuedAt).slice(0,10)).order('created_at',{ascending:false}).limit(5)
       realId=(r||[]).find(x=>Math.abs((Number(x.amount)||0)-amount)<=1)?.id||null }catch(_){}
     await supabase.from('billing').update({deleted_at:new Date().toISOString(),...(realId?{replaced_by_id:realId}:{})}).eq('id',cands[0].id)
-  }catch(_){}
+  }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
 }
 
 export function rutsDeFactura(b, clients=[], clientEntities=[]){ const nr=r=>(r||'').toString().replace(/[.\s-]/g,'').toUpperCase(); const s=new Set(); const add=r=>{const n=nr(r);if(n)s.add(n)}; add(b.receptor_rut); const e=clientEntities.find(x=>String(x.id)===String(b.entity_id)); if(e)add(e.rut); const c=clients.find(x=>String(x.id)===String(b.client_id)); if(c)add(c.rut); clientEntities.filter(x=>String(x.client_id)===String(b.client_id)).forEach(x=>add(x.rut)); return s }
@@ -3628,10 +3628,10 @@ export async function asignarVentaFactura({facturaId, saleId, cuotaIds=[], suger
   if(ids.length){ const {error:e2}=await supabase.from('billing').update({deleted_at:now,replaced_by_id:f.id}).in('id',ids); if(e2) throw e2 }
   await supabase.from('learnings').delete().eq('kind','cuota_no_emitir').eq('value',`cubierta:${f.id}`)
   const clave=claveVentaFactura(f)
-  try{ await aprenderVenta('venta_factura',clave,saleId); if(sugerida&&String(sugerida)!==String(saleId)) await aprenderVenta('venta_factura_no',clave,sugerida) }catch(_){}
+  try{ await aprenderVenta('venta_factura',clave,saleId); if(sugerida&&String(sugerida)!==String(saleId)) await aprenderVenta('venta_factura_no',clave,sugerida) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
   const folio=folioN(f.invoice_no)||f.invoice_no
   const motivo=`Factura N° ${folio} asignada a «${venta||'la venta'}»${ids.length?` · reemplaza ${ids.length} cuota${ids.length!==1?'s':''}`:''}`
-  try{ await supabase.from('agente_bandeja').update({estado:'registrado',motivo,resuelto_at:now}).eq('tipo','factura_sin_venta').eq('estado','pendiente').eq('propuesta->>billing_id',String(f.id)) }catch(_){}
+  try{ await supabase.from('agente_bandeja').update({estado:'registrado',motivo,resuelto_at:now}).eq('tipo','factura_sin_venta').eq('estado','pendiente').eq('propuesta->>billing_id',String(f.id)) }catch(e){registrarError({origen:'accion',vista:'agente_bandeja',err:e})}
   logActividad('facturacion.venta_asignada',{tabla:'billing',id:f.id,detalle:{title:motivo,venta:saleId,cuotas:ids}})
   avisarBillingCambio()
   return {folio,motivo}
@@ -4093,8 +4093,8 @@ export function DocumentosDrive({client, onCount, onPick}){
   const irNivel = (i)=>{ const nueva=path.slice(0,i+1); setPath(nueva); cargarNivel(nueva[nueva.length-1].id) }
   const vincular = async(f)=>{
     // Una sola carpeta por cliente: la de la ficha (clients.drive_folder_id), que usan también los agentes; client_drive queda de respaldo.
-    try{ await supabase.from('clients').update({drive_folder_id:f.id,updated_at:new Date().toISOString()}).eq('id',client.id) }catch(_){}
-    try{ await supabase.from('client_drive').upsert({client_id:String(client.id), folder_id:f.id, folder_name:f.name, updated_at:new Date().toISOString()},{onConflict:'client_id'}) }catch(_){}
+    try{ await supabase.from('clients').update({drive_folder_id:f.id,updated_at:new Date().toISOString()}).eq('id',client.id) }catch(e){registrarError({origen:'accion',vista:'clients',err:e})}
+    try{ await supabase.from('client_drive').upsert({client_id:String(client.id), folder_id:f.id, folder_name:f.name, updated_at:new Date().toISOString()},{onConflict:'client_id'}) }catch(e){registrarError({origen:'accion',vista:'client_drive',err:e})}
     setCand(null); entrarRaiz(f)
   }
   const autoVincular = async()=>{
@@ -4893,8 +4893,8 @@ export function DestinatarioFacturasCard({client, contacts=[], embedded=false}){
     supabase.from('learnings').select('kind,value').in('kind',['factura_to','factura_cc']).eq('key',String(client.id)).then(({data})=>{ if(!alive) return; (data||[]).forEach(r=>{ if(r.kind==='factura_to') setTo(String(r.value||'').trim()); if(r.kind==='factura_cc') setCc(String(r.value||'').split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean)) }) },()=>{})
     return ()=>{alive=false} },[client?.id])
   const flash=()=>{ setSaved(true); setTimeout(()=>setSaved(false),1500) }
-  const saveTo=async v=>{ setTo(v); if(!client?.id) return; try{ if(v.trim()) await setLearningKV('factura_to',String(client.id),v.trim()); else await supabase.from('learnings').delete().eq('kind','factura_to').eq('key',String(client.id)); flash() }catch(_){} }
-  const saveCc=async arr=>{ setCc(arr); if(!client?.id) return; try{ if(arr.length) await setLearningKV('factura_cc',String(client.id),arr.join(',')); else await supabase.from('learnings').delete().eq('kind','factura_cc').eq('key',String(client.id)); flash() }catch(_){} }
+  const saveTo=async v=>{ setTo(v); if(!client?.id) return; try{ if(v.trim()) await setLearningKV('factura_to',String(client.id),v.trim()); else await supabase.from('learnings').delete().eq('kind','factura_to').eq('key',String(client.id)); flash() }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
+  const saveCc=async arr=>{ setCc(arr); if(!client?.id) return; try{ if(arr.length) await setLearningKV('factura_cc',String(client.id),arr.join(',')); else await supabase.from('learnings').delete().eq('kind','factura_cc').eq('key',String(client.id)); flash() }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
   const addCc=em=>{ const e=String(em||'').trim().toLowerCase(); if(e&&e.includes('@')&&!cc.includes(e)&&e!==(to||'').toLowerCase()) saveCc([...cc,e]); setCcInput('') }
   const conEmail=(contacts||[]).filter(c=>c.email)
   const inpS={width:'100%',padding:'9px 11px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,background:'#fff',boxSizing:'border-box'}
@@ -5749,7 +5749,7 @@ export async function recordarCobroFactura(b, client, {cc=null}={}){
   let nota=''; try{ const {data}=await supabase.from('learnings').select('value').eq('kind','recordatorio_nota').eq('key',String(client.id)).maybeSingle(); nota=data?.value||'' }catch(_){}
   const r=recordatorioCobro(b, nota)   // incluye la nota guardada de este cliente
   if(!await appConfirm(`¿Enviar recordatorio de cobro a ${to} por ${r.folio} (${r.monto})? Se adjunta el PDF de la factura.`)) return
-  try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, cc, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(_){}; appAlert(txtEnviado(via,{que:'Recordatorio',para:to})) } }
+  try{ const ad=await facturaPdfAdjunto(b); const via=await enviarComoUsuario({to, cc, subject:r.subject, html:r.html, text:r.text, attachments:ad?[ad]:null}); if(via){ try{ await setLearningKV('factura_recordado',String(b.id),new Date().toISOString()) }catch(e){registrarError({origen:'accion',vista:'factura_recordado',err:e})}; appAlert(txtEnviado(via,{que:'Recordatorio',para:to})) } }
   catch(e){ appAlert('No se pudo enviar el recordatorio: '+e.message) }
 }
 

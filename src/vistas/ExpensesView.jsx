@@ -7,7 +7,7 @@ import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '.
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../../supabase/functions/_shared/gastosReglas.js'
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, DevolucionEmailModal, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, RendicionEmailModal, RendicionModal, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, liquidacionPdfBase64, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, DevolucionEmailModal, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, RendicionEmailModal, RendicionModal, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, liquidacionPdfBase64, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -1187,7 +1187,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
     try{
       try{ localStorage.setItem('notaria_email',dest) }catch(_){}
       // Aprende el/los correo(s) de la notaría: compartido para todo el equipo (una sola fila en learnings).
-      try{ await supabase.from('learnings').delete().eq('kind','notaria_email'); await supabase.from('learnings').insert({kind:'notaria_email',key:'dest',value:dest,meta:{}}) }catch(_){}
+      try{ await supabase.from('learnings').delete().eq('kind','notaria_email'); await supabase.from('learnings').insert({kind:'notaria_email',key:'dest',value:dest,meta:{}}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
       const total=gs.reduce((a,e)=>a+(e.amount||0),0)
       const periodo=r.periodo||periodoNota(gs)
@@ -1204,11 +1204,11 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       const texto=notaEmailText(mensaje, gs, total)
       const subjectNota=(notaSubject||'').trim()||`Liquidación de gastos y comprobante de transferencia · ${BRAND.nombre} · ${periodo}`
       // Aprende la razón social de las boletas por cliente (si toda la liquidación es de un solo cliente y no es el estudio).
-      try{ const cids=[...new Set(gs.map(e=>e.client_id).filter(Boolean))]; if(cids.length===1 && notaBolRS && notaBolRS!==BRAND.nombreLegal){ await supabase.from('learnings').delete().eq('kind','notaria_boletas').eq('key',String(cids[0])); await supabase.from('learnings').insert({kind:'notaria_boletas',key:String(cids[0]),value:JSON.stringify({rs:notaBolRS,rut:notaBolRUT}),meta:{}}) } }catch(_){}
+      try{ const cids=[...new Set(gs.map(e=>e.client_id).filter(Boolean))]; if(cids.length===1 && notaBolRS && notaBolRS!==BRAND.nombreLegal){ await supabase.from('learnings').delete().eq('kind','notaria_boletas').eq('key',String(cids[0])); await supabase.from('learnings').insert({kind:'notaria_boletas',key:String(cids[0]),value:JSON.stringify({rs:notaBolRS,rut:notaBolRUT}),meta:{}}) } }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       const fechaLiq=fmtFechaDMY(r.created_at)
       // Detalle a la notaría = Excel formateado. Si por algo falla, cae a PDF para no quedar sin detalle.
-      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(_){}
-      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:'Liquidación de gastos · Notaría'}) }catch(_){} }
+      let xls=null; try{ xls=await liquidacionExcelB64({gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:`Liquidación ${BRAND.notaria} al ${fechaLiq}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
+      let pdf=null; if(!xls){ try{ pdf=await liquidacionPdfBase64({me:BRAND.nombre,periodo,gastos:gs.map(e=>({...e,concept:sinRaya(e.concept)})),clients,titulo:'Liquidación de gastos · Notaría'}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
       const ext = compMime.includes('pdf')?'pdf':(compMime.includes('png')?'png':(compMime.includes('jpeg')||compMime.includes('jpg')?'jpg':'dat'))
       const adjuntos=[]
       if(xls) adjuntos.push({base64:xls, name:`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fechaLiq}.xlsx`, mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
@@ -4365,7 +4365,7 @@ export function RevisionOficinaPage({items,setExpenses,clients,sales,clientEntit
   const [hechos,setHechos]=useState([])
   const ahora=()=>new Date().toISOString()
   // Bitácora de reasignaciones (misma tabla que "Reasignar gastos"); no frena si falla.
-  const auditar=(e,de,a)=>{ try{ supabase.from('expense_audit').insert({expense_id:e.id,from_client_id:de||null,to_client_id:a||null,concept:e.concept||null,amount:e.amount??null,moved_by:me||null}).then(()=>{},()=>{}) }catch(_){} }
+  const auditar=(e,de,a)=>{ try{ supabase.from('expense_audit').insert({expense_id:e.id,from_client_id:de||null,to_client_id:a||null,concept:e.concept||null,amount:e.amount??null,moved_by:me||null}).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'expense_audit',err:e})} }
   const antesDe=e=>({client_id:e.client_id,entity_id:e.entity_id||null,project:e.project||null,sale_id:e.sale_id||null,revision_estado:e.revision_estado||null,revisado_por:e.revisado_por||null,revisado_at:e.revisado_at||null})
   const marcar=async(e,estado)=>{
     const patch={revision_estado:estado,revisado_por:me||null,revisado_at:ahora()}

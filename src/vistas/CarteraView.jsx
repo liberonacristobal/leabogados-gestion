@@ -4,7 +4,7 @@ import { supabase, getDriveToken, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CART_DOT, DocumentosDrive, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP } from '../lib/compartido.jsx'
+import { CART_DOT, DocumentosDrive, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
 
 export async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el ArrayBuffer (para leer el contenido del archivo)
   let token=await driveToken()
@@ -314,7 +314,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
   const [crossCfg,setCrossCfg] = useState('off'); const [crossBusy,setCrossBusy] = useState(false); const [crossRes,setCrossRes] = useState(null)
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
   const probarCross = async()=>{ setCrossBusy(true); setCrossRes(null); try{ const {data,error}=await supabase.functions.invoke('agente-pmo',{body:{dryRun:true,preview:true}}); setCrossRes(error?{error:error.message}:(data||{})) }catch(e){ setCrossRes({error:e.message||'error'}) } setCrossBusy(false) }
-  const toggleCross = async()=>{ const nv=crossCfg==='on'?'off':'on'; setCrossCfg(nv); try{ await setLearningKV('config','pmo_cross_cartera',nv) }catch(_){} }
+  const toggleCross = async()=>{ const nv=crossCfg==='on'?'off':'on'; setCrossCfg(nv); try{ await setLearningKV('config','pmo_cross_cartera',nv) }catch(e){registrarError({origen:'accion',vista:'config',err:e})} }
   const [draft,setDraft] = useState('')             // borrador de nota de la fila abierta
   const [nuevo,setNuevo] = useState(false)
   const [focoOpen,setFocoOpen] = useState(false)   // vista "Mi foco" (cross-proyecto: qué vence / siguiente paso / detenidos)
@@ -390,7 +390,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
   const [valorHora,setValorHora] = useState({ general:4.5, permanente:2 })
   const [sugEsf,setSugEsf] = useState({})
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','config').in('key',['valor_hora_uf','valor_hora_permanente_uf']).then(({data})=>{ if(!data) return; const g=data.find(r=>r.key==='valor_hora_uf'), pm=data.find(r=>r.key==='valor_hora_permanente_uf'); setValorHora(v=>({ general:g?parseFloat(g.value)||v.general:v.general, permanente:pm?parseFloat(pm.value)||v.permanente:v.permanente })) },()=>{}) },[])
-  const saveVH = async (campo,val) => { const v=parseFloat(val); if(!(v>0)) return; setValorHora(o=>({...o,[campo]:v})); if(DEMO) return; const key=campo==='general'?'valor_hora_uf':'valor_hora_permanente_uf'; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key',key); await supabase.from('learnings').insert({kind:'config',key,value:String(v)}) }catch(_){} }
+  const saveVH = async (campo,val) => { const v=parseFloat(val); if(!(v>0)) return; setValorHora(o=>({...o,[campo]:v})); if(DEMO) return; const key=campo==='general'?'valor_hora_uf':'valor_hora_permanente_uf'; try{ await supabase.from('learnings').delete().eq('kind','config').eq('key',key); await supabase.from('learnings').insert({kind:'config',key,value:String(v)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
   const esPermanente = (p,s) => (s?.cobro_type==='mensual') || /permanente/i.test((p.nombre_proyecto||'')+' '+(s?.title||''))
   const rentabilidadDe = p => {
     const s = saleDe(p); if(!s) return null
@@ -415,7 +415,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
     try{ const {data}=await supabase.from('learnings').select('value').eq('kind','esfuerzo_area').eq('key',area).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(data?.value) previo=parseFloat(data.value) }catch(_){}
     const prompt = `Eres socio de un estudio de abogados chileno. Estima en CUÁNTAS HORAS de trabajo total se hace este encargo, de principio a fin. Devuelve SOLO un número entero de horas, nada más.\n\nEncargo: "${p.nombre_proyecto||s?.title||''}"\nÁrea: ${area}\nHonorario: ${s?(s.moneda==='CLP'?fmt(s.amount_clp):`UF ${s.amount_uf}`):'—'}${previo?`\nEn casos anteriores de esta área estimaste alrededor de ${previo} horas.`:''}`
     try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:20,messages:[{role:'user',content:prompt}]}); const n=parseInt(((data?.content?.[0]?.text||'').match(/\d+/)||[])[0])
-      if(n>0){ updP(p,{esfuerzo_horas:n}); try{ await supabase.from('learnings').delete().eq('kind','esfuerzo_area').eq('key',area); await supabase.from('learnings').insert({kind:'esfuerzo_area',key:area,value:String(n)}) }catch(_){} }
+      if(n>0){ updP(p,{esfuerzo_horas:n}); try{ await supabase.from('learnings').delete().eq('kind','esfuerzo_area').eq('key',area); await supabase.from('learnings').insert({kind:'esfuerzo_area',key:area,value:String(n)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
     }catch(e){ appAlert('No se pudo sugerir: '+(e?.message||'reintenta')) }
     setSugEsf(o=>({...o,[p.id]:null}))
   }
@@ -1796,8 +1796,8 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
       // SIEMBRA EL PLAN desde la propuesta: cada fase = un paso (hito) ordenado, con sus sub-etapas (entregables colgando del hito). Pasos reales del documento, no inventados.
       if(faseSel.length && onAddHito){ for(let i=0;i<faseSel.length;i++){ const f=faseSel[i]
         try{ const h=await onAddHito(proyecto.id, f.titulo, null, null, { plazo:f.fecha||null, orden:i })
-          if(h?.id && onAddEntregable){ for(let j=0;j<(f.subetapas||[]).length;j++){ try{ await onAddEntregable(proyecto.id, f.subetapas[j], null, h.id) }catch(_){} } }
-        }catch(_){} } }
+          if(h?.id && onAddEntregable){ for(let j=0;j<(f.subetapas||[]).length;j++){ try{ await onAddEntregable(proyecto.id, f.subetapas[j], null, h.id) }catch(e){registrarError({origen:'accion',vista:'plazos',err:e})} } }
+        }catch(e){registrarError({origen:'accion',vista:'plazos',err:e})} } }
       onApplied&&onApplied(proyecto.id, campos)
       onClose()
     }catch(e){ setErr(/relation .*proyectos_cartera|Could not find the table|column .*alcance/i.test(e?.message||'')?'Falta la columna: corre el ALTER de docs/sql_proyectos_cartera.sql.':(e?.message||'No se pudo guardar.')); setSaving(false) }

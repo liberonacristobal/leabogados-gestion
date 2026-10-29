@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../supabase'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF } from '../lib/compartido.jsx'
+import { CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
 
 export const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 
@@ -406,7 +406,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           setClients(p=>[...p,nc])
           const rs=propNewClient.razon_social.trim()
           // Sincroniza la RS al estado local (extraEntities) y selecciónala, si no el SaleForm no la ve y la venta quedaría sin entity_id hasta recargar (mismo patrón que agregarRS).
-          if(rs){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:nc.id,name:rs,rut:propNewClient.rut.trim()||null}).select().single(); if(ne){ setExtraEntities(p=>[...p,ne]); up('entity_id',ne.id) } }catch(_){} }
+          if(rs){ try{ const {data:ne}=await supabase.from('client_entities').insert({client_id:nc.id,name:rs,rut:propNewClient.rut.trim()||null}).select().single(); if(ne){ setExtraEntities(p=>[...p,ne]); up('entity_id',ne.id) } }catch(e){registrarError({origen:'accion',vista:'client_entities',err:e})} }
         }
       }
       setSelectedClient(client)

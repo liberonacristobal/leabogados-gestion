@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop } from '../lib/base.jsx'
-import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, RendicionModal, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe } from '../lib/compartido.jsx'
+import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, RendicionModal, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
 
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
@@ -105,7 +105,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
   const saleDe = cid => permanentes.find(p=>String(p.cid)===String(cid))?.sale
   // Propuestas descartadas (la app APRENDE): lo que botas no vuelve a proponerse. Clave = source:ref | tarea:id | coord:cid.
   const [desc,setDesc] = useState(()=>new Set())
-  const descartar = key => { setDesc(s=>{ const n=new Set(s); n.add(key); return n }); setAgenda(a=>a.filter(x=>x.id!==key)); if(DEMO) return; try{ supabase.from('learnings').insert({kind:'horas_descartado',key,value:'1'}) }catch(_){} }
+  const descartar = key => { setDesc(s=>{ const n=new Set(s); n.add(key); return n }); setAgenda(a=>a.filter(x=>x.id!==key)); if(DEMO) return; try{ supabase.from('learnings').insert({kind:'horas_descartado',key,value:'1'}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
 
   useEffect(()=>{
     if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); return }
@@ -145,8 +145,8 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
   const [editH,setEditH] = useState(null); const [ef,setEf] = useState({}); const [eq,setEq] = useState(''); const [undoH,setUndoH] = useState(null)
   const abrirEdit = h => { setEditH(h.id); setEf({ client_id:h.client_id, fecha:h.fecha, horas:h.horas, glosa:h.glosa||'', billable:h.billable!==false }); setEq('') }
   const guardarEdit = async () => { const patch={ client_id:ef.client_id, fecha:ef.fecha, horas:parseFloat(ef.horas)||0, glosa:ef.glosa, billable:!!ef.billable }; setHoras(p=>p.map(x=>x.id===editH?{...x,...patch}:x)); const id=editH; setEditH(null); if(DEMO) return; try{ okDB(await supabase.from('horas').update(patch).eq('id',id),'guardar las horas') }catch(e){ appAlert('No se pudo guardar: '+e.message) } }
-  const borrarHora = async h => { setHoras(p=>p.filter(x=>x.id!==h.id)); setEditH(null); setUndoH(h); if(DEMO) return; try{ if(!okDB(await supabase.from('horas').delete().eq('id',h.id),'borrar las horas')){ setHoras(p=>[h,...p]); setUndoH(null) } }catch(_){} }
-  const deshacerBorrar = async () => { const h=undoH; setUndoH(null); if(!h) return; setHoras(p=>[h,...p]); if(DEMO) return; const {id,created_at,report_id,...rest}=h; try{ const r=await supabase.from('horas').insert(rest).select().single(); if(!okDB(r,'restaurar las horas')) setHoras(p=>p.filter(x=>x.id!==h.id)); else if(r.data) setHoras(p=>p.map(x=>x.id===h.id?r.data:x)) }catch(_){} }
+  const borrarHora = async h => { setHoras(p=>p.filter(x=>x.id!==h.id)); setEditH(null); setUndoH(h); if(DEMO) return; try{ if(!okDB(await supabase.from('horas').delete().eq('id',h.id),'borrar las horas')){ setHoras(p=>[h,...p]); setUndoH(null) } }catch(e){registrarError({origen:'accion',vista:'horas',err:e})} }
+  const deshacerBorrar = async () => { const h=undoH; setUndoH(null); if(!h) return; setHoras(p=>[h,...p]); if(DEMO) return; const {id,created_at,report_id,...rest}=h; try{ const r=await supabase.from('horas').insert(rest).select().single(); if(!okDB(r,'restaurar las horas')) setHoras(p=>p.filter(x=>x.id!==h.id)); else if(r.data) setHoras(p=>p.map(x=>x.id===h.id?r.data:x)) }catch(e){registrarError({origen:'accion',vista:'horas',err:e})} }
   useEffect(()=>{ if(undoH){ const t=setTimeout(()=>setUndoH(null),6000); return ()=>clearTimeout(t) } },[undoH])
   // F4 — Exportar mis horas a CSV (separador ';' y coma decimal para Excel es-CL; BOM para acentos).
   const exportarCSV = () => {
@@ -262,7 +262,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
     if(DEMO){ setMetas({'Cristóbal':40,'Erasmo':40,'Martín':40,'Martina':40,'Rodrigo':30}); return }
     supabase.from('learnings').select('key,value').eq('kind','meta_horas').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
   },[])
-  async function setMeta(name,val){ const v=Number(val)||0; setMetas(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','meta_horas').eq('key',name); await supabase.from('learnings').insert({kind:'meta_horas',key:name,value:String(v)}) }catch(_){} }
+  async function setMeta(name,val){ const v=Number(val)||0; setMetas(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','meta_horas').eq('key',name); await supabase.from('learnings').insert({kind:'meta_horas',key:name,value:String(v)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
   const EQUIPO = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
   const lunISO = (()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10) })()
   const horasPeriodo = name => horas.filter(h=> h.user_name===name && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
@@ -300,7 +300,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
   const [costoHora,setCostoHora] = useState({})   // nombre → costo/hora en pesos (lo define el usuario)
   const [costosOpen,setCostosOpen] = useState(false)
   useEffect(()=>{ if(DEMO){ setCostoHora({'Cristóbal':18000,'Erasmo':18000,'Martín':11250,'Martina':6159}); return } supabase.from('learnings').select('key,value').eq('kind','costo_hora').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setCostoHora(m) },()=>{}) },[])
-  async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(_){} }
+  async function setCosto(name,val){ const v=Math.max(0,Math.round(parseFloat(val)||0)); setCostoHora(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','costo_hora').eq('key',name); await supabase.from('learnings').insert({kind:'costo_hora',key:name,value:String(v)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
   const hayCostos = Object.values(costoHora).some(v=>Number(v)>0)
   // ── Apuesta 3 f2 — Costo CARGADO: suma el overhead de oficina (Costos de Oficina, sin remuneraciones) prorrateado por hora. ──
   const [costosOfi,setCostosOfi] = useState([])
@@ -379,7 +379,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       if(!via){ setRep(r=>({...r,sending:false})); return }
       const {data:rr}=await supabase.from('reportes_horas').insert({client_id:cid,periodo:mes,total_horas:cons,n_entradas:ents.length,dirigido_a:para,estimadas:estMes,consumidas:cons,estado_envio:'enviado',sent_at:new Date().toISOString(),sent_by:me}).select().single()
       if(rr?.id){ await supabase.from('horas').update({report_id:rr.id}).in('id',ents.map(e=>e.id)) }
-      try{ await supabase.from('learnings').delete().eq('kind','horas_para').eq('key',String(cid)); await supabase.from('learnings').insert({kind:'horas_para',key:String(cid),value:para}) }catch(_){}
+      try{ await supabase.from('learnings').delete().eq('kind','horas_para').eq('key',String(cid)); await supabase.from('learnings').insert({kind:'horas_para',key:String(cid),value:para}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       appAlert(txtEnviado(via,{que:'Reporte',para})); setRep(null)
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)); setRep(r=>({...r,sending:false})) }
   }

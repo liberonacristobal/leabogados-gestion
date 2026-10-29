@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Cadencia de cobranza (fuente única): ¿toca recordatorio para esta factura hoy? Escala por mora,
 // respeta un piso de días entre envíos para no spamear. lastISO = fecha del último recordatorio (factura_recordado).
@@ -213,10 +213,10 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
     }catch(e){ errEnv=e; if(!modo) avisoNoEnviado(`El recordatorio a ${cn(g.cid)}`, e.message||String(e)) }
     const nIntentos = combinado?1:bs.length
     if(sentIds.length){ const at=new Date().toISOString()
-      if(!DEMO) for(const id of sentIds){ try{ await setLearningKV('factura_recordado',id,at) }catch(_){} }
+      if(!DEMO) for(const id of sentIds){ try{ await setLearningKV('factura_recordado',id,at) }catch(e){registrarError({origen:'accion',vista:'factura_recordado',err:e})} }
       setRecMap(m=>{ const n={...m}; sentIds.forEach(id=>n[id]=at); return n })
-      const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); if(!DEMO){ try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(_){} }
-      if(!DEMO&&g.cid){ try{ await setLearningKV('recordatorio_nota',String(g.cid),String(nota||'')) }catch(_){} }; setRecNotaMap(m=>({...m,[g.cid]:String(nota||'')}))
+      const nc=(okCount[g.cid]||0)+1; setOkCount(o=>({...o,[g.cid]:nc})); if(!DEMO){ try{ await setLearningKV('cobranza_ok',String(g.cid),String(nc)) }catch(e){registrarError({origen:'accion',vista:'cobranza_ok',err:e})} }
+      if(!DEMO&&g.cid){ try{ await setLearningKV('recordatorio_nota',String(g.cid),String(nota||'')) }catch(e){registrarError({origen:'accion',vista:'recordatorio_nota',err:e})} }; setRecNotaMap(m=>({...m,[g.cid]:String(nota||'')}))
       setRecPrev(null)
       if(!modo) appAlert(lote&&!combinado
         ? txtResumenEnvio({ok:nCorreos, no:nIntentos-nCorreos, via:viaUlt, que:nCorreos===1?'recordatorio':'recordatorios'})+` (${cn(g.cid)}, ${to}).`
@@ -250,7 +250,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   }
   async function pausar(cid){
     setAutoCli(a=>{const n={...a};delete n[cid];return n}); if(DEMO) return
-    try{ await supabase.from('learnings').delete().eq('kind','fd_auto').eq('key','cobranza:'+cid) }catch(_){}
+    try{ await supabase.from('learnings').delete().eq('kind','fd_auto').eq('key','cobranza:'+cid) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
   }
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
   // Detalle de una factura vencida (compartido móvil/escritorio): fecha día-grande + folio + glosa + estado + saldo, y acciones Buscar pago (→ Conciliación) / Abrir factura (→ ficha/factura, con el Conciliar en un toque). Reusa helpers (folioN, saldoBill, fmtFechaDMY).
