@@ -11,9 +11,38 @@ export const HERRAMIENTAS = [
   { name: 'por_cobrar', description: 'Total por cobrar y vencido de todo el estudio, con los clientes que más deben. Úsala para «quién me debe plata», «cuánto está vencido». Con `cliente` limita a uno.', input_schema: { type: 'object', properties: { cliente: { type: 'string' }, top: { type: 'integer', description: 'Cuántos clientes listar (5 por defecto)' } } } },
   { name: 'facturas_cliente', description: 'Últimas facturas de un cliente con su estado y saldo.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
   { name: 'tareas_vencidas', description: 'Tareas abiertas con plazo vencido, agrupadas por responsable.', input_schema: { type: 'object', properties: {} } },
+  { name: 'donde_esta', description: 'Dónde se hace algo en la app (pantalla y sección). Úsala para «dónde cargo…», «cómo hago…», «llévame a…». Solo devuelve pantallas que existen.', input_schema: { type: 'object', properties: { tema: { type: 'string', description: 'Lo que la persona quiere hacer o encontrar' } }, required: ['tema'] } },
+  { name: 'ficha_cliente', description: 'Datos de un cliente: RUT, estado, responsable, contacto, razones sociales, contactos, ventas activas, proyectos y tareas abiertas.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
+  { name: 'ventas_cliente', description: 'Ventas y propuestas de un cliente con monto, lo facturado y lo que falta por facturar.', input_schema: { type: 'object', properties: { cliente: { type: 'string' } }, required: ['cliente'] } },
+  { name: 'por_facturar', description: 'Lo que falta por facturar: cuotas programadas de meses cerrados sin emitir y trabajos activos con plan sin facturar.', input_schema: { type: 'object', properties: {} } },
+  { name: 'trabajos_detenidos', description: 'Trabajos activos sin movimiento en 90 días: con saldo por cobrar o que parecen terminados.', input_schema: { type: 'object', properties: {} } },
 ]
 
-export function crearConsultas({ clients = [], billing = [], expenses = [], tasks = [], hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, folioN = x => String(x || '') }) {
+// Dónde se hace cada cosa. Solo pantallas y secciones que existen en la app; `tab` lleva a la pantalla.
+export const AYUDA = [
+  { tema: 'Cargar la cartola del banco', claves: ['cartola', 'cargar cartola', 'subir cartola', 'extracto', 'movimientos del banco'], donde: 'Banco › Cargar cartola', tab: 'conciliacion' },
+  { tema: 'Conciliar abonos y cargos', claves: ['conciliar', 'abono', 'cargo', 'pago de cliente', 'por resolver', 'banco'], donde: 'Banco › Por resolver', tab: 'conciliacion' },
+  { tema: 'Rendir gastos a un cliente', claves: ['rendicion', 'rendiciones', 'rendir', 'rendir cliente'], donde: 'Gastos › Rendiciones', tab: 'expenses' },
+  { tema: 'Gastos de notaría y OT', claves: ['notaria', 'ot', 'orden de trabajo', 'pago a la notaria'], donde: 'Gastos › Notaría', tab: 'expenses' },
+  { tema: 'Fondos y saldos de gastos de clientes', claves: ['fondo', 'fondos', 'saldo de gastos', 'a favor', 'por cobrar de gastos'], donde: 'Gastos › Por cobrar / A favor', tab: 'expenses' },
+  { tema: 'Cierre de mes', claves: ['cierre', 'cerrar mes', 'cierre de mes'], donde: 'Facturación › Cierre de mes', tab: 'billing' },
+  { tema: 'Emitir una factura', claves: ['emitir', 'emision', 'emitir factura', 'factura nueva', 'sii'], donde: 'Facturación › Emisión SII', tab: 'billing' },
+  { tema: 'Anticipos', claves: ['anticipo', 'anticipos'], donde: 'Facturación › Anticipos disponibles', tab: 'billing' },
+  { tema: 'Cobranza de facturas vencidas', claves: ['cobranza', 'vencida', 'vencidas', 'recordatorio de cobro', 'cobrar'], donde: 'Cobranza', tab: 'cobranza' },
+  { tema: 'Crear una propuesta o venta', claves: ['propuesta', 'nueva venta', 'venta nueva', 'cotizacion', 'honorarios'], donde: 'Ventas › Nueva propuesta', tab: 'sales' },
+  { tema: 'Clientes, contactos, causas y proveedores', claves: ['cliente nuevo', 'nuevo cliente', 'contacto', 'contactos', 'causas', 'proveedores'], donde: 'Clientes (botones Causas, Contactos y Proveedores)', tab: 'clients' },
+  { tema: 'Registrar horas', claves: ['horas', 'registrar horas', 'tiempo'], donde: 'Horas', tab: 'horas' },
+  { tema: 'Tareas y pendientes', claves: ['tarea', 'tareas', 'pendiente', 'pendientes', 'agenda'], donde: 'Tareas', tab: 'tasks' },
+  { tema: 'Caja chica', claves: ['caja chica', 'caja'], donde: 'Caja chica', tab: 'cajachica' },
+  { tema: 'Costos y presupuesto de la oficina', claves: ['costos de oficina', 'presupuesto', 'oficina'], donde: 'Oficina', tab: 'presupuestoOficina' },
+  { tema: 'Estado de resultados', claves: ['resultado', 'estado de resultados', 'utilidad'], donde: 'Estado de resultados', tab: 'estadoResultados' },
+  { tema: 'Flujo de caja', claves: ['flujo de caja', 'flujo', 'proyeccion'], donde: 'Flujo de caja', tab: 'flujoCaja' },
+  { tema: 'Calendario tributario y F29', claves: ['f29', 'impuestos', 'calendario tributario', 'vencimientos tributarios'], donde: 'Calendario tributario', tab: 'calendarioTrib' },
+  { tema: 'Oportunidades, tendencias y socios', claves: ['oportunidades', 'tendencias', 'socios', 'inteligencia', 'servicios y precios'], donde: 'Inteligencia', tab: 'inteligencia' },
+  { tema: 'Mis proyectos', claves: ['proyecto', 'proyectos', 'cartera'], donde: 'Mis proyectos', tab: 'cartera' },
+]
+
+export function crearConsultas({ clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
   const dia = String(hoy || new Date().toISOString()).slice(0, 10)
   const reales = clients.filter(c => c && !c.is_internal)
 
@@ -84,8 +113,82 @@ export function crearConsultas({ clients = [], billing = [], expenses = [], task
     }
   }
 
-  const tabla = { deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas }
-  return (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
+  const nombreCli = id => clients.find(c => String(c.id) === String(id))?.name || 'Cliente'
+  const num = (n, d = 0) => new Intl.NumberFormat('es-CL', { maximumFractionDigits: d }).format(Number(n) || 0)
+  const monto = (v, enUF) => enUF ? `UF ${num(v, 2)}` : clp(v)
+
+  const dondeEsta = ({ tema }) => {
+    const q = nz(tema); if (!q) return { error: 'Falta el tema.' }
+    const puntaje = a => a.claves.reduce((p, c) => p + (q.includes(nz(c)) ? nz(c).length : 0), 0) + (nz(a.tema).split(' ').filter(w => w.length > 3 && q.includes(w)).length)
+    const r = AYUDA.map(a => ({ a, p: puntaje(a) })).filter(x => x.p > 0).sort((x, y) => y.p - x.p).slice(0, 3)
+    if (!r.length) return { resumen: { encontrado: false, nota: 'No hay una sección registrada para eso.' }, tarjeta: null }
+    return { resumen: { opciones: r.map(x => ({ tema: x.a.tema, donde: x.a.donde })) }, tarjeta: { titulo: 'Dónde está', lineas: r.map(x => ({ n: x.a.tema, sub: x.a.donde, valor: '', destino: { tab: x.a.tab } })), total: null, fuente: 'Toca una línea para ir a esa pantalla.' } }
+  }
+
+  const fichaCliente = ({ cliente }) => {
+    const f = buscarCliente(cliente); if (f.error) return Promise.resolve({ error: f.error })
+    const c = f.cliente
+    return Promise.resolve(cargarContactos ? cargarContactos(c.id) : []).catch(() => []).then(contactos => {
+      const rs = clientEntities.filter(e => String(e.client_id) === String(c.id))
+      const ventasAct = sales.filter(v => v && !v.deleted_at && String(v.client_id) === String(c.id) && v.status === 'Activo')
+      const proys = proyectos.filter(p => p && String(p.cliente_id) === String(c.id) && p.activo !== false && !p.pausado)
+      const tks = tasks.filter(t => t && String(t.client_id) === String(c.id) && t.status !== 'Terminado' && !t.archived)
+      const destino = { tipo: 'cliente', id: c.id }
+      const resumen = { cliente: c.name, rut: c.rut || null, estado: c.status || null, tipo: c.tipo_entidad || c.type || null, responsable: c.abogado_responsable || null, correo: c.email || null, telefono: c.telefono || c.phone || null, condicion_de_pago: c.condicion_pago || null,
+        razones_sociales: rs.map(e => ({ nombre: e.name, rut: e.rut || null })), contactos: (contactos || []).map(x => ({ nombre: x.nombre, cargo: x.cargo || null, correo: x.email || null, telefono: x.telefono || null, principal: !!x.principal })),
+        ventas_activas: ventasAct.length, proyectos_activos: proys.map(p => ({ nombre: p.nombre_proyecto, estado: p.estado || null, responsable: p.responsable || null })), tareas_abiertas: tks.length }
+      const lineas = [
+        { n: 'Responsable', sub: c.rut ? `RUT ${c.rut}` : '', valor: c.abogado_responsable || '—', destino },
+        { n: 'Razones sociales', sub: rs.slice(0, 2).map(e => e.name).join(' · '), valor: String(rs.length), destino },
+        { n: 'Contactos', sub: (contactos || []).slice(0, 2).map(x => x.nombre).join(' · '), valor: String((contactos || []).length), destino },
+        { n: 'Ventas activas', sub: '', valor: String(ventasAct.length), destino },
+        { n: 'Proyectos activos', sub: proys.slice(0, 2).map(p => p.nombre_proyecto).join(' · '), valor: String(proys.length), destino: { tab: 'cartera' } },
+        { n: 'Tareas abiertas', sub: '', valor: String(tks.length), destino: { tab: 'tasks' } },
+      ]
+      return { resumen, tarjeta: { titulo: c.name, lineas, total: null, fuente: `Fuente: ficha del cliente, ventas, proyectos y tareas de la app, al ${dmy(dia)}. Toca una línea para ver el detalle.` } }
+    })
+  }
+
+  const ventasCliente = ({ cliente }) => {
+    const f = buscarCliente(cliente); if (f.error) return { error: f.error }
+    const c = f.cliente
+    const vs = sales.filter(v => v && !v.deleted_at && String(v.client_id) === String(c.id)).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 8)
+    if (!vs.length) return { resumen: { cliente: c.name, ventas: [] }, tarjeta: null }
+    const filas = vs.map(v => {
+      const bs = billing.filter(b => b && !b.deleted_at && String(b.sale_id) === String(v.id))
+      const cv = coberturaVenta ? coberturaVenta(v, bs, uf) : null
+      const enUF = v.moneda === 'UF' || (!v.amount_clp && Number(v.amount_uf) > 0)
+      const plan = cv ? cv.plan : (enUF ? Number(v.amount_uf) || 0 : Number(v.amount_clp) || 0)
+      const fact = cv && cv.ok ? cv.usado : null
+      return { v, enUF, plan, fact, falta: fact == null ? null : Math.max(0, plan - fact) }
+    })
+    return {
+      resumen: { cliente: c.name, ventas: filas.map(x => ({ titulo: x.v.title, estado: x.v.status, monto_acordado: monto(x.plan, x.enUF), facturado: x.fact == null ? 'sin calcular' : monto(x.fact, x.enUF), por_facturar: x.falta == null ? 'sin calcular' : monto(x.falta, x.enUF) })), al: dmy(dia) },
+      tarjeta: { titulo: 'Ventas', lineas: filas.map(x => ({ n: x.v.title || 'Venta', sub: `${x.v.status || ''}${x.fact == null ? '' : ` · facturado ${monto(x.fact, x.enUF)} · por facturar ${monto(x.falta, x.enUF)}`}`, valor: monto(x.plan, x.enUF), destino: { tipo: 'cliente', id: c.id } })), total: null, fuente: 'Fuente: monto acordado de cada venta y lo facturado con folio. Las ventas mensuales no tienen un plan fijo y no se calculan.' },
+    }
+  }
+
+  const porFacturar = () => Promise.resolve().then(() => Promise.all([calcCuotasSinEmitir ? calcCuotasSinEmitir() : [], calcTrabajosSinFacturar ? calcTrabajosSinFacturar() : []])).then(([cuotas, trabajos]) => {
+    const totCuotas = cuotas.reduce((a, b) => a + (Number(b.amount) || 0), 0), totTrab = trabajos.reduce((a, t) => a + (Number(t.monto) || 0), 0)
+    const resumen = { cuotas_sin_emitir: cuotas.length, monto_cuotas_sin_emitir: clp(totCuotas), trabajos_sin_facturar: trabajos.length, monto_trabajos_sin_facturar: clp(totTrab),
+      mayores_cuotas: cuotas.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 5).map(b => ({ cliente: nombreCli(b.client_id), concepto: String(b.concept || '').slice(0, 60), monto: clp(b.amount), vence: dmy(b.due) })),
+      mayores_trabajos: trabajos.slice(0, 5).map(t => ({ cliente: nombreCli(t.s.client_id), venta: t.s.title, monto: clp(t.monto), dias_desde_la_ultima_factura: t.dias })), al: dmy(dia) }
+    const tarjetas = []
+    if (cuotas.length) tarjetas.push({ titulo: 'Cuotas vencidas sin facturar', lineas: cuotas.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 6).map(b => ({ n: nombreCli(b.client_id), sub: `${String(b.concept || '').slice(0, 42)} · vence ${dmy(b.due)}`, valor: clp(b.amount), destino: { tab: 'billing' } })), total: { n: `Total (${cuotas.length})`, valor: clp(totCuotas) }, fuente: 'Fuente: cuotas programadas de meses cerrados sin emitir (radar de Facturación).' })
+    if (trabajos.length) tarjetas.push({ titulo: 'Trabajos sin facturar', lineas: trabajos.slice(0, 6).map(t => ({ n: nombreCli(t.s.client_id), sub: `${t.s.title || ''} · ${t.dias} días desde la última factura`, valor: clp(t.monto), destino: { tab: 'billing' } })), total: { n: `Total (${trabajos.length})`, valor: clp(totTrab) }, fuente: 'Fuente: trabajos activos con plan sin facturar (Facturación › Trabajos sin facturar).' })
+    return { resumen, tarjeta: tarjetas.length ? tarjetas : null }
+  })
+
+  const trabajosDetenidos = () => {
+    const l = (detenidos || []).slice().sort((a, b) => (b.dias || 0) - (a.dias || 0))
+    return {
+      resumen: { trabajos_detenidos: l.length, con_saldo: l.filter(x => x.tipo === 'con_saldo').length, parecen_terminados: l.filter(x => x.tipo === 'terminado').length, mayores: l.slice(0, 6).map(x => ({ cliente: nombreCli(x.s.client_id), venta: x.s.title, tipo: x.tipo === 'con_saldo' ? 'con saldo por cobrar' : 'parece terminado', dias: x.dias, por_cobrar: clp(x.porCobrar) })), al: dmy(dia) },
+      tarjeta: l.length ? { titulo: 'Trabajos sin movimiento', lineas: l.slice(0, 8).map(x => ({ n: nombreCli(x.s.client_id), sub: `${x.s.title || ''} · ${x.dias} días · ${x.tipo === 'con_saldo' ? 'con saldo por cobrar' : 'parece terminado'}`, valor: x.porCobrar > 0 ? clp(x.porCobrar) : '', destino: { tipo: 'cliente', id: x.s.client_id } })), total: { n: 'Trabajos', valor: String(l.length) }, fuente: 'Fuente: trabajos activos sin factura, gasto, tarea ni horas en 90 días (Revisión de datos).' } : null,
+    }
+  }
+
+  const tabla = { deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
+  return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
 }
 
 // Bucle de la conversación: la IA pide consultas, la app las resuelve, hasta que redacta la respuesta (máximo `maxVueltas`).
@@ -97,7 +200,8 @@ export async function resolverConIA({ llamar, sistema, mensajes, herramientas = 
     const usos = contenido.filter(b => b.type === 'tool_use')
     if (!usos.length || data.stop_reason !== 'tool_use') return { texto: contenido.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(), tarjetas }
     msgs.push({ role: 'assistant', content: contenido })
-    const resultados = usos.map(u => { const r = ejecutar(u.name, u.input || {}); if (r.tarjeta) tarjetas.push(r.tarjeta); return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(r.error ? { error: r.error } : r.resumen) } })
+    const resultados = []
+    for (const u of usos) { const r = await ejecutar(u.name, u.input || {}); if (r.tarjeta) (Array.isArray(r.tarjeta) ? r.tarjeta : [r.tarjeta]).forEach(t => tarjetas.push(t)); resultados.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(r.error ? { error: r.error } : r.resumen) }) }
     msgs.push({ role: 'user', content: resultados })
   }
   return { texto: '', tarjetas, agotado: true }

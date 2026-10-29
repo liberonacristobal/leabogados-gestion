@@ -15713,12 +15713,14 @@ const PALETTE_ACTIONS = [
 ]
 // Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
 // propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
-function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], expenses=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
+function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], billing=[], expenses=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onIrTab, onClose }){
   const [q,setQ] = useState('')
   const [busy,setBusy] = useState(false)
   const [hist,setHist] = useState([])
   const [copiado,setCopiado] = useState(null)
   const esAdmin = role==='admin'
+  const ufHoy = useUF().uf||0
+  const detenidos = useTrabajosDetenidos(esAdmin?{sales,billing,expenses,tasks}:{})   // misma regla y misma cifra que Revisión de datos y Cobranza
   const miIni = INICIALES_RESP[user?.name]||null
   const NOMBRE_INI = { CL:'Cristóbal', EE:'Erasmo', MC:'Martín', MP:'Martina', RD:'Rodrigo' }
   const brief = () => {
@@ -15766,8 +15768,13 @@ ${brief()}`
       let txt='', tarjetas=[]
       if(esAdmin){
         // Las cifras salen de consultas que la app resuelve con sus funciones únicas; la IA solo redacta con ese resultado.
-        const ejecutar = crearConsultas({ clients, billing, expenses, tasks, hoy:isoLocal(Date.now()), fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, folioN })
-        const reglas = `\n\nCIFRAS: para cualquier monto por cliente, por cobrar, vencido, facturas o tareas vencidas USA las herramientas; nunca escribas un monto que no venga de una herramienta, y copia los montos tal como los devuelve. Si no hay herramienta para lo que piden, dilo en una frase y sugiere en qué vista mirarlo. El desglose se muestra solo en una tarjeta: no repitas la tabla, responde el resultado en 1 o 2 frases.`
+        const hoyCL = isoLocal(Date.now()), uf = ufFechaCache()||{}
+        const aprendidos = async kind => DEMO ? new Set() : new Set(((await supabase.from('learnings').select('key').eq('kind',kind)).data||[]).map(r=>String(r.key)))
+        const ejecutar = crearConsultas({ clients, billing, expenses, tasks, sales, clientEntities, proyectos:proyectosCartera, uf, hoy:hoyCL, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN, detenidos,
+          cargarContactos: async id => DEMO ? [] : ((await supabase.from('contacts').select('nombre,cargo,email,telefono,principal').eq('client_id',id).is('baja_at',null)).data||[]),
+          calcCuotasSinEmitir: async () => cuotasSinEmitir({ billing, sales, uf, noEmitir:await aprendidos('cuota_no_emitir'), hasta:hoyCL.slice(0,8)+'01' }),
+          calcTrabajosSinFacturar: async () => trabajosSinFacturar({ sales, billing, uf, ufHoy, hoy:hoyCL, noEmitir:await aprendidos('cuota_no_emitir'), decididos:await aprendidos('trabajo_sin_facturar') }) })
+        const reglas = `\n\nCIFRAS: para cualquier monto por cliente, por cobrar, vencido, facturas o tareas vencidas USA las herramientas; nunca escribas un monto que no venga de una herramienta, y copia los montos tal como los devuelve. Para «dónde está / cómo hago algo» usa donde_esta y nunca nombres una pantalla que la herramienta no devolvió. Si no hay herramienta para lo que piden, dilo en una frase y sugiere en qué vista mirarlo. El desglose se muestra solo en una tarjeta: no repitas la tabla, responde el resultado en 1 o 2 frases.`
         const r = await resolverConIA({ llamar:b=>claudeCall({model:'claude-opus-4-8',max_tokens:700,...b}), sistema:sys+reglas, mensajes:msgs, ejecutar })
         txt=r.texto; tarjetas=r.tarjetas
       } else {
@@ -15824,7 +15831,7 @@ ${brief()}`
     return null
   }
   // Tarjeta con el desglose que devolvió la consulta (las cifras vienen de la app, no de la IA). Cada línea lleva a su detalle.
-  const irA = d => { if(!d) return; if(d.tipo==='cliente'&&onOpenClientFicha){ onOpenClientFicha(d.id); onClose&&onClose() } else if(d.tab&&onNav){ onNav({tasks:'tareas',billing:'facturacion'}[d.tab]||d.tab) } }
+  const irA = d => { if(!d) return; if(d.tipo==='cliente'&&onOpenClientFicha){ onOpenClientFicha(d.id); onClose&&onClose() } else if(d.tab&&onIrTab){ onIrTab(d.tab) } else if(d.tab&&onNav){ onNav({tasks:'tareas',billing:'facturacion',expenses:'gastos',sales:'ventas',clients:'clientes'}[d.tab]||d.tab) } }
   const tarjetaConsulta = (t,k) => (
     <div key={k} style={{ border:'1px solid #CFE9DD', background:'#F1FAF6', borderRadius:12, padding:'10px 12px', marginTop:8 }}>
       <div style={{ fontSize:10, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:C.greenText, marginBottom:4 }}>{t.titulo}</div>
@@ -19002,7 +19009,7 @@ export default function App() {
         })()}
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
-        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} clientEntities={clientEntities} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<PaginaSobre origen='Anticipo' titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAntApp.client_id))?.name||null} onBack={()=>setCubrirAntApp(null)}><CubrirCuotasModal asPage anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/></PaginaSobre>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
