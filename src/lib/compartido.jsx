@@ -7167,3 +7167,111 @@ export function PaginaSobre({origen,titulo,ctx,onBack,maxW=640,children}){
   return createPortal(<div style={{position:'fixed',top:0,right:0,bottom:0,left:isDesktop?212:0,zIndex:650,background:C.bg,overflowY:'auto'}}><FlujoPagina origen={origen} titulo={titulo} ctx={ctx} onBack={onBack} maxW={maxW}>{children}</FlujoPagina></div>, document.body)
 }
 
+// Movilización: el medio va en subcategory (control de Uber) y la glosa se arma "Movilización Desde–Hasta para motivo".
+export const MEDIOS_MOV = ['Uber','Cabify','DiDi','Taxi','Carga BIP','Estacionamiento','Bencina / peaje']
+
+// Solo los traslados por app/taxi son excepcionales y exigen trayecto y motivo; la carga BIP (transporte público) no pide más.
+export const MEDIO_CON_DETALLE = new Set(['Uber','Cabify','DiDi','Taxi'])
+
+export const medioMovDe = t => { const n=String(t||'').toLowerCase(); return /\buber\b/.test(n)?'Uber':/cabify/.test(n)?'Cabify':/\bdidi\b/.test(n)?'DiDi':/taxi/.test(n)?'Taxi':/metro|\bbip\b|\bbus\b|micro|transporte p/.test(n)?'Carga BIP':/bencina|peaje|\btag\b/.test(n)?'Bencina / peaje':/estacionamiento/.test(n)?'Estacionamiento':'' }
+
+export const glosaMovilizacion = (desde,hasta,motivo) => { const m=String(motivo||'').trim().replace(/^para\s+/i,''); return `Movilización ${String(desde||'').trim()}–${String(hasta||'').trim()}${m?` para ${m}`:''}` }
+
+// Campo con label flotante DENTRO del box (ahorra alto: label chico arriba, valor abajo). Los inputs van borderless (fInp).
+export const FloatFld = ({label,children,mb}) => <div style={{marginBottom:mb??8,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px'}}><div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5,lineHeight:1.4}}>{label}</div>{children}</div>
+
+// ── GASTOS FORM (tabla de ingreso rápido) ─────────────────────────────────────
+export const CATS_GASTO = ['Notaria','CBR','Diario Oficial','Registro Civil','Movilización','Archivo Judicial','Otro']
+
+// Lo aprendido de «¿De qué?» por cliente (key = client_id) o persona (key = p:Nombre): lo más reciente primero.
+export function useDeQueAprendido(){
+  const [deq,setDeq] = useState({})
+  useEffect(()=>{ let on=true
+    selectAll(()=>supabase.from('learnings').select('key,value,updated_at,id').eq('kind','gasto_deque').order('updated_at',{ascending:false}).order('id')).then(r=>{ if(!on) return; const m={}
+      ;(r?.data||[]).forEach(x=>{ if(!x.key||!x.value) return; const l=m[x.key]=m[x.key]||[]; if(!l.some(v=>_normTxt(v)===_normTxt(x.value))) l.push(x.value) }); setDeq(m) },()=>{})
+    return ()=>{on=false} },[])
+  const aprender = (scope,valor) => { const v=String(valor||'').trim(); if(!scope||!v) return
+    learnPut('gasto_deque',scope,v); setDeq(p=>({...p,[scope]:[v,...(p[scope]||[]).filter(x=>_normTxt(x)!==_normTxt(v))]})) }
+  return [deq,aprender]
+}
+
+// Chips de «¿De qué?»: lo aprendido para ese cliente/persona + sus razones sociales.
+export const deQueOpciones = (deq,scope,clientId,clientEntities) => { const out=[]
+  const add=v=>{ const t=String(v||'').trim(); if(t&&!out.some(x=>_normTxt(x)===_normTxt(t))) out.push(t) }
+  ;(deq[scope]||[]).forEach(add); if(clientId) (clientEntities||[]).filter(e=>String(e.client_id)===String(clientId)).forEach(e=>add(e.name))
+  return out.slice(0,5) }
+
+// Subcategoría de «Otro»: nunca un medio de movilización (un envío o despacho no es un Uber).
+export const subOtro = s => { const t=String(s||'').trim(); return t && !MEDIOS_MOV.some(m=>m.toLowerCase()===t.toLowerCase()) ? t : null }
+
+// ── MOTOR DE CONCILIACIÓN (determinista, read-only) ─────────────────────────────────────────────────
+// Detecta cuotas Programadas ya SALDADAS (fantasma). PURO — no muta nada. Auto-marca SOLO señales
+// INEQUÍVOCAS (análisis, no intuición) — cada emitida cubre UNA sola programada (pool con consumo):
+//   1 · MISMO PERÍODO por glosa: cuota y emitida declaran el MISMO mes ("Mensual Mayo" ↔ "mayo 26").
+//       Nunca marca un mes realmente saltado (Eugenia julio, BM septiembre). alta.
+//   2 · MISMA CUOTA N/M etiquetada: la programada "Cuota k/M" y una emitida "Cuota k/M" (mismo M) → el
+//       calendario re-generó una cuota ya emitida. alta.
+//   3 · COBERTURA por anticipo consolidado (Agustín: 3 adelantos → 1 factura). alta.
+// GUARDARRAÍL DEL PLAN (cobro_config): una venta NUNCA puede tener más fantasmas que (filas vivas − nº de
+// cuotas del plan). Si el conteo no lo permite, no se marca — esto solo habría evitado los 3 sub-facturados
+// (Luis c2, Del Sante oct, JPM sep) que causó la vieja señal de "mismo vencimiento" (ELIMINADA por frágil:
+// una emitida genérica "Honorarios" de una cuota vecina la engañaba). Lo que la deriva de fechas deja
+// ambiguo se queda PENDIENTE — jamás se esconde una cuota real; se retira a mano o con futura alineación.
+export function conciliarVentasSaldadas(billing=[], sales=[], anticipos=[], conciliacion=[], ufMap={}, fantasmaNo=new Set()){
+  const act=(billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada' && (b.billing_type||'')!=='reembolso')
+  const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
+  const bankFacturaIds=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='factura'&&c.factura_id).map(c=>String(c.factura_id)))
+  const bySale={}; act.forEach(b=>{ if(b.sale_id) (bySale[String(b.sale_id)]=bySale[String(b.sale_id)]||[]).push(b) })
+  const amtOf=b=>montoFactura(b)||b.amount||0
+  const close=(a,b)=>{ const x=amtOf(a),y=amtOf(b); if(!x||!y) return false; return Math.abs(x-y)/Math.max(x,y) < 0.03 }
+  const out=[]
+  Object.entries(bySale).forEach(([sid,rows])=>{
+    const sale=saleById[sid]||null
+    const emitidas=rows.filter(b=>b.invoice_no && b.status!=='Programada')
+    const progs=rows.filter(b=>b.status==='Programada').sort((a,b)=>String(a.due||'').localeCompare(String(b.due||'')))
+    if(!progs.length || !emitidas.length) return
+    const emitIds=new Set(emitidas.map(e=>String(e.id)))
+    const antIntoEmit=(anticipos||[]).filter(a=>a.estado==='consumido'&&String(a.sale_id||'')===sid&&a.billing_id&&emitIds.has(String(a.billing_id)))
+    const pool=emitidas.map(e=>({e, per:concPeriodoOf(e.concept), cn:cuotaNMof(e.concept), used:false}))
+    const take=pred=>{ const c=pool.find(x=>!x.used&&pred(x)); if(c){ c.used=true; return c.e } return null }
+    const matched=[]; const rest=[]
+    progs.forEach(p=>{
+      if(fantasmaNo.has(String(p.id))) return   // "es pendiente, no fantasma" → aprendido, nunca re-marcar
+      const pPer=concPeriodoOf(p.concept), pCn=cuotaNMof(p.concept)
+      let hit=null, via=null
+      if(pPer){ hit=take(x=>x.per===pPer && close(x.e,p)); if(hit) via='periodo' }               // 1 · mismo mes en la glosa
+      if(!hit && pCn){ hit=take(x=>x.cn && x.cn.n===pCn.n && x.cn.tot===pCn.tot); if(hit) via='cuota' }  // 2 · misma Cuota k/M
+      if(hit) matched.push({prog:p, hit, via}); else rest.push(p)
+    })
+    // 3 · cobertura por anticipo consolidado (una factura respaldada por adelantos cubre lo que resta)
+    if(rest.length && antIntoEmit.length){
+      const restSum=rest.reduce((s,r)=>s+(amtOf(r)||0),0)
+      const big=pool.find(x=>!x.used && antIntoEmit.some(a=>String(a.billing_id)===String(x.e.id)) && amtOf(x.e) >= restSum*0.97)
+      if(big){ big.used=true; rest.forEach(r=>matched.push({prog:r, hit:big.e, via:'cobertura'})); rest.length=0 }
+    }
+    // GUARDARRAÍL DEL PLAN: nunca marcar más que el excedente real (filas vivas − nº de cuotas del plan).
+    const planN=planDeVenta(sale).length
+    let cap=matched.length
+    if(planN>0){ const excedente=Math.max(0,(emitidas.length+progs.length)-planN); cap=Math.min(cap,excedente) }
+    const final=matched.slice(0,cap)   // periodo/cuota/cobertura son inequívocos; el cap solo recorta si el plan no da
+    final.forEach(({prog,hit,via})=>{
+      const razones=[]
+      if(via==='periodo') razones.push(`Ya emitida como N° ${folioN(hit.invoice_no)||hit.invoice_no} — mismo período (${concPeriodoOf(hit.concept)})`)
+      else if(via==='cuota') razones.push(`Ya emitida como N° ${folioN(hit.invoice_no)||hit.invoice_no} — misma ${(cuotaNMof(prog.concept)||{}).n}/${(cuotaNMof(prog.concept)||{}).tot}`)
+      else if(via==='cobertura') razones.push(`Trato facturado como N° ${folioN(hit.invoice_no)||hit.invoice_no} con anticipos consolidados (${fmt(amtOf(hit))})`)
+      if(bankFacturaIds.has(String(hit.id))) razones.push('con pago conciliado en el banco')
+      out.push({ prog, sale, monto:amtOf(prog)||prog.amount||0, posterior:hit, razones, conf:'alta', via })
+    })
+  })
+  return out.sort((a,b)=>(b.monto||0)-(a.monto||0))
+}
+
+// Fecha y hora de Chile en dd-mm-aaaa hh:mm (formato único).
+export const fechaHoraCL = iso => { if(!iso) return '—'; const p=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(iso)); const g=t=>p.find(x=>x.type===t)?.value||''; return `${g('day')}-${g('month')}-${g('year')} ${g('hour')}:${g('minute')}` }
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+// Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
+export const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',calendarioTrib:'Calendario tributario',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
+
+export const tonoMargen = m => m==null ? [C.bgSoft,C.muted] : m<0 ? [C.overdueBg,C.overdueText] : m<30 ? [C.soonBg,C.soonText] : m<55 ? [C.greenSoft,C.greenText] : m<70 ? [C.greenBg,C.greenText] : [C.greenDeep,C.greenText]
+
