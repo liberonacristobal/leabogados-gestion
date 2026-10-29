@@ -1,3 +1,4 @@
+- 2026-10-29 · Pruebas: 58 pruebas nuevas (69 → 127) de las reglas de plata del servidor que no tenían: calce de abonos con facturas, fondos y anticipos, boletas de honorarios y comisiones, F29, registro de facturas del SII, cobertura de cuotas, detectores de Salud de datos, tareas con evidencia y compras por pagar. Sin cambios visibles.
 - 2026-10-29 · Código: el dominio que sugiere el ingreso con Google sale de la marca del estudio (BRAND.emailDominio) en vez de estar escrito en el código. Sin cambios visibles.
 - 2026-10-29 · Uso con mala señal: la app abre sin conexión (guarda solo sus archivos, nunca cifras) y una franja avisa «Sin conexión. No se pueden guardar cambios.» hasta que vuelve la señal.
 - 2026-10-29 · Mantenimiento: aviso mensual automático de dependencias desactualizadas (Dependabot, agrupadas, máximo 3 abiertas).
