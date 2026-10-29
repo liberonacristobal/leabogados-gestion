@@ -7,7 +7,7 @@ import {
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
   getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
   upsertClient, deleteClient as dbDeleteClient,
-  upsertBilling, updateBillingStatus, DEMO
+  upsertBilling, updateBillingStatus, DEMO, alFalloDeEscritura
 } from './supabase'
 import { demoData } from './demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from './cartola'
@@ -915,6 +915,8 @@ const learnPut = async (kind,key,value,meta) => { try{
   if(igual) await supabase.from('learnings').update({hits:(igual.hits||0)+1,updated_at:new Date().toISOString()}).eq('id',igual.id)
   else await supabase.from('learnings').insert({kind,key:k,value:v,meta:m})
 }catch(e){} }
+// Escritura que la base rechaza llega como {error} (no lanza): se registra y se avisa en el diálogo de siempre, para que nadie crea que quedó guardado.
+const okDB = (r, que) => { if(r && r.error){ registrarError({ origen:'accion', vista:que, err:r.error }); appAlert(`No se pudo ${que}: ${r.error.message||'error de la base'}.`); return false } return true }
 // Valor SINGLETON en learnings (config, interruptores): update si existe, insert si no. NO usar upsert
 // onConflict:'kind,key' — la tabla admite (kind,key) duplicados a propósito y ese upsert falla en silencio.
 async function setLearningKV(kind,key,value){
@@ -2843,7 +2845,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
 
   const aplicarCliente = async(e,client_id) => {
     if(!client_id) return
-    try{ await supabase.from('expenses').update({client_id}).eq('id',e.id) }catch(_){}
+    try{ okDB(await supabase.from('expenses').update({client_id}).eq('id',e.id),'asignar el cliente al gasto') }catch(_){}
     if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,client_id}:x))
     const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_cliente',gk,client_id)
     setPickCliFor(null)
@@ -2853,7 +2855,7 @@ function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,currentUserNa
     const patch={category}
     // Movilización = siempre de la oficina: si el gasto no tiene cliente, lo asigna al cliente interno (Liberona Escala).
     if(category==='Movilización' && !e.client_id){ const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi) patch.client_id=ofi.id }
-    try{ await supabase.from('expenses').update(patch).eq('id',e.id) }catch(_){}
+    try{ okDB(await supabase.from('expenses').update(patch).eq('id',e.id),'guardar la categoría del gasto') }catch(_){}
     if(setExpenses) setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x))
     const gk=glosaKey(e.concept||''); if(gk) learnPut('gasto_categoria',gk,category)
     setPickCatFor(null)
@@ -3500,6 +3502,7 @@ async function registrarError({origen='global', vista, err, stack}){
       url: String(location.pathname+location.search).slice(0,300), dispositivo: String(navigator.userAgent||'').slice(0,300) })
   }catch(_){}
 }
+alFalloDeEscritura(({metodo,tabla,status,cuerpo})=>registrarError({ origen:'escritura', vista:tabla, err:`${metodo} ${tabla} → ${status}: ${cuerpo}` }))   // escrituras que la base rechaza
 if(typeof window!=='undefined' && !window.__errHook){ window.__errHook=true
   window.addEventListener('error', e=>registrarError({origen:'global', err:e.error||e.message}))
   window.addEventListener('unhandledrejection', e=>registrarError({origen:'promesa', err:e.reason}))
@@ -9255,11 +9258,11 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
     const nItem = (ef.item||'').trim() || r.item
     const patch = {item:nItem, monto:nMonto, desde:nDesde, monto_prev:nPrev}
     setRows(p=>p.map(x=>x.id===r.id?{...x,...patch}:x)); setEdId(null)
-    if(!DEMO){ try{ await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id) }catch(_){} }
+    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({...patch,updated_at:new Date().toISOString()}).eq('id',r.id),'guardar el costo') }catch(_){} }
   }
   const borrar = async r => { if(!await appConfirm(`Quitar "${r.item}" de ${r.categoria}?`)) return
     setRows(p=>p.filter(x=>x.id!==r.id)); setEdId(null)
-    if(!DEMO){ try{ await supabase.from('costos_oficina').update({activo:false}).eq('id',r.id) }catch(_){} }
+    if(!DEMO){ try{ okDB(await supabase.from('costos_oficina').update({activo:false}).eq('id',r.id),'quitar el costo') }catch(_){} }
   }
   const agregar = async cat => {
     const item=(af.item||'').trim(); const monto=Math.max(0,Math.round(parseFloat(af.monto)||0))
@@ -13483,7 +13486,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
         const via=await enviarComoUsuario({to:dest, subject:`Factura ${folio}`, html, text:body, ...(pdf?{pdfBase64:pdf.base64, pdfName:`Factura ${folio}.pdf`}:{})}, batchModo)
         if(via===null){ err++; continue }
         const at=new Date().toISOString()
-        try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id) }catch(_){}
+        try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',b.id),'marcar la factura como enviada') }catch(_){}
         setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at}:x))
         ok++
       }catch(_){ err++ }
@@ -13495,7 +13498,7 @@ function useBillingModel({billing,clients,sales,clientEntities,user,setBilling,a
   const onUnsendFactura = async (b) => {
     const cli=clients.find(c=>String(c.id)===String(b.client_id))
     if(!await appConfirm(`¿Marcar la Factura N° ${folioN(b.invoice_no)||b.folio||''} como NO enviada?\nVuelve a "Por enviar"${cli?.name?` (${cli.name})`:''}. Útil si el envío fue una prueba.`)) return
-    try{ await supabase.from('billing').update({email_sent_at:null}).eq('id',b.id) }catch(_){}
+    try{ okDB(await supabase.from('billing').update({email_sent_at:null}).eq('id',b.id),'marcar la factura como no enviada') }catch(_){}
     setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:null}:x))
   }
   // Año GLOBAL de Facturación (resumen + interiores + Ficha lo leen). '' = Todos. Persistido en localStorage.
@@ -27798,7 +27801,7 @@ function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, onClose
     setSending(false)
     if(sent){ try{ if(cc.length) await setLearningKV('rendicion_cc',String(client.id),cc.join(', ')) }catch(_){} try{ if((para||'').trim()) await setLearningKV('rendicion_para',String(client.id),para.trim()) }catch(_){}
       // Registrar el envío de la devolución en la rendición → chip "Devolución enviada" en el historial.
-      try{ if(rend?.id){ const now=new Date().toISOString(); await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
+      try{ if(rend?.id){ const now=new Date().toISOString(); if(!okDB(await supabase.from('rendiciones').update({devolucion_at:now}).eq('id',rend.id),'registrar el envío de la devolución')) throw new Error('devolucion'); setRendiciones&&setRendiciones(p=>p.map(x=>x.id===rend.id?{...x,devolucion_at:now}:x)) } }catch(_){}
       appAlert(txtEnviado(via,{que:'Aviso de devolución de fondos', para:[para.trim(),...cc].filter(Boolean).join(', ')})+(comp?'\nCon el comprobante adjunto.':''))
       onClose&&onClose() }
     else avisoNoEnviado('La devolución de fondos', err?.message||String(err||''))
@@ -28258,7 +28261,7 @@ function FacturaEmailModal({factura, facturas, sales=[], client, user, sale, bil
         if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
       }catch(_){} }
       const at=new Date().toISOString()
-      for(const f of listF){ try{ await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id) }catch(_){}; onSent&&onSent(f.id,at) }
+      for(const f of listF){ try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id),'marcar la factura como enviada') }catch(_){}; onSent&&onSent(f.id,at) }
       appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
     }catch(e){ appAlert(txtNoEnviado('La factura', e.message||String(e))) }
     setSending(false)
@@ -32662,9 +32665,9 @@ function UsersView({onClose}) {
   },[])
 
   const saveRole = async(id,role) => {
-    await supabase.from('user_roles').update({role}).eq('id',id)
+    if(!okDB(await supabase.from('user_roles').update({role}).eq('id',id),'cambiar el rol')) return
     const em=users.find(u=>u.id===id)?.email   // doble escritura: `miembros` es la fuente tenant-aware que lee el login
-    if(em) try{ await supabase.from('miembros').update({rol:role}).eq('email',em.toLowerCase()) }catch(_){}
+    if(em) try{ okDB(await supabase.from('miembros').update({rol:role}).eq('email',em.toLowerCase()),'cambiar el rol del miembro') }catch(_){}
     setUsers(p=>p.map(u=>u.id===id?{...u,role}:u))
   }
 
@@ -32680,8 +32683,8 @@ function UsersView({onClose}) {
   const removeUser = async(id) => {
     if(!await appConfirm('¿Eliminar este usuario?')) return
     const em=users.find(u=>u.id===id)?.email
-    await supabase.from('user_roles').delete().eq('id',id)
-    if(em) try{ await supabase.from('miembros').delete().eq('email',em.toLowerCase()) }catch(_){}
+    if(!okDB(await supabase.from('user_roles').delete().eq('id',id),'quitar al usuario')) return
+    if(em) try{ okDB(await supabase.from('miembros').delete().eq('email',em.toLowerCase()),'quitar al miembro') }catch(_){}
     setUsers(p=>p.filter(u=>u.id!==id))
   }
 
@@ -33737,8 +33740,8 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     }catch(e){ setExtErr(/relation .*plazos.*does not exist|Could not find the table/i.test(e?.message||'')?'Falta crear la tabla: corre docs/sql_plazos.sql en Supabase.':(e?.message||'No se pudo guardar.')) }
     setSaving(false)
   }
-  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ await supabase.from('plazos').update({estado:nv}).eq('id',p.id); logActividad(nv==='cumplido'?'plazos.cumplido':'plazos.reabierto',{tabla:'plazos',id:p.id,detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
-  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ await supabase.from('plazos').delete().eq('id',p.id); logActividad('plazos.borrado',{detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
+  const marcar=async(p)=>{ const nv=p.estado==='cumplido'?'pendiente':'cumplido'; try{ if(!okDB(await supabase.from('plazos').update({estado:nv}).eq('id',p.id),'actualizar el plazo')) return; logActividad(nv==='cumplido'?'plazos.cumplido':'plazos.reabierto',{tabla:'plazos',id:p.id,detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).map(x=>x.id===p.id?{...x,estado:nv}:x)) }
+  const borrar=async(p)=>{ if(!(await appConfirm('¿Borrar este plazo?'))) return; try{ if(!okDB(await supabase.from('plazos').delete().eq('id',p.id),'borrar el plazo')) return; logActividad('plazos.borrado',{detalle:{title:p.titulo,name:cn(p.client_id)}}) }catch(_){}; setRows(rs=>(rs||[]).filter(x=>x.id!==p.id)) }
   const agregarManual=async()=>{
     if(!mF.titulo.trim()||mSaving) return
     setMSaving(true); setExtErr(null)
@@ -36052,9 +36055,9 @@ function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing=[], cu
   // E1 — Editar / corregir / borrar una hora (con deshacer).
   const [editH,setEditH] = useState(null); const [ef,setEf] = useState({}); const [eq,setEq] = useState(''); const [undoH,setUndoH] = useState(null)
   const abrirEdit = h => { setEditH(h.id); setEf({ client_id:h.client_id, fecha:h.fecha, horas:h.horas, glosa:h.glosa||'', billable:h.billable!==false }); setEq('') }
-  const guardarEdit = async () => { const patch={ client_id:ef.client_id, fecha:ef.fecha, horas:parseFloat(ef.horas)||0, glosa:ef.glosa, billable:!!ef.billable }; setHoras(p=>p.map(x=>x.id===editH?{...x,...patch}:x)); const id=editH; setEditH(null); if(DEMO) return; try{ await supabase.from('horas').update(patch).eq('id',id) }catch(e){ appAlert('No se pudo guardar: '+e.message) } }
-  const borrarHora = async h => { setHoras(p=>p.filter(x=>x.id!==h.id)); setEditH(null); setUndoH(h); if(DEMO) return; try{ await supabase.from('horas').delete().eq('id',h.id) }catch(_){} }
-  const deshacerBorrar = async () => { const h=undoH; setUndoH(null); if(!h) return; setHoras(p=>[h,...p]); if(DEMO) return; const {id,created_at,report_id,...rest}=h; try{ const {data}=await supabase.from('horas').insert(rest).select().single(); if(data) setHoras(p=>p.map(x=>x.id===h.id?data:x)) }catch(_){} }
+  const guardarEdit = async () => { const patch={ client_id:ef.client_id, fecha:ef.fecha, horas:parseFloat(ef.horas)||0, glosa:ef.glosa, billable:!!ef.billable }; setHoras(p=>p.map(x=>x.id===editH?{...x,...patch}:x)); const id=editH; setEditH(null); if(DEMO) return; try{ okDB(await supabase.from('horas').update(patch).eq('id',id),'guardar las horas') }catch(e){ appAlert('No se pudo guardar: '+e.message) } }
+  const borrarHora = async h => { setHoras(p=>p.filter(x=>x.id!==h.id)); setEditH(null); setUndoH(h); if(DEMO) return; try{ if(!okDB(await supabase.from('horas').delete().eq('id',h.id),'borrar las horas')){ setHoras(p=>[h,...p]); setUndoH(null) } }catch(_){} }
+  const deshacerBorrar = async () => { const h=undoH; setUndoH(null); if(!h) return; setHoras(p=>[h,...p]); if(DEMO) return; const {id,created_at,report_id,...rest}=h; try{ const r=await supabase.from('horas').insert(rest).select().single(); if(!okDB(r,'restaurar las horas')) setHoras(p=>p.filter(x=>x.id!==h.id)); else if(r.data) setHoras(p=>p.map(x=>x.id===h.id?r.data:x)) }catch(_){} }
   useEffect(()=>{ if(undoH){ const t=setTimeout(()=>setUndoH(null),6000); return ()=>clearTimeout(t) } },[undoH])
   // F4 — Exportar mis horas a CSV (separador ';' y coma decimal para Excel es-CL; BOM para acentos).
   const exportarCSV = () => {

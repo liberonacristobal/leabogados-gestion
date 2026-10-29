@@ -388,3 +388,21 @@ test('cartola: «Transferencia de X Rut … desde Banco … a Y Rut …» toma a
   const i = 'Transferencia de CLIENTE Rut 77.700.387-9 desde Banco BICE a BENEFICIARIO Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-09-09 a las 18:48:00.'
   assert.deepEqual(extraerContraparte(i, 'cargo'), { nombre: null, rut: null })
 })
+
+import { vigilarEscrituras } from '../src/vigilanteEscrituras.js'
+test('escrituras rechazadas por la base se avisan; lecturas, éxitos y el propio registro de errores no', async () => {
+  const avisos = []
+  const f = (status) => vigilarEscrituras(() => a => avisos.push(a), async () => new Response('{"message":"rechazado"}', { status }))
+  await f(403)('https://x.supabase.co/rest/v1/billing?id=eq.1', { method: 'PATCH' })
+  await new Promise(r => setTimeout(r, 5))
+  assert.equal(avisos.length, 1); assert.equal(avisos[0].tabla, 'billing'); assert.equal(avisos[0].status, 403)
+  await f(403)('https://x.supabase.co/rest/v1/billing?id=eq.1', { method: 'GET' })         // lectura: no
+  await f(200)('https://x.supabase.co/rest/v1/billing', { method: 'POST' })                 // éxito: no
+  await f(409)('https://x.supabase.co/rest/v1/app_errores', { method: 'POST' })             // el propio registro: no (evita bucle)
+  await f(404)('https://x.supabase.co/functions/v1/push', { method: 'POST' })               // función con 404: no; solo 5xx
+  await new Promise(r => setTimeout(r, 5))
+  assert.equal(avisos.length, 1)
+  await f(500)('https://x.supabase.co/functions/v1/push', { method: 'POST' })
+  await new Promise(r => setTimeout(r, 5))
+  assert.equal(avisos.length, 2)
+})
