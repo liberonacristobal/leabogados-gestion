@@ -9,7 +9,7 @@ import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGast
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
-import { SolicitudesFondosDetectadas } from '../lib/fondosCorreo.jsx'
+import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -4329,7 +4329,7 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
           </div>
           <div style={{display:'flex',gap:8}}>{!D&&revisarRes&&<button type='button' onClick={()=>setShowRevisar(true)} style={{...chipBtn(),...(revisarRes.resumen?{color:revisarRes.col}:{})}}>Revisar</button>}<button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button></div>
         </div>
-        <SolicitudesFondosDetectadas clients={clients} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/>
+        <SolicitudesFondos clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/>
         <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:D?12:8,marginBottom:12}}>
           {cards.map(c=><HubTile key={c.t} ic={c.ic} t={c.t} s={c.s} sCol={c.sCol} col={c.col} bg={c.bg} onClick={c.go}/>)}
         </div>
