@@ -196,9 +196,12 @@ export const CUENTA_HONORARIOS = { razon:BRAND.nombreLegal, rut:BRAND.rut, banco
 // El anfitrión de diálogos (DialogHost, en App.jsx) se registra aquí al montarse.
 export const setDialogHost = fn => { _dialogHost = fn }
 
-// Pantalla que se descarga la primera vez que se abre (no en el arranque de la app). Mientras llega no se ve nada: las pantallas
-// ya tienen su propia carga, y un recuadro intermedio solo agregaría un parpadeo.
+// Pantalla que se descarga aparte del arranque de la app: llega sola unos segundos después de abrir (sin ahorro de datos activado),
+// así el primer toque en ella ya la encuentra descargada. Mientras llega no se ve nada: las pantallas ya tienen su propia carga.
 export const lazyVista = (cargar, nombre) => {
   const L = lazy(() => cargar().then(m => ({ default: m[nombre] })))
+  if (typeof window !== 'undefined' && !(navigator.connection && navigator.connection.saveData)) {
+    setTimeout(() => (window.requestIdleCallback || (f => setTimeout(f, 0)))(() => { cargar().catch(() => {}) }), 4000)
+  }
   return props => <Suspense fallback={null}><L {...props} /></Suspense>
 }

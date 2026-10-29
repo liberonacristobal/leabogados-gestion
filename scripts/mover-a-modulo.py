@@ -127,12 +127,18 @@ if prueba:
     sys.exit(0)
 
 app_txt = '\n'.join(src)
-imports = []
+imports = []   # (nombre local, texto del especificador, módulo, es_default)
 for m in re.finditer(r'^import\s+(.+?)\s+from\s+[\'"]([^\'"]+)[\'"]', app_txt, re.M | re.S):
     cuerpo, mod = m.group(1), m.group(2)
     if mod.startswith('./lib/') or cuerpo.strip().startswith('*'): continue
-    for part in re.findall(r'[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?', cuerpo.replace('{', ' ').replace('}', ' ')):
-        imports.append((part.split(' as ')[-1].strip(), part.strip(), mod))
+    c = cuerpo.strip()
+    mdef = re.match(r'^([A-Za-z_$][\w$]*)\s*(?:,|$)', c)
+    if mdef:
+        imports.append((mdef.group(1), mdef.group(1), mod, True))
+    llaves = re.search(r'\{([^}]*)\}', c, re.S)
+    if llaves:
+        for part in re.findall(r'[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?', llaves.group(1)):
+            imports.append((part.split(' as ')[-1].strip(), part.strip(), mod, False))
 nss = re.findall(r'^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+[\'"]([^\'"]+)[\'"]', app_txt, re.M)
 
 def ident(n, t): return re.search(r'(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))' + re.escape(n) + r'(?![\w$])', t)
@@ -160,14 +166,15 @@ def escribir_modulo(path, nombres, extra_lib=()):
         cuerpo += blk + ['']
     txt = '\n'.join(cuerpo)
     por_modulo = {}
-    for loc, part, mod in imports:
-        if ident(loc, txt): por_modulo.setdefault(mod, []).append(part)
+    for loc, part, mod, es_def in imports:
+        if ident(loc, txt): por_modulo.setdefault(mod, {'def': [], 'named': []})['def' if es_def else 'named'].append(part)
     lin = []
-    for mod, partes in por_modulo.items():
-        default = [p for p in partes if p == 'React']
-        named = [p for p in partes if p not in default]
-        if default and not named: lin.append(f"import {default[0]} from '{mod}'")
-        else: lin.append(f"import {{ {', '.join(named)} }} from '{reescribir(mod)}'")
+    for mod, d in por_modulo.items():
+        ref = reescribir(mod)
+        partes = []
+        if d['def']: partes.append(d['def'][0] if isinstance(d['def'], list) else d['def'])
+        if d['named']: partes.append('{ ' + ', '.join(d['named']) + ' }')
+        lin.append(f"import {', '.join(partes)} from '{ref}'")
     for loc, mod in nss:
         if ident(loc, txt): lin.append(f"import * as {loc} from '{reescribir(mod)}'")
     pre = './' if path.startswith('lib/') else '../lib/'
@@ -189,12 +196,17 @@ def escribir_modulo(path, nombres, extra_lib=()):
                 ya.add(part.split(' as ')[-1].strip())
         faltan_imp = []
         for l in lin:
-            m = re.match(r"import \{ (.+) \} from '(.+)'", l)
-            if m:
-                partes = [x.strip() for x in m.group(1).split(',') if x.strip().split(' as ')[-1] not in ya]
-                if partes: faltan_imp.append(f"import {{ {', '.join(partes)} }} from '{m.group(2)}'")
-            elif l.startswith('import * as '):
+            if l.startswith('import * as '):
                 if l.split()[3] not in ya: faltan_imp.append(l)
+                continue
+            m = re.match(r"import (?:([A-Za-z_$][\w$]*))?(?:,\s*)?(?:\{ (.+) \})? from '(.+)'$", l)
+            if not m: faltan_imp.append(l); continue
+            dflt, nombrados, modref = m.group(1), m.group(2), m.group(3)
+            partes = []
+            if dflt and dflt not in ya: partes.append(dflt)
+            nm = [x.strip() for x in (nombrados or '').split(',') if x.strip() and x.strip().split(' as ')[-1] not in ya]
+            if nm: partes.append('{ ' + ', '.join(nm) + ' }')
+            if partes: faltan_imp.append(f"import {', '.join(partes)} from '{modref}'")
         ultimo = 0
         for m in re.finditer(r'^import\s+.+?\s+from\s+[\'"][^\'"]+[\'"][^\n]*\n', actual, re.M | re.S): ultimo = m.end()
         actual = actual[:ultimo] + ''.join(l + '\n' for l in faltan_imp) + actual[ultimo:]
