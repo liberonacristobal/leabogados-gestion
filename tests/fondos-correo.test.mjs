@@ -1,7 +1,7 @@
 // Reconocer una solicitud de fondos en un correo enviado: monto y cliente, solo cuando no hay duda.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { montoDeTexto, montoSolicitado, montoCorto, pedidosInternos, clienteDePedido, esFormularioFondos, pedidoDeSolicitud, clienteDeCorreo } from './../supabase/functions/_shared/fondosReglas.js'
+import { montoDeTexto, montoSolicitado, montoCorto, pedidosInternos, clienteDePedido, esFormularioFondos, pedidoDeSolicitud, confirmaPago, clienteDeCorreo } from './../supabase/functions/_shared/fondosReglas.js'
 
 test('monto del correo: uno solo, con o sin puntos, en pesos; varios distintos o ninguno, no se adivina', () => {
   assert.equal(montoDeTexto('Solicitud de fondos por $1.200.000 para la constitución'), 1200000)
@@ -99,4 +99,15 @@ test('pedido de una solicitud: mismo cliente y monto, anterior o del mismo día,
   assert.equal(pedidoDeSolicitud(peds, { client_id: '1', monto: 2000000, fecha: '2026-10-13' }).id, 'b')   // mismo día vale
   assert.equal(pedidoDeSolicitud(peds, { client_id: '1', monto: 999, fecha: '2026-10-20' }), null)
   assert.equal(pedidoDeSolicitud([], { client_id: '1', monto: 1, fecha: '2026-10-20' }), null)
+})
+
+test('confirmación del cliente: dice que ya pagó o adjunta un comprobante; una negación no cuenta (respuestas reales, anonimizadas)', () => {
+  assert.equal(confirmaPago('Buenos días Cristobal. Ya transferido. Muchas gracias'), true)
+  assert.equal(confirmaPago('Buenos Días Estimados Adjunto comprobante de pago Solicitado Saludos Cordiales'), true)
+  assert.equal(confirmaPago('Estimado, lo depositamos hoy'), true)
+  assert.equal(confirmaPago('Gracias, lo reviso con administración'), false)
+  assert.equal(confirmaPago('Aún no hemos transferido, lo hacemos mañana'), false)
+  assert.equal(confirmaPago('Hola, gracias', ['Comprobante Operación Express.pdf']), true)   // el comprobante va solo en el adjunto
+  assert.equal(confirmaPago('Hola, gracias', ['firma.png']), false)
+  assert.equal(confirmaPago(null), false)
 })

@@ -71,6 +71,15 @@ export function pedidosInternos(texto) {
   return out;
 }
 
+// Respuesta del cliente que avisa que ya pagó: «ya transferido», «depositado», «transferí», «pagado» o un comprobante adjunto. Una negación
+// cercana («aún no hemos transferido») no cuenta. Es solo una sugerencia: una persona la confirma.
+export function confirmaPago(texto, nombresAdjuntos = []) {
+  const t = _nrm(texto);
+  if (/\b(no|aun no|todavia no|sin)\b[^.]{0,30}(transfer|deposit|pag)/.test(t)) return false;
+  if (/transferid|transferi\b|transferimos|transfirio|depositad|deposite\b|depositamos|pagad|pago realizado|ya pague|ya pagamos|comprobante de (pago|transferencia|deposito)|adjunto comprobante/.test(t)) return true;
+  return (nombresAdjuntos || []).some((n) => /comprobante/.test(_nrm(n)));
+}
+
 // Adjunto que es el formulario de fondos por rendir (Word o PDF): «Solicitud Fondos por Rendir <cliente>.docx».
 export function esFormularioFondos(nombre) {
   const n = _nrm(nombre);
