@@ -94,7 +94,7 @@ export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onO
     {anio==='todos'&&(morV+pfV)>0&&<>
       {cap('Aparte · trabajo impago',true)}
       <CxRow isDesk={d} tenue label='Cartera morosa' pill={F.duda.n?pill(d?`${F.duda.n} factura${F.duda.n!==1?'s':''}`:F.duda.n):null} val={fmtMillLR(morV)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>
-      <CxRow isDesk={d} tenue sg='+' label='Por facturar atrasado' pill={F.sinEmitir.n?pill(d?`${F.sinEmitir.n} cuota${F.sinEmitir.n!==1?'s':''}`:F.sinEmitir.n):null} val={fmtMillLR(pfV)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>
+      <CxRow isDesk={d} tenue sg='+' label='Por facturar vencido' pill={F.sinEmitir.n?pill(d?`${F.sinEmitir.n} cuota${F.sinEmitir.n!==1?'s':''}`:F.sinEmitir.n):null} val={fmtMillLR(pfV)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>
       <CxRow isDesk={d} tenue sg='=' kind='tot' label='Trabajo impago' val={fmtMillLR(morV+pfV)}/>
     </>}
     {onOpenFlujoCaja&&<div onClick={onOpenFlujoCaja} style={{display:'flex',justifyContent:'center',alignItems:'center',gap:4,padding:'10px 14px',borderTop:`1px solid ${C.border}`,color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer'}}>Ver todo en Flujo de caja <Gl n='chevron'/></div>}

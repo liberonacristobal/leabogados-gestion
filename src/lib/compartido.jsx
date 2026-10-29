@@ -3833,7 +3833,7 @@ export const PS_KPIS=[
   {g:'Cobro · hoy',k:'pcob',l:'Por cobrar',ls:'Por cobrar',f:'$',per:'hoy'},
   {g:'Cobro · hoy',k:'venc',l:'de eso, vencido',ls:'de eso, vencido',f:'$',per:'hoy',sub:1},
   {g:'Cobro · hoy',k:'moro',l:'de eso, cartera morosa',ls:'de eso, morosa',f:'$',per:'hoy',sub:1},
-  {g:'Cobro · hoy',k:'pfat',l:'Por facturar atrasado',ls:'Por facturar',f:'$',per:'hoy'},
+  {g:'Cobro · hoy',k:'pfat',l:'Por facturar vencido',ls:'Por facturar',f:'$',per:'hoy'},
   {g:'Gastos de clientes · hoy',k:'deuda',l:'Deuda de clientes por gastos',ls:'Deuda gastos',f:'$',per:'hoy'},
   {g:'Gastos de clientes · hoy',k:'favor',l:'Fondos a favor de clientes',ls:'A favor',f:'$',per:'hoy',extra:1},
   {g:'Ventas',k:'nven',l:'N.º de ventas',ls:'N.º ventas',f:'n',per:'flujo',extra:1},

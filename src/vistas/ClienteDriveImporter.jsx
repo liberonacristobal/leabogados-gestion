@@ -48,7 +48,7 @@ export function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       if(addN) partes.push(`Incorporar ${addN} cliente${addN!==1?'s':''} nuevo${addN!==1?'s':''}: ${lista(prev.wouldAdd,addN)}`)
       if(termN) partes.push(`Archivar ${termN} cliente${termN!==1?'s':''} movido${termN!==1?'s':''} a Terminados: ${lista(prev.wouldTerminate,termN)}`)
       // Near-dup: carpetas que se parecen a un cliente ya existente (typo). NO se crean; se resuelven a mano abajo, en la lista de nuevos.
-      if(revN){ const rl=(prev.needsReview||[]).slice(0,8).map(r=>`"${r.folder}" ≈ ${r.maybe}`).join('; '); partes.push(`OJO · ${revN} carpeta${revN!==1?'s':''} se parece${revN!==1?'n':''} a un cliente existente y NO se crearán (revísalas abajo): ${rl}${revN>8?'…':''}`) }
+      if(revN){ const rl=(prev.needsReview||[]).slice(0,8).map(r=>`"${r.folder}" ≈ ${r.maybe}`).join('; '); partes.push(`Atención · ${revN} carpeta${revN!==1?'s':''} se parece${revN!==1?'n':''} a un cliente existente y NO se crearán (revísalas abajo): ${rl}${revN>8?'…':''}`) }
       if(!addN && !termN){ setSyncMsg(`Nada que incorporar ni archivar. ${revN} carpeta(s) parecida(s) a un cliente existente quedaron para revisar abajo (no se crean duplicados).`); setSyncing(false); return }
       if(!await appConfirm(`Drive propone:\n\n${partes.join('\n\n')}\n\n¿Confirmar los cambios? Es reversible.`)){ setSyncMsg('Cancelado — no se cambió nada.'); setSyncing(false); return }
       // 2) Aplicar de verdad.

@@ -2006,7 +2006,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   const lista=F.clientes.filter(c=>fil==='todos'||(fil==='com'&&(c.com||c.comFuera))||(fil==='mor'&&c.duda)||(fil==='pf'&&c.sin)||(fil==='imp'&&(c.duda||c.sin))||(fil==='ent'&&c.entra))
   const descargar=async()=>{ try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const head=['Cliente','Plazo de pago (días)','Facturas pagadas usadas','Cobranza proyectada 8 sem.','Comisiones por pagar 8 sem.','Flujo neto','Cartera morosa','Por facturar atrasado','Comisiones sujetas a ese cobro','Facturas vencidas']
+      const head=['Cliente','Plazo de pago (días)','Facturas pagadas usadas','Cobranza proyectada 8 sem.','Comisiones por pagar 8 sem.','Flujo neto','Cartera morosa','Por facturar vencido','Comisiones sujetas a ese cobro','Facturas vencidas']
       const data=F.clientes.map(c=>[nom(c.cid),c.ritmo,c.hist,Math.round(c.entra),Math.round(c.com),Math.round(c.entra-c.com),Math.round(c.duda),Math.round(c.sin),Math.round(c.comFuera),c.nVenc])
       const sem=[['Semana del','Cobranza','Gastos de operación','Comisiones','Saldo acumulado'],...F.weeks.map(w=>[fmtFechaDMY(w.ini),Math.round(w.entra),Math.round(w.of),Math.round(w.com),Math.round(w.run)])]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head,...data]),'Por cliente'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sem),'Por semana')
@@ -2038,7 +2038,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
       {st('op','users',C.overdueBg,C.overdueText,isDesktop?'Gastos de operación':'Operación',F.O?`−${fM(F.O)}`:'$0',onOpenCostos?()=>onOpenCostos(F.costoReal):undefined)}
       {st('com','exchange',C.soonBg,C.soonText,isDesktop?'Comisiones por pagar':'Comisiones',F.C?`−${fM(F.C)}`:'$0','com')}
       {st('mor','alert',C.overdueBg,C.overdueText,isDesktop?'Cartera morosa':'Morosa',fM(morV),'mor')}
-      {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar atrasado':'Por facturar',fM(pfV),'pf')}
+      {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar vencido':'Por facturar',fM(pfV),'pf')}
     </div>
     {F.sinCuota.length>0&&<div style={{marginTop:8}}>{aviso(C.soonBg,C.soonText,`Comisión sin cuota · ${F.sinCuota.length}`,[...new Set(F.sinCuota.map(x=>x.prov))].slice(0,2).join(', ')+' · asígnale la cuota para proyectarla',fM(F.sinCuotaTot))}</div>}
   </div>
@@ -2059,7 +2059,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   const chip=(v,l)=><button key={v} onClick={()=>setFil(v)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:'none',cursor:'pointer',background:fil===v?C.accent:C.bgSoft,color:fil===v?'#fff':C.muted}}>{l}</button>
   const tCli=<div ref={cliRef} style={{scrollMarginTop:70}}>
     <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
-    {band(({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar atrasado',com:'Con comisiones',ent:'Cobranza'})[fil]?`${({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar atrasado',com:'Con comisiones',ent:'Cobranza'})[fil]} · por cliente`:'Por cliente',<span onClick={descargar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>Descargar Excel</span>)}
+    {band(({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar vencido',com:'Con comisiones',ent:'Cobranza'})[fil]?`${({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar vencido',com:'Con comisiones',ent:'Cobranza'})[fil]} · por cliente`:'Por cliente',<span onClick={descargar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>Descargar Excel</span>)}
     <div style={{display:'flex',gap:6,flexWrap:'wrap',padding:'8px 12px 2px'}}>{chip('todos','Todos')}{chip('com','Con comisiones')}{chip('mor','Morosa')}{chip('pf','Por facturar')}</div>
     <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr><th style={{...th,textAlign:'left'}}>Cliente</th><th style={th}>Cobranza</th><th style={th}>Comisiones</th><th style={th}>Morosa</th>{isDesktop&&<th style={th}>Por facturar</th>}</tr></thead>
@@ -6581,7 +6581,7 @@ export default function App() {
       const nm=(cli.name||'').trim(); if(!nm) return
       const res=await driveCall({action:'createFolder', name:nm})
       // Carpeta MUY parecida ya en Drive → no creo otra; aviso para que el usuario la revise/ajuste manualmente (evita carpetas duplicadas).
-      if(res?.conflict){ if(silent) return; const nombres=(res.similar||[]).map(s=>`• ${s.name}`).join('\n'); appAlert(`Ojo con Drive: ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${nm}»:\n\n${nombres}\n\nNo creé una nueva para no duplicar. Revisa/ajusta la carpeta en Drive (o renombra) y vuelve a guardar el cliente.`); return }
+      if(res?.conflict){ if(silent) return; const nombres=(res.similar||[]).map(s=>`• ${s.name}`).join('\n'); appAlert(`Atención con Drive: ya hay ${(res.similar||[]).length>1?'carpetas parecidas':'una carpeta parecida'} a «${nm}»:\n\n${nombres}\n\nNo creé una nueva para no duplicar. Revisa/ajusta la carpeta en Drive (o renombra) y vuelve a guardar el cliente.`); return }
       const fid=res?.folderId||res?.id; if(!fid) return
       await supabase.from('clients').update({drive_folder_id:fid}).eq('id',cli.id)
       setClients(p=>p.map(c=>c.id===cli.id?{...c,drive_folder_id:fid}:c))
@@ -7525,8 +7525,6 @@ export default function App() {
         const wc={...saved,clients:clients.find(c=>c.id===saved.client_id)}
         return f.id?p.map(x=>x.id===saved.id?wc:x):[wc,...p]
       })
-      // Aprende glosa→venta: la próxima factura con glosa similar (mismo cliente) sugiere este proyecto.
-      if(saved.sale_id && saved.concept){ const gk=glosaKey(saved.concept); if(gk) learnPut('factura_proyecto', `${saved.client_id}::${gk}`, String(saved.sale_id), {}) }
       // Cuenta por pagar a proveedor anclada a este cobro (monto "de terceros").
       // No se toca si ya se pagó. Se crea/actualiza/elimina según el proveedor asignado.
       if(!_terceroPagado){
