@@ -131,9 +131,9 @@ export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tas
     if (decididos[String(s.id)] && String(decididos[String(s.id)]).slice(0, 10) > lim) continue
     const progs = bs.filter(b => b.status === 'Programada' && !b.invoice_no)
     const porCobrar = emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).reduce((a, b) => a + Math.max(0, montoFactura(b) - (Number(b.paid_amount) || 0)), 0)
-    const dias_ = Math.round((new Date(String(hoy).slice(0, 10) + 'T12:00:00') - new Date(ult + 'T12:00:00')) / 864e5)
+    const dias_ = Math.round((+new Date(String(hoy).slice(0, 10) + 'T12:00:00') - +new Date(ult + 'T12:00:00')) / 864e5)
     if (porCobrar >= 1) { const ultS = [ult, pagoCli[String(s.client_id)] || ''].sort().pop(); if (ultS > lim) continue
-      out.push({ s, tipo: 'con_saldo', ult: ultS, dias: Math.round((new Date(String(hoy).slice(0, 10) + 'T12:00:00') - new Date(ultS + 'T12:00:00')) / 864e5), porCobrar, facturas: emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).length }); continue }
+      out.push({ s, tipo: 'con_saldo', ult: ultS, dias: Math.round((+new Date(String(hoy).slice(0, 10) + 'T12:00:00') - +new Date(ultS + 'T12:00:00')) / 864e5), porCobrar, facturas: emit.filter(b => ['Pendiente', 'Vencido'].includes(b.status)).length }); continue }
     if (progs.length) continue
     const cv = coberturaVenta(s, bs, uf)
     if (cv && (!cv.ok || cv.plan - cv.usado > Math.max(cv.enUF ? 1 : 10000, cv.plan * 0.03))) continue   // sin UF no se afirma que esté facturado

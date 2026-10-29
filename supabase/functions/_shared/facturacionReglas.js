@@ -35,7 +35,7 @@ export function candidatasProgramadas(billing, cliId, monto, fecha, glosa) {
   const gp = periodoDeTexto(glosa)
   const score = x => { const cp = periodoDeTexto(x.concept || ''); let s = 0; if (gp.cuota != null && cp.cuota != null && gp.cuota === cp.cuota) s += 4; s += mesScoreCandidata(x.concept, x.due || x.issued_at, gp.mes); if (gp.anio != null && cp.anio != null && gp.anio === cp.anio) s += 1; return s }
   return (billing || []).filter(x => !x.deleted_at && !x.invoice_no && ['Programada', 'Anticipada'].includes(x.status) && x.billing_type !== 'reembolso' && String(x.client_id) === String(cliId) && Math.abs((x.amount || 0) - monto) / monto <= 0.06
-    && (() => { const dv = x.due || x.issued_at; if (!dv || !fecha) return true; return Math.abs((new Date(dv) - new Date(fecha)) / 86400000) <= (x.billing_type === 'comision' ? 60 : 120) })()
+    && (() => { const dv = x.due || x.issued_at; if (!dv || !fecha) return true; return Math.abs((+new Date(dv) - +new Date(fecha)) / 86400000) <= (x.billing_type === 'comision' ? 60 : 120) })()
     && (x.billing_type !== 'comision' || Math.abs((x.amount || 0) - monto) <= 1))
     .map(x => ({ x, s: score(x) })).sort((a, b) => b.s - a.s || String(a.x.due || a.x.issued_at || '').localeCompare(String(b.x.due || b.x.issued_at || ''))).map(o => ({ ...o.x, _s: o.s }))
 }
@@ -56,7 +56,7 @@ export function decidirRegistroSII(cands, ventasActivas) {
 // del día 10, el último día hábil del mes SIGUIENTE. esHabil(date) = ni fin de semana ni feriado.
 export function ultimoDiaHabilMesEmision(iso, esHabil) {
   if (!iso) return null
-  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00'); if (isNaN(d)) return null
+  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00'); if (isNaN(+d)) return null
   let y = d.getFullYear(), m = d.getMonth()
   if (d.getDate() > 10) { m++; if (m > 11) { m = 0; y++ } }
   const last = new Date(y, m + 1, 0)
@@ -84,7 +84,7 @@ export const claveVentaFactura = f => `${f?.client_id || ''}|${_nRut(f?.receptor
 export function cuotasQueReemplaza(progs, monto) {
   const xs = [...(progs || [])].sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')))
   if (!xs.length || !(monto > 0)) return { cuotas: [], suma: 0, dif: monto || 0, calza: false }
-  let best = null, s = 0
+  /** @type {any} */ let best = null, s = 0
   for (let n = 1; n <= xs.length; n++) { s += Number(xs[n - 1].amount) || 0; if (n > 1 && s > monto * 1.01) break; const d = Math.abs(s - monto); if (!best || d < best.d) best = { n, s, d } }
   return { cuotas: xs.slice(0, best.n), suma: best.s, dif: Math.round(best.s - monto), calza: best.d <= monto * 0.01 }
 }

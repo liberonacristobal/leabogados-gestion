@@ -37,7 +37,7 @@ export async function todasRest(sbUrl, headers, path, size = PAGINA) {
   for (let i = 0; i < MAX_PAGINAS; i++) {
     const r = await fetch(`${sbUrl}/rest/v1/${p}`, { headers: { ...headers, Range: `${i * size}-${i * size + size - 1}` } })
     if (!r.ok) throw new Error(`${path.split('?')[0]}: ${r.status}`)
-    const filas = await r.json(); out.push(...filas)
+    const filas = /** @type {any[]} */ (await r.json()); out.push(...filas)
     if (filas.length < size) break
   }
   return out

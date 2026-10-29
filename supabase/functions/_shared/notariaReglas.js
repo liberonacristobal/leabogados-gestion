@@ -1,6 +1,6 @@
 // Reglas de la notaría compartidas por la app (Banco) y el servidor (conciliacion-auto). Una sola fuente.
 
-const _dias = (a, b) => Math.round((new Date(String(a).slice(0, 10) + 'T12:00') - new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
+const _dias = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 
 // Pago a la notaría ↔ su liquidación (rendiciones tipo 'notaria', enlace 1:1 en rendiciones.movimiento_id).
 // Calce: liquidación sin pago enlazado, creada a ±30 días del cargo. Monto exacto y único → se enlaza; si además el RUT ya es
@@ -25,7 +25,7 @@ export const notariaPendientes = expenses => (expenses || []).filter(e => !e.del
 const _enSaldo = e => !e?.apertura_id
 // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (rendido o notaría liquidada) − reservado para OTROS gastos
 // pendientes del cliente (no la notaría que se está liquidando). esOficina(cid): la oficina siempre cubre sus gastos.
-export function disponibleNotaria(expenses, cid, { esOficina = () => false } = {}) {
+export function disponibleNotaria(expenses, cid, { esOficina = /** @type {(cid: any) => boolean} */ (() => false) } = {}) {
   if (esOficina(cid)) return { fondo: 0, pagado: 0, reservado: 0, resItems: [], disp: Infinity, oficina: true }
   const delCli = (expenses || []).filter(e => !e.deleted_at && String(e.client_id) === String(cid) && _enSaldo(e))
   const g = delCli.filter(e => e.type !== 'fondo' && !e.no_descuenta_saldo)
@@ -41,6 +41,7 @@ export function disponibleNotaria(expenses, cid, { esOficina = () => false } = {
 
 // Tipo de acto de una OT: primero la materia que informa la notaría; si no viene, el concepto del gasto. El orden importa
 // (mandato judicial antes que poder/mandato; uso de domicilio antes que autorización).
+/** @type {[string, RegExp][]} */
 const _ACTOS = [['Mandato judicial', /mandato judicial/], ['Uso de domicilio', /domicilio/], ['Poder o mandato especial', /poder|mandato/], ['Constitución de sociedad', /constituci/], ['Modificación de sociedad', /modificaci/], ['Acta de junta', /acta|junta|reduccion/], ['Compraventa o cesión', /compraventa|promesa|cesion/], ['Autorización de firma', /autoriz|firma/], ['Copia o certificado', /copia|certificad/], ['Finiquito o laboral', /finiquito|laboral|contrato de trabajo/], ['Mutuo o reconocimiento de deuda', /mutuo|deuda/], ['Arrendamiento', /arriendo|arrendamiento/], ['Posesión efectiva', /posesion efectiva|inventario/], ['Declaración jurada', /declaracion jurada|estado civil/]]
 export const tipoActoNotaria = e => { const t = `${e?.materia || ''} ${e?.concept || ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); const a = _ACTOS.find(([, re]) => re.test(t)); return a ? a[0] : 'Otro' }
 // Trámites de tarifa fija: su costo no depende del valor del bien, así que un monto sobre 3 veces lo habitual es un error probable.
@@ -48,11 +49,11 @@ export const tipoActoNotaria = e => { const t = `${e?.materia || ''} ${e?.concep
 export const ACTOS_TARIFA_FIJA = new Set(['Mandato judicial', 'Uso de domicilio', 'Poder o mandato especial', 'Autorización de firma', 'Copia o certificado', 'Finiquito o laboral', 'Declaración jurada'])
 const _med = xs => { const a = xs.slice().sort((x, y) => x - y); if (!a.length) return null; const m = a.length >> 1; return a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2) }
 const _q = (xs, p) => { const a = xs.slice().sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(p * (a.length - 1)))] : null }
-const _d = (a, b) => Math.round((new Date(String(a).slice(0, 10) + 'T12:00') - new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
+const _d = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 
 // Análisis de la notaría (solo lee; no registra ni paga nada): estado de las OT por pagar, lo que se sale de lo habitual y lo
 // que la historia enseña (demora de pago desde que existe la app, arancel típico por acto). Lo usa el edge notaria-analisis.
-export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde = '2026-06-06', esOficina = () => false }) {
+export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde = '2026-06-06', esOficina = /** @type {(cid: any) => boolean} */ (() => false) }) {
   const pend = notariaPendientes(expenses)
   const rend = {}; (rendiciones || []).forEach(r => { rend[String(r.id)] = r })
   // Demora OT → liquidación a la notaría, solo OT desde que existe la app (lo anterior es planilla importada).
@@ -81,7 +82,7 @@ export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde
 
 // Lo que de verdad le toca a quien liquida la notaría: OT pagables con los fondos del cliente (FIFO por fecha dentro del disponible,
 // o de la oficina) y OT sin cliente (por asignar). Las demás esperan fondos del cliente: eso es del aviso de fondos del abogado.
-export function notariaPorLiquidar(expenses = [], { esOficina = () => false } = {}) {
+export function notariaPorLiquidar(expenses = [], { esOficina = /** @type {(cid: any) => boolean} */ (() => false) } = {}) {
   const pend = notariaPendientes(expenses), porCli = {}
   pend.forEach(e => { const k = e.client_id ? String(e.client_id) : '—'; (porCli[k] = porCli[k] || []).push(e) })
   const pagables = [], esperan = [], sinCliente = porCli['—'] || []

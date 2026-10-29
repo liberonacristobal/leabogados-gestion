@@ -1,7 +1,7 @@
 // Facturas de compra del SII ↔ pagos del banco. Compartida por la app (Compras y Proveedores) y el servidor (conciliacion-auto).
 
 const _rut = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '')
-const _dias = (a, b) => Math.round((new Date(String(a).slice(0, 10) + 'T12:00') - new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
+const _dias = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 // Ventana del pago respecto de la emisión: hasta 7 días antes (pago contra proforma) y 75 después (plazo de pago).
 export const COMPRA_PAGO_ANTES = 7, COMPRA_PAGO_DESPUES = 75
 
@@ -39,7 +39,7 @@ export function comprasPorPagar({ docs = [], cargos = [], gastos = [], tarjetaRe
   for (const d of docs || []) {
     const t = Number(d.tipo_dte), r = _rut(d.emisor_rut), monto = Math.round(Math.abs(Number(d.monto) || 0)), fe = String(d.fecha_emision || '').slice(0, 10)
     if ((t !== 33 && t !== 34) || d.movimiento_id || !fe || fe < appDesde || fe > lim || !(monto > 0) || pagadas.has(String(d.id))) continue
-    if (rutsColaboradores.has(r) || emisoresPago.has(r) || reTar.some(re => re.test(String(d.emisor_name || '')))) continue
+    if (rutsColaboradores.has(r) || emisoresPago.has(r) || reTar.some(re => re && re.test(String(d.emisor_name || '')))) continue
     if (nc.some(n => _rut(n.emisor_rut) === r && Math.round(Math.abs(Number(n.monto) || 0)) === monto)) continue
     const enV = (m, antes) => { const x = _dias(m.fecha, fe); return x >= -antes && x <= COMPRA_PAGO_DESPUES }
     const cs = (cargosDe[r] || []).filter(m => enV(m, 60)), mm = m => Math.round(Math.abs(Number(m.monto) || 0))
