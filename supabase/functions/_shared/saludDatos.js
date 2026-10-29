@@ -86,7 +86,7 @@ export function cuotaTramo(billing, sales, ignorados = new Set()) {
 // una persona que recibe retiros, sueldo y bonos: eso lo decide el monto (redondo = retiro del socio), no la glosa.
 const _CAT_PERSONA = new Set(['Retiros', 'Sueldos', 'Bono', 'Otros'])
 export function glosaConflict(coRows) {
-  const m = {}; (coRows || []).forEach(r => { if (!r.key) return; const cat = String(r.value || '').trim(); if (!cat) return; (m[r.key] = m[r.key] || {})[cat] = (m[r.key][cat] || 0) + 1 })
+  const m = {}; (coRows || []).forEach(r => { if (!r.key) return; const cat = String(r.value || '').trim(); if (!cat) return; (m[r.key] = m[r.key] || {})[cat] = (m[r.key][cat] || 0) + (Number(r.hits) > 0 ? Number(r.hits) : 1) })
   return Object.entries(m).filter(([, v]) => Object.keys(v).length > 1 && !Object.keys(v).every(c => _CAT_PERSONA.has(c))).map(([k, v]) => ({ key: k, votos: Object.entries(v).sort((a, b) => b[1] - a[1]).map(([cat, n]) => ({ cat, n })) }))
 }
 
