@@ -28,6 +28,22 @@ export function montoDeTexto(txt) {
   return vistos.size === 1 ? [...vistos][0] : null;
 }
 
+// Monto que se pide en el cuerpo de la solicitud. Un correo real trae varias cifras (gastos ya incurridos, subtotal, total): vale la
+// que sigue a «transferir/depositar … $X» y, si no, «por un total/monto de $X»; cada frase decide solo si nombra una cifra única.
+const _CIFRA = '\\$\\s*(\\d{1,3}(?:\\.\\d{3})+|\\d{4,})';
+export function montoSolicitado(txt) {
+  const t = String(txt || '');
+  const cifras = (frag, v) => { for (const m of frag.matchAll(new RegExp(_CIFRA, 'g'))) { const n = parseInt(m[1].replace(/\./g, ''), 10); if (n >= 5000 && n <= 500000000) v.add(n); } };
+  const unico = (re) => {
+    const v = new Set();
+    for (const m of t.matchAll(re)) cifras(m[1], v);
+    return v.size === 1 ? [...v][0] : null;
+  };
+  return unico(/(?:transfer|deposit)\w*([^\n]{0,120})/gi)
+    ?? unico(/por\s+(?:un\s+)?(?:total|monto|suma)\s+de\s+([^\n]{0,30})/gi)
+    ?? montoDeTexto(t);
+}
+
 // Cliente de un correo: el único al que pertenecen los destinatarios (mapa correo → ids de cliente, de contactos y de correos de
 // facturación aprendidos); sin destinatario conocido, el único cliente cuyo nombre aparece en el texto. Ambiguo o sin pista → null.
 export function clienteDeCorreo(emails, texto, clients, mapa) {
