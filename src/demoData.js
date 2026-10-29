@@ -339,6 +339,7 @@ export const demoData = {
   ],
   // Cartola bancaria (abonos = depósitos recibidos) para probar la Conciliación en demo.
   cartola_movimientos: [
+    { id:'mvfr1', fecha:'2026-10-24', monto:100000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, categoria:null, cuenta:'01-38392-2', rol_cuenta:'gastos', cliente_id:'c6', rut_contraparte:'76.111.222-3', nombre_contraparte:'CLIENTE DEMO SPA', descripcion:'Transf. a terceros vía internet a cuenta 1383922 B.BICE, Liberona Gastos' },
     { id:'mvdv1', fecha:'2026-05-05', monto:120000, tipo:'cargo', es_interno:false, estado:'pendiente', monto_conciliado:0, categoria:null, cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:null, rut_contraparte:'77.900.100-2', nombre_contraparte:'ROJAS ABOGADOS SPA', descripcion:'Transf. a terceros vía Internet (pago duplicado, demo)' },
     { id:'mvdv2', fecha:'2026-10-19', monto:170000, tipo:'abono', es_interno:false, estado:'pendiente', monto_conciliado:0, categoria:null, cuenta:'01-40383-4', rol_cuenta:'honorarios', cliente_id:'c99', rut_contraparte:'77.900.100-2', nombre_contraparte:'ROJAS ABOGADOS SPA', descripcion:'Transf. de terceros (devuelve pago doble + otra cosa, demo)' },
     { id:'mvdob', fecha:'2026-07-03', monto:211000, tipo:'cargo', es_interno:false, estado:'conciliado', monto_conciliado:211000, categoria:null, cuenta:'01-38392-2', rol_cuenta:'gastos', cliente_id:null, rut_contraparte:null, nombre_contraparte:'Martín (demo)', descripcion:'Transf. a terceros vía Internet' },
@@ -429,6 +430,7 @@ export const demoData = {
     { id:'conf40', movimiento_id:'movf40', tipo_destino:'factura', factura_id:'b40', anticipo_id:null, monto_aplicado:12000000, origen:'demo', marco_pago:true },
   ],
   rendiciones: [
+    { id:'rb6', tipo:'cliente', client_id:'c6', total:170000, n_gastos:2, created_at:'2026-10-20T10:00:00', sent_at:'2026-10-20T12:00:00', estado_envio:'enviada', user_name:'Cristóbal', project:null },
     { id:'rc1', periodo:'septiembre 2026', total:24900, n_gastos:2, n_clientes:2, created_at:'2026-09-30T12:00:00', user_name:'Martín', fondo_recibido:300000, gastado:275100, saldo_caja:24900 },
     { id:'rb1', tipo:'cliente', client_id:'c3', total:253065, n_gastos:3, created_at:'2026-10-19T14:00:00', user_name:'Martina', project:null },
     { id:'rb2', tipo:'cliente', client_id:'c1', total:120000, n_gastos:2, created_at:'2026-10-20T10:00:00', user_name:'Cristóbal', project:null },
