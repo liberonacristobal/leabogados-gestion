@@ -110,9 +110,12 @@ const reAbono  = new RegExp(`Abono por transferencia de (.+?)\\s*Rut\\s*${RUT_RE
 const reCCA    = new RegExp(`originador Rut:?\\s*${RUT_RE}\\s*Nombre:?\\s*(.+?)\\s*(?:\\(N\\.?Ref|$)`, 'i')
 // Formato B — transferencia a/desde tercero: "a cuenta NNN B, NOMBRE, Rut RUT ..."
 const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`, 'i')
+// Formato D — transferencia entre bancos: "Transferencia de ORIGEN Rut R1 desde Banco X a DESTINO Rut R2 a Cuenta Corriente de Banco Y, el ..."
+// La contraparte es el DESTINO en un cargo y el ORIGEN en un abono (el otro lado es nuestro).
+const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}\\s+a\\s+Cuenta`, 'i')
 
 // Extrae {rut, nombre} de la glosa probando los formatos en orden (sirve para abonos y cargos).
-function extraerContraparte(desc){
+export function extraerContraparte(desc, tipo){
   let m
   if((m=desc.match(reAbono)))  return { nombre:_flat(m[1])||null, rut:_flat(m[2])||null }
   if((m=desc.match(reCCA)))    return { rut:_flat(m[1])||null, nombre:_flat(m[2])||null }
@@ -121,6 +124,11 @@ function extraerContraparte(desc){
     // "Transf. a terceros a cuenta <nuestra>, Liberona Escala, Rut <nuestro>": el banco enmascara al pagador (tercero con cuenta BICE) mostrando NUESTROS datos → contraparte desconocida.
     if((rut&&esRutPropio(rut))||/liberona escala|quad ases/.test(_norm(nombre))) return { nombre:null, rut:null }
     return { nombre, rut }
+  }
+  if((m=desc.match(reTransfDe))){
+    const lado = tipo==='abono' ? { nombre:_flat(m[1]), rut:_flat(m[2]) } : { nombre:_flat(m[3]), rut:_flat(m[4]) }
+    if(!lado.rut || esRutPropio(lado.rut) || /liberona escala|quad ases/.test(_norm(lado.nombre))) return { nombre:null, rut:null }
+    return { nombre:lado.nombre||null, rut:lado.rut }
   }
   return { rut:null, nombre:null }
 }
@@ -225,7 +233,7 @@ export function parseCartola(aoa, { filename='' } = {}){
     const fecha = dm ? `${anio}-${dm.mm}-${dm.d}` : `${anio}-01-01`
     const fechaIncierta = !fp && !fg   // sin fecha propia: se tomó la del encabezado (o 1-ene si ni eso) → se avisa al cargar
     // RUT / nombre (mismos formatos para abono y cargo) + detección de interno (incluye auto-transferencia con RUT propio)
-    const cp = extraerContraparte(desc)
+    const cp = extraerContraparte(desc, tipo)
     let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
     if(interno){ rut=null; nombre=etiquetaInterno(desc, tipo, cuenta) }

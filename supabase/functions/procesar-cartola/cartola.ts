@@ -95,8 +95,10 @@ const RUT_RE = String.raw`(\d{1,3}(?:\.?\d{3})+-?[\dkK])`
 const reAbono = new RegExp(`Abono por transferencia de (.+?)\\s*Rut\\s*${RUT_RE}`, 'i')
 const reCCA = new RegExp(`originador Rut:?\\s*${RUT_RE}\\s*Nombre:?\\s*(.+?)\\s*(?:\\(N\\.?Ref|$)`, 'i')
 const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`, 'i')
+// Formato D — "Transferencia de ORIGEN Rut R1 desde Banco X a DESTINO Rut R2 a Cuenta Corriente de Banco Y": contraparte = DESTINO en un cargo, ORIGEN en un abono.
+const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}\\s+a\\s+Cuenta`, 'i')
 
-function extraerContraparte(desc: string) {
+function extraerContraparte(desc: string, tipo: string) {
   let m
   if ((m = desc.match(reAbono))) return { nombre: _flat(m[1]) || null, rut: _flat(m[2]) || null }
   if ((m = desc.match(reCCA))) return { rut: _flat(m[1]) || null, nombre: _flat(m[2]) || null }
@@ -105,6 +107,11 @@ function extraerContraparte(desc: string) {
     // "Transf. a terceros a cuenta <nuestra>, Liberona Escala, Rut <nuestro>": el banco enmascara al pagador (un tercero con cuenta BICE) mostrando NUESTROS datos → contraparte desconocida, no somos nosotros.
     if ((rut && esRutPropio(rut)) || /liberona escala|quad ases/.test(_norm(nombre))) return { nombre: null, rut: null }
     return { nombre, rut }
+  }
+  if ((m = desc.match(reTransfDe))) {
+    const lado = tipo === 'abono' ? { nombre: _flat(m[1]), rut: _flat(m[2]) } : { nombre: _flat(m[3]), rut: _flat(m[4]) }
+    if (!lado.rut || esRutPropio(lado.rut) || /liberona escala|quad ases/.test(_norm(lado.nombre))) return { nombre: null, rut: null }
+    return { nombre: lado.nombre || null, rut: lado.rut }
   }
   return { rut: null, nombre: null }
 }
@@ -201,7 +208,7 @@ export function parseCartola(aoa: any[], { filename = '' }: { filename?: string 
     const dm = fp || fechaDesdeGlosa(desc) || fechaHeader
     const anio = anioDesdeGlosa(desc) || (dm && dm.y) || anioFallback
     const fecha = dm ? `${anio}-${dm.mm}-${dm.d}` : `${anio}-01-01`
-    const cp = extraerContraparte(desc)
+    const cp = extraerContraparte(desc, tipo)
     let rut = cp.rut ? formatRut(cp.rut) : null, nombre = cp.nombre
     const interno = detectarInterno(desc, rut)
     if (interno) { rut = null; nombre = etiquetaInterno(desc, tipo, cuenta) }
