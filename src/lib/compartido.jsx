@@ -4047,3 +4047,14 @@ export const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',
 
 export const tonoMargen = m => m==null ? [C.bgSoft,C.muted] : m<0 ? [C.overdueBg,C.overdueText] : m<30 ? [C.soonBg,C.soonText] : m<55 ? [C.greenSoft,C.greenText] : m<70 ? [C.greenBg,C.greenText] : [C.greenDeep,C.greenText]
 
+export const _SOCIO_RET = e => {
+  const sc=String(e.subcategory||'').trim(), scN=_norm(sc)
+  for(const s of SOCIOS_CFG){ if(scN && scN===_norm(s.nombre)) return s.nombre }
+  for(const s of SOCIOS_CFG){ if(scN && scN.includes(_norm(s.nombre))) return s.nombre }
+  if(sc && !/^retiros?$/i.test(sc)) return sc
+  const g=_norm(e.personal_de||e.description||e.concept||e.src_name), gk=_rutK(e.personal_de||e.description||e.concept||e.src_name)
+  for(const s of SOCIOS_CFG){ const rk=_rutK(s.rut); if(rk && (gk.includes(rk)||gk.includes(rk.slice(0,-1)))) return s.nombre }
+  for(const s of SOCIOS_CFG){ if(_norm(s.nombre) && g.includes(_norm(s.nombre))) return s.nombre }
+  return e.personal_de||'Otro'
+}
+
