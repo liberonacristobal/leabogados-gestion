@@ -20,6 +20,8 @@ export const HERRAMIENTAS = [
   { name: 'obligaciones_estudio', description: 'Obligaciones tributarias del estudio: alertas (F29, cotizaciones, declaraciones juradas y F22 sin pago o sin presentar) y próximos vencimientos. Úsala para «qué vence esta semana», «cómo vamos con el F29».', input_schema: { type: 'object', properties: {} } },
   { name: 'notaria_pendiente', description: 'Notaría: OT por pagar, cuáles se pueden pagar con fondos del cliente, cuáles esperan fondos, OT sin cliente y última liquidación.', input_schema: { type: 'object', properties: {} } },
   { name: 'causas', description: 'Causas activas con su estado en tabla y última revisión en pjud.cl; de un cliente o de todos.', input_schema: { type: 'object', properties: { cliente: { type: 'string', description: 'Opcional' } } } },
+  { name: 'compras_sii', description: 'Documentos recibidos del SII (Registro de Compras): recibidos este mes, sin proveedor registrado, los que están en plazo de reclamo (8 días) y los observados por el SII.', input_schema: { type: 'object', properties: {} } },
+  { name: 'f29', description: 'Estado del F29: próximo vencimiento, monto informado por la contadora o estimado del mes cerrado, y los últimos meses con su pago. La app no tiene el F29 presentado: viene del correo de la contadora o se estima.', input_schema: { type: 'object', properties: {} } },
   { name: 'trabajos_detenidos', description: 'Trabajos activos sin movimiento en 90 días: con saldo por cobrar o que parecen terminados.', input_schema: { type: 'object', properties: {} } },
 ]
 
@@ -45,10 +47,11 @@ export const AYUDA = [
   { tema: 'Calendario tributario y F29', claves: ['f29', 'impuestos', 'calendario tributario', 'vencimientos tributarios'], donde: 'Calendario tributario', tab: 'calendarioTrib' },
   { tema: 'Oportunidades, tendencias y socios', claves: ['oportunidades', 'tendencias', 'socios', 'inteligencia', 'servicios y precios'], donde: 'Inteligencia', tab: 'inteligencia' },
   { tema: 'Causas y tabla de audiencias', claves: ['causa', 'causas', 'audiencia', 'audiencias', 'tabla', 'pjud', 'rol'], donde: 'Causas', tab: 'causas' },
+  { tema: 'Compras recibidas del SII, reclamo y observadas', claves: ['compras', 'dte recibidos', 'facturas recibidas', 'documentos recibidos', 'reclamo', 'observadas', 'proveedores del sii'], donde: 'Oficina › Compras (y Revisión de datos)', tab: 'presupuestoOficina' },
   { tema: 'Mis proyectos', claves: ['proyecto', 'proyectos', 'cartera'], donde: 'Mis proyectos', tab: 'cartera' },
 ]
 
-export function crearConsultas({ cal, rendiciones = [], analisisNotaria, notariaPorLiquidar, calendarioDeCliente, causasActivas, estadoCausa, leerResultado, clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
+export function crearConsultas({ cargarComprasSII, comprasEnPlazoReclamo, comprasObservadasSII, terceros = [], cal, rendiciones = [], analisisNotaria, notariaPorLiquidar, calendarioDeCliente, causasActivas, estadoCausa, leerResultado, clients = [], billing = [], expenses = [], tasks = [], sales = [], clientEntities = [], proyectos = [], uf = {}, hoy, fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, coberturaVenta, folioN = x => String(x || ''), cargarContactos, calcCuotasSinEmitir, calcTrabajosSinFacturar, detenidos }) {
   const dia = String(hoy || new Date().toISOString()).slice(0, 10)
   const reales = clients.filter(c => c && !c.is_internal)
 
@@ -255,7 +258,41 @@ export function crearConsultas({ cal, rendiciones = [], analisisNotaria, notaria
     }
   }
 
-  const tabla = { calendario_cliente: calendarioCli, obligaciones_estudio: obligacionesEstudio, notaria_pendiente: notariaPendiente, causas: causasTool, resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
+  const comprasSII = async () => {
+    const c = await cargarComprasSII()
+    const docs = c.docs || [], mes = dia.slice(0, 7)
+    const del = docs.filter(d => String(d.fecha_emision || '').slice(0, 7) === mes && Number(d.tipo_dte) !== 61)
+    const reclamo = comprasEnPlazoReclamo(docs.filter(d => d.sii_estado === 'PENDIENTE'), dia, c.vistasReclamo || new Set(), { terceros, historial: docs })
+    const obs = comprasObservadasSII(docs.filter(d => d.observado_sii), c.vistasObservadas || new Set())
+    const sinProv = docs.filter(d => !d.proveedor_id && String(d.fecha_emision || '') >= `${dia.slice(0, 4)}-01-01` && Number(d.tipo_dte) !== 61)
+    const prov = d => d.emisor_name || d.emisor_rut || 'Proveedor'
+    const resumen = { recibidos_este_mes: { documentos: del.length, monto: clp(del.reduce((a, d) => a + (Number(d.monto) || 0), 0)) }, total_en_la_app: docs.length, desde: docs.length ? dmy(docs.map(d => d.fecha_emision).filter(Boolean).sort()[0]) : null, sin_proveedor_registrado_este_anio: sinProv.length,
+      en_plazo_de_reclamo: reclamo.length, reclamo: reclamo.slice(0, 5).map(x => ({ proveedor: prov(x.d), folio: x.d.folio, monto: clp(x.d.monto), vence_el: dmy(x.vence), quedan_dias: x.quedan })),
+      observados_por_el_sii: obs.length, observados: obs.slice(0, 5).map(d => ({ proveedor: prov(d), folio: d.folio, periodo: d.periodo, monto: clp(d.monto) })), nota: 'Es el Registro de Compras del SII, sincronizado cada día; solo lectura (la app no reclama ni acepta documentos).', al: dmy(dia) }
+    const t = [{ titulo: 'Compras recibidas (SII)', lineas: [
+      { n: 'Recibidas este mes', sub: `${del.length} documento${del.length === 1 ? '' : 's'}`, valor: resumen.recibidos_este_mes.monto, destino: { tab: 'presupuestoOficina' } },
+      { n: 'Sin proveedor registrado', sub: 'documentos de este año', valor: String(sinProv.length), destino: { tab: 'presupuestoOficina' } }], total: null, fuente: `Fuente: Registro de Compras del SII, sincronizado a diario; ${docs.length} documentos en la app.` }]
+    if (reclamo.length) t.push({ titulo: 'En plazo de reclamo (8 días)', lineas: reclamo.slice(0, 6).map(x => ({ n: prov(x.d), sub: `Folio ${x.d.folio} · vence ${dmy(x.vence)}`, valor: `${x.quedan} día${x.quedan === 1 ? '' : 's'} · ${clp(x.d.monto)}`, destino: { tab: 'presupuestoOficina' } })), total: null, fuente: 'Fuente: documentos recibidos pendientes de aceptación o reclamo en el SII.' })
+    if (obs.length) t.push({ titulo: 'Observados por el SII', lineas: obs.slice(0, 6).map(d => ({ n: prov(d), sub: `Folio ${d.folio} · ${d.periodo || ''}`, valor: clp(d.monto), destino: { tab: 'presupuestoOficina' } })), total: null, fuente: 'Fuente: documentos observados del Registro de Compras (su crédito de IVA está objetado).' })
+    return { resumen, tarjeta: t }
+  }
+
+  const f29 = () => {
+    if (!cal) return { error: 'El calendario tributario todavía no carga. Intenta de nuevo en unos segundos.' }
+    const p = (cal.proximos || []).find(x => /F29/.test(x.t || ''))
+    const ciclos = (cal.ciclos || []).map(c => ({ periodo: c.per, vence: dmy(c.f29.vence), pagado: c.f29.pago ? { fecha: dmy(c.f29.pago.fecha), monto: clp(c.f29.pago.monto) } : null, informado_por_la_contadora: c.v && c.v.ppm != null ? clp(c.v.ppm) : null }))
+    let estado = 'sin dato'
+    if (p) estado = p.est === false ? 'informado por la contadora' : p.est === 'cerrado' ? 'estimado del mes cerrado' : `todavía no se calcula (mes abierto${p.calcula ? `; se calcula el ${dmy(p.calcula)}` : ''})`
+    const proximo = p ? { vence: dmy(p.vence), monto: p.monto != null ? clp(p.monto) : null, estado, estimado_del_mes_cerrado: p.estF29 != null ? clp(p.estF29) : null, detalle_del_estimado: p.f29 ? { ppm: p.f29.ppm != null ? clp(p.f29.ppm) : null, retenciones: p.f29.ret != null ? clp(p.f29.ret) : null, impuesto_unico: p.f29.iu != null ? clp(p.f29.iu) : null } : null } : null
+    return {
+      resumen: { proximo, ultimos_periodos: ciclos, nota: 'La app no tiene el F29 presentado en el SII: usa el monto que informa la contadora por correo y, si aún no llega, un estimado del mes cerrado.', al: dmy(dia) },
+      tarjeta: { titulo: 'F29', lineas: [
+        ...(proximo ? [{ n: 'Próximo F29', sub: `vence ${proximo.vence} · ${estado}`, valor: proximo.monto || '—', destino: { tab: 'calendarioTrib' } }] : []),
+        ...ciclos.map(c => ({ n: `Período ${c.periodo}`, sub: `vence ${c.vence}${c.informado_por_la_contadora ? ` · informado ${c.informado_por_la_contadora}` : ''}`, valor: c.pagado ? `Pagado ${c.pagado.monto}` : 'Sin pago registrado', destino: { tab: 'calendarioTrib' } }))], total: null, fuente: 'Fuente: Calendario tributario (valores de la contadora y pagos registrados). No es el F29 presentado en el SII.' },
+    }
+  }
+
+  const tabla = { compras_sii: comprasSII, f29, calendario_cliente: calendarioCli, obligaciones_estudio: obligacionesEstudio, notaria_pendiente: notariaPendiente, causas: causasTool, resultado_anio: resultadoAnio, deuda_cliente: deudaCliente, por_cobrar: porCobrar, facturas_cliente: facturasCliente, tareas_vencidas: tareasVencidas, donde_esta: dondeEsta, ficha_cliente: fichaCliente, ventas_cliente: ventasCliente, por_facturar: porFacturar, trabajos_detenidos: trabajosDetenidos }
   return async (nombre, input) => { const f = tabla[nombre]; if (!f) return { error: 'Esa consulta no existe.' }; try { return await f(input || {}) } catch (e) { return { error: 'No se pudo calcular: ' + (e?.message || 'error') } } }
 }
 
