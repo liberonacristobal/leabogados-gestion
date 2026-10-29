@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { C, Gl, SEC_LBL, appAlert, fmt, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Copyable, Modal, NOMBRE_CLI, PageHeader, PorSocioVista, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { Copyable, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { PorSocioVista } from '../lib/porSocio.jsx'
 
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
 export const ultimaActividad = (clientId, sales, billing, expenses) => {

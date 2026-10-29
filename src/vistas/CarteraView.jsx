@@ -4,7 +4,8 @@ import { supabase, getDriveToken, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CART_DOT, DocumentosDrive, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
+import { CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
+import { DocumentosDrive } from '../lib/fichaCliente.jsx'
 
 export async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el ArrayBuffer (para leer el contenido del archivo)
   let token=await driveToken()
