@@ -8,8 +8,9 @@
     "preview": "vite preview",
     "smoke": "VITE_CJS_IGNORE_WARNING=true node scripts/smoke-demo.mjs",
     "test": "node --test tests/*.test.mjs",
-    "verificar": "vite build && npm run lint && npm test && npm run smoke",
-    "lint": "eslint --quiet src"
+    "verificar": "vite build && npm run lint && npm run tipos && npm test && npm run smoke",
+    "lint": "eslint --quiet src",
+    "tipos": "tsc -p tsconfig.tipos.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
@@ -23,6 +24,7 @@
     "eslint": "^9.13.0",
     "globals": "^15.11.0",
     "puppeteer-core": "^23.11.1",
+    "typescript": "^5.6.3",
     "vite": "^5.3.1"
   }
 }
