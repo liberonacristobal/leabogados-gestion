@@ -34,7 +34,7 @@ async function ir(url: string, jarra: Jarra, init: RequestInit = {}, saltos = 6)
   throw new Error('Demasiados redireccionamientos')
 }
 
-async function login(): Promise<{ ok: boolean; etapa: string }> {
+async function login(): Promise<{ ok: boolean; etapa: string; jarra?: Jarra }> {
   const rutAcc = (Deno.env.get('SII_RUT_ACCESO') || '').replace(/[^0-9kK]/g, '').toUpperCase(), clave = Deno.env.get('SII_CLAVE_TRIBUTARIA') || ''
   if (rutAcc.length < 2 || !clave) return { ok: false, etapa: 'faltan_secretos' }
   const cuerpo = rutAcc.slice(0, -1), dv = rutAcc.slice(-1)
@@ -48,7 +48,7 @@ async function login(): Promise<{ ok: boolean; etapa: string }> {
   if (/IngresoRutClave|Rut o clave incorrecta|clave.*incorrect|Datos de ingreso inválidos|bloquead/i.test(html) && !jarra.c.has('TOKEN')) return { ok: false, etapa: /bloquead/i.test(html) ? 'cuenta_bloqueada' : 'rechazo_de_credenciales' }
   const home = await ir('https://misii.sii.cl/cgi_misii/siihome.cgi', jarra)
   const hh = (await home.text()).slice(0, 200000)
-  if (home.ok && !/IngresoRutClave/i.test(hh) && (jarra.c.has('TOKEN') || /Mi SII|cerrar sesi[oó]n/i.test(hh))) return { ok: true, etapa: 'ingreso_correcto' }
+  if (home.ok && !/IngresoRutClave/i.test(hh) && (jarra.c.has('TOKEN') || /Mi SII|cerrar sesi[oó]n/i.test(hh))) return { ok: true, etapa: 'ingreso_correcto', jarra }
   return { ok: false, etapa: 'sin_sesion' }
 }
 
@@ -56,6 +56,25 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405)
   let b: any = {}; try { b = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
   if (!CRON_SECRET || b.secret !== CRON_SECRET) return json({ error: 'No autorizado' }, 403)
+  if (b.action === 'leer') {
+    // SOLO LECTURA: GET a páginas de *.sii.cl con la sesión abierta. Nunca POST, nunca rutas de rectificar o modificar.
+    const urls: string[] = (Array.isArray(b.urls) ? b.urls : []).slice(0, 8)
+    for (const u of urls) { let h = ''; try { h = new URL(u).hostname } catch { return json({ error: 'URL inválida' }, 400) }
+      if (!/(^|\.)sii\.cl$/.test(h) || /rectific|modific|anular|eliminar|enviar/i.test(u)) return json({ error: 'URL no permitida', url: u.slice(0, 120) }, 400) }
+    try {
+      const l = await login(); if (!l.ok || !l.jarra) return json({ ok: false, etapa: l.etapa })
+      const salida = []
+      for (const u of urls) {
+        const r = await ir(u, l.jarra, { headers: { Accept: b.accept || 'text/html,application/json,*/*' } })
+        const cuerpo = await r.text(), tipo = r.headers.get('content-type') || ''
+        const max = Math.min(Number(b.max) || 1500, 12000), desde = Math.max(0, Number(b.desde) || 0)
+        const rutas = [...new Set([...cuerpo.matchAll(/["'(]((?:\/|https?:\/\/[a-z0-9.]*sii\.cl\/)[A-Za-z0-9_\-\/.?=&%]{6,140})["')]/g)].map(m => m[1]))].filter(x => /rfi|f29|formulario|declarac|consulta|rest|api/i.test(x)).slice(0, b.rutas || 40)
+        const trozos = b.buscar ? [...cuerpo.matchAll(new RegExp(String(b.buscar).slice(0, 60), 'gi'))].slice(0, 12).map(m => cuerpo.slice(Math.max(0, m.index! - 120), m.index! + 220).replace(/\s+/g, ' ')) : undefined
+        salida.push({ trozos, url: u.slice(0, 160), status: r.status, tipo: tipo.slice(0, 60), largo: cuerpo.length, rutas, extracto: b.sinExtracto ? undefined : cuerpo.slice(desde, desde + max) })
+      }
+      return json({ ok: true, salida })
+    } catch (e) { return json({ ok: false, etapa: 'error', detalle: String((e as Error).message || e).slice(0, 160) }) }
+  }
   if (b.action !== 'test-login') return json({ error: 'Acción desconocida' }, 400)
   const previo = await rest("learnings?select=value&kind=eq.mi_sii_intento&key=eq.ultimo&limit=1").catch(() => null)
   const ult = Array.isArray(previo) && previo[0]?.value ? Date.parse(previo[0].value) : 0
