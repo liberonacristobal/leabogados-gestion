@@ -19,7 +19,7 @@ import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
   getClients, getBilling, selectAll,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
-  getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh,
+  getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh, connectCalendarioEstudio, saveCalendarioRefresh,
   upsertClient, deleteClient as dbDeleteClient,
   upsertBilling, updateBillingStatus, DEMO, alFalloDeEscritura
 } from './supabase'
@@ -16576,7 +16576,9 @@ export default function App() {
       if(session.provider_token)saveDriveToken(session.provider_token)
       const email=session.user.email, prt=session.provider_refresh_token
       setTimeout(async()=>{
-        if(prt)saveDriveRefresh(prt, email)   // conexión permanente de Drive (plan B)
+        if(prt){ let esCal=false; try{ esCal=localStorage.getItem('conectar_calendario')==='1' }catch(_){}
+          if(esCal){ try{ localStorage.removeItem('conectar_calendario') }catch(_){}; saveCalendarioRefresh(prt, email) }   // calendario del estudio: fila aparte, no pisa la de Drive/Gmail
+          else saveDriveRefresh(prt, email) }   // conexión permanente de Drive (plan B)
         if(event==='TOKEN_REFRESHED') return   // renovar el token no cambia el rol (y no debe mandar al limitado a Tareas cada hora)
         let u=null; try{ u = await loadUserRole(email) }catch(_){}
         if(u) setUser({email,name:u?.name||email.split('@')[0]})   // si el rol no resolvió, un efecto reintenta (no dejamos user con rol null)
@@ -18848,6 +18850,10 @@ export default function App() {
                 {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
                   Conectar Drive
+                </div>}
+                {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para conectar el calendario del estudio. Entra con la cuenta contacto@leabogados.cl (la dueña del calendario). Al volver, la app queda con esa sesión: cierra sesión y entra de nuevo con tu cuenta. ¿Continuar?')) connectCalendarioEstudio()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
+                  Conectar calendario
                 </div>}
                 <div style={{fontSize:10,color:C.textSoft,fontWeight:700,letterSpacing:'.04em',padding:'8px 14px 2px'}}>CUENTA</div>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'users'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
