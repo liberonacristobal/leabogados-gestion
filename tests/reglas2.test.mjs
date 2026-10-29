@@ -378,3 +378,13 @@ test('Banco: abono de un cliente con rendición enviada y saldo por cubrir propo
   assert.equal(propuestaFondoRendicion({ mov, expenses: [{ client_id: 'c1', type: 'fondo', amount: 5000 }], rendiciones: [rend] }), null)
   assert.equal(propuestaFondoRendicion({ mov: { ...mov, es_interno: true }, expenses, rendiciones: [rend] }), null)
 })
+
+import { extraerContraparte } from '../src/cartola.js'
+test('cartola: «Transferencia de X Rut … desde Banco … a Y Rut …» toma al destino en un cargo y al origen en un abono', () => {
+  const g = 'Transferencia de LIBERONA ESCALA ABOGADOS LIMITADA Rut 77.700.387-9 desde Banco BICE a Martina De Los Angeles Perez Giuras Rut 21.138.928-1 a Cuenta Corriente de Banco Santander-Chile, el 2026-10-27 a las 09:33 hrs.'
+  assert.deepEqual(extraerContraparte(g, 'cargo'), { nombre: 'Martina De Los Angeles Perez Giuras', rut: '21.138.928-1' })
+  const a = 'Transferencia de Persona De Prueba Rut 15.621.320-9 desde Banco BICE a Liberona Escala Abogados Limitada Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-10-19 a las 10:00 hrs.'
+  assert.deepEqual(extraerContraparte(a, 'abono'), { nombre: 'Persona De Prueba', rut: '15.621.320-9' })
+  const i = 'Transferencia de CLIENTE Rut 77.700.387-9 desde Banco BICE a BENEFICIARIO Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-09-09 a las 18:48:00.'
+  assert.deepEqual(extraerContraparte(i, 'cargo'), { nombre: null, rut: null })
+})
