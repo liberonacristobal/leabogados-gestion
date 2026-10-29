@@ -7082,3 +7082,42 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   </div>)
 }
 
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+export const META_UF = 9800
+
+// Costo de operación REAL para proyectar (fuente única): promedio de los últimos 3 meses cerrados del resultado (costos + PPM)
+// y el calendario de pago aprendido del banco: qué parte del gasto del mes sale cada día. Sin planilla o sin pagos → null (se usa el presupuesto).
+export function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
+  const ofi=(deps.clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))); if(!ofi) return null
+  const yms=[]; for(let i=1;i<=meses;i++){ const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1); yms.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) }
+  const rs=yms.map(ym=>resultadoMes(fu,deps,ym)).filter(r=>r.conPlanilla)
+  if(!rs.length) return null
+  const mensual=rs.reduce((a,r)=>a+r.cos+(Number(r.ppm)||0),0)/rs.length
+  const NO=new Set(['Retiros','Comisiones','Proveedores','Honorarios','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial'])
+  const peso={}; let tot=0
+  ;(deps.expenses||[]).forEach(e=>{ if(!e||e.deleted_at||e.type!=='gasto'||String(e.client_id)!==String(ofi.id)||NO.has(String(e.category||''))) return
+    const f=String(e.date||'').slice(0,10); if(!yms.includes(f.slice(0,7))) return
+    const [Y,M,D]=f.split('-').map(Number), last=new Date(Y,M,0).getDate(), k=D===last?30:Math.min(D,29), m=Number(e.amount)||0
+    if(m>0){ peso[k]=(peso[k]||0)+m; tot+=m } })
+  if(!(tot>0)) return null
+  Object.keys(peso).forEach(k=>{ peso[k]/=tot })
+  return {mensual, peso, meses:rs.map(r=>r.ym)}
+}
+
+// Flujo de caja a 8 semanas: UN solo cálculo para Inicio, Oficina y la página (mismas entradas → misma cifra en todas las vistas).
+export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null }){
+  const fu=useFuentesResultado()
+  const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
+  const noEmitir=useNoEmitirSet(), ufFechas=useUFFechas(bill)
+  const costoOp=useMemo(()=>costoOperacionReal(fu,{billing:bill,terceros,costosOfiRows,expenses,clients}),[fu,bill,terceros,costosOfiRows,expenses,clients])
+  return useMemo(()=>flujoCajaProyectado({billing:bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas}),[bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas])
+}
+
+// Parte de las comisiones por pagar que viene de años anteriores al actual: {monto, txt:'2025' | '2024–2025'} o null.
+export const comisPorPagarAnteriores = sc => { const yAct=new Date().getFullYear(); const ys=Object.keys(sc?.porPagarAnio||{}).map(Number).filter(y=>y<yAct).sort(); if(!ys.length) return null
+  const monto=ys.reduce((a,y)=>a+(sc.porPagarAnio[y]||0),0); return monto>0?{monto,txt:ys.length>1?`${ys[0]}–${ys[ys.length-1]}`:String(ys[0])}:null }
+
+// Resultado del año tal como lo muestra Inicio (lo publica el Dashboard al calcularlo; Counsel AI lo lee). Un solo cálculo, dos lectores.
+export let _resultadoInicio = null
+export const publicarResultadoInicio = v => { _resultadoInicio = v }
+
