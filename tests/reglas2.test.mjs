@@ -539,3 +539,19 @@ test('Counsel AI: notaría pendiente, obligaciones, calendario de cliente y caus
   assert.equal(ca.resumen.causas[0].rol, '19-2025'); assert.equal(ca.resumen.causas[0].estado, 'Sin tabla'); assert.equal(ca.tarjeta.lineas[0].valor, 'Sin tabla')
   assert.equal((await ej('causas', {})).resumen.causas_activas, 1)
 })
+
+import { comprasEnPlazoReclamo as _cpr, comprasObservadasSII as _cpo } from '../supabase/functions/_shared/saludDatos.js'
+test('Counsel AI: compras del SII (plazo de reclamo y observadas) y estado del F29', async () => {
+  const d = _datosCopiloto()
+  const docs = [
+    { id: 'd1', folio: 501, tipo_dte: 33, emisor_name: 'Proveedor Uno', emisor_rut: '76.111.111-1', proveedor_id: 'p1', fecha_emision: '2026-10-20', monto: 119000, sii_estado: 'PENDIENTE', fecha_recepcion: '2026-10-26T12:00:00Z', periodo: '2026-10' },
+    { id: 'd2', folio: 77, tipo_dte: 33, emisor_name: 'Proveedor Dos', emisor_rut: '76.222.222-2', proveedor_id: null, fecha_emision: '2026-09-02', monto: 50000, sii_estado: 'ACEPTADO', periodo: '2026-09', observado_sii: true }]
+  d.cargarComprasSII = async () => ({ docs, vistasReclamo: new Set(), vistasObservadas: new Set() }); d.comprasEnPlazoReclamo = _cpr; d.comprasObservadasSII = _cpo
+  d.cal = { ciclos: [{ per: '2026-09', f29: { vence: '2026-10-20', pago: { fecha: '2026-10-19', monto: 1121390 } }, v: { ppm: 1121390 } }, { per: '2026-10', f29: { vence: '2026-11-20', pago: null }, v: null }],
+    proximos: [{ t: 'F29 · IVA/PPM', monto: 900000, est: 'cerrado', vence: '2026-11-20', f29: { total: 900000, ppm: 600000, ret: 100000, iu: 200000 } }] }
+  const ej = crearConsultas(d)
+  const c = await ej('compras_sii', {})
+  assert.equal(c.resumen.recibidos_este_mes.documentos, 1); assert.equal(c.resumen.en_plazo_de_reclamo, 1); assert.equal(c.resumen.reclamo[0].folio, 501); assert.equal(c.resumen.observados_por_el_sii, 1); assert.equal(c.resumen.sin_proveedor_registrado_este_anio, 1)
+  const f = await ej('f29', {})
+  assert.equal(f.resumen.proximo.estado, 'estimado del mes cerrado'); assert.equal(f.resumen.proximo.monto, '$900.000'); assert.equal(f.resumen.ultimos_periodos[0].pagado.monto, '$1.121.390'); assert.match(f.resumen.nota, /no tiene el F29 presentado/)
+})
