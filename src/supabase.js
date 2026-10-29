@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { vigilarEscrituras } from './vigilanteEscrituras.js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -34,7 +35,11 @@ const demoClient = {
   removeChannel: () => {},
 }
 
-export const supabase = DEMO ? demoClient : createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+let _alFallo = null
+export const alFalloDeEscritura = fn => { _alFallo = fn }
+const fetchVigilado = vigilarEscrituras(() => _alFallo)
+
+export const supabase = DEMO ? demoClient : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { fetch: fetchVigilado } })
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 export const signInWithGoogle = () =>
