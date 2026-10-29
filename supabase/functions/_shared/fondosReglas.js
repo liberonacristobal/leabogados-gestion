@@ -44,6 +44,41 @@ export function montoSolicitado(txt) {
     ?? montoDeTexto(t);
 }
 
+// Monto escrito a la chilena en un pedido interno: «2M», «1,5M», «1.5 millones», «$2.000.000», «2.000.000». Un número suelto sin M ni
+// separador de miles («2») no es un monto: no se adivina.
+export function montoCorto(txt) {
+  const t = String(txt || '').trim();
+  let m = t.match(/^\$?\s*(\d+(?:[.,]\d+)?)\s*(?:mm|m|mill(?:ones|on|ón)?)\b/i);
+  if (m) { const n = Math.round(parseFloat(m[1].replace(',', '.')) * 1e6); return n >= 5000 && n <= 500000000 ? n : null; }
+  m = t.match(/^\$?\s*(\d{1,3}(?:\.\d{3})+|\d{4,})\b/);
+  if (m) { const n = parseInt(m[1].replace(/\./g, ''), 10); return n >= 5000 && n <= 500000000 ? n : null; }
+  return null;
+}
+
+// Pedido interno de fondos: líneas «- Cliente: concepto: monto» (viñeta opcional) de un correo entre el equipo. Una fila por línea;
+// la línea que no calza se ignora. El cliente va como texto: quien lo registra confirma a cuál corresponde.
+export function pedidosInternos(texto) {
+  const out = [];
+  String(texto || '').split(/\r?\n/).forEach((l) => {
+    const m = l.match(/^\s*(?:[-•*–]|\d+[.)])\s*(.+)$/);
+    if (!m) return;
+    const partes = m[1].split(':').map((x) => x.trim());
+    if (partes.length < 3) return;
+    const monto = montoCorto(partes[partes.length - 1]);
+    const cliente = partes[0], concepto = partes.slice(1, -1).join(': ');
+    if (monto && cliente && concepto) out.push({ cliente, concepto, monto });
+  });
+  return out;
+}
+
+// Cliente de un pedido interno: el nombre escrito («Geslog») dentro del nombre de un cliente vigente, o al revés; solo si es uno.
+export function clienteDePedido(txt, clients) {
+  const p = _nrm(txt);
+  if (p.length < 4) return null;
+  const hits = (clients || []).filter((c) => c.status !== 'Terminado' && !c.is_internal && (() => { const n = _nrm(c.name); return n.length >= 4 && (n.includes(p) || (n.length >= 6 && p.includes(n))); })());
+  return hits.length === 1 ? String(hits[0].id) : null;
+}
+
 // Cliente de un correo: el único al que pertenecen los destinatarios (mapa correo → ids de cliente, de contactos y de correos de
 // facturación aprendidos); sin destinatario conocido, el único cliente cuyo nombre aparece en el texto. Ambiguo o sin pista → null.
 export function clienteDeCorreo(emails, texto, clients, mapa) {
