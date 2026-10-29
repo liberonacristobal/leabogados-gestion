@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, liquidacionPdfBase64, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
+import { ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
+import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
