@@ -426,3 +426,51 @@ test('glosa: una clasificación antigua ya corregida no genera conflicto; solo e
   const c = votoGlosa([{ key: 'k', value: 'Arriendo', hits: 9, updated_at: f(300) }, { key: 'k', value: 'Servicios', hits: 1, updated_at: f(200) }], hoy)
   assert.equal(c.k.category, 'Arriendo'); assert.equal(c.k.ambiguo, false)
 })
+
+import { crearConsultas, resolverConIA, HERRAMIENTAS } from '../supabase/functions/_shared/consultasCopiloto.js'
+import { fgCliente as _fgC, gastosPorRendirCli as _gpr } from '../supabase/functions/_shared/gastosReglas.js'
+const _saldoB = b => (['Pagado', 'Anulada'].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0)))
+const _porCobrarB = bs => bs.filter(b => b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type)).reduce((s, b) => s + _saldoB(b), 0)
+const _datosCopiloto = () => ({
+  clients: [{ id: 'c1', name: 'Familia Schroder' }, { id: 'c2', name: 'Comercial Andes SpA' }, { id: 'c3', name: 'Comercial Norte SpA' }, { id: 'o', name: 'Estudio (oficina)', is_internal: true }],
+  billing: [
+    { id: 'b1', client_id: 'c1', invoice_no: '10', status: 'Pagado', amount: 250000, issued_at: '2026-10-16' },
+    { id: 'b2', client_id: 'c2', invoice_no: '20', status: 'Vencido', amount: 1000000, paid_amount: 200000, issued_at: '2026-08-01', due: '2026-09-01' },
+    { id: 'b3', client_id: 'c2', invoice_no: '21', status: 'Pendiente', amount: 500000, issued_at: '2026-10-01', due: '2026-12-01' },
+  ],
+  expenses: [{ client_id: 'c1', type: 'fondo', amount: 1367288 }, { client_id: 'c1', type: 'gasto', amount: 2004100, client_rendered_at: '2026-10-16' }, { client_id: 'c1', type: 'gasto', amount: 40000 }],
+  tasks: [{ id: 't1', title: 'A', due: '2026-10-01', status: 'Activo', assignees: ['Martina'] }, { id: 't2', title: 'B', due: '2026-12-01', status: 'Activo', assignees: ['Martina'] }, { id: 't3', title: 'C', due: '2026-10-10', status: 'Terminado', assignees: ['Martín'] }],
+  hoy: '2026-10-28', fgCliente: _fgC, gastosPorRendirCli: _gpr, saldoBill: _saldoB, esVencidaB: b => b.status === 'Vencido', porCobrarBills: _porCobrarB, folioN: x => String(x),
+})
+test('Counsel AI: deuda de un cliente = facturas por cobrar + gastos por cubrir, con las funciones de la app', () => {
+  const ej = crearConsultas(_datosCopiloto())
+  const r = ej('deuda_cliente', { cliente: 'Schröder' })       // sin tilde ni «Familia»: igual lo encuentra
+  assert.equal(r.resumen.cliente, 'Familia Schroder'); assert.equal(r.resumen.deuda_total, '$676.812')
+  assert.equal(r.resumen.facturas_por_cobrar, '$0'); assert.equal(r.resumen.gastos_por_cubrir, '$676.812'); assert.equal(r.resumen.gastos_sin_rendir, '$40.000')
+  assert.equal(r.tarjeta.total.valor, '$676.812'); assert.equal(r.tarjeta.lineas.length, 3)
+  assert.match(ej('deuda_cliente', { cliente: 'Comercial' }).error, /2 clientes/)   // ambiguo: pide precisar, no adivina
+  assert.match(ej('deuda_cliente', { cliente: 'Inexistente' }).error, /No encontré/)
+  assert.match(ej('otra_cosa', {}).error, /no existe/)
+})
+test('Counsel AI: por cobrar total suma las partes y lista los mayores', () => {
+  const r = crearConsultas(_datosCopiloto())('por_cobrar', { top: 3 })
+  assert.equal(r.resumen.por_cobrar_total, '$1.300.000'); assert.equal(r.resumen.vencido, '$800.000')   // 800.000 + 500.000; vencido = el saldo de la vencida
+  assert.equal(r.resumen.mayores[0].cliente, 'Comercial Andes SpA'); assert.equal(r.tarjeta.total.valor, '$1.300.000')
+})
+test('Counsel AI: tareas vencidas por responsable, sin las terminadas ni las de plazo futuro', () => {
+  const r = crearConsultas(_datosCopiloto())('tareas_vencidas', {})
+  assert.equal(r.resumen.tareas_vencidas, 1); assert.deepEqual(r.resumen.por_responsable, [{ responsable: 'Martina', tareas: 1 }])
+})
+test('Counsel AI: el bucle resuelve la consulta que pide la IA y devuelve la tarjeta; sin consulta responde directo', async () => {
+  const ej = crearConsultas(_datosCopiloto()); let n = 0
+  const llamar = async ({ messages, tools }) => { n++; assert.equal(tools.length, HERRAMIENTAS.length)
+    if (n === 1) return { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'u1', name: 'deuda_cliente', input: { cliente: 'Schroder' } }] }
+    const ultimo = messages[messages.length - 1].content[0]; assert.equal(ultimo.type, 'tool_result'); assert.match(ultimo.content, /676\.812/)
+    return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Debe $676.812.' }] } }
+  const r = await resolverConIA({ llamar, sistema: 's', mensajes: [{ role: 'user', content: '¿cuánto debe?' }], ejecutar: ej })
+  assert.equal(r.texto, 'Debe $676.812.'); assert.equal(r.tarjetas.length, 1); assert.equal(n, 2)
+  const directo = await resolverConIA({ llamar: async () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'No tengo esa consulta.' }] }), sistema: 's', mensajes: [], ejecutar: ej })
+  assert.equal(directo.tarjetas.length, 0); assert.equal(directo.texto, 'No tengo esa consulta.')
+  const bucle = await resolverConIA({ llamar: async () => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'x', name: 'tareas_vencidas', input: {} }] }), sistema: 's', mensajes: [], ejecutar: ej, maxVueltas: 2 })
+  assert.equal(bucle.agotado, true)   // la IA no puede quedarse pidiendo consultas para siempre
+})
