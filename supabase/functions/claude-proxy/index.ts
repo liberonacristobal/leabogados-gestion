@@ -7,7 +7,7 @@
 // + este handler exige que el email del JWT sea del equipo (@leabogados.cl en la
 // lista). El anon key no trae email, por lo que queda rechazado.
 //
-// Contrato: POST { model?, max_tokens?, system?, messages:[{role,content}] }
+// Contrato: POST { model?, max_tokens?, system?, tools?, messages:[{role,content}] }
 //  -> responde el JSON de Anthropic tal cual (el front lee data.content[0].text).
 
 import { esDelDominio } from "../_shared/estudio.ts";
@@ -65,6 +65,15 @@ serve(async (req) => {
   // deno-lint-ignore no-explicit-any
   const payload: any = { model, max_tokens, messages };
   if (typeof body.system === "string" && body.system) payload.system = body.system;
+  // Consultas que la IA puede pedir (herramientas): la app las resuelve y devuelve el resultado en los mensajes siguientes.
+  if (Array.isArray(body.tools) && body.tools.length && body.tools.length <= 12) {
+    // deno-lint-ignore no-explicit-any
+    payload.tools = body.tools.map((t: any) => ({
+      name: String(t?.name || "").slice(0, 64),
+      description: String(t?.description || "").slice(0, 1000),
+      input_schema: t?.input_schema && typeof t.input_schema === "object" ? t.input_schema : { type: "object", properties: {} },
+    }));
+  }
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {

@@ -35,7 +35,8 @@ import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '.
 import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
-import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, propuestaFondoRendicion } from '../supabase/functions/_shared/gastosReglas.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
+import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, propuestaFondoRendicion } from '../supabase/functions/_shared/gastosReglas.js'
+import { crearConsultas, resolverConIA } from '../supabase/functions/_shared/consultasCopiloto.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../supabase/functions/_shared/ventaGastoReglas.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
@@ -15712,7 +15713,7 @@ const PALETTE_ACTIONS = [
 ]
 // Copiloto: responde con los datos reales (blindado a no inventar) y, si le pides HACER algo,
 // propone una acción (crear tarea / abrir cliente) que se ejecuta SOLO tras tu confirmación (compuerta).
-function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
+function CopilotoModal({ role='admin', clients=[], sales=[], billing=[], expenses=[], tasks=[], proyectosCartera=[], costosOfiRows=[], user, onSaveTask, onOpenClientFicha, onNav, onClose }){
   const [q,setQ] = useState('')
   const [busy,setBusy] = useState(false)
   const [hist,setHist] = useState([])
@@ -15762,11 +15763,20 @@ Nunca ejecutas nada tú: solo propones y el humano confirma (o copia el borrador
 DATOS:
 ${brief()}`
       const msgs=[]; hist.slice(-8).forEach(x=>{ if(x.role==='user'&&x.text) msgs.push({role:'user',content:x.text}); else if(x.role==='bot'&&x.text) msgs.push({role:'assistant',content:x.text}) }); msgs.push({role:'user',content:t})
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:msgs})
-      const txt = (data?.content?.[0]?.text||'').trim()
+      let txt='', tarjetas=[]
+      if(esAdmin){
+        // Las cifras salen de consultas que la app resuelve con sus funciones únicas; la IA solo redacta con ese resultado.
+        const ejecutar = crearConsultas({ clients, billing, expenses, tasks, hoy:isoLocal(Date.now()), fgCliente, gastosPorRendirCli, saldoBill, esVencidaB, porCobrarBills, folioN })
+        const reglas = `\n\nCIFRAS: para cualquier monto por cliente, por cobrar, vencido, facturas o tareas vencidas USA las herramientas; nunca escribas un monto que no venga de una herramienta, y copia los montos tal como los devuelve. Si no hay herramienta para lo que piden, dilo en una frase y sugiere en qué vista mirarlo. El desglose se muestra solo en una tarjeta: no repitas la tabla, responde el resultado en 1 o 2 frases.`
+        const r = await resolverConIA({ llamar:b=>claudeCall({model:'claude-opus-4-8',max_tokens:700,...b}), sistema:sys+reglas, mensajes:msgs, ejecutar })
+        txt=r.texto; tarjetas=r.tarjetas
+      } else {
+        const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:msgs})
+        txt = (data?.content?.[0]?.text||'').trim()
+      }
       const m = txt.match(/\{[\s\S]*"accion"[\s\S]*\}/)
       if(m){ let a=null; try{ a=JSON.parse(m[0]) }catch(_){}; if(a&&a.accion){ setHist(h=>[...h,{role:'bot',action:a}]); setBusy(false); return } }
-      setHist(h=>[...h,{role:'bot',text:txt||'No pude responder con los datos disponibles.'}])
+      setHist(h=>[...h,{role:'bot',text:txt||(tarjetas.length?'':'No pude responder con los datos disponibles.'),tarjetas}])
     }catch(e){ setHist(h=>[...h,{role:'bot',text:'No se pudo: '+(e?.message||'reintenta')}]) }
     setBusy(false)
   }
@@ -15813,6 +15823,20 @@ ${brief()}`
       </div> )
     return null
   }
+  // Tarjeta con el desglose que devolvió la consulta (las cifras vienen de la app, no de la IA). Cada línea lleva a su detalle.
+  const irA = d => { if(!d) return; if(d.tipo==='cliente'&&onOpenClientFicha){ onOpenClientFicha(d.id); onClose&&onClose() } else if(d.tab&&onNav){ onNav({tasks:'tareas',billing:'facturacion'}[d.tab]||d.tab) } }
+  const tarjetaConsulta = (t,k) => (
+    <div key={k} style={{ border:'1px solid #CFE9DD', background:'#F1FAF6', borderRadius:12, padding:'10px 12px', marginTop:8 }}>
+      <div style={{ fontSize:10, fontWeight:700, letterSpacing:.5, textTransform:'uppercase', color:C.greenText, marginBottom:4 }}>{t.titulo}</div>
+      {(t.lineas||[]).map((l,i)=>(
+        <div key={i} onClick={()=>irA(l.destino)} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:10, padding:'5px 0', borderTop:i?'1px solid #DCEEE5':'none', fontSize:12.5, cursor:l.destino?'pointer':'default' }}>
+          <span style={{ color:C.textSoft, minWidth:0 }}>{l.n}{l.sub?<small style={{ display:'block', fontSize:10.5, color:C.muted }}>{l.sub}</small>:null}</span>
+          <span style={{ whiteSpace:'nowrap' }}><b style={{ color:C.accent, fontVariantNumeric:'tabular-nums' }}>{l.valor}</b>{l.destino?<span style={{ color:C.done, marginLeft:6 }}>›</span>:null}</span>
+        </div>
+      ))}
+      {t.total&&<div style={{ display:'flex', justifyContent:'space-between', paddingTop:7, marginTop:3, borderTop:'1.5px solid #CFE9DD', fontWeight:700, color:C.accent, fontSize:12.5 }}><span>{t.total.n}</span><span style={{ fontVariantNumeric:'tabular-nums' }}>{t.total.valor}</span></div>}
+      {t.fuente&&<div style={{ fontSize:10.5, color:C.muted, marginTop:7, lineHeight:1.4 }}>{t.fuente}</div>}
+    </div> )
   const sugerencias = esAdmin
     ? ['¿Cómo voy este mes?','¿Quién me debe plata?','¿Cuánto cobré y cuánto cuesta la oficina?','¿Qué está detenido?']
     : ['¿Qué está detenido?','¿Qué tengo pendiente?','Crea una tarea para llamar a…']
@@ -15832,7 +15856,7 @@ ${brief()}`
       <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
         {hist.map((m,i)=> m.role==='user'
           ? <div key={i} style={{ alignSelf:'flex-end', maxWidth:'85%', fontSize:13, color:'#fff', background:C.accent, borderRadius:'12px 12px 3px 12px', padding:'8px 12px' }}>{m.text}</div>
-          : <div key={i} style={{ alignSelf:'flex-start', maxWidth:'92%', width:m.action?'92%':'auto' }}>{m.action ? cardAccion(m.action,i,m.done) : <div style={{ fontSize:13, color:C.text, background:C.bgSoft, borderRadius:'12px 12px 12px 3px', padding:'8px 12px', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{m.text}</div>}</div>
+          : <div key={i} style={{ alignSelf:'flex-start', maxWidth:'92%', width:m.action?'92%':'auto' }}>{m.action ? cardAccion(m.action,i,m.done) : <>{m.text?<div style={{ fontSize:13, color:C.text, background:C.bgSoft, borderRadius:'12px 12px 12px 3px', padding:'8px 12px', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{m.text}</div>:null}{(m.tarjetas||[]).map((t,k)=>tarjetaConsulta(t,k))}</>}</div>
         )}
         {busy&&<div style={{ alignSelf:'flex-start', display:'inline-flex' }}><Spin/></div>}
       </div>
@@ -18978,7 +19002,7 @@ export default function App() {
         })()}
         {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
-        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
+        {copilotoOpen&&<CopilotoModal role={userRole} clients={clients} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<PaginaSobre origen='Anticipo' titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAntApp.client_id))?.name||null} onBack={()=>setCubrirAntApp(null)}><CubrirCuotasModal asPage anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/></PaginaSobre>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
