@@ -4,11 +4,20 @@
 import { useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
-import { clienteDeCorreo, montoDeTexto } from '../../supabase/functions/_shared/fondosReglas.js'
+import { clienteDeCorreo, montoSolicitado } from '../../supabase/functions/_shared/fondosReglas.js'
 import { chipBtn, driveToken, logActividad, okDB, registrarError, setLearningKV } from './compartido.jsx'
 
 const DIAS = 14
 const CLAVE = 'fondos_correo'   // learnings: key = id del correo, value = 'registrada' | 'descartada' (no vuelve a proponerse)
+
+// Texto plano del cuerpo, sin la parte citada de correos anteriores (ahí vienen montos que no son de esta solicitud).
+const b64 = d => { try { return decodeURIComponent(escape(atob(String(d).replace(/-/g, '+').replace(/_/g, '/')))) } catch (_) { return '' } }
+const textoPlano = p => {
+  if (!p) return ''
+  if (p.mimeType === 'text/plain' && p.body?.data) return b64(p.body.data)
+  return (p.parts || []).map(textoPlano).find(Boolean) || ''
+}
+const sinCita = t => String(t || '').split(/\n(?:El .{5,80} escribi[oó]:|On .{5,80} wrote:|>)/)[0]
 
 const emailsDe = h => [...String(h || '').matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map(m => m[0].toLowerCase())
 
@@ -35,13 +44,13 @@ export async function detectarSolicitudesFondos(clients) {
   const out = []
   const meta = async id => {
     try {
-      const rr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject`, { headers: { Authorization: 'Bearer ' + token } })
+      const rr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, { headers: { Authorization: 'Bearer ' + token } })
       if (!rr.ok) return
       const j = await rr.json(), H = {}
       ;(j.payload?.headers || []).forEach(h => { H[h.name.toLowerCase()] = h.value })
-      const asunto = String(H.subject || ''), texto = `${asunto} ${j.snippet || ''}`
+      const asunto = String(H.subject || ''), cuerpo = sinCita(textoPlano(j.payload)) || String(j.snippet || ''), texto = `${asunto} ${cuerpo}`
       if (!/fondos?|provisi[oó]n/i.test(texto)) return
-      const monto = montoDeTexto(texto); if (!monto) return
+      const monto = montoSolicitado(texto); if (!monto) return
       const para = emailsDe(H.to), cc = emailsDe(H.cc)
       const client_id = clienteDeCorreo([...para, ...cc], texto, clients, mapa); if (!client_id) return
       const fecha = isoLocal(Number(j.internalDate)) || new Date().toISOString().slice(0, 10)

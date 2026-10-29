@@ -1,7 +1,7 @@
 // Reconocer una solicitud de fondos en un correo enviado: monto y cliente, solo cuando no hay duda.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { montoDeTexto, clienteDeCorreo } from './../supabase/functions/_shared/fondosReglas.js'
+import { montoDeTexto, montoSolicitado, clienteDeCorreo } from './../supabase/functions/_shared/fondosReglas.js'
 
 test('monto del correo: uno solo, con o sin puntos, en pesos; varios distintos o ninguno, no se adivina', () => {
   assert.equal(montoDeTexto('Solicitud de fondos por $1.200.000 para la constitución'), 1200000)
@@ -14,6 +14,17 @@ test('monto del correo: uno solo, con o sin puntos, en pesos; varios distintos o
   assert.equal(montoDeTexto('son $500 de papel'), null)          // bajo el mínimo de un fondo
   assert.equal(montoDeTexto('rol 1.234.567 de la causa'), null)    // sin signo $ ni «pesos»: no es un monto
   assert.equal(montoDeTexto(null), null)
+})
+
+test('monto solicitado: entre gastos incurridos y total, vale la cifra que se pide transferir (correos reales, anonimizados)', () => {
+  const vkh = 'Gastos notariales: $25.000, $35.000, $35.000. Total incurrido: $95.000. Adicionalmente, un fondo de $200.000. Por lo anterior, les pedimos transferir un total de $295.000 a la cuenta destinada a gastos'
+  assert.equal(montoSolicitado(vkh), 295000)
+  const sbs = 'quisiera pedirle por favor que nos transfiera un fondo por rendir para los gastos asociados a la constitución de la sociedad que prestará el servicio de pasajeros en la ciudad de Osorno, por un total de $1.200.000.-'
+  assert.equal(montoSolicitado(sbs), 1200000)   // la cifra queda a más de 80 caracteres de «transfiera»: la toma «por un total de»
+  assert.equal(montoSolicitado('fondos por $300.000'), 300000)          // sin frase: la cifra única de siempre
+  assert.equal(montoSolicitado('Total incurrido: $95.000 y un fondo de $200.000'), null)   // sin frase y con dos cifras: no se adivina
+  assert.equal(montoSolicitado('transferir $100.000 o $200.000'), null)  // la frase nombra dos cifras
+  assert.equal(montoSolicitado(null), null)
 })
 
 const clients = [
