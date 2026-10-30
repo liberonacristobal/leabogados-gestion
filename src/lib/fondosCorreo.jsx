@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { BRAND, C, appConfirm, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
 import { clienteDeCorreo, clienteDePedido, confirmaPago, esFormularioFondos, montoSolicitado, pedidoDeSolicitud, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
-import { chipBtn, driveToken, estadoSolicitud, logActividad, nombresMiembros, okDB, registrarError, setLearningKV } from './compartido.jsx'
+import { chipBtn, depositoDeSolicitud, driveToken, estadoSolicitud, logActividad, nombresMiembros, okDB, registrarError, setLearningKV } from './compartido.jsx'
 
 const DIAS = 14
 const CLAVE = 'fondos_correo'   // learnings: key = id del correo, value = 'registrada' | 'descartada' (no vuelve a proponerse)
@@ -297,7 +297,8 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const filas = [
     ...(ped || []).map(it => ({ k: 'ped', tab: 'reg', id: 'p' + it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
     ...(pedReg || []).filter(r => !ped0(r, r.fecha)).map(it => ({ k: it.formulario ? 'frm' : 'por', tab: 'esp', id: 'q' + it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
-    ...(det || []).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
+    // Una solicitud detectada cuyo fondo ya llegó (mismo cliente y monto, depositado desde la fecha del correo) no es un pendiente: no se ofrece registrarla.
+    ...(det || []).filter(it => { const c = eleg[it.id] || it.client_id; return !(c && depositoDeSolicitud({ client_id: c, monto: it.monto, enviada_at: `${it.fecha}T12:00:00Z` }, expenses)) }).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
     ...(reqs || []).map(r => {
       const st = estadoSolicitud(r, expenses)
       return { k: st.k !== 'rec' && confs[String(r.id)]?.estado === 'confirmo' ? 'cnf' : st.k, tab: st.k === 'rec' ? 'rec' : 'esp', id: 'r' + r.id, r, st, client_id: r.client_id, monto: r.monto, asunto: r.asunto, fecha: String(r.enviada_at || '').slice(0, 10), por: r.enviada_por || '' }
