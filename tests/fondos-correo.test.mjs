@@ -46,6 +46,13 @@ test('cliente del correo: sin destinatario conocido vale el nombre en el texto, 
   assert.equal(clienteDeCorreo([], '', clients, mapa), null)
 })
 
+test('cliente del correo: nombre corto del cliente dentro del asunto (correo real, anonimizado); solo palabras completas', () => {
+  const cs = [{ id: 7, name: 'Ohana' }, { id: 8, name: 'Lopez' }, { id: 9, name: 'Sur' }]
+  assert.equal(clienteDeCorreo(['a@gmail.com'], 'Solicitud de provisión de fondos · Sociedad Hotelera y Turística Ohana Limitada', cs, new Map()), '7')
+  assert.equal(clienteDeCorreo(['a@gmail.com'], 'Fondos para Lopezia SpA', cs, new Map()), null)   // «Lopez» dentro de otra palabra no cuenta
+  assert.equal(clienteDeCorreo(['a@gmail.com'], 'Fondos para el Sur de Chile', cs, new Map()), null)   // nombre de menos de 5 letras: no se adivina
+})
+
 test('monto corto: 2M, 1,5M, millones y pesos; un número suelto no es monto', () => {
   assert.equal(montoCorto('2M'), 2000000)
   assert.equal(montoCorto('1,5M'), 1500000)

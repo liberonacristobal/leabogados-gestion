@@ -108,7 +108,9 @@ export function clienteDeCorreo(emails, texto, clients, mapa) {
   (emails || []).forEach((e) => (mapa.get(e) || []).forEach((id) => ids.add(String(id))));
   if (ids.size === 1) return [...ids][0];
   if (ids.size > 1) return null;
-  const t = _nrm(texto);
-  const hits = (clients || []).filter((c) => c.status !== 'Terminado' && !c.is_internal && _nrm(c.name).length >= 6 && t.includes(_nrm(c.name)));
+  // El nombre se busca como palabras completas (≥5 letras): «Ohana» en «Sociedad Hotelera y Turística Ohana Limitada» calza; «Lopez» dentro de «Lopezia», no.
+  const solo = (x) => ' ' + _nrm(x).replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  const t = solo(texto);
+  const hits = (clients || []).filter((c) => c.status !== 'Terminado' && !c.is_internal && solo(c.name).trim().length >= 5 && t.includes(solo(c.name)));
   return hits.length === 1 ? String(hits[0].id) : null;
 }
