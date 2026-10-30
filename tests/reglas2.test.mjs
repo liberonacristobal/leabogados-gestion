@@ -594,6 +594,7 @@ test('calendarios: tributario solo a socios, lo de clientes a todo el equipo; ot
   assert.deepEqual(destinatariosCalendario(ms, 'estudio.cl', 'socios'), ['socio@estudio.cl'])
   assert.deepEqual(destinatariosCalendario(ms, '@estudio.cl', 'equipo'), ['socio@estudio.cl', 'abogado@estudio.cl'])
   assert.deepEqual(destinatariosCalendario(ms, '', 'equipo'), [])
+  assert.deepEqual(destinatariosCalendario(ms, 'estudio.cl', 'equipo', [' ABOGADO@estudio.cl ']), ['socio@estudio.cl'])   // excluido por pedido del estudio
   const ev = [{ tipo: 'tributario' }, { tipo: 'causa' }, { tipo: 'plazo' }, { tipo: 'contribuciones' }, { tipo: 'diario_oficial' }]
   const [est, cli] = CALENDARIOS
   assert.equal(eventosDeCalendario(ev, est).length, 1)

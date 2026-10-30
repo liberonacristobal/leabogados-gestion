@@ -61,14 +61,15 @@ export const CALENDARIOS = [
 export const eventosDeCalendario = (eventos, cal) => (eventos || []).filter(e => cal.tipos.includes(e.tipo))
 
 // Correos que ven un calendario: solo miembros del mismo dominio que la cuenta dueña (otro estudio o un correo personal nunca entran);
-// 'socios' = los marcados socio, 'equipo' = todos. Sin repetidos.
-export function destinatariosCalendario(miembros, dominio, publico) {
+// 'socios' = los marcados socio, 'equipo' = todos; `excluir` = correos que el estudio pidió dejar fuera. Sin repetidos.
+export function destinatariosCalendario(miembros, dominio, publico, excluir = []) {
+  const fuera = new Set((excluir || []).map(x => String(x).toLowerCase().trim()))
   const dom = String(dominio || '').toLowerCase().replace(/^@/, '')
   if (!dom) return []
   const out = new Set()
   for (const m of miembros || []) {
     const e = String(m?.email || '').toLowerCase().trim()
-    if (!e.endsWith('@' + dom)) continue
+    if (!e.endsWith('@' + dom) || fuera.has(e)) continue
     if (publico === 'socios' && !m.es_socio) continue
     out.add(e)
   }
