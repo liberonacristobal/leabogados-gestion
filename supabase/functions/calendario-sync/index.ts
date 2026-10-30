@@ -1,6 +1,6 @@
 // Edge Function: calendario-sync
-// Mantiene el calendario compartido «LEA · Plazos y audiencias» en Google Calendar: tributario del estudio, causas en tabla, plazos de
-// clientes, contribuciones y publicaciones del Diario Oficial. Cada evento lleva una marca propia (lea=1): la función solo crea, actualiza
+// Mantiene dos calendarios compartidos en Google Calendar: «LEA · Estudio» (tributario, solo socios) y «LEA · Clientes» (causas en tabla,
+// plazos de clientes, contribuciones y publicaciones del Diario Oficial, todo el equipo). Se reparte con _shared/calendarioEventos.js. Cada evento lleva una marca propia (lea=1): la función solo crea, actualiza
 // o quita los que creó ella; nunca toca eventos puestos a mano. Lo que debe haber sale de _shared/calendarioEventos.js (función pura, con pruebas).
 //
 // Cuenta de Google: refresh token con permiso de Calendar guardado en drive_auth id=2 (lo deja el botón «Conectar calendario del estudio»).
@@ -8,11 +8,10 @@
 // Auth: CRON_SECRET en el cuerpo. verify_jwt=false.
 //   POST {secret}                      -> simula: devuelve el plan (no escribe)
 //   POST {secret, escribir:true}       -> sincroniza con Google Calendar
-import { armarEventos } from '../_shared/calendarioEventos.js'
+import { armarEventos, CALENDARIOS, eventosDeCalendario, destinatariosCalendario } from '../_shared/calendarioEventos.js'
 
 const SB_URL = Deno.env.get('SUPABASE_URL') || '', SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', CRON_SECRET = Deno.env.get('CRON_SECRET') || ''
 const CLIENT_ID = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID') || '', CLIENT_SECRET = Deno.env.get('GOOGLE_OAUTH_CLIENT_SECRET') || ''
-const NOMBRE_CAL = 'LEA · Plazos y audiencias'
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json' } })
 
 // deno-lint-ignore no-explicit-any
@@ -57,18 +56,18 @@ async function g(token: string, path: string, init: RequestInit = {}): Promise<a
   return d
 }
 
-async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof leerDatos>>) {
-  // Calendario del estudio: se crea una vez y su id queda guardado.
-  const ya = await rest('learnings?select=value&kind=eq.calendario_estudio&key=eq.id&limit=1')
+async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof leerDatos>>, cal: typeof CALENDARIOS[number], miembros: { email: string; es_socio: boolean }[], dominio: string) {
+  // El calendario se crea una vez y su id queda guardado (el del estudio conserva la clave «id»).
+  const llave = cal.clave === 'estudio' ? 'id' : cal.clave
+  const ya = await rest(`learnings?select=value&kind=eq.calendario_estudio&key=eq.${llave}&limit=1`)
   let calId = Array.isArray(ya) && ya[0]?.value
   if (!calId) {
-    const c = await g(token, 'calendars', { method: 'POST', body: JSON.stringify({ summary: NOMBRE_CAL, timeZone: 'America/Santiago', description: 'Plazos, causas en tabla y obligaciones del estudio. Lo mantiene la app automáticamente.' }) })
-    calId = c.id; await rest('learnings', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ kind: 'calendario_estudio', key: 'id', value: calId }) })
+    const c = await g(token, 'calendars', { method: 'POST', body: JSON.stringify({ summary: cal.nombre, timeZone: 'America/Santiago', description: cal.descripcion }) })
+    calId = c.id; await rest('learnings', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ kind: 'calendario_estudio', key: llave, value: calId }) })
   }
-  // Quién lo ve: solo los socios (lectura).
-  const socios = await rest('miembros?select=email&es_socio=eq.true')
+  // Quién lo ve (solo lectura): miembros del mismo dominio, según el público del calendario.
   const acl: string[] = []
-  for (const m of socios || []) { const email = String(m.email || '').toLowerCase(); if (!email) continue
+  for (const email of destinatariosCalendario(miembros, dominio, cal.publico)) {
     try { await g(token, `calendars/${encodeURIComponent(calId)}/acl`, { method: 'POST', body: JSON.stringify({ role: 'reader', scope: { type: 'user', value: email } }) }); acl.push(email) } catch (e) { if ((e as { status?: number }).status !== 409) throw e } }
   // Lo que ya hay (solo eventos con nuestra marca).
   const hoy = hoyChile(), hasta = eventos.length ? diaSiguiente(eventos[eventos.length - 1].fecha) : diaSiguiente(hoy)
@@ -92,7 +91,7 @@ async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof lee
     catch (err) { if ((err as { status?: number }).status === 409) { await g(token, `calendars/${encodeURIComponent(calId)}/events/${id}`, { method: 'PUT', body: JSON.stringify(cuerpo) }); res.actualizados++ } else throw err }
   }
   for (const [id] of existentes) if (!deseados.has(id)) { await g(token, `calendars/${encodeURIComponent(calId)}/events/${id}`, { method: 'DELETE' }); res.quitados++ }
-  return { calendario: NOMBRE_CAL, compartido_con: acl.length, ...res }
+  return { calendario: cal.nombre, compartido_con: acl.length, ...res }
 }
 
 Deno.serve(async (req) => {
@@ -105,7 +104,11 @@ Deno.serve(async (req) => {
     const porTipo: Record<string, number> = {}; eventos.forEach((e: { tipo: string }) => { porTipo[e.tipo] = (porTipo[e.tipo] || 0) + 1 })
     const token = await tokenGoogle()
     const base = { ok: true, conectado: !!token, total: eventos.length, por_tipo: porTipo }
-    if (b.escribir !== true || !token) return json({ ...base, simulacion: true, proximos: eventos.slice(0, b.max || 40).map((e: { fecha: string; titulo: string; tipo: string }) => `${e.fecha} · ${e.titulo} [${e.tipo}]`) })
-    return json({ ...base, ...(await sincronizar(token, eventos)) })
+    const miembros = await rest('miembros?select=email,es_socio'), cuenta = await rest('drive_auth?id=eq.2&select=email')
+    const dominio = String(cuenta?.[0]?.email || '').split('@')[1] || ''
+    const calendarios = CALENDARIOS.map(c => ({ ...c, eventos: eventosDeCalendario(eventos, c), ven: destinatariosCalendario(miembros, dominio, c.publico) }))
+    if (b.escribir !== true || !token) return json({ ...base, simulacion: true, calendarios: calendarios.map(c => ({ calendario: c.nombre, lo_ven: c.ven, total: c.eventos.length, proximos: c.eventos.slice(0, b.max || 40).map((e: { fecha: string; titulo: string; tipo: string }) => `${e.fecha} · ${e.titulo} [${e.tipo}]`) })) })
+    const hechos = []; for (const c of calendarios) hechos.push(await sincronizar(token, c.eventos, c, miembros, dominio))
+    return json({ ...base, calendarios: hechos })
   } catch (e) { return json({ ok: false, error: String((e as Error).message || e).slice(0, 300) }, 500) }
 })
