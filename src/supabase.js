@@ -77,8 +77,10 @@ export const connectDrivePermanente = () =>
 
 // Calendario del estudio: conexión APARTE de la de Drive/Gmail (no toca la fila id=1). Se entra con la cuenta dueña del calendario
 // (contacto@) y el refresh token queda en la fila id=2, que usa la sincronización con Google Calendar.
-export const connectCalendarioEstudio = () => {
-  try { localStorage.setItem('conectar_calendario', String(Date.now())) } catch (_) {}
+export const connectCalendarioEstudio = async () => {
+  // La marca lleva quién la inició: si al volver entra esa misma persona, fue un ingreso normal (intento cancelado), no el del calendario.
+  let quien = ''; try { quien = (await supabase.auth.getSession())?.data?.session?.user?.email || '' } catch (_) {}
+  try { localStorage.setItem('conectar_calendario', Date.now() + '|' + quien.toLowerCase()) } catch (_) {}
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
