@@ -3,7 +3,7 @@
 // registrada, conciliacion-auto propone el fondo cuando llega el depósito y el aviso diario deja de insistir con ese cliente.
 import { useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { BRAND, C, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
+import { BRAND, C, appConfirm, fmt, fmtFechaDMY, isoLocal } from './base.jsx'
 import { clienteDeCorreo, clienteDePedido, confirmaPago, esFormularioFondos, montoSolicitado, pedidoDeSolicitud, pedidosInternos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { chipBtn, driveToken, estadoSolicitud, logActividad, nombresMiembros, okDB, registrarError, setLearningKV } from './compartido.jsx'
 
@@ -21,9 +21,12 @@ const sinCita = t => String(t || '').split(/\n(?:El .{5,80} escribi[oó]:|On .{5
 
 const MSG = 'fondos_msg'         // learnings: key = id de la solicitud (fund_requests), value = Message-ID del correo enviado (para leer la respuesta del cliente)
 const CONF = 'fondos_confirma'   // learnings: key = id de la solicitud, value = JSON {estado: 'confirmo'|'no', fecha, texto, msg} (decisión sobre la respuesta del cliente)
+const CONTACTO = 'fondos_contacto'   // learnings: key = correo externo, value = id del cliente (se aprende al registrar una solicitud elegida a mano)
 const PEDIDO = 'fondos_pedido'   // learnings: key = «Message-ID del correo|n° de línea» (igual en todas las casillas), value = JSON {estado, client_id, monto, concepto, de, para, fecha}
 
 const emailsDe = h => [...String(h || '').matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map(m => m[0].toLowerCase())
+// Correos de afuera: ni del dominio del estudio ni la casilla de la oficina. Solo esos se aprenden como contactos de un cliente.
+const externos = lista => { const dom = '@' + String(BRAND.emailDominio || '').toLowerCase(), of = String(BRAND.casillaAgente || '').toLowerCase(); return [...new Set(lista)].filter(e => !e.endsWith(dom) && e !== of) }
 
 export async function detectarSolicitudesFondos(clients) {
   const token = await driveToken(); if (!token) return []
@@ -33,16 +36,18 @@ export async function detectarSolicitudesFondos(clients) {
   const ids = ((await r.json()).messages || []).map(m => m.id)
   if (!ids.length) return []
   const hace30 = new Date(Date.now() - 30 * 86400000).toISOString()
-  const [{ data: ctc }, { data: lrn }, { data: vistos }, { data: frs }] = await Promise.all([
+  const [{ data: ctc }, { data: lrn }, { data: vistos }, { data: frs }, { data: apr }] = await Promise.all([
     supabase.from('contacts').select('client_id,email'),
     supabase.from('learnings').select('key,value').in('kind', ['factura_to', 'factura_cc']),
     supabase.from('learnings').select('key').eq('kind', CLAVE),
     supabase.from('fund_requests').select('client_id,monto,enviada_at').gte('enviada_at', hace30),
+    supabase.from('learnings').select('key,value').eq('kind', CONTACTO),
   ])
   const mapa = new Map()
   const agrega = (email, cid) => { const e = String(email || '').trim().toLowerCase(); if (!e.includes('@') || !cid) return; const s = mapa.get(e) || new Set(); s.add(String(cid)); mapa.set(e, s) }
   ;(ctc || []).forEach(c => agrega(c.email, c.client_id))
   ;(lrn || []).forEach(l => emailsDe(l.value).forEach(e => agrega(e, l.key)))
+  ;(apr || []).forEach(l => agrega(l.key, l.value))
   const ya = new Set((vistos || []).map(v => String(v.key)))
   const nuevos = ids.filter(id => !ya.has(id))
   const out = []
@@ -56,11 +61,13 @@ export async function detectarSolicitudesFondos(clients) {
       if (!/fondos?|provisi[oó]n/i.test(texto)) return
       const monto = montoSolicitado(texto); if (!monto) return
       const para = emailsDe(H.to), cc = emailsDe(H.cc)
-      const client_id = clienteDeCorreo([...para, ...cc], texto, clients, mapa); if (!client_id) return
+      // Sin cliente reconocido igual se propone (se elige a mano), siempre que el correo haya salido hacia afuera del estudio.
+      const client_id = clienteDeCorreo([...para, ...cc], texto, clients, mapa) || null
+      if (!client_id && !externos([...para, ...cc]).length) return
       const fecha = isoLocal(Number(j.internalDate)) || new Date().toISOString().slice(0, 10)
       // Ya registrada por otra vía (el módulo «Solicitar fondos» o la rendición): mismo cliente y monto dentro de 2 días.
       const t0 = new Date(fecha + 'T12:00').getTime()
-      if ((frs || []).some(f => String(f.client_id) === client_id && Number(f.monto) === monto && Math.abs(new Date(f.enviada_at).getTime() - t0) <= 2 * 86400000)) return
+      if (client_id && (frs || []).some(f => String(f.client_id) === client_id && Number(f.monto) === monto && Math.abs(new Date(f.enviada_at).getTime() - t0) <= 2 * 86400000)) return
       out.push({ id, asunto, fecha, para: para.join(','), cc: cc.join(','), client_id, monto, mid: String(H['message-id'] || '').trim() })
     } catch (_) { /* un correo ilegible no frena a los demás */ }
   }
@@ -200,7 +207,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   useEffect(() => {
     if (!DEMO) return
     const cs = (clients || []).filter(c => !c.is_internal).slice(0, 4)
-    setDet(cs.slice(0, 2).map((c, i) => ({ id: 'demo' + i, asunto: i ? 'Provisión de fondos' : 'Solicitud de fondos', fecha: i ? '2026-10-28' : '2026-10-27', para: '', cc: '', client_id: String(c.id), monto: i ? 300000 : 1200000 })))
+    setDet(cs.slice(0, 2).map((c, i) => ({ id: 'demo' + i, asunto: i ? 'Provisión de fondos' : 'Solicitud de fondos', fecha: i ? '2026-10-28' : '2026-10-27', para: '', cc: '', client_id: String(c.id), monto: i ? 300000 : 1200000 })).concat([{ id: 'demo2', asunto: 'Solicitud de provisión de fondos · Sociedad Hotelera Ohana Limitada', fecha: '2026-10-16', para: 'contacto@hotel-demo.cl', cc: '', client_id: null, monto: 300000 }]))
     setPed([{ id: 'dp0', cliente: cs[0]?.name || 'Cliente', concepto: 'Puesta en marcha', monto: 2000000, client_id: cs[0] ? String(cs[0].id) : null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }, { id: 'dp1', cliente: 'Zeta', concepto: 'Reorganización', monto: 1500000, client_id: null, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo' }])
     setPedReg([{ id: 'dq0', client_id: cs[1] ? String(cs[1].id) : null, concepto: 'Inscripción', monto: 2000000, fecha: '2026-10-13', de: 'erasmo@demo', para: 'martina@demo', formulario: { fecha: '2026-10-13', por: 'martina@demo' } }])
     setSug({ dr0: { fecha: '2026-10-23', texto: 'Ya transferido. Muchas gracias', msg: 'demo' } })
@@ -290,7 +297,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const filas = [
     ...(ped || []).map(it => ({ k: 'ped', tab: 'reg', id: 'p' + it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
     ...(pedReg || []).filter(r => !ped0(r, r.fecha)).map(it => ({ k: it.formulario ? 'frm' : 'por', tab: 'esp', id: 'q' + it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.concepto, fecha: it.fecha, por: quienEs(it.de), ruta: ruta(it) })),
-    ...(det || []).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
+    ...(det || []).map(it => ({ k: 'det', tab: 'reg', id: it.id, it, client_id: eleg[it.id] || it.client_id, monto: it.monto, asunto: it.asunto, fecha: it.fecha, por: user?.name || '' })),
     ...(reqs || []).map(r => {
       const st = estadoSolicitud(r, expenses)
       return { k: st.k !== 'rec' && confs[String(r.id)]?.estado === 'confirmo' ? 'cnf' : st.k, tab: st.k === 'rec' ? 'rec' : 'esp', id: 'r' + r.id, r, st, client_id: r.client_id, monto: r.monto, asunto: r.asunto, fecha: String(r.enviada_at || '').slice(0, 10), por: r.enviada_por || '' }
@@ -303,6 +310,22 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const lista = filas.filter(f => f.tab === tabAct && (!quien || f.por === quien))
     .sort((a, b) => tabAct === 'esp' ? String(a.fecha).localeCompare(String(b.fecha)) : String(b.fecha).localeCompare(String(a.fecha)))
     .slice(0, tabAct === 'rec' ? 15 : 60)
+  // Al registrar con un cliente elegido a mano, los correos externos del envío quedan como contactos de ese cliente (no se pisa el de otro sin preguntar).
+  const aprenderContactos = async it => {
+    try {
+      const ext = externos([...emailsDe(it.para), ...emailsDe(it.cc)]); if (!ext.length) return
+      const [{ data: ctc }, { data: apr }] = await Promise.all([supabase.from('contacts').select('client_id,email').in('email', ext), supabase.from('learnings').select('key,value').eq('kind', CONTACTO).in('key', ext)])
+      const dueno = {}; (ctc || []).forEach(c => { dueno[String(c.email).toLowerCase()] = String(c.client_id) }); (apr || []).forEach(l => { dueno[l.key] = String(l.value) })
+      const mios = String(it.client_id), guardar = []
+      for (const e of ext) {
+        if (dueno[e] === mios) continue
+        if (dueno[e] && !await appConfirm(`${e} figura como contacto de ${nombre(dueno[e])}. ¿Dejarlo también como contacto de ${nombre(mios)}?`)) continue
+        guardar.push(e)
+      }
+      for (const e of guardar) await setLearningKV(CONTACTO, e, mios)
+      if (guardar.length) logActividad('fondos.contactos_aprendidos', { tabla: 'clients', id: mios, detalle: { cliente: nombre(mios), title: 'Contactos aprendidos desde una solicitud de fondos', correos: guardar.length } })
+    } catch (e) { registrarError({ origen: 'accion', vista: CONTACTO, err: e }) }
+  }
   const registrar = async it => {
     setBusy(it.id)
     try {
@@ -313,6 +336,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
       setReqs(p => [res.data, ...(p || [])])
       if (it.mid && res.data?.id) { try { await setLearningKV(MSG, res.data.id, it.mid); setMsgs(a => ({ ...a, [String(res.data.id)]: it.mid })) } catch (e) { registrarError({ origen: 'accion', vista: MSG, err: e }) } }
       try { await setLearningKV(CLAVE, it.id, 'registrada') } catch (e) { registrarError({ origen: 'accion', vista: CLAVE, err: e }) }
+      if (it.eligio) await aprenderContactos(it)
       logActividad('fondos.solicitud_enviada', { tabla: 'clients', id: it.client_id, detalle: { cliente: nombre(it.client_id), title: 'Solicitud detectada en el correo', monto: it.monto } })
       quita(it.id)
     } finally { setBusy(null) }
@@ -327,6 +351,10 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     } catch (e) { registrarError({ origen: 'accion', vista: CLAVE, err: e }) }
     quita(it.id); setBusy(null)
   }
+  const selCli = f => <select value='' onChange={e => e.target.value && setEleg(p => ({ ...p, [f.it.id]: e.target.value }))} style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 6px', background: C.card, color: C.accent, maxWidth: 170 }}>
+                  <option value=''>¿Qué cliente?</option>
+                  {(clients || []).filter(c => !c.is_internal && c.status !== 'Terminado').sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                </select>
   const quitaPed = id => { setPed(p => { const n = (p || []).filter(x => x.id !== id); try { sessionStorage.setItem(cacheKey + '_ped', JSON.stringify({ t: Date.now(), items: n })) } catch (_) { /* sin almacenamiento */ } return n }) }
   const registrarPedido = async f => {
     const it = f.it, cid = f.client_id; if (!cid) return
@@ -388,29 +416,27 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
       </div>}
       {!lista.length && <div style={{ fontSize: 12, color: C.textSoft, padding: '8px 0' }}>Sin solicitudes en esta pestaña.</div>}
       {lista.map((f, i) => {
-        const pl = PILL[f.k], abre = abierta === f.id, sinCli = f.k === 'ped' && !f.client_id
+        const pl = PILL[f.k], abre = abierta === f.id, sinCli = (f.k === 'ped' || f.k === 'det') && !f.client_id
         return (
           <div key={f.id} style={{ borderTop: i ? `1px solid ${C.border}` : 'none' }}>
             <div onClick={() => setAbierta(abre ? null : f.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '8px 0', cursor: 'pointer' }}>
               <div style={{ minWidth: 0, flex: '1 1 110px' }}>
-                <div onClick={onOpenClientFicha && f.client_id ? e => { e.stopPropagation(); onOpenClientFicha(f.client_id) } : undefined} style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onOpenClientFicha && f.client_id ? 'pointer' : 'default' }}>{sinCli ? f.it.cliente : nombre(f.client_id)}</div>
+                <div onClick={onOpenClientFicha && f.client_id ? e => { e.stopPropagation(); onOpenClientFicha(f.client_id) } : undefined} style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onOpenClientFicha && f.client_id ? 'pointer' : 'default' }}>{sinCli ? (f.it.cliente || 'Sin cliente') : nombre(f.client_id)}</div>
                 <div style={{ fontSize: 11, color: C.textSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtFechaDMY(f.fecha)}{f.ruta ? ` · ${f.ruta}` : f.por ? ` · ${f.por}` : ''}{f.asunto ? ` · ${f.asunto}` : ''}</div>
               </div>
               <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 7px', background: pl.bg, color: pl.c, whiteSpace: 'nowrap' }}>{pl.t}</span>
               <span style={{ fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(f.monto)}</span>
               {f.k === 'ped' && <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                {sinCli && <select value='' onChange={e => e.target.value && setEleg(p => ({ ...p, [f.it.id]: e.target.value }))} style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 6px', background: C.card, color: C.accent, maxWidth: 170 }}>
-                  <option value=''>¿Qué cliente?</option>
-                  {(clients || []).filter(c => !c.is_internal && c.status !== 'Terminado').sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-                </select>}
+                {sinCli && selCli(f)}
                 {!sinCli && <button type='button' disabled={busy === f.id} onClick={() => registrarPedido(f)} style={chipBtn('primary')}>Registrar pedido</button>}
                 <button type='button' disabled={busy === f.id} onClick={() => descartarPedido(f)} style={chipBtn()}>No es pedido</button>
               </div>}
               {f.k === 'det' && <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                <button type='button' disabled={busy === f.id} onClick={() => registrar(f.it)} style={chipBtn('primary')}>Registrar</button>
+                {sinCli ? selCli(f) : <button type='button' disabled={busy === f.id} onClick={() => registrar({ ...f.it, client_id: f.client_id, eligio: !!eleg[f.it.id] })} style={chipBtn('primary')}>Registrar</button>}
                 <button type='button' disabled={busy === f.id} onClick={() => descartar(f.it)} style={chipBtn()}>No es solicitud</button>
               </div>}
             </div>
+            {f.k === 'det' && eleg[f.it.id] && externos([...emailsDe(f.it.para), ...emailsDe(f.it.cc)]).length > 0 && <div style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', margin: '0 0 8px 8px', fontSize: 11.5, color: C.text }}>Quedan como contactos de {nombre(f.client_id)}: <b>{externos([...emailsDe(f.it.para), ...emailsDe(f.it.cc)]).join(' · ')}</b></div>}
             {f.r && sug[String(f.r.id)] && f.k !== 'rec' && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', margin: '0 0 8px 8px', fontSize: 11.5 }}>
               <span style={{ minWidth: 0, flex: '1 1 160px', color: C.text }}><b>El cliente respondió:</b> «{sug[String(f.r.id)].texto}» · {fmtFechaDMY(sug[String(f.r.id)].fecha)}</span>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
