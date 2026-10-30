@@ -1,15 +1,17 @@
 // Qué eventos debe tener el calendario compartido del estudio en Google Calendar. Función pura: recibe los datos ya leídos de la base y
 // devuelve la lista de eventos de día completo; la sincronización compara esa lista con lo que hay en Google y crea, actualiza o quita.
-import { CAL_CL, CONTRIB_CUOTAS, ymMas, finDeMes, crearCalendario, djFecha } from './calendarioReglas.js'
+import { CAL_CL, ymMas, finDeMes, crearCalendario, djFecha } from './calendarioReglas.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const mesNom = ym => { const [Y, M] = String(ym).split('-'); return `${MESES[+M - 1] || ''} ${Y}` }
 const dmy = d => { const p = String(d || '').slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '' }
 const MIN_ANTES = { tributario: 3 * 1440 - 540, otro: 1440 - 540 }   // aviso a las 09:00: 3 días antes (tributario) o el día anterior
-const COLOR = { tributario: '9', causa: '3', plazo: '5', contribuciones: '5', diario_oficial: '10' }
+const COLOR = { tributario: '9', causa: '3', plazo: '5', remate: '11', diario_oficial: '10' }
 const URL_APP = 'https://gestion.leabogados.cl/'
+const normTxt = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9& ]/g, ' ').replace(/\s+/g, ' ').trim()
+const fechaChile = ts => new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Santiago' })
 
-export function armarEventos({ hoy, feriados = new Set(), obl = [], dj = [], cumplidas = [], causas = [], plazos = [], props = [], clientes = [], docs = [], horizonteDias = 240 }) {
+export function armarEventos({ hoy, feriados = new Set(), obl = [], dj = [], cumplidas = [], causas = [], plazos = [], props = [], remates = [], clientes = [], docs = [], horizonteDias = 240 }) {
   const cal = crearCalendario(feriados)
   const lim = new Date(new Date(hoy + 'T12:00').getTime() + horizonteDias * 864e5).toISOString().slice(0, 10)
   const nombre = id => clientes.find(c => String(c.id) === String(id))?.name || ''
@@ -39,11 +41,16 @@ export function armarEventos({ hoy, feriados = new Set(), obl = [], dj = [], cum
   ;(plazos || []).filter(p => p.estado !== 'cumplido' && p.tipo !== 'tabla' && p.fecha).forEach(p => { const f = String(p.fecha).slice(0, 10)
     push({ clave: `plazo-${p.id}`, tipo: 'plazo', fecha: f, titulo: `${p.titulo || 'Plazo'}${nombre(p.client_id) ? ' · ' + nombre(p.client_id) : ''}`, descripcion: [p.descripcion || '', nombre(p.client_id) ? `Cliente: ${nombre(p.client_id)}` : ''].filter(Boolean).join('\n'), enlace: URL_APP }) })
 
-  // Contribuciones: una cuota por fecha, con los clientes que tienen roles.
-  const porCli = new Map(); (props || []).forEach(p => { const g = porCli.get(String(p.client_id)) || { n: 0, deuda: 0 }; g.n++; g.deuda += Number(p.deuda_contribuciones) || 0; porCli.set(String(p.client_id), g) })
-  if (porCli.size) [Y, Y + 1].forEach(a => CONTRIB_CUOTAS.forEach(([mm, n]) => { const f = cal.habilDesde(`${a}-${mm}-30`)
-    const lista = [...porCli.entries()].sort((x, y) => y[1].n - x[1].n).slice(0, 15).map(([id, g]) => `${nombre(id) || 'Cliente'} · ${g.n} rol${g.n === 1 ? '' : 'es'}${g.deuda > 0 ? ' · con deuda' : ''}`)
-    push({ clave: `contrib-${f}`, tipo: 'contribuciones', fecha: f, titulo: `Contribuciones · ${n} cuota`, descripcion: `${(props || []).length} roles de ${porCli.size} clientes.\n${lista.join('\n')}`, enlace: URL_APP }) }))
+  // Remates de la TGR de propiedades de los clientes: solo los que calzan por rol (comuna + manzana + predio) con la tabla propiedades;
+  // la nómina de la TGR es nacional y el dueño por nombre no basta para meterlo al calendario.
+  const claveRol = (comuna, mz, pr) => `${normTxt(comuna)}|${Number(mz)}|${Number(pr)}`
+  const dePropiedad = new Map()
+  ;(props || []).forEach(p => { const [mz, pr] = String(p.rol || '').split('-'); if (mz && pr && p.comuna) dePropiedad.set(claveRol(p.comuna, mz, pr), p) })
+  ;(remates || []).filter(r => r.fecha_remate).forEach(r => { const a = String(r.rol_formato || '').split('-'); if (a.length < 3) return
+    const p = dePropiedad.get(claveRol(a.slice(0, -2).join('-'), a[a.length - 2], a[a.length - 1])); if (!p) return
+    const f = fechaChile(r.fecha_remate); const cli = nombre(p.client_id)
+    push({ clave: `remate-${r.sk}`, tipo: 'remate', fecha: f, titulo: `Remate TGR · rol ${r.rol_formato}${cli ? ' · ' + cli : ''}`,
+      descripcion: [`Propiedad de un cliente en remate por cobranza de la TGR.`, cli ? `Cliente: ${cli}` : '', r.dueno ? `Dueño según la TGR: ${r.dueno}` : '', r.juzgado ? `${r.juzgado}${r.rol_judicial ? ' · ' + r.rol_judicial : ''}` : '', r.tasacion ? `Tasación: $${Math.round(Number(r.tasacion)).toLocaleString('es-CL')}` : ''].filter(Boolean).join('\n'), enlace: URL_APP + (p.client_id ? `?cliente=${p.client_id}` : '') }) })
 
   // Diario Oficial: fecha límite de publicación de cada extracto pendiente.
   ;(docs || []).filter(d => ['pendiente', 'plazo_vencido'].includes(d.do_estado) && d.do_publicacion && d.do_publicacion.vence).forEach(d => { const f = String(d.do_publicacion.vence).slice(0, 10)
@@ -53,10 +60,10 @@ export function armarEventos({ hoy, feriados = new Set(), obl = [], dj = [], cum
 }
 
 // Dos calendarios de Google, cada uno con su público: lo tributario del estudio lo ven solo los socios; lo que es de clientes (causas en
-// tabla, plazos, contribuciones, publicaciones del Diario Oficial), todo el equipo.
+// tabla, plazos, remates de la TGR, publicaciones del Diario Oficial), todo el equipo.
 export const CALENDARIOS = [
   { clave: 'estudio', nombre: 'LEA · Estudio', tipos: ['tributario'], publico: 'socios', descripcion: 'Obligaciones tributarias del estudio. Lo mantiene la app automáticamente.' },
-  { clave: 'clientes', nombre: 'LEA · Clientes', tipos: ['causa', 'plazo', 'contribuciones', 'diario_oficial'], publico: 'equipo', descripcion: 'Causas en tabla, plazos y obligaciones de los clientes. Lo mantiene la app automáticamente.' },
+  { clave: 'clientes', nombre: 'LEA · Clientes', tipos: ['causa', 'plazo', 'remate', 'diario_oficial'], publico: 'equipo', descripcion: 'Causas en tabla, plazos, remates y publicaciones de los clientes. Lo mantiene la app automáticamente.' },
 ]
 export const eventosDeCalendario = (eventos, cal) => (eventos || []).filter(e => cal.tipos.includes(e.tipo))
 

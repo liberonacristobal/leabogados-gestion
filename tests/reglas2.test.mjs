@@ -570,21 +570,24 @@ test('calendario: F29 el 20 y cotizaciones el 13 del mes siguiente, al día háb
 })
 
 import { armarEventos as _armarEv } from '../supabase/functions/_shared/calendarioEventos.js'
-test('calendario de Google: tributario, causas en tabla, plazos, contribuciones y Diario Oficial, sin lo vencido ni lo ya presentado', () => {
+test('calendario de Google: tributario, causas en tabla, plazos, remates de la TGR y Diario Oficial, sin lo vencido ni lo ya presentado', () => {
   const ev = _armarEv({ hoy: '2026-10-29', obl: [{ tipo: 'F29', activo: true }, { tipo: 'COT', activo: true }, { tipo: 'F22', activo: true }, { tipo: 'DJ', formulario: '1948', detalle: 'retiros de socios sociedades de personas', activo: true }],
     dj: [{ anio_tributario: 2027, formulario: '1948', fecha: '2027-03-16', detalle: 'Sociedades de personas' }], cumplidas: [{ clave: 'F22-2026' }],
     causas: [{ id: 'c1', estado: 'activa', rol: '19', anio: 2025, caratula: 'DÍAZ / SII', corte_nombre: 'Corte de Apelaciones de La Serena', client_id: 'k1', abogado: 'Cristóbal', ultima_tabla: { fecha: '2026-11-30', sala: 'Primera Sala', numero: 12 } }, { id: 'c2', estado: 'activa', rol: '18', anio: 2025, ultima_tabla: { fecha: '2026-10-01' } }],
     plazos: [{ id: 'p1', titulo: 'Término del arriendo', fecha: '2026-12-15', estado: 'pendiente', client_id: 'k1' }, { id: 'p2', titulo: 'Hecho', fecha: '2026-12-16', estado: 'cumplido' }],
-    props: [{ client_id: 'k1', rol: '1-2', deuda_contribuciones: 0 }, { client_id: 'k1', rol: '1-3', deuda_contribuciones: 5000 }], clientes: [{ id: 'k1', name: 'Javiera Díaz' }],
+    props: [{ client_id: 'k1', comuna: 'Las Condes', rol: '1-2' }, { client_id: 'k1', comuna: 'Linares', rol: '1-3' }],
+    remates: [{ sk: 'r1', rol_formato: 'LAS CONDES-00001-00002', dueno: 'Otro Nombre', juzgado: '1° Juzgado Civil', rol_judicial: 'C-10-2026', fecha_remate: '2026-12-02T14:00:00+00:00', tasacion: 50000000 },
+      { sk: 'r2', rol_formato: 'LAS CONDES-00099-00002', fecha_remate: '2026-12-03T14:00:00+00:00' }], clientes: [{ id: 'k1', name: 'Javiera Díaz' }],
     docs: [{ id: 'd1', cliente_id: 'k1', do_estado: 'pendiente', do_publicacion: { vence: '2026-11-10' } }] })
-  const por = t => ev.filter(e => e.tipo === t)
+  const por = t => ev.filter(e => e.tipo === t)   // r2 (otro rol) no es de un cliente
   assert.ok(por('tributario').some(e => e.clave === 'F29-2026-10' && e.fecha === '2026-11-20')); assert.ok(por('tributario').some(e => e.clave === 'COT-2026-10' && e.fecha === '2026-11-13'))
   assert.ok(!por('tributario').some(e => e.clave === 'F22-2026')); assert.ok(por('tributario').some(e => e.clave === 'F22-2027'))   // la ya presentada no entra
   assert.ok(por('tributario').some(e => /Declaraciones juradas 1948/.test(e.titulo) && e.fecha === '2027-03-16'))
   assert.deepEqual(por('causa').map(e => e.titulo), ['Vista en tabla · Rol 19-2025'])   // la de octubre ya pasó
   assert.match(por('causa')[0].descripcion, /Cliente: Javiera Díaz/)
   assert.deepEqual(por('plazo').map(e => e.fecha), ['2026-12-15']); assert.deepEqual(por('diario_oficial').map(e => e.fecha), ['2026-11-10'])
-  assert.ok(por('contribuciones').some(e => e.fecha === '2026-11-30' && /2 roles de 1 clientes/.test(e.descripcion)))
+  assert.deepEqual(por('remate').map(e => e.clave), ['remate-r1']); assert.equal(por('remate')[0].fecha, '2026-12-02'); assert.match(por('remate')[0].titulo, /Javiera Díaz/)   // solo el que calza por rol
+  assert.equal(por('contribuciones').length, 0)
   assert.ok(ev.every(e => e.fecha >= '2026-10-29'))
 })
 
@@ -595,7 +598,7 @@ test('calendarios: tributario solo a socios, lo de clientes a todo el equipo; ot
   assert.deepEqual(destinatariosCalendario(ms, '@estudio.cl', 'equipo'), ['socio@estudio.cl', 'abogado@estudio.cl'])
   assert.deepEqual(destinatariosCalendario(ms, '', 'equipo'), [])
   assert.deepEqual(destinatariosCalendario(ms, 'estudio.cl', 'equipo', [' ABOGADO@estudio.cl ']), ['socio@estudio.cl'])   // excluido por pedido del estudio
-  const ev = [{ tipo: 'tributario' }, { tipo: 'causa' }, { tipo: 'plazo' }, { tipo: 'contribuciones' }, { tipo: 'diario_oficial' }]
+  const ev = [{ tipo: 'tributario' }, { tipo: 'causa' }, { tipo: 'plazo' }, { tipo: 'remate' }, { tipo: 'diario_oficial' }]
   const [est, cli] = CALENDARIOS
   assert.equal(eventosDeCalendario(ev, est).length, 1)
   assert.equal(eventosDeCalendario(ev, cli).length, 4)

@@ -1,6 +1,6 @@
 // Edge Function: calendario-sync
 // Mantiene dos calendarios compartidos en Google Calendar: «LEA · Estudio» (tributario, solo socios) y «LEA · Clientes» (causas en tabla,
-// plazos de clientes, contribuciones y publicaciones del Diario Oficial, todo el equipo). Se reparte con _shared/calendarioEventos.js. Cada evento lleva una marca propia (lea=1): la función solo crea, actualiza
+// plazos de clientes, remates de la TGR y publicaciones del Diario Oficial, todo el equipo). Se reparte con _shared/calendarioEventos.js. Cada evento lleva una marca propia (lea=1): la función solo crea, actualiza
 // o quita los que creó ella; nunca toca eventos puestos a mano. Lo que debe haber sale de _shared/calendarioEventos.js (función pura, con pruebas).
 //
 // Cuenta de Google: refresh token con permiso de Calendar guardado en drive_auth id=2 (lo deja el botón «Conectar calendario del estudio»).
@@ -26,19 +26,20 @@ const diaSiguiente = (iso: string) => new Date(new Date(iso + 'T12:00').getTime(
 
 async function leerDatos() {
   const hoy = hoyChile()
-  const [obl, dj, cumplidas, causas, plazos, props, clientes, docs, fer] = await Promise.all([
+  const [obl, dj, cumplidas, causas, plazos, props, remates, clientes, docs, fer] = await Promise.all([
     rest('obligaciones_tributarias?select=tipo,formulario,detalle,activo,client_id&client_id=is.null'),
     rest('sii_dj_vencimientos?select=anio_tributario,formulario,fecha,detalle&fecha=gte.' + hoy),
     rest('obligaciones_cumplidas?select=clave,client_id&client_id=is.null'),
     rest('causas?select=id,estado,rol,anio,caratula,corte_nombre,libro_nombre,client_id,abogado,ultima_tabla&estado=eq.activa'),
     rest('plazos?select=id,client_id,titulo,descripcion,tipo,fecha,estado&estado=neq.cumplido'),
-    rest('propiedades?select=client_id,rol,deuda_contribuciones&limit=3000'),
+    rest('propiedades?select=client_id,rol,comuna&limit=3000'),
+    rest('tgr_remates?select=sk,rol_formato,dueno,juzgado,rol_judicial,fecha_remate,tasacion&vigente=eq.true&fecha_remate=gte.' + hoy + '&limit=3000'),
     rest('clients?select=id,name&limit=2000'),
     rest('documentos_notaria?select=id,cliente_id,do_estado,do_publicacion&do_estado=in.(pendiente,plazo_vencido)'),
     rest('feriados?select=fecha'),
   ])
   const feriados = new Set((fer || []).map((f: { fecha: string }) => String(f.fecha).slice(0, 10)))
-  return armarEventos({ hoy, feriados, obl, dj, cumplidas, causas, plazos, props, clientes, docs })
+  return armarEventos({ hoy, feriados, obl, dj, cumplidas, causas, plazos, props, remates, clientes, docs })
 }
 
 async function tokenGoogle(): Promise<string | null> {
@@ -70,7 +71,8 @@ async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof lee
   for (const email of destinatariosCalendario(miembros, dominio, cal.publico, excluir)) {
     try { await g(token, `calendars/${encodeURIComponent(calId)}/acl`, { method: 'POST', body: JSON.stringify({ role: 'reader', scope: { type: 'user', value: email } }) }); acl.push(email) } catch (e) { if ((e as { status?: number }).status !== 409) throw e } }
   // Lo que ya hay (solo eventos con nuestra marca).
-  const hoy = hoyChile(), hasta = eventos.length ? diaSiguiente(eventos[eventos.length - 1].fecha) : diaSiguiente(hoy)
+  // La ventana cubre todo el horizonte (no solo hasta el último evento deseado): así también se quita lo que dejó de corresponder.
+  const hoy = hoyChile(), hasta = diaSiguiente(new Date(new Date(hoy + 'T12:00').getTime() + 300 * 864e5).toISOString().slice(0, 10))
   const existentes = new Map<string, { id: string; summary?: string; description?: string; start?: { date?: string }; colorId?: string }>()
   let pagina: string | undefined
   do {
