@@ -197,6 +197,8 @@ function DialogHost(){
   </Modal>
 }
 
+// Marca del ingreso «Conectar calendario» (vence a los 10 min): esa cuenta no es miembro, así que no se le evalúa el rol por ninguna vía.
+const esIngresoCalendario=()=>{ try{ return Date.now()-Number(localStorage.getItem('conectar_calendario')||0)<10*60*1000 }catch(_){ return false } }
 function LoginScreen({loading, denied, onRetry, calMsg}) {
   // Pantalla de acceso = marca del PRODUCTO (FirmDesk, dirección "Ledger"), no del estudio.
   // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
@@ -6319,7 +6321,7 @@ export default function App() {
     const authSafety=setTimeout(finishAuth,6000)
     getSession().then(({data:{session}})=>{
       setSession(session)
-      if(session){ loadUserRole(session.user.email).then(u=>{ if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) }
+      if(session&&!esIngresoCalendario()){ loadUserRole(session.user.email).then(u=>{ if(u) setUser({email:session.user.email,name:u?.name||session.user.email.split('@')[0]}) }).catch(()=>{}) }
     }).catch(()=>{}).finally(()=>{ clearTimeout(authSafety); finishAuth() })
     // El callback es SÍNCRONO y lo que consulta Supabase va diferido (setTimeout 0). Al abrir la app con el token vencido,
     // supabase-js renueva DENTRO de su inicialización y espera a este callback; si aquí se hace `await supabase.from(...)`,
@@ -6332,7 +6334,7 @@ export default function App() {
       if(session.provider_token)saveDriveToken(session.provider_token)
       const email=session.user.email, prt=session.provider_refresh_token
       setTimeout(async()=>{
-        let esCal=false; try{ esCal=Date.now()-Number(localStorage.getItem('conectar_calendario')||0)<10*60*1000 }catch(_){}   // la marca vence a los 10 min: un intento cancelado no debe cerrar una sesión normal
+        const esCal=esIngresoCalendario()
         if(prt||esCal){
           if(esCal){ try{ localStorage.removeItem('conectar_calendario') }catch(_){}
             const ok=prt?await saveCalendarioRefresh(prt, email):false   // calendario del estudio: fila aparte, no pisa la de Drive/Gmail
@@ -6349,7 +6351,7 @@ export default function App() {
 
   // Reintento de rol: si hay sesión pero el rol no resolvió (falla de red/RLS en loadUserRole), reintenta hasta lograrlo.
   // Evita que el usuario quede con userRole=null (área de contenido en blanco / "pantalla negra") esperando un refresh manual.
-  useEffect(()=>{ if(DEMO||!session||userRole||accessDenied) return; let alive=true, tries=0, timer=null
+  useEffect(()=>{ if(DEMO||!session||userRole||accessDenied||esIngresoCalendario()) return; let alive=true, tries=0, timer=null
     // BUCLE de reintento (antes era de UN solo disparo: si ese reintento fallaba, userRole quedaba null para siempre y la
     // pantalla de carga se quedaba PEGADA hasta recargar a mano). Ahora reintenta con backoff hasta resolver el rol.
     const attempt=async()=>{ if(!alive) return
