@@ -1,8 +1,9 @@
 // Edge Function: calendario-conectar
-// Guarda el permiso de Google Calendar de la cuenta del calendario del estudio (contacto@) en drive_auth id=2. La tabla solo admite
-// escritura del servidor (política drive_auth_solo_servicio), así que la app no puede escribirla directo: llama aquí con su sesión.
+// Guarda el permiso de Google en drive_auth: destino «calendario» (default) = fila 2, la cuenta del calendario del estudio (contacto@);
+// destino «drive» = fila 1, la conexión permanente de Drive y Gmail de quien la autoriza. La tabla solo admite escritura del servidor
+// (política drive_auth_solo_servicio), así que la app no puede escribirla directo: llama aquí con su sesión.
 // Solo acepta a quien entra con una cuenta del dominio del estudio (el de la casilla del agente, learnings config/agente_casilla).
-// Body: { refresh_token }. verify_jwt=true.
+// Body: { refresh_token, destino? }. verify_jwt=true.
 const SB_URL = Deno.env.get('SUPABASE_URL') || '', SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Content-Type': 'application/json' }
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: CORS })
@@ -21,7 +22,7 @@ Deno.serve(async (req) => {
   if (rt.length < 20) return json({ error: 'Falta el permiso de Google' }, 400)
   const r = await fetch(`${SB_URL}/rest/v1/drive_auth?on_conflict=id`, {
     method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ id: 2, refresh_token: rt, email, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ id: body.destino === 'drive' ? 1 : 2, refresh_token: rt, email, updated_at: new Date().toISOString() }),
   })
   if (!r.ok) return json({ error: 'No se pudo guardar: ' + (await r.text()).slice(0, 160) }, 500)
   return json({ ok: true, email })
