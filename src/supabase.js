@@ -92,7 +92,8 @@ export const connectCalendarioEstudio = async () => {
 }
 export const saveCalendarioRefresh = async (refresh_token, email) => {
   if (!refresh_token) return false
-  try { const { error } = await supabase.from('drive_auth').upsert({ id: 2, refresh_token, email, updated_at: new Date().toISOString() }, { onConflict: 'id' }); return !error } catch (_) { return false }
+  // drive_auth solo admite escritura del servidor: se guarda por la función calendario-conectar, con la sesión de quien entró.
+  try { const { data, error } = await supabase.functions.invoke('calendario-conectar', { body: { refresh_token } }); return !error && !!data?.ok } catch (_) { return false }
 }
 
 // Guarda el refresh_token (fila única id=1) para que el servidor renueve el acceso a Drive.
