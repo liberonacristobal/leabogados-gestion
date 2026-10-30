@@ -56,7 +56,7 @@ async function g(token: string, path: string, init: RequestInit = {}): Promise<a
   return d
 }
 
-async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof leerDatos>>, cal: typeof CALENDARIOS[number], miembros: { email: string; es_socio: boolean }[], dominio: string) {
+async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof leerDatos>>, cal: typeof CALENDARIOS[number], miembros: { email: string; es_socio: boolean }[], dominio: string, excluir: string[]) {
   // El calendario se crea una vez y su id queda guardado (el del estudio conserva la clave «id»).
   const llave = cal.clave === 'estudio' ? 'id' : cal.clave
   const ya = await rest(`learnings?select=value&kind=eq.calendario_estudio&key=eq.${llave}&limit=1`)
@@ -67,7 +67,7 @@ async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof lee
   }
   // Quién lo ve (solo lectura): miembros del mismo dominio, según el público del calendario.
   const acl: string[] = []
-  for (const email of destinatariosCalendario(miembros, dominio, cal.publico)) {
+  for (const email of destinatariosCalendario(miembros, dominio, cal.publico, excluir)) {
     try { await g(token, `calendars/${encodeURIComponent(calId)}/acl`, { method: 'POST', body: JSON.stringify({ role: 'reader', scope: { type: 'user', value: email } }) }); acl.push(email) } catch (e) { if ((e as { status?: number }).status !== 409) throw e } }
   // Lo que ya hay (solo eventos con nuestra marca).
   const hoy = hoyChile(), hasta = eventos.length ? diaSiguiente(eventos[eventos.length - 1].fecha) : diaSiguiente(hoy)
@@ -106,9 +106,12 @@ Deno.serve(async (req) => {
     const base = { ok: true, conectado: !!token, total: eventos.length, por_tipo: porTipo }
     const miembros = await rest('miembros?select=email,es_socio'), cuenta = await rest('drive_auth?id=eq.2&select=email')
     const dominio = String(cuenta?.[0]?.email || '').split('@')[1] || ''
-    const calendarios = CALENDARIOS.map(c => ({ ...c, eventos: eventosDeCalendario(eventos, c), ven: destinatariosCalendario(miembros, dominio, c.publico) }))
+    // Correos que el estudio pidió dejar fuera de los calendarios (learnings config/calendario_excluidos, separados por coma).
+    const ex = await rest('learnings?select=value&kind=eq.config&key=eq.calendario_excluidos&limit=1')
+    const excluir = String(Array.isArray(ex) && ex[0]?.value || '').split(',').map(x => x.trim()).filter(Boolean)
+    const calendarios = CALENDARIOS.map(c => ({ ...c, eventos: eventosDeCalendario(eventos, c), ven: destinatariosCalendario(miembros, dominio, c.publico, excluir) }))
     if (b.escribir !== true || !token) return json({ ...base, simulacion: true, calendarios: calendarios.map(c => ({ calendario: c.nombre, lo_ven: c.ven, total: c.eventos.length, proximos: c.eventos.slice(0, b.max || 40).map((e: { fecha: string; titulo: string; tipo: string }) => `${e.fecha} · ${e.titulo} [${e.tipo}]`) })) })
-    const hechos = []; for (const c of calendarios) hechos.push(await sincronizar(token, c.eventos, c, miembros, dominio))
+    const hechos = []; for (const c of calendarios) hechos.push(await sincronizar(token, c.eventos, c, miembros, dominio, excluir))
     return json({ ...base, calendarios: hechos })
   } catch (e) { return json({ ok: false, error: String((e as Error).message || e).slice(0, 300) }, 500) }
 })
