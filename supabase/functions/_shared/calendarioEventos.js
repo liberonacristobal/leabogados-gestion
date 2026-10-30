@@ -51,3 +51,26 @@ export function armarEventos({ hoy, feriados = new Set(), obl = [], dj = [], cum
 
   return ev.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.clave.localeCompare(b.clave))
 }
+
+// Dos calendarios de Google, cada uno con su público: lo tributario del estudio lo ven solo los socios; lo que es de clientes (causas en
+// tabla, plazos, contribuciones, publicaciones del Diario Oficial), todo el equipo.
+export const CALENDARIOS = [
+  { clave: 'estudio', nombre: 'LEA · Estudio', tipos: ['tributario'], publico: 'socios', descripcion: 'Obligaciones tributarias del estudio. Lo mantiene la app automáticamente.' },
+  { clave: 'clientes', nombre: 'LEA · Clientes', tipos: ['causa', 'plazo', 'contribuciones', 'diario_oficial'], publico: 'equipo', descripcion: 'Causas en tabla, plazos y obligaciones de los clientes. Lo mantiene la app automáticamente.' },
+]
+export const eventosDeCalendario = (eventos, cal) => (eventos || []).filter(e => cal.tipos.includes(e.tipo))
+
+// Correos que ven un calendario: solo miembros del mismo dominio que la cuenta dueña (otro estudio o un correo personal nunca entran);
+// 'socios' = los marcados socio, 'equipo' = todos. Sin repetidos.
+export function destinatariosCalendario(miembros, dominio, publico) {
+  const dom = String(dominio || '').toLowerCase().replace(/^@/, '')
+  if (!dom) return []
+  const out = new Set()
+  for (const m of miembros || []) {
+    const e = String(m?.email || '').toLowerCase().trim()
+    if (!e.endsWith('@' + dom)) continue
+    if (publico === 'socios' && !m.es_socio) continue
+    out.add(e)
+  }
+  return [...out]
+}

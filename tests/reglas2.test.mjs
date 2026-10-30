@@ -587,3 +587,16 @@ test('calendario de Google: tributario, causas en tabla, plazos, contribuciones 
   assert.ok(por('contribuciones').some(e => e.fecha === '2026-11-30' && /2 roles de 1 clientes/.test(e.descripcion)))
   assert.ok(ev.every(e => e.fecha >= '2026-10-29'))
 })
+
+import { CALENDARIOS, eventosDeCalendario, destinatariosCalendario } from '../supabase/functions/_shared/calendarioEventos.js'
+test('calendarios: tributario solo a socios, lo de clientes a todo el equipo; otro dominio nunca entra', () => {
+  const ms = [{ email: 'Socio@estudio.cl', es_socio: true }, { email: 'abogado@estudio.cl', es_socio: false }, { email: 'socio@gmail.com', es_socio: true }, { email: 'socio@estudio.cl', es_socio: true }, { email: '', es_socio: true }]
+  assert.deepEqual(destinatariosCalendario(ms, 'estudio.cl', 'socios'), ['socio@estudio.cl'])
+  assert.deepEqual(destinatariosCalendario(ms, '@estudio.cl', 'equipo'), ['socio@estudio.cl', 'abogado@estudio.cl'])
+  assert.deepEqual(destinatariosCalendario(ms, '', 'equipo'), [])
+  const ev = [{ tipo: 'tributario' }, { tipo: 'causa' }, { tipo: 'plazo' }, { tipo: 'contribuciones' }, { tipo: 'diario_oficial' }]
+  const [est, cli] = CALENDARIOS
+  assert.equal(eventosDeCalendario(ev, est).length, 1)
+  assert.equal(eventosDeCalendario(ev, cli).length, 4)
+  assert.equal(eventosDeCalendario(ev, est).length + eventosDeCalendario(ev, cli).length, ev.length)   // todo evento cae en un calendario y solo en uno
+})
