@@ -180,7 +180,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
   const [msgs, setMsgs] = useState({})         // id de solicitud → Message-ID del correo enviado
   const [confs, setConfs] = useState({})       // id de solicitud → decisión sobre la respuesta del cliente
   const [sug, setSug] = useState({})           // id de solicitud → respuesta del cliente por confirmar
-  const cacheKey = `fd_fondos_correo_${user?.email || ''}`
+  const cacheKey = `fd_fondos_correo_v2_${user?.email || ''}`
   useEffect(() => {
     let vivo = true
     if (DEMO) return
