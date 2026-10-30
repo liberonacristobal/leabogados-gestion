@@ -197,7 +197,7 @@ function DialogHost(){
   </Modal>
 }
 
-function LoginScreen({loading, denied, onRetry}) {
+function LoginScreen({loading, denied, onRetry, calMsg}) {
   // Pantalla de acceso = marca del PRODUCTO (FirmDesk, dirección "Ledger"), no del estudio.
   // Colores propios de FirmDesk (fuera de la paleta C del tenant, a propósito). El ingreso sigue siendo Google corporativo, sin cambios.
   const sm = typeof window!=='undefined' && window.innerWidth < 600
@@ -218,6 +218,7 @@ function LoginScreen({loading, denied, onRetry}) {
       </div>
       <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?27:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
       <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:denied?20:38}}>Every number, in its place.</div>
+      {calMsg&&!denied&&<div style={{maxWidth:320,background:'#E8F6EF',border:'1px solid #BFE5D2',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#0E7A41',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>{calMsg}</div>}
       {denied&&<div style={{maxWidth:320,background:'#FDECEA',border:'1px solid #F3C9C4',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#A3312B',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>Tu cuenta no tiene acceso a FirmDesk. Pídele a un administrador de tu oficina que te invite y vuelve a entrar.</div>}
       <button onClick={()=>{ onRetry&&onRetry(); signInWithGoogle() }} disabled={loading} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:9,minWidth:sm?220:240,background:'#fff',border:'1px solid #DADFDE',borderRadius:12,padding:'13px 18px',color:INK,fontSize:14,fontWeight:600,cursor:loading?'default':'pointer'}}>
         {loading?<Spin/>:<>
@@ -5865,6 +5866,7 @@ export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
+  const [calMsg,setCalMsg]=useState('')   // resultado de «Conectar calendario»: esa cuenta (contacto@) solo guarda su permiso de Calendar y sale
   const [accessDenied,setAccessDenied]=useState(false)   // autenticó pero no está invitado (sin fila en miembros ni user_roles) → cerrar sesión + avisar, no auto-crear
   const [user,setUser]=useState(null)
   // Etapa 2 multi-tenant: al resolver la sesión, cargar la identidad del estudio del usuario desde la tabla `estudios` (la RLS la filtra a la suya) → BRAND desde la DB, con la constante de fallback. Para LEA los valores son idénticos (cero cambio visible).
@@ -6330,8 +6332,12 @@ export default function App() {
       if(session.provider_token)saveDriveToken(session.provider_token)
       const email=session.user.email, prt=session.provider_refresh_token
       setTimeout(async()=>{
-        if(prt){ let esCal=false; try{ esCal=localStorage.getItem('conectar_calendario')==='1' }catch(_){}
-          if(esCal){ try{ localStorage.removeItem('conectar_calendario') }catch(_){}; saveCalendarioRefresh(prt, email) }   // calendario del estudio: fila aparte, no pisa la de Drive/Gmail
+        let esCal=false; try{ esCal=Date.now()-Number(localStorage.getItem('conectar_calendario')||0)<10*60*1000 }catch(_){}   // la marca vence a los 10 min: un intento cancelado no debe cerrar una sesión normal
+        if(prt||esCal){
+          if(esCal){ try{ localStorage.removeItem('conectar_calendario') }catch(_){}
+            const ok=prt?await saveCalendarioRefresh(prt, email):false   // calendario del estudio: fila aparte, no pisa la de Drive/Gmail
+            setCalMsg(ok?'Calendario conectado con '+email+'. Entra ahora con tu cuenta.':'No se pudo guardar la conexión del calendario. Vuelve a intentarlo.')
+            try{ await signOut() }catch(_){}; return }   // la cuenta del calendario no es un miembro: no se evalúa el rol ni se deja la sesión abierta
           else saveDriveRefresh(prt, email) }   // conexión permanente de Drive (plan B)
         if(event==='TOKEN_REFRESHED') return   // renovar el token no cambia el rol (y no debe mandar al limitado a Tareas cada hora)
         let u=null; try{ u = await loadUserRole(email) }catch(_){}
@@ -8455,7 +8461,7 @@ export default function App() {
       </div>}
     </div>)
   if(loadingAuth) return bootScreen
-  if(!session) return <LoginScreen loading={loadingAuth} denied={accessDenied} onRetry={()=>setAccessDenied(false)}/>
+  if(!session) return <LoginScreen loading={loadingAuth} denied={accessDenied} calMsg={calMsg} onRetry={()=>setAccessDenied(false)}/>
   // Sesión OK pero el rol aún no resuelve (o falló y está reintentando): mismo loader, NUNCA el área de contenido en blanco.
   if(!userRole) return bootScreen
 
