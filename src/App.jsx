@@ -1471,7 +1471,7 @@ const TEMAS_PROCESOS = [
   ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos|xml-emitidos)/],
   ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|causas-monitor|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
-  ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal|lector-documentos)/],
+  ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal)/],
   ['ofi','Oficina y costos',/^(oficina-|valores-contadora)/],
   ['equipo','Resúmenes al equipo',/^(tu-semana|resumen-lunes|gastos-limitado|horas-)/],
   ['control','Control de la app',/./],
@@ -1507,7 +1507,6 @@ function resumenCorrida(p){
     if(/^notaria-documentos/.test(j)&&r.leidos!=null) return nn(r.leidos,'documento leído','documentos leídos')
     if(j==='sii-radar'&&r.inserted!=null) return nn(r.inserted,'norma nueva','normas nuevas')
     if(j==='tgr-remates'&&r.remates!=null) return `${r.remates} remates · ${r.de_clientes??0} de clientes`
-    if(j==='lector-documentos'&&r.leidos!=null) return `${nn(r.leidos,'documento leído','documentos leídos')} · ${r.con_plazos??0} con plazos · ${r.por_leer??0} por leer`
   }
   return p.ultima?`última ${fechaHoraCL(p.ultima)}`:`primera: ${horarioProceso(p.schedule)}`
 }
@@ -1518,17 +1517,13 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
   // proyectos y evidencias de tareas). Cada fila lleva a su lugar; aquí no se aprueba nada.
   const [pa,setPa]=useState(null), [paAb,setPaAb]=useState(!!isDesktop), [temasAb,setTemasAb]=useState(()=>new Set())
   useEffect(()=>{ let on=true
-    if(DEMO){ setPa({bandeja:_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso'),hallazgos:[],pmo:0,evid:0,docPlazos:[]}); return ()=>{ on=false } }
+    if(DEMO){ setPa({bandeja:_DEMO_BANDEJA.filter(r=>r.estado==='pendiente'||r.estado==='sospechoso'),hallazgos:[],pmo:0,evid:0}); return ()=>{ on=false } }
     Promise.all([supabase.from('agente_bandeja').select('tipo,estado,asunto,propuesta').in('estado',['pendiente','sospechoso']),
       supabase.from('auditoria_hallazgos').select('detector,titulo').is('resuelto_at',null),
       supabase.from('pmo_sugerencias').select('id',{count:'exact',head:true}).eq('estado','pendiente'),
-      supabase.from('tasks').select('id',{count:'exact',head:true}).not('evidencia','is',null).neq('status','Terminado'),
-      supabase.from('documentos_lectura').select('client_id,plazos').not('plazos','is',null)])
-      .then(([b,h,pm,ev,dl])=>{ if(!on) return
-        // Plazos con fecha que el Lector de documentos dejó por confirmar (se confirman en el calendario de cada cliente).
-        // Solo plazos que aún no pasan: una fecha vencida leída de un documento antiguo no es un plazo por confirmar.
-        const hoyDp=isoLocal(Date.now()), docPlazos=[]; (dl.data||[]).forEach(l=>(Array.isArray(l.plazos)?l.plazos:[]).forEach(p=>{ if(p.estado==='propuesto'&&p.fecha&&String(p.fecha).slice(0,10)>=hoyDp) docPlazos.push(l.client_id) }))
-        setPa({bandeja:b.data||[],hallazgos:h.data||[],pmo:pm.count||0,evid:ev.count||0,docPlazos}) },()=>{ if(on) setPa({bandeja:[],hallazgos:[],pmo:0,evid:0,docPlazos:[]}) })
+      supabase.from('tasks').select('id',{count:'exact',head:true}).not('evidencia','is',null).neq('status','Terminado')])
+      .then(([b,h,pm,ev])=>{ if(!on) return
+        setPa({bandeja:b.data||[],hallazgos:h.data||[],pmo:pm.count||0,evid:ev.count||0}) },()=>{ if(on) setPa({bandeja:[],hallazgos:[],pmo:0,evid:0}) })
     return ()=>{ on=false } },[])
   const [procs,setProcs]=useState(null), [err,setErr]=useState(null), [aviso,setAviso]=useState(null), [sel,setSel]=useState(null), [corr,setCorr]=useState(null)
   useEffect(()=>{ let on=true; cargarProcesos().then(d=>on&&setProcs(d),e=>on&&setErr(e.message||String(e)))
@@ -1590,7 +1585,6 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
     Object.entries(gh).forEach(([k,hs])=>out.push({k:'h'+k,t:HALLAZGO_TIPO[k]||String(hs[0].titulo||'Hallazgo').split(' · ')[0],s:'Revisión de datos',n:hs.length,on:onOpenRevision}))
     if(pa.pmo) out.push({k:'pmo',t:'Pasos sugeridos de proyectos',s:'Mis proyectos',n:pa.pmo,on:onOpenCartera})
     if(pa.evid) out.push({k:'ev',t:'Tareas cumplidas según los registros',s:'Tareas · por confirmar',n:pa.evid,on:onOpenTareas})
-    if(pa.docPlazos?.length){ const cs=[...new Set(pa.docPlazos)]; out.push({k:'dp',t:'Plazos encontrados en documentos',s:`${cs.length} cliente${cs.length===1?'':'s'} · se confirman en el calendario de su ficha`,n:pa.docPlazos.length,on:onOpenClientFicha?()=>onOpenClientFicha(cs[0]):null}) }
     return out })()
   const paTot=paFilas.reduce((a,x)=>a+x.n,0)
   return wrap(<>

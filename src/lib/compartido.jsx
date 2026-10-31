@@ -3006,7 +3006,7 @@ export const CAL_CLI_DIAS = 60
 
 export const OBL_CLIENTE = [['F29',null,'F29 mensual'],['F22',null,'F22 anual'],['DJ','1879','DJ 1879 · retenciones de honorarios'],['DJ','1887','DJ 1887 · sueldos'],['DJ','1948','DJ 1948 · retiros de socios'],['PATENTE',null,'Patente municipal']]
 
-export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[], dj=[], lect=[]}={}){
+export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[], obl=[], dj=[]}={}){
   hoy = hoy || isoLocal(Date.now())
   const hasta=isoLocal(new Date(new Date(hoy+'T12:00').getTime()+CAL_CLI_DIAS*864e5)), Y=+hoy.slice(0,4), items=[]
   const dentro=f=>f&&f<=hasta, push=x=>{ if(dentro(x.fecha)) items.push({...x, vencido:x.fecha<hoy}) }
@@ -3017,9 +3017,6 @@ export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[],
   const activas=(causas||[]).filter(c=>c.estado==='activa'), enTabla=activas.filter(c=>c.ultima_tabla?.fecha&&c.ultima_tabla.fecha>=hoy)
   enTabla.forEach(c=>push({fecha:c.ultima_tabla.fecha, t:`Vista en tabla · Rol ${c.rol}-${c.anio}`, s:[String(c.corte_nombre||'').replace(/^Corte de Apelaciones de /,'C.A. de '),c.ultima_tabla.sala,c.ultima_tabla.numero?`N° ${c.ultima_tabla.numero}`:''].filter(Boolean).join(' · '), go:'financiero'}))
   ;(plazos||[]).filter(p=>p.estado!=='cumplido'&&p.tipo!=='tabla'&&p.fecha).forEach(p=>push({fecha:String(p.fecha).slice(0,10), t:p.titulo||'Plazo', s:p.descripcion||'Plazo del contrato', go:'plazos'}))
-  // Plazos que el Lector de documentos encontró en la carpeta del cliente: quedan «por confirmar» hasta que una persona los
-  // confirme (pasan a la tabla plazos y salen de aquí) o los descarte. Los sin fecha exacta no van al calendario.
-  ;(lect||[]).forEach(l=>(Array.isArray(l.plazos)?l.plazos:[]).forEach((p,i)=>{ if(p.estado==='propuesto'&&p.fecha) push({fecha:p.fecha, t:p.titulo, s:`En documento · ${l.nombre||'Drive'}`, porConfirmar:{lect:l, idx:i}}) }))
   const elegidas=(obl||[]).filter(o=>o.activo!==false)
   elegidas.forEach(o=>{ if(o.tipo==='F29'){ const ym=hoy.slice(0,7); let per=_ymMas(ym,-1); if(venceCalTrib('F29',per)<hoy) per=ym; push({fecha:venceCalTrib('F29',per), t:`F29 de ${_mesNom(per).split(' ')[0]}`, s:'Obligación tributaria'}) }
     else if(o.tipo==='F22'){ let f=_habilDesde(`${Y}-04-30`); if(f<hoy) f=_habilDesde(`${Y+1}-04-30`); push({fecha:f, t:`F22 · Renta AT ${f.slice(0,4)}`, s:'Obligación tributaria'}) }
@@ -3031,14 +3028,13 @@ export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[],
 
 // Lo que el calendario de un cliente lee de la base (la ficha y Counsel AI usan la misma lectura).
 export async function cargarFuentesCalCliente(clientId){
-  const [d,p,o,l]=await Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
-    supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId),
-    supabase.from('documentos_lectura').select('id,drive_file_id,nombre,plazos').eq('client_id',clientId).not('plazos','is',null)])
-  return {docs:d.data||[], plazos:p.data||[], obl:o.data||[], lect:l.data||[]}
+  const [d,p,o]=await Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
+    supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId)])
+  return {docs:d.data||[], plazos:p.data||[], obl:o.data||[]}
 }
 // Calendario completo de un cliente para Counsel AI: mismas fuentes y misma función que la ficha (calendarioCliente).
 export async function calendarioDeCliente(clientId){
-  if(DEMO) return calendarioCliente({props:_DEMO_PROPIEDADES.filter(p=>p.client_id===clientId), causas:_DEMO_CAUSAS.filter(c=>c.client_id===clientId), docs:[], plazos:[], obl:[], dj:[], lect:[]})
+  if(DEMO) return calendarioCliente({props:_DEMO_PROPIEDADES.filter(p=>p.client_id===clientId), causas:_DEMO_CAUSAS.filter(c=>c.client_id===clientId), docs:[], plazos:[], obl:[], dj:[]})
   const [pr,ca,f,tr]=await Promise.all([supabase.from('propiedades').select('*').eq('client_id',clientId).limit(2000), supabase.from('causas').select('*').neq('estado','terminada').eq('client_id',clientId), cargarFuentesCalCliente(clientId), cargarCalTrib()])
   return calendarioCliente({props:pr.data||[], causas:ca.data||[], ...f, dj:tr?.dj||[]})
 }
@@ -3053,9 +3049,8 @@ export async function causasActivas(clientId=null){
 export function useCalCliente(clientId){
   const [f,setF]=useState(null), [dj,setDj]=useState([])
   useEffect(()=>{ let v=true; cargarCalTrib().then(x=>{ if(v) setDj(x.dj||[]) })
-    if(DEMO){ const f40=isoLocal(Date.now()+40*864e5)   // ejemplo inventado: un plazo que el lector encontró en un contrato
-      setF({docs:[], plazos:[], obl:[], lect:[{id:'dl1',drive_file_id:'demo-arriendo',nombre:'Contrato de arriendo bodega.pdf',plazos:[{titulo:'Término del arriendo',fecha:f40,cita:'El presente contrato tendrá una duración de un año a contar de su firma.',estado:'propuesto'}]}]}); return ()=>{ v=false } }
-    cargarFuentesCalCliente(clientId).then(r=>{ if(v) setF(r) },()=>{ if(v) setF({docs:[], plazos:[], obl:[], lect:[]}) })
+    if(DEMO){ setF({docs:[], plazos:[], obl:[]}); return ()=>{ v=false } }
+    cargarFuentesCalCliente(clientId).then(r=>{ if(v) setF(r) },()=>{ if(v) setF({docs:[], plazos:[], obl:[]}) })
     return ()=>{ v=false } },[clientId])
   // Elegir/quitar una obligación tributaria del cliente (queda guardada: no se vuelve a preguntar).
   const alternar=useCallback(async(tipo,formulario,detalle)=>{ const ex=(f?.obl||[]).find(o=>o.tipo===tipo&&String(o.formulario||'')===String(formulario||''))
@@ -3066,17 +3061,7 @@ export function useCalCliente(clientId){
     if(error){ setF(x=>({...x, obl:ex?x.obl.map(o=>o===nuevo?ex:o):x.obl.filter(o=>o!==nuevo)})); appAlert('No se pudo guardar: '+error.message); return }
     setF(x=>({...x, obl:x.obl.map(o=>o===nuevo?data:o)}))
     logActividad(nuevo.activo?'calendario.obligacion_cliente':'calendario.obligacion_cliente_quitada',{tabla:'clients',id:clientId,detalle:{title:`${detalle||tipo} ${nuevo.activo?'elegida':'quitada'} para el cliente`}}) },[clientId,f])
-  // Plazo encontrado en un documento: confirmar = pasa a la tabla plazos (con la cita como descripción); descartar = no vuelve a salir.
-  const resolverPlazoDoc=useCallback(async({lect,idx},confirmar)=>{ const p=(lect.plazos||[])[idx]; if(!p) return
-    let plazoId=null
-    if(confirmar&&!DEMO){ const {data,error}=await supabase.from('plazos').insert({client_id:clientId,titulo:p.titulo,descripcion:p.cita||p.descripcion||null,tipo:'plazo',fecha:p.fecha,estado:'pendiente',fuente:'documento',file_id:lect.drive_file_id}).select('*').single()
-      if(error){ appAlert('No se pudo confirmar el plazo: '+error.message); return } plazoId=data.id; setF(x=>({...x, plazos:[...(x.plazos||[]),data]})) }
-    if(confirmar&&DEMO) setF(x=>({...x, plazos:[...(x.plazos||[]),{id:'demo-'+Date.now(),client_id:clientId,titulo:p.titulo,descripcion:p.cita,tipo:'plazo',fecha:p.fecha,estado:'pendiente',fuente:'documento'}]}))
-    const nuevos=(lect.plazos||[]).map((q,j)=>j===idx?{...q,estado:confirmar?'confirmado':'descartado',...(plazoId?{plazo_id:plazoId}:{})}:q)
-    if(!DEMO){ const {error}=await supabase.from('documentos_lectura').update({plazos:nuevos}).eq('id',lect.id); if(error){ appAlert('No se pudo guardar: '+error.message); return } }
-    setF(x=>({...x, lect:(x.lect||[]).map(l=>l.id===lect.id?{...l,plazos:nuevos}:l)}))
-    logActividad(confirmar?'documentos.plazo_confirmado':'documentos.plazo_descartado',{tabla:'clients',id:clientId,detalle:{title:`Plazo ${confirmar?'confirmado':'descartado'} del documento «${lect.nombre||''}»: ${p.titulo}${p.fecha?` · ${fmtFechaDMY(p.fecha)}`:''}`}}) },[clientId])
-  return {f, dj, alternar, resolverPlazoDoc} }
+  return {f, dj, alternar} }
 
 // Fuentes del calendario (se leen una vez por sesión; `recargarCalTrib` al marcar una presentada).
 export let _calTribP=null
