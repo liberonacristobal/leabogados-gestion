@@ -20,6 +20,8 @@
 
 import { SMTPClient } from "../_shared/envios.ts";
 import { enviarPush } from "../_shared/push.ts";
+import { cruzarSalas, leerTablaSalas } from "../_shared/salasXls.js";
+import * as XLSX from "npm:xlsx@0.18.5";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -201,7 +203,7 @@ async function procesarMonitor(k: any, causas: any[], salasPorCorte: Map<string,
   const corteDe = (c: any) => esSuprema(c) ? "Corte Suprema" : c.corte_nombre;
   // Revisiones ya anotadas hoy (para no repetir «Sin tabla hoy» en el seguimiento cada hora).
   const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
-  const segHoy = new Set(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&select=causa_id`).catch(() => [])) || []).map((s: { causa_id: string }) => s.causa_id));
+  const segHoy = new Set<string>(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&select=causa_id`).catch(() => [])) || []).map((s: { causa_id: string }) => s.causa_id));
   const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
   const fallidas: { c: Record<string, string>; motivo: string }[] = [];
   const origen = quien.startsWith("agente") ? "agente" : "manual", por = quien.startsWith("agente") ? null : quien;
@@ -303,6 +305,46 @@ async function avisarFallas(k: { fallasA: string[]; miembros: any[] }, fallidas:
   return { enviado: ok, para: k.fallasA, motivo: motivo || null };
 }
 
+// Programación de Salas (con días de anticipación) de nuestras causas: la más próxima desde hoy queda en la causa, avisa al abogado una
+// vez por fecha, crea el plazo «Vista en tabla» y deja el seguimiento. La usan el computador de la oficina y el correo de la suscripción.
+// porCorreo: viene del Excel de la suscripción, que solo trae lo confirmado de la semana; no prueba que la causa se haya revisado
+// hoy (no limpia «No se pudo revisar» ni marca la revisión del computador) y la ausencia en el archivo no es «Sin tabla».
+// deno-lint-ignore no-explicit-any
+async function aplicarProgramacion(k: any, porId: Map<string, any>, filasPorCausa: any[], o: { dryRun: boolean; quien: string; hoy: string; fuente: string; segHoy: Set<string>; segPost: (row: Record<string, unknown>) => Promise<void>; porCorreo?: boolean }, out: any) {
+  const { dryRun, quien, hoy, fuente, segHoy, segPost } = o;
+  for (const r of filasPorCausa) {
+    const c = porId.get(r.causa_id); if (!c) continue;
+    const base = { causa_id: c.id, estudio_id: c.estudio_id, origen: "agente", por: null };
+    if (r.error) { out.errores.push({ causa: `${c.rol}-${c.anio}`, error: r.error }); if (!segHoy.has(c.id)) await segPost({ ...base, en_tabla: false, tabla: null, aviso: null, resultado: `Programación de Salas: no se pudo consultar (${r.error})` }); continue; }
+    out.programacion++;
+    // deno-lint-ignore no-explicit-any
+    const filas = (Array.isArray(r.filas) ? r.filas : []).filter((x: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha || "")));
+    // deno-lint-ignore no-explicit-any
+    const prox = filas.filter((x: any) => x.fecha >= hoy).sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))[0] || null;
+    // Consulta correcta: la causa deja de estar «No se pudo revisar».
+    const patch: Record<string, unknown> = o.porCorreo ? {} : { programacion_at: new Date().toISOString(), ultima_error: null, ultima_error_at: null };
+    let av: unknown = null;
+    if (prox) {
+      out.en_tabla.push({ causa: `${c.rol}-${c.anio}`, ...prox });
+      // El día de la vista manda el Monitor (estado en vivo); antes, la programación.
+      if (!(c.ultima_tabla?.fuente === "monitor" && c.ultima_tabla?.fecha === hoy)) patch.ultima_tabla = { sala: prox.sala || "", numero: String(prox.numero || ""), fecha: prox.fecha, caratula: prox.caratula || "", ingreso: prox.ingreso || "", fuente: "programacion", revisado_at: new Date().toISOString() };
+      if (prox.fecha !== String(c.avisado_fecha || "").slice(0, 10)) {
+        const { para, cc, nombreA } = k.destinos(c);
+        const asunto = `Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`;
+        av = await avisarCausa({ ON: k.ON, dryRun, quien }, c, para, cc, "en_tabla", asunto,
+          `${c.caratula || k.nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero} de la tabla` : ""}, para el ${dmy(prox.fecha)}`,
+          `${P(`Hola ${esc(nombreA)},`)}${P("La siguiente causa fue puesta en tabla:")}${FILAS([["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(k.nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: Programación de Salas, pjud.cl, ${fuente}. La vista quedó en el calendario de plazos de la app; el día de la vista la app sigue la sala y avisa cuando la causa esté próxima a verse.`)}`);
+        out.avisos.push({ tipo: "en_tabla", causa: `${c.rol}-${c.anio}`, ...(av as object) });
+        if (!dryRun) await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre}${prox.sala ? ` · ${prox.sala}` : ""}${prox.numero ? ` · N° ${prox.numero}` : ""}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: prox.fecha, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
+        patch.avisado_fecha = prox.fecha;
+      }
+    }
+    if (av || !segHoy.has(c.id)) await segPost({ ...base, en_tabla: !!prox, tabla: prox, aviso: av,
+      resultado: prox ? `En tabla (Programación de Salas): ${prox.sala || "sala por informar"}${prox.numero ? `, N° ${prox.numero}` : ""}, ${dmy(prox.fecha)}${av ? ((av as { enviado: boolean }).enviado ? " · aviso enviado" : ` · aviso NO enviado: ${(av as { motivo: string }).motivo}`) : ""}` : "Sin tabla (Programación de Salas, confirmado)" });
+    if (!dryRun && Object.keys(patch).length) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) }).catch(() => null);
+  }
+}
+
 // Salas por causa (la tabla con su fecha, con anticipación) y el Estado Diario de su tribunal (resoluciones del día). Pocas
 // consultas al día; si pjud.cl le pide captcha, se detiene y lo informa (nunca lo resuelve). Se identifica con su propia clave
 // (header x-pjud-local), cuya huella SHA-256 está en learnings config causas_local_token_sha256; la clave vive solo en ese equipo.
@@ -323,41 +365,11 @@ async function atenderLocal(body: any, token: string) {
   // deno-lint-ignore no-explicit-any
   const porId = new Map<string, any>(k.todas.map((c: { id: string }) => [c.id, c]));
   const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
-  const segHoy = new Set(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&resultado=like.*Programación de Salas*&select=causa_id`).catch(() => [])) || []).map((x: { causa_id: string }) => x.causa_id));
+  const segHoy = new Set<string>(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&resultado=like.*Programación de Salas*&select=causa_id`).catch(() => [])) || []).map((x: { causa_id: string }) => x.causa_id));
   const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
   const out = { programacion: 0, en_tabla: [] as unknown[], resoluciones: [] as unknown[], avisos: [] as unknown[], errores: [] as unknown[], captcha: !!body.captcha };
   const fuente = `consultada desde el computador de la oficina el ${dmy(hoy)} a las ${hora}`;
-  for (const r of Array.isArray(body.programacion) ? body.programacion : []) {
-    const c = porId.get(r.causa_id); if (!c) continue;
-    const base = { causa_id: c.id, estudio_id: c.estudio_id, origen: "agente", por: null };
-    if (r.error) { out.errores.push({ causa: `${c.rol}-${c.anio}`, error: r.error }); if (!segHoy.has(c.id)) await segPost({ ...base, en_tabla: false, tabla: null, aviso: null, resultado: `Programación de Salas: no se pudo consultar (${r.error})` }); continue; }
-    out.programacion++;
-    // deno-lint-ignore no-explicit-any
-    const filas = (Array.isArray(r.filas) ? r.filas : []).filter((x: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha || "")));
-    // deno-lint-ignore no-explicit-any
-    const prox = filas.filter((x: any) => x.fecha >= hoy).sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))[0] || null;
-    // Consulta correcta: la causa deja de estar «No se pudo revisar».
-    const patch: Record<string, unknown> = { programacion_at: new Date().toISOString(), ultima_error: null, ultima_error_at: null };
-    let av: unknown = null;
-    if (prox) {
-      out.en_tabla.push({ causa: `${c.rol}-${c.anio}`, ...prox });
-      // El día de la vista manda el Monitor (estado en vivo); antes, la programación.
-      if (!(c.ultima_tabla?.fuente === "monitor" && c.ultima_tabla?.fecha === hoy)) patch.ultima_tabla = { sala: prox.sala || "", numero: String(prox.numero || ""), fecha: prox.fecha, caratula: prox.caratula || "", ingreso: prox.ingreso || "", fuente: "programacion", revisado_at: new Date().toISOString() };
-      if (prox.fecha !== String(c.avisado_fecha || "").slice(0, 10)) {
-        const { para, cc, nombreA } = k.destinos(c);
-        const asunto = `Causa en tabla: Rol ${c.rol}-${c.anio} - ${c.corte_nombre} - ${dmy(prox.fecha)}`;
-        av = await avisarCausa({ ON: k.ON, dryRun, quien }, c, para, cc, "en_tabla", asunto,
-          `${c.caratula || k.nomCli[c.client_id] || "Causa"} · Rol ${c.rol}-${c.anio}: ${c.corte_nombre}${prox.sala ? `, ${prox.sala}` : ""}${prox.numero ? `, N° ${prox.numero} de la tabla` : ""}, para el ${dmy(prox.fecha)}`,
-          `${P(`Hola ${esc(nombreA)},`)}${P("La siguiente causa fue puesta en tabla:")}${FILAS([["Causa", esc(c.caratula || prox.caratula || "")], ["Cliente", esc(k.nomCli[c.client_id] || "")], ["Rol", `${esc(c.rol)}-${c.anio}${c.libro_nombre ? ` · ${esc(c.libro_nombre)}` : ""}`], ["Corte", esc(c.corte_nombre)], ["Sala", esc(prox.sala || "")], ["N° en la tabla", esc(prox.numero || "")], ["Fecha de la vista", dmy(prox.fecha)], ["Abogado", esc(c.abogado || "")]])}${PIE(`Fuente: Programación de Salas, pjud.cl, ${fuente}. La vista quedó en el calendario de plazos de la app; el día de la vista la app sigue la sala y avisa cuando la causa esté próxima a verse.`)}`);
-        out.avisos.push({ tipo: "en_tabla", causa: `${c.rol}-${c.anio}`, ...(av as object) });
-        if (!dryRun) await rest("plazos", { method: "POST", body: JSON.stringify({ client_id: c.client_id, titulo: `Vista en tabla · Rol ${c.rol}-${c.anio}`, descripcion: `${c.corte_nombre}${prox.sala ? ` · ${prox.sala}` : ""}${prox.numero ? ` · N° ${prox.numero}` : ""}${c.caratula ? ` · ${c.caratula}` : ""}`, tipo: "tabla", fecha: prox.fecha, estado: "pendiente", fuente: "causas-tablas", estudio_id: c.estudio_id }) }).catch(() => null);
-        patch.avisado_fecha = prox.fecha;
-      }
-    }
-    if (av || !segHoy.has(c.id)) await segPost({ ...base, en_tabla: !!prox, tabla: prox, aviso: av,
-      resultado: prox ? `En tabla (Programación de Salas): ${prox.sala || "sala por informar"}${prox.numero ? `, N° ${prox.numero}` : ""}, ${dmy(prox.fecha)}${av ? ((av as { enviado: boolean }).enviado ? " · aviso enviado" : ` · aviso NO enviado: ${(av as { motivo: string }).motivo}`) : ""}` : "Sin tabla (Programación de Salas, confirmado)" });
-    if (!dryRun) await rest(`causas?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(patch) }).catch(() => null);
-  }
+  await aplicarProgramacion(k, porId, Array.isArray(body.programacion) ? body.programacion : [], { dryRun, quien, hoy, fuente, segHoy, segPost }, out);
   // Resoluciones del Estado Diario: una vez por causa y fecha (causas.estado_diario_fecha guarda la última avisada).
   // deno-lint-ignore no-explicit-any
   const est = (Array.isArray(body.estados) ? body.estados : []).filter((x: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(x.fecha || ""))).sort((a: any, b: any) => a.fecha.localeCompare(b.fecha));
@@ -408,6 +420,68 @@ async function atenderLocal(body: any, token: string) {
   return json({ ok: true, dryRun, aviso: k.ON, ...out });
 }
 
+// ─── Programación de Salas por correo (suscripción del Poder Judicial) ───
+// El Poder Judicial envía a contacto@ un Excel por Corte con las tablas ordinarias confirmadas de la semana siguiente (la Suprema y cada
+// Corte de Apelaciones inscrita, en correos distintos). El agente de correo ya los guarda en la bandeja y en el bucket documentos; aquí se
+// leen una sola vez (learnings salas_correo, key = id del correo), se cruzan con nuestras causas activas y las que quedan en tabla siguen
+// el mismo camino que la Programación de Salas del computador de la oficina (aplicarProgramacion): aviso al abogado, plazo y seguimiento.
+// Si un archivo no se puede leer el correo queda pendiente (se reintenta) y la corrida termina con error: Procesos lo muestra y avisa.
+// body.salas_correo = true; body.dryRun = no guarda ni envía; body.gmail_id = solo ese correo; body.reprocesar = incluso los ya leídos.
+// deno-lint-ignore no-explicit-any
+async function leerSalasCorreo(body: any) {
+  const dryRun = !!body.dryRun, quien = "agente-salas-correo";
+  const { fecha: hoy } = ahoraCL();
+  const q = (v: string) => encodeURIComponent(v);
+  const mails = await rest(`agente_bandeja?select=id,gmail_id,recibido_at,estado,adjuntos&de=ilike.${q("*@pjud.cl")}&asunto=ilike.${q("programacion*de*salas*")}${body.gmail_id ? `&gmail_id=eq.${q(String(body.gmail_id))}` : ""}&order=recibido_at.asc&limit=80`);
+  const leidos = new Set((await rest("learnings?kind=eq.salas_correo&select=key&limit=2000").catch(() => [])).map((x: { key: string }) => x.key));
+  // deno-lint-ignore no-explicit-any
+  const pend = mails.filter((m: any) => body.reprocesar || !leidos.has(m.gmail_id));
+  if (!pend.length) return json({ ok: true, dryRun, correos: 0 });
+  const filas: { corte: string; fecha: string; sala: string; tabla: string; recurso: string; caratulado: string; rol: string; anio: string }[] = [];
+  const archivos: { correo: string; nombre: string; corte: string; filas: number; desde: string; hasta: string }[] = [];
+  const errores: { correo: string; archivo: string; error: string }[] = [];
+  const conError = new Set<string>();
+  for (const m of pend) {
+    // deno-lint-ignore no-explicit-any
+    for (const a of (Array.isArray(m.adjuntos) ? m.adjuntos : []).filter((x: any) => /\.xlsx?$/i.test(String(x.nombre || "")) && x.path)) {
+      try {
+        const r = await fetch(`${SB_URL}/storage/v1/object/documentos/${String(a.path).split("/").map(encodeURIComponent).join("/")}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } });
+        if (!r.ok) throw new Error(`no se pudo abrir el archivo guardado (${r.status})`);
+        const wb = XLSX.read(new Uint8Array(await r.arrayBuffer()), { type: "array" });
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        if (!hoja) throw new Error("el archivo no trae hojas");
+        const t = leerTablaSalas(XLSX.utils.sheet_to_json(hoja, { header: 1, raw: false, defval: "" }) as string[][]);
+        if (!t.ok) throw new Error(String((t as { motivo?: string }).motivo || "formato no reconocido"));
+        const fechas = t.filas.map((f) => f.fecha).sort();
+        archivos.push({ correo: m.gmail_id, nombre: a.nombre, corte: t.filas[0]?.corte || "", filas: t.filas.length, desde: fechas[0] || "", hasta: fechas[fechas.length - 1] || "" });
+        filas.push(...t.filas);
+      } catch (e) { conError.add(m.gmail_id); errores.push({ correo: m.gmail_id, archivo: String(a.nombre), error: String((e as Error).message || e) }); }
+    }
+  }
+  const k = await contexto("estado=eq.activa");
+  // Solo lo que aún no pasa: una fecha anterior a hoy no es una vista por avisar.
+  const cruces = cruzarSalas(filas.filter((f) => f.fecha >= hoy), k.todas);
+  // deno-lint-ignore no-explicit-any
+  const porId = new Map<string, any>(k.todas.map((c: { id: string }) => [c.id, c]));
+  const desde = new Date(`${hoy}T00:00:00-03:00`).toISOString();
+  const segHoy = new Set<string>(((await rest(`causas_seguimiento?revisado_at=gte.${encodeURIComponent(desde)}&resultado=like.*Programación de Salas*&select=causa_id`).catch(() => [])) || []).map((x: { causa_id: string }) => x.causa_id));
+  const segPost = async (row: Record<string, unknown>) => { if (!dryRun) await rest("causas_seguimiento", { method: "POST", body: JSON.stringify(row) }).catch(() => null); };
+  // deno-lint-ignore no-explicit-any
+  const out: any = { programacion: 0, en_tabla: [], avisos: [], errores: [] };
+  await aplicarProgramacion(k, porId, cruces, { dryRun, quien, hoy, fuente: `recibida por correo el ${dmy(hoy)} (suscripción a Programación de Salas del Poder Judicial)`, segHoy, segPost, porCorreo: true }, out);
+  const resumen = (gid: string) => { const mios = archivos.filter((a) => a.correo === gid), n = mios.reduce((t, a) => t + a.filas, 0);
+    return `Programación de salas leída: ${n} causas programadas en ${mios.length === 1 ? "1 Corte" : `${mios.length} Cortes`} · ${out.en_tabla.length ? (out.en_tabla.length === 1 ? "1 causa nuestra en tabla" : `${out.en_tabla.length} causas nuestras en tabla`) : "ninguna causa nuestra"}`; };
+  if (!dryRun) for (const m of pend) {
+    if (conError.has(m.gmail_id)) continue;
+    await rest("learnings", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ kind: "salas_correo", key: m.gmail_id, value: resumen(m.gmail_id), estudio_id: "lea" }) }).catch(() => null);
+    await rest(`agente_bandeja?id=eq.${m.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrado", resumen: resumen(m.gmail_id) }) }).catch(() => null);
+  }
+  if (!dryRun && archivos.length) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: quien, action: "causas.salas_correo_leido", table_name: "causas", record_id: null, estudio_id: "lea", detail: { title: `Programación de salas leída del correo: ${archivos.length === 1 ? "1 archivo" : `${archivos.length} archivos`}, ${out.en_tabla.length === 1 ? "1 causa nuestra en tabla" : `${out.en_tabla.length} causas nuestras en tabla`}`, archivos, errores } }) }).catch(() => null);
+  // Los números primero: Procesos lee solo el comienzo de la respuesta.
+  const res = { ok: !errores.length, dryRun, aviso: k.ON, correos: pend.length, en_tabla: out.en_tabla.length, sin_leer: errores.length, archivos, causas_en_tabla: out.en_tabla, avisos: out.avisos, errores };
+  return json(errores.length ? { ...res, error: `No se pudo leer ${errores.length === 1 ? "un archivo" : `${errores.length} archivos`} de la programación de salas: ${errores[0].error}` } : res, errores.length ? 500 : 200);
+}
+
 Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any
   let body: any = {}; try { body = await req.json(); } catch { /* sin body */ }
@@ -424,6 +498,10 @@ Deno.serve(async (req) => {
     const dom = String(cas?.[0]?.value || "").split("@")[1];
     if (!u?.email || !dom || !String(u.email).toLowerCase().endsWith("@" + dom.toLowerCase())) return json({ error: "No autorizado" }, 403);
     quien = u.email;
+  }
+  if (body.salas_correo) {
+    if (quien !== "agente") return json({ error: "No autorizado" }, 403);
+    try { return await leerSalasCorreo(body); } catch (e) { return json({ ok: false, error: String((e as Error).message || e) }, 500); }
   }
   // Vigilancia (cron de días hábiles, 07:15): si el computador de la oficina no hizo la revisión de la mañana, se avisa una vez
   // al día a causas_avisar_fallas (un computador apagado o dormido no avisa por sí mismo).

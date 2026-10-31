@@ -1486,6 +1486,7 @@ function resumenCorrida(p){
     if(r.skipped==='apagado') return 'apagado'
     if(r.error) return `error: ${String(r.error).slice(0,80)}`
     const j=String(p.jobname||'')
+    if(j==='causas-tablas-correo'&&r.correos!=null) return r.correos?`${nn(r.correos,'correo leído','correos leídos')} · ${r.en_tabla??0} ${r.en_tabla===1?'causa nuestra en tabla':'causas nuestras en tabla'}`:'Sin correos nuevos'
     if(/^causas-(tablas|monitor)/.test(j)&&r.revisadas!=null) return r.modo==='seguir'&&!r.revisadas&&!len(r.errores)?'Sin causas en la tabla de hoy':`${nn(r.revisadas,'causa revisada','causas revisadas')} · ${len(r.en_tabla)??0} en la tabla de hoy${len(r.errores)?` · ${len(r.errores)} sin revisar`:''}`
     if(j==='clientes-drive-sync'&&r.addedN!=null) return `${nn(r.addedN,'cliente nuevo','clientes nuevos')} · ${r.linkedN??0} vinculados`
     if(/^bhe-correo/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'correo','correos')} · ${len(r.nuevas)??0} boletas nuevas`
