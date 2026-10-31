@@ -162,6 +162,12 @@ Deno.serve(async (req) => {
     if (!ok) motivo = g.motivo || ((cfg as any)?.error ? "No se pudo leer la casilla autorizada" : !permitidas.length ? "Sin casilla autorizada en la configuración" : `Casilla ${g.email} no autorizada`);
   }
   if (!ok) return json({ error: "No autorizado", motivo }, 403);
+  // El script de la casilla pregunta qué correos de la programación de salas ya leyó la app (causas-tablas, modo salas_correo) para
+  // etiquetarlos «salas-leida» y marcarlos leídos en Gmail. Solo devuelve los id de Gmail de esos correos.
+  if (body.salas_leidas) {
+    const r = await rest("learnings?kind=eq.salas_correo&select=key&order=created_at.desc&limit=100").catch(() => []);
+    return json({ ok: true, leidos: (Array.isArray(r) ? r : []).map((x: { key: string }) => x.key) });
+  }
   const dryRun = !!body.dryRun;
   // deno-lint-ignore no-explicit-any
   const msgs: any[] = Array.isArray(body.messages) ? body.messages.slice(0, 40) : [];
