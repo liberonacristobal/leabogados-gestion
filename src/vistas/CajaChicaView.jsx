@@ -208,7 +208,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
         const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
         const prompt=`Eres asistente contable del estudio ${BRAND.nombre}. Te paso GASTOS de caja chica a los que les falta cliente o categoría, la lista de CLIENTES y las CATEGORÍAS válidas. Para cada gasto sugiere el cliente (id de la lista) y/o la categoría más probable según la glosa. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>","category":"<una de las categorías o null>"}]. NUNCA inventes un client_id fuera de la lista ni una categoría fuera de las dadas.\nCATEGORIAS: ${JSON.stringify(CAT_LIST)}\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,falta_cliente:!e.client_id,falta_categoria:!e.category})))}`
         try{
-          const j=await claudeCall({feature:'CajaChicaView',model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+          const j=await claudeCall({feature:'CajaChicaView',model:'claude-haiku-4-5-20251001',max_tokens:1500,messages:[{role:'user',content:prompt}]})
           const txt=j?.content?.[0]?.text||''
           const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
           arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e) return; const s=sug[e.id]||{}; if(!e.client_id && o.client_id && clients.some(c=>String(c.id)===String(o.client_id))){ s.client_id=o.client_id; s.cliIA=true } if(!e.category && o.category && CAT_LIST.includes(o.category)){ s.category=o.category; s.catIA=true } if(s.client_id||s.category) sug[e.id]=s })
