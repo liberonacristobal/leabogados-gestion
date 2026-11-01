@@ -4,7 +4,7 @@ import { supabase, getDriveToken, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
+import { CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, promptConCache, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
 import { DocumentosDrive } from '../lib/fichaCliente.jsx'
 
 export async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el ArrayBuffer (para leer el contenido del archivo)
@@ -64,7 +64,7 @@ export async function escanearCarteraGmail(clients=[], proyectos=[], onProgress)
     const batch=correos.slice(i,i+20)
     const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide UNA de estas tres: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}; (c) COMPROMISO o PLAZO concreto con FECHA cierta para un PROYECTO existente (una entrega acordada, un vencimiento, una reunión o audiencia fijada por el correo) → {"tipo":"hito","proyecto_id":"<id de la lista>","titulo":"compromiso en pocas palabras","fecha":"YYYY-MM-DD","fuente":"Remitente — Asunto"}. Solo usa "hito" si el correo fija una fecha real y concreta (no un "a la brevedad"). Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas ni fechas que no estén en el correo.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
-      const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:promptConCache(prompt,'\nCORREOS:\n',correos.length>20)}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       ;(Array.isArray(arr)?arr:[]).forEach(x=>{
         if(!x||!x.tipo) return
