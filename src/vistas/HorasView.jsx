@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
@@ -241,11 +242,11 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       let glosa='', hh=0.5, cid=null
       if(DEMO){ await new Promise(r=>setTimeout(r,900)); glosa='Coordinación con el cliente por WhatsApp sobre el estado del contrato y próximos pasos.'; hh=0.4; cid='c1' }
       else{
-        const lista = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name})).slice(0,400)
-        const prompt=`Eres asistente de un abogado chileno. Del siguiente texto (chat de WhatsApp, correo o nota) escribe una "glosa" facturable BREVE (1 línea, español jurídico de Chile; describe la gestión; NO inventes), estima "horas" (0.1 a 8) y elige el "client_id" de la lista si es claro (si no, null). Devuelve SOLO JSON {"glosa":"...","horas":<num>,"client_id":"<id o null>"}.\nCLIENTES: ${JSON.stringify(lista)}\nTEXTO: ${t.slice(0,4000)}`
+        const lista = listaClientesIA(clients)
+        const prompt=`Eres asistente de un abogado chileno. Del siguiente texto (chat de WhatsApp, correo o nota) escribe una "glosa" facturable BREVE (1 línea, español jurídico de Chile; describe la gestión; NO inventes), estima "horas" (0.1 a 8) y elige el "cliente" (número de la lista, formato número|nombre) si es claro (si no, null). Devuelve SOLO JSON {"glosa":"...","horas":<num>,"cliente":<número o null>}.\nCLIENTES:\n${lista.texto}\nTEXTO: ${t.slice(0,4000)}`
         const j=await claudeCall({feature:'HorasView',model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
         const txt=j?.content?.[0]?.text||''; const m=txt.match(/\{[\s\S]*\}/); const o=m?JSON.parse(m[0]):{}
-        glosa=o.glosa||'Gestión registrada desde una nota.'; hh=Math.max(0.1,Math.min(8,parseFloat(o.horas)||0.5)); cid=(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id)))?String(o.client_id):null
+        glosa=o.glosa||'Gestión registrada desde una nota.'; hh=Math.max(0.1,Math.min(8,parseFloat(o.horas)||0.5)); cid=lista.idDe(o.cliente)==null?null:String(lista.idDe(o.cliente))
       }
       const ref='n'+Date.now()
       setAgenda(a=>[{ id:'pega:'+ref, source:'pega', source_ref:ref, tag:'NOTA', titulo:t.slice(0,90), glosa, horas:hh, fecha:hoy, client_id:cid, ia:true }, ...a])
