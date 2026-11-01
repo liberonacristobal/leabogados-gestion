@@ -6,6 +6,7 @@ import { notariaPendientes, disponibleNotaria } from '../../supabase/functions/_
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../../supabase/functions/_shared/notariaDocsReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../../supabase/functions/_shared/gastosReglas.js'
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
+import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
@@ -896,12 +897,12 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
         needIA.push(e)
       })
       if(needIA.length){
-        const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
-        const prompt=`Eres asistente contable del estudio ${BRAND.nombre}. Te paso GASTOS sin cliente y la lista de CLIENTES. Para cada gasto sugiere el cliente (id de la lista) más probable según la glosa y el monto. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>"}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,fecha:e.date||''})))}`
+        const lista=listaClientesIA(clients)
+        const prompt=`Eres asistente contable del estudio ${BRAND.nombre}. Te paso GASTOS sin cliente y la lista de CLIENTES (número|nombre). Para cada gasto sugiere el cliente (su número de la lista) más probable según la glosa y el monto. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","cliente":<número o null>}]. NUNCA inventes un número fuera de la lista.\nCLIENTES:\n${lista.texto}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,fecha:e.date||''})))}`
         try{
-          const j=await claudeCall({feature:'ExpensesView',model:'claude-haiku-4-5-20251001',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+          const j=await claudeCall({feature:'ExpensesView',model:'claude-haiku-4-5-20251001',max_tokens:4000,messages:[{role:'user',content:prompt}]})
           const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
-          arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e||!o.client_id) return; const c=clients.find(x=>String(x.id)===String(o.client_id)); if(!c||c.status==='Terminado') return; sug[e.id]={client_id:c.id,name:c.name,conf:70,via:'IA'} })
+          arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); const cid=lista.idDe(o.cliente); if(!e||!cid) return; const c=clients.find(x=>String(x.id)===String(cid)); if(!c||c.status==='Terminado') return; sug[e.id]={client_id:c.id,name:c.name,conf:70,via:'IA'} })
         }catch(_){}
       }
       setOrfSug(sug)
