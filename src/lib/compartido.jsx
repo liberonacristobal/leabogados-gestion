@@ -63,6 +63,10 @@ export async function driveCall(body){   // puente a la edge function `drive` (a
   return data
 }
 
+// Prompt en dos partes para las llamadas por tandas: lo fijo (instrucciones + listas) lleva caché y lo que cambia por tanda (desde `marca`)
+// va al final. Desde la segunda tanda lo fijo se lee del caché de Anthropic a una fracción del precio. Sin la marca, el prompt va entero.
+export const promptConCache=(prompt,marca,variasTandas=true)=>{ const i=String(prompt).lastIndexOf(marca); if(!variasTandas||i<=0) return prompt; return [{type:'text',text:prompt.slice(0,i),cache_control:{type:'ephemeral'}},{type:'text',text:prompt.slice(i)}] }
+
 export async function claudeCall(body){
   const {data:{session}} = await supabase.auth.getSession()
   if(!session) throw new Error('Sesión expirada. Vuelve a entrar.')
@@ -3414,7 +3418,7 @@ export async function escanearTareasGmail(clients=[], onProgress){
     const batch=correos.slice(i,i+20); if(onProgress) onProgress(correos.length===0?0:Math.min(correos.length,i),correos.length)
     const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES (número|nombre). Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "cliente" (número de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","cliente":<número o null>,"due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un número fuera de la lista.\nCLIENTES:\n${lista.texto}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
-      const data=await claudeCall({feature:'compartido',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const data=await claudeCall({feature:'compartido',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:promptConCache(prompt,'\nCORREOS:\n',correos.length>20)}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:lista.idDe(o.cliente), due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
     }catch(_){}
