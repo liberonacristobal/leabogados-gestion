@@ -559,7 +559,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   // Lee la boleta de honorarios del SII (PDF) con IA y completa N°, fecha y bruto si están vacíos. Si falla, se escriben a mano.
   const leerBoletaPdf = async file => { if(DEMO) return; setLeyendoBol(true)
     try{ const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onloadend=()=>res(String(fr.result||'').split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file) })
-      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:'Es una boleta de honorarios electrónica del SII de Chile. Responde SOLO un JSON {"folio":número,"fecha":"AAAA-MM-DD","bruto":número entero en pesos (Total Honorarios)}. Si un dato no está, null.'}]}]})
+      const j=await claudeCall({feature:'ProveedoresView',model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:'Es una boleta de honorarios electrónica del SII de Chile. Responde SOLO un JSON {"folio":número,"fecha":"AAAA-MM-DD","bruto":número entero en pesos (Total Honorarios)}. Si un dato no está, null.'}]}]})
       const t=String(j?.content?.[0]?.text||''), m=t.match(/\{[\s\S]*\}/); const o=m?JSON.parse(m[0]):null
       if(o){ const fe=/^\d{4}-\d\d-\d\d$/.test(String(o.fecha||''))?o.fecha:null, br=Math.round(Number(o.bruto)||0)||null, fo=parseInt(o.folio)||null
         setBol(p=>p?({...p, numero:p.numero||(fo?String(fo):''), fecha:fe||p.fecha, monto:p.monto||(br?String(br):''), leida:{folio:fo,fecha:fe,bruto:br}}):p) }

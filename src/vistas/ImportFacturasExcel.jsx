@@ -147,7 +147,7 @@ Enfócate en: filas SIN cliente (cuántas y agrupar por cliente nuevo), montos n
 
 FILAS (${rows.length}):
 ${muestra}`
-      const j = await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const j = await claudeCall({feature:'ImportFacturasExcel',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       let txt = (j?.content?.[0]?.text||'').replace(/```json|```/g,'').trim()
       const rep = JSON.parse(txt)
       setIaReport(rep)

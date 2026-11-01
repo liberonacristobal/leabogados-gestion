@@ -926,7 +926,7 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
     const ref = (previos&&previos.length) ? `\n\nEn casos ANTERIORES de esta área usaste estas tareas (respétalas como base y ajústalas si corresponde):\n${previos.map(p=>`- ${p.titulo} (${p.dias!=null?p.dias+' días':'sin plazo'})`).join('\n')}` : ''
     const prompt = `Eres abogado senior en un estudio chileno. Se activó una propuesta y hay que arrancar el trabajo. Devuelve SOLO un JSON (sin markdown) con la forma {"tareas":[{"titulo":"...","dias":N,"nota":"..."}]}: entre 3 y 5 primeras tareas concretas para comenzar este encargo, en orden lógico. "dias" = plazo sugerido en días corridos desde hoy (entero). "nota" = una línea breve de contexto (máx ~12 palabras). Español de Chile, forma "tú", sin emojis, sin voseo.\n\nEncargo: "${sale?.title||''}"\nÁrea: ${area}\nCliente: ${cliName}\n${sale?.notes?`Notas: ${String(sale.notes).slice(0,600)}`:''}${ref}`
     try{
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
       const txt = data?.content?.[0]?.text || ''
       const j = JSON.parse((txt.match(/\{[\s\S]*\}/)||[txt])[0])
       const arr = Array.isArray(j?.tareas)?j.tareas:[]
@@ -4099,7 +4099,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
       const txt=(await leerDriveTextoSA(file)).slice(0,14000)
       if(!txt||txt.length<100) throw new Error('El documento no tiene texto suficiente.')
       const sys=`Eres abogado chileno. Del documento extrae los PLAZOS, VENCIMIENTOS y OBLIGACIONES con relevancia de agenda (renovaciones, hitos, obligaciones periódicas, vencimientos, prescripciones). Devuelve SOLO un JSON array, sin markdown, de {titulo, fecha, descripcion, tipo}. fecha en formato YYYY-MM-DD SOLO si es una fecha cierta; si es relativa ("30 días desde la firma") o no hay fecha, deja fecha="" y explícalo en descripcion. tipo = una de: plazo | obligación | hito. NO inventes fechas.`
-      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,system:sys,messages:[{role:'user',content:txt}]})
+      const data=await claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:2500,system:sys,messages:[{role:'user',content:txt}]})
       const out=data?.content?.[0]?.text||''; const m=out.match(/\[[\s\S]*\]/); let arr=[]; try{ arr=m?JSON.parse(m[0]):[] }catch(_){ arr=[] }
       const items=(Array.isArray(arr)?arr:[]).filter(x=>x&&x.titulo).map(x=>({titulo:String(x.titulo).slice(0,200), fecha:/^\d{4}-\d{2}-\d{2}$/.test(x.fecha||'')?x.fecha:null, descripcion:String(x.descripcion||''), tipo:['plazo','obligación','hito'].includes(x.tipo)?x.tipo:'plazo'}))
       if(!items.length) throw new Error('No encontré plazos u obligaciones en ese documento.')
@@ -4659,7 +4659,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
       const prompt=`Eres asistente del estudio de abogados ${BRAND.nombre} (@${BRAND.emailDominio}). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
-        const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+        const data=await claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
         const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
         arr.forEach(o=>{ const a=batch.find(x=>x.email===o.email); if(a){ if(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id))){ a.client_id=o.client_id; a.byIA=true } if(o.cargo) a.cargo=o.cargo } })
       }catch(_){}
@@ -5551,10 +5551,10 @@ ${brief()}`
           calcCuotasSinEmitir: async () => cuotasSinEmitir({ billing, sales, uf, noEmitir:await aprendidos('cuota_no_emitir'), hasta:hoyCL.slice(0,8)+'01' }),
           calcTrabajosSinFacturar: async () => trabajosSinFacturar({ sales, billing, uf, ufHoy, hoy:hoyCL, noEmitir:await aprendidos('cuota_no_emitir'), decididos:await aprendidos('trabajo_sin_facturar') }) })
         const reglas = `\n\nCIFRAS: para cualquier monto por cliente, por cobrar, vencido, facturas o tareas vencidas USA las herramientas; nunca escribas un monto que no venga de una herramienta, y copia los montos tal como los devuelve. Para «dónde está / cómo hago algo» usa donde_esta y nunca nombres una pantalla que la herramienta no devolvió. Si no hay herramienta para lo que piden, dilo en una frase y sugiere en qué vista mirarlo. El desglose se muestra solo en una tarjeta: no repitas la tabla, responde el resultado en 1 o 2 frases.`
-        const r = await resolverConIA({ llamar:b=>claudeCall({model:'claude-opus-4-8',max_tokens:700,...b}), sistema:sys+reglas, mensajes:msgs, ejecutar })
+        const r = await resolverConIA({ llamar:b=>claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:700,...b}), sistema:sys+reglas, mensajes:msgs, ejecutar })
         txt=r.texto; tarjetas=r.tarjetas
       } else {
-        const data = await claudeCall({model:'claude-opus-4-8',max_tokens:500,system:sys,messages:msgs})
+        const data = await claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:500,system:sys,messages:msgs})
         txt = (data?.content?.[0]?.text||'').trim()
       }
       const m = txt.match(/\{[\s\S]*"accion"[\s\S]*\}/)

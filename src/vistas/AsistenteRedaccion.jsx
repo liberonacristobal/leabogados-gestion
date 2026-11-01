@@ -179,7 +179,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
       const txt = await leerDriveTextoSA(file)
       if(!txt||txt.length<200) throw new Error('El documento no tiene texto suficiente.')
       const sys = `Eres abogado chileno. Del documento legal extrae las CLÁUSULAS REUTILIZABLES (no los datos del caso). Devuelve SOLO un JSON array, sin markdown ni backticks, de objetos {titulo, categoria, texto}. titulo: nombre corto de la cláusula. categoria: EXACTAMENTE una de: ${CATS_CLAUSULA.join(' | ')}. texto: la cláusula redactada de forma reutilizable, reemplazando nombres/RUT/montos/fechas específicos del caso por marcadores [PARTE], [SOCIEDAD], [MONTO], [PLAZO], [FECHA]; conserva la redacción jurídica. Omite recitales y datos puramente del caso. Máximo 12 cláusulas.`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt.slice(0,14000)}]})
+      const data = await claudeCall({feature:'AsistenteRedaccion',model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt.slice(0,14000)}]})
       const out = data?.content?.[0]?.text||''
       const m = out.match(/\[[\s\S]*\]/); let arr=[]; try{ arr = m?JSON.parse(m[0]):[] }catch(_){ arr=[] }
       const rows = (Array.isArray(arr)?arr:[]).filter(c=>c&&c.titulo&&c.texto).map(c=>{ const cat=CATS_CLAUSULA.includes(c.categoria)?c.categoria:'General'; return { clave:`${cat}::${String(c.titulo).slice(0,80)}`.toLowerCase(), titulo:String(c.titulo).slice(0,120), categoria:cat, texto:String(c.texto), fuente:file.name, file_id:file.id, updated_at:new Date().toISOString() } })
@@ -204,7 +204,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
       }
       if(precTxt&&precSel){ content+=`\n\nPRECEDENTE DEL ESTUDIO (documento real "${precSel.name}"): sigue su ESTRUCTURA, tono y cláusulas como modelo, pero ADAPTA todo al caso actual — NO copies datos, montos ni nombres del precedente.\n---\n${precTxt}\n---` }
       if(cliDocTxt&&cliDocSel){ content+=`\n\nDOCUMENTO DEL CLIENTE ("${cliDocSel.name}", de su carpeta en Drive): úsalo como fuente de datos y contexto REAL de este caso (partes, RUT, montos, fechas, cláusulas). Extrae lo pertinente; no lo copies textual.\n---\n${cliDocTxt}\n---` }
-      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
+      const data=await claudeCall({feature:'AsistenteRedaccion',model:'claude-opus-4-8',max_tokens:t.max,system:t.sys,messages:[{role:'user',content}]})
       setDraft(data?.content?.[0]?.text||'(sin respuesta)')
       logActividad('redaccion.generado',{detalle:{title:(TIPOS_REDACCION.find(t=>t.k===tipo)?.lbl||tipo),name:cliente||null}})
     }catch(e){ setErr(e?.message||'No se pudo generar.') }

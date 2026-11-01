@@ -14,6 +14,7 @@
 
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -104,7 +105,9 @@ async function leerPublicacion(url: string) {
 Copia las razones sociales tal como aparecen. Si no se lee algo, usa null. No inventes.`;
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 600, messages: [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: encodeBase64(bytes) } }, { type: "text", text: prompt }] }] }) });
-  const d = await r.json(); if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
+  const d = await r.json();
+  await registrarUsoIA({ funcion: "diario-oficial", modelo: "claude-opus-4-8", data: d, status: r.status, maxTokens: 600 });
+  if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
   const t = (d.content || []).map((c: { text?: string }) => c.text || "").join(""); const m = t.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("IA: sin JSON"); return JSON.parse(m[0]);
 }

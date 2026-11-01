@@ -12,6 +12,7 @@
 
 import { todasRest } from "../_shared/paginar.js";
 import { sugerirVentaGasto, VENTA_REAL } from "../_shared/ventaGastoReglas.js";
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -59,7 +60,9 @@ async function correos(q: string, max = 3): Promise<string[]> {
 async function ia(prompt: string): Promise<any[]> {
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 2500, messages: [{ role: "user", content: prompt }] }) });
-  const d = await r.json(); if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
+  const d = await r.json();
+  await registrarUsoIA({ funcion: "gastos-trabajo-ia", modelo: "claude-opus-4-8", data: d, status: r.status, maxTokens: 2500 });
+  if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
   const t = (d.content || []).map((c: { text?: string }) => c.text || "").join(""); const m = t.match(/\[[\s\S]*\]/);
   return m ? JSON.parse(m[0]) : [];
 }

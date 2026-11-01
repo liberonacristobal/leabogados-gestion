@@ -631,7 +631,7 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
     setIaHoyBusy(true)
     const prompt=`Eres el copiloto del socio de un estudio de abogados. Estos son los pendientes de HOY (ya calculados, no inventes cifras): ${atenderHoy.items.map(i=>i.iaTxt).join('; ')}. Escribe 2 frases MUY breves, en español de Chile, tono directo, diciendo en qué enfocarse hoy y por qué (prioriza cobranza/plazos). No listes todo, da el foco. Sin saludo ni markdown.`
     try{
-      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      const data=await claudeCall({feature:'DashboardView',model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim()
       if(txt) setIaHoy(txt)
     }catch(e){ appAlert('No se pudo generar el resumen: '+(e?.message||e)) }

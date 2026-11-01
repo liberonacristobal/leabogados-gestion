@@ -159,7 +159,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     try{
       const resumenOpp = OPPS.map(o=> o.rows.length ? `${o.t} (${o.rows.length}): ${o.rows.slice(0,3).map(x=>`${x.c.name} ${o.metric(x)}`).join('; ')}` : null).filter(Boolean).join('. ')
       const prompt = `Eres el copiloto estratégico del socio de un estudio de abogados chileno. Cifras YA calculadas (no inventes ni cambies números): vendido ${yr} ${fmtUFk(kpis.vendidoYTD)}, por cobrar ${fmt(kpis.porCobrar)}, cobrado ${yr} ${fmt(kpis.cobradoYTD)}. Oportunidades detectadas: ${resumenOpp||'sin oportunidades destacadas'}. Escribe 3 a 4 frases MUY concretas, en español de Chile, tono directo y estratégico, diciendo en qué enfocar esta semana y por qué, priorizando ingresos y cobranza. Menciona 2 o 3 clientes puntuales por nombre cuando aporte. Da el foco, no listes todo. Sin saludo, sin markdown, sin viñetas.`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const txt = (data.content?.[0]?.text||'').trim()
       setIaResumen(txt || 'No se pudo generar el resumen. Reintenta.')
     }catch(e){ setIaResumen('No se pudo generar: '+(e?.message||'reintenta')) }
@@ -179,7 +179,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
 - Por abogado ${yr} (vs ${tendencias.prevYr}): ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join('; ')}.
 - Oportunidades: dormidos ${opp.dormidos.length} (${opp.dormidos.slice(0,3).map(x=>x.c.name).join(', ')||'—'}); cobranza vencida ${opp.cobranza.length}; cross-sell ${opp.crossSell.length}; sin recurrencia ${opp.sinRec.length}; win-back ${opp.winback.length}.`
       const prompt = `Eres el analista de negocio de un estudio de abogados chileno. Responde la pregunta del socio USANDO SOLO los datos entregados (no inventes nombres ni cifras; si no está, dilo). Español de Chile, directo, máximo 4 frases, con cifras cuando aporten.\n\nPREGUNTA: ${q}\n\nDATOS:\n${brief}`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
       setRespuesta((data.content?.[0]?.text||'').trim()||'No pude responder con los datos disponibles.')
     }catch(e){ setRespuesta('No se pudo: '+(e?.message||'reintenta')) }
     setPregBusy(false)
@@ -191,7 +191,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     setIaAreasBusy(true)
     try{
       const prompt = `Eres asistente tributario de un estudio de abogados chileno. Áreas del estudio (usa SOLO estas, tal cual están escritas): ${areasFirma.join(' | ')}. Novedad del SII: "${addForm.titulo}. ${addForm.resumen}". Responde SOLO un array JSON con las áreas del estudio a las que afecta (subconjunto EXACTO de la lista; [] si ninguna). Sin markdown ni texto extra.`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:200,messages:[{role:'user',content:prompt}]})
       const txt=(data.content?.[0]?.text||'').trim().replace(/```json|```/g,'')
       const arr=JSON.parse(txt)
       if(Array.isArray(arr)) setAddForm(f=>({...f,areas:arr.filter(a=>areasFirma.includes(a))}))
@@ -218,7 +218,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
       const oppTxt = OPPS.map(o=> o.rows.length?`${o.t} ${o.rows.length}`:null).filter(Boolean).join(', ')
       const brief = `INTERNO — vendido ${yr} ${fmtUFk(kpis.vendidoYTD)} (crecimiento ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'} vs ${tendencias.prevYr}); por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}. Cartera ${carteraTot.activos} activos (en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}). Áreas top: ${servicios.slice(0,4).map(s=>`${s.area} ${fmtUFk(s.uf)} (${s.recPct}% rec)`).join(', ')}. Por abogado: ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join(', ')}. Oportunidades: ${oppTxt||'—'}. EXTERNO (Radar SII): ${radarTxt}.`
       const prompt = `Eres el asesor estratégico del socio de un estudio de abogados chileno. Con los datos INTERNOS + el outlook del SII (EXTERNO), escribe un PLAN DEL AÑO en 5-6 frases concretas: dónde concentrar, qué áreas potenciar, qué clientes/segmentos priorizar, qué riesgos de cobranza atacar, y qué oportunidades regulatorias del SII aprovechar (con su cruce por área). Español de Chile, directo, con cifras cuando aporten. Usa SOLO estos datos, no inventes; si algo no está, no lo afirmes. Sin markdown ni viñetas.\n\nDATOS:\n${brief}`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
       setPlanAnio((data.content?.[0]?.text||'').trim()||'No se pudo generar el plan.')
     }catch(e){ setPlanAnio('No se pudo: '+(e?.message||'reintenta')) }
     setPlanBusy(false)
@@ -229,7 +229,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     setBriefBusy(true)
     try{
       const prompt = `Eres asistente tributario de un estudio de abogados chileno. Explica en 2-3 frases, factual y en español de Chile, de qué se trata este foco del SII y por qué le importa al estudio y a sus clientes. Usa SOLO la información dada; NO inventes cifras, números de norma ni cites artículos que no aparezcan. Sin markdown.\n\nFOCO: ${n.titulo}\nTIPO: ${n.tipo||''} ${n.numero||''}\nRESUMEN: ${n.resumen||'(sin resumen)'}\nÁREAS: ${(n.areas||[]).join(', ')||'—'}`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
       const brief = (data.content?.[0]?.text||'').trim()
       if(brief){ const {error}=await supabase.from('sii_novedades').update({brief}).eq('id',n.id); if(error){appAlert('No se pudo guardar: '+error.message)} else { await cargarSii() } }
     }catch(e){ appAlert('No se pudo generar el brief: '+(e?.message||'reintenta')) }
@@ -241,7 +241,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     setMemoBusy(true); setMemoText(null)
     try{
       const prompt = `Eres abogado tributarista de un estudio chileno. Redacta un MEMO breve para que el abogado plantee una conversación proactiva a un cliente sobre este foco del SII. Empieza con "Asunto: ..." y luego 4-5 frases. Tono profesional cercano, español de Chile (forma usted). Explica qué está haciendo el SII, por qué conviene revisarlo y propón coordinar una reunión. Usa SOLO la info dada; NO inventes cifras ni cites normas que no aparezcan. Sin markdown.\n\nFOCO: ${n.titulo}\nTIPO: ${n.tipo||''} ${n.numero||''}\nCONTEXTO: ${n.brief||n.resumen||''}\nÁREAS: ${(n.areas||[]).join(', ')||'—'}`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:450,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:450,messages:[{role:'user',content:prompt}]})
       setMemoText((data.content?.[0]?.text||'').trim()||'No se pudo generar el memo.')
     }catch(e){ setMemoText('No se pudo: '+(e?.message||'reintenta')) }
     setMemoBusy(false)

@@ -899,7 +899,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
         const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
         const prompt=`Eres asistente contable del estudio ${BRAND.nombre}. Te paso GASTOS sin cliente y la lista de CLIENTES. Para cada gasto sugiere el cliente (id de la lista) más probable según la glosa y el monto. Si no es claro, usa null. Devuelve SOLO un JSON array: [{"id":"<id del gasto>","client_id":"<id o null>"}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES: ${JSON.stringify(clientList)}\nGASTOS: ${JSON.stringify(needIA.map(e=>({id:e.id,glosa:e.concept||'',monto:e.amount||0,fecha:e.date||''})))}`
         try{
-          const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
+          const j=await claudeCall({feature:'ExpensesView',model:'claude-opus-4-8',max_tokens:1500,messages:[{role:'user',content:prompt}]})
           const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
           arr.forEach(o=>{ const e=needIA.find(x=>String(x.id)===String(o.id)); if(!e||!o.client_id) return; const c=clients.find(x=>String(x.id)===String(o.client_id)); if(!c||c.status==='Terminado') return; sug[e.id]={client_id:c.id,name:c.name,conf:70,via:'IA'} })
         }catch(_){}

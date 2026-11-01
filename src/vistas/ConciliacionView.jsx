@@ -72,7 +72,7 @@ export async function leerValoresClaudia(){
   const H={}; (jm.payload?.headers||[]).forEach(h=>H[h.name.toLowerCase()]=h.value)
   const subject=H['subject']||''; const body=extraerTextoGmail(jm)||''
   const prompt=`De este correo de la contadora del estudio (asunto "${subject}"), extrae los costos a pagar del mes. IMPORTANTE: lo que ella llama "IVA" es en realidad el PPM. Devuelve SOLO un JSON array, sin texto extra: [{"item":"Cotizaciones Sueldos","categoria":"Leyes sociales","monto":2076519,"vence":"YYYY-MM-DD o null"}]. Categorías válidas EXACTAS: "Leyes sociales" (para cotizaciones/imposiciones), "Impuestos y patentes" (para PPM o lo que ella llame IVA), "Remuneraciones" (para contadora o sueldos). El monto es un número entero, sin puntos ni signos. La fecha del correo puede decir "se paga el jueves 20-08" → 2026-08-20. No inventes nada que no esté en el correo.\n\nCORREO:\n${String(body).slice(0,3000)}`
-  const data=await claudeCall({model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
+  const data=await claudeCall({feature:'ConciliacionView',model:'claude-opus-4-8',max_tokens:900,messages:[{role:'user',content:prompt}]})
   const arr=JSON.parse((data.content?.[0]?.text||'').match(/\[[\s\S]*\]/)?.[0]||'[]')
   return { subject, mes:(subject.match(/(\d{2}-\d{4})/)||[])[1]||'', items:(arr||[]).filter(o=>o&&o.item&&Number(o.monto)>0).map(o=>({item:String(o.item),categoria:String(o.categoria||'Impuestos y patentes'),monto:Math.round(Number(o.monto)||0),vence:(/^\d{4}-\d{2}-\d{2}$/.test(o.vence||'')?o.vence:null)})) }
 }
