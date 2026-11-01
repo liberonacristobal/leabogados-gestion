@@ -64,7 +64,7 @@ export async function escanearCarteraGmail(clients=[], proyectos=[], onProgress)
     const batch=correos.slice(i,i+20)
     const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, preview), la lista de CLIENTES y la de PROYECTOS activos (con su "estado_actual" = en qué está). Para cada correo con relevancia real para un proyecto o cliente decide UNA de estas tres: (a) actualiza un PROYECTO existente → {"tipo":"update","proyecto_id":"<id de la lista>","sugerencia":"nuevo 'en qué está' en 1 frase","fuente":"Remitente — Asunto"}; (b) tema NUEVO de un cliente SIN proyecto → {"tipo":"nuevo","cliente_id":"<id o null>","sugerencia":"tema/nombre del proyecto en pocas palabras","fuente":"Remitente — Asunto"}; (c) COMPROMISO o PLAZO concreto con FECHA cierta para un PROYECTO existente (una entrega acordada, un vencimiento, una reunión o audiencia fijada por el correo) → {"tipo":"hito","proyecto_id":"<id de la lista>","titulo":"compromiso en pocas palabras","fecha":"YYYY-MM-DD","fuente":"Remitente — Asunto"}. Solo usa "hito" si el correo fija una fecha real y concreta (no un "a la brevedad"). Ignora newsletters, notificaciones, publicidad y lo irrelevante. Sé conservador: solo lo que claramente mueve un proyecto. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas ni fechas que no estén en el correo.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
-      const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
+      const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       ;(Array.isArray(arr)?arr:[]).forEach(x=>{
         if(!x||!x.tipo) return
@@ -145,7 +145,7 @@ export async function escanearCarteraCalendario(clients=[], proyectos=[]){
   const hoyISO=new Date().toISOString().slice(0,10)
   const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso EVENTOS del calendario (título, fecha, asistentes, ubicación), CLIENTES y PROYECTOS activos. Para cada evento que claramente corresponda a un cliente/proyecto (audiencia, reunión, vencimiento, hito), devuelve {"tipo":"hito","proyecto_id":"<id de la lista o null>","cliente_id":"<id o null>","titulo":"...","fecha":"YYYY-MM-DD"}. Enlaza a un PROYECTO existente por su cliente siempre que puedas. Ignora eventos personales o irrelevantes. Devuelve SOLO un JSON array (sin markdown). Hoy ${hoyISO}. NUNCA inventes ids fuera de las listas.\nCLIENTES:\n${JSON.stringify(clientList)}\nPROYECTOS:\n${JSON.stringify(proyList)}\nEVENTOS:\n${JSON.stringify(evs)}`
   try{
-    const data=await claudeCall({model:'claude-opus-4-8',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+    const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:2000,messages:[{role:'user',content:prompt}]})
     const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
     const out=[]
     ;(Array.isArray(arr)?arr:[]).forEach(x=>{
@@ -415,7 +415,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
     let previo=null
     try{ const {data}=await supabase.from('learnings').select('value').eq('kind','esfuerzo_area').eq('key',area).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(data?.value) previo=parseFloat(data.value) }catch(_){}
     const prompt = `Eres socio de un estudio de abogados chileno. Estima en CUÁNTAS HORAS de trabajo total se hace este encargo, de principio a fin. Devuelve SOLO un número entero de horas, nada más.\n\nEncargo: "${p.nombre_proyecto||s?.title||''}"\nÁrea: ${area}\nHonorario: ${s?(s.moneda==='CLP'?fmt(s.amount_clp):`UF ${s.amount_uf}`):'—'}${previo?`\nEn casos anteriores de esta área estimaste alrededor de ${previo} horas.`:''}`
-    try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:20,messages:[{role:'user',content:prompt}]}); const n=parseInt(((data?.content?.[0]?.text||'').match(/\d+/)||[])[0])
+    try{ const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:20,messages:[{role:'user',content:prompt}]}); const n=parseInt(((data?.content?.[0]?.text||'').match(/\d+/)||[])[0])
       if(n>0){ updP(p,{esfuerzo_horas:n}); try{ await supabase.from('learnings').delete().eq('kind','esfuerzo_area').eq('key',area); await supabase.from('learnings').insert({kind:'esfuerzo_area',key:area,value:String(n)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
     }catch(e){ appAlert('No se pudo sugerir: '+(e?.message||'reintenta')) }
     setSugEsf(o=>({...o,[p.id]:null}))
@@ -443,7 +443,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       notas.length?`Últimas notas de bitácora: ${notas.join(' | ')}`:''
     ].filter(Boolean).join('\n')
     const prompt=`Eres un abogado senior de un estudio chileno revisando este encargo. Con SOLO los datos de abajo (no inventes nada), dime el SIGUIENTE PASO concreto para mover el proyecto: una sola acción, clara y accionable, en 1 frase (español de Chile, trato "tú"). Si procede, sugiere una fecha límite realista (a partir de hoy ${hoyISO}). Si el proyecto está al día y no hay nada urgente, dilo claramente. Devuelve SOLO un JSON (sin markdown): {"paso":"la acción en 1 frase","fecha":"YYYY-MM-DD o null","aldia":true/false}.\n\nDATOS:\n${brief}`
-    try{ const data=await claudeCall({model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
+    try{ const data=await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:300,messages:[{role:'user',content:prompt}]})
       const j=JSON.parse((data?.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
       setSigPaso(o=>({...o,[p.id]:{texto:String(j.paso||'').slice(0,240), fecha:/^\d{4}-\d{2}-\d{2}$/.test(j.fecha||'')?j.fecha:null, aldia:!!j.aldia}}))
     }catch(e){ setSigPaso(o=>({...o,[p.id]:{err:true}})) }
@@ -627,7 +627,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       const pasosTxt=pend.map((h,i)=>`${i+1}. ${h.titulo}`).join('\n')
       const itemsTxt=items.map((d,i)=>`[${String.fromCharCode(65+i)}] (${d.source}) ${d.name}\n${d.texto}`).join('\n\n---\n\n')
       const prompt=`Eres asistente de un estudio de abogados chileno. PASOS pendientes del proyecto:\n${pasosTxt}\n\nEVIDENCIA (documentos y correos — tipo, nombre/asunto, extracto):\n${itemsTxt}\n\n¿Qué evidencia PRUEBA que un paso está CUMPLIDO (es el producto/resultado de ese paso, no solo lo menciona)? Responde SOLO JSON: [{"doc":"A","paso":N}] con los matches claros; si ninguno, []. Usa solo lo que la evidencia prueba; no inventes.`
-      const data=await claudeCall({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
+      const data=await claudeCall({feature:'CarteraView',model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
       const raw=(data?.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       let arr=[]; try{ arr=JSON.parse(raw) }catch(_){ arr=[] }
       const out=[]; (Array.isArray(arr)?arr:[]).forEach(m=>{ const di=String(m.doc||'').toUpperCase().charCodeAt(0)-65; const pi=(parseInt(m.paso,10)||0)-1; const d=items[di]; const h=pend[pi]; if(d&&h&&!out.some(x=>x.hitoId===h.id)) out.push({ source:d.source, origenId:d.id, label:d.name+' · leído por IA', conceptKey:_normC(d.name), hitoId:h.id, hitoTitulo:h.titulo, fecha:d.fecha||null }) })
@@ -1765,7 +1765,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
       const txt = (await leerDriveTextoSA(f)).slice(0,16000)
       if(!txt||txt.length<100) throw new Error('El documento no tiene texto suficiente.')
       const sys = `Eres abogado chileno. Del texto de esta PROPUESTA DE HONORARIOS/SERVICIOS extrae el PLAN DE TRABAJO (el "alcance de los servicios"), respetando su estructura real. Devuelve SOLO un JSON (sin markdown): {"resumen":"2-3 frases del alcance","servicios":["..."],"fases":[{"titulo":"nombre de la etapa o fase","fecha":"YYYY-MM-DD o vacío","subetapas":["tarea o punto dentro de la fase","..."]}]}. Las FASES son las etapas del encargo EN ORDEN; las SUBETAPAS son los puntos o tareas de cada fase, tal como los lista la propuesta. Pon fecha SOLO si la propuesta la menciona para esa fase (p. ej. un plan por meses); si no, deja "". NO inventes fases, subetapas ni fechas: usa el lenguaje de la propuesta. En litigios, las fases son las etapas procesales del encargo.`
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt}]})
+      const data = await claudeCall({feature:'CarteraView',model:'claude-opus-4-8',max_tokens:3500,system:sys,messages:[{role:'user',content:txt}]})
       const out = data?.content?.[0]?.text||''; const m = out.match(/\{[\s\S]*\}/); let obj={}
       try{ obj = m?JSON.parse(m[0]):{} }catch(_){ obj={} }
       setResumen(String(obj.resumen||''))

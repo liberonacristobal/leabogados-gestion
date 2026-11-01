@@ -21,6 +21,7 @@ import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 import { todasRest } from "../_shared/paginar.js";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { leerCorreoNotaria, otParaDocumento, nombreArchivoNotaria, firmadoPorNotaria, sugerenciasDocumento, indiceNombres, clientesEnTexto, clienteDeLectura } from "../_shared/notariaDocsReglas.js";
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -129,7 +130,9 @@ async function leerConIA(bytes: Uint8Array): Promise<any> {
 Copia nombres y RUT tal como aparecen. Si no se lee algo, usa null. No inventes.`;
   const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 1200, messages: [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: encodeBase64(bytes) } }, { type: "text", text: prompt }] }] }) });
-  const d = await r.json(); if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
+  const d = await r.json();
+  await registrarUsoIA({ funcion: "notaria-documentos", modelo: "claude-opus-4-8", data: d, status: r.status, maxTokens: 1200 });
+  if (!r.ok) throw new Error(`IA: ${d?.error?.message || r.status}`);
   const t = (d.content || []).map((c: { text?: string }) => c.text || "").join(""); const m = t.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("IA: sin JSON"); return JSON.parse(m[0]);
 }

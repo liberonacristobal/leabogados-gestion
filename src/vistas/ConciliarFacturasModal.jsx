@@ -138,7 +138,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
       const ventas=g.sales.map(s=>`${s.id} :: ${s.title}${s.year?` (${s.year})`:''} · modalidad ${s.cobro_type||'?'}${s.cobro_config?.nCuotas?` ${s.cobro_config.nCuotas} cuotas`:''} · total $${(s.amount_clp||(s.amount_uf&&s.uf_value?Math.round(s.amount_uf*s.uf_value):0)||0).toLocaleString('es-CL')}`).join('\n')
       const concs=g.rows.slice(0,8).map(r=>`- ${r.concept} · $${(r.amount||0).toLocaleString('es-CL')}${r.issued_at?` · emitida ${r.issued_at}`:''}`).join('\n')
       const prompt=`Asistente contable de un estudio de abogados. Estas facturas no están asignadas a un proyecto (venta). ¿A cuál venta pertenecen? Cruza por PRIORIDAD: modalidad de pago y número de cuotas de la venta › monto por cuota › fecha › glosa. Si las facturas dicen "cuota X/N", deben calzar con una venta de modalidad cuotas con N cuotas. Responde SOLO con el id exacto de la venta, o la palabra ninguna.\n\nVentas del cliente:\n${ventas}\n\nFacturas:\n${concs}`
-      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})
+      const j=await claudeCall({feature:'ConciliarFacturasModal',model:'claude-opus-4-8',max_tokens:60,messages:[{role:'user',content:prompt}]})
       const txt=(j?.content?.[0]?.text||'').trim()
       const m=g.sales.find(s=>txt.includes(String(s.id)))
       if(m) setAiSug(p=>({...p,[idx]:m})); else appAlert('La IA no encontró una venta clara para esta serie.')

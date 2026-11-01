@@ -1,3 +1,4 @@
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 // Edge Function: contactos-perfil
 // Perfil de contactos de clientes desde la casilla conectada (drive_auth), para distinguir quién decide de quién apoya en lo
 // contable. Nunca guarda el texto de un correo: devuelve solo lo necesario para clasificar.
@@ -59,7 +60,9 @@ async function cargoIA(nombre: string, colas: string[]): Promise<{ cargo: string
   const prompt = `Estas son las últimas líneas de correos escritos por ${nombre || "una persona"}. Extrae SOLO de su firma el cargo y la empresa por la que firma. Si no hay firma con cargo, usa null. No incluyas teléfonos, direcciones, correos, claves ni ningún otro dato. Responde SOLO JSON: {"cargo": string|null, "empresa": string|null}.\n\n${colas.map((c, i) => `--- Correo ${i + 1} ---\n${c}`).join("\n")}`;
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 120, messages: [{ role: "user", content: prompt }] }) });
-    const j = await r.json(); const t = (j?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+    const j = await r.json();
+    await registrarUsoIA({ funcion: "contactos-perfil", modelo: "claude-opus-4-8", data: j, status: r.status, maxTokens: 120 });
+    const t = (j?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
     const o = JSON.parse(t); const ok = (x: unknown) => typeof x === "string" && x.length <= 80 && /\s|[a-z]{3,}/i.test(x) && !/\d{4,}|@|https?:|[$#%&*=]/.test(x) ? x.trim() : null;
     return { cargo: ok(o.cargo), empresa: ok(o.empresa) };
   } catch { return null; }

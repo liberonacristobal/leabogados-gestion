@@ -355,7 +355,7 @@ TAREA 2 — compón la GLOSA del gasto en "concepto_corregido": combina el conce
 Responde SOLO con un array JSON sin markdown ni texto adicional:
 [{"index":1,"raw_nombre":"...","client_id":"uuid o null","client_nombre":"... o null","confidence":0-100,"reason":"breve","is_internal":true/false,"concepto_corregido":"..."}]`
     try{
-      const data = await claudeCall({model:'claude-opus-4-8',max_tokens:8000,messages:[{role:'user',content:prompt}]})
+      const data = await claudeCall({feature:'CargaMasivaModal',model:'claude-opus-4-8',max_tokens:8000,messages:[{role:'user',content:prompt}]})
       const raw = (data.content?.[0]?.text||'[]').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
       let arr
       try{ arr = JSON.parse(raw) }

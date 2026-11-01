@@ -323,7 +323,7 @@ export function SaleForm({asPage=false,afterHero=null,sale,clients:initialClient
         const result = await (await cargarMammoth()).extractRawText({arrayBuffer: arrayBuf})
         text = result.value
       }
-      const apiData = await claudeCall({model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
+      const apiData = await claudeCall({feature:'SaleForm',model:'claude-sonnet-4-6',max_tokens:4000,system:`Eres un experto extractor de datos de propuestas y contratos de servicios legales en Chile. Lee TODO el documento y devuelve SOLO un JSON (sin markdown ni backticks) con estos campos. Reglas:
 - Si un dato no está explícito pero se infiere con certeza, infiérelo; si no, usa "" o null. No inventes.
 - cliente_nombre: cliente/contraparte a quien se dirige la propuesta (persona o empresa).
 - cliente_rut: RUT chileno formato 12.345.678-9 si aparece.

@@ -12,6 +12,7 @@
 
 import { esDelDominio } from "../_shared/estudio.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 
@@ -86,6 +87,7 @@ serve(async (req) => {
       body: JSON.stringify(payload),
     });
     const data = await r.json();
+    await registrarUsoIA({ funcion: "claude-proxy", modelo: model, data, status: r.status, origen: body.feature, usuario: email, maxTokens: max_tokens });
     if (!r.ok) {
       console.log(`[claude-proxy] Anthropic ${r.status} para ${email}`);
       return json({ error: data?.error?.message || `Anthropic ${r.status}` }, r.status);

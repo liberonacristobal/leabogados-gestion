@@ -16,6 +16,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -47,6 +48,7 @@ async function acortarIA(items: { id: string; title: string }[]): Promise<Record
     body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
   });
   const j = await r.json();
+  await registrarUsoIA({ funcion: "titulos-cortos", modelo: "claude-haiku-4-5-20251001", data: j, status: r.status, maxTokens: 1500 });
   const txt = (j?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
   const out: Record<string, string> = {};
   try {

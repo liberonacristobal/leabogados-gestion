@@ -227,7 +227,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
         withContent.push({ id:p.id, tipo:p.tag, titulo:p.titulo, contenido:((content||'')+' '+(p.titulo||'')).replace(/\s+/g,' ').trim().slice(0,2200) })
       }
       const prompt=`Eres asistente de un abogado chileno. Para CADA ítem escribe una "glosa" facturable BREVE (1 sola línea, español jurídico de Chile, describe la gestión efectivamente realizada; NO inventes datos ni cifras que no aparezcan en el contenido; sin exagerar) y estima "horas" dedicadas (número entre 0.1 y 8 según el trabajo). Devuelve SOLO un JSON array [{"id":"<id>","glosa":"...","horas":<num>}].\nITEMS: ${JSON.stringify(withContent)}`
-      const j=await claudeCall({model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]})
+      const j=await claudeCall({feature:'HorasView',model:'claude-opus-4-8',max_tokens:1200,messages:[{role:'user',content:prompt}]})
       const txt=j?.content?.[0]?.text||''; const m=txt.match(/\[[\s\S]*\]/); const arr=m?JSON.parse(m[0]):[]
       setAgenda(a=>a.map(x=>{ const o=arr.find(y=>String(y.id)===String(x.id)); if(!o) return targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x; const h=keepHoras(x)?x.horas:Math.max(0.1,Math.min(8,parseFloat(o.horas)||x.horas)); return {...x, glosa:o.glosa||x.glosa, horas:h, ia:true, iaLoading:false} }))
     }catch(_){ setAgenda(a=>a.map(x=> targets.some(t=>t.id===x.id)?{...x,iaLoading:false}:x)) }
@@ -243,7 +243,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       else{
         const lista = clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name})).slice(0,400)
         const prompt=`Eres asistente de un abogado chileno. Del siguiente texto (chat de WhatsApp, correo o nota) escribe una "glosa" facturable BREVE (1 línea, español jurídico de Chile; describe la gestión; NO inventes), estima "horas" (0.1 a 8) y elige el "client_id" de la lista si es claro (si no, null). Devuelve SOLO JSON {"glosa":"...","horas":<num>,"client_id":"<id o null>"}.\nCLIENTES: ${JSON.stringify(lista)}\nTEXTO: ${t.slice(0,4000)}`
-        const j=await claudeCall({model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
+        const j=await claudeCall({feature:'HorasView',model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
         const txt=j?.content?.[0]?.text||''; const m=txt.match(/\{[\s\S]*\}/); const o=m?JSON.parse(m[0]):{}
         glosa=o.glosa||'Gestión registrada desde una nota.'; hh=Math.max(0.1,Math.min(8,parseFloat(o.horas)||0.5)); cid=(o.client_id&&clients.some(c=>String(c.id)===String(o.client_id)))?String(o.client_id):null
       }

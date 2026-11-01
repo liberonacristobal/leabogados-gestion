@@ -149,7 +149,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[
         let text=''
         for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const c=await pg.getTextContent(); text+=c.items.map(it=>it.str||'').join(' ')+'\n' }
         if(text.trim()){
-          const apiData=await claudeCall({model:'claude-sonnet-4-6',max_tokens:2000,system:PROMPT_PROPUESTA_IA,messages:[{role:'user',content:text.slice(0,40000)}]})
+          const apiData=await claudeCall({feature:'SalesView',model:'claude-sonnet-4-6',max_tokens:2000,system:PROMPT_PROPUESTA_IA,messages:[{role:'user',content:text.slice(0,40000)}]})
           const raw=(apiData.content?.[0]?.text||'{}').replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim()
           const p=JSON.parse(raw)
           // Cliente SOLO si ya existe (nunca crear): por RUT, luego por nombre exacto, luego el matcher por archivo.

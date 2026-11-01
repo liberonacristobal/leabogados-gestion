@@ -1,3 +1,4 @@
+import { registrarUsoIA } from "../_shared/usoIA.ts";
 // sii-radar — auto-ingesta del SII (Radar Tributario).
 //
 // Qué hace: lee los ÍNDICES oficiales del SII (circulares y resoluciones del año) y guarda en `sii_novedades` (la misma tabla
@@ -68,6 +69,7 @@ async function clasificar(docs: { titulo: string }[], tipo: string, areas: strin
     body: JSON.stringify({ model: "claude-opus-4-8", max_tokens: 4000, messages: [{ role: "user", content: prompt }] }),
   });
   const j = await r.json().catch(() => null);
+  await registrarUsoIA({ funcion: "sii-radar", modelo: "claude-opus-4-8", data: j, status: r.status, maxTokens: 4000 });
   const txt = String(j?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
   try { const arr = JSON.parse(txt.slice(txt.indexOf("["), txt.lastIndexOf("]") + 1)); return Array.isArray(arr) ? arr : []; } catch { return []; }
 }
