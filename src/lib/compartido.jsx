@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
+import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { LOGO_FACTURA_B64 } from '../assets/logoFacturaB64'
 import { supabase, selectAll, getDriveToken, DEMO, alFalloDeEscritura } from '../supabase'
 import { demoData } from '../demoData'
@@ -3407,15 +3408,15 @@ export async function escanearTareasGmail(clients=[], onProgress){
   }
   for(let i=0;i<ids.length;i+=8){ await Promise.all(ids.slice(i,i+8).map(fetchMeta)) }
   if(!correos.length) return []
-  const clientList=clients.filter(c=>c.status!=='Terminado').map(c=>({id:c.id,nombre:c.name}))
+  const lista=listaClientesIA(clients)
   const hoyISO=new Date().toISOString().slice(0,10); const out=[]
   for(let i=0;i<correos.length;i+=20){
     const batch=correos.slice(i,i+20); if(onProgress) onProgress(correos.length===0?0:Math.min(correos.length,i),correos.length)
-    const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES. Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "client_id" (de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","client_id":"<id o null>","due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un client_id fuera de la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
+    const prompt=`Eres asistente de un abogado del estudio ${BRAND.nombre}. Te paso CORREOS (remitente, asunto, vista previa) y la lista de CLIENTES (número|nombre). Para cada correo decide si implica una TAREA o acción pendiente PARA MÍ (responder, enviar algo, revisar, gestionar, cumplir un plazo). Si NO es tarea (newsletter, notificación, info sin acción, publicidad), devuélvelo con "task":false. Para los que sí: "title" breve en infinitivo (ej. "Enviar borrador a Cavor"), "cliente" (número de la lista o null), "due" (YYYY-MM-DD solo si el correo menciona un plazo concreto, si no null) y "note" (1 frase de contexto). Hoy es ${hoyISO}. Devuelve SOLO un JSON array: [{"id":"...","task":true,"title":"...","cliente":<número o null>,"due":"YYYY-MM-DD|null","note":"..."}]. NUNCA inventes un número fuera de la lista.\nCLIENTES:\n${lista.texto}\nCORREOS:\n${JSON.stringify(batch.map(c=>({id:c.id,de:c.fromName+' <'+c.from+'>',asunto:c.subject,preview:c.snippet})))}`
     try{
       const data=await claudeCall({feature:'compartido',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:prompt}]})
       const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
-      arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:(o.client_id&&clients.some(cl=>String(cl.id)===String(o.client_id)))?o.client_id:null, due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
+      arr.forEach(o=>{ if(!o||!o.task) return; const c=batch.find(x=>x.id===o.id); if(!c) return; out.push({...c, title:o.title||c.subject, client_id:lista.idDe(o.cliente), due:(o.due&&/^\d{4}-\d{2}-\d{2}$/.test(o.due))?o.due:null, note:o.note||''}) })
     }catch(_){}
   }
   return out
