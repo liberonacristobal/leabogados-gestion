@@ -85,6 +85,23 @@ export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = 
     && fact.has(String(b.sale_id)) && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
 }
 
+// Cuotas «por emitir» de un mes (mesKey = 'AAAA-MM'): fuente única del checklist y de la foto de Facturación. Las del mes salen del
+// vencimiento real (sin vencimiento rodado), sin ventas terminadas, sin «No corresponde» ni cubiertas por lo facturado; lo atrasado
+// (vencimiento anterior al mes) es exactamente el radar cuotasSinEmitir. Sin folio no hay factura emitida.
+export function cuotasPorEmitirMes({ billing = [], sales = [], fantasmaIds = new Set(), noEmitir = new Set(), mesKey, uf = {} }) {
+  const ini = `${mesKey}-01`
+  const fin = `${mesKey}-${String(new Date(Number(mesKey.slice(0, 4)), Number(mesKey.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
+  const cub = cuotasCubiertasVenta(billing, sales)
+  /** @type {Record<string, string>} */
+  const st = {}
+  ;(sales || []).forEach(s => { if (s && !s.deleted_at) st[String(s.id)] = s.status })
+  const atrasadas = new Set(cuotasSinEmitir({ billing: /** @type {any} */ (billing), sales: /** @type {any} */ (sales), uf, noEmitir, hasta: ini }).map(b => String(b.id)))
+  const fuera = b => (b.sale_id && st[String(b.sale_id)] && st[String(b.sale_id)] !== 'Activo') || noEmitir.has(String(b.id)) || !!cub.get(String(b.id))?.total
+  const dReal = b => String(b.due || b.issued_at || '').slice(0, 10)
+  return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && !(b.invoice_no || b.folio) && b.billing_type !== 'reembolso' && b.billing_type !== 'nota_credito'
+    && !fantasmaIds.has(String(b.id)) && dReal(b) && dReal(b) <= fin && (dReal(b) >= ini ? !fuera(b) : atrasadas.has(String(b.id))))
+}
+
 // Saldo a favor ya recibido a cuenta de las cuotas por emitir: los anticipos disponibles del MISMO trabajo se reparten por orden de
 // vencimiento (FIFO). La factura se emite igual por el total; lo recibido se imputa después. El subarriendo queda fuera: cada pago
 // es de su mes (anticiposSubarriendo). Devuelve Map id de la cuota → monto recibido.
