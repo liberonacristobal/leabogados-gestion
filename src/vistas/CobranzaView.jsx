@@ -114,6 +114,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   const [tramoF,setTramoF] = useState(()=>filtroInicial??null)   // antigüedad: null (todas) | 0 a 4 (tramo) | 'm60' (más de 60 días)
   useEffect(()=>{ if(filtroInicial!=null){ setTramoF(filtroInicial); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line
   const [compMap,setCompMap] = useState({})    // client_id → compromiso de pago {fecha, por, monto, creado, quien} (learnings cobranza_compromiso)
+  const [movTab,setMovTab] = useState('fac')   // móvil, cliente desplegado: 'fac' (facturas) | 'ges' (gestión)
   const [compPage,setCompPage] = useState(null)   // client_id con la hoja «Compromiso de pago» abierta
   const [compForm,setCompForm] = useState({fecha:'',por:'',monto:''})
   const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
@@ -284,11 +285,22 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
     try{ if(!DEMO){ okDB(await supabase.from('learnings').delete().eq('kind','cobranza_compromiso').eq('key',String(cid)),'quitar el compromiso de pago'); logActividad('cobranza.compromiso_quitado',{tabla:'clients',id:cid,detalle:{title:`Compromiso de pago quitado: ${cn(cid)}`}}) }
       setCompMap(m=>{ const n={...m}; delete n[cid]; return n })
     }catch(e){ registrarError({origen:'accion',vista:'cobranza_compromiso',err:e}); appAlert('No se pudo quitar el compromiso: '+(e?.message||e)) } }
+  const ultRec = g=>(gGlobal[g.cid]||g).items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]
+  const chipGes = g=>{ const G=gGlobal[g.cid]||g; if(!(G.vencido>0)||compMap[g.cid]) return null; const u=ultRec(g)
+    return u ? <span style={chipSty(TONO.gr)}>Recordado {fmtFechaDMY(u)}</span> : <span style={chipSty(TONO.hacer)}>Sin gestiones</span> }
+  // Fila compacta de factura para el móvil (N°, vence, mora, saldo a la derecha); al tocarla abre la factura, donde están PDF y Buscar pago.
+  const detMini = ({b,venc,diasVenc})=>(
+    <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:8,alignItems:'center',padding:'8px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenFactura?'pointer':'default'}}>
+      <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>N° {folioN(b.invoice_no)||'—'}</div><div style={{fontSize:10.5,color:C.muted}}>Vence {fmtFechaDMY(venceBill(b))}</div></div>
+      <span style={chipSty(!venc?TONO.ok:diasVenc>90?TONO.hacer:diasVenc>30?TONO.am:TONO.gr)}>{venc?`${diasVenc} d`:'Al día'}</span>
+      <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{f0(saldoBill(b))}</span>
+    </div>)
   // Gestiones de cobro del cliente (despliegue): compromiso vigente/incumplido, último recordatorio, o la ausencia de gestiones a la vista.
-  const gestionesDe = g=>{ const G=gGlobal[g.cid]||g; const recs=G.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort(); const x=compDe(g.cid)
+  const gestionesDe = (g,mini)=>{ const G=gGlobal[g.cid]||g; const recs=G.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort(); const x=compDe(g.cid)
     const desde=G.items.filter(i=>i.venc).map(i=>venceBill(i.b)).filter(Boolean).sort()[0]
-    return (<div onClick={e=>e.stopPropagation()} style={{margin:'10px 0 4px'}}>
-      <div style={SEC_LBL}>Gestiones de cobro</div>
+    return (<div onClick={e=>e.stopPropagation()} style={{margin:mini?'2px 0 4px':'10px 0 4px'}}>
+      {!mini&&<div style={SEC_LBL}>Gestiones de cobro</div>}
+      {mini&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>{chipPunt(g.cid)}<span style={{color:C.muted,fontSize:11.5}}>{(()=>{ const e=punt.get(String(g.cid)); return e&&e.n>0?`${e.n} pagada${e.n!==1?'s':''} · ${e.promedio} d en promedio · ${e.pct30}% en 30 d`:'Ninguna pagada en 12 meses' })()}</span></div>}
       {x&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:12,color:C.text,marginTop:5}}><span>Compromiso de pago <b>{fmtFechaDMY(x.c.fecha)}</b>{x.c.monto?` · ${f0(x.c.monto)}`:''}{x.c.por?` · ${x.c.por}`:''}</span>{chipComp(g.cid)}<span onClick={()=>quitarCompromiso(g.cid)} style={{fontSize:11,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Quitar</span></div>}
       {recs.length>0 ? <div style={{fontSize:12,color:C.muted,marginTop:5}}>Último recordatorio {fmtFechaDMY(recs[recs.length-1])}</div>
         : (G.vencido>0&&!x&&desde) ? <div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginTop:5}}>Sin gestiones registradas en la app desde el {fmtFechaDMY(desde)}</div> : null}
@@ -439,7 +451,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
       })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
         <div key={g.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
           {/* Plegada: nombre + vencido (o el total si está al día). Al tocar se abre el resto: total, estado, ficha, facturas y recordatorio. */}
-          <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+          <div onClick={()=>{ setExpCli(expCli===g.cid?null:g.cid); setMovTab('fac') }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
             <span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
               <div style={{textAlign:'right',lineHeight:1.15}}>
@@ -450,14 +462,11 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
               <span style={{fontSize:11,color:C.muted}}>{expCli===g.cid?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
             </div>
           </div>
-          <div onClick={()=>setExpCli(expCli===g.cid?null:g.cid)} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:6,cursor:'pointer'}}>{chipPunt(g.cid)}{chipComp(g.cid)}<span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.accent}}>{pctCartera(g.cid)} de la cartera</span></div>
+          <div onClick={()=>{ setExpCli(expCli===g.cid?null:g.cid); setMovTab('fac') }} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:6,cursor:'pointer'}}>{chipPunt(g.cid)}{chipGes(g)}{chipComp(g.cid)}<span style={{fontSize:11,fontWeight:600,color:C.muted}}>{pctCartera(g.cid)} de la cartera</span></div>
           {expCli===g.cid&&<>
-          <div style={{display:'flex',alignItems:'center',gap:7,margin:'6px 0 2px',flexWrap:'wrap'}}>
-            <span style={{fontSize:11,color:C.muted}}>{g.items.length} factura{g.items.length!==1?'s':''} pendiente{g.items.length!==1?'s':''}{g.maxDias>0?` · vencida hace ${nDias(g.maxDias)} · ${gapTxt}`:' · al día'}</span>
-            {onOpenClientFicha&&<span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha <Gl n='chevron'/></span>}
-          </div>
-          <div style={{marginTop:6,borderTop:`1px solid ${C.bgSoft}`}}>{g.items.map(detItem)}</div>
-          {gestionesDe(g)}
+          <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,margin:'10px 0 6px'}}>{[['fac',`Facturas · ${g.items.length}`],['ges','Gestión']].map(([k,l])=>{ const on=movTab===k; return <button key={k} onClick={()=>setMovTab(k)} style={{flex:1,fontSize:11.5,fontWeight:700,borderRadius:20,padding:'7px 8px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{l}</button> })}</div>
+          {movTab==='ges' ? gestionesDe(g,true) : <>
+          <div>{g.items.map(detMini)}</div>
           {!conVenc
             ? <div style={{marginTop:9,fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin facturas vencidas</div>
             : <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:9,marginTop:10}}>
@@ -469,6 +478,8 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
                   <button onClick={()=>enviarCliente(g)} disabled={sending===g.cid} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{sending===g.cid?'Enviando…':'Enviar recordatorio'}</button></>}
             </div>
           </div>}
+          {onOpenClientFicha&&<div style={{marginTop:8}}><span onClick={e=>{e.stopPropagation();onOpenClientFicha(g.cid)}} style={{fontSize:11,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha <Gl n='chevron'/></span></div>}
+          </>}
           </>}
         </div>
       )})}
