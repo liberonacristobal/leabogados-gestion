@@ -407,7 +407,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <table style={{borderCollapse:'collapse',width:'100%'}}>
-              <thead><tr>{th('cliente','Cliente')}{th('facturas','Facturas')}{th('mora','Mora')}{th('vencido','Vencido',true)}{th('total','Total deuda',true)}<th style={{...thS,textAlign:'right'}}>Puntualidad</th><th style={{...thS,textAlign:'right'}}>% cartera</th></tr></thead>
+              <thead><tr>{th('cliente','Cliente')}{th('facturas','Facturas')}{th('mora','Mora')}<th style={thS}>Puntualidad</th><th style={{...thS,textAlign:'right'}}>% cartera</th>{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:13,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
@@ -415,10 +415,10 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
                     <td style={td}><span style={{display:'inline-flex',marginRight:7,verticalAlign:'middle',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.done}/></span><span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>{chipComp(g.cid)&&<span style={{marginLeft:8}}>{chipComp(g.cid)}</span>}</td>
                     <td style={{...td,color:C.muted}}>{g.items.length}</td>
                     <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
+                    <td style={td}>{chipPunt(g.cid)}</td>
+                    <td style={{...td,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.muted,fontWeight:600}}>{pctCartera(g.cid)}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
-                    <td style={{...td,textAlign:'right'}}>{chipPunt(g.cid)}</td>
-                    <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{pctCartera(g.cid)}</td>
                   </tr>
                   {open&&<tr><td colSpan={7} style={{background:'#FFFFFF',borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:4}} onClick={e=>e.stopPropagation()}>
