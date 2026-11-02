@@ -2228,6 +2228,14 @@ export function AsignarVentaFactura({factura, sales=[], billing=[], onHecho}){
 // Cuotas marcadas «No corresponde» (learnings cuota_no_emitir): la misma marca que silencia el radar de Facturación.
 export let _noEmitirP=null
 
+// Compromisos de pago de cobranza (learnings cobranza_compromiso): client_id → {fecha, por, monto, creado, quien}.
+export function useCompromisosCobranza(){
+  const [m,setM]=useState({})
+  useEffect(()=>{ if(DEMO) return; let v=true
+    supabase.from('learnings').select('key,value').eq('kind','cobranza_compromiso').then(({data})=>{ if(!v) return; const o={}; (data||[]).forEach(r=>{ try{ o[r.key]=JSON.parse(r.value) }catch(_){} }); setM(o) },()=>{})
+    return ()=>{ v=false } },[])
+  return m
+}
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set())
   useEffect(()=>{ if(DEMO) return; if(!_noEmitirP) _noEmitirP=supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>new Set((data||[]).map(r=>String(r.key))),()=>new Set())

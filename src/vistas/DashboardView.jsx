@@ -4,6 +4,7 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
+import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, diaGrande, fmt, fmtFechaDMY, fmtN, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_CLI, SEÑAL_COL, UF_FALLBACK, _diasDesde, _esOfiCliR, publicarResultadoInicio, _ymPrev, alertasCajaChica, bigDate, carteraMovimiento, claudeCall, cobradoBill, comisPorPagarAnteriores, comisionesVenta, costosOficinaMes, currentYear, daysLeft, daysLeftB, esFacIngreso, esRecurrente, esSubarriendo, esVencidaB, flujoCajaProyectado, fmtDate, fmtMill, fmtMillLR, fmtShort, fmtUFk, gastosPorLiquidarCaja, logEvent, margenDeSale, margenPct, mesCorto, mesTitulo, montoFactura, nDias, porCobrarBills, redondearPartes, resultadoMes, saldoBill, saldoComisiones, saldoDelta, taskAssignees, ufDelDia, urgencyColor, useCalTrib, useFlujoCaja, useFuentesResultado, usePersistedState, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from '../lib/compartido.jsx'
 
@@ -559,6 +560,8 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
   // Vencido = TODO lo vencido (porCobrarBills + esVencidaB), lo mismo que muestra Cobranza; el aging +60 queda solo para su gráfico.
   const vencidoBills = useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)),[billing])
   const vencidoTot = vencidoBills.reduce((a,b)=>a+saldoBill(b),0)
+  // Exposición de la cartera (mismo helper que Cobranza): % de lo por cobrar con más de 60 días de mora.
+  const expoCob = useMemo(()=>exposicionCartera((billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).map(b=>({cid:b.client_id,saldo:saldoBill(b),mora:esVencidaB(b)?-daysLeftB(b):0}))),[billing])
   // Programadas fantasma (ya emitidas, alta confianza) fuera, para no contar dos veces la cuota y su factura gemela.
   const billingProj = useMemo(()=> (fantasmaIds&&fantasmaIds.size) ? (billing||[]).filter(b=> !fantasmaIds.has(String(b.id))) : (billing||[]), [billing,fantasmaIds])
   // Cuentas por pagar (cifra del tile): deuda a proveedores no pagada (por_pagar + pendiente), excluye facturas anuladas. Mismo criterio que el detalle.
@@ -1156,7 +1159,7 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
             {kTile('resmes','Resultado del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct}% pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},'neto · 8 semanas',onOpenFlujoCaja)}
-            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}</span>:'del año',()=>go('cobranza'))}
+            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{expoCob.pctM60>0?` · ${Math.round(expoCob.pctM60*100)}% con más de 60 días`:''}</span>:'del año',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}
             {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
             {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.totalTodo, porPagar=cxpTotDash
               // La cifra grande es lo accionable (por pagar, saldo vivo), igual que «Comisiones por pagar» en Oficina; lo pagado del año va debajo.
