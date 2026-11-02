@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
-import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotasSinEmitir, ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
+import { ufFechaCache, useNoEmitirSet } from '../lib/compartido.jsx'
 import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, diaGrande, fmt, fmtFechaDMY, fmtN, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_CLI, SEÑAL_COL, UF_FALLBACK, _diasDesde, _esOfiCliR, publicarResultadoInicio, _ymPrev, alertasCajaChica, bigDate, carteraMovimiento, claudeCall, cobradoBill, comisPorPagarAnteriores, comisionesVenta, costosOficinaMes, currentYear, daysLeft, daysLeftB, esFacIngreso, esRecurrente, esSubarriendo, esVencidaB, flujoCajaProyectado, fmtDate, fmtMill, fmtMillLR, fmtShort, fmtUFk, gastosPorLiquidarCaja, logEvent, margenDeSale, margenPct, mesCorto, mesTitulo, montoFactura, nDias, porCobrarBills, redondearPartes, resultadoMes, saldoBill, saldoComisiones, saldoDelta, taskAssignees, ufDelDia, urgencyColor, useCalTrib, useFlujoCaja, useFuentesResultado, usePersistedState, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from '../lib/compartido.jsx'
 
@@ -644,13 +645,14 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
     for(let i=1;i<=_mNow;i++){ const r=resultadoMes(fuRes,deps,`${currentYear}-${String(i).padStart(2,'0')}`); o.ing+=r.ing; o.cos+=r.cos; o.com+=r.com; o.res+=r.res; o.ingUF+=r.ingUF; o.cosUF+=r.cosUF; o.comUF+=r.comUF }
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,currentYear,_mNow,ufDias,ufRef])
   // Prioridades financieras (alertas del dueño) — se computa aquí para usar el conteo en la tarjeta de Accesos directos y reusar en la lista. De datos que ya existen.
+  const noEmitirSet=useNoEmitirSet()
   const prioridades = (()=>{
     const hoy=new Date().toISOString().slice(0,10)
     const vencMonto=vencidoTot
     const vencN=vencidoBills.length
-    const _fact=ventasFacturando(billing)   // solo trabajos que ya empezaron a facturar (regla del usuario 24-10)
-    const progVenc=(billingProj||[]).filter(b=> b && !b.deleted_at && b.status==='Programada' && b.due && b.due<hoy && (!b.sale_id || _fact.has(String(b.sale_id))))
-    const progMonto=progVenc.reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
+    // Misma regla que el radar «Cuotas vencidas sin facturar» (Facturación y cierre de mes): meses cerrados, dentro de la vida de la app, sin «No corresponde» ni cubiertas.
+    const progVenc=cuotasSinEmitir({billing:billingProj,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:`${hoy.slice(0,7)}-01`})
+    const progMonto=progVenc.reduce((a,b)=>a+(b.amount||0),0)
     const porIdent=ingresosPorAnioVenta.porIdentificar||0
     const ingYTD_a=ingresosPorAnioVenta.total||0
     const cxpN=comisSaldo.provsPorPagar.size, cxpDias=comisSaldo.porPagarDesde?_diasDesde(comisSaldo.porPagarDesde):null
@@ -664,7 +666,7 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
     const raw=[
       vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>go('cobranza')},
       (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${vMon(entraPrevUF,entraPrev)} · costó ${vMon(rPrev.cosUF,cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
-      progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
+      progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} cuota${progVenc.length!==1?'s':''} vencida${progVenc.length!==1?'s':''} sin facturar`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Revisar',go:()=>onAcceso&&onAcceso('sinemitir')},
       cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}${cxpDias!=null?` · la más antigua cobrada hace ${nDias(cxpDias)}`:''}${comisSaldo.porDevengar>0?` · sujeto a cobro ${fmtShort(comisSaldo.porDevengar)}`:''}`,goLbl:'Ver',go:()=>navTo?navTo({tab:'proveedores'}):go('billing')},
       margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct}%`,goLbl:'Repricing',go:()=>go('repricing')},
       (misHorasSem===0) && {key:'cargahoras:'+_wk,sev:'b',icon:'clock',monto:0,t:'Aún no cargas tus horas de la semana',s:'La app las lee de tu correo y agenda — así mides tu rentabilidad real',goLbl:'Cargar',go:()=>go('horas')},

@@ -625,3 +625,17 @@ test('cuotas por emitir del mes: una sola regla para el checklist y el ciclo de 
   assert.deepEqual(cuotasPorEmitirMes({ billing, sales, mesKey: '2026-11', noEmitir: new Set(['m1']) }).map(b => b.id), ['m2', 'a1'])   // «No corresponde»
   assert.deepEqual(cuotasPorEmitirMes({ billing, sales, mesKey: '2026-11', fantasmaIds: new Set(['m2']) }).map(b => b.id), ['m1', 'a1']) // ya emitida en el SII (cotejo)
 })
+
+test('factura sin enviar: emitida con XML, impaga y sin envío registrado (una regla para la tarjeta, la bandeja y el checklist)', async () => {
+  const { facturaSinEnviar } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const base = { invoice_no: '480', dte_xml: '<x/>', status: 'Pendiente' }
+  assert.equal(facturaSinEnviar(base), true)
+  assert.equal(facturaSinEnviar({ ...base, status: 'Vencido' }), true)
+  assert.equal(facturaSinEnviar({ ...base, status: 'Pagado' }), false)          // pagada: ya no se manda «para que paguen»
+  assert.equal(facturaSinEnviar({ ...base, email_sent_at: '2026-10-02T12:00:00Z' }), false)
+  assert.equal(facturaSinEnviar({ ...base, sent_at: '2026-10-02' }), false)
+  assert.equal(facturaSinEnviar({ ...base, dte_xml: null }), false)             // sin XML no se puede enviar
+  assert.equal(facturaSinEnviar({ ...base, invoice_no: null }), false)          // sin folio no está emitida
+  assert.equal(facturaSinEnviar({ ...base, deleted_at: '2026-10-05' }), false)
+  assert.equal(facturaSinEnviar(null), false)
+})
