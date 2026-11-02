@@ -85,6 +85,10 @@ export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = 
     && fact.has(String(b.sale_id)) && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
 }
 
+// Factura emitida (con folio) y con respaldo XML que aún no se manda al cliente: impaga y sin envío registrado. Fuente única de la
+// tarjeta del ciclo, la bandeja «Facturas por enviar» y el checklist (que además filtra por mes de emisión).
+export const facturaSinEnviar = b => !!b && !b.deleted_at && !!(b.invoice_no || b.folio) && !!b.dte_xml && !b.email_sent_at && !b.sent_at && (b.status === 'Pendiente' || b.status === 'Vencido')
+
 // Cuotas «por emitir» de un mes (mesKey = 'AAAA-MM'): fuente única del checklist y de la foto de Facturación. Las del mes salen del
 // vencimiento real (sin vencimiento rodado), sin ventas terminadas, sin «No corresponde» ni cubiertas por lo facturado; lo atrasado
 // (vencimiento anterior al mes) es exactamente el radar cuotasSinEmitir. Sin folio no hay factura emitida.
