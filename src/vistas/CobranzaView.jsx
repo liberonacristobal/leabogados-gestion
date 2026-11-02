@@ -287,7 +287,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
     }catch(e){ registrarError({origen:'accion',vista:'cobranza_compromiso',err:e}); appAlert('No se pudo quitar el compromiso: '+(e?.message||e)) } }
   const ultRec = g=>(gGlobal[g.cid]||g).items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]
   const chipGes = g=>{ const G=gGlobal[g.cid]||g; if(!(G.vencido>0)||compMap[g.cid]) return null; const u=ultRec(g)
-    return u ? <span style={chipSty(TONO.gr)}>Recordado {fmtFechaDMY(u)}</span> : <span style={chipSty(TONO.hacer)}>Sin gestiones</span> }
+    return u ? <span style={chipSty(TONO.gr)}>Recordado {fmtFechaDMY(u)}</span> : null }
   // Fila compacta de factura para el móvil (N°, vence, mora, saldo a la derecha); al tocarla abre la factura, donde están PDF y Buscar pago.
   const detMini = ({b,venc,diasVenc})=>(
     <div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:8,alignItems:'center',padding:'8px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenFactura?'pointer':'default'}}>
@@ -303,7 +303,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
       {mini&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>{chipPunt(g.cid)}<span style={{color:C.muted,fontSize:11.5}}>{(()=>{ const e=punt.get(String(g.cid)); return e&&e.n>0?`${e.n} pagada${e.n!==1?'s':''} · ${e.promedio} d en promedio · ${e.pct30}% en 30 d`:'Ninguna pagada en 12 meses' })()}</span></div>}
       {x&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:12,color:C.text,marginTop:5}}><span>Compromiso de pago <b>{fmtFechaDMY(x.c.fecha)}</b>{x.c.monto?` · ${f0(x.c.monto)}`:''}{x.c.por?` · ${x.c.por}`:''}</span>{chipComp(g.cid)}<span onClick={()=>quitarCompromiso(g.cid)} style={{fontSize:11,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Quitar</span></div>}
       {recs.length>0 ? <div style={{fontSize:12,color:C.muted,marginTop:5}}>Último recordatorio {fmtFechaDMY(recs[recs.length-1])}</div>
-        : (G.vencido>0&&!x&&desde) ? <div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginTop:5}}>Sin gestiones registradas en la app desde el {fmtFechaDMY(desde)}</div> : null}
+        : (G.vencido>0&&!x&&desde) ? <div style={{fontSize:12,color:C.muted,marginTop:5}}>Sin gestiones registradas en la app desde el {fmtFechaDMY(desde)}</div> : null}
       {G.vencido>0&&<button onClick={()=>abrirCompromiso(g.cid)} style={{marginTop:7,minHeight:32,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:11.5,fontWeight:700,cursor:'pointer'}}>{x?'Cambiar compromiso de pago':'Registrar compromiso de pago'}</button>}
     </div>) }
   const NIV = { firme:{bg:C.soonBg,tx:C.soonText,lbl:'Firme'}, final:{bg:C.overdueBg,tx:C.overdueText,lbl:'Final'} }
