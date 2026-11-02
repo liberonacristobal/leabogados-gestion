@@ -112,14 +112,16 @@ export function alertasTercero(/** @type {any} */ args) {
   for (const [f, ts] of porFolio) {
     const distintas = new Set(ts.map(t => String(t.billing_id || t.id)))
     if (distintas.size > 1) { out.push({ tipo: 'folio_repetido', pago: ts[0], detalle: f }); continue }
-    for (const t of ts) {
-      if (_folios(t.factura_numero).length !== 1) continue
-      const propio = misDocs.find((/** @type {any} */ d) => _folio(d.folio) === f)
-      if (propio) {
-        const e = _n(t.monto), p = _pct(_montoDoc(propio), e)
-        if (e > 0 && Math.abs(p) > tolerancia) out.push({ tipo: 'monto', pago: t, doc: propio, detalle: f, pct: p })
-        continue
-      }
+    // Una factura del tercero puede cubrir varias filas de comisión de la MISMA factura nuestra (p. ej. dos tramos): se compara la
+    // suma de lo esperado de todas esas filas con el monto del documento, no cada fila por separado.
+    const propio = misDocs.find((/** @type {any} */ d) => _folio(d.folio) === f)
+    const unicas = ts.filter((/** @type {any} */ t) => _folios(t.factura_numero).length === 1)
+    if (propio && unicas.length) {
+      const e = unicas.reduce((a, t) => a + _n(t.monto), 0), p = _pct(_montoDoc(propio), e)
+      if (e > 0 && Math.abs(p) > tolerancia) out.push({ tipo: 'monto', pago: unicas[0], doc: propio, detalle: f, pct: p })
+      continue
+    }
+    for (const t of unicas) {
       const otro = (docs || []).find((/** @type {any} */ d) => _esFacturaTercero(d) && _folio(d.folio) === f && rut && _rut(d.emisor_rut) !== rut)
       if (otro) out.push({ tipo: 'emisor_distinto', pago: t, doc: otro, detalle: f })
     }
