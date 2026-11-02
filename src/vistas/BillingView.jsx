@@ -5,7 +5,7 @@ import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supab
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { trabajosSinFacturar, cuotasSinEmitir, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { trabajosSinFacturar, cuotasSinEmitir, cuotasPorEmitirMes, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
@@ -55,7 +55,6 @@ export function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(),
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const [emitSel,setEmitSel] = useState(()=>new Set())   // cuotas seleccionadas (ids) para facturar/descargar en lote
-  const [emitBulk,setEmitBulk] = useState(false)         // emisión en lote en curso
   const toggleSel = id => setEmitSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
   const ufState = useUF()
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -96,8 +95,7 @@ export function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(),
   const ckFuera=useMemo(()=>{ const cub=cuotasCubiertasVenta(billing,sales), st={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) st[String(s.id)]=s.status })
     return b=>(b.sale_id&&st[String(b.sale_id)]&&st[String(b.sale_id)]!=='Activo')||(noEmitirCk&&noEmitirCk.has(String(b.id)))||!!cub.get(String(b.id))?.total },[billing,sales,noEmitirCk])
   const ckAtrasadas=useMemo(()=>new Set(cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart}).map(b=>String(b.id))),[billing,sales,noEmitirCk,refStart])
-  const porEmitir = billing.filter(b=> matchQ(b) && !b.deleted_at && b.status==='Programada' && !esEmitida(b) && b.billing_type!=='reembolso' && b.billing_type!=='nota_credito' && !(fantasmaIds&&fantasmaIds.has(String(b.id))) && dReal(b) && dReal(b)<=refEnd
-    && (dReal(b)>=refStart ? !ckFuera(b) : ckAtrasadas.has(String(b.id))))
+  const porEmitir = cuotasPorEmitirMes({billing,sales,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey,uf:ufFechaCache()||{}}).filter(matchQ)   // misma regla que la foto de Facturación (ventasReglas)
   const yaEmitidasFantasma = billing.filter(b=> !b.deleted_at && b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)) && dReal(b) && dReal(b)<=refEnd)
   const esMesB = b => dReal(b)>=refStart   // devengo del mes en curso (el <=refEnd ya está garantizado por porEmitir)
   const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
@@ -260,7 +258,7 @@ export function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(),
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const ufHoy = ufState.uf || null
-      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
+      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')} al ${fmtFechaDMY(new Date().toLocaleDateString('en-CA'))}` : 'Monto hoy ($)'
       const header=['Responsable','Cliente','Razón social','RUT','Concepto','Cuota','UF',ufNota,'Devengo de la cuota']
       // Fuente única de fila (misma que "↓ Programadas"): reusada por ambas hojas para que no divergan.
       const rowOf = b => {
@@ -290,21 +288,13 @@ export function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(),
     setDesc(false)
   }
 
-  // Facturar en lote: emite (marca emitida) las cuotas seleccionadas, con confirmación. Reversible (desmarcar una a una).
-  const facturarSel = async() => {
-    const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
-    const tot = sel.reduce((a,b)=>a+(b.amount||0),0)
-    const ok = await appConfirm(`Vas a FACTURAR ${sel.length} cuota${sel.length!==1?'s':''} (${fmt(tot)}). Se marcan como emitidas. ¿Continuar?`); if(!ok) return
-    setEmitBulk(true)
-    try{ for(const b of sel){ try{ await onEmitir(b) }catch(_){} } setEmitSel(new Set()) } finally{ setEmitBulk(false) }
-  }
   // Descargar en lote: Excel solo con las cuotas seleccionadas (columnas base).
   const descargarSel = async() => {
     const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const ufHoy = ufState.uf || null
-      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}` : 'Monto hoy ($)'
+      const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')} al ${fmtFechaDMY(new Date().toLocaleDateString('en-CA'))}` : 'Monto hoy ($)'
       const header=['Cliente','Razón social','RUT','Concepto','UF (original)',ufNota,'Devengo']
       const rowOf = b => {
         const c=clients.find(x=>x.id===b.client_id)
@@ -512,7 +502,6 @@ export function ChecklistFacturacion({sinRegN=0, billing, fantasmaIds=new Set(),
           <div style={{color:'#fff',fontSize:12.5,fontWeight:700}}>{sel.length} seleccionada{sel.length!==1?'s':''} · {fmt(tot)}</div>
           <button onClick={()=>setEmitSel(new Set())} style={{marginLeft:'auto',background:'transparent',border:'none',color:C.textSoft,fontSize:11,cursor:'pointer'}}>Limpiar</button>
           <button onClick={descargarSel} style={{background:'#fff',color:C.accent,border:'none',borderRadius:8,padding:'6px 13px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Descargar</button>
-          <button onClick={facturarSel} disabled={emitBulk} style={{background:C.greenText,color:'#fff',border:'none',borderRadius:8,padding:'6px 13px',fontSize:12,fontWeight:700,cursor:emitBulk?'default':'pointer'}}>{emitBulk?'Facturando…':'Facturar'}</button>
         </div>
       )})()}
       {/* 1 · A FACTURAR ESTE MES — por cliente; vigente + atrasadas del mismo cliente (no se para su facturación) */}
@@ -3259,7 +3248,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
               const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
               const mesAct=_now.toISOString().slice(0,7)
-              const pemMes=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&String(b.due||'').startsWith(mesAct))
+              // Mismas cuotas que el checklist (ventasReglas): las del mes, sin lo atrasado (eso es el paso «Vencidas»).
+              const pemMes=cuotasPorEmitirMes({billing,sales,fantasmaIds,noEmitir:noEmitirSet||new Set(),mesKey:mesAct,uf:ufFechaCache()||{}}).filter(b=>String(b.due||b.issued_at||'').slice(0,10)>=`${mesAct}-01`)
               const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0)
               const dupN=yaFacturadasIds.size
               const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0)
@@ -3307,9 +3297,34 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:opts.titCol||C.text,lineHeight:1.3}}>{titulo}</div>
                   <div style={{fontSize:10,color:opts.subCol||C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
                 </div>)
+              // Ciclo del mes (5 pasos, render aprobado 2026-11-02): cada cifra sale de la misma fuente que su pantalla de destino.
+              const sumM=a=>a.reduce((t,b)=>t+(b.amount||0),0)
+              const cobPend=emi.filter(b=>sa(b)>0), porEnvTot=porEnviar.reduce((t,b)=>t+mo(b),0)
+              const pasos=[
+                {k:'Vencidas', n:sinEmitirN, v:sinEmitirN>0?fmtShort(sumM(sinEmitirCands)):'—', u:`${sinEmitirN} cuota${sinEmitirN!==1?'s':''}`, ic:'alert', col:sinEmitirN>0?C.overdueText:C.done, on:()=>go('sinemitir')},
+                {k:'Emitir SII', n:pemN, v:pemN>0?fmtShort(pemTot):'—', u:`${pemN} cuota${pemN!==1?'s':''}`, ic:'file', col:pemN>0?C.accent:C.done, on:()=>{setFilter('checklist');clearSel&&clearSel()}},
+                {k:'Cotejar SII', n:dupN, v:dupN>0?String(dupN):'—', u:'por vincular', ic:'exchange', col:dupN>0?C.accent:C.done, on:()=>setSiiOpen(true)},
+                {k:'Enviar', n:porEnviar.length, v:porEnviar.length>0?fmtShort(porEnvTot):'—', u:`${porEnviar.length} factura${porEnviar.length!==1?'s':''}`, ic:'mail', col:porEnviar.length>0?C.accent:C.done, on:abrirBandeja},
+                {k:'Cobrar', n:cobPend.length, v:cobPend.length>0?fmtShort(cobPend.reduce((t,b)=>t+sa(b),0)):'—', u:`${cobPend.length} de ${emi.length}`, ic:'check', col:cobPend.length>0?C.greenText:C.done, on:()=>setCierreOpen(true)},
+              ]
+              const sigI=[1,2,3].find(i=>pasos[i].n>0)   // paso siguiente: el primero pendiente entre emitir, cotejar y enviar
+              const pasoEl=(p,i)=><div key={i} onClick={p.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();p.on()}}} style={{flex:1,minWidth:0,textAlign:'center',cursor:'pointer',padding:'6px 2px',borderRadius:10,background:sigI===i?C.azulBg:'transparent'}}>
+                <SIcon n={p.ic} s={19} c={p.col}/>
+                <div style={{fontSize:9,fontWeight:600,textTransform:'uppercase',letterSpacing:.3,marginTop:4,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i+1} · {p.k}</div>
+                <div style={{fontSize:isDesktop?16:14,fontWeight:800,color:p.col,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{p.v}</div>
+                <div style={{fontSize:9.5,color:C.muted,marginTop:1}}>{p.u}</div>
+              </div>
+              const flecha=k=><div key={'f'+k} style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
+              const linea=idx=><div style={{display:'flex',alignItems:'stretch'}}>{idx.map((i,k)=>[k>0&&flecha(i),pasoEl(pasos[i],i)])}</div>
+              const cicloMes=(
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 15px'}}>
+                  <div style={{...SEC_LBL,marginBottom:12}}>Ciclo de {MN[_now.getMonth()]}</div>
+                  {isDesktop?linea([0,1,2,3,4]):<div style={{display:'flex',flexDirection:'column',gap:6}}>{linea([0,1,2])}{linea([3,4])}</div>}
+                </div>)
               const P=d=><path d={d}/>
               return (
               <div style={{display:'flex',flexDirection:'column',gap:9,marginBottom:8}}>
+                {cicloMes}
                 {/* EL MES */}
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'1px solid #D3E3F3',borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minHeight:96}}>

@@ -604,3 +604,24 @@ test('calendarios: tributario solo a socios, lo de clientes a todo el equipo; ot
   assert.equal(eventosDeCalendario(ev, cli).length, 4)
   assert.equal(eventosDeCalendario(ev, est).length + eventosDeCalendario(ev, cli).length, ev.length)   // todo evento cae en un calendario y solo en uno
 })
+
+test('cuotas por emitir del mes: una sola regla para el checklist y el ciclo de Facturación', async () => {
+  const { cuotasPorEmitirMes } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 's1', status: 'Activo', amount_clp: 20000000 }, { id: 's2', status: 'Terminado', amount_clp: 1000000 }]
+  const f = (id, sale, extra) => ({ id, sale_id: sale, amount: 1000000, ...extra })
+  const billing = [
+    f('e1', 's1', { invoice_no: '401', status: 'Pagado', issued_at: '2026-07-01' }),
+    f('m1', 's1', { status: 'Programada', due: '2026-11-01' }),                       // del mes → entra
+    f('m2', 's1', { status: 'Programada', due: '2026-11-30' }),                       // del mes → entra
+    f('m3', 's2', { status: 'Programada', due: '2026-11-01' }),                       // venta terminada → no
+    f('m4', 's1', { status: 'Programada', due: '2026-12-01' }),                       // otro mes → no
+    f('m5', 's1', { status: 'Programada', due: '2026-11-05', billing_type: 'reembolso' }), // reembolso → no
+    f('a1', 's1', { status: 'Programada', due: '2026-10-01' }),                       // atrasada (radar) → entra
+    f('a2', 's1', { status: 'Programada', due: '2026-05-01' }),                       // antes de la app → no
+    f('x1', 's1', { status: 'Programada', due: '2026-11-10', invoice_no: '402' }),    // con folio: ya emitida → no
+  ]
+  const r = cuotasPorEmitirMes({ billing, sales, mesKey: '2026-11' })
+  assert.deepEqual(r.map(b => b.id), ['m1', 'm2', 'a1'])
+  assert.deepEqual(cuotasPorEmitirMes({ billing, sales, mesKey: '2026-11', noEmitir: new Set(['m1']) }).map(b => b.id), ['m2', 'a1'])   // «No corresponde»
+  assert.deepEqual(cuotasPorEmitirMes({ billing, sales, mesKey: '2026-11', fantasmaIds: new Set(['m2']) }).map(b => b.id), ['m1', 'a1']) // ya emitida en el SII (cotejo)
+})
