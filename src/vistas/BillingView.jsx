@@ -6,6 +6,7 @@ import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
@@ -2577,6 +2578,17 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
   useEffect(()=>{ const k=String(intent||'').startsWith('cotejo')?'sii':({checklist:'checklist',cierre:'cierre',sinemitir:'sinemitir',sinfacturar:'sinfacturar',porcompletar:'porcompletar'})[intent]; if(k&&onVolver&&origenVolver) desdeFueraRef.current=k },[intent])   // eslint-disable-line
   const volverOrigen=(k,fn)=>()=>{ if(desdeFueraRef.current===k&&onVolver){ desdeFueraRef.current=null; onVolver() } else fn() }
   const origenDe=(k,fb)=>desdeFueraRef.current===k&&origenVolver?origenVolver:fb
+  // Envíos de facturas hechos fuera de la app: se detectan en los enviados de quien abre «Facturas por enviar» (regla estricta en _shared) y se marcan con un toque.
+  const [envDet,setEnvDet] = useState([])
+  const [envDetOpen,setEnvDetOpen] = useState(false)
+  useEffect(()=>{ if(!bandejaEnvio) return; let vivo=true
+    ;(async()=>{ try{ const fs=(billing||[]).filter(b=>facturaSinEnviar(b)&&b.issued_at); const r=await detectarEnviosFacturas({facturas:fs}); if(vivo) setEnvDet(r) }catch(e){ registrarError({origen:'accion',vista:'envios_correo',err:e}) } })()
+    return ()=>{ vivo=false } },[bandejaEnvio])   // eslint-disable-line
+  const quitarEnvDet=h=>setEnvDet(d=>d.filter(x=>!(x.correo_id===h.correo_id&&x.factura_id===h.factura_id)))
+  const aceptarEnvDet=async h=>{ try{ const at=await marcarEnviadaDesdeCorreo(h,user?.name); setBilling&&setBilling(p=>p.map(x=>x.id===h.factura.id?{...x,email_sent_at:at,sent_by:user?.name||null}:x)); quitarEnvDet(h) }catch(e){ registrarError({origen:'accion',vista:'billing',err:e}); appAlert('No se pudo marcar como enviada: '+(e?.message||e)) } }
+  const descartarEnvDet=async h=>{ await descartarEnvioCorreo(h); quitarEnvDet(h) }
+  const marcarYaEnviada=async b=>{ if(!await appConfirm(`¿Marcar la Factura N° ${folioN(b.invoice_no)||b.invoice_no||''} como enviada fuera de la app?\nQueda con la fecha de hoy y sale de «Por enviar».`)) return
+    try{ const at=await marcarEnviadaManual(b,user?.name); setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at,sent_by:user?.name||null}:x)) }catch(e){ registrarError({origen:'accion',vista:'billing',err:e}); appAlert('No se pudo marcar como enviada: '+(e?.message||e)) } }
   const etapaEmision = Number(useConfigValor('sii_emision_etapa'))||1   // paso actual de la puesta en marcha (0 = certificado, ya hecho)
   // Página "Cargar del SII": bitácora (sii_import_batches) e inventario de lo sin registrar se cargan al abrirla. Estado propio (no reusa cargasHist, que abre el modal de historial).
   const [histPage,setHistPage]=useState(null)
@@ -2648,6 +2660,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
     const enviadas=(billing||[]).filter(b=>!b.deleted_at&&(b.email_sent_at||b.sent_at)).sort((x,y)=>String(y.email_sent_at||y.sent_at).localeCompare(String(x.email_sent_at||x.sent_at))).slice(0,15)
     const cliN=b=>clients.find(c=>String(c.id)===String(b.client_id))?.name||'—'
     const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
+    const yaBtn=b=><button onClick={()=>marcarYaEnviada(b)} title='Se envió por otro camino' style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Ya enviada</button>
     const enviarBtn=b=><button onClick={()=>setFacturaEmail(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enviar</button>
     return <FlujoPagina origen='Facturación' titulo='Facturas por enviar' onBack={()=>setBandejaEnvio(false)} maxW={1120}>
       <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
@@ -2655,6 +2668,20 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           {porEnviar.length>0
             ? <div style={{background:C.soonBg,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por enviar al cliente</div><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}><span style={{fontSize:24,fontWeight:800,color:C.soonText,letterSpacing:-.4}}>{porEnviar.length}</span><span style={{fontSize:20,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span></div><div style={{fontSize:11.5,color:C.soonText}}>Emitidas que aún no se mandan al cliente · adjunta el PDF</div></div>
             : <div style={{background:C.greenBg,borderRadius:12,padding:'12px 14px'}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Por enviar al cliente</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo enviado</div></div>}
+          {envDet.length>0&&<div style={{background:C.azulBg,borderRadius:12,padding:'10px 13px'}}>
+            <div onClick={()=>setEnvDetOpen(o=>!o)} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); setEnvDetOpen(o=>!o) } }} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{envDet.length} envío{envDet.length!==1?'s':''} detectado{envDet.length!==1?'s':''} en tus correos enviados</div><div style={{fontSize:11,color:C.muted}}>Confirma para marcarlos como enviados</div></div>
+              <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{envDetOpen?'Ocultar':'Revisar'}</span></div>
+            {envDetOpen&&<div style={{marginTop:9,background:'#fff',borderRadius:10,overflow:'hidden'}}>
+              {envDet.map((h,i)=><div key={h.correo_id+'|'+h.factura_id} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',flexWrap:isDesktop?'nowrap':'wrap'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:C.text,display:'flex',alignItems:'center',gap:6,minWidth:0}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(h.factura.invoice_no)||h.factura.invoice_no} · {cliN(h.factura)}</span>{h.nivel==='probable'&&<span title={h.motivo} style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap',flexShrink:0}}>Probable</span>}</div>
+                  <div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h.correo.asunto||'(sin asunto)'} · {fmtFechaDMY(h.correo.fecha)} · a {h.correo.para.join(', ')}</div></div>
+                <button onClick={()=>aceptarEnvDet(h)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer',flexShrink:0}}>Marcar enviada</button>
+                <button onClick={()=>descartarEnvDet(h)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>No corresponde</button>
+              </div>)}
+            </div>}
+          </div>}
           {porEnviar.length>0&&<label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'9px 11px',background:C.bgSoft,borderRadius:9}}><input type='checkbox' checked={masivoSaldo} onChange={e=>setMasivoSaldo(e.target.checked)} style={{cursor:'pointer',marginTop:1,flexShrink:0}}/><span style={{fontSize:11.5,color:C.text,lineHeight:1.4}}>Recordar saldo pendiente<span style={{color:C.muted}}> — si el cliente tiene otra factura por cobrar, se agrega al correo la línea con el detalle (factura completa o saldo parcial).</span></span></label>}
           {porEnviar.length>0&&<div style={card}>
             {isDesktop
@@ -2664,10 +2691,10 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                     <td onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>{cliN(b)}</td>
                     <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,color:dest?C.muted:C.overdueText,fontSize:11.5}}>{dest||'sin correo — lo eliges al enviar'}</td>
                     <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</td>
-                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}>{enviarBtn(b)}</td></tr> })}</tbody></table>
+                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></td></tr> })}</tbody></table>
               : porEnviar.map((b,i)=>{ const dest=contactoDe(b); return <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
                   <div onClick={()=>onEdit&&onEdit(b)} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'} · {cliN(b)}</div><div style={{fontSize:10.5,color:dest?C.muted:C.overdueText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest||'sin correo — lo eliges al enviar'}</div></div>
-                  <span style={{fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>{enviarBtn(b)}</div> })}
+                  <span style={{fontSize:12.5,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></div> })}
             <div style={{display:'flex',alignItems:'center',gap:8,paddingTop:10}}><span style={{fontSize:11,color:C.muted,flex:1,minWidth:0}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span><button disabled={envioMasivoBusy} onClick={enviarTodas} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'9px 14px',cursor:'pointer',opacity:envioMasivoBusy?.6:1}}>{envioMasivoBusy?'Enviando…':'Enviar todas'}</button></div>
           </div>}
         </div>
