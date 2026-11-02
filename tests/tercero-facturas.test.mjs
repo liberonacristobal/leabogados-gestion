@@ -135,3 +135,13 @@ test('listas vacías y valores nulos: sin NaN ni errores', () => {
   assert.equal(c.totales.parteTercero, 0)
   assert.equal(alertasTercero({ pagos: null, docs: null, billing: null, proveedor: null }).length, 0)
 })
+
+test('una factura del tercero que cubre dos filas de la MISMA factura nuestra: se compara la suma, sin alerta de monto', () => {
+  const pagos = [pago('t1', 'b1', 400000, { factura_numero: '300' }), pago('t2', 'b1', 100000, { factura_numero: '300' })]
+  const r = alertasTercero({ docs: [doc('d1', 300, '2026-08-31', 500000)], pagos, billing, proveedor: PROV, hoy: '2026-11-02' })
+  assert.deepEqual(r.filter(a => a.tipo === 'monto'), [])
+  assert.deepEqual(r.filter(a => a.tipo === 'folio_repetido'), [])
+  // Si la suma sí difiere más de la tolerancia, alerta una sola vez (no una por fila).
+  const r2 = alertasTercero({ docs: [doc('d1', 300, '2026-08-31', 560000)], pagos, billing, proveedor: PROV, hoy: '2026-11-02' })
+  assert.equal(r2.filter(a => a.tipo === 'monto').length, 1)
+})
