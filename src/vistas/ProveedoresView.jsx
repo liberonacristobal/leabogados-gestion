@@ -4,8 +4,9 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
+import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll } from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
 export function _simTipo(aRaw,bRaw){
@@ -101,6 +102,79 @@ export function cuadreComisiones({ts=[], billing=[], anticipos=[], concs=[], sal
   return {items, ok, filas}
 }
 
+// ── Facturas del tercero (2026-11-02): la factura que emite el proveedor por su parte de cada cuota, cuadrada con la cuota del cliente.
+// Reglas en _shared/terceroFacturasReglas.js (cuadre propuesto, alertas, cadena); aquí solo la presentación (escritorio y móvil).
+const _pctTxt = p => `${(Math.abs(p)*100).toFixed(1).replace('.',',')}%`
+export const TERC_ALERTA = {
+  esperada_sin_emitir:'Factura del proveedor sin emitir',
+  monto:'Monto fuera de tolerancia',
+  folio_repetido:'Folio repetido',
+  emisor_distinto:'Emisor distinto' }
+const _tercEtq = f => ({recibida:['pg','Recibida'],registrada:['dev','Sin documento en el SII'],propuesta:['pp','Por cuadrar'],esperada:['dev','Esperada'],sin_emitir:['rev','Sin emitir']})[f]||['dev','']
+const _TERC_TONO = {pg:[C.greenBg,C.greenText],pp:[C.soonBg,C.soonText],dev:[C.bgSoft,C.muted],rev:[C.overdueBg,C.overdueText]}
+function TercChip({tono,txt}){ const [bg,fg]=_TERC_TONO[tono]||_TERC_TONO.dev; return <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:bg,color:fg,lineHeight:1.35,display:'inline-block',whiteSpace:'nowrap'}}>{txt}</span> }
+
+export function TercFacturasCard({rt, isDesktop, dmy, cuotaTxt, onAbrir, onCuadrar, onDescartar, busy}){
+  const T=rt.cadena.totales
+  const kLbl={fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}
+  const num={fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}
+  const tile=(l,v,sub)=><div style={{flex:1,minWidth:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 12px'}}><div style={{...kLbl,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div><div style={{fontSize:isDesktop?19:17,fontWeight:700,color:C.accent,letterSpacing:-.4,...num,marginTop:1}}>{fmtMill(v)}</div>{sub&&<div style={{fontSize:11,color:C.muted,...num}}>{sub}</div>}</div>
+  const row=(key,left,right,onClick)=><div key={key} onClick={onClick} className={onClick?'pv-c':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onClick?'pointer':'default'}}>{left}{right}</div>
+  const lbl=t=><span style={{...kLbl,display:'block',padding:'10px 14px 4px'}}>{t}</span>
+  const cuotaDe=t=>cuotaTxt(t)
+  return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,padding:'12px 14px 8px'}}>
+      {tile('Facturado',T.facturado,`${T.n} cuota${T.n===1?'':'s'}`)}
+      {tile('Parte del proveedor',T.parteTercero)}
+      {tile('Con factura recibida',T.conFactura,`${T.nConFactura} de ${T.n}`)}
+    </div>
+    {rt.alertas.length>0&&<>{lbl(`Alertas · ${rt.alertas.length}`)}{rt.alertas.map((a,i)=>{ const t=a.pago, cu=cuotaDe(t)
+      const sub=a.tipo==='esperada_sin_emitir'?`Se esperaba hasta el ${dmy(a.detalle)}`:a.tipo==='monto'?`Factura N° ${a.detalle} del SII difiere ${_pctTxt(a.pct||0)} de la parte esperada`:a.tipo==='folio_repetido'?`La factura N° ${a.detalle} está en más de una cuota`:`La factura N° ${a.detalle} del SII es de otro RUT`
+      return row('a'+i,<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.overdueText}}>{TERC_ALERTA[a.tipo]}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cu} · {sub}</div></div>,<span style={{fontSize:13,fontWeight:700,...num}}>{fmt(a.doc?Math.abs(Number(a.doc.monto)||0):Number(t.monto)||0)}</span>,()=>onAbrir(t.id)) })}</>}
+    {rt.propuestas.length>0&&<>{lbl(`Cuadres propuestos · ${rt.propuestas.length}`)}{rt.propuestas.map(pr=>{ const d=pr.doc, t=pr.pago
+      return <div key={d.id} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,display:'flex',flexDirection:'column',gap:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700}}>Factura N° {d.folio} <span style={{fontWeight:400,color:C.muted}}>· {dmy(d.fecha_emision)}</span></div>
+            <div style={{fontSize:11,color:C.muted}}>Cuadra con {cuotaDe(t)} · {pr.diferencia===0?'monto exacto':`difiere ${_pctTxt(pr.pct)} de la parte esperada ${fmt(Number(t.monto)||0)}`} · única cuota facturada sin factura del proveedor</div></div>
+          <span style={{fontSize:13,fontWeight:700,...num}}>{fmt(Math.abs(Number(d.monto)||0))}</span></div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <ActBtn variant='ghost' onClick={()=>onDescartar(d,t)}>No es esa</ActBtn>
+          <ActBtn variant='primary' onClick={()=>onCuadrar(pr)}>{busy==='cuadre:'+d.id?'Cuadrando…':'Cuadrar'}</ActBtn></div></div> })}</>}
+    {rt.noResueltas.length>0&&<>{lbl(`Por revisar a mano · ${rt.noResueltas.length}`)}{rt.noResueltas.map(n=>row('n'+n.doc.id,<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700}}>Factura N° {n.doc.folio} <span style={{fontWeight:400,color:C.muted}}>· {dmy(n.doc.fecha_emision)}</span></div><div style={{fontSize:11,color:C.muted}}>{n.motivo==='varias_cuotas'?'Cabe en más de una cuota':n.motivo==='fuera_tolerancia'?'Ninguna cuota sin factura queda dentro del 1%':'No hay cuota facturada sin factura del proveedor'}</div></div>,<span style={{fontSize:13,fontWeight:700,...num}}>{fmt(Math.abs(Number(n.doc.monto)||0))}</span>))}</>}
+    {lbl('Cuotas')}
+    {isDesktop&&<div style={{display:'flex',gap:10,padding:'4px 14px',fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}><span style={{flex:1}}>Cuota</span><span style={{width:120,textAlign:'right'}}>Facturado</span><span style={{width:150,textAlign:'right',whiteSpace:'nowrap'}}>Parte del proveedor</span><span style={{width:11}}/></div>}
+    {rt.cadena.cuotas.map(c=>{ const [tn,tx]=_tercEtq(c.debemos.factura)
+      return row(c.pago.id,<div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12.5,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cuotaDe(c.pago)}</div>
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',fontSize:11,color:C.muted}}><span>{dmy(c.facturamos.fecha)}</span><TercChip tono={tn} txt={c.debemos.folio&&c.debemos.factura!=='propuesta'?`N° ${c.debemos.folio} · ${tx}`:tx}/>{!isDesktop&&<span style={num}>Facturado {fmtMill(c.facturamos.monto)}</span>}</div></div>,
+        <>{isDesktop&&<span style={{width:120,textAlign:'right',fontSize:13,color:C.muted,...num}}>{fmt(c.facturamos.monto)}</span>}<span style={{width:isDesktop?150:'auto',textAlign:'right',fontSize:13,fontWeight:700,...num}}>{fmt(c.debemos.monto)}</span><span style={{color:C.textSoft,fontSize:11}}><Gl n='chevron'/></span></>,()=>onAbrir(c.pago.id)) })}
+    {rt.cadena.cuotas.length===0&&<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin cuotas facturadas</div>}
+    {rt.cadena.provision>0&&<div style={{padding:'9px 14px',fontSize:11.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>{rt.cadena.provision} cuota{rt.cadena.provision===1?'':'s'} futura{rt.cadena.provision===1?'':'s'} aún sin facturar</div>}
+  </div>
+}
+
+// Cadena de una cuota: facturamos al cliente · el cliente paga · debemos al proveedor · pagamos al proveedor.
+export function TercCadenaPage({c, prov, titulo, isDesktop, dmy, onBack, onFactura}){
+  const kLbl={fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}
+  const hito=(n,estado,t,sub)=>{ const [bg,fg]={ok:[C.greenBg,C.greenText],rev:[C.overdueBg,C.overdueText],pp:[C.soonBg,C.soonText],no:[C.bgSoft,C.muted]}[estado]
+    return <div key={n} style={{display:'flex',gap:12,padding:'12px 0',borderTop:n>1?`1px solid ${C.bgSoft}`:'none'}}><span style={{width:26,height:26,borderRadius:'50%',background:bg,color:fg,fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</span><div style={{minWidth:0}}><div style={{fontSize:13.5,fontWeight:700}}>{t}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{sub}</div></div></div> }
+  const {facturamos:h1,clientePaga:h2,debemos:h3,pagamos:h4}=c
+  const f=h3.factura
+  const sub3=`Parte ${fmt(h3.monto)} · `+(f==='recibida'?`Factura N° ${h3.folio} del ${dmy(h3.fecha)} · recibida del SII`:f==='registrada'?`Factura N° ${h3.folio} registrada · sin documento en el SII`:f==='propuesta'?`Propuesta: factura N° ${h3.folio} del SII, por cuadrar`:f==='sin_emitir'?`Factura del proveedor sin emitir desde el ${dmy(h3.limite)}`:`Factura del proveedor aún no emitida · se espera hasta el ${dmy(h3.limite)}`)
+  return <div>
+    <PageHeader origen={prov} onBack={onBack} titulo={titulo}/>
+    <div style={{padding:isDesktop?'16px 26px 48px':'12px 14px 40px',maxWidth:isDesktop?760:640,margin:'0 auto'}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 16px'}}>
+        <div style={kLbl}>Cadena de la cuota</div>
+        {hito(1,'ok','Facturamos al cliente',<>Factura N° {folioN(h1.folio)} del {dmy(h1.fecha)} · {fmt(h1.monto)} · <span onClick={onFactura} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver factura</span></>)}
+        {hito(2,h2.ok?'ok':h2.vencida?'rev':'no','El cliente paga',h2.ok?`Pagada${h2.fecha?' el '+dmy(h2.fecha):''}`:h2.vencida?'Sin pago registrado · factura vencida':'Pendiente de pago')}
+        {hito(3,f==='recibida'?'ok':f==='sin_emitir'?'rev':f==='propuesta'?'pp':'no','Debemos al proveedor',sub3)}
+        {hito(4,h4.ok?'ok':'no','Pagamos al proveedor',h4.ok?`Pagada${h4.fecha?' el '+dmy(h4.fecha):''}`:h4.habilitado?'Por pagar':'Se habilita cuando el cliente pague')}
+      </div>
+    </div>
+  </div>
+}
+
 export function CorreoBoletaPage({prov, bm, lineas=[], user, onBack, onSent}){
   const isDesktop = useIsDesktop()
   const myEmail = String(user?.email||'').toLowerCase()
@@ -177,6 +251,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   // soloProvId: «Mis comisiones» del miembro del equipo — su propia ficha, solo lectura (sin editar, enlazar, pagar ni banco).
   const ro = !!soloProvId
   const mem = ro ? null : viewMemLeer('proveedores')
+  const [cadSel,setCadSel] = useState(null), abrirTercRef = useRef(false), scrollFichaRef = useRef(null), [volverOrigen,setVolverOrigen] = useState(false)   // cadena de una cuota abierta · abrir «Facturas del tercero» al llegar desde Facturación
   const [view,setView] = useState(ro?'ficha':(mem?.view||'list'))   // list | ficha | form | enlazar | pagar
   const [modo,setModo] = useState(mem?.modo==='cli'?'cli':'prov')   // lista: prov (por proveedor) | cli (por cliente)
   const [lf,setLf] = useState('todos'), [expP,setExpP] = useState(null), [verSinMov,setVerSinMov] = useState(false)   // landing: filtro por tarjeta · fila desplegada · proveedores sin movimiento en el año
@@ -189,8 +264,8 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const [ordC,setOrdC] = useState(-1), [ordP,setOrdP] = useState(-1)   // orden por fecha: comisiones · pagos y facturas del SII (−1 = más nuevo primero)
   const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(5) // comisión desplegada · cuántas se muestran
   const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false)   // ficha: revisar y acciones · tarjetita abierta · más clientes
-  useEffect(()=>{ if(ro) return; viewMemGuardar('proveedores',{view:['form','pagar','boleta'].includes(view)?(selId?'ficha':'list'):view,selId,yr,modo,tf}) },[view,selId,yr,modo,tf])
-  useEffect(()=>{ if(focoProvId&&proveedores.some(p=>String(p.id)===String(focoProvId))){ setSelId(String(focoProvId)); setView('ficha'); setCf('todas'); onFocoUsado&&onFocoUsado() } },[focoProvId,proveedores])
+  useEffect(()=>{ if(ro) return; viewMemGuardar('proveedores',{view:['form','pagar','boleta','cadena'].includes(view)?(selId?'ficha':'list'):view,selId,yr,modo,tf}) },[view,selId,yr,modo,tf])
+  useEffect(()=>{ if(focoProvId&&proveedores.some(p=>String(p.id)===String(focoProvId))){ setSelId(String(focoProvId)); setView('ficha'); setCf('todas'); abrirTercRef.current=true; setVolverOrigen(true); onFocoUsado&&onFocoUsado() } },[focoProvId,proveedores])   // llegó desde otra vista (Facturación): «‹» de la ficha vuelve ahí
   const [q,setQ] = useState('')
   const [ord,setOrd] = useState({k:'total',dir:-1})
   const [evMas,setEvMas] = useState(false), [cMas,setCMas] = useState(false), [retOpen,setRetOpen] = useState(false)
@@ -219,6 +294,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const [docs,setDocs] = useState([]), [cargos,setCargos] = useState([]), [concs,setConcs] = useState([]), [gastosCat,setGastosCat] = useState({}), [abonoCli,setAbonoCli] = useState({})
   const ruts = useMemo(()=>new Set(proveedores.map(p=>_nRut(p.rut)).filter(Boolean)),[proveedores])
   // Boletas de honorarios de los proveedores (bruto, retención, líquido, PDF en el bucket privado `documentos`).
+  const terc = useTerceroFacturas({terceros:ro?[]:terceros,billing,proveedores:ro?[]:proveedores})   // facturas del tercero (SII) ↔ cuotas: cuadre propuesto y alertas
   const [bhes,setBhes] = useState([])
   useEffect(()=>{ if(DEMO){ setBhes(demoData.boletas_honorarios||[]); return } const ids=proveedores.filter(esBoletaProv).map(p=>p.id).filter(id=>!ro||String(id)===String(soloProvId)); if(!ids.length) return
     supabase.from('boletas_honorarios').select('*').in('proveedor_id',ids).order('fecha',{ascending:false}).then(({data})=>setBhes(data||[]),()=>{}) },[proveedores])
@@ -247,6 +323,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     }catch(_){} })()
     return ()=>{ vivo=false } },[proveedores,ruts,billIds.join(',')])
 
+  useEffect(()=>{ if(abrirTercRef.current&&selId&&terc.porProveedor[String(selId)]?.nRevisar>0){ abrirTercRef.current=false; setSecAb('tercero') } },[terc.porProveedor,selId])
   const hoyISO = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})   // fecha de Chile (no UTC: de noche daba el día siguiente)
   const dmy = iso => fmtFechaDMY(String(iso||'').slice(0,10))
   const dm = iso => { const s=String(iso||'').slice(0,10).split('-'); return s[2]?`${s[2]}-${s[1]}`:'' }
@@ -484,12 +561,31 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     logActividad(`proveedores.${prov.id}.factura_quitar`,{tabla:'sii_compras_docs',id:d.id,detalle:{title:`Factura N° ${d.folio}`}})
   }
 
+  // Facturas del tercero: «Cuadrar» escribe factura_numero y factura_fecha en la cuota (como el registro de la factura del proveedor) y deja historial.
+  const cuadrarTercero = async pr => {
+    if(busy) return
+    const t=pr.pago, d=pr.doc, b=facDe(t), prov=proveedores.find(p=>String(p.id)===String(t.proveedor_id)), monto=Math.abs(Number(d.monto)||0)
+    if(!(await appConfirm(`¿Cuadrar la factura N° ${d.folio} del ${dmy(d.fecha_emision)} (${fmt(monto)}) con la cuota ${b?.invoice_no?'de la factura N° '+folioN(b.invoice_no):'elegida'}${cliDe(t)?' de '+cliDe(t).name:''}? Se anota en esa cuota.`))) return
+    setBusy('cuadre:'+d.id)
+    const patch={factura_numero:String(d.folio),factura_fecha:String(d.fecha_emision||'').slice(0,10)||null}
+    if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update(patch).eq('id',t.id); if(error){ setBusy(null); appAlert('No se pudo cuadrar: '+error.message); return } }
+    setTerceros&&setTerceros(p=>p.map(x=>x.id===t.id?{...x,...patch}:x))
+    logActividad(`proveedores.${t.proveedor_id}.factura_tercero`,{tabla:'terceros_pagos',id:t.id,detalle:{title:`Factura N° ${d.folio} cuadrada con la cuota${b?.invoice_no?' de la factura N° '+folioN(b.invoice_no):''}`,monto}})
+    setBusy(null)
+  }
+  const descartarTercero = async (d,t) => {
+    if(!(await appConfirm(`¿Descartar el cuadre de la factura N° ${d.folio} con esta cuota? No se vuelve a proponer.`))) return
+    terc.descartar(d.id,t.id)
+    logActividad(`proveedores.${t.proveedor_id}.factura_tercero_no`,{tabla:'sii_compras_docs',id:d.id,detalle:{title:`Factura N° ${d.folio}: no corresponde a esa cuota`}})
+  }
+  const cliCorto2 = n => String(n||'').split(/\s+/).slice(0,2).join(' ')
+  const cuotaTercTxt = t => { const b=facDe(t), q=nCuotaDe(b); return `${q?`Cuota ${q.n}${q.de?' de '+q.de:''}`:'Cuota'} · ${cliCorto2(cliDe(t)?.name)}${b?.invoice_no?' · Factura N° '+folioN(b.invoice_no):''}` }
   const anios = [...new Set([...terceros.map(t=>yOf(t.pagado_at)),...docs.map(d=>yOf(d.fecha_emision)),...cargos.map(m=>yOf(m.fecha))].filter(y=>/^\d{4}$/.test(y)))]
   if(!anios.includes(yr)) anios.push(yr)
   anios.sort((a,b)=>b.localeCompare(a))
   const selAnio = <select value={yr} onChange={e=>setYr(e.target.value)} title='Año de lo pagado y transferido' style={{fontSize:12.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.card,outline:'none',cursor:'pointer'}}>{anios.map(y=><option key={y} value={y}>{y}</option>)}</select>
   const sel = proveedores.find(p=>String(p.id)===String(selId))
-  const abrirFicha = (id,filtro='todas',cli=null) => { setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(5); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
+  const abrirFicha = (id,filtro='todas',cli=null) => { setVolverOrigen(false); setSelId(String(id)); setView('ficha'); setCf(filtro); setCliF(cli); setNVer(5); setExpT(null); setEvMas(false); setCMas(false); setAsgOpen(false); setRetOpen(false) }
   const abrirNuevo = () => { setF({nombre:'',razon_social:'',rut:'',datos_pago:'',documento:null}); setOkDistinto(false); setCompletarCola([]); setView('form') }
   const abrirEditar = (p,cola=[]) => { setF({id:p.id,nombre:p.nombre||'',razon_social:p.razon_social||'',rut:p.rut||'',datos_pago:p.datos_pago||'',documento:p.documento||null}); setOkDistinto(false); setCompletarCola(cola); setSelId(String(p.id)); setView('form') }
   const abrirBoleta = p => { const sinDoc=tercDe(p.id).filter(t=>est(t)!=='pagada'&&!t.factura_numero); const pp=sinDoc.filter(t=>est(t)==='por_pagar')
@@ -670,6 +766,11 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   }
 
   // ── FICHA ──
+  if(view==='cadena'&&sel&&cadSel){
+    const rt=terc.porProveedor[String(sel.id)], c=rt?.cadena.cuotas.find(x=>String(x.pago.id)===String(cadSel))
+    const q=nCuotaDe(c?.billing)
+    if(c) return (<div>{css}<TercCadenaPage c={c} prov={tituloProv(sel)} titulo={q?`Cuota ${q.n}${q.de?' de '+q.de:''}`:`Factura N° ${folioN(c.facturamos.folio)}`} isDesktop={isDesktop} dmy={dmy} onBack={()=>{ setView('ficha'); const sc=scrollFichaRef.current; setTimeout(()=>restoreScroll(sc),0) }} onFactura={()=>onOpenFactura&&onOpenFactura(c.billing)}/></div>)
+  }
   if(view==='ficha'&&sel){
     const m0=met(sel), ts=tercDe(sel.id), dsAll=docsDe(sel.id), csAll=cargosDe(sel.id), cli=clienteDe(sel), fq=factQueTePaga(sel)
     const conBolF = esBoletaProv(sel)   // emite boleta de honorarios: costo bruto · retención · líquido
@@ -979,7 +1080,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
         {diaGrande(d.fecha_emision)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{tit}</div><div style={{fontSize:11,color:C.muted}}>{subT}</div></div>
         <span style={{fontSize:13,fontWeight:700,color:nc?C.muted:C.text,...num}}>{nc?'−':''}{fmt(Math.abs(Number(d.monto)||0))}</span></div>{enlP?.did===d.id&&panelEnlace()}</Fragment> }
     const docsCard = docsY.length ? <div style={{...card,overflow:'hidden'}}>{band(`Facturas de ${tituloProv(sel)} en el SII · ${yr}`,ordTog(ordP,setOrdP))}{docsY.map(filaDoc)}</div> : null
-    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
+    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta'],['factura_tercero','Cuadró una factura del proveedor con su cuota'],['factura_tercero_no','Descartó un cuadre de factura']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
     const btnExcel = <span onClick={exportCuotas} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
     // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
@@ -997,9 +1098,12 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     const pagTot = pagosY.reduce((x,m)=>x+Math.abs(Number(m.monto)||0),0), ultPagoF = pagosY.map(m=>String(m.fecha)).sort().pop()
     const facY = docsY.filter(d=>Number(d.tipo_dte)!==61), nNC = docsY.length-facY.length, docNet = docsY.reduce((x,d)=>x+sgn(d)*Math.abs(Number(d.monto)||0),0)
     const ultDoc = [...facY].sort((p1,p2)=>String(p1.fecha_emision).localeCompare(String(p2.fecha_emision))).pop()
+    const rtT = ro ? null : terc.porProveedor[String(sel.id)]
+    const tercEl = rtT ? <TercFacturasCard rt={rtT} isDesktop={isDesktop} dmy={dmy} cuotaTxt={cuotaTercTxt} busy={busy} onAbrir={id=>{ try{ const d=document.getElementById('main-scroll'); scrollFichaRef.current={w:window.scrollY||0,d:d?d.scrollTop:0} }catch(_){} setCadSel(id);setView('cadena'); setTimeout(()=>restoreScroll({w:0,d:0}),0) }} onCuadrar={cuadrarTercero} onDescartar={descartarTercero}/> : null
     const secs = [
       pagosCard&&{k:'pagos',t:'Pagos del banco',v:fmt(pagTot),s:`${pagosY.length} en ${yr}${ultPagoF?' · último '+dmy(ultPagoF):''}`,el:pagosCard},
       docsCard&&{k:'sii',t:'Facturas en el SII',v:fmt(docNet),s:`${facY.length} factura${facY.length!==1?'s':''}${nNC?` y ${nNC} NC`:''} en ${yr}${ultDoc?' · última F'+ultDoc.folio:''}`,el:docsCard},
+      tercEl&&{k:'tercero',t:'Facturas del tercero',v:fmt(rtT.cadena.totales.parteTercero),s:`${rtT.cadena.totales.nConFactura} de ${rtT.cadena.totales.n} con factura${rtT.nRevisar?` · ${rtT.nRevisar} por revisar`:''}`,el:tercEl},
       aFavor&&{k:'cobrar',t:'Comisiones por cobrar',v:fmt(m0.porCobrarTe),s:`cobradas ${yr} ${fmt(m0.cobAnioTe)}`,el:aFavor},
       {k:'hist',t:'Historial',v:null,s:'Pagos, enlaces y cambios',el:bita},
     ].filter(Boolean)
@@ -1019,7 +1123,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
       ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
       : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
     return (<div>{css}
-      <PageHeader origen={ro?origen:'Proveedores'} onBack={ro?onBack:()=>setView('list')} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
+      <PageHeader origen={(ro||volverOrigen)?origen:'Proveedores'} onBack={ro?onBack:()=>{ if(volverOrigen&&onBack){ setVolverOrigen(false); onBack() } else setView('list') }} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
         {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{mesCard}{cuadreCard}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>

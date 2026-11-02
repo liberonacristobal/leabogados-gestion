@@ -138,6 +138,9 @@ export const demoData = {
     { id:'b10', client_id:'c6', sale_id:'s6', concept:'Contratos con proveedores',               amount:40000000, status:'Pendiente',  invoice_no:'1312', issued_at:'2026-05-28', due:'2026-07-10', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b11', client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 1/2',                      amount:23400000, status:'Pendiente',  invoice_no:'1320', issued_at:'2026-06-02', due:'2026-06-30', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b12', client_id:'c4', sale_id:'s4', concept:'Asesoría permanente — mayo',              amount:4000000,  status:'Pendiente',  invoice_no:'1330', issued_at:'2026-05-31', due:'2026-06-20', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'bpa1', client_id:'c3', sale_id:null, concept:'Servicio con proveedor — Cuota 1 de 24', amount:1800000, status:'Pagado',    invoice_no:'1401', issued_at:'2026-08-03', due:'2026-09-02', paid_at:'2026-08-20', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bpa2', client_id:'c3', sale_id:null, concept:'Servicio con proveedor — Cuota 2 de 24', amount:1810000, status:'Pendiente', invoice_no:'1415', issued_at:'2026-09-01', due:'2026-10-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
+    { id:'bpa3', client_id:'c3', sale_id:null, concept:'Servicio con proveedor — Cuota 3 de 24', amount:1820000, status:'Pendiente', invoice_no:'1430', issued_at:'2026-10-02', due:'2026-11-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'b19', client_id:'c3', sale_id:null, concept:'Estudio de títulos — saldo',              amount:677309,   status:'Vencido',    invoice_no:'1305', issued_at:'2026-04-01', due:'2026-05-01', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     // Calce cercano por DIFERENCIA DE UF (#8): venta en UF (s5). Cuota PROGRAMADA a 300 UF × $39.000 = $11.700.000 (b.amount); EMITIDA a la UF del día ($39.500) → DTE $11.850.000. El cliente pagó lo programado ($11.700.000) → faltan $150.000 (1,3%) = variación de UF.
     { id:'bcc', client_id:'c5', sale_id:'s5', concept:'Marcas — cuota 2/2 (UF)',                  amount:11700000, status:'Pendiente',  invoice_no:'1340', issued_at:'2026-09-02', due:'2026-09-30', paid_at:null, billing_type:'honorarios', monto_terceros:0, receptor_rut:'76.222.333-4', dte_xml:'<DTE><MntTotal>11850000</MntTotal></DTE>' },
@@ -304,6 +307,7 @@ export const demoData = {
   proveedores: [
     { id:'pv1', nombre:'Andrés Rojas',    razon_social:'Rojas Abogados SpA',  rut:'77.900.100-2', datos_pago:'Banco de Chile · cuenta corriente 00-123-45678-90 · 77.900.100-2 · pagos@rojasabogados.cl' },
     { id:'pv2', nombre:'María José Soto', razon_social:'MJ Asesorías Ltda.',  rut:'76.500.300-4' },
+    { id:'pv4', nombre:'Proveedor A',     razon_social:'Proveedor A SpA',     rut:'76.123.456-7', datos_pago:'Banco de Chile · cuenta corriente 00-555-44444-33 · 76.123.456-7' },
     { id:'pv3', nombre:'Tomás Vidal',     razon_social:'Tomás Vidal Pérez',   rut:'17.456.789-3', documento:'boleta', datos_pago:'BancoEstado · cuenta RUT 17456789 · tvidal@correo.cl' },
   ],
   // Boletas de honorarios recibidas (quien emite boleta: costo = bruto; retención al F29; se le transfiere el líquido)
@@ -315,6 +319,9 @@ export const demoData = {
     { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'María José Soto', monto:3000000, estado:'pendiente', tipo_costo:'clp', sale_id:'s6', created_at:'2026-05-28' },
     { id:'tp3', billing_id:'b5',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:1500000, estado:'pagado', pagado_at:'2026-05-10', movimiento_id:'movpv2', tipo_costo:'clp', comision_pct:15, comision_monto:264706, created_at:'2026-04-05' },
     { id:'tp4', billing_id:'b5',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:176991, liquido:150000, retencion:26991, bhe_id:'bh1', factura_numero:'12', factura_fecha:'2026-08-01', estado:'pagado', pagado_at:'2026-08-06', tipo_costo:'pct', valor:10, created_at:'2026-04-05' },
+    { id:'tpa1', billing_id:'bpa1', proveedor_id:'pv4', proveedor:'Proveedor A', monto:720000, factura_numero:'2001', factura_fecha:'2026-08-31', estado:'por_pagar', tipo_costo:'clp', created_at:'2026-08-03' },
+    { id:'tpa2', billing_id:'bpa2', proveedor_id:'pv4', proveedor:'Proveedor A', monto:724000, estado:'pendiente', tipo_costo:'clp', created_at:'2026-09-01' },
+    { id:'tpa3', billing_id:'bpa3', proveedor_id:'pv4', proveedor:'Proveedor A', monto:740000, estado:'pendiente', tipo_costo:'clp', created_at:'2026-10-02' },
     { id:'tp6', billing_id:'b13a2', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
     { id:'tp7', billing_id:'b13a3', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
     { id:'tp5', billing_id:'b4',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:212389, liquido:180000, retencion:32389, estado:'por_pagar', tipo_costo:'pct', valor:10, created_at:'2026-03-22' },
@@ -323,6 +330,8 @@ export const demoData = {
   sii_compras_docs: [
     { id:'dpv1', folio:'120', tipo_dte:33, fecha_emision:'2026-07-01', emisor_rut:'77.900.100-2', monto:4000000, proveedor_id:'pv1', movimiento_id:null },
     { id:'dpv2', folio:'98',  tipo_dte:33, fecha_emision:'2026-05-02', emisor_rut:'77.900.100-2', monto:1500000, proveedor_id:'pv1', movimiento_id:null },
+    { id:'dpa1', folio:'2001', tipo_dte:34, fecha_emision:'2026-08-31', emisor_rut:'76.123.456-7', monto:720000, proveedor_id:'pv4', movimiento_id:null },
+    { id:'dpa2', folio:'2002', tipo_dte:34, fecha_emision:'2026-09-30', emisor_rut:'76.123.456-7', monto:726000, proveedor_id:'pv4', movimiento_id:null },
     { id:'dpv3', folio:'55',  tipo_dte:34, fecha_emision:'2026-06-10', emisor_rut:'76.500.300-4', monto:3000000, proveedor_id:'pv2', movimiento_id:null },
   ],
   anticipos: [
