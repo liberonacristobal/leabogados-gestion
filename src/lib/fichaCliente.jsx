@@ -11,6 +11,7 @@ import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoRe
 import { diasA as _diasA } from '../../supabase/functions/_shared/calendarioReglas.js'
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { esSubarriendo, ventaUF } from './cifras.js'
+import { puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { ActBtn, AsignarVentaFactura, BitacoraLista, CAL_CLI_DIAS, CORTES_PJUD, CheckMini, Copyable, DestinatarioFacturasCard, ESTADO_COBRO, EstadoFacturaChip, IconSection, LIBROS_PJUD, OBL_CLIENTE, Sparkle, TH_BAND, UF_FALLBACK, _GRUPO_DESTINO, _MES_AB, _corteCorta, _estadoCausa, _libroLegible, _nomProp, _ordRol, _rolTxt, bigDate, calendarioCliente, catSinClienteVenta, cobradoBill, concPeriodoOf, cuotaNMof, cuotasOlvidadas, daysLeft, descargarPdfU8, driveCall, esFacturada, esPermanente, esVencidaB, estadoCobro, estadoFacturaLabel, facturaDtePdfBase64, facturaNombreArchivo, fmtSaldoG, fmtShort, fmtUF, huecoFIFO, loadXLSXStyle, logActividad, montoFactura, otConSello, planDeVenta, porCobrarBills, recordarCobroFactura, recorridoGasto, registrarError, rolledDueMap, rsDisplay, saldoBill, serieKey, splitSetDTE, subproyectosCliente, taskAssignees, tipoFacturaLbl, urgencyColor, useAprendidosVenta, useArrastre, useCalCliente, useCausas, useIaVenta, usePropiedades, useUF, verFacturaPdf } from './compartido.jsx'
 
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
@@ -847,6 +848,17 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
   return (
     <div style={{padding:'16px 20px 60px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
       {/* La foto (Vendido/Facturado/Cobrado/Por cobrar) vive en el embudo del Resumen — no se repite acá. Ventas = proyectos + facturas + anticipos. */}
+      {/* Puntualidad de pago: perfil aprendido de los pagos de los últimos 12 meses (misma regla que Cobranza). */}
+      {(()=>{
+        const facs=clientBilling.filter(b=>!b.deleted_at&&b.invoice_no&&b.billing_type!=='reembolso'); if(!facs.length) return null
+        const hoyP=new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+        const e=puntualidadPorCliente(clientBilling,hoyP).get(String(client.id))||{n:0,etiqueta:'Sin pagos registrados',tono:'hacer'}
+        const T={ok:{bg:C.greenBg,fg:C.greenText},am:{bg:C.soonBg,fg:C.soonText},hacer:{bg:C.overdueBg,fg:C.overdueText},gr:{bg:C.bgSoft,fg:C.muted}}[e.tono]||{bg:C.bgSoft,fg:C.muted}
+        return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={SEC_LBL}>Puntualidad de pago</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',background:T.bg,color:T.fg,whiteSpace:'nowrap'}}>{e.etiqueta}</span></div>
+          <div style={{fontSize:11.5,color:C.muted,marginTop:5,lineHeight:1.45}}>{e.n>0?`${e.n} factura${e.n!==1?'s':''} pagada${e.n!==1?'s':''} en los últimos 12 meses · ${e.promedio} días en promedio desde la emisión · ${e.pct30}% dentro de 30 días`:'Ninguna factura pagada en los últimos 12 meses.'}</div>
+        </div>)
+      })()}
 
 
       {/* Proyectos (icono-sección colapsada): Vigentes + Terminados, con barra de cobro (facturado→cobrado) */}
