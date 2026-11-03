@@ -5963,7 +5963,7 @@ export default function App() {
       .then(([a,b,m])=>{ if(v) setPendLearn({noEmitir:new Set((a.data||[]).map(r=>String(r.key))),decFact:new Map((b.data||[]).map(r=>[String(r.key),r.value])),movs:m.data||[]}) }).catch(()=>{})
     return ()=>{ v=false } },[userRole,tab])
   const pendCli = useMemo(()=>{ if(userRole!=='admin') return new Map(); try{ return pendientesPorCliente({clients,sales,billing,anticipos,expenses,movsPend:pendLearn.movs,uf:ufFechaCache()||{},hoy:isoLocal(Date.now()),noEmitir:pendLearn.noEmitir,decFact:pendLearn.decFact,esVencida:esVencidaB,saldoBill}) }catch(_){ return new Map() } },[userRole,clients,sales,billing,anticipos,expenses,pendLearn])
-  const misPend = useMemo(()=>{ const yo=_normTxt(user?.name||''); if(!yo) return 0; let n=0; (clients||[]).forEach(c=>{ if(c&&!c.is_internal&&c.status==='Activo'&&_normTxt(c.abogado_responsable||'')===yo&&pendCli.has(String(c.id))) n++ }); return n },[clients,user?.name,pendCli])
+  const misPend = useMemo(()=>{ const yo=_normTxt(user?.name||''); if(!yo) return 0; let n=0; (clients||[]).forEach(c=>{ if(c&&!c.is_internal&&c.status==='Activo'&&_normTxt(c.abogado_responsable||'')===yo&&(pendCli.get(String(c.id))?.items||[]).some(i=>!i.soloFiltro)) n++ }); return n },[clients,user?.name,pendCli])
   useEffect(()=>{ if(_TAB_PAGINAS.includes(tab)) return; try{ sessionStorage.setItem(_TAB_KEY,JSON.stringify({tab,at:Date.now()})) }catch(_){} },[tab])   // eslint-disable-line react-hooks/exhaustive-deps
   // Registro de pantallas visitadas (usage_events area 'vista'): para saber con datos qué se usa antes de rediseñar o quitar algo.
   useEffect(()=>{ if(DEMO||!user?.email) return; logEvent('vista',tab,{},user?.name||user?.email) },[tab,user?.email])   // eslint-disable-line

@@ -1,7 +1,7 @@
 // Pruebas de pendientes financieros por cliente (vista «Revisar cuentas»). Casos de situaciones reales, sin nombres de clientes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pendientesPorCliente, tiposDe, clientesConPendientes } from '../supabase/functions/_shared/pendientesCliente.js'
+import { pendientesPorCliente, tiposDe, clientesConPendientes, contables } from '../supabase/functions/_shared/pendientesCliente.js'
 
 const HOY = '2026-11-03'
 const clients = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'ci', is_internal: true }]
@@ -66,4 +66,14 @@ test('tiposDe y clientesConPendientes: orden fijo, filtro por tipo y orden por c
   assert.deepEqual(clientesConPendientes(m).map(x => x.id), ['c2', 'c1'])
   assert.deepEqual(clientesConPendientes(m, new Set(['cuotas'])).map(x => x.id), ['c1'])
   assert.deepEqual(clientesConPendientes(m, new Set(), new Set(['c1'])).map(x => x.id), ['c1'])
+})
+
+test('fondos viven solo como filtro: no cuentan en «Todos» ni en contables, sí al elegir el tipo', () => {
+  const expenses = [{ client_id: 'c3', type: 'gasto', amount: 50000 }]
+  const m = pendientesPorCliente({ ...base, expenses, billing: [{ id: 'a1', client_id: 'c3', status: 'Anulada' }] })
+  assert.equal(m.get('c3').items.length, 2)
+  assert.deepEqual(contables(m.get('c3').items).map(i => i.tipo), ['datos'])
+  assert.deepEqual(clientesConPendientes(m).map(x => x.n), [1])
+  assert.deepEqual(clientesConPendientes(m, new Set(['fondos'])).map(x => x.n), [1])
+  assert.equal(clientesConPendientes(pendientesPorCliente({ ...base, expenses })).length, 0)
 })

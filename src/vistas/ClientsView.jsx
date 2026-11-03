@@ -5,7 +5,7 @@ import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtF
 import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
-import { TIPOS_PENDIENTE, tiposDe } from '../../supabase/functions/_shared/pendientesCliente.js'
+import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
 
 // Texto de cada tipo de pendiente en la lista de escritorio («2 cuotas por emitir»).
 const TXT_PEND = {banco:['pago por imputar','pagos por imputar'], fondos:['fondos por solicitar','fondos por solicitar'], sinfactura:['pagada sin factura','pagadas sin factura'], cuotas:['cuota por emitir','cuotas por emitir'], vencidas:['factura vencida','facturas vencidas'], datos:['dato por corregir','datos por corregir']}
@@ -13,7 +13,7 @@ const txtTipos = (items,largo) => { const t=tiposDe(items); return largo ? t.map
 
 // Pendientes financieros del cliente (Resumen de la ficha): solo el número actual y lo que falta; lo resuelto sale solo cuando la regla deja de detectarlo.
 function PendientesCliente({pend,billing,sales,onGo}){
-  const items=pend?.items||[]
+  const items=contables(pend?.items), fondos=(pend?.items||[]).filter(i=>i.soloFiltro)
   const venta = id => (sales||[]).find(s=>String(s.id)===String(id))
   const det = it => { const b=it.billing_id?(billing||[]).find(x=>String(x.id)===String(it.billing_id)):null
     if(it.tipo==='cuotas') return `Vencida el ${fmtFechaDMY(it.fecha)}`
@@ -27,9 +27,9 @@ function PendientesCliente({pend,billing,sales,onGo}){
         <div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent}}>Pendientes financieros</div>
         <div style={{fontSize:20,fontWeight:800,color:items.length?C.soonText:C.greenText,marginTop:2}}>{items.length?`${items.length} pendiente${items.length!==1?'s':''}`:'Sin pendientes'}</div>
       </div>
-      {items.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
-        {items.map((it,i)=>(<div key={it.key} onClick={()=>onGo(it)} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{it.titulo}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(it)}</div></div>
+      {items.length+fondos.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
+        {[...items,...fondos].map((it,i)=>(<div key={it.key} onClick={()=>onGo(it)} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:it.soloFiltro?500:700,color:it.soloFiltro?C.muted:C.text}}>{it.titulo}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(it)}</div></div>
           {it.monto>0&&<span style={{fontSize:13,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>}
           <ActBtn variant={it.tipo==='cuotas'?'primary':undefined} onClick={e=>{e.stopPropagation();onGo(it)}}>{it.tipo==='cuotas'?'Emitir':'Ver'} →</ActBtn>
         </div>))}
@@ -199,14 +199,14 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
     let base = baseCl.filter(c=>enEstado(c,sFilter))
     if(q.trim()) base=base.filter(c=>calzaBusqueda(c,q))
     if(respSel.size>0) base=base.filter(c=>respSel.has(responsableDe[c.id]))
-    if(pendOn&&pendCli){ const nDe=c=>(pendCli.get(String(c.id))?.items||[]).filter(i=>tipoSel.size===0||tipoSel.has(i.tipo)).length
+    if(pendOn&&pendCli){ const nDe=c=>(tipoSel.size===0?contables(pendCli.get(String(c.id))?.items):(pendCli.get(String(c.id))?.items||[]).filter(i=>tipoSel.has(i.tipo))).length
       return base.filter(c=>nDe(c)>0).sort((a,b)=>nDe(b)-nDe(a)||(a.name||'').localeCompare(b.name||'','es')) }
     return [...base].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
   },[baseCl,sFilter,q,respSel,responsableDe,calzaBusqueda,pendOn,pendCli,tipoSel])
   // Ámbito de los conteos del filtro: estado y responsable elegidos (sin búsqueda ni tipo). Los números cuentan clientes, no pendientes.
-  const ambitoPend = useMemo(()=>baseCl.filter(c=>enEstado(c,sFilter)&&(respSel.size===0||respSel.has(responsableDe[c.id]))&&pendCli?.has(String(c.id))),[baseCl,sFilter,respSel,responsableDe,pendCli])
-  const nTipoCli = k => ambitoPend.filter(c=>pendCli.get(String(c.id)).items.some(i=>i.tipo===k)).length
-  const itemsDe = c => (pendCli?.get(String(c.id))?.items||[]).filter(i=>tipoSel.size===0||tipoSel.has(i.tipo))
+  const ambitoPend = useMemo(()=>baseCl.filter(c=>enEstado(c,sFilter)&&(respSel.size===0||respSel.has(responsableDe[c.id]))&&contables(pendCli?.get(String(c.id))?.items).length>0),[baseCl,sFilter,respSel,responsableDe,pendCli])
+  const nTipoCli = k => baseCl.filter(c=>enEstado(c,sFilter)&&(respSel.size===0||respSel.has(responsableDe[c.id]))&&(pendCli?.get(String(c.id))?.items||[]).some(i=>i.tipo===k)).length
+  const itemsDe = c => tipoSel.size===0?contables(pendCli?.get(String(c.id))?.items):(pendCli?.get(String(c.id))?.items||[]).filter(i=>tipoSel.has(i.tipo))
   const irPend = it => { if(it.billing_id){ const b=(billing||[]).find(x=>String(x.id)===String(it.billing_id)); if(b&&onEditBilling) return onEditBilling(b) }
     if(it.mov_id&&onOpenConciliacion) return onOpenConciliacion(it.mov_id)
     if(it.sale_id){ const v=(sales||[]).find(x=>String(x.id)===String(it.sale_id)); if(v&&onOpenSale) return onOpenSale(v) } }
