@@ -5,6 +5,7 @@ import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supab
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
+import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
@@ -1740,7 +1741,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
               doc:d})
             continue
           }
-          const b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioN(folioM))
+          let b = (billing||[]).find(x=> !x.deleted_at && folioN(x.invoice_no)===folioN(folioM))
+          if(!b&&folioM&&!DEMO){ try{ const f=String(folioN(folioM)||folioM); const {data:dbB}=await supabase.from('billing').select('*').in('invoice_no',[f,'Factura '+f]).is('deleted_at',null).limit(1); b=(dbB&&dbB[0])||undefined }catch(_){} }   // la vista pudo quedar desactualizada: si la factura ya existe en la base, no es «nueva»
           const cli = b ? ((clients||[]).find(c=>String(c.id)===String(b.client_id))?.name||b.receptor_name||'—') : null
           if(!b){
             const tipoDte=P.tipo, fecha=P.fecha, rut=P.rut, receptor=P.receptor, monto=P.total, nmb=P.nmb, dsc=P.dsc
@@ -1786,7 +1788,12 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
           receptor_rut:r.row.rut||null, receptor_name:r.row.receptor||null, monto:Math.round(r.monto||0),
           glosa:r.glosa||null, doc_json:{doc:r.doc, row:r.row}, client_id:r.clienteId||null,
           estado:'sin_registrar', created_by:user?.name||null, updated_at:new Date().toISOString() }))
-        if(stage.length){ await supabase.from('sii_cargas_docs').upsert(stage,{onConflict:'folio,tipo_dte'}); contarSinRegistrar() }
+        if(stage.length){
+          let pend=stage
+          try{ const {data:ex}=await supabase.from('sii_cargas_docs').select('folio,tipo_dte,estado').in('folio',stage.map(x=>x.folio)); pend=sinPisarRegistradas(stage,ex||[]) }catch(_){}   // lo ya registrado no vuelve a «sin registrar»
+          if(pend.length) await supabase.from('sii_cargas_docs').upsert(pend,{onConflict:'folio,tipo_dte'})
+          contarSinRegistrar()
+        }
       }catch(e){registrarError({origen:'accion',vista:'sii_cargas_docs',err:e})}
       onRefresh&&onRefresh()
     }catch(e){ if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() } else appAlert('Error en el respaldo: '+(e.message||e)) }
