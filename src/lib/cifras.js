@@ -60,3 +60,16 @@ export function redondearPartes(partes, paso=1, fijos=[]){
   return out.map(x=>x*paso)
 }
 
+// Cifras por socio de un período — FUENTE ÚNICA de la ventana «Por socio» y del Panel de socios. Mismas fórmulas de siempre, extraídas de PorSocioVista
+// sin cambios: P = partidasPorSocio, V = vendidoPorSocio, ym = 'AAAA-MM' (el mes elegido; el año corre de enero a ese mes).
+// card6(socio|null, 'mes'|'ytd') = [Vendido, Facturado, Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo].
+/** @param {{P: any[], V: any[], ym: string}} a */
+export function kpisPorSocio({P,V,ym}){
+  const y=Number(ym.slice(0,4))
+  /** @type {(d:any,p:string)=>boolean} */ const inPer=(d,p)=>{ const s=String(d||'').slice(0,7); return p==='mes'?s===ym:(s>=`${y}-01`&&s<=ym) }
+  /** @type {(s:string,k:any,soc:any,p:string)=>number} */ const sumP=(s,k,soc,p)=>P.reduce((a,r)=>a+((r.s===s&&(k==null||(Array.isArray(k)?k.includes(r.k):r.k===k))&&(!soc||r.soc===soc)&&inPer(r.d,p))?r.m:0),0)
+  /** @type {(soc:any,p:string)=>number} */ const vend=(soc,p)=>V.reduce((a,x)=>a+((!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym)?x.m:0),0)
+  const KF=['emit','cext','reemb','nc'], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']
+  /** @type {(soc:any,p:string)=>number[]} */ const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p)] }
+  return {inPer,sumP,vend,KF,KC,KI,card6}
+}
