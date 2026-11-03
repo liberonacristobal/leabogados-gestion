@@ -8,6 +8,7 @@ import { PageHeader, _ymPrev, claudeCall, fmtShort, fmtUFk, resultadoMes, resume
 import { esSubarriendo, ventaUF } from '../lib/cifras.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { retirosSocios } from './SociosView.jsx'
+import { leerFoto, filasFoto, resumenFoto } from '../../supabase/functions/_shared/fotoMes.js'
 import { INDICADORES, construirDossier, estadosTemas, filasComparacion, leerInformeIA, textoDeInforme, textoVariacion, verificarTexto } from '../../supabase/functions/_shared/informeMes.js'
 
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -17,6 +18,7 @@ const ESTADO = { mejora:['Mejora',C.greenBg,C.greenText], atencion:['Atención',
 const TEMA_LBL = { resultado:'Resultado', cobranza:'Cobranza', ventas:'Ventas', comisiones:'Comisiones', retiros:'Retiros', liquidez:'Liquidez' }
 const ENLACE_LBL = { estadoResultados:'Estado de resultados', cobranza:'Por cobrar', ventas:'Ventas', proveedores:'Por pagar', socios:'Socios', flujoCaja:'Flujo de caja' }
 const PILL = { up:[C.greenBg,C.greenText], dn:[C.overdueBg,C.overdueText], nt:[C.bgSoft,C.muted] }
+const DEST_CIERRE = { porCobrar:'cobranza', vencido:'cobranza', m60:'cobranza', comisiones:'proveedores', fondos:'gastos' }
 const DEST_FILA = { Resultado:'estadoResultados', Ventas:'ventas', 'Socios y pagos':'socios' }
 
 const SYSTEM = `Eres analista financiero de un estudio de abogados chileno. Recibes un RESUMEN en JSON con las cifras de un mes, ya calculadas por el sistema, comparadas con el mes anterior. Redacta el informe del mes.
@@ -52,7 +54,15 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
               p:{ ing:rp.ing, cobrado:mismoAnio?(byMes[ymP]??0):null, cos:rp.cos, com:rp.com, res:rp.res, margen:rp.margen, ventasUF:vP.uf, ventasN:vP.n, retiros:mismoAnio?retDe(ymP):null } }
   const filas = useMemo(()=>filasComparacion(d),[JSON.stringify(d)])
 
-  // ── Lo que hay hoy (no se compara: la cartera de cada cierre no se guardaba) ──
+  // ── Cartera al cierre: la foto que la app guarda el día 1 de cada mes (learnings foto_mes, key = mes que cierra) ──
+  const [fotos,setFotos] = useState({})
+  useEffect(()=>{ let v=true; setFotos({}); if(DEMO) return
+    supabase.from('learnings').select('key,value').eq('kind','foto_mes').in('key',[ym,ymP]).then(({data})=>{ if(!v) return; const o={}; (data||[]).forEach(r=>{ const f=leerFoto(r.value); if(f) o[r.key]=f }); setFotos(o) },()=>{})
+    return ()=>{ v=false } },[ym])
+  const fM = fotos[ym]||null, fP = fotos[ymP]||null
+  const filasCierre = useMemo(()=>filasFoto(fM,fP),[fM,fP])
+
+  // ── Lo que hay hoy ──
   const cart = useMemo(()=>resumenCartera(billing),[billing])
   const porCobrar = porCobrarBills(billing)
   const sc = useMemo(()=>saldoComisiones(terceros,billing),[terceros,billing])
@@ -65,7 +75,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
   const fmtV = { clp:fmtShort, uf:n=>fmtUFk(n), n:n=>String(n), pts:n=>`${pct1(n)}%` }
   const dossier = useMemo(()=>construirDossier({ mes:etiquetaMes(ym), comparado:etiquetaMes(ymP), filas, f:fmtV, estados,
     extras:{ porCobrar:fmtShort(porCobrar), vencido:fmtShort(cart.vencidoTot), porcentajeVencido:pctVencido==null?null:`${Math.round(pctVencido*100)}%`, vencidoMasDeSesentaDias:fmtShort(cart.expo.m60), flujoCajaProximasSemanas:`${flujo.fin>0?'+':''}${fmtShort(flujo.fin)}`, semanas:8,
-      comisionesPorPagar:fmtShort(sc.porPagar), diasComisionMasAntigua:diasCom, retirosAcumuladosCadaSocio:ret.SOC.map(s=>`${s} ${fmtShort(ret.retTot[s]||0)}`), diferenciaRetiros:fmtShort(Math.abs(ret.difAcum)) } }),[filas,ym,estados.resultado,estados.cobranza,porCobrar,cart.vencidoTot,flujo.fin,sc.porPagar,diasCom,ret.difAcum])
+      comisionesPorPagar:fmtShort(sc.porPagar), diasComisionMasAntigua:diasCom, retirosAcumuladosCadaSocio:ret.SOC.map(s=>`${s} ${fmtShort(ret.retTot[s]||0)}`), diferenciaRetiros:fmtShort(Math.abs(ret.difAcum)), carteraAlCierre:resumenFoto(fM,fP,fmtShort) } }),[filas,fM,fP,ym,estados.resultado,estados.cobranza,porCobrar,cart.vencidoTot,flujo.fin,sc.porPagar,diasCom,ret.difAcum])
 
   // ── Informe guardado / generado ──
   const [inf,setInf] = useState(null), [cargando,setCargando] = useState(true), [busy,setBusy] = useState(false), [err,setErr] = useState(null), [copiado,setCopiado] = useState(false)
@@ -151,6 +161,18 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
             {grupos.map(g=>(<div key={g}><div style={{padding:'6px 12px',background:C.bgSoft,fontSize:10,fontWeight:800,color:C.accent,textTransform:'uppercase',letterSpacing:.4,borderTop:`1px solid ${C.border}`}}>{g}</div>{filas.filter(f=>f.grupo===g).map(fila)}</div>))}
             {!mismoAnio&&<div style={{padding:'8px 12px',fontSize:10.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>El cobrado y los retiros del mes anterior pertenecen a otro año y no se comparan aquí.</div>}
           </div>)}
+        {caja(`Cartera al cierre de ${etiquetaMes(ym)}`, 'Cobranza', ()=>go('cobranza'),
+          fM ? <div>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:C.bgSoft,fontSize:10,fontWeight:800,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}><span style={{flex:1}}>Indicador</span>{isDesktop&&<span style={{minWidth:80,textAlign:'right'}}>{lblP}</span>}<span style={{minWidth:80,textAlign:'right'}}>{lblM}</span><span style={{minWidth:56,textAlign:'center'}}>Var.</span></div>
+            {filasCierre.map(f=>(
+              <div key={f.k} onClick={()=>go(DEST_CIERRE[f.k])} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{f.etiqueta}</div>{!isDesktop&&<div style={{fontSize:10.5,color:C.muted}}>{lblP} {valPrev(f)}</div>}</div>
+                {isDesktop&&<span style={{fontSize:13,color:C.muted,fontVariantNumeric:'tabular-nums',minWidth:80,textAlign:'right'}}>{valPrev(f)}</span>}
+                <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',minWidth:80,textAlign:'right',whiteSpace:'nowrap'}}>{valFila(f)}</span>
+                {pill(f)}
+              </div>))}
+            <div style={{padding:'8px 12px',fontSize:10.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Foto del {fmtFechaDMY(fM.capturada)}{fP?`; anterior, del ${fmtFechaDMY(fP.capturada)}`:''}.</div>
+          </div> : <div style={{padding:'10px 12px',fontSize:12,color:C.muted}}>Sin foto de cartera de {etiquetaMes(ym)}.</div>)}
         {caja('Hoy', 'Cobranza', ()=>go('cobranza'),
           <div>
             {[['Por cobrar',fmtShort(porCobrar),pctVencido!=null?`${Math.round(pctVencido*100)}% vencido`:'', 'cobranza'],['Vencido',fmtShort(cart.vencidoTot),`${fmtShort(cart.expo.m60)} con más de 60 días`,'cobranza'],['Comisiones por pagar',fmtShort(sc.porPagar),diasCom!=null?`la más antigua, hace ${diasCom} días`:'','proveedores'],['Flujo de caja · 8 semanas',(flujo.fin>0?'+':'')+fmtShort(flujo.fin),'','flujoCaja']].map(([l,v,s,dest])=>(
@@ -158,7 +180,6 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{l}</div>{s&&<div style={{fontSize:10.5,color:C.muted}}>{s}</div>}</div>
                 <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{v}</span>
               </div>))}
-            <div style={{padding:'8px 12px',fontSize:10.5,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Valores de hoy, sin comparar: la cartera de cada cierre no se guardaba.</div>
           </div>)}
       </div>
     </div>)
