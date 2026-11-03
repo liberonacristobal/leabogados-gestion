@@ -87,6 +87,9 @@ export const demoData = {
   // Vendido 2026 ≈ $527M (≈63% de la meta de $800M)
   sales: [
     { id:'ssub', client_id:'c4', title:'Subarrendamiento oficina', moneda:'CLP', amount_clp:1080000, year:2026, month:3, status:'Activo', cobro_type:'mensual', cobro_config:{subarriendo:true}, responsible:'Cristóbal', created_at:'2026-03-01' },
+    { id:'sdpa', client_id:'c3', title:'Posesión efectiva (demo anticipo)', area:'Otro', moneda:'CLP', amount_clp:1200000, year:2026, month:8, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-08-01' },
+    { id:'sdpg', client_id:'c2', title:'Ampliación de giro (demo pagada)', area:'Corporativo', moneda:'CLP', amount_clp:400000, year:2026, month:7, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-07-01' },
+    { id:'sdsp', client_id:'c1', title:'Análisis tributario (demo sin primera)', area:'Tributario', moneda:'CLP', amount_clp:900000, year:2026, month:7, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2026-07-02' },
     { id:'s1',  client_id:'c1', entity_id:'e1', title:'Asesoría corporativa permanente', area:'Corporativo', moneda:'UF',  amount_uf:90,   cost_uf:0,   uf_value:39000, year:2026, month:1, status:'Activo', cobro_type:'mensual',       responsible:'Cristóbal', created_at:'2026-01-05' },
     { id:'s2',  client_id:'c2', entity_id:'e2', title:'Reorganización societaria',         area:'Corporativo', moneda:'UF',  amount_uf:1500, cost_uf:150, uf_value:39000, year:2026, month:2, status:'Activo', cobro_type:'cuotas',        responsible:'Erasmo',    created_at:'2026-02-10' },
     { id:'s3',  client_id:'c3',               title:'Litigio laboral colectivo',          area:'Litigios',    moneda:'CLP', amount_clp:75000000,  cost_clp:0, year:2026, month:3, status:'Activo', cobro_type:'personalizada', responsible:'Cristóbal', created_at:'2026-03-02' },
@@ -119,6 +122,12 @@ export const demoData = {
     { id:'bsub1', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina (marzo–abril 2026)', amount:2160000, status:'Pagado', invoice_no:'321', issued_at:'2026-04-13', due:'2026-05-13', paid_at:'2026-04-07', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
     { id:'bsub2', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Octubre 2026', amount:1080000, status:'Pagado', invoice_no:'487', issued_at:'2026-10-07', due:'2026-11-06', paid_at:'2026-10-06', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
     { id:'bsub3', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Noviembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-12-01', billing_type:'subarriendo', monto_terceros:0 },
+    { id:'bdpa1', client_id:'c3', sale_id:'sdpa', concept:'Posesión efectiva — Cuota 1/3', amount:400000, status:'Anticipada', invoice_no:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdpa2', client_id:'c3', sale_id:'sdpa', concept:'Posesión efectiva — Cuota 2/3', amount:400000, status:'Programada', invoice_no:null, due:'2026-10-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdpa3', client_id:'c3', sale_id:'sdpa', concept:'Posesión efectiva — Cuota 3/3', amount:400000, status:'Programada', invoice_no:null, due:'2026-12-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdpg1', client_id:'c2', sale_id:'sdpg', concept:'Ampliación de giro — Cuota 1/1', amount:400000, status:'Anticipada', invoice_no:null, due:'2026-08-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdsp1', client_id:'c1', sale_id:'sdsp', concept:'Análisis tributario — Cuota 1/2', amount:450000, status:'Programada', invoice_no:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdsp2', client_id:'c1', sale_id:'sdsp', concept:'Análisis tributario — Cuota 2/2', amount:450000, status:'Programada', invoice_no:null, due:'2026-12-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'bsub4', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Diciembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2027-01-01', billing_type:'subarriendo', monto_terceros:0 },
     // Pagadas (cobrado 2026)
     { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:3510000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },
@@ -336,6 +345,8 @@ export const demoData = {
   ],
   anticipos: [
     { id:'antsub6', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-06-01', nota:'Subarriendo junio 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
+    { id:'antdpa', client_id:'c3', sale_id:'sdpa', monto:400000, fecha:'2026-08-20', nota:'Honorarios sin factura (conciliación bancaria)', estado:'consumido', created_by:'Cristóbal' },
+    { id:'antdpg', client_id:'c2', sale_id:'sdpg', monto:400000, fecha:'2026-07-20', nota:'Honorarios sin factura (conciliación bancaria)', estado:'consumido', created_by:'Cristóbal' },
     { id:'antsub7', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-07-02', nota:'Subarriendo julio 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'antsub8', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-08-03', nota:'Subarriendo agosto 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },
     { id:'antsub9', client_id:'c4', sale_id:'ssub', monto:1080000, fecha:'2026-09-01', nota:'Subarriendo septiembre 2026 (pago sin factura, conciliación bancaria)', estado:'disponible', created_by:'Cristóbal' },

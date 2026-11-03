@@ -1,8 +1,9 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { supabase } from '../supabase'
+import { supabase, DEMO } from '../supabase'
+import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
+import { setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
 
 export const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 
@@ -151,6 +152,28 @@ export const COBRO_IC = {
   porcentaje: _cIc(<><path d='M19 5L5 19'/><circle cx='6.5' cy='6.5' r='2.5'/><circle cx='17.5' cy='17.5' r='2.5'/></>),
   personalizada: _cIc(<><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/></>),
   hora: _cIc(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>),
+}
+
+// Pregunta única cuando un trabajo quedó cubierto por anticipos y no tiene factura: la respuesta se guarda (learnings venta_factura) y no vuelve a preguntar.
+function PreguntaFactura({sale,billing,anticipos}){
+  const [resp,setResp]=useState(undefined)
+  useEffect(()=>{ let vivo=true; if(!sale?.id) return; if(DEMO){ setResp(null); return } supabase.from('learnings').select('value').eq('kind','venta_factura').eq('key',String(sale.id)).order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(vivo) setResp(data?.[0]?.value||null) }); return ()=>{vivo=false} },[sale?.id])
+  const ep=estadoPagoVenta(sale,billing,anticipos,isoLocal(new Date().getTime()))
+  if(!ep||ep.estado!=='pagada'||resp===undefined) return null
+  const guardar=async v=>{ setResp(v); if(DEMO) return; try{ await setLearningKV('venta_factura',String(sale.id),v) }catch(e){ appAlert('No se pudo guardar la respuesta: '+(e.message||e)) } }
+  const btn=on=>({fontSize:12,fontWeight:700,borderRadius:8,padding:'7px 14px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted})
+  return (
+    <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',margin:'10px 0'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        <span style={{fontSize:13,fontWeight:800,color:C.accent}}>¿Se emitirá factura?</span>
+        <span style={{fontSize:10.5,fontWeight:700,background:C.greenBg,color:C.greenText,borderRadius:20,padding:'2px 9px'}}>Pagada sin factura</span>
+        <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(ep.recibido)}</span>
+      </div>
+      <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
+        <button onClick={()=>guardar('si')} style={btn(resp==='si')}>Se emitirá</button>
+        <button onClick={()=>guardar('no')} style={btn(resp==='no')}>No se emitirá</button>
+      </div>
+    </div>)
 }
 
 export function SaleForm({asPage=false,afterHero=null,sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,onPrimerasTareas,saving,user,onExposeUpload,onExposeDrive,onExposeReasign}) {
@@ -878,6 +901,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         )
       })()}
       {afterHero}
+      {sale?.id&&<PreguntaFactura sale={sale} billing={billing} anticipos={anticipos}/>}
 
       {/* Escritorio: 2 columnas (izquierda=datos · derecha=dinero/cobro). En móvil estos divs apilan igual que hoy (misma estructura, sin duplicar). */}
       <div style={isDesktop&&formNuevo?{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:0,alignItems:'start'}:undefined}>
