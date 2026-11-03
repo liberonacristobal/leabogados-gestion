@@ -2419,11 +2419,27 @@ export function recordatorioCobro(bs, nota){
   return { nivel, folio:multi?`Facturas ${folStr}`:`Factura ${fol[0]}`, monto:fm(total), subject, html, text, items }
 }
 
+// PDF OFICIAL DEL SII de una factura emitida: el mismo que muestra «Visualización documento (pdf)» en Documentos Emitidos del SII
+// (original y copia cedible, con su logo, timbre y resolución). Lo trae la edge function sii-sync (action pdf-emitido) con el certificado
+// del estudio. Es lo que se ENVÍA y se archiva: el PDF que genera la app desde el XML (facturaDtePdfBase64) queda solo como copia de consulta.
+// Lanza un Error con el motivo si el SII no lo entrega (no se envía otro en su lugar).
+const _pdfSiiCache = new Map()
+export async function facturaPdfSii(b){
+  if(!b?.invoice_no) throw new Error('la factura no tiene folio')
+  const k=String(b.id); if(_pdfSiiCache.has(k)) return _pdfSiiCache.get(k)
+  const xml=String(b.dte_xml||''), tipo=+(xml.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||(b.billing_type==='nota_credito'?61:null), folio=folioN(b.invoice_no)
+  const token=await tokenSesion(); if(!token) throw new Error('Sesión expirada. Vuelve a entrar.')
+  const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':supabase.supabaseKey},body:JSON.stringify({action:'pdf-emitido',folio,tipo})})
+  const d=await res.json().catch(()=>({}))
+  if(!res.ok||!d.base64) throw new Error(d.motivo||d.error||('error '+res.status))
+  const rzn=((xml.match(/<RznSocRecep>([^<]*)/)||[])[1]||'').replace(/&amp;/g,'&')
+  const out={ base64:d.base64, name:facturaNombreArchivo({folio,rznR:rzn}), mime:'application/pdf' }
+  _pdfSiiCache.set(k,out); return out
+}
+
 export async function facturaPdfAdjunto(b){
-  try{ const doc=splitSetDTE(b?.dte_xml||'')[0]; if(!doc) return null
-    const r=await facturaDtePdfBase64(doc)
-    return { base64:r.base64, name:`Factura ${folioN(b.invoice_no)||r.folio||''}.pdf`, mime:'application/pdf' }
-  }catch(_){ return null }
+  const r=await facturaPdfSii(b)
+  return { base64:r.base64, name:`Factura ${folioN(b.invoice_no)}.pdf`, mime:'application/pdf' }
 }
 
 // Genera el PDF con timbre de una factura (desde su DTE) y lo abre en una pestaña para revisarlo.
@@ -2434,13 +2450,17 @@ export function facturaNombreArchivo(r){ const rz=String(r?.rznR||'').replace(/[
 export function descargarPdfU8(u8,nombre){ const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); const a=document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000) }
 
 export async function verFacturaPdf(b){
-  try{
-    const doc=splitSetDTE(b?.dte_xml||'')[0]
-    if(!doc){ appAlert('Esta factura no tiene XML del SII para generar el PDF.'); return }
-    const r=await facturaDtePdfBase64(doc)
-    const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i)
-    descargarPdfU8(u8, facturaNombreArchivo(r))
-  }catch(e){ appAlert('No se pudo abrir el PDF.') }
+  const bajar=base64=>{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); return u8 }
+  try{ const r=await facturaPdfSii(b); descargarPdfU8(bajar(r.base64), r.name); return }
+  catch(e){
+    // Sin el PDF del SII solo se ofrece la copia que genera la app desde el XML, avisándolo: no es el documento del SII.
+    try{
+      const doc=splitSetDTE(b?.dte_xml||'')[0]
+      if(!doc){ appAlert('No se pudo traer el PDF del SII ('+(e.message||e)+') y la factura no tiene XML para generar una copia.'); return }
+      appAlert('No se pudo traer el PDF del SII ('+(e.message||e)+').\nSe descarga la copia que genera la app desde el XML; para enviar al cliente usa el PDF del SII.')
+      const r=await facturaDtePdfBase64(doc); descargarPdfU8(bajar(r.base64), facturaNombreArchivo(r))
+    }catch(_){ appAlert('No se pudo abrir el PDF.') }
+  }
 }
 
 // Resuelve la MEJOR venta/proyecto para una factura: la vinculada (sale_id); si no, la única venta del cliente (o su única Activa).
