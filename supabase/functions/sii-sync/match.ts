@@ -24,6 +24,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { selectAll } from '../_shared/paginar.js'
+import { propuestaDelDia, serieYaFacturadaEnMes } from '../_shared/facturacionReglas.js'
 import { createClient } from '@supabase/supabase-js'
 import type { VentaSII } from './rcv.ts'
 
@@ -49,7 +50,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   )
 
   const [progRes, cliRes, entRes, emitRes, folioRes] = await Promise.all([
-    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,sale_id,billing_type,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null).order('id')),
     supabase.from('clients').select('id,name,rut'),
     selectAll(() => supabase.from('client_entities').select('id,client_id,name,rut').order('id')),
     selectAll(() => supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']).is('deleted_at', null).order('id')),
@@ -57,6 +58,20 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   ])
   const err = progRes.error || cliRes.error || entRes.error || emitRes.error || folioRes.error
   if (err) throw new Error('Error leyendo la base: ' + err.message)
+
+  // Para la PROPUESTA DEL DÍA (_shared/facturacionReglas.js): ventas (moneda y valor UF de la cuota), la UF de los días de emisión y lo ya
+  // facturado en el mes de cada documento (para no registrar sola una cuota de una venta que ya facturó ese mes).
+  const fechasV = ventas.map((v) => String(v.fechaEmision || '').slice(0, 10)).filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f)).sort()
+  const dia = (iso: string, d: number) => { const x = new Date(iso + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10) }
+  const [ventasRes, ufRes, delMesRes] = fechasV.length ? await Promise.all([
+    selectAll(() => supabase.from('sales').select('id,moneda,uf_value').is('deleted_at', null).order('id')),
+    supabase.from('indicadores').select('fecha,valor').eq('codigo', 'uf').gte('fecha', dia(fechasV[0], -6)).lte('fecha', dia(fechasV[fechasV.length - 1], 2)),
+    selectAll(() => supabase.from('billing').select('id,sale_id,invoice_no,issued_at,status,deleted_at').not('invoice_no', 'is', null).is('deleted_at', null).gte('issued_at', fechasV[0].slice(0, 7) + '-01').order('id')),
+  ]) : [{ data: [] }, { data: [] }, { data: [] }]
+  const ventasApp = ventasRes.data || []
+  const ufPorFecha: Record<string, number> = {}
+  for (const r of ufRes.data || []) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor)
+  const facturadasMes = delMesRes.data || []
 
   const programadas = progRes.data || []
   const clientes = cliRes.data || []
@@ -92,6 +107,36 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
     const rutV = normalizarRut(v.rutReceptor)
     if (rutV === '') { resultado.sinMatch.push(itemSinMatch(v)); continue }
 
+    // 1) PROPUESTA DEL DÍA: RUT de la razón social + monto exacto de lo que proponía el Excel «Facturar» (UF × UF del día). Una sola cuota
+    //    → se registra sola (si su venta no facturó ya este mes); varias de una venta o una cuota vieja → se propone y confirma una persona.
+    const prop = propuestaDelDia({ doc: { rut: v.rutReceptor, monto: v.montoTotal, fecha: String(v.fechaEmision || '').slice(0, 10) }, programadas: programadas.filter((b: any) => !progUsadas.has(b.id)), ents: entidades, clientes, ventas: ventasApp, ufPorFecha, usadas: progUsadas })
+    if (prop.nivel === 'exacta') {
+      const mismoMes = serieYaFacturadaEnMes(facturadasMes, prop.propuesta.sale_id, String(v.fechaEmision).slice(0, 10), String(v.folio))
+      if (!mismoMes) {
+        const b = prop.propuesta
+        const { error } = await supabase.from('billing').update({
+          status: 'Pendiente', invoice_no: String(v.folio), issued_at: v.fechaEmision,
+          amount: v.montoTotal,   // el monto REAL es el del DTE emitido
+          sii_synced_at: new Date().toISOString(), sii_tipo_dte: v.tipoDte, receptor_rut: b.receptor_rut || v.rutReceptor, updated_at: new Date().toISOString(),
+        }).eq('id', b.id).eq('status', 'Programada')
+        if (error) { resultado.errores.push({ folio: v.folio, error: error.message }); console.log(`[sii-sync] ERROR actualizando folio ${v.folio}: ${error.message}`) }
+        else {
+          progUsadas.add(b.id)
+          resultado.actualizadas.push({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, folio: v.folio, monto: v.montoTotal, fechaEmision: v.fechaEmision, por: 'propuesta del día' })
+          console.log(`[sii-sync] folio ${v.folio} -> Pendiente por propuesta del día (${nombreCliente(b)}, $${v.montoTotal})`)
+          continue
+        }
+      } else prop.motivo = `su venta ya tiene la factura N° ${String(mismoMes.invoice_no).replace(/^factura\s*/i, '')} emitida este mes`
+    }
+    if (prop.nivel) {
+      resultado.ambiguas.push({
+        folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision,
+        propuesta: prop.propuesta ? prop.propuesta.id : null, motivo: prop.motivo, nivel: prop.nivel,
+        candidatos: prop.candidatas.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: null, vence: b.due || null, venta: b.sale_id || null })),
+      })
+      continue
+    }
+
     // Una emitida es "corregible" (candidata a recibir el folio del SII) SOLO si NO tiene folio.
     // REGLA: una factura que YA tiene folio es una emisión real y NUNCA se ofrece como candidata
     // (antes se colaban facturas válidas de OTRO período: se marcaban "corregibles" solo porque su
@@ -116,6 +161,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
       if (total > 1 || cand.some(esRec)) {
         resultado.ambiguas.push({
           folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision,
+          propuesta: null, motivo: null, nivel: null,
           candidatos: cand.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: b.invoice_no || null, vence: b.due || null })),
         })
         resuelto = true

@@ -107,3 +107,74 @@ export function sugerirVentas({ factura, sales = [], billing = [], aprendidas = 
     return { sale: s, progs, ...r, hits, mismaRS, motivo, rechazada: rech.has(String(s.id)), auto: hits >= 2 && r.calza && !rech.has(String(s.id)), score }
   }).sort((a, b) => b.score - a.score)
 }
+
+// ── PROPUESTA DEL DÍA: cruce de una factura emitida en el SII con lo que la app proponía facturar (el Excel «Facturar») ──
+// El Excel «Facturar_AAAA-MM» trae, por cuota por emitir, el RUT de la razón social y el «Monto hoy ($)»: la cuota en UF por el
+// valor de la UF del día de la descarga, redondeado. Con eso se emite en el SII, así que una factura emitida se puede calzar
+// con su cuota por RUT + monto exacto, sin tolerancias de porcentaje. Se reproduce la MISMA fórmula del Excel (BillingView.descargarExcel):
+//   monto = venta en CLP ? cuota.amount : round(cuota.amount / venta.uf_value × UF del día)
+// Funciones puras (sin red ni base). Fuente única de: el cotejo del SII (sii-sync/match.ts), el registro automático
+// (facturas-sii-registrar) y la vista Cuadrar con SII.
+export const rutNorm = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '').replace(/^0+/, '')
+
+/** RUT con que sale una cuota en el Excel «Facturar» (misma prioridad que rsRutExport): su receptor, la RS elegida, la única RS, la primera RS con RUT, el cliente.
+ * @param {any} b @param {any[]} [entidadesCliente] @param {any} [cliente] */
+export function rutDeCuota(b, entidadesCliente = [], cliente = null) {
+  const ents = entidadesCliente || []
+  const porId = b?.entity_id ? ents.find(e => String(e.id) === String(b.entity_id)) : null
+  const r = [b?.receptor_rut, porId && porId.rut, ents.length === 1 && ents[0].rut, ((ents.find(e => e.rut && String(e.rut).trim()) || {}).rut), cliente && cliente.rut].map(x => String(x || '').trim()).find(Boolean) || ''
+  return rutNorm(r)
+}
+
+/** Monto «hoy» de una cuota a un valor de UF (null si no se puede calcular, como el Excel que lo deja vacío). */
+export function montoDeCuota(b, venta, uf) {
+  const amount = Number(b?.amount) || 0
+  if (venta && venta.moneda === 'CLP') return amount
+  const ufVal = Number(venta?.uf_value) || 0
+  if (!(ufVal > 0) || !(uf > 0)) return null
+  return Math.round(amount / ufVal * uf)
+}
+
+const _dia = (iso, d) => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10) }
+const _inicioMesAnterior = iso => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() - 1, 1)).toISOString().slice(0, 10) }
+const _finMes = iso => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 0)).toISOString().slice(0, 10) }
+
+/**
+ * Cuota que propone el día para una factura del SII.
+ *  doc = {rut, monto, fecha} · programadas = cuotas sin folio (cualquier cliente) · ents/clientes/ventas = filas crudas ·
+ *  ufPorFecha = {'AAAA-MM-DD': valor UF}.
+ * Solo entran cuotas programadas con devengo hasta el fin del mes de emisión (lo que el Excel trae) cuyo RUT es el del documento
+ * y cuyo monto calza al peso con el de algún día de la ventana (5 días antes a 1 después de la emisión: se descarga y se emite
+ * el mismo día o el siguiente). Resultado:
+ *   nivel 'exacta'  → una sola cuota calza y su devengo es del mes anterior o posterior: se puede registrar sola.
+ *   nivel 'atrasada'→ una sola calza, pero con devengo de hace más de un mes: se propone y la confirma una persona.
+ *   nivel 'serie'   → varias cuotas de UNA venta (mismo monto cada mes): se propone la más antigua (FIFO) y la confirma una persona.
+ *   nivel 'varias'  → cuotas de ventas distintas: no se propone ninguna; candidatas = solo las que calzan.
+ *   nivel null      → ninguna calza exacto (el cotejo sigue con sus tolerancias).
+ * candidatas va ordenada: la propuesta primero, luego por devengo.
+ */
+export function propuestaDelDia({ doc, programadas = [], ents = [], clientes = [], ventas = [], ufPorFecha = {}, usadas = new Set() }) {
+  const sin = { nivel: null, propuesta: null, candidatas: [], motivo: null }
+  const rutD = rutNorm(doc?.rut), monto = Math.round(Number(doc?.monto) || 0), fecha = String(doc?.fecha || '').slice(0, 10)
+  if (!rutD || !(monto > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return sin
+  const ufs = []
+  for (let d = -5; d <= 1; d++) { const v = Number(ufPorFecha[_dia(fecha, d)]); if (v > 0) ufs.push(v) }
+  const tope = _finMes(fecha)
+  const ventaDe = new Map((ventas || []).map(v => [String(v.id), v]))
+  const entsDe = new Map(), clienteDe = new Map((clientes || []).map(c => [String(c.id), c]))
+  for (const e of ents || []) { const k = String(e.client_id); if (!entsDe.has(k)) entsDe.set(k, []); entsDe.get(k).push(e) }
+  const ok = (programadas || []).filter(b => b && !b.deleted_at && !b.invoice_no && b.status === 'Programada' && b.billing_type !== 'reembolso' && !usadas.has(b.id) && b.due && String(b.due) <= tope
+    && rutDeCuota(b, entsDe.get(String(b.client_id)) || [], clienteDe.get(String(b.client_id))) === rutD
+    && (() => { const v = ventaDe.get(String(b.sale_id)); if (v && v.moneda === 'CLP') return Math.abs((Number(b.amount) || 0) - monto) <= 1; return ufs.some(u => { const m = montoDeCuota(b, v, u); return m != null && Math.abs(m - monto) <= 1 }) })())
+    .sort((a, b) => String(a.due).localeCompare(String(b.due)))
+  if (!ok.length) return sin
+  if (ok.length === 1) {
+    // Una cuota con devengo de hace más de un mes no se registra sola aunque sea la única: puede ser una vieja sin emitir y la factura
+    // otra (series que se emiten fuera de orden). Se propone y la confirma una persona.
+    if (String(ok[0].due) < _inicioMesAnterior(fecha)) return { nivel: 'atrasada', propuesta: ok[0], candidatas: ok, motivo: `única cuota que calza, pero con devengo del ${String(ok[0].due).split('-').reverse().join('-')}` }
+    return { nivel: 'exacta', propuesta: ok[0], candidatas: ok, motivo: 'RUT y monto iguales a los de la lista Facturar' }
+  }
+  const unaVenta = ok.every(b => b.sale_id && String(b.sale_id) === String(ok[0].sale_id))
+  if (unaVenta) return { nivel: 'serie', propuesta: ok[0], candidatas: ok, motivo: `${ok.length} cuotas de la misma venta calzan; se propone la más antigua` }
+  return { nivel: 'varias', propuesta: null, candidatas: ok, motivo: `${ok.length} cuotas de ventas distintas calzan` }
+}

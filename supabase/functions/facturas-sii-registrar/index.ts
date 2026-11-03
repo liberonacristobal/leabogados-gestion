@@ -9,7 +9,7 @@
 // Lo que la app resuelve con reglas extra (comisión por facturar, cuota anticipada, cuota que habría que retirar) y lo ambiguo
 // (RUT sin cliente, cuotas de ventas distintas) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
-import { candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
+import { propuestaDelDia, candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
 import { todasRest } from "../_shared/paginar.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const out = { registradas: [] as unknown[], a_bandeja: [] as unknown[], cerradas: 0 };
     const [clients, ents, sales, abiertas] = await Promise.all([
       todas("clients?select=id,name,rut"), todas("client_entities?select=id,client_id,rut,name"),
-      todas("sales?select=id,client_id,title,status,area,cobro_config,entity_id,deleted_at&deleted_at=is.null&status=eq.Activo"),
+      todas("sales?select=id,client_id,title,status,area,cobro_config,entity_id,moneda,uf_value,deleted_at&deleted_at=is.null&status=eq.Activo"),
       todas("agente_bandeja?select=id,gmail_id,estado&tipo=eq.factura_sin_registrar&estado=eq.pendiente"),
     ]);
     // Propuestas abiertas cuya factura ya se registró (en la app o aquí) → se cierran solas.
@@ -83,6 +83,10 @@ Deno.serve(async (req) => {
     // RUT con el formato de la app (78.457.999-9): el SII lo trae sin puntos y el UNIQUE de client_entities compara el texto tal cual.
     const rutApp = (r: string) => { const c = nRut(r); return c.length < 2 ? r : c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + c.slice(-1); };
     const usadas = new Set<string>();
+    // UF de los días de emisión (para la propuesta del día: lo que el Excel «Facturar» proponía = UF de la cuota × UF del día).
+    const ufPorFecha: Record<string, number> = {};
+    { const fs = docs.map((d) => String(d.fecha_emision).slice(0, 10)).sort(); const dia = (iso: string, n: number) => { const x = new Date(iso + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+      for (const r of await todas(`indicadores?select=fecha,valor&codigo=eq.uf&fecha=gte.${dia(fs[0], -6)}&fecha=lte.${dia(fs[fs.length - 1], 2)}`).catch(() => [])) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor); }
     const bandeja = async (d: any, motivo: string, cid: string | null) => {
       out.a_bandeja.push({ folio: d.folio, monto: d.monto, motivo });
       if (dryRun) return;
@@ -101,7 +105,11 @@ Deno.serve(async (req) => {
       if (!cli) { await bandeja(d, "El RUT del receptor no está en la app", null); continue; }
       const billingCli = await todas(`billing?select=id,client_id,sale_id,concept,amount,status,due,issued_at,invoice_no,billing_type,deleted_at,prepaid_anticipo_id,paid_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=is.null`);
       const facturadasCli = await todas(`billing?select=id,sale_id,invoice_no,issued_at,status,deleted_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=not.is.null`);
-      const cands = candidatasProgramadas(billingCli, cli.cid, monto, fecha, d.glosa || "").filter((c: { id: string }) => !usadas.has(c.id));
+      // 1) PROPUESTA DEL DÍA (RUT de la razón social + monto exacto del Excel «Facturar»): manda sobre las tolerancias de porcentaje.
+      const prop = propuestaDelDia({ doc: { rut: d.receptor_rut, monto, fecha }, programadas: billingCli, ents, clientes: clients, ventas: sales, ufPorFecha, usadas });
+      let cands = candidatasProgramadas(billingCli, cli.cid, monto, fecha, d.glosa || "").filter((c: { id: string }) => !usadas.has(c.id));
+      if (prop.nivel === "exacta" || prop.nivel === "serie") cands = prop.candidatas;
+      else if (prop.nivel === "atrasada" || prop.nivel === "varias") { await bandeja(d, `${prop.motivo}: confírmala en Cuadrar con SII`, cli.cid); continue; }
       const activas = sales.filter((s) => s.client_id === cli.cid && !esSub(s));
       const dec = decidirRegistroSII(cands, activas);
       const due = ultimoDiaHabilMesEmision(fecha, esHabil);

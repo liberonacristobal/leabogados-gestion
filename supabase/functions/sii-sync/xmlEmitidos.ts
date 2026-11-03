@@ -93,10 +93,12 @@ export async function bajarXmlEmitidos(rutEmpresa: string, pendientes: Pendiente
 
 // PDF OFICIAL del SII de una factura emitida: el mismo que muestra «Visualización documento (pdf)» en Documentos Emitidos
 // (mipeDisplayPDF.cgi). Solo LEE el SII. Devuelve el PDF en base64 o el motivo por el que no se pudo (captcha, folio no encontrado).
-export async function pdfEmitidoSii(rutEmpresa: string, folio: string, tipo: number | null): Promise<{ ok: boolean; base64?: string; bytes?: number; motivo?: string; captcha?: boolean }> {
-  const s = await abrirSesion(rutEmpresa)
-  const pag = await s.ir(lista(folio, tipo))
-  if (!/mipeGesDocEmi\.cgi/.test(pag.t)) return { ok: false, motivo: 'el folio no aparece en Documentos Emitidos' }
+export async function pdfEmitidoSii(rutEmpresa: string, folio: string, tipo: number | null): Promise<{ ok: boolean; base64?: string; bytes?: number; motivo?: string; detalle?: string; captcha?: boolean }> {
+  // El SII a veces devuelve la lista vacía en una sesión recién abierta (visto con varias consultas seguidas): sesión nueva y reintento (hasta 3).
+  let s = await abrirSesion(rutEmpresa)
+  let pag = await s.ir(lista(folio, tipo))
+  for (let i = 0; i < 2 && !/mipeGesDocEmi\.cgi/.test(pag.t); i++) { await new Promise((r) => setTimeout(r, 2500)); s = await abrirSesion(rutEmpresa); pag = await s.ir(lista(folio, tipo)) }
+  if (!/mipeGesDocEmi\.cgi/.test(pag.t)) return { ok: false, motivo: 'el folio no aparece en Documentos Emitidos', detalle: `${pag.status} · ${pag.t.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400)}` }
   if (await captchaActivo(s, pag.t)) return { ok: false, captcha: true, motivo: 'el SII activó el captcha' }
   const ref = pag.t.match(/href="(\/cgi-bin\/Portal001\/mipeGesDocEmi\.cgi\?[^"]+)"/)?.[1]
   if (!ref) return { ok: false, motivo: 'sin enlace al documento' }
