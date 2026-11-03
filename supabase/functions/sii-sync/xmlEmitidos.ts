@@ -12,7 +12,7 @@ import { cargarCertificado } from './auth.ts'
 export const XML_DESDE = '2026-06-09'
 const BASE = 'https://www1.sii.cl/cgi-bin/Portal001/'
 
-type Sesion = { ir: (url: string, body?: string) => Promise<{ status: number; t: string }> }
+type Sesion = { ir: (url: string, body?: string) => Promise<{ status: number; t: string; u8: Uint8Array }> }
 
 async function abrirSesion(rutEmpresa: string): Promise<Sesion> {
   const c = cargarCertificado()
@@ -27,7 +27,8 @@ async function abrirSesion(rutEmpresa: string): Promise<Sesion> {
     } as RequestInit)
     for (const k of r.headers.getSetCookie?.() || []) { const kv = k.split(';')[0], i = kv.indexOf('='); if (i > 0) jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim()) }
     // El SII entrega ISO-8859-1.
-    return { status: r.status, t: new TextDecoder('latin1').decode(new Uint8Array(await r.arrayBuffer())) }
+    const u8 = new Uint8Array(await r.arrayBuffer())
+    return { status: r.status, t: new TextDecoder('latin1').decode(u8), u8 }
   }
   const ref = `${BASE}mipeSelEmpresa.cgi`
   await ir(`https://herculesr.sii.cl/cgi_AUT2000/CAutInicio.cgi?${ref}`, `referencia=${encodeURIComponent(ref)}`)
@@ -88,4 +89,22 @@ export async function bajarXmlEmitidos(rutEmpresa: string, pendientes: Pendiente
     }
   }
   return { captcha: false, resultados }
+}
+
+// PDF OFICIAL del SII de una factura emitida: el mismo que muestra «Visualización documento (pdf)» en Documentos Emitidos
+// (mipeDisplayPDF.cgi). Solo LEE el SII. Devuelve el PDF en base64 o el motivo por el que no se pudo (captcha, folio no encontrado).
+export async function pdfEmitidoSii(rutEmpresa: string, folio: string, tipo: number | null): Promise<{ ok: boolean; base64?: string; bytes?: number; motivo?: string; captcha?: boolean }> {
+  const s = await abrirSesion(rutEmpresa)
+  const pag = await s.ir(lista(folio, tipo))
+  if (!/mipeGesDocEmi\.cgi/.test(pag.t)) return { ok: false, motivo: 'el folio no aparece en Documentos Emitidos' }
+  if (await captchaActivo(s, pag.t)) return { ok: false, captcha: true, motivo: 'el SII activó el captcha' }
+  const ref = pag.t.match(/href="(\/cgi-bin\/Portal001\/mipeGesDocEmi\.cgi\?[^"]+)"/)?.[1]
+  if (!ref) return { ok: false, motivo: 'sin enlace al documento' }
+  const det = await s.ir('https://www1.sii.cl' + ref.replace(/&amp;/g, '&'))
+  const cod = det.t.match(/mipeDisplayPDF\.cgi\?DHDR_CODIGO=(\d+)/)?.[1]
+  if (!cod) return { ok: false, motivo: 'el documento no trae la visualización en PDF' }
+  const r = (await s.ir(`${BASE}mipeDisplayPDF.cgi?DHDR_CODIGO=${cod}`)).u8
+  if (r.length < 1000 || String.fromCharCode(...r.slice(0, 4)) !== '%PDF') return { ok: false, motivo: 'el SII no devolvió un PDF' }
+  let bin = ''; for (let i = 0; i < r.length; i += 0x8000) bin += String.fromCharCode(...r.subarray(i, i + 0x8000))
+  return { ok: true, base64: btoa(bin), bytes: r.length }
 }

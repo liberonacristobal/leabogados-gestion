@@ -23,7 +23,7 @@ import { armarDocumento, type FacturaInput } from './dte.ts'
 import { firmarDocumento } from './firma.ts'
 import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 import { armarLibroVentas } from './libro.ts'
-import { bajarXmlEmitidos, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
+import { bajarXmlEmitidos, pdfEmitidoSii, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
 import { leerEnvioRecibido, armarRecepcionEnvio, armarResultadoDTE, armarEnvioRecibos } from './intercambio.ts'
 
 const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']   // respaldo si la tabla miembros no responde
@@ -112,7 +112,7 @@ serve(async (req) => {
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
   // xml-emitidos entra aca: solo LEE el SII (descarga el respaldo XML) y completa billing.dte_xml vacío.
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos']
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos', 'pdf-emitido']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !(await esAdminDelEstudio(email)))) {
@@ -585,6 +585,12 @@ serve(async (req) => {
 
     // Facturas emitidas fuera de la app (portal del SII) que no tienen su XML: lo trae con el certificado y lo guarda.
     // Solo desde XML_DESDE. Si el SII activó el captcha de la descarga, se detiene y responde 409 (vigilancia lo informa).
+    // PDF oficial del SII de una factura emitida (solo lectura). Lo usa la app para enviar y descargar el mismo documento que muestra el SII.
+    if (body.action === 'pdf-emitido') {
+      if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
+      const r = await pdfEmitidoSii(getEmisor().rut.replace(/\./g, ''), String(body.folio || '').replace(/\D/g, ''), Number(body.tipo) || null)
+      return json(r, r.ok ? 200 : r.captcha ? 409 : 404)
+    }
     if (body.action === 'xml-emitidos') {
       if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
       const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
