@@ -1969,7 +1969,7 @@ export const cuotaOrdOf = c => { const m=String(c||'').toLowerCase().match(/\b(?
 export async function reconcileProgramada(clientId, amount, issuedAt){
   try{
     if(!clientId || !amount || !issuedAt) return
-    const {data} = await supabase.from('billing').select('id,due,amount').eq('client_id',clientId).eq('status','Programada')
+    const {data} = await supabase.from('billing').select('id,due,amount,sale_id,concept,entity_id').eq('client_id',clientId).eq('status','Programada').is('deleted_at',null)
     if(!data || !data.length) return
     // Monto con tolerancia ±5% (piso $1.000) + due dentro de ±45 días de la emisión: evita borrar una programada
     // lejana de otra venta del mismo cliente. La ventana temporal + el candado de empate hacen seguro el match difuso.
@@ -1982,8 +1982,12 @@ export async function reconcileProgramada(clientId, amount, issuedAt){
     // Soft-delete (no borrado físico) para que sea reversible desde la Papelera si reconcilió la cuota equivocada.
     // Deja registrado QUÉ factura la reemplaza (replaced_by_id): así el trigger de la base le pasa sus comisiones de proveedores.
     let realId=null
-    try{ const {data:r}=await supabase.from('billing').select('id,amount').eq('client_id',clientId).is('deleted_at',null).neq('status','Programada').eq('issued_at',String(issuedAt).slice(0,10)).order('created_at',{ascending:false}).limit(5)
-      realId=(r||[]).find(x=>Math.abs((Number(x.amount)||0)-amount)<=1)?.id||null }catch(_){}
+    let real=null
+    try{ const {data:r}=await supabase.from('billing').select('id,amount,sale_id,concept,entity_id').eq('client_id',clientId).is('deleted_at',null).neq('status','Programada').eq('issued_at',String(issuedAt).slice(0,10)).order('created_at',{ascending:false}).limit(5)
+      real=(r||[]).find(x=>Math.abs((Number(x.amount)||0)-amount)<=1)||null; realId=real?.id||null }catch(_){}
+    // La factura real HEREDA la venta, el concepto y la razón social de la cuota que reemplaza (antes la cuota se borraba y la factura quedaba suelta, sin venta).
+    if(real){ const h={}; if(!real.sale_id&&cands[0].sale_id) h.sale_id=cands[0].sale_id; if((!real.concept||real.concept==='Honorarios')&&cands[0].concept) h.concept=cands[0].concept; if(!real.entity_id&&cands[0].entity_id) h.entity_id=cands[0].entity_id
+      if(Object.keys(h).length){ const {error:he}=await supabase.from('billing').update({...h,updated_at:new Date().toISOString()}).eq('id',real.id); if(he) return } }   // si no pudo heredar, no borra la cuota
     await supabase.from('billing').update({deleted_at:new Date().toISOString(),...(realId?{replaced_by_id:realId}:{})}).eq('id',cands[0].id)
   }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
 }
@@ -2090,7 +2094,7 @@ export const TIPOS_FACTURA = [
   {k:'honorarios', t:'Honorarios', col:C.accent},
   {k:'reembolso', t:'Gastos', col:C.azulInfo},
   {k:'comision', t:'Comisión', col:C.tealText},
-  {k:'externo', t:'Por externo', col:C.soonText},
+  {k:'externo', t:'Venta de terceros', col:C.soonText},
   {k:'subarriendo', t:'Subarriendo', col:C.grisText},
 ]
 

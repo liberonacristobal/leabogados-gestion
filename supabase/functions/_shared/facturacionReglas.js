@@ -117,12 +117,13 @@ export function sugerirVentas({ factura, sales = [], billing = [], aprendidas = 
 // (facturas-sii-registrar) y la vista Cuadrar con SII.
 export const rutNorm = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '').replace(/^0+/, '')
 
-/** RUT con que sale una cuota en el Excel «Facturar» (misma prioridad que rsRutExport): su receptor, la RS elegida, la única RS, la primera RS con RUT, el cliente.
+/**
+ * RUT con que sale una cuota en el Excel «Facturar» (misma prioridad que rsRutExport): su receptor, la RS elegida, la única RS, la primera RS con RUT, el cliente.
  * @param {any} b @param {any[]} [entidadesCliente] @param {any} [cliente] */
 export function rutDeCuota(b, entidadesCliente = [], cliente = null) {
   const ents = entidadesCliente || []
   const porId = b?.entity_id ? ents.find(e => String(e.id) === String(b.entity_id)) : null
-  const r = [b?.receptor_rut, porId && porId.rut, ents.length === 1 && ents[0].rut, ((ents.find(e => e.rut && String(e.rut).trim()) || {}).rut), cliente && cliente.rut].map(x => String(x || '').trim()).find(Boolean) || ''
+  const r = [b?.receptor_rut, porId && porId.rut, ents.length === 1 && ents[0].rut, (ents.find(e => e.rut && String(e.rut).trim()) || {}).rut, cliente && cliente.rut].map(x => String(x || '').trim()).find(Boolean) || ''
   return rutNorm(r)
 }
 
@@ -138,43 +139,129 @@ export function montoDeCuota(b, venta, uf) {
 const _dia = (iso, d) => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10) }
 const _inicioMesAnterior = iso => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() - 1, 1)).toISOString().slice(0, 10) }
 const _finMes = iso => { const x = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 0)).toISOString().slice(0, 10) }
+const _difDias = (a, b) => Math.abs((Date.parse(String(a).slice(0, 10)) - Date.parse(String(b).slice(0, 10))) / 86400000)
+/** Venta de subarriendo (marcador cobro_config.subarriendo, igual que esSubarriendo de cifras.js). @param {any} v */
+export const esVentaSubarriendo = v => !!v && (v.cobro_config?.subarriendo === true || (v.area || '') === 'Subarriendo')
+
+/** N° de cuota y mes que dice un texto (glosa o concepto). Cuota: «cuota 4», «pago 6/10», «cobro 8», «2-18», «2/2». */
+export function senalesTexto(txt) {
+  const t = String(txt || '')
+  const p = periodoDeTexto(t)
+  const c = t.match(/(?:cuota|pago|cobro)\s*(\d{1,2})/i) || t.match(/\b(\d{1,2})\s*[\/-]\s*\d{1,2}\b/)
+  return { cuota: c ? +c[1] : null, mes: p.mes, anio: p.anio }
+}
+/** La glosa contradice a la cuota solo con señales fuertes: otro N° de cuota u otro mes. Sin dato en alguno de los dos, no contradice. */
+export function glosaContradice(glosa, concepto) {
+  const g = senalesTexto(glosa), c = senalesTexto(concepto)
+  if (g.cuota != null && c.cuota != null && g.cuota !== c.cuota) return true
+  if (g.mes != null && c.mes != null && g.mes !== c.mes) return true
+  return false
+}
+/** La glosa coincide a favor de la cuota (mismo N° de cuota o mismo mes). */
+export function glosaApoya(glosa, concepto) {
+  const g = senalesTexto(glosa), c = senalesTexto(concepto)
+  return (g.cuota != null && g.cuota === c.cuota) || (g.mes != null && g.mes === c.mes)
+}
 
 /**
  * Cuota que propone el día para una factura del SII.
- *  doc = {rut, monto, fecha} · programadas = cuotas sin folio (cualquier cliente) · ents/clientes/ventas = filas crudas ·
- *  ufPorFecha = {'AAAA-MM-DD': valor UF}.
- * Solo entran cuotas programadas con devengo hasta el fin del mes de emisión (lo que el Excel trae) cuyo RUT es el del documento
- * y cuyo monto calza al peso con el de algún día de la ventana (5 días antes a 1 después de la emisión: se descarga y se emite
- * el mismo día o el siguiente). Resultado:
- *   nivel 'exacta'  → una sola cuota calza y su devengo es del mes anterior o posterior: se puede registrar sola.
- *   nivel 'atrasada'→ una sola calza, pero con devengo de hace más de un mes: se propone y la confirma una persona.
- *   nivel 'serie'   → varias cuotas de UNA venta (mismo monto cada mes): se propone la más antigua (FIFO) y la confirma una persona.
- *   nivel 'varias'  → cuotas de ventas distintas: no se propone ninguna; candidatas = solo las que calzan.
- *   nivel null      → ninguna calza exacto (el cotejo sigue con sus tolerancias).
- * candidatas va ordenada: la propuesta primero, luego por devengo.
- */
-export function propuestaDelDia({ doc, programadas = [], ents = [], clientes = [], ventas = [], ufPorFecha = {}, usadas = new Set() }) {
-  const sin = { nivel: null, propuesta: null, candidatas: [], motivo: null }
+ *  doc = {rut, monto, fecha, glosa?} · programadas = cuotas sin folio (cualquier cliente) · ents/clientes/ventas = filas crudas ·
+ *  ufPorFecha = {'AAAA-MM-DD': valor UF} · anticipos = pagos por adelantado (fecha del pago de las cuotas Anticipada).
+ * Solo entran cuotas Programada o Anticipada con devengo hasta el fin del mes de emisión (lo que el Excel trae), cuyo RUT es el del
+ * documento y cuyo monto calza al peso con el de algún día de la ventana (5 días antes a 1 después de la emisión). Resultado (nivel):
+ *   'exacta'      una sola cuota calza y su devengo es del mes anterior o posterior: se puede registrar sola.
+ *   'atrasada'    una sola calza, pero con devengo de hace más de un mes: se propone y la confirma una persona.
+ *   'serie'       varias cuotas de UNA venta: se propone la más antigua (FIFO) y la confirma una persona.
+ *   'varias'      cuotas de ventas distintas: sin propuesta; candidatas = solo las que calzan.
+ *   'subarriendo' cuotas del subarriendo de oficina (la glosa no se usa): propone la pagada por adelantado más cercana a la emisión, o la más antigua.
+ *   'comision'    «Comisión por facturar» (monto exacto): se propone y se confirma, con el registro que ya tiene sus ajustes.
+ *   'sin_cuota'   la glosa contradice (otro N° de cuota u otro mes) a todas las que calzan por RUT y monto: no se propone ninguna.
+ *   null          ninguna calza exacto (el cotejo sigue con sus tolerancias).
+ * evidencia = lo que explica el calce (modo de monto, UF del día, señales de la glosa); candidatas va con la propuesta primero.
+ * @param {{doc:any, programadas?:any[], ents?:any[], clientes?:any[], ventas?:any[], ufPorFecha?:Record<string,number>, anticipos?:any[], usadas?:Set<any>}} p */
+export function propuestaDelDia({ doc, programadas = [], ents = [], clientes = [], ventas = [], ufPorFecha = {}, anticipos = [], usadas = new Set() }) {
+  /** @type {{nivel:string|null, propuesta:any, candidatas:any[], motivo:string|null, evidencia:any}} */
+  const sin = { nivel: null, propuesta: null, candidatas: [], motivo: null, evidencia: null }
   const rutD = rutNorm(doc?.rut), monto = Math.round(Number(doc?.monto) || 0), fecha = String(doc?.fecha || '').slice(0, 10)
   if (!rutD || !(monto > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return sin
+  /** @type {[string, number][]} */
   const ufs = []
-  for (let d = -5; d <= 1; d++) { const v = Number(ufPorFecha[_dia(fecha, d)]); if (v > 0) ufs.push(v) }
+  for (let d = -5; d <= 1; d++) { const f = _dia(fecha, d), v = Number(ufPorFecha[f]); if (v > 0) ufs.push([f, v]) }
   const tope = _finMes(fecha)
   const ventaDe = new Map((ventas || []).map(v => [String(v.id), v]))
   const entsDe = new Map(), clienteDe = new Map((clientes || []).map(c => [String(c.id), c]))
   for (const e of ents || []) { const k = String(e.client_id); if (!entsDe.has(k)) entsDe.set(k, []); entsDe.get(k).push(e) }
-  const ok = (programadas || []).filter(b => b && !b.deleted_at && !b.invoice_no && b.status === 'Programada' && b.billing_type !== 'reembolso' && !usadas.has(b.id) && b.due && String(b.due) <= tope
-    && rutDeCuota(b, entsDe.get(String(b.client_id)) || [], clienteDe.get(String(b.client_id))) === rutD
-    && (() => { const v = ventaDe.get(String(b.sale_id)); if (v && v.moneda === 'CLP') return Math.abs((Number(b.amount) || 0) - monto) <= 1; return ufs.some(u => { const m = montoDeCuota(b, v, u); return m != null && Math.abs(m - monto) <= 1 }) })())
-    .sort((a, b) => String(a.due).localeCompare(String(b.due)))
+  const antDe = new Map((anticipos || []).map(a => [String(a.id), a]))
+  const fechaPago = b => String((b.paid_at || (b.prepaid_anticipo_id && antDe.get(String(b.prepaid_anticipo_id))?.fecha) || '')).slice(0, 10)
+  const evid = new Map()
+  const ok = (programadas || []).filter(b => {
+    if (!b || b.deleted_at || b.invoice_no || !['Programada', 'Anticipada'].includes(b.status) || b.billing_type === 'reembolso' || usadas.has(b.id)) return false
+    if (rutDeCuota(b, entsDe.get(String(b.client_id)) || [], clienteDe.get(String(b.client_id))) !== rutD) return false
+    if (b.billing_type === 'comision') { if (b.status !== 'Anticipada' || Math.abs((Number(b.amount) || 0) - monto) > 1) return false; const fp = fechaPago(b) || b.due; if (fp && _difDias(fp, fecha) > 60) return false; evid.set(b.id, { modo: 'comision' }); return true }
+    if (!(b.due && String(b.due) <= tope)) return false
+    const v = ventaDe.get(String(b.sale_id))
+    if (v && v.moneda === 'CLP') { if (Math.abs((Number(b.amount) || 0) - monto) > 1) return false; evid.set(b.id, { modo: 'clp' }); return true }
+    for (const [f, u] of ufs) { const m = montoDeCuota(b, v, u); if (m != null && Math.abs(m - monto) <= 1) { evid.set(b.id, { modo: 'uf', ufDia: f, uf: Number(v?.uf_value) > 0 ? Math.round((Number(b.amount) || 0) / Number(v.uf_value) * 100) / 100 : null, valorUf: u }); return true } }
+    return false
+  }).sort((a, b) => String(a.due || '').localeCompare(String(b.due || '')))
   if (!ok.length) return sin
-  if (ok.length === 1) {
-    // Una cuota con devengo de hace más de un mes no se registra sola aunque sea la única: puede ser una vieja sin emitir y la factura
-    // otra (series que se emiten fuera de orden). Se propone y la confirma una persona.
-    if (String(ok[0].due) < _inicioMesAnterior(fecha)) return { nivel: 'atrasada', propuesta: ok[0], candidatas: ok, motivo: `única cuota que calza, pero con devengo del ${String(ok[0].due).split('-').reverse().join('-')}` }
-    return { nivel: 'exacta', propuesta: ok[0], candidatas: ok, motivo: 'RUT y monto iguales a los de la lista Facturar' }
+  const conEv = (b, extra = {}) => ({ ...(evid.get(b.id) || {}), ...extra })
+  const ordenar = (lista, prop) => prop ? [prop, ...lista.filter(x => x.id !== prop.id)] : lista
+  // Subarriendo de oficina: la glosa no manda (el texto de estas facturas no describe la cuota).
+  const sub = ok.filter(b => esVentaSubarriendo(ventaDe.get(String(b.sale_id))))
+  if (sub.length) {
+    const cercana = sub.filter(b => b.status === 'Anticipada' && fechaPago(b) && _difDias(fechaPago(b), fecha) <= 10).sort((a, b) => _difDias(fechaPago(a), fecha) - _difDias(fechaPago(b), fecha))[0]
+    const prop = cercana || sub[0]
+    return { nivel: 'subarriendo', propuesta: prop, candidatas: ordenar(sub, prop), motivo: cercana ? `cuota del subarriendo cubierta por el pago del ${fechaPago(cercana).split('-').reverse().join('-')}` : 'cuota más antigua del subarriendo', evidencia: conEv(prop, { glosa: 'no_se_usa' }) }
   }
-  const unaVenta = ok.every(b => b.sale_id && String(b.sale_id) === String(ok[0].sale_id))
-  if (unaVenta) return { nivel: 'serie', propuesta: ok[0], candidatas: ok, motivo: `${ok.length} cuotas de la misma venta calzan; se propone la más antigua` }
-  return { nivel: 'varias', propuesta: null, candidatas: ok, motivo: `${ok.length} cuotas de ventas distintas calzan` }
+  const com = ok.filter(b => b.billing_type === 'comision')
+  if (com.length) {
+    const prop = [...com].sort((a, b) => _difDias(fechaPago(a) || a.due, fecha) - _difDias(fechaPago(b) || b.due, fecha))[0]
+    return { nivel: 'comision', propuesta: prop, candidatas: ordenar(com, prop), motivo: 'comisión por facturar del mismo monto', evidencia: conEv(prop) }
+  }
+  // La glosa descarta solo con señales fuertes (otro N° de cuota u otro mes); no es un veto general.
+  const glosa = String(doc?.glosa || '')
+  let vivas = ok
+  if (glosa) {
+    vivas = ok.filter(b => !glosaContradice(glosa, b.concept))
+    if (!vivas.length) return { nivel: 'sin_cuota', propuesta: null, candidatas: [], motivo: 'la glosa no coincide con la cuota que calza por RUT y monto (otro N° de cuota u otro mes)', evidencia: { glosa: 'contradice' } }
+    if (vivas.length > 1) { const ap = vivas.filter(b => glosaApoya(glosa, b.concept)); if (ap.length === 1) vivas = ap }
+  }
+  const senal = b => { const g = senalesTexto(glosa), c = senalesTexto(b.concept); return glosa ? { glosa: (g.cuota != null && g.cuota === c.cuota) || (g.mes != null && g.mes === c.mes) ? 'calza' : 'sin_dato', cuota: c.cuota, mes: c.mes } : {} }
+  if (vivas.length === 1) {
+    const b = vivas[0]
+    // Una cuota con devengo de hace más de un mes no se registra sola aunque sea la única: puede ser una vieja sin emitir y la factura otra.
+    if (String(b.due) < _inicioMesAnterior(fecha)) return { nivel: 'atrasada', propuesta: b, candidatas: [b], motivo: `única cuota que calza, pero con devengo del ${String(b.due).split('-').reverse().join('-')}`, evidencia: conEv(b, senal(b)) }
+    return { nivel: 'exacta', propuesta: b, candidatas: [b], motivo: 'RUT y monto iguales a los de la lista Facturar', evidencia: conEv(b, senal(b)) }
+  }
+  const unaVenta = vivas.every(b => b.sale_id && String(b.sale_id) === String(vivas[0].sale_id))
+  if (unaVenta) return { nivel: 'serie', propuesta: vivas[0], candidatas: vivas, motivo: `${vivas.length} cuotas de la misma venta calzan; se propone la más antigua`, evidencia: conEv(vivas[0], senal(vivas[0])) }
+  return { nivel: 'varias', propuesta: null, candidatas: vivas, motivo: `${vivas.length} cuotas de ventas distintas calzan`, evidencia: null }
 }
+
+/** Una línea que explica por qué se asignó (para «Asignadas automáticamente»). @param {any} ev @param {string} concepto */
+export function explicarAsignacion(ev, concepto) {
+  const e = ev || {}, f = x => { const [y, m, d] = String(x || '').split('-'); return `${d}-${m}-${y}` }
+  const monto = e.modo === 'uf' ? `el monto (${String(e.uf ?? '').replace('.', ',')} UF × UF del ${f(e.ufDia)})` : e.modo === 'comision' ? 'el monto de la comisión por facturar' : 'el monto'
+  const partes = ['el RUT', monto]
+  if (e.glosa === 'calza') partes.push(e.cuota != null ? `la cuota ${e.cuota} de la glosa` : 'el mes de la glosa')
+  const lista = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}` : partes[0]
+  return `Asignada a «${concepto}». Coinciden ${lista}.`
+}
+
+/**
+ * Parche que convierte una cuota en su factura emitida: FUENTE ÚNICA del registro (Cargar del SII, cotejo del SII, registro automático).
+ * Una cuota Anticipada (pagada por adelantado) queda Pagada con la fecha de su pago; el vencimiento corre desde la emisión (due ya calculado
+ * por quien llama); el monto es el del DTE. dteXml: undefined = no tocar; null o texto = guardar.
+ * @param {{prog:any, folio:any, fecha:string, due?:string|null, tipoDte?:any, montoDte?:number|null, fechaAnticipo?:string|null, dteXml?:string|null, batchId?:string|null, ahora:string}} p
+ */
+export function parcheRegistroCuota({ prog, folio, fecha, due = null, tipoDte = 34, montoDte = null, fechaAnticipo = null, dteXml = undefined, batchId = null, ahora }) {
+  /** @type {Record<string, any>} */
+  const patch = { invoice_no: String(folio), status: 'Pendiente', issued_at: fecha || null, ...(fecha && due ? { due } : {}), ...(dteXml !== undefined ? { dte_xml: dteXml } : {}), sii_tipo_dte: tipoDte || 34, sii_synced_at: ahora, updated_at: ahora, ...(montoDte != null ? { amount: montoDte } : {}), ...(batchId ? { import_batch_id: batchId } : {}) }
+  if (prog?.status === 'Anticipada') Object.assign(patch, { status: 'Pagado', paid: true, paid_at: fechaAnticipo || prog.paid_at || fecha || null })
+  return patch
+}
+/** Lo que hace falta guardar de una cuota para poder deshacer su registro. @param {any} prog */
+export const instantaneaCuota = prog => ({ status: prog?.status ?? 'Programada', due: prog?.due ?? null, amount: prog?.amount ?? null, paid: prog?.paid ?? null, paid_at: prog?.paid_at ?? null, sii_tipo_dte: prog?.sii_tipo_dte ?? null, sii_synced_at: prog?.sii_synced_at ?? null, issued_at: prog?.issued_at ?? null })
+/** Parche que deshace el registro de una cuota a partir de su instantánea (vuelve a no tener folio). @param {any} prev @param {string} ahora */
+export const parcheDeshacerRegistro = (prev, ahora) => ({ ...prev, invoice_no: null, dte_xml: null, updated_at: ahora })

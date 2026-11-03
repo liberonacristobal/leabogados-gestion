@@ -24,7 +24,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { selectAll } from '../_shared/paginar.js'
-import { propuestaDelDia, serieYaFacturadaEnMes } from '../_shared/facturacionReglas.js'
+import { propuestaDelDia, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision, explicarAsignacion, instantaneaCuota, parcheRegistroCuota } from '../_shared/facturacionReglas.js'
 import { createClient } from '@supabase/supabase-js'
 import type { VentaSII } from './rcv.ts'
 
@@ -50,7 +50,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   )
 
   const [progRes, cliRes, entRes, emitRes, folioRes] = await Promise.all([
-    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,sale_id,billing_type,amount,due,status,receptor_rut,concept,invoice_no').eq('status', 'Programada').is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('billing').select('id,client_id,entity_id,sale_id,billing_type,amount,due,status,receptor_rut,concept,invoice_no,paid,paid_at,prepaid_anticipo_id,sii_tipo_dte,sii_synced_at,issued_at').in('status', ['Programada', 'Anticipada']).is('deleted_at', null).order('id')),
     supabase.from('clients').select('id,name,rut'),
     selectAll(() => supabase.from('client_entities').select('id,client_id,name,rut').order('id')),
     selectAll(() => supabase.from('billing').select('id,client_id,entity_id,amount,status,receptor_rut,concept,invoice_no,issued_at').in('status', ['Pendiente', 'Vencido']).is('deleted_at', null).order('id')),
@@ -64,7 +64,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const fechasV = ventas.map((v) => String(v.fechaEmision || '').slice(0, 10)).filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f)).sort()
   const dia = (iso: string, d: number) => { const x = new Date(iso + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10) }
   const [ventasRes, ufRes, delMesRes] = fechasV.length ? await Promise.all([
-    selectAll(() => supabase.from('sales').select('id,moneda,uf_value').is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('sales').select('id,moneda,uf_value,cobro_config,area').is('deleted_at', null).order('id')),
     supabase.from('indicadores').select('fecha,valor').eq('codigo', 'uf').gte('fecha', dia(fechasV[0], -6)).lte('fecha', dia(fechasV[fechasV.length - 1], 2)),
     selectAll(() => supabase.from('billing').select('id,sale_id,invoice_no,issued_at,status,deleted_at').not('invoice_no', 'is', null).is('deleted_at', null).gte('issued_at', fechasV[0].slice(0, 7) + '-01').order('id')),
   ]) : [{ data: [] }, { data: [] }, { data: [] }]
@@ -72,6 +72,19 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const ufPorFecha: Record<string, number> = {}
   for (const r of ufRes.data || []) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor)
   const facturadasMes = delMesRes.data || []
+
+  // Pagos por adelantado (fecha de pago de las cuotas Anticipada), glosa de lo ya bajado del SII y los externos (venta de terceros) ya facturados.
+  const [antRes, glosaRes, extRes, tpRes] = fechasV.length ? await Promise.all([
+    supabase.from('anticipos').select('id,fecha'),
+    supabase.from('sii_cargas_docs').select('folio,glosa').gte('fecha_emision', fechasV[0]).not('glosa', 'is', null),
+    selectAll(() => supabase.from('billing').select('id,client_id').eq('billing_type', 'externo').is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('terceros_pagos').select('billing_id,proveedor_id,proveedor,comision_pct').not('comision_pct', 'is', null).order('id')),
+  ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+  const anticipos = antRes.data || []
+  const glosaDe = new Map<string, string>((glosaRes.data || []).map((g: any) => [String(g.folio), String(g.glosa || '')]))
+  const tpPorBill = new Map<string, any>((tpRes.data || []).map((t: any) => [String(t.billing_id), t]))
+  const externoDeCliente = new Map<string, any>()   // cliente → externo con que ya se facturó (el más reciente gana por orden de lectura)
+  for (const b of extRes.data || []) { const t = tpPorBill.get(String(b.id)); if (t) externoDeCliente.set(String(b.client_id), { proveedorId: t.proveedor_id, proveedor: t.proveedor, pct: Number(t.comision_pct) || 15 }) }
 
   const programadas = progRes.data || []
   const clientes = cliRes.data || []
@@ -107,32 +120,46 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
     const rutV = normalizarRut(v.rutReceptor)
     if (rutV === '') { resultado.sinMatch.push(itemSinMatch(v)); continue }
 
-    // 1) PROPUESTA DEL DÍA: RUT de la razón social + monto exacto de lo que proponía el Excel «Facturar» (UF × UF del día). Una sola cuota
-    //    → se registra sola (si su venta no facturó ya este mes); varias de una venta o una cuota vieja → se propone y confirma una persona.
-    const prop = propuestaDelDia({ doc: { rut: v.rutReceptor, monto: v.montoTotal, fecha: String(v.fechaEmision || '').slice(0, 10) }, programadas: programadas.filter((b: any) => !progUsadas.has(b.id)), ents: entidades, clientes, ventas: ventasApp, ufPorFecha, usadas: progUsadas })
+    // 1) PROPUESTA DEL DÍA: RUT de la razón social + monto exacto de lo que proponía el Excel «Facturar» (UF × UF del día), con la glosa
+    //    (ya bajada del XML) solo para descartar o desempatar. Una sola cuota → se asigna sola (si su venta no facturó ya este mes);
+    //    el resto se propone y lo confirma una persona. Subarriendo, comisión y venta de terceros no se asignan solos.
+    const fechaV = String(v.fechaEmision || '').slice(0, 10)
+    const prop = propuestaDelDia({ doc: { rut: v.rutReceptor, monto: v.montoTotal, fecha: fechaV, glosa: glosaDe.get(String(v.folio)) || '' }, programadas: programadas.filter((b: any) => !progUsadas.has(b.id)), ents: entidades, clientes, ventas: ventasApp, ufPorFecha, anticipos, usadas: progUsadas })
     if (prop.nivel === 'exacta') {
-      const mismoMes = serieYaFacturadaEnMes(facturadasMes, prop.propuesta.sale_id, String(v.fechaEmision).slice(0, 10), String(v.folio))
+      const mismoMes = serieYaFacturadaEnMes(facturadasMes, prop.propuesta.sale_id, fechaV, String(v.folio))
       if (!mismoMes) {
-        const b = prop.propuesta
-        const { error } = await supabase.from('billing').update({
-          status: 'Pendiente', invoice_no: String(v.folio), issued_at: v.fechaEmision,
-          amount: v.montoTotal,   // el monto REAL es el del DTE emitido
-          sii_synced_at: new Date().toISOString(), sii_tipo_dte: v.tipoDte, receptor_rut: b.receptor_rut || v.rutReceptor, updated_at: new Date().toISOString(),
-        }).eq('id', b.id).eq('status', 'Programada')
+        const b = prop.propuesta, ahora = new Date().toISOString()
+        const antF = b.status === 'Anticipada' ? (anticipos.find((x: any) => String(x.id) === String(b.prepaid_anticipo_id))?.fecha || null) : null
+        const patch = { ...parcheRegistroCuota({ prog: b, folio: v.folio, fecha: v.fechaEmision, due: ultimoDiaHabilMesEmision(v.fechaEmision), tipoDte: v.tipoDte, montoDte: v.montoTotal, fechaAnticipo: antF, ahora }), receptor_rut: b.receptor_rut || v.rutReceptor }
+        const { error } = await supabase.from('billing').update(patch).eq('id', b.id).eq('status', b.status)
         if (error) { resultado.errores.push({ folio: v.folio, error: error.message }); console.log(`[sii-sync] ERROR actualizando folio ${v.folio}: ${error.message}`) }
         else {
           progUsadas.add(b.id)
           resultado.actualizadas.push({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, folio: v.folio, monto: v.montoTotal, fechaEmision: v.fechaEmision, por: 'propuesta del día' })
-          console.log(`[sii-sync] folio ${v.folio} -> Pendiente por propuesta del día (${nombreCliente(b)}, $${v.montoTotal})`)
+          // Bitácora con lo necesario para deshacer (la cuota tal como estaba) y el porqué de la asignación.
+          await supabase.from('activity_log').insert({ user_email: 'cotejo', action: 'facturacion.asignada_auto', table_name: 'billing', record_id: b.id, estudio_id: 'lea',
+            detail: { title: `Factura N° ${v.folio} asignada sola: ${nombreCliente(b)} → «${b.concept}»`, folio: String(v.folio), monto: v.montoTotal, concepto: b.concept, cliente: nombreCliente(b), texto: explicarAsignacion(prop.evidencia, b.concept), evidencia: prop.evidencia, prev: instantaneaCuota(b), fecha: fechaV } }).then(() => null, () => null)
+          console.log(`[sii-sync] folio ${v.folio} -> asignada por propuesta del día (${nombreCliente(b)}, $${v.montoTotal})`)
           continue
         }
       } else prop.motivo = `su venta ya tiene la factura N° ${String(mismoMes.invoice_no).replace(/^factura\s*/i, '')} emitida este mes`
     }
     if (prop.nivel) {
       resultado.ambiguas.push({
-        folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision,
-        propuesta: prop.propuesta ? prop.propuesta.id : null, motivo: prop.motivo, nivel: prop.nivel,
-        candidatos: prop.candidatas.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: null, vence: b.due || null, venta: b.sale_id || null })),
+        folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision, tipoDte: v.tipoDte,
+        propuesta: prop.propuesta ? prop.propuesta.id : null, motivo: prop.motivo, nivel: prop.nivel, evidencia: prop.evidencia, glosa: glosaDe.get(String(v.folio)) || null,
+        candidatos: prop.candidatas.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: null, vence: b.due || null, venta: b.sale_id || null, pago: b.paid_at || null, tipo: b.billing_type || null })),
+      })
+      continue
+    }
+    // Venta de terceros: el cliente ya se facturó como de un externo y esta factura no calza con ninguna cuota propia → se propone con el % aprendido (85/15 por defecto).
+    const cliExt = (entidades.find((e: any) => normalizarRut(e.rut) === rutV)?.client_id) || (clientes.find((c: any) => normalizarRut(c.rut) === rutV)?.id)
+    const ext = cliExt ? externoDeCliente.get(String(cliExt)) : null
+    if (ext) {
+      resultado.ambiguas.push({
+        folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision, tipoDte: v.tipoDte, clienteId: cliExt,
+        propuesta: null, nivel: 'externo', motivo: `el cliente ya se facturó como venta de terceros con ${ext.proveedor || 'un externo'} y no calza con ninguna cuota propia`, evidencia: null, glosa: glosaDe.get(String(v.folio)) || null,
+        externo: { proveedorId: ext.proveedorId, proveedor: ext.proveedor, pct: ext.pct || 15 }, candidatos: [],
       })
       continue
     }
@@ -149,7 +176,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
       // Candidatos en TODOS los periodos, no solo el del cotejo. CLAVE para recurrentes: repiten
       // monto mes a mes; si narraramos por periodo el motor "encontraria" 1 (el mes del cotejo) y le
       // pegaria el folio al MES equivocado (mes vencido: la factura de julio es servicio de junio).
-      const progC = programadas.filter((b: any) => !progUsadas.has(b.id) && calza(b))
+      const progC = programadas.filter((b: any) => b.status === 'Programada' && b.billing_type !== 'comision' && !progUsadas.has(b.id) && calza(b))
       const emitC = emitidas.filter((b: any) => !emitUsadas.has(b.id) && calza(b) && folioCorregible(b))
       const cand = [...progC, ...emitC]
       const total = cand.length

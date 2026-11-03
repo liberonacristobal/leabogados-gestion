@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
-import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
+import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -739,7 +739,7 @@ export const ufDeGlosa = g => { const m=String(g||'').match(/(\d[\d.,]*)\s*UF\b/
 // Puntúa cuánto calza el MES de servicio de la glosa (gmes) con una candidata. Prioriza la convención "mes vencido" de la firma
 // (servicio = vencimiento − 1), luego el N° de cuota, y deja el mes directo como señal débil. Evita que cuotas de meses contiguos empaten.
 
-export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],initialMes,onOpenClientFicha,asPage=false}) {
+export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],sales=[],anticipos=[],user=null,onReclasificarTercero,initialMes,onOpenClientFicha,asPage=false}) {
   const isDesktop = useIsDesktop()
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
@@ -750,6 +750,10 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   // "hace X" desde el último cotejo exitoso (cualquier mes)
   const desdeTxt = ts => { if(!ts) return null; const min=Math.round((Date.now()-new Date(ts).getTime())/60000); if(min<1) return 'recién'; if(min<60) return `hace ${min} min`; const h=Math.round(min/60); if(h<24) return `hace ${h} h`; const d=Math.round(h/24); return `hace ${d} día${d!==1?'s':''}` }
   const [ingresando,setIngresando] = useState(null)        // folio en curso
+  const [tab,setTab] = useState(null)                       // 'asignar' | 'auto' | 'reg' (null = el que corresponda)
+  const [autoRows,setAutoRows] = useState(null)             // facturas que el motor asignó solo en el mes (bitácora), con su porqué
+  const [autoExp,setAutoExp] = useState(()=>new Set())
+  const [deshaciendo,setDeshaciendo] = useState(null)
   const [ingresadas,setIngresadas] = useState(()=>({}))    // folio -> {cliente|null}
   const [yaOpen,setYaOpen] = useState(false)
   const [autoOpen,setAutoOpen] = useState(false)   // "se cargaron solas" colapsado por defecto
@@ -757,6 +761,33 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   const [ambShowAll,setAmbShowAll] = useState(()=>new Set())   // "Elige la factura": ver TODAS las candidatas aunque una calce el mes (por defecto solo la del mes correcto)
   const [corrExp,setCorrExp] = useState(()=>new Set())   // billingIds con la comparación En el SII ↔ Tu factura (folio) abierta
   const [yy,mm] = mes.split('-').map(Number)
+  // «Asignadas automáticamente»: lo que el cotejo y el registro automático asignaron solos este mes, con lo que hace falta para deshacerlo.
+  const cargarAuto = async()=>{ if(DEMO){ setAutoRows([]); return }
+    try{ const ini=`${mes}-01`, fin=new Date(Date.UTC(yy,mm,1)).toISOString().slice(0,10)
+      const {data}=await supabase.from('activity_log').select('id,action,record_id,detail,created_at').in('action',['facturacion.asignada_auto','facturacion.registrada_auto','facturacion.asignada_deshecha','facturacion.glosa_no_coincide']).gte('created_at',ini).lt('created_at',fin).order('created_at',{ascending:false}).limit(500)
+      const det=r=>{ try{ return typeof r.detail==='string'?JSON.parse(r.detail):(r.detail||{}) }catch(_){ return {} } }
+      const ultima={}; (data||[]).filter(r=>r.action==='facturacion.asignada_deshecha').forEach(r=>{ const k=String(r.record_id); if(!ultima[k]||r.created_at>ultima[k]) ultima[k]=r.created_at })
+      const aviso=new Set((data||[]).filter(r=>r.action==='facturacion.glosa_no_coincide').map(r=>String(r.record_id)))
+      const vistos=new Set()
+      setAutoRows((data||[]).filter(r=>['facturacion.asignada_auto','facturacion.registrada_auto'].includes(r.action)&&!(ultima[String(r.record_id)]&&ultima[String(r.record_id)]>r.created_at))
+        .filter(r=>{ const k=String(r.record_id); if(vistos.has(k)) return false; vistos.add(k); return true })
+        .map(r=>({id:r.id,billingId:r.record_id,at:r.created_at,d:det(r),aviso:aviso.has(String(r.record_id))})))
+    }catch(_){ setAutoRows([]) } }
+  const deshacerAuto = async(f)=>{
+    if(deshaciendo) return
+    const prev=f.d.prev||(f.d.antes?{status:f.d.antes.status,due:f.d.antes.due??null,amount:f.d.antes.amount??null,paid:null,paid_at:null,sii_tipo_dte:null,sii_synced_at:null,issued_at:null}:null)
+    if(!prev){ setError('Esta asignación no se puede deshacer desde aquí.'); return }
+    const conXml=!!(billing||[]).find(b=>String(b.id)===String(f.billingId))?.dte_xml
+    if(!await appConfirm(`¿Deshacer la asignación de la Factura N° ${f.d.folio}?\nLa cuota «${f.d.concepto||'—'}» vuelve a quedar sin folio y la factura queda por asignar.${conXml?'\nSe quita también su XML; se vuelve a bajar al asignarla de nuevo.':''}`)) return
+    setDeshaciendo(f.id); setError('')
+    try{ const ahora=new Date().toISOString()
+      const {error:e1}=await supabase.from('billing').update(parcheDeshacerRegistro(prev,ahora)).eq('id',f.billingId); if(e1) throw e1
+      try{ await supabase.from('sii_cargas_docs').update({estado:'sin_registrar',billing_id:null,updated_at:ahora}).eq('billing_id',f.billingId) }catch(_){}
+      try{ await supabase.from('activity_log').insert({ user_email:user?.email||user?.name||null, action:'facturacion.asignada_deshecha', table_name:'billing', record_id:f.billingId, estudio_id:'lea', detail:{ title:`Asignación deshecha: Factura N° ${f.d.folio}`, folio:String(f.d.folio) } }) }catch(_){}
+      setAutoRows(r=>(r||[]).filter(x=>x.id!==f.id)); if(onRefresh) await onRefresh()
+    }catch(e){ setError(`No se pudo deshacer la asignación de la Factura N° ${f.d.folio}: ${e.message}`) }
+    setDeshaciendo(null) }
+  useEffect(()=>{ cargarAuto() },[mes,result])   // eslint-disable-line
   const mesLabel = `${MESES_ABR[mm-1]} ${yy}`
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
   const cambiarMes = d => { const dt=new Date(yy,mm-1+d,1); setMes(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`) }
@@ -767,14 +798,18 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   const resolverCliente = (rut,nombre) => resolverClienteSII(rut,nombre,clients,clientEntities)
   // Crea el cobro en billing desde la factura del SII. Si reconoce el cliente, vincula
   // y aprende el RUT para siempre; si no, lo deja sin cliente para asignarlo en Facturacion.
-  const ingresarHuerfana = async(it, clienteIdForzado) => {
-    if(ingresando||ingresadas[it.folio]) return                       // A2: anti doble-click / re-entrada (guard síncrono)
+  const ingresarHuerfana = async(it, clienteIdForzado, opc={}) => {
+    if(ingresando||ingresadas[it.folio]) return null                  // A2: anti doble-click / re-entrada (guard síncrono)
     const dup=(billing||[]).find(b=>String(b.invoice_no)===String(it.folio)&&!b.deleted_at)   // A1: dedupe cliente-side (no depende de una constraint UNIQUE en la DB)
-    if(dup){ setIngresadas(p=>({...p,[it.folio]:{cliente:(clients.find(c=>String(c.id)===String(dup.client_id))||{}).name||null}})); return }
+    if(dup){ setIngresadas(p=>({...p,[it.folio]:{cliente:(clients.find(c=>String(c.id)===String(dup.client_id))||{}).name||null}})); return dup }
     setIngresando(it.folio); setError('')
+    let creada=null
     try{
       const cli = clienteIdForzado ? (clients.find(c=>String(c.id)===String(clienteIdForzado))||null) : resolverCliente(it.rut,it.receptor)
-      await upsertBilling({
+      // Si una cuota calza (RUT + monto exacto del Excel «Facturar», glosa solo para descartar), la factura ES esa cuota: se convierte en su lugar y conserva
+      // su venta, concepto y razón social. Antes «Cargar» creaba una factura suelta y borraba la cuota (la venta quedaba sin ella).
+      if(!opc.sinCuota&&cli){ const pr=await propuestaDe(it); if(pr.propuesta&&['exacta','serie','atrasada','subarriendo','comision'].includes(pr.nivel)){ await asignarCuota(it,pr.propuesta,pr.evidencia); setIngresadas(p=>({...p,[it.folio]:{cliente:cli.name||null}})); setIngresando(null); return pr.propuesta } }
+      creada = await upsertBilling({
         client_id: cli?.id||null,
         concept: 'Honorarios',
         receptor_name: it.receptor||null,
@@ -790,7 +825,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
         notes: null,
       })
       if(cli){
-        await reconcileProgramada(cli.id, it.monto, isoFecha(it.fechaEmision)||it.fechaEmision)   // A3: fecha ISO (no cruda) para la ventana ±45d
+        if(!opc.sinCuota) await reconcileProgramada(cli.id, it.monto, isoFecha(it.fechaEmision)||it.fechaEmision)   // A3: fecha ISO (no cruda) para la ventana ±45d; la factura hereda la venta de la cuota que reemplaza
         // M5: no pisar el nombre bueno de una RS ya existente con el crudo del SII (ignoreDuplicates: solo crea el vínculo si el RUT es nuevo)
         if(it.rut) await supabase.from('client_entities').upsert({client_id:cli.id,rut:it.rut,name:it.receptor||null},{onConflict:'rut',ignoreDuplicates:true})
       }
@@ -800,6 +835,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
       setError(e.message?.includes('duplicate')?`Factura N° ${it.folio} ya estaba registrada`:`No se pudo ingresar Factura N° ${it.folio}: ${e.message}`)
     }
     setIngresando(null)
+    return creada
   }
   // "Asignar todas" ingresa SOLO las que reconoce el cliente por RUT (las que no, se eligen a mano fila por fila — no se crean sin cliente en bulk).
   const ingresarTodas = async() => { for(const it of (result?.sinMatch||[])){ if(!ingresadas[it.folio] && resolverCliente(it.rut,it.receptor)) await ingresarHuerfana(it) } }
@@ -853,19 +889,49 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
     const tomadas=new Set()
     for(const it of ps){ const c=(it.candidatos||[]).find(x=>String(x.id)===String(it.propuesta)); if(c&&!tomadas.has(String(c.id))&&!ambDone[`id:${c.id}`]){ tomadas.add(String(c.id)); await elegirAmbigua(it,c) } }
   }
+  // UF de los días de la emisión (para reproducir el «Monto hoy» del Excel Facturar).
+  const ufVentana = async(fecha)=>{ try{ const f=String(fecha||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return {}
+    const d=n=>{ const x=new Date(f+'T12:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10) }
+    const {data}=await supabase.from('indicadores').select('fecha,valor').eq('codigo','uf').gte('fecha',d(-6)).lte('fecha',d(2)); const m={}; (data||[]).forEach(r=>{ m[String(r.fecha).slice(0,10)]=Number(r.valor) }); return m }catch(_){ return {} } }
+  // Propuesta del día para una factura del SII: MISMA regla (_shared/facturacionReglas.js) que el cotejo del servidor y el registro automático.
+  const propuestaDe = async(it)=>{ const fecha=isoFecha(it.fechaEmision)||it.fechaEmision
+    return propuestaDelDia({ doc:{rut:it.rut, monto:it.monto, fecha, glosa:it.glosa||''}, programadas:(billing||[]).filter(b=>!b.deleted_at&&!b.invoice_no), ents:clientEntities, clientes:clients, ventas:sales, ufPorFecha:await ufVentana(fecha), anticipos }) }
+  // Convierte una cuota en la factura del SII con la regla única de registro (la cuota pagada por adelantado queda Pagada con la fecha de su pago,
+  // el vencimiento corre desde la emisión y el monto es el del DTE) y deja en la bitácora la cuota tal como estaba, para poder deshacerlo.
+  const asignarCuota = async(it, cand, evidencia=null)=>{
+    const prog=(billing||[]).find(b=>String(b.id)===String(cand.id)); if(!prog) throw new Error('La cuota ya no existe')
+    const fecha=isoFecha(it.fechaEmision)||it.fechaEmision, ahora=new Date().toISOString()
+    const antF=prog.status==='Anticipada'?((anticipos||[]).find(a=>String(a.id)===String(prog.prepaid_anticipo_id))?.fecha||null):null
+    const patch=parcheRegistroCuota({ prog, folio:it.folio, fecha, due:dueFromIssued(fecha), tipoDte:it.tipoDte, montoDte:Math.round(Number(it.monto)||0), fechaAnticipo:antF, ahora })
+    const {error}=await supabase.from('billing').update(patch).eq('id',prog.id)
+    if(error) throw error
+    try{ await supabase.from('sii_cargas_docs').update({estado:'registrada',billing_id:prog.id,updated_at:ahora}).eq('folio',String(it.folio)).eq('estado','sin_registrar') }catch(_){}
+    const cli=(clients||[]).find(c=>String(c.id)===String(prog.client_id))
+    try{ await supabase.from('activity_log').insert({ user_email:user?.email||user?.name||null, action:'facturacion.asignada_confirmada', table_name:'billing', record_id:prog.id, estudio_id:'lea', detail:{ title:`Factura N° ${it.folio} asignada a «${prog.concept}»`, folio:String(it.folio), monto:Math.round(Number(it.monto)||0), concepto:prog.concept, cliente:cli?.name||null, texto:explicarAsignacion(evidencia,prog.concept), prev:instantaneaCuota(prog), fecha } }) }catch(_){}
+    if(onRefresh) await onRefresh()
+  }
   const elegirAmbigua = async(it,cand) => {
     if(ambBusy||ambDone[it.folio]) return                             // guard anti doble-click
     setAmbBusy(it.folio); setError('')
     try{
-      const patch = { invoice_no:String(it.folio), issued_at:isoFecha(it.fechaEmision)||it.fechaEmision, ...(Number(it.monto)>0?{amount:Math.round(Number(it.monto))}:{}), sii_tipo_dte:it.tipoDte||null, sii_synced_at:new Date().toISOString(), updated_at:new Date().toISOString() }   // amount = monto REAL del SII (no el programado)
-      if(cand.estado==='Programada') patch.status='Pendiente'
-      const {error} = await supabase.from('billing').update(patch).eq('id', cand.id)
-      if(error) throw error
+      await asignarCuota(it,cand,String(cand.id)===String(it.propuesta)?it.evidencia:null)
       setAmbDone(p=>({...p,[it.folio]:cand.cliente||'—',[`id:${cand.id}`]:true}))   // la cuota ya no se ofrece a otra factura
-      if(onRefresh) await onRefresh()
     }catch(e){ setError(`No se pudo asignar Factura N° ${it.folio}: ${e.message}`) }
     setAmbBusy(null)
   }
+  // Venta de terceros: se registra la factura sin venta y se le asocia el externo con su comisión (por defecto la aprendida, 15 %; editable por porcentaje o por monto).
+  const [extEdit,setExtEdit] = useState(()=>({}))   // folio → {modo:'pct'|'monto', valor:string}
+  const extPartes = it => { const e=extEdit[it.folio]||{}, total=Math.round(Number(it.monto)||0), pct0=Number(it.externo?.pct)||15
+    const comision = e.modo==='monto' ? Math.min(total,Math.max(0,Math.round(Number(String(e.valor||'').replace(/[^\d]/g,''))||0))) : Math.round(total*Math.min(100,Math.max(0,e.valor!==undefined&&e.valor!==''?Number(String(e.valor).replace(',','.'))||0:pct0))/100)
+    return { total, comision, externo: total-comision, pct: total>0?Math.round(comision/total*10000)/100:0 } }
+  const confirmarExterno = async(it)=>{
+    if(ambBusy||ambDone[it.folio]||!onReclasificarTercero||!it.externo) return
+    const {pct}=extPartes(it); setAmbBusy(it.folio); setError('')
+    try{ const fac=await ingresarHuerfana(it,it.clienteId,{sinCuota:true}); if(!fac?.id) throw new Error('No se pudo registrar la factura')
+      const r=await onReclasificarTercero(fac,{proveedorId:it.externo.proveedorId,comisionPct:pct}); if(!r) throw new Error('No se pudo asociar al externo')
+      setAmbDone(p=>({...p,[it.folio]:'Venta de terceros'})); if(onRefresh) await onRefresh()
+    }catch(e){ setError(`No se pudo registrar Factura N° ${it.folio} como venta de terceros: ${e.message}`) }
+    setAmbBusy(null) }
 
   const llamar = async(body) => {
     const {data:{session}} = await supabase.auth.getSession()
@@ -898,6 +964,9 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   useEffect(()=>{ try{ const k='sii_lastsync_'+mes; const prev=localStorage.getItem(k); const hoyISO=new Date().toISOString().slice(0,10); if(!prev||prev.slice(0,10)!==hoyISO){ sincronizar() } }catch(_){} },[])   // eslint-disable-line
   const vacio = result&&!result.actualizadas?.length&&!result.corregirFolio?.length&&!result.ambiguas?.length&&!result.sinMatch?.length&&!result.errores?.length
   const reg = result?.yaRegistradas||[]
+  // Por asignar = lo que el motor no pudo calzar solo (baja a medida que lo resuelves). Registradas = emitidas − por asignar.
+  const asignarN = result ? (result.corregirFolio||[]).filter(it=>!corregidas[it.billingId]).length+(result.ambiguas||[]).filter(it=>!ambDone[it.folio]).length+(result.sinMatch||[]).filter(it=>!ingresadas[it.folio]).length : 0
+  const tabAct = tab || (asignarN>0 ? 'asignar' : (autoRows&&autoRows.length ? 'auto' : 'reg'))
   const Hdr = ({label,color,bg,border,right}) => (
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 20px',background:bg,borderBottom:`0.5px solid ${border||'#E4E8EB'}`}}>
       <span style={{fontSize:11,fontWeight:600,color,textTransform:'uppercase',letterSpacing:'0.05em'}}>{label}</span>
@@ -931,38 +1000,25 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
           <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 20px',borderBottom:'0.5px solid #E4E8EB',background:C.bgSoft}}>
             <span style={{width:7,height:7,borderRadius:'50%',background:ds?C.normal:C.done,flexShrink:0}}/>
             <span style={{fontSize:11,color:C.muted}}>{ds?`Cuadrado con el SII · ${ds}`:'Sin cuadrar aún'}</span>
-            {porEmitir.length>0&&<span style={{fontSize:11,color:C.soonText,marginLeft:'auto',whiteSpace:'nowrap'}}>{porEmitir.length} por emitir este mes</span>}
+            {porEmitir.length>0&&<span style={{fontSize:11,color:C.soonText,marginLeft:'auto',whiteSpace:'nowrap'}}>{porEmitir.length} por facturar este mes</span>}
           </div>
         )})()}
         {error&&<div style={{padding:'10px 20px',fontSize:12,color:C.overdue,background:C.overdueBg}}>{error}</div>}
-        {result&&!loading&&(()=>{ const auto=(result.actualizadas?.length||0); const porResolver=(result.corregirFolio||[]).filter(it=>!corregidas[it.billingId]).length+(result.ambiguas||[]).filter(it=>!ambDone[it.folio]).length+(result.sinMatch||[]).filter(it=>!ingresadas[it.folio]).length; return (   /* baja a medida que resuelves en la sesión (M2) */
-          <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB'}}>
-            {(()=>{ const emit=result.totalSII||0; const cuad=Math.max(0,emit-porResolver); return <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',textAlign:'center',background:'#F3F0F8'}}>
-                  <div style={{...SEC_LBL}}>Emitido en SII</div>
-                  <div style={{fontSize:22,fontWeight:700,color:C.accent,marginTop:3,lineHeight:1}}>{emit}</div>
-                </div>
-                <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',textAlign:'center'}}>
-                  <div style={{...SEC_LBL}}>Cargado</div>
-                  <div style={{fontSize:22,fontWeight:700,color:C.accent,marginTop:3,lineHeight:1}}>{cuad}</div>
-                </div>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                <div style={{borderRadius:12,padding:'10px 12px',background:porResolver>0?C.soonBg:C.bgSoft,border:`1px solid ${porResolver>0?'#F0E4B8':C.border}`}}>
-                  <div style={{fontSize:9,fontWeight:700,color:porResolver>0?C.soonText:C.done,textTransform:'uppercase',letterSpacing:.3}}>Por cargar</div>
-                  <div style={{fontSize:18,fontWeight:700,color:porResolver>0?C.soonText:C.done,marginTop:2,lineHeight:1}}>{porResolver}</div>
-                  <div style={{fontSize:9,color:C.muted,marginTop:1}}>emitidas, sin cargar</div>
-                </div>
-                <div style={{borderRadius:12,padding:'10px 12px',background:C.greenBg,border:'1px solid #CFE9DD'}}>
-                  <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Cuadradas</div>
-                  <div style={{fontSize:18,fontWeight:700,color:C.greenText,marginTop:2,lineHeight:1}}>{cuad}</div>
-                  <div style={{fontSize:9,color:C.greenText,marginTop:1}}>{auto>0?`${auto} se cargaron solas`:'emitido = cargado'}</div>
-                </div>
-              </div>
-            </> })()}
-          </div>
-        )})()}
+        {result&&!loading&&(()=>{ const emit=result.totalSII||0, porAsignar=asignarN, reg=Math.max(0,emit-porAsignar), nAuto=(autoRows||[]).length
+          const Tarjeta = ({k,n,tono,onClick}) => { const bg=tono==='g'?C.greenBg:tono==='a'?C.soonBg:C.surface, fg=tono==='g'?C.greenText:tono==='a'?C.soonText:C.accent, lb=tono==='g'?C.greenText:tono==='a'?C.soonText:C.muted
+            return <div onClick={onClick} style={{border:`1px solid ${tono==='a'?'#F0E4B8':tono==='g'?'transparent':C.border}`,borderRadius:12,padding:'10px 12px',background:bg,cursor:'pointer',minWidth:0}}>
+              <div style={{fontSize:10,fontWeight:700,color:lb,textTransform:'uppercase',letterSpacing:.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k}</div>
+              <div style={{fontSize:24,fontWeight:700,color:fg,lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{n}</div></div> }
+          const Pest = ({id,txt,n}) => <span onClick={()=>setTab(id)} style={{fontSize:12,fontWeight:600,borderRadius:20,padding:'5px 13px',cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${tabAct===id?C.accent:C.border}`,background:tabAct===id?C.accent:C.surface,color:tabAct===id?'#fff':C.muted}}>{txt}<span style={{opacity:.8,marginLeft:5,fontWeight:500}}>{n}</span></span>
+          return (
+          <div style={{padding:'14px 20px',borderBottom:'0.5px solid #E4E8EB',display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:10}}>
+              <Tarjeta k={isDesktop?'Emitidas en el SII':'Emitidas'} n={emit} onClick={()=>setTab('reg')}/>
+              <Tarjeta k={isDesktop?'Registradas':'Registr.'} n={reg} tono='g' onClick={()=>setTab('reg')}/>
+              <Tarjeta k='Por asignar' n={porAsignar} tono={porAsignar>0?'a':undefined} onClick={()=>setTab('asignar')}/>
+            </div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}><Pest id='asignar' txt='Por asignar' n={porAsignar}/><Pest id='auto' txt={isDesktop?'Asignadas automáticamente':'Automáticas'} n={nAuto}/><Pest id='reg' txt='Registradas' n={Math.max(0,reg-nAuto)}/></div>
+          </div>)})()}
         {loading&&<SiiDots/>}
         {/* Ya cuadrado hoy pero sin cotejo en vivo esta sesión: evita la página vacía — muestra la foto del mes desde datos locales. */}
         {!result&&!loading&&!error&&(()=>{ const emitidasMes=(billing||[]).filter(b=>b.invoice_no&&!b.deleted_at&&b.status!=='Anulada'&&!['reembolso','nota_credito'].includes(b.billing_type||'')&&String(b.issued_at||'').startsWith(mes)).length; const porEmitir=(billing||[]).filter(b=>b.status==='Programada'&&!b.deleted_at&&String(b.due||'').startsWith(mes)).length; return (
@@ -973,7 +1029,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
             <button onClick={sincronizar} style={{marginTop:14,height:24,padding:'0 16px',background:'#fff',color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer'}}>Volver a cotejar</button>
           </div>) })()}
         {result&&!loading&&<>
-          {vacio
+          {tabAct!=='asignar' ? null : vacio
             ? <div style={{display:'flex',gap:12,padding:'16px 20px',alignItems:'center'}}>
                 <div style={{width:32,height:32,borderRadius:'50%',background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><CheckVerde/></div>
                 <div>
@@ -1036,7 +1092,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                 </>}
                 {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
-                  <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4' right={(()=>{ const ps=(result.ambiguas||[]).filter(it=>it.propuesta&&!ambDone[it.folio]&&!ambDone[`id:${it.propuesta}`]); return ps.length>1?<button disabled={!!ambBusy} onClick={confirmarPropuestas} style={{height:24,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',opacity:ambBusy?.5:1}}>Confirmar las {ps.length} propuestas</button>:null })()}/>
+                  <Hdr label='Por confirmar' color='#537281' bg='#EEF1F4' right={(()=>{ const ps=(result.ambiguas||[]).filter(it=>it.propuesta&&!ambDone[it.folio]&&!ambDone[`id:${it.propuesta}`]); return ps.length>1?<button disabled={!!ambBusy} onClick={confirmarPropuestas} style={{height:24,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',opacity:ambBusy?.5:1}}>Confirmar las {ps.length} propuestas</button>:null })()}/>
                   {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(()=>{
                         // El servidor ya cruzó el RUT de la razón social y el monto exacto con lo que proponía el Excel «Facturar»: solo esas candidatas, la propuesta primero.
                         if(it.nivel){ const l=(it.candidatos||[]).filter(c=>!c.folio&&!ambDone[`id:${c.id}`]); return [...l].sort((a,b)=>(String(b.id)===String(it.propuesta)?1:0)-(String(a.id)===String(it.propuesta)?1:0)||String(a.vence||'').localeCompare(String(b.vence||''))) }
@@ -1069,11 +1125,11 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                         </div>
                         {!done&&it.propuesta&&cands[0]&&String(cands[0].id)===String(it.propuesta)&&<button onClick={ev=>{ ev.stopPropagation(); elegirAmbigua(it,cands[0]) }} disabled={ambBusy===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,marginRight:10,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Confirmar'}</button>}
                         {done ? <span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Asignada</span>
-                          : <span style={{fontSize:11,color:cands.length?C.accent:C.soonText,fontWeight:600,whiteSpace:'nowrap'}}>{cands.length?`${cands.length} candidata${cands.length!==1?'s':''}`:'sin candidatas'} {exp?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>}
+                          : <span style={{fontSize:11,color:cands.length||it.nivel==='externo'?C.accent:C.soonText,fontWeight:600,whiteSpace:'nowrap'}}>{it.nivel==='externo'?'Venta de terceros':it.nivel==='sin_cuota'?'Sin cuota':cands.length?`${cands.length} candidata${cands.length!==1?'s':''}`:'sin candidatas'} {exp?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>}
                       </div>
                       {exp&&!done&&<div style={{padding:'2px 20px 10px',background:C.bgSoft}}>
                         <div style={{fontSize:11,color:C.muted,padding:'7px 0',lineHeight:1.5}}><span style={{fontWeight:700,color:C.accent}}>Del SII:</span> {fmt(it.monto)} · {dmy(it.fechaEmision)}{it.rut?` · ${fmtRut(it.rut)}`:''}{it.receptor?` · ${it.receptor}`:''}</div>
-                        {cands.length===0&&(()=>{ const c=resolverCliente(it.rut,it.receptor); return (   /* M1: salida real (no mandar a una sección donde el ítem no existe) */
+                        {!it.nivel&&cands.length===0&&(()=>{ const c=resolverCliente(it.rut,it.receptor); return (   /* M1: salida real (no mandar a una sección donde el ítem no existe) */
                           <div style={{padding:'7px 0 2px',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{fontSize:11,color:C.soonText,marginBottom:6}}>Las coincidencias ya están emitidas con su folio. Cárgala como factura nueva:</div>
                             {c
@@ -1081,14 +1137,14 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                               : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
                           </div>
                         ) })()}
-                        {(()=>{ const showAll=ambShowAll.has(it.folio); const visibles=(!it.nivel&&cands.length>1&&!showAll)?cands.slice(0,1):cands; return (<>
-                          {it.nivel&&<div style={{fontSize:11,color:it.propuesta?C.greenText:C.soonText,padding:'5px 0',lineHeight:1.4}}>{it.propuesta?<><b>Propuesta:</b> {it.motivo}.</>:<>{it.motivo}: elige la que corresponde.</>}</div>}
+                        {(()=>{ const showAll=ambShowAll.has(it.folio); const visibles=it.nivel==='externo'?[]:(!it.nivel&&cands.length>1&&!showAll)?cands.slice(0,1):cands; return (<>
+                          {it.nivel&&it.nivel!=='externo'&&<div style={{fontSize:11,color:it.propuesta?C.greenText:C.soonText,padding:'5px 0',lineHeight:1.4}}>{it.propuesta?<><b>Propuesta:</b> {it.motivo}.</>:it.nivel==='sin_cuota'?<>{it.motivo}.{it.glosa?` Glosa: «${it.glosa}».`:''} Asígnala a un cliente.</>:<>{it.motivo}: elige la que corresponde.</>}</div>}
                           {!it.nivel&&cands.length>1&&!showAll&&<div style={{fontSize:11,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Se propone la cuota <b>más antigua sin pagar</b> (las facturas se emiten en orden, mes vencido). Revisa antes de asignar.</div>}
                           {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const primera=it.nivel?String(cand.id)===String(it.propuesta):cand===cands[0]; return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
-                              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado}{cand.folio?` · N° ${cand.folio}`:''}{cand._dups>1?` · ${cand._dups} programadas iguales`:''}</div>
+                              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado==='Anticipada'&&cand.pago?`pagada el ${fmtFechaDMY(cand.pago)}`:cand.estado}{cand.folio?` · N° ${cand.folio}`:''}{cand._dups>1?` · ${cand._dups} programadas iguales`:''}</div>
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
@@ -1099,6 +1155,23 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                           )})}
                           {!it.nivel&&cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ver solo la más antigua':`Ver todas las cuotas (${cands.length})`}</button>}
                         </>) })()}
+                        {it.nivel==='externo'&&it.externo&&(()=>{ const pt=extPartes(it), e=extEdit[it.folio]||{modo:'pct'}; const T=({k,v,g})=><div style={{flex:1,minWidth:0,border:`1px solid ${g?'transparent':C.border}`,borderRadius:10,padding:'7px 10px',background:g?C.greenBg:C.surface}}><div style={{fontSize:9,fontWeight:700,color:g?C.greenText:C.muted,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k}</div><div style={{fontSize:15,fontWeight:700,color:g?C.greenText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div></div>
+                          return (<div style={{padding:'6px 0 4px',display:'flex',flexDirection:'column',gap:8}}>
+                            <div style={{fontSize:11,color:C.greenText,lineHeight:1.4}}><b>Propuesta:</b> {it.motivo}.</div>
+                            <div style={{display:'flex',gap:8}}><T k='Facturado' v={pt.total}/><T k={`Al externo · ${Math.round((100-pt.pct)*100)/100} %`} v={pt.externo}/><T k={`Oficina · ${pt.pct} %`} v={pt.comision} g/></div>
+                            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                              <span style={{fontSize:11,color:C.muted}}>Comisión de la oficina</span>
+                              {['pct','monto'].map(m=><span key={m} onClick={()=>setExtEdit(x=>({...x,[it.folio]:{modo:m,valor:''}}))} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'3px 11px',cursor:'pointer',border:`1px solid ${(e.modo||'pct')===m?C.accent:C.border}`,background:(e.modo||'pct')===m?C.accent:C.surface,color:(e.modo||'pct')===m?'#fff':C.muted}}>{m==='pct'?'Porcentaje':'Monto'}</span>)}
+                              <input value={e.valor!==undefined&&e.valor!==''?e.valor:((e.modo||'pct')==='pct'?String(Number(it.externo.pct)||15):'')} onChange={ev=>setExtEdit(x=>({...x,[it.folio]:{modo:e.modo||'pct',valor:ev.target.value}}))} inputMode='decimal' placeholder={(e.modo||'pct')==='pct'?'15':'$'} style={{width:96,height:26,border:`1px solid ${C.border}`,borderRadius:8,padding:'0 9px',fontSize:12,color:C.text,background:C.surface}}/>
+                              <span style={{fontSize:11,color:C.muted}}>{(e.modo||'pct')==='pct'?'%':'pesos'}</span>
+                            </div>
+                            <div style={{fontSize:10.5,color:C.textSoft}}>Por defecto 15 %; se puede cambiar el porcentaje o escribir el monto. Se registra sin venta y el valor se aprende para este externo.</div>
+                            <button onClick={()=>confirmarExterno(it)} disabled={ambBusy===it.folio||!onReclasificarTercero} style={{height:26,alignSelf:'flex-start',padding:'0 14px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11.5,fontWeight:600,cursor:'pointer',opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Confirmar'}</button>
+                          </div>) })()}
+                        {it.nivel&&<div style={{padding:'8px 0 2px',borderTop:'0.5px solid #E4E8EB',marginTop:4}}>
+                          <div style={{fontSize:11,color:C.muted,marginBottom:6}}>O asígnala a un cliente, aunque no tenga venta (queda como honorarios, sin venta):</div>
+                          <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ const f=await ingresarHuerfana(it,cid,{sinCuota:true}); const cc=clients.find(x=>String(x.id)===String(cid)); if(f) setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Asignar a un cliente' placeholder='Buscar cliente…'/>
+                        </div>}
                       </div>}
                     </div>
                   )})}
@@ -1136,27 +1209,41 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                     </div>
                   ) })}
                 </>}
-                {/* 5. Se cargaron solas (automático) — colapsado */}
-                {result.actualizadas?.length>0&&<>
-                  <div onClick={()=>setAutoOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 20px',cursor:'pointer',borderBottom:autoOpen?'0.5px solid #E4E8EB':'none'}}>
-                    <span style={{fontSize:11,fontWeight:600,color:C.greenText,textTransform:'uppercase',letterSpacing:'0.05em'}}>Se cargaron solas · {result.actualizadas.length}</span>
-                    <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:autoOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-                  </div>
-                  {autoOpen&&result.actualizadas.map((it,i)=><Fila key={i}>{bigDate(isoFecha(it.fechaEmision),C.normal)}<div style={{minWidth:0,flex:1,marginLeft:4}}><div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.cliente}</div><div style={{fontSize:11,color:C.textSoft,marginTop:1}}>Factura N° {it.folio}</div></div><span style={{fontSize:13,fontWeight:500,color:C.text,marginLeft:'auto',marginRight:8,whiteSpace:'nowrap'}}>{fmt(it.monto)}</span><CheckVerde/></Fila>)}
-                </>}
                 {result.errores?.length>0&&<>
                   <Hdr label='Errores' color={C.overdue} bg='#FCEBEB'/>
                   {result.errores.map((it,i)=><Fila key={i}><span style={{fontSize:12,color:C.text}}>Factura N° {it.folio}</span><span style={{fontSize:11,color:C.overdue,marginLeft:'auto'}}>{it.error}</span></Fila>)}
                 </>}
                 </>
               })()}
-          {reg.length>0&&<>
-            <div onClick={()=>setYaOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 20px',cursor:'pointer'}}>
-              <span style={{fontSize:11,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:'0.05em'}}>Ya registradas</span>
-              <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{transform:yaOpen?'rotate(180deg)':'none',transition:'transform .2s'}}><polyline points='6 9 12 15 18 9'/></svg>
-            </div>
-            {yaOpen&&reg.map((it,i)=>{ const cli=resolverCliente(it.rut,it.receptor); return (
-              <div key={i} style={{padding:'10px 20px',borderBottom:'0.5px solid #E4E8EB',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+          {tabAct==='auto'&&<>
+            {autoRows===null&&<div style={{padding:'16px 20px',fontSize:12,color:C.muted}}>Cargando…</div>}
+            {autoRows&&autoRows.length===0&&<div style={{padding:'16px 20px',fontSize:12,color:C.muted}}>Este mes no se ha asignado ninguna factura automáticamente.</div>}
+            {(autoRows||[]).map(f=>{ const exp=autoExp.has(f.id), d=f.d||{}, fila=(billing||[]).find(b=>String(b.id)===String(f.billingId)), puedeDeshacer=!!(d.prev||d.antes)
+              return (
+              <div key={f.id} style={{borderBottom:'0.5px solid #E4E8EB'}}>
+                <div onClick={()=>setAutoExp(x=>{ const n=new Set(x); n.has(f.id)?n.delete(f.id):n.add(f.id); return n })} style={{display:'flex',alignItems:'center',padding:'11px 20px',cursor:'pointer'}}>
+                  {bigDate(d.fecha||String(f.at).slice(0,10),C.muted)}
+                  <div style={{minWidth:0,flex:1,marginLeft:4}}>
+                    <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.cliente||(fila&&((clients||[]).find(c=>String(c.id)===String(fila.client_id))||{}).name)||'—'}</div>
+                    <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>Factura N° {d.folio} · {fmt(d.monto||fila?.amount||0)}</div>
+                  </div>
+                  <span style={{fontSize:10.5,fontWeight:700,borderRadius:20,padding:'2px 10px',whiteSpace:'nowrap',background:f.aviso?C.soonBg:C.greenBg,color:f.aviso?C.soonText:C.greenText}}>{f.aviso?'Revisar':'Asignada'}</span>
+                </div>
+                {exp&&<div style={{padding:'0 20px 12px 64px',background:C.bgSoft,display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{fontSize:12,color:C.textSoft,paddingTop:8,lineHeight:1.5}}>{d.texto||d.title||'Asignada por RUT y monto.'}</div>
+                  {f.aviso&&<div style={{fontSize:12,color:C.soonText,lineHeight:1.5}}>La glosa del XML no coincide con la cuota asignada. Revisa si corresponde.</div>}
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                    {fila&&onOpenClientFicha&&<button onClick={()=>{onOpenClientFicha(fila.client_id);onClose&&onClose()}} style={{height:28,padding:'0 13px',borderRadius:8,background:C.surface,color:C.accent,border:`1px solid ${C.border}`,fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Ver la factura</button>}
+                    {puedeDeshacer&&<button disabled={deshaciendo===f.id} onClick={()=>deshacerAuto(f)} style={{height:28,padding:'0 13px',borderRadius:8,background:C.surface,color:C.accent,border:`1px solid ${C.border}`,fontSize:11.5,fontWeight:600,cursor:'pointer',opacity:deshaciendo===f.id?.5:1}}>{deshaciendo===f.id?'…':'Deshacer'}</button>}
+                  </div>
+                </div>}
+              </div>) })}
+          </>}
+          {tabAct==='reg'&&(()=>{ const autoFolios=new Set((autoRows||[]).map(f=>String(f.d?.folio))), lista=reg.filter(it=>!autoFolios.has(String(it.folio)))
+            return <>
+            {lista.length===0&&<div style={{padding:'16px 20px',fontSize:12,color:C.muted}}>No hay otras facturas registradas en este período.</div>}
+            {lista.map((it,i)=>{ const cli=resolverCliente(it.rut,it.receptor); return (
+              <div key={i} onClick={cli&&onOpenClientFicha?()=>{onOpenClientFicha(cli.id);onClose&&onClose()}:undefined} style={{padding:'10px 20px',borderBottom:'0.5px solid #E4E8EB',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,cursor:cli&&onOpenClientFicha?'pointer':'default'}}>
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:500,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cli?.name||it.receptor||'—'}</div>
                   <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>{it.receptor||''}{it.rut?` · ${fmtRut(it.rut)}`:''}</div>
@@ -1168,7 +1255,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                 </div>
               </div>
             )})}
-          </>}
+          </>})()}
         </>}
       </div>
   )
@@ -1855,15 +1942,13 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const now=new Date().toISOString()
     const dteTot=item.doc?dteMontoTotal(item.doc):null
     const isoF=(s=>{ const t=String(s||''); if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10); const m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:t })(item.row.fechaEmision||item.fecha)
-    // El plazo corre desde la emisión: al emitir por match de DTE, recalcula el due (si no, la programada conserva su due planificado viejo y nace "vencida").
-    // Cuota ya pagada por adelantado (Anticipada: p. ej. el arriendo que entró antes de facturarse): al llegar su factura queda PAGADA
-    // con la fecha del anticipo, no "por cobrar" (si no, se cobraría dos veces).
+    // Registro con la regla ÚNICA (_shared/facturacionReglas.js, parcheRegistroCuota; la misma del cotejo y del registro automático):
+    // el plazo corre desde la emisión; una cuota Anticipada (pagada por adelantado, p. ej. el arriendo o una comisión por facturar) queda
+    // PAGADA con la fecha de su pago, no «por cobrar» (si no, se cobraría dos veces); el monto es el del DTE.
     const progRow=(billing||[]).find(x=>String(x.id)===String(item.progId))
     const antPrev=progRow?.status==='Anticipada'&&progRow.prepaid_anticipo_id ? (anticipos||[]).find(a=>String(a.id)===String(progRow.prepaid_anticipo_id)) : null
-    // Comisión por facturar (cobrada antes de emitir): conserva la fecha del depósito.
-    const pagoAnt=progRow?.status==='Anticipada' ? { status:'Pagado', paid:true, paid_at:antPrev?.fecha||progRow?.paid_at||isoF||null } : null
-    const patch={ invoice_no:String(item.row.folio), status:'Pendiente', issued_at:isoF||null, ...(isoF?{due:dueFromIssued(isoF)}:{}), dte_xml:item.doc||null, sii_tipo_dte:item.row.tipoDte||34, sii_synced_at:now, updated_at:now, ...(dteTot!=null?{amount:dteTot}:{}), ...(bid?{import_batch_id:bid}:{}) }
-    if(pagoAnt) Object.assign(patch,pagoAnt)
+    const pagoAnt=progRow?.status==='Anticipada'
+    const patch=parcheRegistroCuota({ prog:progRow||{}, folio:item.row.folio, fecha:isoF||null, due:isoF?dueFromIssued(isoF):null, tipoDte:item.row.tipoDte||34, montoDte:dteTot, fechaAnticipo:antPrev?.fecha||null, dteXml:item.doc||null, batchId:bid||null, ahora:now })
     // Comisión por facturar con monto distinto al del SII: manda el DTE. Factura mayor → queda el resto por cobrar; menor → el sobrante del depósito vuelve a «por conciliar».
     let ajusteCom=null
     if(pagoAnt&&progRow?.billing_type==='comision'&&dteTot!=null&&!DEMO){
@@ -2729,7 +2814,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
       <FacturarBloqueModal asPage anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>
     </FlujoPagina> : null
   const siiCotejoPage = siiOpen ? <FlujoPagina origen={siiPageOpen?'Facturación electrónica':origenDe('sii',origenFact)} titulo='Cuadrar con SII' onBack={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} maxW={1000}>
-      <SiiSyncModal asPage onClose={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>
+      <SiiSyncModal asPage onClose={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} anticipos={anticipos} user={user} onReclasificarTercero={onReclasificarTercero} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>
     </FlujoPagina> : null
   const regPage = regReview ? (()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0)
     return <FlujoPagina origen={origenFact} titulo={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onBack={()=>!regBusy&&setRegReview(null)} maxW={720}>
@@ -3885,7 +3970,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             return <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:10}}>
               {ch('g','Es de gastos',false,()=>doReembolso(e),C.azulInfo)}
               {ch('c','Es comisión',comOpen,()=>{ if(comOpen){ setAnioPickFor(null); return } setComSoc(''); setComOrig(''); setAnioPickFor('com:'+b.id) },C.tealText)}
-              {onReclasificarTercero&&ch('x','Es de un externo',extOpen,()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')},C.soonText)}
+              {onReclasificarTercero&&ch('x','Es una venta de terceros',extOpen,()=>{setAnioPickFor(extOpen?null:('ext:'+b.id));setTvProv('');setTvNuevo('');setTvPct('')},C.soonText)}
               {sug&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>sugerido: {sug==='comision'?'Comisión':'Por externo'}</span>}
             </div> }
           // Comisión: queda billing_type='comision', con su origen (texto) y el socio que la generó (learnings socio_factura, fuente de Por socio).
