@@ -24,6 +24,7 @@ import { firmarDocumento } from './firma.ts'
 import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 import { armarLibroVentas } from './libro.ts'
 import { bajarXmlEmitidos, pdfEmitidoSii, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
+import { guardarYRevisarGlosa } from './glosa.ts'
 import { leerEnvioRecibido, armarRecepcionEnvio, armarResultadoDTE, armarEnvioRecibos } from './intercambio.ts'
 
 const ADMINS = ['cl@leabogados.cl', 'ee@leabogados.cl']   // respaldo si la tabla miembros no responde
@@ -616,7 +617,7 @@ serve(async (req) => {
       let cargados = 0
       if (!body.dryRun) for (const r of resultados.filter((x) => x.estado === 'cargado')) {
         const { error } = await sb.from('billing').update({ dte_xml: r.xml }).eq('id', r.id).is('dte_xml', null)
-        if (error) { r.estado = 'error'; r.detalle = error.message } else cargados++
+        if (error) { r.estado = 'error'; r.detalle = error.message } else { cargados++; await guardarYRevisarGlosa(sb, r.id, r.folio, r.xml || '').catch(() => null) }
       }
       if (!body.dryRun) for (const r of resultados.filter((x) => x.estado !== 'cargado')) {
         const n = (intentos.get(r.id) || 0) + 1

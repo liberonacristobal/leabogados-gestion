@@ -9,7 +9,7 @@
 // Lo que la app resuelve con reglas extra (comisión por facturar, cuota anticipada, cuota que habría que retirar) y lo ambiguo
 // (RUT sin cliente, cuotas de ventas distintas) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
-import { propuestaDelDia, candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
+import { propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
 import { todasRest } from "../_shared/paginar.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
     const usadas = new Set<string>();
     // UF de los días de emisión (para la propuesta del día: lo que el Excel «Facturar» proponía = UF de la cuota × UF del día).
     const ufPorFecha: Record<string, number> = {};
+    const anticipos = await todas("anticipos?select=id,fecha").catch(() => []);
     { const fs = docs.map((d) => String(d.fecha_emision).slice(0, 10)).sort(); const dia = (iso: string, n: number) => { const x = new Date(iso + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
       for (const r of await todas(`indicadores?select=fecha,valor&codigo=eq.uf&fecha=gte.${dia(fs[0], -6)}&fecha=lte.${dia(fs[fs.length - 1], 2)}`).catch(() => [])) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor); }
     const bandeja = async (d: any, motivo: string, cid: string | null) => {
@@ -103,13 +104,18 @@ Deno.serve(async (req) => {
       if (d.client_id && porRut && porRut.cid !== d.client_id) { await bandeja(d, "El RUT es de otro cliente que el asignado al documento", d.client_id); continue; }
       const cli = porRut || (d.client_id ? { cid: d.client_id, ent: null } : null);
       if (!cli) { await bandeja(d, "El RUT del receptor no está en la app", null); continue; }
-      const billingCli = await todas(`billing?select=id,client_id,sale_id,concept,amount,status,due,issued_at,invoice_no,billing_type,deleted_at,prepaid_anticipo_id,paid_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=is.null`);
+      const billingCli = await todas(`billing?select=id,client_id,entity_id,receptor_rut,sale_id,concept,amount,status,due,issued_at,invoice_no,billing_type,deleted_at,prepaid_anticipo_id,paid,paid_at,sii_tipo_dte,sii_synced_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=is.null`);
       const facturadasCli = await todas(`billing?select=id,sale_id,invoice_no,issued_at,status,deleted_at&client_id=eq.${cli.cid}&deleted_at=is.null&invoice_no=not.is.null`);
       // 1) PROPUESTA DEL DÍA (RUT de la razón social + monto exacto del Excel «Facturar»): manda sobre las tolerancias de porcentaje.
-      const prop = propuestaDelDia({ doc: { rut: d.receptor_rut, monto, fecha }, programadas: billingCli, ents, clientes: clients, ventas: sales, ufPorFecha, usadas });
+      const prop = propuestaDelDia({ doc: { rut: d.receptor_rut, monto, fecha, glosa: d.glosa || "" }, programadas: billingCli, ents, clientes: clients, ventas: sales, ufPorFecha, anticipos, usadas });
       let cands = candidatasProgramadas(billingCli, cli.cid, monto, fecha, d.glosa || "").filter((c: { id: string }) => !usadas.has(c.id));
       if (prop.nivel === "exacta" || prop.nivel === "serie") cands = prop.candidatas;
-      else if (prop.nivel === "atrasada" || prop.nivel === "varias") { await bandeja(d, `${prop.motivo}: confírmala en Cuadrar con SII`, cli.cid); continue; }
+      else if (prop.nivel && prop.nivel !== "exacta") { await bandeja(d, `${prop.motivo}: confírmala en Cuadrar con SII`, cli.cid); continue; }
+      // Venta de terceros: un cliente que ya se facturó como de un externo y no calza con ninguna cuota propia se propone como tal (85/15 editable).
+      if (!prop.nivel && !cands.length) {
+        const ext = await rest(`billing?select=id&client_id=eq.${cli.cid}&billing_type=eq.externo&deleted_at=is.null&limit=1`).catch(() => []);
+        if (ext?.length) { await bandeja(d, "Parece una venta de terceros (el cliente ya se facturó así): confírmala en Cuadrar con SII", cli.cid); continue; }
+      }
       const activas = sales.filter((s) => s.client_id === cli.cid && !esSub(s));
       const dec = decidirRegistroSII(cands, activas);
       const due = ultimoDiaHabilMesEmision(fecha, esHabil);
@@ -132,13 +138,18 @@ Deno.serve(async (req) => {
         // Comisión por facturar y cuota anticipada tienen reglas propias en la app (monto del depósito, fecha del anticipo).
         const mismoMes = serieYaFacturadaEnMes(facturadasCli, p.sale_id, fecha, d.folio);
         if (mismoMes) { await bandeja(d, `Su venta ya tiene la factura N° ${String(mismoMes.invoice_no).replace(/^factura\s*/i, "")} emitida este mes: puede ser un mes atrasado o adelantado`, cli.cid); continue; }
-        if (p.billing_type === "comision" || p.status === "Anticipada") { await bandeja(d, p.billing_type === "comision" ? "Calza con una comisión por facturar" : "Calza con una cuota ya pagada por adelantado", cli.cid); continue; }
+        if (p.billing_type === "comision") { await bandeja(d, "Calza con una comisión por facturar", cli.cid); continue; }
         usadas.add(p.id);
         out.registradas.push({ folio: d.folio, cliente: nombre, monto, como: `cuota «${p.concept}»`, due });
         if (dryRun) continue;
-        await rest(`billing?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify({ invoice_no: String(d.folio), status: "Pendiente", issued_at: fecha, due, sii_tipo_dte: Number(d.tipo_dte), sii_synced_at: now, updated_at: now, amount: monto }) });
+        // Registro de la cuota con la regla única (_shared/facturacionReglas.js): una cuota pagada por adelantado queda Pagada con la fecha de su pago.
+        const antF = p.status === "Anticipada" ? (anticipos.find((a: { id: string }) => String(a.id) === String(p.prepaid_anticipo_id))?.fecha || null) : null;
+        const patch = parcheRegistroCuota({ prog: p, folio: d.folio, fecha, due, tipoDte: Number(d.tipo_dte), montoDte: monto, fechaAnticipo: antF, ahora: now });
+        await rest(`billing?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(patch) });
         await rest(`sii_cargas_docs?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrada", billing_id: p.id, updated_at: now }) });
-        await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "facturacion.registrada_auto", table_name: "billing", record_id: p.id, estudio_id: "lea", detail: JSON.stringify({ title: `Factura N° ${d.folio} registrada sola: ${nombre} ${fmt(monto)} → cuota «${p.concept}»`, folio: d.folio, antes: { status: p.status, due: p.due, amount: p.amount, concept: p.concept } }) }) });
+        const ev = prop.propuesta && prop.propuesta.id === p.id ? prop.evidencia : null;
+        await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "facturacion.registrada_auto", table_name: "billing", record_id: p.id, estudio_id: "lea",
+          detail: { title: `Factura N° ${d.folio} registrada sola: ${nombre} ${fmt(monto)} → cuota «${p.concept}»`, folio: String(d.folio), monto, concepto: p.concept, cliente: nombre, texto: explicarAsignacion(ev, p.concept), evidencia: ev, prev: instantaneaCuota(p), fecha, antes: { status: p.status, due: p.due, amount: p.amount, concept: p.concept } } }) });
         continue;
       }
       // Nueva sin venta clara (el cliente tiene varias ventas activas, o ninguna): se registra AL CLIENTE, sin venta (entra a Por
