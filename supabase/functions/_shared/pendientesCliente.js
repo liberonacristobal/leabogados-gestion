@@ -51,10 +51,11 @@ export function pendientesPorCliente(p) {
     const sal = saldoBill(b); if (sal > 0 && esVencida(b)) add(b.client_id, 'vencidas', b.id, { billing_id: b.id, sale_id: b.sale_id || null, fecha: b.issued_at || b.due, monto: Math.round(sal), titulo: 'Factura vencida' })
   })
 
-  // Fondos: gastos por rendir y el cliente debe (la misma regla de «Rendir a clientes»: grupo «pedir»).
+  // Fondos: gastos por rendir y el cliente debe (la misma regla de «Rendir a clientes»: grupo «pedir»). Decisión 03-11: son muchos y pequeños
+  // (24 de 30 clientes de un abogado), así que viven solo como filtro: no suman a «Todos», al número de Inicio ni al total de la ficha.
   cli.forEach(id => {
     const n = gastosPorRendirCli(expenses, id).length, s = fgCliente(expenses, id).saldo
-    if (grupoRendir({ n, s, armada: false }) === 'pedir') add(id, 'fondos', id, { monto: Math.round(-s), titulo: 'Fondos por solicitar' })
+    if (grupoRendir({ n, s, armada: false }) === 'pedir') add(id, 'fondos', id, { monto: Math.round(-s), titulo: 'Fondos por solicitar', soloFiltro: true })
   })
 
   // Banco: abono ya asignado al cliente y aún sin conciliar.
@@ -69,6 +70,9 @@ export function pendientesPorCliente(p) {
   return out
 }
 
+/** Los pendientes que cuentan por defecto (todos menos los que viven solo como filtro). */
+export const contables = (items = []) => items.filter(i => !i.soloFiltro)
+
 /** Conteo por tipo de los pendientes de un cliente, en el orden fijo de TIPOS_PENDIENTE. */
 export function tiposDe(items = []) {
   return TIPOS_PENDIENTE.map(([k, l]) => ({ tipo: k, label: l, n: items.filter(i => i.tipo === k).length })).filter(x => x.n > 0)
@@ -82,7 +86,7 @@ export function clientesConPendientes(mapa, tipos = new Set(), ids = null) {
   const res = []
   mapa.forEach((g, id) => {
     if (ids && !ids.has(String(id))) return
-    const items = tipos.size ? g.items.filter(i => tipos.has(i.tipo)) : g.items
+    const items = tipos.size ? g.items.filter(i => tipos.has(i.tipo)) : contables(g.items)
     if (items.length) res.push({ id, n: items.length, items })
   })
   return res.sort((a, b) => b.n - a.n)
