@@ -873,7 +873,7 @@ export async function facturaDtePdfBase64(docXml, opts={}){
   const tipoD=+g('TipoDTE',idDoc)||34, resol=opts.resol||_resolDoc.get(docXml)||BRAND.siiResol||{nro:'99',anio:'2014'}
   const D={ folio:g('Folio',idDoc), fch:g('FchEmis',idDoc), fma:g('FmaPago',idDoc), rutE:g('RUTEmisor',emi),
     rutR:g('RUTRecep',rec), rznR:g('RznSocRecep',rec), giroR:g('GiroRecep',rec), dirR:g('DirRecep',rec), cmnaR:g('CmnaRecep',rec), ciuR:g('CiudadRecep',rec),
-    exe:+g('MntExe',tot), total:+g('MntTotal',tot),
+    exe:+g('MntExe',tot), neto:+g('MntNeto',tot), iva:+g('IVA',tot), tasaIva:+g('TasaIVA',tot)||19, total:+g('MntTotal',tot),
     items:detalles.map(d=>({nmb:g('NmbItem',d), dsc:g('DscItem',d), qty:g('QtyItem',d), prc:+g('PrcItem',d), mnt:+g('MontoItem',d)})) }
   const fmtRut=r=>{ const a=String(r||'').split('-'); return (a[0]||'').replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(a[1]?'-'+a[1]:'') }
   const fmtN=n=>(n||0).toLocaleString('es-CL')
@@ -892,10 +892,10 @@ export async function facturaDtePdfBase64(docXml, opts={}){
   p.setDrawColor(...RED); p.setLineWidth(0.8); p.roundedRect(bx,by,bw,bh,2,2)
   p.setTextColor(...RED); p.setFont('helvetica','bold')
   p.setFontSize(11); p.text('R.U.T. '+fmtRut(D.rutE),bx+bw/2,by+6.5,{align:'center'})
-  const nom=NOMBRE_DTE[tipoD]||NOMBRE_DTE[34]; p.setFontSize(9); p.text(nom[0],bx+bw/2,by+13,{align:'center'}); p.text(nom[1],bx+bw/2,by+17,{align:'center'})
+  const nom=NOMBRE_DTE[tipoD]||NOMBRE_DTE[34]; p.setFontSize(10); p.text(nom[0],bx+bw/2,by+13.5,{align:'center'}); p.text(nom[1],bx+bw/2,by+18,{align:'center'})
   p.setFontSize(16.5); p.text('N° '+D.folio,bx+bw/2,by+25,{align:'center'})
-  p.setFont('helvetica','normal'); p.setFontSize(6.5); p.setTextColor(...REDLT); p.text(BRAND.siiUnidad||'S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+30,{align:'center'})
-  const fy=by+bh+6; p.setFont('helvetica','normal'); p.setFontSize(8); p.setTextColor(...MUT)
+  p.setFont('helvetica','bold'); p.setFontSize(8); p.setTextColor(...RED); p.text(BRAND.siiUnidad||'S.I.I. - SANTIAGO ORIENTE',bx+bw/2,by+bh+4.5,{align:'center'})   // Res. 18/2003 (mod. 22/2016) letra c: la unidad del SII va DEBAJO del recuadro
+  const fy=by+bh+10; p.setFont('helvetica','normal'); p.setFontSize(8); p.setTextColor(...MUT)
   // Fecha alineada al borde derecho del recuadro del folio (un mes largo no se sale de la hoja).
   const flw=p.getTextWidth('Fecha de emisión:  '); p.setFont('helvetica','bold'); const fvw=p.getTextWidth(fchL(D.fch)); const fx=Math.max(M,bx+bw-flw-fvw)
   p.setFont('helvetica','normal'); p.text('Fecha de emisión:',fx,fy); p.setFont('helvetica','bold'); p.setTextColor(...GRAF); p.text(fchL(D.fch),fx+flw,fy)
@@ -904,6 +904,7 @@ export async function facturaDtePdfBase64(docXml, opts={}){
   const inl=(lab,val,vcol)=>{ p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text(lab,M,ye); const w=p.getTextWidth(lab+'  '); p.setFont('helvetica','normal'); p.setTextColor(...(vcol||GRAF)); const ls=p.splitTextToSize(String(val||''),bx-4-(M+w)); ls.forEach((l,i)=>p.text(l,M+w,ye+i*3.9)); ye+=4.7+(ls.length-1)*3.9 }
   // Datos del emisor: los del DTE (lo que el SII recibió); el texto de la app solo si el XML no los trae.
   const giroE=g('GiroEmis',emi)||'Prestación de servicios y asesorías profesionales', dirE=[g('DirOrigen',emi),g('CmnaOrigen',emi)].filter(Boolean).join(', ')||BRAND.direccionCalle
+  { const rznE=g('RznSoc',emi); if(rznE) inl('Razón social:',rznE) }   // letra d: nombre completo o razón social del emisor, arriba a la izquierda
   inl('Giro:',giroE)
   inl('Dirección:',dirE)
   p.setFontSize(8.5)
@@ -913,7 +914,7 @@ export async function facturaDtePdfBase64(docXml, opts={}){
   p.setTextColor(...MUT); p.text('     ·     ',cx,ye); cx+=p.getTextWidth('     ·     ')
   p.setFont('helvetica','bold'); p.setTextColor(...NAVY); p.text('Teléfono:',cx,ye); cx+=p.getTextWidth('Teléfono:  ')
   const telX=g('Telefono',emi), telE=/^9\d{8}$/.test(telX)?'+56'+telX:(telX||BRAND.telefonoFactura||BRAND.telefono)
-  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(telE,cx,ye); ye=Math.max(ye+6,by+bh+10)
+  p.setFont('helvetica','normal'); p.setTextColor(...GRAF); p.text(telE,cx,ye); ye=Math.max(ye+6,by+bh+13)
   p.setFont('helvetica','bold'); p.setFontSize(9); p.setTextColor(...NAVY); p.text('VENTA DEL GIRO',M,ye)
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ye+5,W-M,ye+5)
   // Receptor: la razón social y la dirección largas pasan a varias líneas y el recuadro crece (antes se montaban sobre el RUT).
@@ -948,12 +949,14 @@ export async function facturaDtePdfBase64(docXml, opts={}){
     p.setFont('helvetica','normal'); p.setTextColor(...GRAF); [['Nombre:',M+3,ay+11],['R.U.T.:',M+100,ay+11],['Fecha:',M+3,ay+17],['Recinto:',M+60,ay+17],['Firma:',M+130,ay+17]].forEach(([t,x,yy])=>{ p.text(t,x,yy); p.line(x+p.getTextWidth(t)+1.5,yy+0.6,x+(t==='Nombre:'?90:t==='R.U.T.:'?80:t==='Firma:'?50:65),yy+0.6) })
     p.setFontSize(6.5); p.setTextColor(...MUT); p.text('El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4, y la letra c) del Art. 5 de la Ley 19.983, acredita que la entrega de mercaderías o servicio(s) prestado(s) ha(n) sido recibido(s).',M+3,ay+22,{maxWidth:W-2*M-6}) }
   p.setDrawColor(...BORD); p.setLineWidth(0.3); p.line(M,ty-8,W-M,ty-8)
-  p.addImage(bc,'PNG',M,ty,tw,th)
+  const TX=20   // el timbre va a 2 cm del borde izquierdo (manual de muestras impresas del SII)
+  p.addImage(bc,'PNG',TX,ty,tw,th)
   p.setTextColor(...MUT); p.setFont('helvetica','normal'); p.setFontSize(7)
-  p.text('Timbre Electrónico SII',M,ty+th+3.5); p.text(`Res. ${resol.nro} de ${resol.anio} · Verifique documento: www.sii.cl`,M,ty+th+6.8)
+  p.text('Timbre Electrónico SII',TX,ty+th+3.5); p.text(`Res. ${resol.nro} de ${resol.anio} · Verifique documento: www.sii.cl`,TX,ty+th+6.8)
   p.setFontSize(9); p.setTextColor(...GRAF); p.setFont('helvetica','normal')
-  p.text('Impuesto adicional',138,ty+1); p.text('$ '+fmtN(0),W-M,ty+1,{align:'right'})
-  p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'})
+  if(D.neto>0){ p.text('Monto neto',138,ty+1); p.text('$ '+fmtN(D.neto),W-M,ty+1,{align:'right'}); p.text(`IVA ${D.tasaIva}%`,138,ty+7.5); p.text('$ '+fmtN(D.iva),W-M,ty+7.5,{align:'right'}) }
+  else { p.text('Impuesto adicional',138,ty+1); p.text('$ '+fmtN(0),W-M,ty+1,{align:'right'})
+  p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'}) }
   p.setDrawColor(...NAVY); p.setLineWidth(0.5); p.line(138,ty+10.5,W-M,ty+10.5)
   p.setFont('helvetica','bold'); p.setFontSize(12); p.setTextColor(...NAVY); p.text('TOTAL',138,ty+16.5); p.text('$ '+fmtN(D.total),W-M,ty+16.5,{align:'right'})
   if(opts.cedible){ p.setFont('helvetica','bold'); p.setFontSize(11); p.setTextColor(...RED); p.text('CEDIBLE',W-M,ty+th+6.8,{align:'right'}) }
