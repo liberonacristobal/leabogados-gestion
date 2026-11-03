@@ -112,7 +112,7 @@ serve(async (req) => {
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
   // xml-emitidos entra aca: solo LEE el SII (descarga el respaldo XML) y completa billing.dte_xml vacío.
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos', 'pdf-emitido']
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !(await esAdminDelEstudio(email)))) {
