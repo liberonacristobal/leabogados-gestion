@@ -53,6 +53,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     return {year,bruto,costo,neto,brutoUF,costoUF,netoUF,meta,pct}
   }
   const m = metricasAnio(selYear)
+  const metaUF = m.meta>0 ? ((m.bruto>0&&m.brutoUF>0) ? m.meta*m.brutoUF/m.bruto : (ufRef>0?m.meta/ufRef:0)) : 0
   // Facturado/Cobrado del AÑO seleccionado (facturas emitidas en el año; cobrado = de esas, cuánto pagado).
   const _sySel = String(selYear)
   // "Ingresado a caja" = HONORARIOS COBRADOS anclados a la CARTOLA (regla 2026-08-27: debe cuadrar con el banco).
@@ -170,5 +171,14 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,sub,rex]=redondearPartes([o['fac'+sf],o['sub'+sf],o['rex'+sf]],paso,[0]), [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
     o.verUF=cuadra(1,'UF'); o.verCLP=cuadra(1e5,'')
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
-  return { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }
+  return { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }
+}
+
+// Porcentajes del «Resultado del año» (Vendido contra meta, Facturado contra lo vendido, Cobrado contra meta de cobranza): una sola fórmula para Inicio y el Panel de socios.
+export function pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza }){
+  const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
+  const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
+  const factPct=m.bruto>0?Math.min(100,Math.round(resAnio.fac/m.bruto*100)):0
+  const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: igual que ventaPct
+  return { ventaPct, ventaNetoPct, factPct, cobroPct }
 }

@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
@@ -1924,6 +1925,15 @@ export function ClientePicker({clients=[], onPick}){
 // Días para vencer sobre la FUENTE ÚNICA de vencimiento (venceBill = emisión+30). >0 faltan, <0 vencida hace N. Cobranza/recordatorios DEBEN usar esto (no daysLeft(due) crudo, que rompe si el due quedó viejo tras emitir tarde).
 export const daysLeftB = b => daysLeft(venceBill(b))
 
+// Cartera por cobrar (Inicio, Cobranza y Panel de socios): lo vencido y la exposición por antigüedad. FUENTE ÚNICA, extraída de Inicio sin cambiar la fórmula.
+// Vencido = TODO lo vencido (porCobrarBills + esVencidaB), lo mismo que muestra Cobranza; expo = exposicionCartera sobre las facturas abiertas con saldo.
+export function resumenCartera(billing){
+  const vencidoBills=(billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b))
+  const vencidoTot=vencidoBills.reduce((a,b)=>a+saldoBill(b),0)
+  const expo=exposicionCartera((billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).map(b=>({cid:b.client_id,saldo:saldoBill(b),mora:esVencidaB(b)?-daysLeftB(b):0})))
+  return {vencidoBills,vencidoTot,expo}
+}
+
 // CHIP ÚNICO del estado de una factura para MOSTRAR — fuente única visual. Deriva de estadoFacturaLabel (que ya concuerda con estadoCobro: nunca "Cobrado" y "Sin pago" a la vez).
 // Pasa `respaldoMap` (usa b.id) o `aplicado` directo. `short` usa la etiqueta corta; `chevron` agrega ' ›' cuando la fila despliega detalle.
 export function EstadoFacturaChip({b, aplicado=0, respaldoMap=null, cartolaHasta=null, short=false, chevron=false, style={}}){
@@ -2853,6 +2863,11 @@ export function recorridoGasto(e,{conc=[],movById={},expenses=[]}={}){
 // Aporte de UN movimiento al saldo del cliente (fondo suma; gasto resta salvo histórico). FUENTE ÚNICA de la fórmula neta
 // que antes se repetía inline en el Dashboard y la lista de Clientes. Equivale a sumar esto = fgCliente().saldo.
 export const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amount||0) : (e.no_descuenta_saldo ? 0 : -(e.amount||0))
+// Saldo de gastos y fondos por cliente (FUENTE ÚNICA de la columna «Fondos» de Clientes y del Panel de socios): Σ saldoDelta de cada cliente.
+// Negativo = el cliente debe reponer (gastos que adelantó la oficina); positivo = fondos del cliente que tiene la oficina.
+export const saldosPorCliente = expenses => { const m={}; (expenses||[]).forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+saldoDelta(e) }); return m }
+// Totales de esos saldos para un conjunto de clientes (ids): porReponer (suma de los negativos, en positivo) y aFavor (suma de los positivos), con cuántos clientes.
+export const totalesFondos = (saldos, ids) => { let porReponer=0, aFavor=0, nDeben=0, nFavor=0; (ids||Object.keys(saldos||{})).forEach(id=>{ const v=(saldos||{})[id]||0; if(v<0){ porReponer-=v; nDeben++ } else if(v>0){ aFavor+=v; nFavor++ } }); return {porReponer,aFavor,nDeben,nFavor} }
 
 export const DriveIcon = ({size=14}) => <svg width={size} height={size} viewBox='0 0 87.3 78' xmlns='http://www.w3.org/2000/svg'><path d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='#0066da'/><path d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='#00ac47'/><path d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='#ea4335'/><path d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='#00832d'/><path d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='#2684fc'/><path d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='#ffba00'/></svg>
 
@@ -4041,7 +4056,7 @@ export const fechaHoraCL = iso => { if(!iso) return '—'; const p=new Intl.Date
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-export const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',calendarioTrib:'Calendario tributario',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
+export const TAB_LABELS = {novedades:'Novedades',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',panelSocios:'Panel de socios',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',calendarioTrib:'Calendario tributario',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
 
 export const tonoMargen = m => m==null ? [C.bgSoft,C.muted] : m<0 ? [C.overdueBg,C.overdueText] : m<30 ? [C.soonBg,C.soonText] : m<55 ? [C.greenSoft,C.greenText] : m<70 ? [C.greenBg,C.greenText] : [C.greenDeep,C.greenText]
 

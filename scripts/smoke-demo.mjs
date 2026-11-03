@@ -15,7 +15,7 @@ if (!CHROME) { console.error('No encontré Chrome: define CHROME_PATH.'); proces
 
 // Pestañas que se abren solas (sin un registro elegido). Las de detalle (tarea, gasto, factura, flujo) necesitan datos y se prueban por su lista.
 const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', 'conciliacion', 'inteligencia', 'cajachica', 'cobranza', 'horas',
-  'repricing', 'cartera', 'presupuestoOficina', 'socios', 'proveedores', 'subarriendo', 'resultadoAnio', 'facturasDelMes', 'estadoResultados',
+  'repricing', 'cartera', 'presupuestoOficina', 'socios', 'panelSocios', 'proveedores', 'subarriendo', 'resultadoAnio', 'facturasDelMes', 'estadoResultados',
   'flujoCaja', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'misComisiones', 'porCobrarMios']
 // Páginas y ventanas que se abren sin datos (desde menú o tarjetas).
 const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']

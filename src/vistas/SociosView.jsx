@@ -107,35 +107,15 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terc
   </div>)
 }
 
-export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+// Retiros de los socios en un año (FUENTE ÚNICA de la página Socios y del Panel de socios). Extraído de SociosView SIN cambiar ninguna fórmula:
+// un retiro = las transferencias de un socio a ≤3 días; la paridad se mide por rondas. yr = año; socios = miembros socios (o SOCIOS_CFG).
+export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   const GAP=3   // días: transferencias del mismo socio a ≤3 días = el mismo retiro
-  const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
-  const [yr,setYr]=useState(curY)
-  const [eqMode,setEqMode]=useState('ambos')
-  const [tablaMode,setTablaMode]=useState('monto')
-  const [movVista,setMovVista]=useState('socio')
-  const [expRet,setExpRet]=useState(null)
-  const [busy,setBusy]=useState(null)
-  const [ocultarVacios,setOcultarVacios]=useState(false)
-  const [mesAbierto,setMesAbierto]=useState(null)
-  const listaRef=useRef(null), porSocioRef=useRef(null)
-  const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
-  const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const ofi=(clients||[]).find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||''))
   const SOC_SRC=(socios&&socios.length)?socios:SOCIOS_CFG
   const SOC=SOC_SRC.map(s=>s.nombre)
-  const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
-  const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
-  const BG=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[1]]))
   const A=SOC[0], B=SOC[1]   // paridad entre 2 socios (LEA)
-  const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const MC=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
   const dnum=d=>{ const t=new Date(String(d||'').slice(0,10)+'T12:00').getTime(); return isNaN(t)?0:Math.round(t/86400000) }
-  const _dmyS=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
-  const _mc=d=>{ const s=String(d||'').slice(0,10); const n=parseInt(s.slice(5,7),10); return n?`${s.slice(8,10)} ${MC[n]}`:'' }
-  const fechaLbl=(d0,d1)=>{ if(d0===d1) return _mc(d0); const a=String(d0).slice(0,10),b=String(d1).slice(0,10); if(a.slice(5,7)===b.slice(5,7)) return `${a.slice(8,10)}–${b.slice(8,10)} ${MC[parseInt(a.slice(5,7),10)]}`; return `${_mc(d0)} – ${_mc(d1)}` }
-  const fmtM=n=>fmtMill(Math.abs(Number(n)||0))   // millones, 1 decimal (helper único fmtMill)
-  const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
   const inOfi=e=>ofi&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)
   const movs=(expenses||[]).filter(e=>inOfi(e)&&String(e.category||'').trim().toLowerCase()==='retiros').map(e=>({e,socio:_SOCIO_RET(e),amt:Number(e.amount)||0,date:String(e.date||'').slice(0,10)}))
   // clusters por socio: transferencias a ≤GAP días = un retiro
@@ -149,12 +129,39 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
   const totalRet=movs.reduce((a,m)=>a+m.amt,0)
   const sueldoTot=SOC.reduce((a,s)=>a+(sueldos[s]||0),0)
   const nRet=retSoc.length
-  const promRetiro=nRet?Math.round(totalRet/nRet):0
-  const mesesComp=yr<curY?12:(yr>curY?0:Math.max(0,curM-1))
-  const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?(sueldos[s]||0):0); return mesesComp>0?Math.round(base/mesesComp):0 }
   // rondas: clusters de ambos socios a ≤GAP días = una ronda de retiro (para comparar paridad)
   const rondas=(()=>{ const cs=[...retSoc].sort((a,b)=>dnum(a.d0)-dnum(b.d0)); const rd=[]; cs.forEach(c=>{ const last=rd[rd.length-1]; if(last && dnum(c.d0)-dnum(last.d1)<=GAP){ if(dnum(c.d1)>dnum(last.d1)) last.d1=c.d1; last[c.socio]=(last[c.socio]||0)+c.amt } else { const r={d0:c.d0,d1:c.d1}; SOC.forEach(n=>r[n]=0); r[c.socio]=(r[c.socio]||0)+c.amt; rd.push(r) } }); return rd })()
   const difAcum=(retTot[A]||0)-(retTot[B]||0)
+  return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
+}
+
+export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+  const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
+  const [yr,setYr]=useState(curY)
+  const [eqMode,setEqMode]=useState('ambos')
+  const [tablaMode,setTablaMode]=useState('monto')
+  const [movVista,setMovVista]=useState('socio')
+  const [expRet,setExpRet]=useState(null)
+  const [busy,setBusy]=useState(null)
+  const [ocultarVacios,setOcultarVacios]=useState(false)
+  const [mesAbierto,setMesAbierto]=useState(null)
+  const listaRef=useRef(null), porSocioRef=useRef(null)
+  const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
+  const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
+  const { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum } = retirosSocios({ expenses, clients, socios, yr })   // fuente única: la misma del Panel de socios
+  const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
+  const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
+  const BG=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[1]]))
+  const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const MC=['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const _dmyS=d=>{ const m=String(d||'').slice(0,10).match(/^(\d{4})-(\d\d)-(\d\d)$/); return m?`${m[3]}-${m[2]}-${m[1]}`:(d||'') }
+  const _mc=d=>{ const s=String(d||'').slice(0,10); const n=parseInt(s.slice(5,7),10); return n?`${s.slice(8,10)} ${MC[n]}`:'' }
+  const fechaLbl=(d0,d1)=>{ if(d0===d1) return _mc(d0); const a=String(d0).slice(0,10),b=String(d1).slice(0,10); if(a.slice(5,7)===b.slice(5,7)) return `${a.slice(8,10)}–${b.slice(8,10)} ${MC[parseInt(a.slice(5,7),10)]}`; return `${_mc(d0)} – ${_mc(d1)}` }
+  const fmtM=n=>fmtMill(Math.abs(Number(n)||0))   // millones, 1 decimal (helper único fmtMill)
+  const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
+  const promRetiro=nRet?Math.round(totalRet/nRet):0
+  const mesesComp=yr<curY?12:(yr>curY?0:Math.max(0,curM-1))
+  const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?(sueldos[s]||0):0); return mesesComp>0?Math.round(base/mesesComp):0 }
   const faltaTxt=d=>d===0?null:(d>0?`falta ${B} ${fmt(Math.abs(d))}`:`falta ${A} ${fmt(Math.abs(d))}`)
   // período = mes; dentro de un mes puede haber varias rondas de retiro. Muestro todos los meses del año transcurrido; toggle oculta los sin retiros.
   const mesesDelAnio=yr<curY?12:(yr>curY?0:curM)
