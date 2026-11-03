@@ -79,6 +79,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       // Antes esto caía a "sin año" aunque el documento SÍ tuviera fecha (facturas emitidas y anticipos/pagos conciliados).
       return yrDe(docFecha)
     }
+    const byMonth={}
     let total=0, totalUF=0, sinMontoUF=0, percibidasUF=0, cajaSubarrUF=0, cajaReembUF=0, cajaExtUF=0, sinMonto=0, sinN=0, percibidas=0, cajaSubarr=0, cajaReemb=0, cajaExt=0; const byYear={}, byYearUF={}; const listByYear={}; const sinList=[]; const percList=[]
     ingConc.forEach(c=>{
       const m=abonoById[String(c.movimiento_id)]; if(!m) return
@@ -99,6 +100,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       if(c.tipo_destino==='factura'){ const b=billById[String(c.factura_id)]||{}; item={ id:'cf-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b.client_id||m.cliente_id, invoice_no:b.invoice_no, folio:b.invoice_no, sale_id:b.sale_id||null, paid_at:m.fecha, _cobrado:monto, concept:b.concept } }
       else { const a=antById[String(c.anticipo_id)]||{}; item={ id:'ca-'+c.movimiento_id+'-'+String(c.anticipo_id), client_id:a.client_id||m.cliente_id, invoice_no:null, folio:null, sale_id:a.sale_id||null, paid_at:m.fecha, _cobrado:monto, _esAnticipo:true, concept:a.nota||'Anticipo' } }
       total+=monto; totalUF+=monto/ufDelDia(ufDias,m.fecha,ufRef)   // Cobrado en UF: cada pago con la UF del día del depósito
+      { const ymC=String(m.fecha||'').slice(0,7); byMonth[ymC]=(byMonth[ymC]||0)+monto }   // cobrado propio por MES del depósito: suma de los meses = total
       if(ay==null){ sinMonto+=monto; sinMontoUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); sinN++; sinList.push(item); return }
       byYear[ay]=(byYear[ay]||0)+monto; byYearUF[ay]=(byYearUF[ay]||0)+monto/ufDelDia(ufDias,m.fecha,ufRef); (listByYear[ay]=listByYear[ay]||[]).push(item)
     })
@@ -108,7 +110,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
-    return {total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
+    return {byMonth,total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
   },[ingConc,ingAbonos,billing,anticipos,sales,terceros,expenses,selYear,ufDias,ufRef])
   // Comisiones PAGADAS del año (base caja, por pagado_at) atribuidas al AÑO DE LA VENTA — espejo de ingresosPorAnioVenta.
   // Año de venta = terceros.sale_id → sales.year; si no, vía la factura (billing.sale_id → sales.year); si no, el año del documento. Así "sin año" no aparece cuando la factura tiene venta.
