@@ -845,6 +845,14 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   const [ambDone,setAmbDone] = useState(()=>({}))             // folio -> cliente elegido
   const [ambBusy,setAmbBusy] = useState(null)                 // folio en curso
   const isoFecha = d => { if(!d) return ''; const s=String(d); if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10); const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m?`${m[3]}-${m[2]}-${m[1]}`:'' }
+  // Confirma de una vez todas las propuestas del cruce por RUT y monto (cada una se asigna como si se tocara «Confirmar»).
+  const confirmarPropuestas = async() => {
+    const ps=(result?.ambiguas||[]).filter(it=>it.propuesta&&!ambDone[it.folio]&&!ambDone[`id:${it.propuesta}`])
+    if(!ps.length||ambBusy) return
+    if(!await appConfirm(`Asignar ${ps.length} facturas del SII a la cuota propuesta de cada una (RUT y monto iguales a los de la lista Facturar). ¿Seguir?`)) return
+    const tomadas=new Set()
+    for(const it of ps){ const c=(it.candidatos||[]).find(x=>String(x.id)===String(it.propuesta)); if(c&&!tomadas.has(String(c.id))&&!ambDone[`id:${c.id}`]){ tomadas.add(String(c.id)); await elegirAmbigua(it,c) } }
+  }
   const elegirAmbigua = async(it,cand) => {
     if(ambBusy||ambDone[it.folio]) return                             // guard anti doble-click
     setAmbBusy(it.folio); setError('')
@@ -853,7 +861,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
       if(cand.estado==='Programada') patch.status='Pendiente'
       const {error} = await supabase.from('billing').update(patch).eq('id', cand.id)
       if(error) throw error
-      setAmbDone(p=>({...p,[it.folio]:cand.cliente||'—'}))
+      setAmbDone(p=>({...p,[it.folio]:cand.cliente||'—',[`id:${cand.id}`]:true}))   // la cuota ya no se ofrece a otra factura
       if(onRefresh) await onRefresh()
     }catch(e){ setError(`No se pudo asignar Factura N° ${it.folio}: ${e.message}`) }
     setAmbBusy(null)
@@ -1028,8 +1036,10 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                 </>}
                 {/* 3. Elige la factura — varias candidatas: comparación con lo del SII */}
                 {result.ambiguas?.length>0&&<>
-                  <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4'/>
+                  <Hdr label='Elige la factura correcta' color='#537281' bg='#EEF1F4' right={(()=>{ const ps=(result.ambiguas||[]).filter(it=>it.propuesta&&!ambDone[it.folio]&&!ambDone[`id:${it.propuesta}`]); return ps.length>1?<button disabled={!!ambBusy} onClick={confirmarPropuestas} style={{height:24,padding:'0 12px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',opacity:ambBusy?.5:1}}>Confirmar las {ps.length} propuestas</button>:null })()}/>
                   {result.ambiguas.map((it,i)=>{ const exp=ambExp.has(it.folio); const done=ambDone[it.folio]; const cands=(()=>{
+                        // El servidor ya cruzó el RUT de la razón social y el monto exacto con lo que proponía el Excel «Facturar»: solo esas candidatas, la propuesta primero.
+                        if(it.nivel){ const l=(it.candidatos||[]).filter(c=>!c.folio&&!ambDone[`id:${c.id}`]); return [...l].sort((a,b)=>(String(b.id)===String(it.propuesta)?1:0)-(String(a.id)===String(it.propuesta)?1:0)||String(a.vence||'').localeCompare(String(b.vence||''))) }
                         const raw=(it.candidatos||[]).filter(c=>!c.folio)
                         // EXPANDIR por venta: incluir TODAS las cuotas SIN emitir de la venta de cada candidata → para no saltar la 2/3
                         // (los candidatos del motor mezclan período+vencidas y pueden omitir la del medio). Ordenadas por N° de cuota.
@@ -1055,7 +1065,9 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                         <div style={{minWidth:0,flex:1,marginLeft:4}}>
                           <div style={{fontSize:12,fontWeight:500,color:C.text,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.receptor||`Factura N° ${it.folio}`}</div>
                           <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>Factura N° {it.folio}{it.rut?` · ${fmtRut(it.rut)}`:''} · {fmt(it.monto)}</div>
+                          {it.propuesta&&cands[0]&&String(cands[0].id)===String(it.propuesta)&&!done&&<div style={{fontSize:11,color:C.greenText,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Propuesta: {cands[0].cliente} · {cands[0].concepto||'—'}</div>}
                         </div>
+                        {!done&&it.propuesta&&cands[0]&&String(cands[0].id)===String(it.propuesta)&&<button onClick={ev=>{ ev.stopPropagation(); elegirAmbigua(it,cands[0]) }} disabled={ambBusy===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,marginRight:10,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Confirmar'}</button>}
                         {done ? <span style={{fontSize:11,fontWeight:500,color:C.normal,whiteSpace:'nowrap'}}>Asignada</span>
                           : <span style={{fontSize:11,color:cands.length?C.accent:C.soonText,fontWeight:600,whiteSpace:'nowrap'}}>{cands.length?`${cands.length} candidata${cands.length!==1?'s':''}`:'sin candidatas'} {exp?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>}
                       </div>
@@ -1069,9 +1081,10 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                               : <AsignarClienteInline bill={{folio:it.folio}} clients={clients} onAssign={async(_,cid)=>{ await ingresarHuerfana(it,cid); const cc=clients.find(x=>String(x.id)===String(cid)); setAmbDone(p=>({...p,[it.folio]:cc?.name||'—'})) }} label='Elegir cliente' placeholder='Buscar cliente…'/>}
                           </div>
                         ) })()}
-                        {(()=>{ const showAll=ambShowAll.has(it.folio); const visibles=(cands.length>1&&!showAll)?cands.slice(0,1):cands; return (<>
-                          {cands.length>1&&!showAll&&<div style={{fontSize:11,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Se propone la cuota <b>más antigua sin pagar</b> (las facturas se emiten en orden, mes vencido). Revisa antes de asignar.</div>}
-                          {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const primera=cand===cands[0]; return (
+                        {(()=>{ const showAll=ambShowAll.has(it.folio); const visibles=(!it.nivel&&cands.length>1&&!showAll)?cands.slice(0,1):cands; return (<>
+                          {it.nivel&&<div style={{fontSize:11,color:it.propuesta?C.greenText:C.soonText,padding:'5px 0',lineHeight:1.4}}>{it.propuesta?<><b>Propuesta:</b> {it.motivo}.</>:<>{it.motivo}: elige la que corresponde.</>}</div>}
+                          {!it.nivel&&cands.length>1&&!showAll&&<div style={{fontSize:11,color:C.greenText,padding:'5px 0',lineHeight:1.4}}>Se propone la cuota <b>más antigua sin pagar</b> (las facturas se emiten en orden, mes vencido). Revisa antes de asignar.</div>}
+                          {visibles.map((cand,j)=>{ const exacto=Number(cand.monto)===Number(it.monto); const primera=it.nivel?String(cand.id)===String(it.propuesta):cand===cands[0]; return (
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
@@ -1079,12 +1092,12 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
-                              {primera&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>Más antigua sin pagar</div>}
+                              {primera&&<div style={{fontSize:9,fontWeight:700,color:C.greenText}}>{it.nivel?'Propuesta':'Más antigua sin pagar'}</div>}
                             </div>
-                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:primera?C.accent:'#fff',color:primera?'#fff':C.accent,border:primera?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':'Elegir'}</button>
+                            <button onClick={()=>elegirAmbigua(it,cand)} disabled={ambBusy===it.folio} style={{height:24,padding:'0 13px',borderRadius:8,background:primera?C.accent:'#fff',color:primera?'#fff':C.accent,border:primera?'none':`1px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,opacity:ambBusy===it.folio?.5:1}}>{ambBusy===it.folio?'…':(it.nivel&&primera?'Confirmar':'Elegir')}</button>
                           </div>
                           )})}
-                          {cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ver solo la más antigua':`Ver todas las cuotas (${cands.length})`}</button>}
+                          {!it.nivel&&cands.length>1&&<button onClick={()=>setAmbShowAll(s=>{ const n=new Set(s); n.has(it.folio)?n.delete(it.folio):n.add(it.folio); return n })} style={{background:'none',border:'none',color:C.muted,fontSize:11,cursor:'pointer',padding:'6px 0',textDecoration:'underline'}}>{showAll?'Ver solo la más antigua':`Ver todas las cuotas (${cands.length})`}</button>}
                         </>) })()}
                       </div>}
                     </div>
