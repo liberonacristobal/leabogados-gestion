@@ -10,9 +10,14 @@ import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPo
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
-import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, CUENTA_HONORARIOS, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
-import { driveTokenVigente, facturaPdfSii, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+
+import { driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+
+// Facturas ya registradas con XML guardado y sin ningún PDF adjunto (ni oficial ni copia): lo que falta respaldar en Drive. Fuente única de la tarjeta de la entrada, la página de pendientes y el respaldo masivo.
+export const facturasSinRespaldo = (billing, attIds) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.dte_xml&&b.status!=='Anulada'&&!(attIds&&attIds.has(String(b.id))))
+const fechaEmisionDe = b => { if(/^\d{4}-\d{2}/.test(String(b.issued_at||''))) return b.issued_at; const m=String(b.dte_xml||'').match(/<FchEmis>([^<]+)<\/FchEmis>/); return m?m[1]:'' }
 
 // Fuente única: estado de una fila del import → categoría corta (para conteos por archivo y batch). No duplicar este mapa.
 export const CAT_IMPORT = {programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',sin_respaldo:'sinpdf',error:'err',sin_dte:'err',sin_factura:'err'}
@@ -1919,6 +1924,21 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       if(ok) appAlert(`${ok} respaldo${ok!==1?'s':''} guardado${ok!==1?'s':''} en Drive.`)
     } finally { setRespaldoRetry(null); onRefresh&&onRefresh() }
   }
+  // Sube a Drive el PDF-respaldo de facturas ya registradas (idempotente: con el PDF oficial guardado no toca Drive). Devuelve cuántas salieron y cuántas no.
+  const respaldarFacturas = async(bills)=>{
+    if(!bills||!bills.length) return {ok:0,err:0,auth:false}
+    const token = await driveTokenVigente()
+    if(!token){ if(await appConfirm('Tu conexión con Drive venció. Para guardar los respaldos hay que reconectarla; lo cargado queda guardado. ¿Reconectar ahora?')) connectDrive(); return {ok:0,err:0,auth:true} }
+    let ok=0, err=0, auth=false
+    for(const b of bills){
+      try{ const d=splitSetDTE(b.dte_xml)[0]||b.dte_xml; await adjuntarRespaldoDrive(token,b,d,fechaEmisionDe(b)||null); ok++ }
+      catch(e){ if(e instanceof DriveAuthError||e?.code===401){ auth=true; break } err++ }
+    }
+    if(auth){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive() }
+    onRefresh&&onRefresh()
+    appAlert(`${ok} respaldo${ok!==1?'s':''} guardado${ok!==1?'s':''} en Drive${err?` · ${err} con error (reintenta)`:''}.`)
+    return {ok,err,auth}
+  }
   // Backfill: respalda en Drive TODAS las facturas emitidas (con DTE) que aún no tienen copia guardada. El PDF se regenera del DTE. Idempotente (adjuntarRespaldoDrive dedup contra Drive).
   const [backfillBusy,setBackfillBusy] = useState(false)
   // Respalda TODAS las facturas emitidas en Drive, en la carpeta del MES FACTURADO (emisión − 1, convención del estudio).
@@ -1931,13 +1951,13 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const conResp=new Set(att.map(a=>String(a.billing_id)))
     const attByBill={}; att.forEach(a=>{ if(a.drive_file_id){ (attByBill[String(a.billing_id)]||(attByBill[String(a.billing_id)]=[])).push(a.drive_file_id) } })
     const emitidas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.dte_xml&&b.invoice_no)
-    const faltan=emitidas.filter(b=>!conResp.has(String(b.id)))
+    const faltan=facturasSinRespaldo(billing,conResp)
     const yaResp=emitidas.filter(b=>attByBill[String(b.id)])   // con archivo real en Drive → revisar/mover de carpeta
     if(!faltan.length && !yaResp.length){ appAlert('No hay facturas emitidas para respaldar.'); return }
     const partes=[faltan.length?`${faltan.length} sin copia (se suben)`:'', yaResp.length?`${yaResp.length} por revisar que estén en la carpeta del mes facturado`:''].filter(Boolean).join(' · ')
     if(!await appConfirm(`${partes}. ¿Continuar? Puede tardar un poco.`)) return
     const token=await driveToken(); if(!token){ if(await appConfirm('Para guardar en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); return }
-    const fEmisDe = b => { if(/^\d{4}-\d{2}/.test(String(b.issued_at||''))) return b.issued_at; const m=String(b.dte_xml||'').match(/<FchEmis>([^<]+)<\/FchEmis>/); return m?m[1]:'' }
+    const fEmisDe = fechaEmisionDe
     setBackfillBusy(true); let ok=0,err=0,mov=0
     for(const b of faltan){ try{ const d=splitSetDTE(b.dte_xml)[0]||b.dte_xml; await adjuntarRespaldoDrive(token,b,d,fEmisDe(b)||null); ok++ }
       catch(e){ err++; if(e instanceof DriveAuthError||e?.code===401){ appAlert('Tu acceso a Drive expiró. Reconéctalo e intenta de nuevo.'); connectDrive(); setBackfillBusy(false); onRefresh&&onRefresh(); return } } }
@@ -2659,11 +2679,11 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       </div>
     )
   }
-  return { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiBuscarXml, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
+  return { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, respaldarFacturas, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiBuscarXml, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli }
 }
 
 export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientEntities,user,setBilling,anticipos=[],terceros=[],respaldoMap={},cartolaHasta=null,onNuevoAnticipo,onProveedores,onConciliarTerceros,onCubrirCuotas,onDescubrirCuotas,onDeshacerConsumo,onFusionarAnticipos,onAbrirAnticipo,onFacturarBloque,onFacturarAdelantos,onStatusChange,onRevertirPago,onReactivar,onDelete,onAdd,onEdit,onImport,onImportExcel,onUpload,onAssignClient,onEmitir,onAnular,onSetVentaAnio,onReprocesarSinAnio,onAssignSeries,onDepurarCobradas,onRefresh,onConciliar,onOpenClientFicha,onReplaceProgramada,onIngresarSII,onCrearVentaRapida,onFacturaTercero,onReclasificarTercero,onBuscarSII,proveedores=[],onSaveProveedor,onIrConciliacion,onOpenPorSocio,onIrCobranza,onConsumeAnticipos,onCrearVentaForm,intent,onIntentDone,onVolver,origenVolver}) {
-  const { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiBuscarXml, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
+  const { comPorFacturarDe, siiOpen, setSiiOpen, depurarRows, setDepurarRows, cubrirAnt, setCubrirAnt, facturarAnt, setFacturarAnt, filter, setFilter, cotejoMes, setCotejoMes, cierreOpen, setCierreOpen, ufHoy, estSel, setEstSel, isDesktop, agingF, setAgingF, groupOpen, setGroupOpen, rsSel, setRsSel, ESTADO_MAP, irAEstado, irAEstadoAging, estadoActivo, impOpen, setImpOpen, respaldoRef, procResp, setProcResp, respaldoRes, setRespaldoRes, respaldoFiles, setRespaldoFiles, respaldoAt, setRespaldoAt, respaldoBatchId, setRespaldoBatchId, batchIdRef, respaldoSummaryRef, cargasHist, setCargasHist, mesTandaReq, setMesTandaReq, xmlHub, setXmlHub, sinRegN, setSinRegN, sinRegDocs, cargandoStage, setCargandoStage, matchProgramada, marcarStaged, contarSinRegistrar, procesarRespaldoSII, cargarSinRegistrar, abrirHistCargas, creandoFac, setCreandoFac, crearCli, setCrearCli, ensureBatch, crearDesdeXML, ncConfirm, setNcConfirm, ncVincular, setNcVincular, ncBusy, setNcBusy, anularPorNC, regBusy, setRegBusy, regReview, setRegReview, respaldoRetry, reintentarRespaldos, backfillRespaldos, respaldarFacturas, backfillBusy, progPick, setProgPick, secOpen, setSecOpen, crearVentaFor, setCrearVentaFor, cvForm, setCvForm, cvBusy, setCvBusy, terceroFor, setTerceroFor, queCorr, setQueCorr, tvProv, setTvProv, tvNuevo, setTvNuevo, tvBusy, setTvBusy, tvPct, setTvPct, comisionTercMap, setComisionTercMap, registrarProg, doRegistrar, doRegistrarLote, abrirCrearVenta, doCrearVenta, abrirTercero, elegirTercero, doTercero, moreOpen, setMoreOpen, siiPageOpen, setSiiPageOpen, saludCobranza, setSaludCobranza, recOpen, setRecOpen, siiPanel, setSiiPanel, siiBusy, setSiiBusy, siiCall, siiProbar, siiVerificarEstados, siiBuscarXml, siiResumenSemanal, siiTraerHistorico, siiHistProg, ncResolver, cargarNCResolver, foliosEstado, setFoliosEstado, siiLog, setSiiLog, cargarSiiLog, siiSetJson, setSiiSetJson, siiPeriodo, setSiiPeriodo, siiResult, setSiiResult, SII_SET_SAMPLE, siiEmitirSet, siiLibro, siiDescargarXml, siiIntercambio, bandejaEnvio, setBandejaEnvio, factToMap, setFactToMap, abrirBandeja, onUnsendFactura, fYear, setFYear, fMonth, setFMonth, showMeses, setShowMeses, showBuscar, setShowBuscar, q, setQ, payingId, setPayingId, expandBill, setExpandBill, pagando, setPagando, payDate, setPayDate, inclTerceros, setInclTerceros, payMonto, setPayMonto, fmtDMY, openClients, setOpenClients, toggleClient, collapseAll, selected, setSelected, toggleSel, clearSel, MONTHS, openPendiente, setOpenPendiente, openPorFacturar, setOpenPorFacturar, selExcel, setSelExcel, emitiendo, setEmitiendo, emitEnt, setEmitEnt, descExcel, setDescExcel, bb, anioPickFor, setAnioPickFor, ventaBusca, setVentaBusca, verCerradas, setVerCerradas, pcOrden, setPcOrden, pcConfirm, setPcConfirm, noEmitirSet, marcarNoEmitir, trabajosSF, decidirTrabajo, siiBuscaFor, setSiiBuscaFor, reprocBusy, setReprocBusy, anioLearned, setAnioLearned, saleYrById, anioVentaDe, sinAnio, yearBtns, tercerosByBilling, isProg, dateField, filtered, grouped, matchYM, kpiDate, ufInfoDe, yaFacturadasIds, pending, overdue, paid, programado, nEmitidas, nProgramadas, nPagadas, years, confirmPago, facturaEmail, setFacturaEmail, facturasEmail, setFacturasEmail, soloSinEnviar, setSoloSinEnviar, esEmitida, sinEnviar, envioBadge, cobranzaOpen, setCobranzaOpen, venceG, esVencidaG, recordadoMap, setRecordadoMap, recNota, setRecNota, recNotaMap, diasDesde, nrG, efClientIdG, abonos, setAbonos, concFac, setConcFac, abonosDe, pagosFor, setPagosFor, pagoBusy, setPagoBusy, otraFor, setOtraFor, otraQ, setOtraQ, otrasFacturas, pagosDe, pagosRutSugeridos, conciliarPago, esCalceCercano, calcesCercanos, conciliarCalceCercano, calcesOpen, setCalcesOpen, calcesSugeridos, porConciliarIds, estadoCuentaEnviar, recordarCobro, recordarCobroTanda, acuseCobro, recPreview, setRecPreview, enviarRecordatorio, emitirConRS, marcarEmitida, marcarEmitidasBulk, descargando, setDescargando, descargarProgramadas, emitidasTotal, mesKey, progMes, progMesTotal, progIds, toggleExcel, allExcel, resolveRS, descargarPorFacturar, confirmarEmitida, renderClientGroup, siiSinCli } = useBillingModel({ billing, clients, sales, clientEntities, user, setBilling, anticipos, terceros, respaldoMap, cartolaHasta, onNuevoAnticipo, onProveedores, onConciliarTerceros, onCubrirCuotas, onDescubrirCuotas, onDeshacerConsumo, onFusionarAnticipos, onAbrirAnticipo, onFacturarBloque, onStatusChange, onRevertirPago, onReactivar, onDelete, onAdd, onEdit, onImport, onImportExcel, onUpload, onAssignClient, onEmitir, onAnular, onSetVentaAnio, onReprocesarSinAnio, onAssignSeries, onDepurarCobradas, onRefresh, onConciliar, onOpenClientFicha, onReplaceProgramada, onIngresarSII, onCrearVentaRapida, onFacturaTercero, proveedores, onSaveProveedor, onIrConciliacion, intent, onIntentDone })
   // «‹ origen»: si la página se abrió desde otra pestaña con navTo (Inicio, etc.), el botón de volver regresa AL ORIGEN (goBack), no al resumen.
   const desdeFueraRef=useRef(null)
   const terc=useTerceroFacturas({terceros,billing})   // facturas del tercero: cuadres propuestos y alertas (misma fuente que la ficha del proveedor)
@@ -2696,56 +2716,47 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
   const [comOrig,setComOrig] = useState('')   // Por clasificar › Comisión: quién o qué la generó
   const [porRevOpen,setPorRevOpen] = useState(false)   // hub: tarjeta "Por revisar" desplegada
 
+  // Respaldo pendiente en Drive: facturas con XML guardado y sin ningún PDF adjunto (fuente única: facturasSinRespaldo). Se recalcula al abrir el hub, la página y tras cada carga.
+  const [attIds,setAttIds]=useState(null)
+  const cargarAtt=async()=>{ if(DEMO){ setAttIds(null); return } try{ const {data}=await selectAll(()=>supabase.from('billing_attachments').select('billing_id').order('id')); setAttIds(new Set((data||[]).map(a=>String(a.billing_id)))) }catch(_){ setAttIds(prev=>prev) } }
+  const [respDriveOpen,setRespDriveOpen]=useState(false)
+  const [selResp,setSelResp]=useState(()=>new Set())
+  const [qResp,setQResp]=useState('')
+  const [ordResp,setOrdResp]=useState('monto|desc')
+  const [abiertosResp,setAbiertosResp]=useState(()=>new Set())
+  const [respBusy,setRespBusy]=useState(false)
+  const [histOpen,setHistOpen]=useState(false)
+  useEffect(()=>{ cargarAtt() },[xmlHub,respDriveOpen,!!respaldoRes])   // eslint-disable-line
+  const sinResp = useMemo(()=>attIds?facturasSinRespaldo(billing,attIds):[],[billing,attIds])
   const xmlHubPage = xmlHub ? (()=>{
           const sinXml=billing.filter(b=>!b.deleted_at && esEmitida(b) && !b.dte_xml && !b.email_sent_at && String(b.issued_at||'').startsWith(mesKey))
           const conXml=billing.filter(b=>!b.deleted_at && b.dte_xml && String(b.issued_at||'').startsWith(mesKey)).length
           const pend=(sinRegN||0)+sinXml.length
-          const svg=d=><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
-          const fila=(icon,ic,titulo,sub,onClick,right)=>(
-            <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>
-              <span style={{width:36,height:36,borderRadius:10,background:ic.bg,color:ic.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12,fontWeight:800}}>{icon}</span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13.5,fontWeight:600,color:C.accent}}>{titulo}</div><div style={{fontSize:11,color:C.muted}}>{sub}</div></div>
-              {right||<span style={{color:C.textSoft,fontSize:18,flexShrink:0}}><Gl n='chevron'/></span>}
-            </div>)
-          const chip=(txt,onClick)=><span key={txt} onClick={e=>{e.stopPropagation();onClick&&onClick()}} style={{display:'inline-block',fontSize:11,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 7px',margin:'3px 4px 0 0',background:C.card,color:C.text,cursor:'pointer'}}>{txt}</span>
+          const ico=(d,c)=><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+          const pl=(n,s,p)=>n!==1?(p||s+'s'):s
+          const tiles=[]
+          if(sinRegN>0) tiles.push(<HubTile key='sr' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 8v5M12 16h.01'/></>,C.soonText)} bg={C.surface} t='Emitidas sin registrar' s={`${sinRegN} en el SII · toca para cargarlas`} sM={`${sinRegN} en el SII`} sCol={C.soonText} cardBg={C.soonBg} cardBd={C.avisoLine} onClick={()=>{ if(cargandoStage) return; cargarSinRegistrar() }}/>)
+          if(sinXml.length>0) tiles.push(<HubTile key='sx' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 8v5M12 16h.01'/></>,C.overdueText)} bg={C.surface} t='Emitidas sin XML' s={`${sinXml.length} este mes · no se pueden enviar hasta cargar su XML`} sM={`${sinXml.length} este mes`} sCol={C.overdueText} cardBg={C.overdueBg} cardBd={C.overdueBd} onClick={()=>{ respaldoRef.current&&respaldoRef.current.click() }}/>)
+          if(pend===0) tiles.push(<HubTile key='ok' icNode={ico(<path d='M20 6 9 17l-5-5'/>,C.greenText)} bg={C.surface} t='Por cargar' s={`Todo cargado · ${conXml} factura${pl(conXml,'')} del mes con XML`} sM='Todo cargado' sCol={C.greenText} cardBg={C.greenBg} cardBd='transparent'/>)
+          if(sinResp.length>0) tiles.push(<HubTile key='rd' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 8v5M12 16h.01'/></>,C.soonText)} bg={C.surface} t='Respaldo pendiente en Drive' s={`${sinResp.length} factura${pl(sinResp.length,'')} sin PDF guardado`} sM={`${sinResp.length} sin PDF`} sCol={C.soonText} cardBg={C.soonBg} cardBd={C.avisoLine} onClick={()=>{ setSelResp(new Set()); setQResp(''); setRespDriveOpen(true) }}/>)
+          tiles.push(<HubTile key='xml' icNode={ico(<path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/>,C.azulInfo)} bg={C.azulBg} t='Cargar XML' s='El respaldo .xml del SII (uno o varios)' sM='Archivo .xml' onClick={()=>{ respaldoRef.current&&respaldoRef.current.click() }}/>)
+          if(onImportExcel) tiles.push(<HubTile key='xls' icNode={ico(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.greenText)} bg={C.greenBg} t='Importar Excel' s='El detalle .xls / .xlsx del SII' sM='Detalle del SII' onClick={()=>{ onImportExcel() }}/>)
+          if(onUpload) tiles.push(<HubTile key='pdf' icNode={ico(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>,C.coralText)} bg={C.ambarBg} t='Cargar PDF' s='El PDF de la factura' sM='PDF de la factura' onClick={()=>{ onUpload() }}/>)
+          if(onImport) tiles.push(<HubTile key='drv' icNode={ico(<path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/>,C.tealText)} bg={C.tealBg} t='Desde Drive' s='Importar facturas de Drive' sM='Facturas de Drive' onClick={()=>{ onImport() }}/>)
+          tiles.push(<HubTile key='his' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>,C.muted)} bg={C.bgSoft} t='Historial de cargas' s={`${conXml} factura${pl(conXml,'')} del mes con XML`} sM={`${conXml} este mes`} cardBg={histOpen?C.selBg:undefined} cardBd={histOpen?C.accent:undefined} onClick={()=>setHistOpen(o=>!o)}/>)
           const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
-          return (<div>
-            <PageHeader origen='Facturas del mes' onBack={()=>setXmlHub(false)} titulo='Cargar del SII'/>
-            <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12,padding:isDesktop?'18px 28px 40px':'14px 16px 40px',maxWidth:isDesktop?1120:640,margin:'0 auto'}}>
-              <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:12,width:'100%'}}>
-                {pend>0
-                  ? <div style={{background:C.soonBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.soonText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:26,fontWeight:800,color:C.soonText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{pend}</div><div style={{fontSize:11.5,color:C.soonText}}>{sinRegN>0?`${sinRegN} emitida${sinRegN!==1?'s':''} en el SII sin registrar`:''}{sinRegN>0&&sinXml.length>0?' · ':''}{sinXml.length>0?`${sinXml.length} emitida${sinXml.length!==1?'s':''} sin XML`:''}</div></div>
-                  : <div style={{background:C.greenBg,borderRadius:12,padding:'14px 16px'}}><div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Por cargar</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo cargado</div><div style={{fontSize:11.5,color:C.greenText}}>{conXml} factura{conXml!==1?'s':''} de este mes con XML</div></div>}
-                {pend>0&&<div style={card}>
-                  {sinRegN>0&&<>
-                    {fila(String(sinRegN),{bg:C.soonBg,fg:C.soonText},'Emitidas en el SII sin registrar','Están en el SII y no en el sistema — cárgalas para registrarlas',()=>{ if(cargandoStage) return; cargarSinRegistrar() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargarlas <Gl n='chevron'/></span>)}
-                    <div style={{padding:'0 0 8px 48px'}}>{(sinRegDocs||[]).slice(0,12).map(d=>chip(`N° ${d.folio}${d.receptor_name?' · '+String(d.receptor_name).slice(0,22):''}${d.monto?' · '+fmt(d.monto):''}`,()=>{ if(cargandoStage) return; cargarSinRegistrar() }))}{(sinRegDocs||[]).length>12&&<span style={{fontSize:11,color:C.muted}}> +{(sinRegDocs||[]).length-12}</span>}</div>
-                  </>}
-                  {sinXml.length>0&&<>
-                    {fila(String(sinXml.length),{bg:C.overdueBg,fg:C.overdueText},'Emitidas sin XML este mes','No se pueden enviar hasta cargar su XML',()=>{ respaldoRef.current&&respaldoRef.current.click() },<span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Cargar XML <Gl n='chevron'/></span>)}
-                    <div style={{padding:'0 0 4px 48px'}}>{sinXml.slice(0,12).map(b=>chip(`N° ${folioN(b.invoice_no)}`,()=>onEdit&&onEdit(b)))}{sinXml.length>12&&<span style={{fontSize:11,color:C.muted}}> +{sinXml.length-12}</span>}</div>
-                  </>}
-                </div>}
-                <div style={card}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0 2px'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Historial de cargas</span>{pend>0&&conXml>0&&<span style={{fontSize:11,color:C.muted}}>{conXml} de este mes con XML</span>}</div>
-                  {histPage==null||histPage==='loading'
-                    ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Cargando…</div>
-                    : histPage.length===0 ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
-                    : histPage.map(b=><CargaHistRow key={b.id} b={b}/>)}
-                </div>
-              </div>
-              <div style={isDesktop?{width:380,flexShrink:0}:{width:'100%'}}>
-                <div style={card}>
-                  <div style={{...SEC_LBL,padding:'8px 0 2px'}}>Cargar</div>
-                  {fila(svg(<><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'/></>),{bg:C.accent,fg:'#fff'},'Cargar XML','El respaldo .xml del SII (uno o varios)',()=>{ respaldoRef.current&&respaldoRef.current.click() })}
-                  {onImportExcel&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>),{bg:C.tealBg,fg:C.tealText},'Importar Excel','El detalle .xls / .xlsx del SII (o una planilla)',()=>{ onImportExcel() })}
-                  {onUpload&&fila(svg(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></>),{bg:C.overdueBg,fg:C.overdueText},'Cargar PDF','El PDF de la factura',()=>{ onUpload() })}
-                  {onImport&&fila(svg(<><path d='M22 12.5V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></>),{bg:C.azulBg,fg:C.accent},'Desde Drive','Importar facturas de Drive',()=>{ onImport() })}
-                  <div style={{fontSize:11.5,color:C.muted,padding:'8px 0 4px'}}>Lo cargado queda guardado aunque salgas. Lo registras cuando quieras.</div>
-                </div>
-              </div>
+          return (<FlujoPagina origen='Facturas del mes' titulo='Cargar del SII' onBack={()=>setXmlHub(false)} maxW={760}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
+              {tiles.map((t,i)=><div key={t.key} style={{gridColumn:(i===tiles.length-1&&tiles.length%2===1)?'1 / -1':undefined,minWidth:0}}>{t}</div>)}
             </div>
-          </div>) })() : null
+            {histOpen&&<div style={{...card,marginTop:isDesktop?12:8}}>
+              <div style={{...SEC_LBL,padding:'8px 0 2px'}}>Historial de cargas</div>
+              {histPage==null||histPage==='loading'
+                ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Cargando…</div>
+                : histPage.length===0 ? <div style={{padding:'14px 0',color:C.muted,fontSize:12}}>Aún no hay cargas registradas.</div>
+                : histPage.map(b=><CargaHistRow key={b.id} b={b}/>)}
+            </div>}
+          </FlujoPagina>) })() : null
   const cierrePage = cierreOpen ? <FlujoPagina origen={origenDe('cierre','Facturación')} titulo='Cierre de mes' onBack={volverOrigen('cierre',()=>setCierreOpen(false))} maxW={1180}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>onEdit&&onEdit(b)} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></FlujoPagina> : null
   // Facturas por enviar = PÁGINA (antes modal). Foto + tabla (escritorio) / lista (móvil) con la cifra a la derecha + historial de envíos (bitácora en billing: email_sent_at/sent_to/sent_by).
   const porEnviarPage = bandejaEnvio ? (()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null
@@ -2854,33 +2865,74 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
         <div style={{marginTop:12}}><ActBtn variant='primary' size='lg' full disabled={!!regBusy} onClick={()=>doRegistrarLote(items)}>{regBusy==='lote'?'Registrando…':`Registrar ${items.length}`}</ActBtn></div>
       </div>
     </FlujoPagina> })() : null
-  const billingPage = emailPage || recPage || depurarPage || cubrirPage || facturarPage || siiCotejoPage || regPage || cargasPage || cierrePage || porEnviarPage || xmlHubPage
-  const _pgKey = [!!facturaEmail,!!(facturasEmail&&facturasEmail.length),!!recPreview,!!depurarRows,!!cubrirAnt,!!facturarAnt,!!siiOpen,!!regReview,cargasHist!==null].join('')
-  useEffect(()=>{ if(cierreOpen||bandejaEnvio||xmlHub||/true/.test(_pgKey)) restoreScroll({w:0,d:0}) },[cierreOpen,bandejaEnvio,xmlHub,_pgKey])
-  return (
-    <div>
-      {billingPage}
-      <div style={billingPage?{display:'none'}:undefined}>
-      <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
-          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {filter==='checklist'&&<button onClick={volverOrigen('checklist',()=>{setFilter('resumen');clearSel&&clearSel()})} title={origenDe('checklist','Volver al resumen')} style={chipBtn('primary')}><Gl n='chevL'/> Volver</button>}
-            {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
-            {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
-            <div style={{position:'relative'}}>
-              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
-              {mesTandaReq&&<MesTandaModal def={mesTandaReq.def} onPick={v=>{ mesTandaReq.resolve(v); setMesTandaReq(null) }}/>}
-              {respaldoRes&&(()=>{
+  const respaldoDrivePage = respDriveOpen ? (()=>{
+    const D=isDesktop
+    const cliN=id=>(clients||[]).find(c=>String(c.id)===String(id))?.name||'Sin cliente'
+    const qn=_normTxt(qResp.trim()), qraw=qResp.trim()
+    const gmap=new Map()
+    sinResp.forEach(b=>{ const k=String(b.client_id||''); if(!gmap.has(k)) gmap.set(k,{k,cid:b.client_id||null,nom:cliN(b.client_id),bills:[]}); gmap.get(k).bills.push(b) })
+    let grupos=[...gmap.values()]
+    if(qn) grupos=grupos.map(g=>_normTxt(g.nom).includes(qn)?g:{...g,bills:g.bills.filter(b=>String(folioN(b.invoice_no)||b.invoice_no||'').includes(qraw))}).filter(g=>g.bills.length)
+    grupos=grupos.map(g=>({...g,bills:[...g.bills].sort((a,z)=>String(z.issued_at||'').localeCompare(String(a.issued_at||''))),total:g.bills.reduce((a,b)=>a+(montoFactura(b)||0),0)}))
+    const [oc,od]=ordResp.split('|'), dir=od==='asc'?1:-1
+    grupos.sort((a,z)=>oc==='nombre'?dir*a.nom.localeCompare(z.nom,'es'):dir*(a.total-z.total))
+    const totalAll=sinResp.reduce((a,b)=>a+(montoFactura(b)||0),0)
+    const selB=sinResp.filter(b=>selResp.has(b.id)), selTot=selB.reduce((a,b)=>a+(montoFactura(b)||0),0)
+    const togg=id=>setSelResp(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+    const reintentar=async(lista)=>{ if(respBusy||!lista.length) return; setRespBusy(true); try{ await respaldarFacturas(lista); await cargarAtt(); setSelResp(new Set()) } finally{ setRespBusy(false) } }
+    const nF=sinResp.length, nC=gmap.size
+    const lblK={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase'}
+    const hero=<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 14px'}}>
+      <div style={{...lblK,color:C.accent}}>Sin PDF guardado</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:12,color:C.muted}}>Drive · {nF} factura{nF!==1?'s':''}</span><span style={{fontSize:24,fontWeight:800,color:C.accent,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(totalAll)}</span></div>
+      <button disabled={respBusy||!nF} onClick={()=>reintentar(sinResp)} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:respBusy?'default':'pointer',opacity:respBusy?.6:1}}>{respBusy?'Guardando…':`Reintentar las ${nF}`}</button>
+    </div>
+    const selBox=selB.length>0&&<div style={{background:C.tileBg,border:`1px solid ${C.accent}`,borderRadius:12,padding:'11px 13px'}}>
+      <div style={{...lblK,color:C.accent}}>Seleccionadas</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{selB.length} factura{selB.length!==1?'s':''}</span><span style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(selTot)}</span></div>
+      <button disabled={respBusy} onClick={()=>reintentar(selB)} style={{width:'100%',minHeight:38,marginTop:9,borderRadius:9,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:respBusy?'default':'pointer',opacity:respBusy?.6:1}}>{respBusy?'Guardando…':`Reintentar el respaldo · ${selB.length}`}</button>
+    </div>
+    const selS={fontSize:12.5,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:10,height:40,boxSizing:'border-box',padding:'0 10px',background:C.surface,color:C.accent,cursor:'pointer',minWidth:0}
+    const ORDS=[['monto|desc','Mayor monto'],['monto|asc','Menor monto'],['nombre|asc','Cliente A–Z'],['nombre|desc','Cliente Z–A']]
+    const toolbar=<div style={{display:'flex',gap:8,alignItems:'center'}}><div style={{flex:1,minWidth:0}}><Buscador value={qResp} onChange={setQResp} placeholder={D?'Buscar cliente o N° de factura…':'Buscar cliente o N°…'}/></div><select value={ordResp} onChange={e=>setOrdResp(e.target.value)} style={selS}>{ORDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
+    const filaB=(b)=>{ const on=selResp.has(b.id); const n=folioN(b.invoice_no)||b.invoice_no
+      return <div key={b.id} onClick={()=>togg(b.id)} style={{display:'grid',gridTemplateColumns:D?'18px minmax(0,1fr) auto':'18px minmax(0,1fr) auto 32px',columnGap:10,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.selBg:'transparent'}}>
+        <span style={{width:18,height:18,borderRadius:6,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
+        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text}}><b onClick={e=>{e.stopPropagation();onEdit&&onEdit(b)}} title='Abrir la factura' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)'}}>N° {n}</b> · {b.issued_at?fmtFechaDMY(b.issued_at):'sin fecha'}</div><div style={{fontSize:10.5,color:C.muted}}>{tipoFacturaLbl(b)}</div></div>
+        <span style={{fontSize:12.5,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>
+        {!D&&<button onClick={e=>{e.stopPropagation();onEdit&&onEdit(b)}} title='Abrir la factura' style={{width:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>}
+      </div> }
+    const cardC=(g)=>{ const open=!!qn||abiertosResp.has(g.k)||g.bills.some(b=>selResp.has(b.id))||gmap.size<=3
+      return <div key={g.k} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
+        <div onClick={()=>setAbiertosResp(p=>{ const n=new Set(p); n.has(g.k)?n.delete(g.k):n.add(g.k); return n })} style={{display:'flex',alignItems:'center',gap:10,padding:D?'11px 14px':'10px 12px',cursor:'pointer'}}>
+          <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}><span onClick={e=>{ if(g.cid&&onOpenClientFicha){ e.stopPropagation(); onOpenClientFicha(g.cid) } }} style={{cursor:g.cid&&onOpenClientFicha?'pointer':'default'}}>{g.nom}</span> <span style={{fontSize:11,fontWeight:500,color:C.textSoft,whiteSpace:'nowrap'}}>· {g.bills.length} factura{g.bills.length!==1?'s':''}</span></div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Más antigua {fmtFechaDMY(g.bills.map(b=>b.issued_at).filter(Boolean).sort()[0]||'')}</div></div>
+          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?15:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</div><span style={{fontSize:9.5,borderRadius:20,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:C.ambarBg,color:C.soonText}}>Sin PDF</span></div>
+        </div>
+        {open&&<div>{g.bills.map(filaB)}</div>}
+      </div> }
+    const lista=<div style={{display:'flex',flexDirection:'column',gap:8,flex:1,minWidth:0,width:'100%'}}>
+      {nF>0&&toolbar}
+      {grupos.map(cardC)}
+      {nF>0&&grupos.length===0&&<div style={{padding:'18px 4px',fontSize:12.5,color:C.muted}}>Ninguna factura coincide con la búsqueda.</div>}
+    </div>
+    return <FlujoPagina origen={respaldoRes?'Resultado':'Cargar del SII'} titulo='Respaldo en Drive' ctx={nF?`${nF} factura${nF!==1?'s':''} · ${nC} cliente${nC!==1?'s':''}`:null} onBack={()=>setRespDriveOpen(false)} maxW={1060}>
+      {nF===0
+        ? <div style={{background:C.greenBg,borderRadius:12,padding:'14px 16px'}}><div style={{...lblK,color:C.greenText}}>Respaldo en Drive</div><div style={{fontSize:20,fontWeight:800,color:C.greenText}}>Todo respaldado</div></div>
+        : D
+          ? <div style={{display:'flex',gap:18,alignItems:'flex-start'}}>{lista}<div style={{width:290,flexShrink:0,position:'sticky',top:72,display:'flex',flexDirection:'column',gap:10}}>{hero}{selBox}</div></div>
+          : <div style={{display:'flex',flexDirection:'column',gap:10}}>{hero}{selBox}{lista}</div>}
+    </FlujoPagina> })() : null
+  const resultadoPage = respaldoRes ? (()=>{
                 const g=k=>respaldoRes.filter(r=>r.estado===k)
                 const prog=g('programada'), nuevas=g('nueva'), reg=g('registrada'), nc=[...g('nota_credito'),...g('nc_hecha')]
                 const adj=g('adjuntada'),dup=g('duplicada'),cre=g('creada'),sinpdf=g('sin_respaldo'),err=[...g('error'),...g('sin_dte'),...g('sin_factura')]
                 const STY={adjuntada:{t:'Adjuntada',c:C.greenText,bg:C.greenBg},creada:{t:'Agregada',c:C.greenText,bg:C.greenBg},duplicada:{t:'Ya tenía respaldo',c:C.muted,bg:C.bgSoft},sin_respaldo:{t:'Registrada · falta respaldo',c:C.soonText,bg:C.soonBg},error:{t:'Error',c:C.overdueText,bg:C.overdueBg},sin_dte:{t:'Archivo sin DTE',c:C.overdueText,bg:C.overdueBg},sin_factura:{t:'Sin factura',c:C.soonText,bg:C.soonBg}}
-                const row=(r,i)=>{ const s=STY[r.estado]||STY.error; return (
+                const row=(r,i,oc)=>{ const s=STY[r.estado]||STY.error; return (
                   <div key={i} style={{padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N° ${r.folio}`:r.archivo||'—'}{r.cliente?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.folio?`N° ${r.folio}`:r.archivo||'—'}{r.cliente&&oc!==true?<span style={{fontWeight:400,color:C.muted}}> · {r.cliente}</span>:''}{r.monto?<span style={{fontWeight:400,color:C.muted}}> · {fmt(r.monto)}</span>:''}</div>
                         {r.msg&&r.estado!=='sin_respaldo'&&<div style={{fontSize:10,color:C.overdueText}}>{r.msg}</div>}
                         {r.estado==='sin_respaldo'&&<div style={{fontSize:10,color:C.soonText}}>{r.drive?'Se cayó la conexión con Drive al subir el PDF.':'No se pudo subir el PDF-respaldo.'} La factura ya quedó registrada.</div>}
                         {r.estado==='creada'&&r.sinCliente&&<div style={{fontSize:10,color:C.soonText}}>Sin cliente — asígnalo en la factura.</div>}
@@ -2892,11 +2944,11 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   </div>) }
                 // Asigna un cliente a una fila 'nueva' sin resolver Y APRENDE: crea la RS (RUT del receptor) bajo ese cliente para que la próxima carga se resuelva sola.
                 const asignarClienteImport=async(row,cid)=>{ const cli=(clients||[]).find(c=>String(c.id)===String(cid)); setRespaldoRes(p=>(p||[]).map(x=>x===row?{...x,clienteId:cid,cliente:cli?.name||x.cliente}:x)); await aprenderRS(cid, row?.row?.rut, row?.row?.receptor, clientEntities) }
-                const progRowR=(r,i)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; const noCli=!r.clienteId&&r.estado==='nueva'; const cliDisp=r.clienteId?(r.cliente||'—'):titleCase(r.cliente||r.row?.receptor||'—'); const rsDisp=r.row?.receptor?titleCase(r.row.receptor):''; const showRS=rsDisp&&_normTxt(rsDisp)!==_normTxt(cliDisp); return (
+                const progRowR=(r,i,oc)=>{ const done=r.estado==='registrada'; const isProg=r.estado==='programada'; const cands=r.progCand||[]; const sel=cands.find(c=>c.id===r.progId); const many=isProg&&cands.length>1; const open=progPick===r; const noCli=!r.clienteId&&r.estado==='nueva'; const cliDisp=r.clienteId?(r.cliente||'—'):titleCase(r.cliente||r.row?.receptor||'—'); const rsDisp=r.row?.receptor?titleCase(r.row.receptor):''; const showRS=rsDisp&&_normTxt(rsDisp)!==_normTxt(cliDisp); return (
                   <div key={'p'+i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
                     <div onClick={()=>{ const bb2=r.progId&&(billing||[]).find(x=>x.id===r.progId); if(bb2&&onEdit) onEdit(bb2) }} style={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:12,alignItems:'start',cursor:r.progId?'pointer':'default'}}>
                       <div style={{minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cliDisp}</div>
+                        {oc!==true&&<div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cliDisp}</div>}
                         {showRS&&<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rsDisp}</div>}
                         <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>Factura N° {r.folio}{r.fecha?` · ${fmtFechaDMY(r.fecha)}`:''}<span style={{fontSize:8,fontWeight:600,borderRadius:4,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,background:isProg?C.bgWarm:C.soonBg,color:isProg?C.muted:C.soonText}}>{isProg?'Programada':'Nueva'}</span></div>
                       </div>
@@ -3009,56 +3061,70 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 const CATKEYS={prog:['prog'],new:['nuevas'],dup:['adj','dup'],reg:['reg'],nc:['nc'],cre:['cre'],sinpdf:['sinpdf'],err:['err']}
                 const goSec=(cat)=>{ const ks=CATKEYS[cat]||[cat]; ks.forEach(k=>setSecOpen(p=>({...p,[k]:true}))); setTimeout(()=>{ for(const k of ks){ const el=document.getElementById('imp-sec-'+k); if(el){ el.scrollIntoView({behavior:'smooth',block:'start'}); break } } },70) }
                 const sec=(key,t,c,items,rowFn,def=false)=>{ if(!items.length) return null; const open=secOpen[key]??def; return <div key={key} id={'imp-sec-'+key}><div onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',margin:'12px 2px 2px'}}><span style={{fontSize:9,color:c,transform:open?'rotate(90deg)':'none',transition:'transform .12s'}}><Gl n='chevron'/></span><span style={{fontSize:9,fontWeight:700,color:c,textTransform:'uppercase',letterSpacing:.3}}>{t}</span></div>{open&&items.map(rowFn)}</div> }
-                return createPortal(
-                  <div style={{position:'fixed',left:0,right:0,top:0,bottom:'calc(56px + env(safe-area-inset-bottom,0px))',background:C.bg,zIndex:100,display:'flex',flexDirection:'column'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'calc(env(safe-area-inset-top,0px) + 14px) 16px 12px',borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0}}>
-                    <button onClick={async()=>{ const pend=(prog||[]).length+(nuevas||[]).length; if(pend>0 && !(await appConfirm({title:`Quedan ${pend} carga${pend!==1?'s':''} sin registrar`, message:'Se guardan en “Cargar XML › Cargadas sin registrar”. No se registran ni entran en tus cifras hasta completarlas, y no se duplican.', confirmText:'Guardar y salir', cancelText:'Volver a la carga'}))) return; setRespaldoRes(null); contarSinRegistrar() }} style={chipBtn('primary')}><Gl n='chevL'/> Volver</button>
-                    <span style={{fontSize:15,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.3}}>Cargar XML del SII · {respaldoRes.length}</span>
+                                const volver=async()=>{ const pend=(prog||[]).length+(nuevas||[]).length; if(pend>0 && !(await appConfirm({title:`Quedan ${pend} carga${pend!==1?'s':''} sin registrar`, message:'Se guardan en “Cargar XML › Cargadas sin registrar”. No se registran ni entran en tus cifras hasta completarlas, y no se duplican.', confirmText:'Guardar y salir', cancelText:'Volver a la carga'}))) return false; setRespaldoRes(null); contarSinRegistrar(); return true }
+                const nTot=respaldoRes.length, nPor=prog.length+nuevas.length+nc.length, nErr=err.length, nRegs=Math.max(0,nTot-nPor-nErr)
+                const totSkip=(respaldoFiles||[]).reduce((a,f)=>a+(f.skipped||0),0)
+                const kt=(k,n,tono,go)=>{ const bg=tono==='g'?C.greenBg:tono==='a'?C.soonBg:tono==='r'?C.overdueBg:C.surface, fg=tono==='g'?C.greenText:tono==='a'?C.soonText:tono==='r'?C.overdueText:C.accent, lb=tono==='g'?C.greenText:tono==='a'?C.soonText:tono==='r'?C.overdueText:C.muted
+                  return <div onClick={go} style={{border:`1px solid ${tono==='a'?C.avisoLine:tono==='r'?C.overdueBd:tono==='g'?'transparent':C.border}`,borderRadius:12,padding:'10px 12px',background:bg,cursor:go?'pointer':'default',minWidth:0}}>
+                    <div style={{fontSize:10,fontWeight:700,color:lb,textTransform:'uppercase',letterSpacing:.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k}</div>
+                    <div style={{fontSize:24,fontWeight:700,color:fg,lineHeight:1.15,fontVariantNumeric:'tabular-nums'}}>{n}</div></div> }
+                const ico=(d,c)=><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
+                const claveCli=r=>String(r.clienteId||r._fac?.client_id||'')||('n:'+_normTxt(r.cliente||r.row?.receptor||''))
+                const nomCli=r=>r.clienteId||r._fac?.client_id?((clients||[]).find(c=>String(c.id)===String(r.clienteId||r._fac?.client_id))?.name||r.cliente||'—'):titleCase(r.cliente||r.row?.receptor||'—')
+                const agrupar=items=>{ const m=new Map(); items.forEach(r=>{ const k=claveCli(r); if(!m.has(k)) m.set(k,{k,nom:nomCli(r),cid:r.clienteId||r._fac?.client_id||null,rows:[]}); m.get(k).rows.push(r) }); return [...m.values()].map(g=>({...g,tot:g.rows.reduce((a,r)=>a+(r.monto||0),0)})).sort((a,z)=>z.tot-a.tot) }
+                const cardCli=(g,rowFn)=>(
+                  <div key={g.k} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface,marginBottom:8}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 13px'}}>
+                      <span onClick={g.cid&&onOpenClientFicha?()=>onOpenClientFicha(g.cid):undefined} style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflowWrap:'anywhere',cursor:g.cid&&onOpenClientFicha?'pointer':'default'}}>{g.nom}</span>
+                      <span style={{fontSize:11,fontWeight:600,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'1px 8px',flexShrink:0}}>{g.rows.length}</span>
+                      <span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(g.tot)}</span>
+                    </div>
+                    <div style={{padding:'0 13px',borderTop:`1px solid ${C.bgSoft}`}}>{g.rows.map((r,i)=>rowFn(r,i))}</div>
+                  </div>)
+                const secCli=(key,titulo,col,items,rowFn,def,extra)=>{ if(!items.length) return null; const open=secOpen[key]??def
+                  return <div key={key} id={'imp-sec-'+key}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,margin:'16px 2px 8px'}}>
+                      <span onClick={()=>setSecOpen(p=>({...p,[key]:!open}))} style={{display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer',flex:1,minWidth:0}}><span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={col}/></span><span style={{...SEC_LBL,color:col}}>{titulo}</span></span>{extra}
+                    </div>
+                    {open&&agrupar(items).map(g=>cardCli(g,rowFn))}
+                  </div> }
+                const rowAny=(r,i)=>r.estado==='registrada'?progRowR(r,i,true):row(r,i,true)
+                const registradas=[...reg,...adj,...dup,...cre,...sinpdf]
+                const tileGrid=[]
+                if(sinpdf.length>0) tileGrid.push(<HubTile key='drv' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 8v5M12 16h.01'/></>,C.soonText)} bg={C.surface} t='Falta guardar el PDF en Drive' s={`${sinpdf.length} factura${sinpdf.length!==1?'s':''} · toca para reconectar y reintentar`} sM={`${sinpdf.length} factura${sinpdf.length!==1?'s':''} · reintentar`} sCol={C.soonText} cardBg={C.soonBg} cardBd={C.avisoLine} onClick={()=>!respaldoRetry&&reintentarRespaldos(sinpdf)}/>)
+                tileGrid.push(<HubTile key='his' icNode={ico(<><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/></>,C.muted)} bg={C.bgSoft} t='Historial de cargas' s='bitácora de las cargas del SII' sM='bitácora' onClick={async()=>{ if(await volver()){ setXmlHub(true); setHistOpen(true) } }}/>)
+                return <FlujoPagina origen='Cargar del SII' titulo='Resultado' ctx={`${isDesktop?`Carga del ${fmtFechaDMY(isoLocal(respaldoAt||Date.now()))} · `:''}${nTot} documento${nTot!==1?'s':''}${totSkip>0?` · ${totSkip} repetido${totSkip!==1?'s':''} omitido${totSkip!==1?'s':''}`:''}`} onBack={volver} maxW={1120}>
+                  <div style={{display:'flex',flexDirection:'column',gap:isDesktop?12:10}}>
+                    <div style={{display:'grid',gridTemplateColumns:`repeat(${isDesktop?4:2},minmax(0,1fr))`,gap:isDesktop?10:8}}>
+                      {kt('Cargadas',nTot)}
+                      {kt('Registradas',nRegs,'g',registradas.length?()=>goSec(sinpdf.length&&!reg.length?'sinpdf':'reg'):undefined)}
+                      {kt('Por registrar',nPor,nPor>0?'a':undefined,nPor>0?()=>goSec(nuevas.length||prog.length?'new':'nc'):undefined)}
+                      {kt('Con problema',nErr,nErr>0?'r':undefined,nErr>0?()=>goSec('err'):undefined)}
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:isDesktop?12:8}}>{tileGrid.map((t,i)=><div key={i} style={{gridColumn:tileGrid.length===1?'1 / -1':undefined,minWidth:0}}>{t}</div>)}</div>
+                    {secCli('nuevas',`Por registrar · ${prog.length+nuevas.length}`,C.soonText,[...prog,...nuevas],(r,i)=>progRowR(r,i,true),true,prog.length>0?<button onClick={()=>setRegReview(prog)} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'6px 12px',cursor:'pointer',whiteSpace:'nowrap'}}>{prog.length===1?'Registrar la emitida':`Registrar las ${prog.length} emitidas`}</button>:null)}
+                    {nc.length>0&&<div id='imp-sec-nc'>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'0 13px'}}>{nc.map(ncRowR)}</div></div>}
+                    {secCli('reg',`Registradas · ${registradas.length}`,C.greenText,registradas,rowAny,false)}
+                    {err.length>0&&<div id='imp-sec-err'>{hdr(`Con problema · ${err.length}`,C.overdueText)}<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'0 13px'}}>{err.map(row)}</div></div>}
                   </div>
-                  <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-                  <div style={{maxWidth:600,margin:'0 auto',padding:'14px 16px 34px'}}>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:10,background:C.bgSoft,borderRadius:8,padding:'7px 10px'}}><b style={{color:C.text}}>Lo cargado queda guardado aunque salgas.</b> Se registra en las fichas cuando tú quieras.</div>
-                  <div style={{display:'flex',gap:8,marginBottom:10}}>
-                    <div onClick={()=>goSec('prog')} style={{flex:1,background:C.bgWarm,borderRadius:10,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{prog.length+reg.length}</div><div style={{...SEC_LBL}}>Programadas</div></div>
-                    <div onClick={()=>goSec('nc')} style={{flex:1,background:'#FAECE7',borderRadius:10,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.coralText,fontVariantNumeric:'tabular-nums'}}>{nc.length}</div><div style={{fontSize:9,fontWeight:600,color:C.coralText,textTransform:'uppercase',letterSpacing:.3}}>Nota de crédito</div></div>
-                    <div onClick={()=>goSec('new')} style={{flex:1,background:C.soonBg,borderRadius:10,padding:'8px 10px',cursor:'pointer'}}><div style={{fontSize:18,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nuevas.length}</div><div style={{fontSize:9,fontWeight:600,color:C.soonText,textTransform:'uppercase',letterSpacing:.3}}>Nuevas</div></div>
-                  </div>
-                  {respaldoFiles&&respaldoFiles.length>1&&(()=>{
-                    const catOf=catImport
-                    const PILL={prog:['programadas',C.bgWarm,C.muted],new:['nuevas',C.soonBg,C.soonText],dup:['ya cargadas',C.greenBg,C.greenText],reg:['registradas',C.greenBg,C.greenText],nc:['nota de crédito','#FAECE7',C.coralText],cre:['agregadas',C.greenBg,C.greenText],sinpdf:['falta respaldo',C.soonBg,C.soonText],err:['con problema',C.overdueBg,C.overdueText]}
-                    const order=['prog','new','dup','reg','nc','cre','sinpdf','err']
-                    const totDocs=respaldoFiles.reduce((a,f)=>a+(f.total||0),0), totSkip=respaldoFiles.reduce((a,f)=>a+(f.skipped||0),0)
-                    return <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
-                      <div style={{padding:'10px 13px 8px',borderBottom:`1px solid ${C.bgSoft}`}}>
-                        {respaldoAt&&<div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.5}}>Cargado {fmtFechaHora(respaldoAt)}</div>}
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginTop:respaldoAt?3:0}}>
-                          <span style={{fontSize:11,color:C.muted}}>{respaldoFiles.length} archivos · {totDocs} documentos</span>
-                          {totSkip>0&&<span style={{fontSize:10,color:C.muted,flexShrink:0}}>{totSkip} repetido{totSkip!==1?'s':''} omitido{totSkip!==1?'s':''}</span>}
-                        </div>
-                      </div>
-                      {respaldoFiles.map((f,fi)=>{ const items=(respaldoRes||[]).filter(r=>r.archivo===f.name); const counts={}; items.forEach(r=>{ const k=catOf(r.estado); counts[k]=(counts[k]||0)+1 }); return (
-                        <div key={f.name} style={{padding:'10px 12px',borderTop:fi?`1px solid ${C.bgSoft}`:'none'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.name}</span><span style={{marginLeft:'auto',fontSize:10,color:C.muted,fontWeight:600,flexShrink:0}}>{f.total} doc</span></div>
-                          <div style={{display:'flex',flexWrap:'wrap',gap:5,marginTop:6}}>{order.filter(k=>counts[k]).map(k=>{ const p=PILL[k]; return <span key={k} onClick={()=>goSec(k)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'2px 9px',background:p[1],color:p[2],cursor:'pointer'}}>{counts[k]} {p[0]}</span> })}{f.skipped>0&&<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{f.skipped} repetida{f.skipped!==1?'s':''}</span>}</div>
-                        </div>) })}
-                    </div> })()}
-                  {prog.length>0&&<button onClick={()=>setRegReview(prog)} style={{width:'100%',fontSize:13,fontWeight:600,color:C.accent,background:C.azulBg,border:`1px solid #B5D4F4`,borderRadius:8,padding:'9px 0',cursor:'pointer'}}>Registrar las {prog.length} emitidas</button>}
-                  {sec('prog',`Programadas · ${prog.length}`,C.muted,prog,progRowR,false)}
-                  {sec('nuevas',`Nuevas · ${nuevas.length}`,C.soonText,nuevas,progRowR,true)}
-                  {nc.length>0&&<div id='imp-sec-nc'>{hdr(`Notas de crédito · ${nc.length}`,C.coralText)}{nc.map(ncRowR)}</div>}
-                  {sec('reg',`Registradas · ${reg.length}`,C.greenText,reg,progRowR,false)}
-                  {sec('adj',`Adjuntadas al Drive · ${adj.length}`,C.greenText,adj,row,false)}
-                  {sec('dup',`Ya tenían respaldo · ${dup.length}`,C.muted,dup,row,false)}
-                  {sec('cre',`Agregadas · ${cre.length}`,C.greenText,cre,row,false)}
-                  {sinpdf.length>0&&<div id='imp-sec-sinpdf'>{hdr(`Registradas · falta respaldo en Drive · ${sinpdf.length}`,C.soonText)}
-                    <div style={{fontSize:11,color:C.muted,margin:'2px 2px 7px',lineHeight:1.45}}>Estas facturas <b style={{color:C.text}}>ya quedaron registradas</b> (en tus cifras y por cobrar). Solo no se pudo guardar su PDF-respaldo en Drive porque se cayó la conexión. Reintenta cuando quieras — no se duplica nada.</div>
-                    {sinpdf.map(row)}
-                    <button disabled={!!respaldoRetry} onClick={()=>reintentarRespaldos(sinpdf)} style={{width:'100%',marginTop:8,fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'9px 0',cursor:respaldoRetry?'default':'pointer',opacity:respaldoRetry?.6:1}}>{respaldoRetry?'Reintentando…':`Reintentar respaldo en Drive · ${sinpdf.length}`}</button>
-                  </div>}
-                  {err.length>0&&<div id='imp-sec-err'>{hdr(`Con problema · ${err.length}`,C.overdueText)}{err.map(row)}</div>}
-                  </div>
-                  </div>
-                  </div>, document.body) })()}
+                </FlujoPagina> })() : null
+  const billingPage = emailPage || recPage || depurarPage || cubrirPage || facturarPage || siiCotejoPage || regPage || cargasPage || cierrePage || porEnviarPage || respaldoDrivePage || resultadoPage || xmlHubPage
+  const _pgKey = [!!facturaEmail,!!(facturasEmail&&facturasEmail.length),!!recPreview,!!depurarRows,!!cubrirAnt,!!facturarAnt,!!siiOpen,!!regReview,cargasHist!==null].join('')
+  useEffect(()=>{ if(cierreOpen||bandejaEnvio||xmlHub||/true/.test(_pgKey)) restoreScroll({w:0,d:0}) },[cierreOpen,bandejaEnvio,xmlHub,_pgKey])
+  return (
+    <div>
+      {billingPage}
+      <div style={billingPage?{display:'none'}:undefined}>
+      <div style={{padding:'20px 20px 0',position:'sticky',top:0,background:C.bg,zIndex:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}}>
+          <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Facturación</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {filter==='checklist'&&<button onClick={volverOrigen('checklist',()=>{setFilter('resumen');clearSel&&clearSel()})} title={origenDe('checklist','Volver al resumen')} style={chipBtn('primary')}><Gl n='chevL'/> Volver</button>}
+            {filter==='resumen'&&<button onClick={()=>{setFilter('clientes');clearSel&&clearSel()}} title='Detalle por cliente' style={{height:24,display:'inline-flex',alignItems:'center',gap:5,padding:'0 11px',borderRadius:20,fontSize:12,fontWeight:600,cursor:'pointer',border:'0.5px solid '+C.accent,background:'#fff',color:C.accent}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/><circle cx='12' cy='12' r='3'/></svg>Por cliente</button>}
+            {(isProg||estadoActivo('programadas'))&&<button onClick={descargarProgramadas} disabled={descargando} style={{...chipBtn('soft'),opacity:descargando?.6:1}}>{descargando?'Generando...':'↓ Programadas'}</button>}
+            <div style={{position:'relative'}}>
+              <input ref={respaldoRef} type='file' accept='.xml,text/xml' multiple style={{position:'absolute',width:1,height:1,opacity:0,pointerEvents:'none'}} onChange={e=>{ const fs=[...(e.target.files||[])]; e.target.value=''; procesarRespaldoSII(fs) }}/>
+              {mesTandaReq&&<MesTandaModal def={mesTandaReq.def} onPick={v=>{ mesTandaReq.resolve(v); setMesTandaReq(null) }}/>}
               {ncConfirm&&(()=>{ const it=ncConfirm.item; return (
                 <div style={{position:'fixed',inset:0,zIndex:9999,background:C.bgSoft,overflowY:'auto'}}>
                   <div style={{maxWidth:560,margin:'0 auto',padding:'20px 16px 44px'}}>
