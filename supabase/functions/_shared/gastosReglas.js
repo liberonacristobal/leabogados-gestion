@@ -34,3 +34,22 @@ export function propuestaFondoRendicion({ mov, expenses, rendiciones }) {
   const rend = cands[0]
   return { rend, resto, porCubrir, queda: Math.max(0, porCubrir - resto) }
 }
+
+// Reparto de los gastos de un cliente entre sus fondos (FUENTE ÚNICA: Rendir un fondo, mover gastos de fondo, Salud de datos).
+// Cada gasto queda en UN lugar: el fondo asignado a mano (reembolso_fondo_id) o, si no, el fondo de su mismo proyecto, el de su misma
+// razón social o el más antiguo con saldo; sin saldo en ningún fondo → «Sin fondo» (lo que falta pedir). Una devolución (fondo negativo)
+// consume como un gasto. Mismas reglas que fgCliente, así que Σ(fondo − sus gastos) − sin fondo = saldo del cliente, siempre.
+export function repartoFondos(expenses, clientId){
+  const movs=(expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e))
+  const ord=(a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.created_at||'').localeCompare(String(b.created_at||''))
+  const fondos=movs.filter(e=>e.type==='fondo'&&(Number(e.amount)||0)>0).sort(ord).map(f=>({f, quedan:Number(f.amount)||0, gastos:[]}))
+  const consumos=movs.filter(e=>(e.type!=='fondo'&&!e.no_descuenta_saldo)||(e.type==='fondo'&&(Number(e.amount)||0)<0)).sort(ord)
+  const sinFondo=[], deGasto={}
+  consumos.forEach(g=>{ const m=Math.abs(Number(g.amount)||0)
+    let b=g.reembolso_fondo_id?fondos.find(x=>String(x.f.id)===String(g.reembolso_fondo_id)):null
+    if(!b){ const vivos=fondos.filter(x=>x.quedan>0), rsOk=x=>!x.f.entity_id||!g.entity_id||x.f.entity_id===g.entity_id
+      b=(g.project&&vivos.find(x=>x.f.project===g.project&&rsOk(x)))||(g.entity_id&&vivos.find(x=>x.f.entity_id===g.entity_id))||vivos.find(rsOk)||null }
+    if(b){ b.gastos.push(g); b.quedan-=m; deGasto[g.id]=b.f.id } else { sinFondo.push(g); deGasto[g.id]=null } })
+  const totSin=sinFondo.reduce((a,g)=>a+Math.abs(Number(g.amount)||0),0)
+  return {fondos, sinFondo, totSin, deGasto, saldo:fondos.reduce((a,x)=>a+x.quedan,0)-totSin}
+}

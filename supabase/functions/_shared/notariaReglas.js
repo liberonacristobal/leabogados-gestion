@@ -1,4 +1,5 @@
 // Reglas de la notaría compartidas por la app (Banco) y el servidor (conciliacion-auto). Una sola fuente.
+import { repartoFondos } from './gastosReglas.js'
 
 const _dias = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 
@@ -25,6 +26,10 @@ export const notariaPendientes = expenses => (expenses || []).filter(e => !e.del
 const _enSaldo = e => !e?.apertura_id
 // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (rendido o notaría liquidada) − reservado para OTROS gastos
 // pendientes del cliente (no la notaría que se está liquidando). esOficina(cid): la oficina siempre cubre sus gastos.
+// POR TRABAJO (como Rendiciones): una OT se paga con el fondo de su trabajo y, después, con el fondo sin trabajo del cliente; el fondo de
+// otro trabajo nunca la cubre. El disponible nunca supera al del cliente completo (el reparto solo restringe, no agrega). Fondo y gastos se
+// reparten con repartoFondos, la misma regla de Rendiciones. porTrabajo: lo que queda en cada trabajo con OT pendiente y en «sin trabajo»;
+// otSinTrabajo: OT sin trabajo que no tiene fondo sin trabajo (hay que asignarles el trabajo antes de pagar).
 export function disponibleNotaria(expenses, cid, { esOficina = /** @type {(cid: any) => boolean} */ (() => false) } = {}) {
   if (esOficina(cid)) return { fondo: 0, pagado: 0, reservado: 0, resItems: [], disp: Infinity, oficina: true }
   const delCli = (expenses || []).filter(e => !e.deleted_at && String(e.client_id) === String(cid) && _enSaldo(e))
@@ -35,8 +40,25 @@ export function disponibleNotaria(expenses, cid, { esOficina = /** @type {(cid: 
   const reservado = resItems.reduce((a, e) => a + (Number(e.amount) || 0), 0)
   // Parte del fondo que no es plata del cliente: el ajuste «Incobrable · asumido por la oficina» (castigo ya decidido).
   const asumido = delCli.filter(e => e.type === 'fondo' && e.category === 'Ajuste' && /incobrable/i.test(e.concept || '')).reduce((a, e) => a + (Number(e.amount) || 0), 0)
-  const disp = Math.max(0, fondo - pagado - reservado)
-  return { fondo, pagado, reservado, resItems, disp, asumido: Math.min(asumido, disp) }
+  const completo = Math.max(0, fondo - pagado - reservado)
+  const ots = delCli.filter(e => esNotaPend(e) && (Number(e.amount) || 0) > 1)
+  /** @type {{ trabajo: string, disp: number }[]} */
+  const porTrabajo = []
+  let disp = completo, sinTrabajo = 0
+  /** @type {any[]} */
+  let otSinTrabajo = []
+  if (ots.length) {
+    /** @type {Record<string, number>} */
+    const neto = {}
+    repartoFondos(delCli.filter(e => !esNotaPend(e)).map(e => ({ ...e, client_id: cid })), cid).fondos.forEach((/** @type {any} */ x) => { const k = String(x.f.project || '').trim(); neto[k] = (neto[k] || 0) + x.quedan })
+    sinTrabajo = Math.max(0, neto[''] || 0)
+    const trabajos = [...new Set(ots.map(e => String(e.project || '').trim()).filter(Boolean))]
+    trabajos.forEach(t => porTrabajo.push({ trabajo: t, disp: Math.max(0, neto[t] || 0) }))
+    disp = Math.min(completo, sinTrabajo + porTrabajo.reduce((a, x) => a + x.disp, 0))
+    if (sinTrabajo <= 0) otSinTrabajo = ots.filter(e => !String(e.project || '').trim())
+  }
+  const disponibleAsumido = Math.min(asumido, disp)
+  return { fondo, pagado, reservado, resItems, disp, completo, porTrabajo, sinTrabajo, otSinTrabajo, asumido: disponibleAsumido }
 }
 
 // Tipo de acto de una OT: primero la materia que informa la notaría; si no viene, el concepto del gasto. El orden importa

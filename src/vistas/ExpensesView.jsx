@@ -3486,7 +3486,7 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
           <button onClick={()=>{ setSelNota(new Set(pagables.map(e=>e.id))); setNotaConfirm(false); setDeudaEstF('sel'); setNotaCliOpen(new Set(pagables.map(e=>e.incobrable_at?'__asume__':e.client_id?String(e.client_id):e.personal_de?'p:'+e.personal_de:'__sinasignar__'))) }} title={`${pagables.length} OT: lo que cubre el fondo de cada cliente o persona, más lo de la oficina y lo que asume`} style={{width:'100%',minHeight:38,marginTop:10,borderRadius:9,border:`1px solid ${C.greenText}`,background:C.greenBg,color:C.greenText,fontSize:12.5,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'0 12px'}}>
             <span style={{whiteSpace:'nowrap'}}>Seleccionar con fondos</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(pagablesT)}</span>
           </button>)
-        const partes=[['con','Con saldo',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','A cargo de la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
+        const partes=[['con','Fondo disponible',conFondoT,C.greenText,`${nCon} con fondo para pagar`],['adel','Adelanta oficina',adelantoT,C.soonText,`${nAdel} cliente${nAdel!==1?'s':''} · pedir fondos`],...(sinFondoT>0?[['pers','Personal sin saldo',sinFondoT,C.muted,perSin.join(' · ')||'sin cliente asignado']]:[]),...(asumeT>0?[['asume','A cargo de la oficina',asumeT,C.grisText,`${notaGroups.asume.length} OT incobrable${notaGroups.asume.length!==1?'s':''}`]]:[])]
         const hero = (
           <div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'12px 14px'}}>
             <div style={{...lblK,color:C.accent}}>Pendiente a notaría</div>
@@ -3511,7 +3511,7 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
           <div style={{background:adelanto>0?C.overdueBg:C.tileBg,border:`1px solid ${adelanto>0?C.overdueText:C.accent}`,borderRadius:12,padding:'11px 13px'}}>
             <div style={{...lblK,color:adelanto>0?C.overdueText:C.accent}}>Seleccionadas</div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,marginTop:2}}><span style={{fontSize:13,fontWeight:700,color:adelanto>0?C.overdueText:C.accent}}>{selNota.size} OT</span><span style={{fontSize:16,fontWeight:800,color:adelanto>0?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(notaTotal)}</span></div>
-            {ln('Con saldo',fmt(conFondo),C.greenText)}
+            {ln('Fondo disponible',fmt(conFondo),C.greenText)}
             {ln('Adelanto',fmt(adelanto),adelanto>0?C.overdueText:null)}
             {asumeSel>0&&ln('A cargo de la oficina',fmt(asumeSel))}
             {abgs.length>0&&<div style={{borderTop:'0.5px solid rgba(83,114,129,.25)',marginTop:6,paddingTop:6}}>
@@ -3566,13 +3566,13 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
               {derecha}
             </div>
         const clientCard=(cid,gsAll)=>{
-          const {fondo:fondosC, reservado:reservadoC, disp, asumido, oficina:esOf}=dispCliente(cid)
+          const {fondo:fondosC, reservado:reservadoC, disp, asumido, oficina:esOf, porTrabajo:fondoTrab=[], sinTrabajo:fondoSinTrab=0, otSinTrabajo:otSinTrab=[], completo:fondoCompleto=0}=dispCliente(cid)
           const aPagar=gsAll.reduce((a,e)=>a+(e.amount||0),0)
           const exc=excepNota.has(cid)
           const cn=cliName(cid)
           const gs = qq ? gsAll.filter(e=>matchE(e,cn)) : gsAll
           const cubre=disp>=aPagar, sinF=disp<=0
-          const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:sinF?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}
+          const est = exc?{l:'Con adelanto',bg:C.overdueBg,c:C.overdueText}:(otSinTrab.length>0&&fondoCompleto>0)?{l:'Asignar trabajo',bg:C.bgSoft,c:C.muted}:sinF?{l:'Sin fondo',bg:C.overdueBg,c:C.overdueText}:cubre?{l:'Fondo disponible',bg:C.greenBg,c:C.greenText}:{l:'Fondo parcial',bg:C.ambarBg,c:C.soonText}
           const deficit=Math.max(0,aPagar-disp)   // sin línea de déficit (redundante con el monto y el chip); rojo solo en el chip
           const open = !!qq || notaCliOpen.has(cid)
           return (
@@ -3583,6 +3583,10 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
               esOf?colD('Oficina','gasto propio',C.muted):colSaldo(disp,deficit>0?null:disp-aPagar),
               montoEst(aPagar,esOf?null:est))}
             {open&&<div>
+              {(fondoTrab.length>0||fondoSinTrab>0||otSinTrab.length>0)&&<div style={{padding:'6px 13px',borderTop:`1px solid ${C.border}`,fontSize:12,color:C.muted,lineHeight:1.5}}>
+                Fondo disponible por trabajo · {fondoTrab.map(x=><span key={x.trabajo} style={{marginRight:10}}>{x.trabajo} <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.disp)}</b></span>)}{fondoSinTrab>0&&<span style={{marginRight:10}}>Sin trabajo <b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(fondoSinTrab)}</b></span>}
+                {otSinTrab.length>0&&<span style={{color:C.soonText,fontWeight:600}}>{otSinTrab.length} OT sin trabajo: asígnalo para usar el fondo del trabajo.</span>}
+              </div>}
               {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 13px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,color:exc?C.overdueText:C.muted,fontWeight:exc?600:400}}>Oficina cubre la diferencia{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
               {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gsAll.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede, notaQ) })}
             </div>}
@@ -3605,7 +3609,7 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
         const listaClientes=(()=>{
           if(deudaGroup==='cliente') return entries.map(e=>clientCard(e.cid,e.gs))
           const groups={}; entries.forEach(e=>{ const gk=deudaGroup==='responsable'?e.resp:e.estKey; (groups[gk]=groups[gk]||[]).push(e) })
-          const ESTLBL={cubre:'Con saldo',parcial:'Parcial',sinfondos:'Sin saldo · adelanta la oficina',adelanto:'Con adelanto activado'}
+          const ESTLBL={cubre:'Fondo disponible',parcial:'Fondo parcial',sinfondos:'Sin fondo · adelanta la oficina',adelanto:'Con adelanto activado'}
           const order=deudaGroup==='responsable'
             ? Object.keys(groups).sort((a,b)=>groups[b].reduce((s,e)=>s+e.aPagar,0)-groups[a].reduce((s,e)=>s+e.aPagar,0))
             : ['sinfondos','adelanto','parcial','cubre'].filter(k=>groups[k])
@@ -3627,7 +3631,7 @@ export function ExpensesView({onEntregarCaja,onIrCajaChica,onRevisionCajaChica,o
         })()
         const personales=!notaResp?Object.entries(notaGroups.personal).map(([persona,gsAll])=>{ const gs=qq?gsAll.filter(e=>matchE(e,persona)):gsAll; if(qq&&!gs.length) return null; if(deudaEstF==='sel'){ if(!gsAll.some(x=>selNota.has(x.id))) return null } else if(deudaEstF){ const cbF=coberturaPersona(persona,gsAll), dd=cbF.con, tt=cbF.ap; if(deudaEstF==='adel'||deudaEstF==='asume'||(deudaEstF==='con'&&!(dd>0))||(deudaEstF==='pers'&&!(tt>dd))) return null } const pc=personChip(persona); const k='p:'+persona; const open=!!qq||notaCliOpen.has(k); const tot=gsAll.reduce((a,e)=>a+(e.amount||0),0); const cbP=coberturaPersona(persona,gsAll), dP=cbP.disp; const sinFP=cbP.con<=0, cubreP=cbP.con>=tot; return (
           <div key={persona} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
-            {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin saldo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Con saldo',bg:C.greenBg,c:C.greenText}:{l:'Parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
+            {(()=>{ const defP=Math.max(0,tot-dP); const estP=sinFP?{l:'Sin fondo',bg:C.overdueBg,c:C.overdueText}:cubreP?{l:'Fondo disponible',bg:C.greenBg,c:C.greenText}:{l:'Fondo parcial',bg:C.ambarBg,c:C.soonText}; return filaCab(open,()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n}),
               nombreOT(<>Personal · <span style={{color:pc.color,fontWeight:800}}>{persona}</span></>,gsAll.length),
               <>Disponible <b style={{color:dP>0?C.text:C.overdueText,fontWeight:600}}>{fmt(dP)}</b></>,
               colSaldo(dP,defP>0?null:dP-tot),
