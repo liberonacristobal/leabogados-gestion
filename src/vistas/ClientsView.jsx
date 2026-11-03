@@ -1,12 +1,43 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
+import { TIPOS_PENDIENTE, tiposDe } from '../../supabase/functions/_shared/pendientesCliente.js'
 
-export function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
+// Texto de cada tipo de pendiente en la lista de escritorio («2 cuotas por emitir»).
+const TXT_PEND = {banco:['pago por imputar','pagos por imputar'], fondos:['fondos por solicitar','fondos por solicitar'], sinfactura:['pagada sin factura','pagadas sin factura'], cuotas:['cuota por emitir','cuotas por emitir'], vencidas:['factura vencida','facturas vencidas'], datos:['dato por corregir','datos por corregir']}
+const txtTipos = (items,largo) => { const t=tiposDe(items); return largo ? t.map(x=>x.tipo==='fondos'?'fondos por solicitar':`${x.n} ${TXT_PEND[x.tipo][x.n===1?0:1]}`).join(' · ') : (t.length>3?[...t.slice(0,2).map(x=>x.label),`+${t.length-2}`]:t.map(x=>x.label)).join(' · ') }
+
+// Pendientes financieros del cliente (Resumen de la ficha): solo el número actual y lo que falta; lo resuelto sale solo cuando la regla deja de detectarlo.
+function PendientesCliente({pend,billing,sales,onGo}){
+  const items=pend?.items||[]
+  const venta = id => (sales||[]).find(s=>String(s.id)===String(id))
+  const det = it => { const b=it.billing_id?(billing||[]).find(x=>String(x.id)===String(it.billing_id)):null
+    if(it.tipo==='cuotas') return `Vencida el ${fmtFechaDMY(it.fecha)}`
+    if(it.tipo==='vencidas') return `Factura N° ${folioN(b?.invoice_no)} · emitida el ${fmtFechaDMY(String(it.fecha||'').slice(0,10))}`
+    if(it.tipo==='banco') return `Depósito del ${fmtFechaDMY(it.fecha)}`
+    if(it.tipo==='fondos') return 'Gastos por rendir'
+    return venta(it.sale_id)?.title||(b?.concept||'') }
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 14px'}}>
+        <div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent}}>Pendientes financieros</div>
+        <div style={{fontSize:20,fontWeight:800,color:items.length?C.soonText:C.greenText,marginTop:2}}>{items.length?`${items.length} pendiente${items.length!==1?'s':''}`:'Sin pendientes'}</div>
+      </div>
+      {items.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
+        {items.map((it,i)=>(<div key={it.key} onClick={()=>onGo(it)} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{it.titulo}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(it)}</div></div>
+          {it.monto>0&&<span style={{fontSize:13,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>}
+          <ActBtn variant={it.tipo==='cuotas'?'primary':undefined} onClick={e=>{e.stopPropagation();onGo(it)}}>{it.tipo==='cuotas'?'Emitir':'Ver'} →</ActBtn>
+        </div>))}
+      </div>}
+    </div>)
+}
+
+export function ClientFicha({pend=null,onPendGo=null,setExpenses=null,onAsociarTrabajo,onToggleStatus,onOpenFusion,client,clients,sales,billing,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onEdit,onClose,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onReplaceProgramada,onOpenSale,onEditTask,onEditExpense,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onRendicion,rendiciones,onAnularRendicion,onEditRendicion,user,onRendicionSent,onSaveFields,initialFtab,onAjuste,backLabel}) {
   const [emailRend,setEmailRend] = useState(null)
   const [menuMas,setMenuMas] = useState(false)
   // Volver a la misma pestaña de la ficha tras una página (gasto, factura, ajuste…).
@@ -89,6 +120,7 @@ export function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,on
 
       <div style={{padding:'16px 20px 0',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined,display:ftab==='resumen'?'block':'none'}}>
 
+        {pend&&pend.items?.length>0&&<PendientesCliente pend={pend} billing={billing} sales={sales} onGo={it=>it.tipo==='fondos'?setFtab('financiero'):(onPendGo&&onPendGo(it))}/>}
         <FotoCliente client={client} sales={sales} billing={billing} expenses={expenses} tasks={tasks} setFtab={setFtab} onRendicion={onRendicion} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onEditTask={onEditTask} onAddTask={onAddTask}/>
 
       </div>
@@ -99,7 +131,7 @@ export function ClientFicha({setExpenses=null,onAsociarTrabajo,onToggleStatus,on
   )
 }
 
-export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
+export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,onContactos,onCausas=null,onAsociarTrabajo,clients,sales,billing,setBilling,expenses,tasks,clientEntities,anticipos,respaldoMap,cartolaHasta=null,onNuevoAnticipo,onToggleStatus,onEdit,onAdd,onAddTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onEditTask,onEditExpense,onAjuste,onConciliar,onOpenConciliacion,onAssignSeries,onStatusChange,onReplaceProgramada,onImportDrive,onProveedores,proveedores=[],terceros=[],onSaveProveedor,onRevertirPagoProveedor,onAsignarFacturas,onOpenSale,provSaving,setExpenses,setRendiciones,rendiciones,user,onSaveFields,onRendicionComplete,openFichaId,onOpenedFicha,navOrigin,navOriginLabel,onBackOrigin,onOpenFusion}) {
   // Clientes creados por el último sync de Drive → tag "Nuevo · Drive" unos días.
   const [nuevosDrive,setNuevosDrive] = useState(()=>new Set())
   useEffect(()=>{ if(DEMO){ setNuevosDrive(new Set(['tech araucanía spa'])); return } let alive=true
@@ -132,6 +164,9 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
   const toggleResp = r => setRespSel(p=>{const n=new Set(p);n.has(r)?n.delete(r):n.add(r);return n})
   const [q,setQ] = useState(_vmC?.q||'')
   const [ord,setOrd] = useState(_vmC?.ord||{k:'nombre',dir:1})   // escritorio: columna por la que se ordena la tabla
+  const [pendOn,setPendOn] = useState(!!_vmC?.pend)   // «Pendientes financieros»: solo los clientes con algo por resolver (regla única pendientesPorCliente)
+  const [tipoSel,setTipoSel] = useState(()=>new Set(_vmC?.tipos||[]))
+  useEffect(()=>{ if(!pendIntent) return; setPendOn(true); setTipoSel(new Set()); setRespSel(new Set((pendIntent.resp||[]).filter(r=>responsables.includes(r)))); setSFilter('Activo'); setQ(''); setSelected(null); onPendIntentUsed&&onPendIntentUsed() },[pendIntent])
   const [selected,setSelected] = useState(()=>_vmC?.selId?(clients.find(c=>String(c.id)===String(_vmC.selId))||null):null)
   const [forceFtab,setForceFtab] = useState(null)
   const [rendicionClient,setRendicionClient] = useState(null)
@@ -141,7 +176,7 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
   const [extOpen,setExtOpen] = useState(!!_vmC?.extOpen)   // ficha abierta por cross-link desde otra vista → el ← vuelve al origen
   useEffect(()=>{ if(openFichaId){ const c=clients.find(x=>String(x.id)===String(openFichaId)); if(c){ setForceFtab('financiero'); setSelected(c); setExtOpen(true) } onOpenedFicha&&onOpenedFicha() } },[openFichaId])
 
-  useEffect(()=>{ viewMemGuardar('clientes',{sFilter,resp:[...respSel],q,ord,selId:selected?.id||null,extOpen}) },[sFilter,respSel,q,ord,selected?.id,extOpen])
+  useEffect(()=>{ viewMemGuardar('clientes',{sFilter,resp:[...respSel],q,ord,selId:selected?.id||null,extOpen,pend:pendOn,tipos:[...tipoSel]}) },[sFilter,respSel,q,ord,selected?.id,extOpen,pendOn,tipoSel])
   // Actualizar selected cuando cambian los datos
   useEffect(()=>{ if(selected) setSelected(clients.find(c=>c.id===selected.id)||null) },[clients])
 
@@ -164,8 +199,17 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
     let base = baseCl.filter(c=>enEstado(c,sFilter))
     if(q.trim()) base=base.filter(c=>calzaBusqueda(c,q))
     if(respSel.size>0) base=base.filter(c=>respSel.has(responsableDe[c.id]))
+    if(pendOn&&pendCli){ const nDe=c=>(pendCli.get(String(c.id))?.items||[]).filter(i=>tipoSel.size===0||tipoSel.has(i.tipo)).length
+      return base.filter(c=>nDe(c)>0).sort((a,b)=>nDe(b)-nDe(a)||(a.name||'').localeCompare(b.name||'','es')) }
     return [...base].sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'))
-  },[baseCl,sFilter,q,respSel,responsableDe,calzaBusqueda])
+  },[baseCl,sFilter,q,respSel,responsableDe,calzaBusqueda,pendOn,pendCli,tipoSel])
+  // Ámbito de los conteos del filtro: estado y responsable elegidos (sin búsqueda ni tipo). Los números cuentan clientes, no pendientes.
+  const ambitoPend = useMemo(()=>baseCl.filter(c=>enEstado(c,sFilter)&&(respSel.size===0||respSel.has(responsableDe[c.id]))&&pendCli?.has(String(c.id))),[baseCl,sFilter,respSel,responsableDe,pendCli])
+  const nTipoCli = k => ambitoPend.filter(c=>pendCli.get(String(c.id)).items.some(i=>i.tipo===k)).length
+  const itemsDe = c => (pendCli?.get(String(c.id))?.items||[]).filter(i=>tipoSel.size===0||tipoSel.has(i.tipo))
+  const irPend = it => { if(it.billing_id){ const b=(billing||[]).find(x=>String(x.id)===String(it.billing_id)); if(b&&onEditBilling) return onEditBilling(b) }
+    if(it.mov_id&&onOpenConciliacion) return onOpenConciliacion(it.mov_id)
+    if(it.sale_id){ const v=(sales||[]).find(x=>String(x.id)===String(it.sale_id)); if(v&&onOpenSale) return onOpenSale(v) } }
   // Por cobrar de cada cliente: misma fuente que la ficha (porCobrarBills).
   const porCobrarDe = useMemo(()=>{ const g={}; (billing||[]).forEach(b=>{ if(b&&b.client_id!=null) (g[b.client_id]=g[b.client_id]||[]).push(b) }); const m={}; Object.keys(g).forEach(k=>{ m[k]=porCobrarBills(g[k]) }); return m },[billing])
   const balances = useMemo(()=>{
@@ -183,6 +227,8 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
         respaldoMap={respaldoMap}
         cartolaHasta={cartolaHasta}
         initialFtab={forceFtab}
+        pend={pendCli?.get(String(selected.id))||null}
+        onPendGo={irPend}
         onAjuste={onAjuste}
         onSaveFields={onSaveFields}
         clients={clients}
@@ -249,6 +295,29 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
   const filtroBtns = mob => [['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>{ const on=sFilter===v; return (
     <button key={v} onClick={()=>setSFilter(v)} style={{...(mob?{flex:1,padding:'7px 0'}:{padding:'7px 13px'}),borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l} <span style={{opacity:.7,fontVariantNumeric:'tabular-nums'}}>{nEstado(v)}</span></button>) })
   const respChips = responsables.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>{responsables.map(r=>{ const on=respSel.has(r); return <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted,fontSize:10.5,fontWeight:on?600:500,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button> })}</div>
+  const pendChip = pendCli&&(<button onClick={()=>{ setPendOn(v=>!v); setTipoSel(new Set()) }} style={{height:26,padding:'0 11px',borderRadius:20,border:`1px solid ${pendOn?C.soon:C.border}`,background:pendOn?C.soonBg:C.surface,color:pendOn?C.soonText:C.muted,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Pendientes financieros <span style={{opacity:.75,fontVariantNumeric:'tabular-nums'}}>{ambitoPend.length}</span></button>)
+  const tipoBtns = pendOn&&pendCli&&(<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>{[['','Todos',ambitoPend.length],...TIPOS_PENDIENTE.map(([k,l])=>[k,l,nTipoCli(k)])].map(([k,l,n])=>{ const on=k===''?tipoSel.size===0:tipoSel.has(k); return (
+    <button key={k||'todos'} onClick={()=>k===''?setTipoSel(new Set()):setTipoSel(p=>{ const x=new Set(p); x.has(k)?x.delete(k):x.add(k); return x })} style={{padding:'6px 11px',borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l} <span style={{opacity:.7,fontVariantNumeric:'tabular-nums'}}>{n}</span></button>) })}</div>)
+  const pendVacio = <div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>{q.trim()?'Sin clientes que calcen con la búsqueda':'Sin clientes con pendientes financieros'}</div>
+  const pendListaD = cl.length===0 ? pendVacio : (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,padding:'8px 16px',...TH_BAND}}><span>Cliente</span><span>Tipo de pendiente</span><span style={{textAlign:'right'}}>Pendientes</span><span/></div>
+    {cl.map(c=>{ const its=itemsDe(c), suma=its.reduce((a,i)=>a+(i.monto||0),0); return (
+      <div key={c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+        <div style={{minWidth:0}}><div style={{...NOMBRE_CLI}}>{c.name}</div>{subDe(c)&&<div style={{fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subDe(c)}</div>}</div>
+        <span style={{fontSize:11.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{txtTipos(its,true)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</span>
+        <span style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{its.length}</span>
+        <SIcon n='chevron' s={12} c={C.done}/>
+      </div>) })}
+    <div style={{padding:'9px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,fontWeight:700}}>{cl.length} cliente{cl.length!==1?'s':''}</div>
+  </div>)
+  const pendListaM = cl.length===0 ? pendVacio : (<div>{cl.map(c=>{ const its=itemsDe(c), suma=its.reduce((a,i)=>a+(i.monto||0),0); return (
+    <div key={c.id} onClick={()=>abrir(c)} style={{background:C.card,borderRadius:12,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{...NOMBRE_CLI}}>{c.name}</div>
+        <div style={{fontSize:11.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{txtTipos(its,false)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</div>
+      </div>
+      <span style={{fontSize:13,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{its.length}</span>
+    </div>) })}<div style={{fontSize:11,color:C.muted,margin:'8px 2px 0'}}>{cl.length} cliente{cl.length!==1?'s':''}</div></div>)
   const dupAlert = dupGrupos.length>0&&onOpenFusion&&(()=>{ const nf=dupGrupos.reduce((x,g)=>x+g.clientes.length,0); return (
     <div onClick={()=>onOpenFusion()} title='Revisar y fusionar' style={{display:'flex',alignItems:'center',gap:10,background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:12,padding:'10px 12px',marginBottom:12,cursor:'pointer'}}>
       <SIcon n='alert' s={18} c={C.soonText}/>
@@ -276,10 +345,11 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
         <Buscador value={q} onChange={setQ} placeholder='Buscar por nombre, razón social o RUT' style={{marginBottom:9}}/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{filtroBtns(false)}</div>
-          {respChips}
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>{respChips}{pendChip}</div>
         </div>
+        {tipoBtns&&<div style={{marginBottom:12,marginTop:-4}}>{tipoBtns}</div>}
         {dupAlert}
-        {filas.length===0
+        {pendOn&&pendCli ? pendListaD : filas.length===0
           ? <div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>{q.trim()?'Sin clientes que calcen con la búsqueda':'Sin clientes'}</div>
           : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
               <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,padding:'8px 16px',...TH_BAND}}>{hcol('nombre','Cliente')}{hcol('resp','Responsable')}{hcol('tareas','Tareas',1)}{hcol('cobrar','Por cobrar',1)}{hcol('fondos','Fondos',1)}<span/></div>
@@ -331,12 +401,14 @@ export function ClientsView({onContactos,onCausas=null,onAsociarTrabajo,clients,
           {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
-        {respChips&&<div style={{marginBottom:4}}>{respChips}</div>}
+        {(respChips||pendChip)&&<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:4}}>{respChips}{pendChip}</div>}
+        {tipoBtns&&<div style={{marginBottom:4}}>{tipoBtns}</div>}
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {dupAlert}
-        {cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{q.trim()?'Sin clientes que calcen con la búsqueda':'Sin clientes'}</div>}
-        {cl.length>0&&(()=>{
+        {pendOn&&pendCli&&pendListaM}
+        {!(pendOn&&pendCli)&&cl.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>{q.trim()?'Sin clientes que calcen con la búsqueda':'Sin clientes'}</div>}
+        {!(pendOn&&pendCli)&&cl.length>0&&(()=>{
           // Directorio A-Z: agrupado por inicial, avatar empresa/persona del color del responsable, índice lateral.
           const norm=s=>(s||'').trim().toUpperCase()
           const letterOf=c=>{ const ch=norm(c.name)[0]||'#'; return /[A-ZÑ]/.test(ch)?ch:'#' }

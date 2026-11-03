@@ -152,7 +152,7 @@ export function computeAgingCartera(billingRows, clientesMap){
   return { total, buckets, delta, dso, mayorExposicion:{nombre:mayor.nombre,monto:mayor.monto}, concentracionTop1Pct: total>0?(mayor.monto/total*100):0, top5 }
 }
 
-export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenCalTrib,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
+export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sales,billing,fantasmaIds=new Set(),anticipos=[],clients,clientEntities=[],expenses,tasks,pettyCash,terceros=[],proveedores=[],rendiciones=[],proyectosCartera=[],setTab,navTo,user,onAddTask,onEditTask,onCompleteTask,onPreviewTask,onEntregarCaja,tareasOpen=false,onTareasClose,onOpenOficina,costosOfiMes=0,costosOfiRows=[],onOpenCostosOfi,onOpenEstadoResultados,onOpenFlujoCaja,onOpenClientFicha,onOpenPlazos,onOpenCalTrib,onOpenProyecto,onAcceso,onOpenEmitidoMes,prioOpen=false,setPrioOpen}) {
   const go = t => navTo ? navTo({tab:t}) : setTab(t)   // salto que apila origen+scroll (navTo) para que "Volver" regrese al Inicio en su posición exacta
   const [misProyOpen,setMisProyOpen] = usePersistedState('dash_misproy_open',false)
   const [verTodosProy,setVerTodosProy] = useState(false)   // "Ver todos" en Mis proyectos: carga mis terminados y muestra los 3 grupos
@@ -743,6 +743,7 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
       {onAcceso&&(()=>{
         const ic = (d,col) => <svg width='19' height='19' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const accesos = [
+          ['revisarCuentas','Revisar cuentas', ic(<><circle cx='12' cy='12' r='9'/><path d='M14.5 9.5c-.4-1-1.4-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1.1 0-2.1-.5-2.5-1.5M12 6.5V8M12 16v1.5'/></>,C.soonText), C.soonBg],
           ['conciliacion','Banco', ic(<><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></>,C.greenText), C.greenBg],
           ['cobranza','Cobranza', ic(<><rect x='2' y='6' width='20' height='12' rx='2'/><circle cx='12' cy='12' r='2.5'/><path d='M6 12h.01M18 12h.01'/></>,C.overdueText), C.overdueBg],
           ['facturasMes','Facturas', ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='M12 11v6M9.5 12.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4'/></>,C.accent), C.azulBg],
@@ -757,9 +758,10 @@ export function Dashboard({onRendirClientes=null,proyHitos=[],sales,billing,fant
         return (
           <div style={{padding:'0 20px 0'}}>
             <div className='dash-acc' style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:14}}>
-              {[...accesos].sort((a,b)=>((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
+              {[...accesos].sort((a,b)=>a[0]==='revisarCuentas'?-1:b[0]==='revisarCuentas'?1:((accUso.c[b[0]]||0)-(accUso.c[a[0]]||0))).map(([id,label,icon,bg])=>(
                 <button key={id} onClick={()=>{bumpAcceso(id);onAcceso(id)}} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'11px 4px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
-                  {accUso.last===id&&<span title='Lo último que abriste' style={{position:'absolute',top:7,right:9,width:7,height:7,borderRadius:'50%',background:C.normal}}/>}
+                  {id==='revisarCuentas'&&nPendCuentas>0&&<span title='Clientes con pendientes financieros' style={{position:'absolute',top:6,right:9,fontSize:10,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{nPendCuentas}</span>}
+                  {accUso.last===id&&!(id==='revisarCuentas'&&nPendCuentas>0)&&<span title='Lo último que abriste' style={{position:'absolute',top:7,right:9,width:7,height:7,borderRadius:'50%',background:C.normal}}/>}
                   <span style={{width:34,height:34,borderRadius:'50%',background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{icon}</span>
                   <span style={{fontSize:10,color:C.text}}>{label}</span>
                 </button>
