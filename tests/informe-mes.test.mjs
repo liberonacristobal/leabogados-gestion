@@ -49,5 +49,7 @@ test('lectura del informe de la IA: exige 6 puntos en el orden fijo y acepta cer
   assert.equal(ok.puntos.length, 6); assert.match(textoDeInforme(ok), /Buen mes/)
   assert.equal(leerInformeIA(JSON.stringify({ frase: 'x', puntos: puntos.slice(0, 5) })), null)
   assert.equal(leerInformeIA(JSON.stringify({ frase: 'x', puntos: [...puntos].reverse() })), null)
+  const conMayuscula = leerInformeIA(JSON.stringify({ frase: 'x', puntos: TEMAS.map(t => ({ tema: t[0].toUpperCase() + t.slice(1), titular: 'T', porque: 'P' })) }))
+  assert.equal(conMayuscula.puntos[0].tema, 'resultado'); assert.equal(conMayuscula.puntos[0].cifra, '')   // tolera mayúsculas y campos ausentes
   assert.equal(leerInformeIA('no es json'), null)
 })
