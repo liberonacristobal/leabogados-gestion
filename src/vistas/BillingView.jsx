@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
+import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
@@ -739,6 +740,13 @@ export const ufDeGlosa = g => { const m=String(g||'').match(/(\d[\d.,]*)\s*UF\b/
 // Puntúa cuánto calza el MES de servicio de la glosa (gmes) con una candidata. Prioriza la convención "mes vencido" de la firma
 // (servicio = vencimiento − 1), luego el N° de cuota, y deja el mes directo como señal débil. Evita que cuotas de meses contiguos empaten.
 
+// El pago a un tercero (reparto en % o UF) se calcula sobre la FACTURA emitida: al convertir una cuota en factura se recalcula con el monto del DTE.
+async function ajustarTercerosPorFactura(billingId, saleId, sales, monto, fecha){
+  try{ const {data:ts}=await supabase.from('terceros_pagos').select('id,estado,tipo_costo,valor,monto,liquido,retencion,bhe_id,comision_pct').eq('billing_id',billingId)
+    const venta=(sales||[]).find(x=>String(x.id)===String(saleId))
+    for(const c of tercerosPorFactura({terceros:ts||[],venta,montoFactura:monto,fecha})) await supabase.from('terceros_pagos').update(c.patch).eq('id',c.id)
+  }catch(e){ registrarError({origen:'accion',vista:'terceros_por_factura',err:e}) } }
+
 export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],sales=[],anticipos=[],user=null,onReclasificarTercero,initialMes,onOpenClientFicha,asPage=false}) {
   const isDesktop = useIsDesktop()
   const hoy = new Date()
@@ -899,13 +907,27 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   // Convierte una cuota en la factura del SII con la regla única de registro (la cuota pagada por adelantado queda Pagada con la fecha de su pago,
   // el vencimiento corre desde la emisión y el monto es el del DTE) y deja en la bitácora la cuota tal como estaba, para poder deshacerlo.
   const asignarCuota = async(it, cand, evidencia=null)=>{
-    const prog=(billing||[]).find(b=>String(b.id)===String(cand.id)); if(!prog) throw new Error('La cuota ya no existe')
     const fecha=isoFecha(it.fechaEmision)||it.fechaEmision, ahora=new Date().toISOString()
+    // Pago de subarriendo recibido SIN factura (anticipo disponible): la factura se crea Pagada con la fecha del pago, igual que las anteriores, y consume el anticipo.
+    const antId=cand.anticipoId||(String(cand.id).startsWith('ant:')?String(cand.id).slice(4):null)
+    if(antId){
+      const ant=(anticipos||[]).find(a=>String(a.id)===String(antId)); if(!ant||ant.estado!=='disponible') throw new Error('El pago ya no está disponible')
+      const entRut=n=>String(n||'').replace(/[^0-9kK]/g,'').toUpperCase(), ent=(clientEntities||[]).find(e=>String(e.client_id)===String(ant.client_id)&&entRut(e.rut)===entRut(it.rut))
+      const monto=Math.round(Number(it.monto)||0)
+      const fac=await upsertBilling({ client_id:ant.client_id, sale_id:ant.sale_id, entity_id:ant.entity_id||ent?.id||null, concept:cand.concepto, receptor_name:it.receptor||null, receptor_rut:it.rut||null, amount:monto, billing_type:'subarriendo', status:'Pagado', paid:true, paid_at:ant.fecha, paid_amount:monto, invoice_no:String(it.folio), issued_at:fecha, due:dueFromIssued(fecha), sii_tipo_dte:it.tipoDte||34, sii_synced_at:ahora })
+      const {error:ea}=await supabase.from('anticipos').update({estado:'consumido',billing_id:fac.id}).eq('id',ant.id); if(ea) throw ea
+      try{ await supabase.from('sii_cargas_docs').update({estado:'registrada',billing_id:fac.id,updated_at:ahora}).eq('folio',String(it.folio)).eq('estado','sin_registrar') }catch(_){}
+      try{ await supabase.from('activity_log').insert({ user_email:user?.email||user?.name||null, action:'facturacion.asignada_confirmada', table_name:'billing', record_id:fac.id, estudio_id:'lea', detail:{ title:`Factura N° ${it.folio} asignada al pago sin factura del ${ant.fecha}: «${cand.concepto}»`, folio:String(it.folio), monto, concepto:cand.concepto, anticipo:ant.id, fecha } }) }catch(_){}
+      if(onRefresh) await onRefresh()
+      return
+    }
+    const prog=(billing||[]).find(b=>String(b.id)===String(cand.id)); if(!prog) throw new Error('La cuota ya no existe')
     const antF=prog.status==='Anticipada'?((anticipos||[]).find(a=>String(a.id)===String(prog.prepaid_anticipo_id))?.fecha||null):null
     const patch=parcheRegistroCuota({ prog, folio:it.folio, fecha, due:dueFromIssued(fecha), tipoDte:it.tipoDte, montoDte:Math.round(Number(it.monto)||0), fechaAnticipo:antF, ahora })
     const {error}=await supabase.from('billing').update(patch).eq('id',prog.id)
     if(error) throw error
     try{ await supabase.from('sii_cargas_docs').update({estado:'registrada',billing_id:prog.id,updated_at:ahora}).eq('folio',String(it.folio)).eq('estado','sin_registrar') }catch(_){}
+    await ajustarTercerosPorFactura(prog.id,prog.sale_id,sales,Math.round(Number(it.monto)||0),prog.due||fecha)
     const cli=(clients||[]).find(c=>String(c.id)===String(prog.client_id))
     try{ await supabase.from('activity_log').insert({ user_email:user?.email||user?.name||null, action:'facturacion.asignada_confirmada', table_name:'billing', record_id:prog.id, estudio_id:'lea', detail:{ title:`Factura N° ${it.folio} asignada a «${prog.concept}»`, folio:String(it.folio), monto:Math.round(Number(it.monto)||0), concepto:prog.concept, cliente:cli?.name||null, texto:explicarAsignacion(evidencia,prog.concept), prev:instantaneaCuota(prog), fecha } }) }catch(_){}
     if(onRefresh) await onRefresh()
@@ -1144,7 +1166,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                           <div key={j} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'0.5px solid #E4E8EB'}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.cliente}</div>
-                              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado==='Anticipada'&&cand.pago?`pagada el ${fmtFechaDMY(cand.pago)}`:cand.estado}{cand.folio?` · N° ${cand.folio}`:''}{cand._dups>1?` · ${cand._dups} programadas iguales`:''}</div>
+                              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cand.concepto||'—'} · {cand.estado==='Anticipada'&&cand.pago?`pagada el ${fmtFechaDMY(cand.pago)}`:cand.estado==='Pagada sin factura'&&cand.pago?`pago del ${fmtFechaDMY(cand.pago)}, sin factura`:cand.estado}{cand.folio?` · N° ${cand.folio}`:''}{cand._dups>1?` · ${cand._dups} programadas iguales`:''}</div>
                             </div>
                             <div style={{textAlign:'right',flexShrink:0}}>
                               <div style={{fontSize:12,fontWeight:600,color:exacto?C.greenText:C.muted,whiteSpace:'nowrap'}}>{fmt(cand.monto)}</div>
@@ -1964,6 +1986,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     }
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
     if(error) throw error
+    await ajustarTercerosPorFactura(item.progId,progRow?.sale_id,sales,patch.amount??progRow?.amount??0,progRow?.due||isoF)
     if(ajusteCom){ logActividad('facturacion.comision_monto_distinto',{tabla:'billing',id:item.progId,detalle:{folio:String(item.row.folio),title:ajusteCom.tipo==='falta'?'Comisión: la factura es mayor que el depósito (resto por cobrar)':'Comisión: el depósito es mayor que la factura (sobrante por conciliar)',monto:ajusteCom.dif}})
       appAlert(ajusteCom.tipo==='falta'?`La Factura N° ${item.row.folio} es ${fmt(ajusteCom.dif)} mayor que el depósito: esa diferencia queda por cobrar.`:`El depósito era ${fmt(ajusteCom.dif)} mayor que la Factura N° ${item.row.folio}: esa diferencia queda por conciliar en Banco.`) }
     setBilling&&setBilling(p=>p.map(x=>x.id===item.progId?{...x,...patch}:x))

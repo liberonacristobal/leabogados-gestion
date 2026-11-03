@@ -2432,6 +2432,17 @@ export async function facturaPdfSii(b){
   if(!b?.invoice_no) throw new Error('la factura no tiene folio')
   const k=String(b.id); if(_pdfSiiCache.has(k)) return _pdfSiiCache.get(k)
   const xml=String(b.dte_xml||''), tipo=+(xml.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||(b.billing_type==='nota_credito'?61:null), folio=folioN(b.invoice_no)
+  const rzn0=((xml.match(/<RznSocRecep>([^<]*)/)||[])[1]||'').replace(/&amp;/g,'&')
+  // Primero el PDF ya guardado en la factura (Respaldo SII en Drive): se envía sin depender de la sesión del SII.
+  try{
+    const {data:att}=await supabase.from('billing_attachments').select('drive_file_id').eq('billing_id',b.id).eq('uploaded_by','Respaldo SII').order('created_at',{ascending:false}).limit(1)
+    const fid=att?.[0]?.drive_file_id, dt=fid?await driveToken():null
+    if(fid&&dt){
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+dt}})
+      if(r.ok){ const u8=new Uint8Array(await r.arrayBuffer()); let bin=''; for(let i=0;i<u8.length;i+=0x8000) bin+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000))
+        if(bin.startsWith('%PDF')){ const out={ base64:btoa(bin), name:facturaNombreArchivo({folio,rznR:rzn0}), mime:'application/pdf' }; _pdfSiiCache.set(k,out); return out } }
+    }
+  }catch(_){}
   const token=await tokenSesion(); if(!token) throw new Error('Sesión expirada. Vuelve a entrar.')
   const res=await fetch('https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':supabase.supabaseKey},body:JSON.stringify({action:'pdf-emitido',folio,tipo})})
   const d=await res.json().catch(()=>({}))

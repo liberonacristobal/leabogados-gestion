@@ -98,16 +98,23 @@ test('la glosa desempata entre cuotas de la misma serie', () => {
   const r = run({ rut: '76217569K', monto: 2393309, fecha: '2026-11-03', glosa: 'Fusiones 2-18' }, { programadas: dos })
   assert.equal(r.nivel, 'exacta'); assert.equal(r.propuesta.id, 'a2')
 })
-test('subarriendo: incluye cuotas pagadas por adelantado, propone la cubierta por el pago cercano y nunca usa la glosa', () => {
-  const ventasS = [...ventas, { id: 'ss', moneda: 'CLP', uf_value: null, cobro_config: { subarriendo: true } }]
-  const sub = [
-    P('m5', { sale_id: 'ss', amount: 1080000, due: '2026-05-01', concept: 'Subarrendamiento oficina — Mensual Mayo 2026', client_id: 'c2', entity_id: null, receptor_rut: '78.099.865-2' }),
-    P('m11', { sale_id: 'ss', amount: 1080000, due: '2026-11-01', concept: 'Subarrendamiento oficina — Mensual Noviembre 2026', client_id: 'c2', entity_id: null, receptor_rut: '78.099.865-2', status: 'Anticipada', paid_at: '2026-11-02' }),
-  ]
-  const r = propuestaDelDia({ doc: { rut: '78099865-2', monto: 1080000, fecha: '2026-11-03', glosa: 'Asesoría Laboral octubre 2026' }, programadas: sub, ents: [], clientes, ventas: ventasS, ufPorFecha: UF })
-  assert.equal(r.nivel, 'subarriendo'); assert.equal(r.propuesta.id, 'm11'); assert.deepEqual(r.candidatas.map(c => c.id), ['m11', 'm5'])
-  const sinPago = propuestaDelDia({ doc: { rut: '78099865-2', monto: 1080000, fecha: '2026-11-03' }, programadas: [sub[0]], ents: [], clientes, ventas: ventasS, ufPorFecha: UF })
-  assert.equal(sinPago.propuesta.id, 'm5')
+test('subarriendo: FIFO entre cuotas y pagos sin factura; la glosa no se usa', () => {
+  const ventasS = [...ventas, { id: 'ss', moneda: 'CLP', uf_value: null, title: 'Subarrendamiento oficina', cobro_config: { subarriendo: true } }]
+  const base = { client_id: 'c2', entity_id: null, receptor_rut: '78.099.865-2', sale_id: 'ss', amount: 1080000 }
+  const m5 = P('m5', { ...base, due: '2026-05-01', concept: 'Subarrendamiento oficina — Mensual Mayo 2026' })
+  const m11 = P('m11', { ...base, due: '2026-11-01', concept: 'Subarrendamiento oficina — Mensual Noviembre 2026', status: 'Anticipada', paid_at: '2026-11-02' })
+  const ant = (id, fecha, mes) => ({ id, estado: 'disponible', billing_id: null, sale_id: 'ss', client_id: 'c2', entity_id: null, monto: 1080000, fecha, nota: `Subarriendo ${mes} 2026 (pago sin factura, conciliación bancaria)` })
+  const ants = [ant('a7', '2026-07-02', 'julio'), ant('a8', '2026-08-03', 'agosto'), ant('a9', '2026-09-01', 'septiembre')]
+  const doc = { rut: '78099865-2', monto: 1080000, fecha: '2026-11-03', glosa: 'Asesoría Laboral octubre 2026' }
+  const entsS = [{ id: 'e9', client_id: 'c2', rut: '78.099.865-2' }]
+  const f = (programadas, anticipos) => propuestaDelDia({ doc, programadas, ents: entsS, clientes, ventas: ventasS, ufPorFecha: UF, anticipos })
+  const r = f([m11, m5], ants)
+  assert.equal(r.nivel, 'subarriendo'); assert.equal(r.propuesta.id, 'm5'); assert.deepEqual(r.candidatas.map(c => c.id), ['m5', 'ant:a7', 'ant:a8', 'ant:a9', 'm11'])
+  assert.match(r.motivo, /mayo de 2026/)
+  const sinMayo = f([m11], ants)
+  assert.equal(sinMayo.propuesta.id, 'ant:a7'); assert.equal(sinMayo.propuesta.esAnticipo, true); assert.equal(sinMayo.propuesta.concept, 'Subarrendamiento oficina — Mensual Julio 2026')
+  assert.equal(f([m11], []).propuesta.id, 'm11')
+  assert.equal(f([], [{ ...ants[0], estado: 'consumido' }]).nivel, null, 'un pago ya consumido no es candidato')
 })
 test('comisión por facturar: solo Anticipada de monto exacto y dentro de 60 días; se propone, no se registra sola', () => {
   const com = (o) => P('k1', { billing_type: 'comision', status: 'Anticipada', amount: 202500, due: '2026-10-21', paid_at: '2026-10-21', sale_id: null, ...o })

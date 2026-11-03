@@ -10,6 +10,31 @@ export const pagarT = t => t?.liquido != null ? (Number(t.liquido) || 0) : (Numb
 // (la estimación pudo hacerse con la de otro año). Con boleta registrada mandan sus cifras reales.
 export const reajusteBHEPago = (t, fecha) => { if (t?.liquido == null || t?.bhe_id || !(Number(t?.retencion) > 0)) return null
   const liq = Number(t.liquido) || 0, bruto = Math.round(liq / (1 - tasaBHE(fecha))); return bruto !== Number(t.monto) ? { monto: bruto, retencion: bruto - liq } : null }
+// Lo que se le paga a un tercero por una cuota se calcula SOBRE LA FACTURA EMITIDA, no sobre la cuota programada: el reparto en % o en UF se
+// reajusta con el monto real del DTE (la UF del día de emisión cambia el monto). % → factura × %; UF → factura × (UF del tercero ÷ UF de la venta).
+// Un monto fijo en $ no cambia. No toca lo ya pagado, lo que ya tiene boleta registrada ni las retenciones de un externo (comision_pct).
+// Con boleta de honorarios (liquido != null): el monto calculado es el líquido y el bruto sale con la tasa de retención vigente (como costoComision).
+// Devuelve los cambios a aplicar [{id, patch}]; vacío si nada cambia. venta = {moneda, amount_uf}.
+export function tercerosPorFactura({ terceros, venta, montoFactura, fecha }) {
+  const out = []
+  const total = Math.round(Number(montoFactura) || 0)
+  if (!(total > 0)) return out
+  for (const t of terceros || []) {
+    if (!t || t.estado === 'pagado' || t.bhe_id || t.comision_pct != null) continue
+    const v = Number(t.valor) || 0
+    if (!(v > 0)) continue
+    let m = null
+    if (t.tipo_costo === 'pct') m = Math.round(total * v / 100)
+    else if (t.tipo_costo === 'uf' && venta && (venta.moneda || 'UF') !== 'CLP' && Number(venta.amount_uf) > 0) m = Math.round(total * (v / Number(venta.amount_uf)))
+    if (m == null || !(m > 0)) continue
+    /** @type {Record<string, number>} */
+    let patch = { monto: m }
+    if (t.liquido != null) { const tasa = tasaBHE(fecha), bruto = Math.round(m / (1 - tasa)); patch = { monto: bruto, liquido: m, retencion: bruto - m } }
+    if (Number(patch.monto) === Number(t.monto) && (patch.liquido == null || Number(patch.liquido) === Number(t.liquido))) continue
+    out.push({ id: t.id, patch })
+  }
+  return out
+}
 // Estado de una comisión: pagada (lo marcó el banco) · por pagar (el cliente ya pagó su cuota) · por devengar.
 export const estadoComision = (t, b) => t?.estado === 'pagado' ? 'pagada' : (t?.estado === 'por_pagar' || b?.status === 'Pagado' || b?.status === 'Anticipada') ? 'por_pagar' : 'por_devengar'
 
