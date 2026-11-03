@@ -112,7 +112,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         </tr>) })}</tbody>
     </table></div>)
   const bloques = {
-    mes: { cap:'Resultado', titulo:`Cómo cerró ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Estado de resultados', dest:'estadoResultados',
+    mes: { cap:'Resultado', titulo:`Cómo cerró ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} onClick={()=>go('estadoResultados')}/>
         <Fila tono='az' label='Costos de oficina' value={fmtShort(rm.cos)} onClick={()=>go('estadoResultados')}/>
@@ -137,7 +137,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)}% de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} onClick={()=>go('cobranza')}/>
         <Fila tono='ro' label='Más de 60 días' sub={cart.expo.pctM60!=null?`${Math.round(cart.expo.pctM60*100)}% de la cartera`:undefined} value={fmtShort(cart.expo.m60)} onClick={()=>go('cobranza')}/>
         {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
-        <Fila tono='am' label='Fondos por reponer' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · gastos adelantados`} value={fmtShort(fondos.porReponer)} onClick={()=>go('gastos')}/>
+        <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} onClick={()=>go('gastos')}/>
       </> },
     cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos de oficina', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
       body:<>
@@ -160,6 +160,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Sub t='Fondos de clientes'/>
         <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} onClick={()=>go('gastos')}/>
         <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} onClick={()=>go('facturas')}/>
+        <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },
     caj: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Caja', hl:<>Flujo <b style={{color:flujo.fin>=0?C.greenText:C.overdueText}}>{(flujo.fin>0?'+':'')+fmtShort(flujo.fin)}</b></>, tono:'az', link:'Flujo de caja', dest:'flujoCaja',
       body:<>
