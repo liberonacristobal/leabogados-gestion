@@ -1681,7 +1681,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     let fileId, url, nombre=fname, subido=false
     if(yaEnDrive.length){ fileId=yaEnDrive[0].id; url=yaEnDrive[0].webViewLink||null }
     else { const r = await facturaPdfSii(b); const bin = atob(r.base64); const u8 = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); const up = await driveUpload(token, carpeta, new File([u8], fname, {type:'application/pdf'}), fname); fileId=up.id; url=up.webViewLink||null; nombre=up.name||fname; subido=true }
-    const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:fileId, name:nombre, url, uploaded_by:'Respaldo SII' })
+    const { error:iErr } = await supabase.from('billing_attachments').insert({ billing_id:b.id, drive_file_id:fileId, name:nombre, url, uploaded_by:subido?'PDF oficial SII':'Respaldo SII' })
     if(iErr) throw new Error('subió a Drive pero no se pudo adjuntar a la factura: '+iErr.message)
     return { url, subido }
   }

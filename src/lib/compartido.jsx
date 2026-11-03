@@ -2433,9 +2433,9 @@ export async function facturaPdfSii(b){
   const k=String(b.id); if(_pdfSiiCache.has(k)) return _pdfSiiCache.get(k)
   const xml=String(b.dte_xml||''), tipo=+(xml.match(/<TipoDTE>(\d+)<\/TipoDTE>/)||[])[1]||(b.billing_type==='nota_credito'?61:null), folio=folioN(b.invoice_no)
   const rzn0=((xml.match(/<RznSocRecep>([^<]*)/)||[])[1]||'').replace(/&amp;/g,'&')
-  // Primero el PDF ya guardado en la factura (Respaldo SII en Drive): se envía sin depender de la sesión del SII.
+  // Primero el PDF OFICIAL ya guardado en la factura («PDF oficial SII» en Drive; las copias que generaba la app quedan como «Respaldo SII» y no se usan para enviar): se envía sin depender de la sesión del SII.
   try{
-    const {data:att}=await supabase.from('billing_attachments').select('drive_file_id').eq('billing_id',b.id).eq('uploaded_by','Respaldo SII').order('created_at',{ascending:false}).limit(1)
+    const {data:att}=await supabase.from('billing_attachments').select('drive_file_id').eq('billing_id',b.id).eq('uploaded_by','PDF oficial SII').order('created_at',{ascending:false}).limit(1)
     const fid=att?.[0]?.drive_file_id, dt=fid?await driveToken():null
     if(fid&&dt){
       const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&supportsAllDrives=true`,{headers:{Authorization:'Bearer '+dt}})
