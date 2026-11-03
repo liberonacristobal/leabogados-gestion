@@ -50,6 +50,8 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const [decFact,setDecFact] = useState(()=>new Map())   // learnings venta_factura: 'si' | 'no' por venta
+  const [noEmitirSet,setNoEmitirSet] = useState(()=>new Set())   // learnings cuota_no_emitir: las mismas cuotas que el radar de Facturación silencia
+  useEffect(()=>{ let vivo=true; if(DEMO) return; supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>{ if(vivo&&data) setNoEmitirSet(new Set(data.map(r=>String(r.key)))) }); return ()=>{vivo=false} },[])
   useEffect(()=>{ let vivo=true; if(DEMO) return; supabase.from('learnings').select('key,value,updated_at').eq('kind','venta_factura').order('updated_at').then(({data})=>{ if(vivo&&data) setDecFact(new Map(data.map(r=>[String(r.key),r.value]))) }); return ()=>{vivo=false} },[])
   const _vmV = viewMemLeer('ventas')   // volver al lugar exacto tras abrir una venta/factura (página)
   const [fYear,setFYear] = useState(_vmV?.fYear??String(currentYear))
@@ -58,6 +60,10 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const [hubView,setHubView] = useState(_vmV?.hubView??null)               // null = solo tarjetas · 'vendido' = filtros + desglose · 'propuestas' = lista de propuestas
   const [estSel,setEstSel] = useState(()=>new Set(_vmV?.est||['Activo','Terminado']))   // filtro de estado MULTI-selección (afecta Vendido + desglose)
   const [abogSel,setAbogSel] = useState(()=>new Set(_vmV?.abog||[]))      // filtro de abogado multi (vacío = todos)
+  const [pagoSel,setPagoSel] = useState(()=>new Set(_vmV?.pago||[]))      // filtro de estado de pago multi (vacío = todos)
+  const PAGOS = [['anticipo','Con anticipo'],['pagada','Pagada sin factura'],['poremitir','Por emitir'],['sinprimera','Sin primera factura']]
+  // Estado de pago del trabajo (helper único estadoPagoVenta + la decisión «Se emitirá» guardada): lo usan la etiqueta, el filtro y los conteos.
+  const pagoDe = s => { const ep=estadoPagoVenta(s,billing,anticipos,hoyCL,undefined,noEmitirSet); if(!ep) return null; return (ep.estado==='pagada'&&decFact.get(String(s.id))==='si')?'poremitir':ep.estado }
   const [openF,setOpenF] = useState(null)                   // desplegable de filtro abierto: 'estado' | 'abogado' | null
   const toggleSet = (setter,val)=>setter(prev=>{ const n=new Set(prev); n.has(val)?n.delete(val):n.add(val); return n })
   const ufState = useUF()
@@ -86,7 +92,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const sumUF = arr=>arr.reduce((a,s)=>a+ventaUF(s,ufRef),0)
   const sumCLP = arr=>Math.round(arr.reduce((a,s)=>a+ventaCLP(s,ufRef),0))
   // "Vendido" = ventas del año/área con estado dentro del filtro multi (por defecto Activo+Terminado) y abogado dentro del filtro (vacío = todos). El desglose suma exacto a este total.
-  const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(respVenta(s))))
+  const vendSrc = yearSales.filter(s=> estSel.has(s.status) && (abogSel.size===0 || abogSel.has(respVenta(s))) && (pagoSel.size===0 || pagoSel.has(pagoDe(s))))
   const vendUF=sumUF(vendSrc), vendCLP=sumCLP(vendSrc)
   const comDe = s => comisionesVenta(s,terceros,billing,ufRef).anual
   const comUFde = s => { const u=parseFloat(s.uf_value)||ufRef; return u>0 ? comDe(s)/u : 0 }   // UF de la propia venta (igual que su ficha)
@@ -213,7 +219,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const colorGrupo = k => groupBy==='abogado' ? (k==='Sin abogado'?C.done:personChip(k).color) : (AREA_COL[k]||'#537281')
   const grupos = useMemo(()=>{
     // El desglose desglosa el MISMO universo que "Vendido" (estado en el filtro multi + abogado en el filtro), así suma exacto al total.
-    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||ventaCuentaEnAnio(s,fYear)) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(respVenta(s))))
+    const src = sales.filter(s=> !esSubarriendo(s) && (!fYear||ventaCuentaEnAnio(s,fYear)) && (!fArea||s.area===fArea) && estSel.has(s.status) && (abogSel.size===0||abogSel.has(respVenta(s))) && (pagoSel.size===0||pagoSel.has(pagoDe(s))))
     const m={}
     src.forEach(s=>{
       const k = groupBy==='abogado' ? respVenta(s) : (s.area||'Sin área')
@@ -221,7 +227,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
       m[k].count++; m[k].uf+=ventaUF(s,ufRef); m[k].rows.push(s)
     })
     return Object.values(m).sort((a,b)=>b.uf-a.uf)
-  },[sales,fYear,fArea,groupBy,ufRef,estSel,abogSel])
+  },[sales,fYear,fArea,groupBy,ufRef,estSel,abogSel,pagoSel,billing,anticipos,decFact,noEmitirSet])
   // Ingreso por año del grupo elegido: distribuye las cuotas (emitidas + programadas) de esas ventas por AÑO de VENCIMIENTO; cobrado vs por cobrar por año. Fuente única montoFactura/cobradoBill. Otro lente que "vendido" (contrato): cuándo entra la plata.
   // Proyección: se muestra hasta el año en que termina la cobranza (todas las cuotas). EXCEPCIÓN — las recurrentes (mensuales activas) se proyectan solo UN año (sus primeras 12 cuotas por vencimiento), para no arrastrar un contrato indefinido a años futuros.
   const ingresoPorAnio = rows => {
@@ -240,7 +246,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   // Lista del Vendido = el MISMO universo que el desglose (suma exacta al total). Orden de la tabla: monto (desc) por defecto.
   const listaVendido = useMemo(()=>grupos.flatMap(g=>g.rows),[grupos])
   const [ordV,setOrdV] = useState(_vmV?.ordV||{k:'monto',dir:-1})
-  useEffect(()=>{ viewMemGuardar('ventas',{fYear,fArea,q,hubView,est:[...estSel],abog:[...abogSel],montoUF,groupBy,selGroup,ordV}) },[fYear,fArea,q,hubView,estSel,abogSel,montoUF,groupBy,selGroup,ordV])
+  useEffect(()=>{ viewMemGuardar('ventas',{fYear,fArea,q,hubView,est:[...estSel],abog:[...abogSel],pago:[...pagoSel],montoUF,groupBy,selGroup,ordV}) },[fYear,fArea,q,hubView,estSel,abogSel,montoUF,groupBy,selGroup,ordV])
   const valV = (s,k) => k==='venta'?(s.title||''):k==='resp'?respVenta(s):ventaUF(s,ufRef)
   const ordenarVentas = rows => [...rows].sort((a,b)=>{ const va=valV(a,ordV.k), vb=valV(b,ordV.k); const r=typeof va==='string'?va.localeCompare(vb,'es'):(va-vb); return (r*ordV.dir)||(a.title||'').localeCompare(b.title||'','es') })
   const exportarVentas = async rows => {
@@ -254,7 +260,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Escritorio: tabla ordenable (venta con su cliente · responsable · mes · monto) con total = suma de las filas.
-  const chipPago = s => { const ep=estadoPagoVenta(s,billing,anticipos,hoyCL); if(!ep) return null; const m=(ep.estado==='pagada'&&decFact.get(String(s.id))==='si')?['Por emitir',C.soonBg,C.soonText]:{anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[ep.estado]; return <span title={ep.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
+  const chipPago = s => { const k=pagoDe(s); if(!k) return null; const ep=estadoPagoVenta(s,billing,anticipos,hoyCL,undefined,noEmitirSet); const m={anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],poremitir:['Por emitir',C.soonBg,C.soonText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[k]; return <span title={ep?.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
   const tablaVentas = (rows,tUF,tCLP) => { const COLS='minmax(0,1fr) 104px 116px 104px 124px 12px'
     const comT=rows.reduce((a,s)=>a+comDe(s),0), comTUF=rows.reduce((a,s)=>a+comUFde(s),0)
     const hc=(k,l,right)=>{ const on=ordV.k===k; return <span onClick={()=>setOrdV(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='monto'?-1:1})} style={{cursor:'pointer',userSelect:'none',textAlign:right?'right':'left',color:on?C.accent:C.muted}}>{l}{on?(ordV.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
@@ -393,6 +399,8 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
               <span style={{color:C.textSoft,fontSize:11,flexShrink:0}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>
             </span>)
           const estTxt = estSel.size===0?'Ninguno':(estSel.size===ESTADOS.length?'Todos':ESTADOS.filter(e=>estSel.has(e)).join(', '))
+          const pagoTxt = pagoSel.size===0?'Todos':PAGOS.filter(([k])=>pagoSel.has(k)).map(([,l])=>l).join(', ')
+          const pagoN = Object.fromEntries(PAGOS.map(([k])=>[k,yearSales.filter(s=>estSel.has(s.status)&&pagoDe(s)===k).length]))
           const abTxt = abogSel.size===0?'Todos':abogados.filter(a=>abogSel.has(a)).join(', ')
           const chipSel={display:'inline-flex',alignItems:'center',gap:2,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:10,padding:'0 6px 0 11px'}
           const chipLbl={fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft,flexShrink:0}
@@ -409,10 +417,15 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
               {abogados.length>0 && chip(abogSel.size>0, 'Abogado', abTxt, ()=>setOpenF(o=>o==='abogado'?null:'abogado'), openF==='abogado')}
               <span style={chipSel}><span style={chipLbl}>Año</span><select value={fYear} onChange={e=>setFYear(e.target.value)} style={selBare}><option value=''>Todos</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></span>
               <span style={chipSel}><span style={chipLbl}>Área</span><select value={fArea} onChange={e=>setFArea(e.target.value)} style={selBare}><option value=''>Todas</option>{['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}</select></span>
+              {chip(pagoSel.size>0, 'Pago', pagoTxt, ()=>setOpenF(o=>o==='pago'?null:'pago'), openF==='pago')}
             </div>
             {openF==='estado' && <div style={popSty}>
               <div style={popHd}>Estado · uno o varios</div>
               {ESTADOS.map(st=>{ const on=estSel.has(st); return <div key={st} onClick={()=>toggleSet(setEstSel,st)} style={optSty}><span style={ckSty(on)}>{on?<Gl n='tick'/>:''}</span>{st}</div> })}
+            </div>}
+            {openF==='pago' && <div style={popSty}>
+              <div style={popHd}>Pago · uno o varios</div>
+              {PAGOS.map(([k,l])=>{ const on=pagoSel.has(k); return <div key={k} onClick={()=>toggleSet(setPagoSel,k)} style={optSty}><span style={ckSty(on)}>{on?<Gl n='tick'/>:''}</span>{l}<span style={{marginLeft:'auto',fontVariantNumeric:'tabular-nums',color:C.textSoft,fontSize:12}}>{pagoN[k]}</span></div> })}
             </div>}
             {openF==='abogado' && <div style={popSty}>
               <div style={popHd}>Abogado · uno o varios</div>

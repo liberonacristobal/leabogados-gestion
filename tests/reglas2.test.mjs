@@ -695,3 +695,12 @@ test('cuotas sin primera factura: las vencidas de trabajos que aún no parten, c
   assert.deepEqual(cuotasSinEmitir(base).map(b => b.id), ['b1'])
   assert.deepEqual(cuotasSinPrimeraFactura({ ...base, noEmitir: new Set(['a1']) }).map(b => b.id), ['a2'])   // «No corresponde» también las silencia
 })
+
+test('estado de pago: las cuotas marcadas «No corresponde» no cuentan como vencidas sin primera factura', async () => {
+  const { estadoPagoVenta } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sale = { id: 'a', status: 'Activo' }
+  const billing = [{ id: 'q1', sale_id: 'a', status: 'Programada', due: '2026-09-01', amount: 10 }, { id: 'q2', sale_id: 'a', status: 'Programada', due: '2026-10-01', amount: 10 }]
+  assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02').estado, 'sinprimera')
+  assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02', undefined, new Set(['q1'])).estado, 'sinprimera')   // queda q2
+  assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02', undefined, new Set(['q1', 'q2'])), null)
+})

@@ -87,8 +87,8 @@ export function ventasEnMarcha(billing, anticipos = []) {
 // Estado de pago de un trabajo que aún no tiene ninguna factura emitida (etiqueta informativa en Ventas, nunca deuda ni alerta):
 // 'anticipo' = ya recibió plata y quedan cuotas por cubrir · 'pagada' = todas sus cuotas quedaron cubiertas por anticipos, sin factura ·
 // 'sinprimera' = trabajo activo, sin factura ni plata, con una cuota ya vencida dentro de la vida de la app. null = no aplica.
-// recibido = suma de los anticipos del trabajo (o, sin anticipos, de sus cuotas «Anticipada»).
-export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', appDesde = APP_DESDE) {
+// Las cuotas marcadas «No corresponde» (noEmitir) no cuentan, igual que en el radar. recibido = suma de los anticipos del trabajo (o, sin anticipos, de sus cuotas «Anticipada»).
+export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', appDesde = APP_DESDE, noEmitir = new Set()) {
   if (!sale || sale.deleted_at || !['Activo', 'Terminado'].includes(sale.status)) return null
   const id = String(sale.id)
   const cu = (billing || []).filter(b => b && !b.deleted_at && String(b.sale_id) === id && b.status !== 'Anulada' && b.billing_type !== 'reembolso' && b.billing_type !== 'nota_credito')
@@ -100,7 +100,7 @@ export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', ap
     const abiertas = cu.some(b => b.status === 'Programada')
     return { estado: cuotasAnt.length && !abiertas ? 'pagada' : 'anticipo', recibido }
   }
-  if (sale.status === 'Activo' && hoy && cu.some(b => b.status === 'Programada' && b.due && b.due >= appDesde && b.due < hoy)) return { estado: 'sinprimera', recibido: 0 }
+  if (sale.status === 'Activo' && hoy && cu.some(b => b.status === 'Programada' && b.due && b.due >= appDesde && b.due < hoy && !noEmitir.has(String(b.id)))) return { estado: 'sinprimera', recibido: 0 }
   return null
 }
 
