@@ -49,6 +49,7 @@ export const Pill = ({label,bg,color,small}) => <span style={{display:'inline-bl
 export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const mesCerrado = hoyCL.slice(0,8)+'01'   // mismo corte que el radar de cuotas (meses cerrados: antes del 1º del mes en curso)
   const [decFact,setDecFact] = useState(()=>new Map())   // learnings venta_factura: 'si' | 'no' por venta
   const [noEmitirSet,setNoEmitirSet] = useState(()=>new Set())   // learnings cuota_no_emitir: las mismas cuotas que el radar de Facturación silencia
   useEffect(()=>{ let vivo=true; if(DEMO) return; supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>{ if(vivo&&data) setNoEmitirSet(new Set(data.map(r=>String(r.key)))) }); return ()=>{vivo=false} },[])
@@ -63,7 +64,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const [pagoSel,setPagoSel] = useState(()=>new Set(_vmV?.pago||[]))      // filtro de estado de pago multi (vacío = todos)
   const PAGOS = [['anticipo','Con anticipo'],['pagada','Pagada sin factura'],['poremitir','Por emitir'],['sinprimera','Sin primera factura']]
   // Estado de pago del trabajo (helper único estadoPagoVenta + la decisión «Se emitirá» guardada): lo usan la etiqueta, el filtro y los conteos.
-  const pagoDe = s => { const ep=estadoPagoVenta(s,billing,anticipos,hoyCL,undefined,noEmitirSet); if(!ep) return null; return (ep.estado==='pagada'&&decFact.get(String(s.id))==='si')?'poremitir':ep.estado }
+  const pagoDe = s => { const ep=estadoPagoVenta(s,billing,anticipos,mesCerrado,undefined,noEmitirSet); if(!ep) return null; return (ep.estado==='pagada'&&decFact.get(String(s.id))==='si')?'poremitir':ep.estado }
   const [openF,setOpenF] = useState(null)                   // desplegable de filtro abierto: 'estado' | 'abogado' | null
   const toggleSet = (setter,val)=>setter(prev=>{ const n=new Set(prev); n.has(val)?n.delete(val):n.add(val); return n })
   const ufState = useUF()
@@ -260,7 +261,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Escritorio: tabla ordenable (venta con su cliente · responsable · mes · monto) con total = suma de las filas.
-  const chipPago = s => { const k=pagoDe(s); if(!k) return null; const ep=estadoPagoVenta(s,billing,anticipos,hoyCL,undefined,noEmitirSet); const m={anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],poremitir:['Por emitir',C.soonBg,C.soonText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[k]; return <span title={ep?.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
+  const chipPago = s => { const k=pagoDe(s); if(!k) return null; const ep=estadoPagoVenta(s,billing,anticipos,mesCerrado,undefined,noEmitirSet); const m={anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],poremitir:['Por emitir',C.soonBg,C.soonText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[k]; return <span title={ep?.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
   const tablaVentas = (rows,tUF,tCLP) => { const COLS='minmax(0,1fr) 104px 116px 104px 124px 12px'
     const comT=rows.reduce((a,s)=>a+comDe(s),0), comTUF=rows.reduce((a,s)=>a+comUFde(s),0)
     const hc=(k,l,right)=>{ const on=ordV.k===k; return <span onClick={()=>setOrdV(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='monto'?-1:1})} style={{cursor:'pointer',userSelect:'none',textAlign:right?'right':'left',color:on?C.accent:C.muted}}>{l}{on?(ordV.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
