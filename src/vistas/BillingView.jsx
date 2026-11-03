@@ -12,7 +12,7 @@ import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExpos
 import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
-import { facturaPdfSii, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { driveTokenVigente, facturaPdfSii, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Fuente única: estado de una fila del import → categoría corta (para conteos por archivo y batch). No duplicar este mapa.
 export const CAT_IMPORT = {programada:'prog',nueva:'new',nota_credito:'nc',nc_hecha:'nc',adjuntada:'dup',duplicada:'dup',creada:'cre',registrada:'reg',sin_respaldo:'sinpdf',error:'err',sin_dte:'err',sin_factura:'err'}
@@ -1671,6 +1671,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   // Sube/enlaza el PDF-respaldo de una factura YA registrada a Drive (idempotente). Fuente única: la usan la carga de XML y el reintento.
   // Si falla (p. ej. token de Drive 401), la factura igual quedó registrada — lo único que falta es este respaldo.
   const adjuntarRespaldoDrive = async(token, b, d, periodoISO)=>{
+    // Ya tiene el PDF oficial del SII guardado en la factura: no se vuelve a subir ni se toca Drive.
+    try{ const {data:ya}=await supabase.from('billing_attachments').select('url').eq('billing_id',b.id).eq('uploaded_by','PDF oficial SII').limit(1); if(ya&&ya[0]) return { url:ya[0].url, subido:false } }catch(_){}
     const folioM = b.invoice_no
     const rzn=(d&&(d.match(/<RznSocRecep>([^<]+)<\/RznSocRecep>/)||[])[1])||b.receptor_name||''
     const fname='Factura '+folioM+' - '+String(rzn).replace(/[\/\\:*?"<>|]/g,'').slice(0,45)+'.pdf'
@@ -1703,8 +1705,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     if(periodoISO){ try{ const per=String(periodoISO).slice(0,7); const {data}=await supabase.from('sii_import_batches').select('id,created_at').eq('period',per).order('created_at',{ascending:false}).limit(1); if(data&&data[0]){ let n=0; try{ const {count}=await supabase.from('billing').select('id',{count:'exact',head:true}).eq('import_batch_id',data[0].id).is('deleted_at',null); n=count||0 }catch(_){} const M=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const ml=`${M[+per.slice(5,7)-1]} ${per.slice(0,4)}`; if(!(await appConfirm({title:`Ya registraste ${ml}`, message:(n?`Tienes ${n} factura${n!==1?'s':''} de ${ml} ya registradas (el ${fmtFechaDMY(data[0].created_at)}).`:`Ya registraste ${ml} (el ${fmtFechaDMY(data[0].created_at)}).`)+`\n\nSubir el XML otra vez NO duplica nada: las ya registradas se saltan solas y en pantalla solo quedarán las que aún falten por registrar.`, confirmText:'Subir igual', cancelText:'Cancelar'}))) return } }catch(_){} }
     setProcResp(true); setRespaldoRes(null)
     try{
-      const token = await driveToken()
-      if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); setProcResp(false); return }
+      const token = await driveTokenVigente()   // sin Drive vigente igual se registran los XML; solo queda pendiente el respaldo del PDF
       const res=[]
       const progUsadas=new Set()   // programadas ya tomadas por otra factura de este lote (no reusar en el match FIFO)
       const seenDoc=new Set()      // folio+tipo ya vistos en el lote (dedup: mismo DTE repetido en 2 archivos o archivo cargado 2 veces)
@@ -1754,6 +1755,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
           try{ await supabase.from('billing').update({dte_xml:d,...fixAmt,...(td?{sii_tipo_dte:td}:{}),updated_at:new Date().toISOString()}).eq('id',b.id); if(setBilling) setBilling(p=>p.map(x=>x.id===b.id?{...x,dte_xml:d,...(fixAmt.amount!=null?{amount:dteTot}:{}),...(td?{sii_tipo_dte:td}:{})}:x)) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}
           // Paso 2: respaldo (PDF a Drive) vía helper único. Si falla, la factura IGUAL quedó registrada — solo falta el respaldo (no es error de la factura).
           try{
+            if(!token) throw new DriveAuthError()
             const { url, subido } = await adjuntarRespaldoDrive(token, b, d, periodoISO)
             res.push({folio:folioM, cliente:cli, monto:b.amount, estado:subido?'adjuntada':'duplicada', url})
           }catch(e){ res.push({folio:folioM, cliente:cli, billingId:b.id, estado:'sin_respaldo', drive:(e instanceof DriveAuthError||e?.code===401), msg:e.message||String(e), doc:d}) }
@@ -1904,8 +1906,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     if(!items||!items.length) return
     setRespaldoRetry('go')
     try{
-      const token = await driveToken()
-      if(!token){ if(await appConfirm('Para guardar los respaldos en Drive necesitas conectarlo. ¿Conectar ahora?')) connectDrive(); return }
+      const token = await driveTokenVigente()
+      if(!token){ if(await appConfirm('Tu conexión con Drive venció. Para guardar los respaldos hay que reconectarla; lo cargado queda guardado. ¿Reconectar ahora?')) connectDrive(); return }
       let ok=0
       for(const it of items){
         const b=(billing||[]).find(x=>String(x.id)===String(it.billingId)) || {id:it.billingId, invoice_no:it.folio, receptor_name:it.cliente}
@@ -4718,6 +4720,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
 export async function driveBuscarEnCarpeta(token, folderId, name){
   const q=encodeURIComponent(`name='${String(name).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and '${folderId}' in parents and trashed=false`)
   const r=await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,webViewLink)&supportsAllDrives=true&includeItemsFromAllDrives=true`,{headers:{Authorization:'Bearer '+token}})
+  if(r.status===401) throw new DriveAuthError()
   if(!r.ok) return []
   const d=await r.json().catch(()=>({})); return d.files||[]
 }

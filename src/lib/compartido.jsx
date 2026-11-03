@@ -839,6 +839,14 @@ export async function driveToken(){
   return t||null
 }
 
+// Token de Drive que Google todavía acepta (el guardado dura ~1 hora y driveToken() lo entrega aunque haya vencido).
+// null = no hay conexión o venció: hay que reconectar. Sin red se deja pasar (el error real saldrá en la llamada).
+export async function driveTokenVigente(){
+  const t=await driveToken(); if(!t) return null
+  try{ const r=await fetch('https://www.googleapis.com/drive/v3/about?fields=user',{headers:{Authorization:'Bearer '+t}}); if(r.status===401){ try{ localStorage.removeItem('drive_token') }catch(_){} return null } }catch(_){}
+  return t
+}
+
 // ── GMAIL API: enviar rendición con PDF adjunto. Requiere el scope gmail.send en el login
 //    (agregar a supabase.js cuando esté habilitado en Google Cloud Console). Sin ese scope,
 //    la API devuelve 403 y el modal cae al fallback de Gmail compose (sin adjunto). ──
