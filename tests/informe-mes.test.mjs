@@ -43,6 +43,11 @@ test('verificación del texto: pasa si todo número está en el resumen y falla 
   assert.equal(mala.ok, false); assert.deepEqual(mala.faltantes, ['99'])
 })
 
+test('el texto puede nombrar los plazos de la app (60 días de mora, 30 de pago, 8 semanas) pero no otros números', () => {
+  assert.equal(verificarTexto('Hay $43,7M vencidos, con pagos a 30 días y más de 60 días de mora; el flujo a 8 semanas es −$40,4M.', dossier).ok, true)
+  assert.equal(verificarTexto('Con más de 75 días de mora.', dossier).ok, false)
+})
+
 test('lectura del informe de la IA: exige 6 puntos en el orden fijo y acepta cercos de código', () => {
   const puntos = TEMAS.map(t => ({ tema: t, cifra: '$1M', etiqueta: 'x', variacion: '+1%', titular: 'T', porque: 'P', enlace: 'estadoResultados' }))
   const ok = leerInformeIA('```json\n' + JSON.stringify({ frase: 'Buen mes', puntos }) + '\n```')

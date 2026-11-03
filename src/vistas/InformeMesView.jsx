@@ -64,7 +64,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
   // ── Resumen para la IA ──
   const fmtV = { clp:fmtShort, uf:n=>fmtUFk(n), n:n=>String(n), pts:n=>`${pct1(n)}%` }
   const dossier = useMemo(()=>construirDossier({ mes:etiquetaMes(ym), comparado:etiquetaMes(ymP), filas, f:fmtV, estados,
-    extras:{ porCobrar:fmtShort(porCobrar), vencido:fmtShort(cart.vencidoTot), porcentajeVencido:pctVencido==null?null:`${Math.round(pctVencido*100)}%`, masDe60dias:fmtShort(cart.expo.m60), flujoCajaProximasSemanas:`${flujo.fin>0?'+':''}${fmtShort(flujo.fin)}`, semanas:8,
+    extras:{ porCobrar:fmtShort(porCobrar), vencido:fmtShort(cart.vencidoTot), porcentajeVencido:pctVencido==null?null:`${Math.round(pctVencido*100)}%`, vencidoMasDeSesentaDias:fmtShort(cart.expo.m60), flujoCajaProximasSemanas:`${flujo.fin>0?'+':''}${fmtShort(flujo.fin)}`, semanas:8,
       comisionesPorPagar:fmtShort(sc.porPagar), diasComisionMasAntigua:diasCom, retirosAcumuladosCadaSocio:ret.SOC.map(s=>`${s} ${fmtShort(ret.retTot[s]||0)}`), diferenciaRetiros:fmtShort(Math.abs(ret.difAcum)) } }),[filas,ym,estados.resultado,estados.cobranza,porCobrar,cart.vencidoTot,flujo.fin,sc.porPagar,diasCom,ret.difAcum])
 
   // ── Informe guardado / generado ──

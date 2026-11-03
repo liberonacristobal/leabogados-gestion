@@ -82,6 +82,8 @@ export function construirDossier({ mes, comparado, filas, f, extras = {}, estado
     masMovidos: masMovidos(filas).map(r => ({ indicador: r.etiqueta, mes: fmt(r, r.m), anterior: fmt(r, r.p), variacion: textoVariacion(r) })),
     estados,
     hoy: extras,
+    // Plazos y horizontes de la app que el texto puede nombrar (no son cifras del mes).
+    contexto: { moraLarga: 'más de 60 días', plazoDePago: '30 días', horizonteDelFlujo: '8 semanas' },
   }
 }
 
