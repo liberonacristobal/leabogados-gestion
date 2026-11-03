@@ -73,6 +73,7 @@ serve(async (req) => {
     const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,title,client_id,responsible").order("id"));
     const { data: ufRaw } = await selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo", "uf").order("fecha"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
+    const { data: anticiposRaw } = await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"));
     // Trabajos por cerrar: lo que dejó el auditor nocturno (misma regla que Revisión de datos), sin los ya marcados «Sigue activo».
     const { data: detRaw } = await sb.from("auditoria_hallazgos").select("detector,monto,prueba").in("detector", ["trabajo_terminado", "trabajo_detenido_saldo"]).is("resuelto_at", null);
     const { data: activoOkRaw } = await sb.from("learnings").select("key").eq("kind", "trabajo_activo_ok");
@@ -118,7 +119,7 @@ serve(async (req) => {
     const firstOfMonth = todayCL.slice(0, 7) + "-01";
     const noEmitir = new Set((noEmitirRaw || []).map((r: Record<string, unknown>) => String(r.key)));
     const uf = Object.fromEntries((ufRaw || []).map((r: Record<string, unknown>) => [String(r.fecha), Number(r.valor)]));
-    const sinEmitirN = cuotasSinEmitir({ billing: vivos, sales: salesRaw || [], uf, noEmitir, hasta: firstOfMonth }).length;
+    const sinEmitirN = cuotasSinEmitir({ billing: vivos, sales: salesRaw || [], anticipos: anticiposRaw || [], uf, noEmitir, hasta: firstOfMonth }).length;
 
     // ── COBRANZA a caja del año + semana (plano abono/conciliación) y META (annual_targets).
     const year = todayCL.slice(0, 4);

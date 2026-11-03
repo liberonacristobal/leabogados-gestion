@@ -180,7 +180,8 @@ serve(async (req) => {
       const mnt: Record<string,string> = {}; (conXml.data||[]).forEach((r:any)=>{ const m=String(r.dte_xml||"").match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); if (m) mnt[String(r.id)]=`<MntTotal>${m[1]}</MntTotal>`; });
       const billingV = (billing||[]).map((b:any)=> mnt[String(b.id)] ? { ...b, dte_xml: mnt[String(b.id)] } : b);
       const noEmitir = new Set((ne.data||[]).map((r:any)=>String(r.key)));
-      const sinEmitir = cuotasSinEmitir({ billing: billingV, sales: sales2, uf, noEmitir, hasta: hoyCL.slice(0,7)+"-01" });
+      const anticiposRaw = (await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"))).data||[];
+      const sinEmitir = cuotasSinEmitir({ billing: billingV, sales: sales2, anticipos: anticiposRaw, uf, noEmitir, hasta: hoyCL.slice(0,7)+"-01" });
       const sinFact = primerLunes ? trabajosSinFacturar({ sales: sales2, billing: billingV, uf, ufHoy, hoy: hoyCL, noEmitir, decididos: new Set((dec.data||[]).map((r:any)=>String(r.key))) }) : [];
       // Cobrado la semana pasada (lunes a domingo) a caja: conciliación a factura o anticipo por fecha del depósito, sin internos (como Inicio).
       const abId: Record<string,string> = {}; (abs.data||[]).forEach((m:any)=>{ if (m.es_interno!==true) abId[String(m.id)] = String(m.fecha||"").slice(0,10) });

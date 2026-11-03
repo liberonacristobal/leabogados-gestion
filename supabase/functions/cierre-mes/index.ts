@@ -97,7 +97,8 @@ Deno.serve(async (req) => {
   const nmNow = (+per.slice(0, 4)) * 12 + (+per.slice(5, 7)) + 1;
   const atrasoMeses = (due: string) => { const p = String(due || "").slice(0, 7).split("-"); if (p.length < 2 || !p[0] || !p[1]) return 0; return Math.max(0, nmNow - ((+p[0]) * 12 + (+p[1]))); };
   const uf = Object.fromEntries(ufRows.map((r) => [String(r.fecha), Number(r.valor)]));
-  const radar = cuotasSinEmitir({ billing: bills, sales, uf, noEmitir: new Set(noEmitirRows.map((r) => String(r.key))), hasta });
+  const anticiposTodos = await sbAll("anticipos?select=sale_id,monto,estado");
+  const radar = cuotasSinEmitir({ billing: bills, sales, anticipos: anticiposTodos, uf, noEmitir: new Set(noEmitirRows.map((r) => String(r.key))), hasta });
   const recib = radar.length ? recibidoACuenta(radar, await sbAll(`anticipos?select=sale_id,monto,estado&estado=eq.disponible&sale_id=in.(${[...new Set(radar.map((b) => String(b.sale_id)))].join(",")})`), sales) : new Map();
   const olv = radar.sort((a, b) => String(a.due).localeCompare(String(b.due))).map((b) => {
     const x = cuotaN(b.concept); const s = saleById.get(String(b.sale_id)); const c = cliById.get(String(b.client_id)); const e = entOf(b);

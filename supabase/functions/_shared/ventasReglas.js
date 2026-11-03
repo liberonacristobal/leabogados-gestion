@@ -74,15 +74,55 @@ export function cuotasCubiertasVenta(billing = [], sales = [], uf = {}) {
   return out
 }
 
+// Trabajo «en marcha»: ya factura (factura emitida) o ya recibió plata (cualquier anticipo con monto, disponible o consumido, o una
+// cuota «Anticipada»). Con plata recibida el cliente sí partió, aunque aún no haya folio. Lo usa solo el radar de cuotas: los demás
+// radares siguen con ventasFacturando (decisión 24-10: un trabajo sin factura ni pago puede no haber iniciado su facturación).
+export function ventasEnMarcha(billing, anticipos = []) {
+  const s = ventasFacturando(billing)
+  ;(anticipos || []).forEach(a => { if (a && a.sale_id && Number(a.monto) > 0) s.add(String(a.sale_id)) })
+  ;(billing || []).forEach(b => { if (b && !b.deleted_at && b.sale_id && b.status === 'Anticipada') s.add(String(b.sale_id)) })
+  return s
+}
+
+// Estado de pago de un trabajo que aún no tiene ninguna factura emitida (etiqueta informativa en Ventas, nunca deuda ni alerta):
+// 'anticipo' = ya recibió plata y quedan cuotas por cubrir · 'pagada' = todas sus cuotas quedaron cubiertas por anticipos, sin factura ·
+// 'sinprimera' = trabajo activo, sin factura ni plata, con una cuota ya vencida dentro de la vida de la app. null = no aplica.
+// recibido = suma de los anticipos del trabajo (o, sin anticipos, de sus cuotas «Anticipada»).
+export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', appDesde = APP_DESDE) {
+  if (!sale || sale.deleted_at || !['Activo', 'Terminado'].includes(sale.status)) return null
+  const id = String(sale.id)
+  const cu = (billing || []).filter(b => b && !b.deleted_at && String(b.sale_id) === id && b.status !== 'Anulada' && b.billing_type !== 'reembolso' && b.billing_type !== 'nota_credito')
+  if (cu.some(b => b.invoice_no)) return null
+  const ant = (anticipos || []).filter(a => a && String(a.sale_id) === id && Number(a.monto) > 0)
+  const cuotasAnt = cu.filter(b => b.status === 'Anticipada')
+  if (ant.length || cuotasAnt.length) {
+    const recibido = ant.length ? ant.reduce((t, a) => t + Number(a.monto), 0) : cuotasAnt.reduce((t, b) => t + (Number(b.amount) || 0), 0)
+    const abiertas = cu.some(b => b.status === 'Programada')
+    return { estado: cuotasAnt.length && !abiertas ? 'pagada' : 'anticipo', recibido }
+  }
+  if (sale.status === 'Activo' && hoy && cu.some(b => b.status === 'Programada' && b.due && b.due >= appDesde && b.due < hoy)) return { estado: 'sinprimera', recibido: 0 }
+  return null
+}
+
 // Radar «Cuotas vencidas sin facturar» (fuente única: Facturación, resumen del lunes y cierre de mes): programadas que vencieron
 // antes de `hasta` (1º del mes en curso = meses cerrados) y dentro de la vida de la app, de ventas Activas que ya facturan, que no
 // están cubiertas por lo ya facturado y que nadie marcó «No corresponde» (learnings cuota_no_emitir). Candidatas por revisar.
 export const APP_DESDE = '2026-06-06'
-export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = new Set(), hasta, appDesde = APP_DESDE }) {
+export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = new Set(), hasta, appDesde = APP_DESDE, anticipos = [] }) {
+  return _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, ventasEnMarcha(billing, anticipos), true)
+}
+
+// Mismas cuotas vencidas, pero de trabajos activos que aún no parten (sin factura ni plata recibida). Se muestran aparte, plegadas y sin
+// sumar al contador de «Por revisar» (decisión 24-10: un trabajo sin factura ni pago puede no haber iniciado su facturación).
+export function cuotasSinPrimeraFactura({ billing = [], sales = [], uf = {}, noEmitir = new Set(), hasta, appDesde = APP_DESDE, anticipos = [] }) {
+  return _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, ventasEnMarcha(billing, anticipos), false)
+}
+
+function _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, enMarcha, deLosQueParten) {
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
-  const cub = cuotasCubiertasVenta(billing, sales, uf), fact = ventasFacturando(billing)
+  const cub = cuotasCubiertasVenta(billing, sales, uf)
   return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.sale_id && venta.get(String(b.sale_id))?.status === 'Activo'
-    && fact.has(String(b.sale_id)) && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
+    && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
 }
 
 // Factura emitida (con folio) y con respaldo XML que aún no se manda al cliente: impaga y sin envío registrado. Fuente única de la
@@ -92,14 +132,14 @@ export const facturaSinEnviar = b => !!b && !b.deleted_at && !!(b.invoice_no || 
 // Cuotas «por emitir» de un mes (mesKey = 'AAAA-MM'): fuente única del checklist y de la foto de Facturación. Las del mes salen del
 // vencimiento real (sin vencimiento rodado), sin ventas terminadas, sin «No corresponde» ni cubiertas por lo facturado; lo atrasado
 // (vencimiento anterior al mes) es exactamente el radar cuotasSinEmitir. Sin folio no hay factura emitida.
-export function cuotasPorEmitirMes({ billing = [], sales = [], fantasmaIds = new Set(), noEmitir = new Set(), mesKey, uf = {} }) {
+export function cuotasPorEmitirMes({ billing = [], sales = [], fantasmaIds = new Set(), noEmitir = new Set(), mesKey, uf = {}, anticipos = [] }) {
   const ini = `${mesKey}-01`
   const fin = `${mesKey}-${String(new Date(Number(mesKey.slice(0, 4)), Number(mesKey.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
   const cub = cuotasCubiertasVenta(billing, sales)
   /** @type {Record<string, string>} */
   const st = {}
   ;(sales || []).forEach(s => { if (s && !s.deleted_at) st[String(s.id)] = s.status })
-  const atrasadas = new Set(cuotasSinEmitir({ billing: /** @type {any} */ (billing), sales: /** @type {any} */ (sales), uf, noEmitir, hasta: ini }).map(b => String(b.id)))
+  const atrasadas = new Set(cuotasSinEmitir({ billing: /** @type {any} */ (billing), sales: /** @type {any} */ (sales), uf, noEmitir, hasta: ini, anticipos: /** @type {any} */ (anticipos) }).map(b => String(b.id)))
   const fuera = b => (b.sale_id && st[String(b.sale_id)] && st[String(b.sale_id)] !== 'Activo') || noEmitir.has(String(b.id)) || !!cub.get(String(b.id))?.total
   const dReal = b => String(b.due || b.issued_at || '').slice(0, 10)
   return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && !(b.invoice_no || b.folio) && b.billing_type !== 'reembolso' && b.billing_type !== 'nota_credito'

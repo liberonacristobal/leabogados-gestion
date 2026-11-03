@@ -1,6 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../supabase'
+import { supabase, DEMO } from '../supabase'
+import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
@@ -45,8 +46,11 @@ export const AreaChip = ({area}) => {
 
 export const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
 
-export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta}) {
+export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
+  const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
+  const [decFact,setDecFact] = useState(()=>new Map())   // learnings venta_factura: 'si' | 'no' por venta
+  useEffect(()=>{ let vivo=true; if(DEMO) return; supabase.from('learnings').select('key,value,updated_at').eq('kind','venta_factura').order('updated_at').then(({data})=>{ if(vivo&&data) setDecFact(new Map(data.map(r=>[String(r.key),r.value]))) }); return ()=>{vivo=false} },[])
   const _vmV = viewMemLeer('ventas')   // volver al lugar exacto tras abrir una venta/factura (página)
   const [fYear,setFYear] = useState(_vmV?.fYear??String(currentYear))
   const [fArea,setFArea] = useState(_vmV?.fArea||'')
@@ -250,6 +254,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Escritorio: tabla ordenable (venta con su cliente · responsable · mes · monto) con total = suma de las filas.
+  const chipPago = s => { const ep=estadoPagoVenta(s,billing,anticipos,hoyCL); if(!ep) return null; const m=(ep.estado==='pagada'&&decFact.get(String(s.id))==='si')?['Por emitir',C.soonBg,C.soonText]:{anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[ep.estado]; return <span title={ep.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
   const tablaVentas = (rows,tUF,tCLP) => { const COLS='minmax(0,1fr) 104px 116px 104px 124px 12px'
     const comT=rows.reduce((a,s)=>a+comDe(s),0), comTUF=rows.reduce((a,s)=>a+comUFde(s),0)
     const hc=(k,l,right)=>{ const on=ordV.k===k; return <span onClick={()=>setOrdV(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='monto'?-1:1})} style={{cursor:'pointer',userSelect:'none',textAlign:right?'right':'left',color:on?C.accent:C.muted}}>{l}{on?(ordV.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
@@ -258,9 +263,10 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[
       <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',...TH_BAND}}>{hc('venta','Venta · cliente')}{hc('resp','Responsable')}{hc('monto','Monto',1)}<span style={{textAlign:'right',color:C.muted}}>Terceros</span><span style={{textAlign:'right',color:C.muted}}>Neto oficina</span><span/></div>
       {vis.map(s=>{ const cli=clients.find(c=>String(c.id)===String(s.client_id)); const rp=respVenta(s); const pc=rp&&rp!=='Sin abogado'?personChip(rp):null; const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), com=comDe(s), comUF=comUFde(s)
         return (<div key={s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:12.5}}>
-          <div style={{minWidth:0}}>
+          <div style={{minWidth:0,overflow:'hidden'}}>
             <div style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}</div>
             <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span onClick={cli&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(cli.id)}:undefined} title={cli?'Ver ficha del cliente':undefined} style={{color:C.accent,cursor:cli?'pointer':'default'}}>{cli?.name||'—'}</span>{s.year?` · ${s.month?String(s.month).padStart(2,'0')+'-':''}${s.year}`:''}</div>
+            {chipPago(s)&&<div style={{marginTop:3}}>{chipPago(s)}</div>}
           </div>
           <span>{pc?<span style={{fontSize:9.5,fontWeight:700,color:pc.color,background:pc.bg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{rp}</span>:<span style={{color:C.textSoft}}>—</span>}</span>
           <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',fontWeight:700,color:C.text}}>{(ufA>0||clpA>0)?<>{fmtMonto(ufA,clpA)}{esRecurrente(s)?<span style={{fontSize:9,fontWeight:500,color:C.muted}}> /año</span>:null}</>:<span style={{fontWeight:500,color:C.muted}}>{porHoras(s)?'por horas':'—'}</span>}</span>
@@ -309,6 +315,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],terceros=[
         </div>
         <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
           <AreaChip area={s.area}/>
+          {chipPago(s)}
           {groupBy==='abogado'&&(()=>{ const rp=respVenta(s); if(!rp||rp==='Sin abogado') return null; const pc=personChip(rp); return <span style={{fontSize:11,color:pc.color,fontWeight:700}}>{rp}</span> })()}
           <span style={{fontSize:10,color:C.muted}}>{s.year}{s.month?' · '+String(s.month).padStart(2,'0'):''}</span>
           {isPropuesta&&<span style={{fontSize:10,color:tardio?C.soonText:C.muted,fontWeight:tardio?700:400}}>{diasPendiente} día{diasPendiente!==1?'s':''} esperando</span>}

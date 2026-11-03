@@ -5,7 +5,7 @@ import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supab
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { trabajosSinFacturar, cuotasSinEmitir, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
@@ -97,8 +97,8 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   const noEmitirCk=useNoEmitirSet()
   const ckFuera=useMemo(()=>{ const cub=cuotasCubiertasVenta(billing,sales), st={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) st[String(s.id)]=s.status })
     return b=>(b.sale_id&&st[String(b.sale_id)]&&st[String(b.sale_id)]!=='Activo')||(noEmitirCk&&noEmitirCk.has(String(b.id)))||!!cub.get(String(b.id))?.total },[billing,sales,noEmitirCk])
-  const ckAtrasadas=useMemo(()=>new Set(cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart}).map(b=>String(b.id))),[billing,sales,noEmitirCk,refStart])
-  const porEmitir = cuotasPorEmitirMes({billing,sales,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey,uf:ufFechaCache()||{}}).filter(matchQ)   // misma regla que la foto de Facturación (ventasReglas)
+  const ckAtrasadas=useMemo(()=>new Set(cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart}).map(b=>String(b.id))),[billing,sales,anticipos,noEmitirCk,refStart])
+  const porEmitir = cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey,uf:ufFechaCache()||{}}).filter(matchQ)   // misma regla que la foto de Facturación (ventasReglas)
   const yaEmitidasFantasma = billing.filter(b=> !b.deleted_at && b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)) && dReal(b) && dReal(b)<=refEnd)
   const esMesB = b => dReal(b)>=refStart   // devengo del mes en curso (el <=refEnd ya está garantizado por porEmitir)
   const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
@@ -3287,7 +3287,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
               const mesAct=_now.toISOString().slice(0,7)
               // Mismas cuotas que el checklist (ventasReglas): las del mes, sin lo atrasado (eso es el paso «Vencidas»).
-              const pemMes=cuotasPorEmitirMes({billing,sales,fantasmaIds,noEmitir:noEmitirSet||new Set(),mesKey:mesAct,uf:ufFechaCache()||{}}).filter(b=>String(b.due||b.issued_at||'').slice(0,10)>=`${mesAct}-01`)
+              const pemMes=cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirSet||new Set(),mesKey:mesAct,uf:ufFechaCache()||{}}).filter(b=>String(b.due||b.issued_at||'').slice(0,10)>=`${mesAct}-01`)
               const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0)
               const dupN=yaFacturadasIds.size
               const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0)
@@ -3297,7 +3297,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               // "Por revisar": acciones de higiene (antes KPIs falsos / alertas sueltas). Cada una lleva a su lugar real.
               // Radar "Cuotas vencidas sin facturar": programadas de meses CERRADOS (antes del actual), dentro de la vida de la app (2026-06-06), de ventas Activas, que no marcaste "no corresponde". Candidatas a emitir, por revisar.
               const _m1=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`
-              const sinEmitirCands=cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:_m1})
+              const sinEmitirCands=cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:_m1})
               const sinEmitirN=sinEmitirCands.length
               const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
@@ -3730,8 +3730,11 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
-          const cands=cuotasSinEmitir({billing,sales,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1})
+          const cands=cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1})
           const recib=recibidoACuenta(cands,anticipos,sales)
+          const sinPrim=cuotasSinPrimeraFactura({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1}).sort((x,y)=>String(x.due).localeCompare(String(y.due)))
+          const sinPrimOpen=openClients.has('__sinprimera'), sinPrimTot=sinPrim.reduce((a,b)=>a+(b.amount||0),0)
+          const sinPrimCli=[...new Set(sinPrim.map(b=>String(b.client_id||'—')))]
           const byCli={}; cands.forEach(b=>{ const k=String(b.client_id||'—'); (byCli[k]=byCli[k]||[]).push(b) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
           keys.forEach(k=>byCli[k].sort((x,y)=>String(x.due).localeCompare(String(y.due))))
@@ -3740,7 +3743,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           return (
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'0 2px'}}>Cuotas de meses ya cerrados que la app tiene como <b style={{color:C.text}}>Programadas</b> (no emitidas). <b style={{color:C.text}}>Por revisar</b> — no todas son un error: algunas pueden ser intencionales o ya emitidas en un período sin sincronizar. Usa <b style={{color:C.text}}>“Buscar en SII”</b> para confirmar si ya existe.</div>
-            {cands.length===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Nada por revisar — las cuotas de meses cerrados están emitidas o resueltas.</div>}
+            {cands.length===0&&sinPrim.length===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Nada por revisar — las cuotas de meses cerrados están emitidas o resueltas.</div>}
             {keys.map(k=>{ const gi=byCli[k]; const cli=(clients||[]).find(c=>String(c.id)===k); const tot=gi.reduce((a,b)=>a+(b.amount||0),0); const open=openClients.has(k); const nMeses=new Set(gi.map(b=>String(b.due).slice(0,7))).size; return (
               <div key={k}>
                 <div onClick={()=>toggleClient(k)} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 2px 7px'}}>
@@ -3768,6 +3771,29 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                     </div>) })}
                 </div>}
               </div>) })}
+            {sinPrim.length>0&&<div style={{marginTop:cands.length?6:0,border:`0.5px dashed ${C.border}`,borderRadius:12,background:C.bgSoft,overflow:'hidden'}}>
+              <div onClick={()=>toggleClient('__sinprimera')} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'10px 12px'}}>
+                <span style={{fontSize:10,color:C.textSoft,transform:sinPrimOpen?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}><Gl n='chevron'/></span>
+                <span style={{fontSize:12.5,fontWeight:700,color:C.muted}}>Sin primera factura</span>
+                <span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>· {sinPrimCli.length} cliente{sinPrimCli.length!==1?'s':''} · {sinPrim.length} cuota{sinPrim.length!==1?'s':''}</span>
+                <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(sinPrimTot)}</span>
+              </div>
+              {sinPrimOpen&&sinPrim.map(b=>{ const s=saleById[String(b.sale_id)]; const cli=(clients||[]).find(c=>String(c.id)===String(b.client_id)); return (
+                <div key={b.id} style={{borderTop:`0.5px solid ${C.border}`,padding:'10px 12px',background:'#fff'}}>
+                  <div style={{display:'flex',alignItems:'baseline',gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{...NOMBRE_CLI,cursor:onOpenClientFicha?'pointer':'default'}}>{cli?.name||b.receptor_name||'Sin cliente'}</div>
+                      <div style={{fontSize:12,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s?.title||b.concept||'Cuota'}</div>
+                      <div style={{fontSize:10.5,color:C.textSoft,marginTop:1}}>Vencía {mesLbl(b.due)} · sin pago ni factura</div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(b.amount||0)}</div>
+                  </div>
+                  <div style={{display:'flex',gap:7,marginTop:8,flexWrap:'wrap'}}>
+                    <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
+                    <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}}>No corresponde</button>
+                  </div>
+                </div>) })}
+            </div>}
           </div>)
         })() : filter==='sinfacturar' ? (()=>{
           // Trabajos sin facturar (trabajosSinFacturar): ventas que ya facturan, sin factura hace más de 60 días y con parte del plan

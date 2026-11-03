@@ -639,3 +639,59 @@ test('factura sin enviar: emitida con XML, impaga y sin envío registrado (una r
   assert.equal(facturaSinEnviar({ ...base, deleted_at: '2026-10-05' }), false)
   assert.equal(facturaSinEnviar(null), false)
 })
+
+test('radar de cuotas: un trabajo con plata recibida cuenta como en marcha aunque no tenga folio', async () => {
+  const { cuotasSinEmitir, ventasEnMarcha } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const venta = id => ({ id, status: 'Activo' })
+  const cuota = (id, sale, due, extra = {}) => ({ id, sale_id: sale, status: 'Programada', due, amount: 100000, ...extra })
+  const sales = [venta('a'), venta('b'), venta('c'), venta('d'), venta('e')]
+  const billing = [
+    cuota('a1', 'a', '2026-10-01'),                                   // sin factura ni plata: sigue fuera (decisión 24-10)
+    cuota('b1', 'b', '2026-10-01'), cuota('b0', 'b', '2026-09-01', { status: 'Anticipada' }),   // cuota Anticipada = plata recibida
+    cuota('c1', 'c', '2026-10-01'),                                   // anticipo consumido
+    cuota('d1', 'd', '2026-10-01', { invoice_no: '10', status: 'Pendiente' }), cuota('d2', 'd', '2026-10-01'),   // ya factura
+    cuota('e1', 'e', '2026-05-01'),                                   // vencida antes de la app: fuera
+  ]
+  const anticipos = [{ sale_id: 'c', monto: 50000, estado: 'consumido' }, { sale_id: null, monto: 9, estado: 'disponible' }, { sale_id: 'a', monto: 0, estado: 'disponible' }]
+  const ids = r => r.map(b => b.id).sort()
+  assert.deepEqual(ids(cuotasSinEmitir({ billing, sales, anticipos, hasta: '2026-11-01' })), ['b1', 'c1', 'd2'])
+  assert.deepEqual(ids(cuotasSinEmitir({ billing, sales, hasta: '2026-11-01' })), ['b1', 'd2'])   // sin la tabla de anticipos: la cuota Anticipada de b basta, c queda fuera
+  assert.equal(ventasEnMarcha(billing, anticipos).has('a'), false)
+})
+
+test('estado de pago del trabajo sin factura: con anticipo, pagada sin factura y sin primera factura', async () => {
+  const { estadoPagoVenta } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const v = (id, status = 'Activo') => ({ id, status })
+  const c = (sale, status, due, amount = 100) => ({ id: sale + due + status, sale_id: sale, status, due, amount })
+  const billing = [
+    c('a', 'Anticipada', '2026-09-01'), c('a', 'Programada', '2026-10-01'),                 // parte cubierta, queda una
+    c('b', 'Anticipada', '2026-07-01'), c('b', 'Anticipada', '2026-08-01'),                 // todas cubiertas
+    c('d', 'Programada', '2026-08-01'),                                                      // vencida, sin plata ni factura
+    c('e', 'Programada', '2026-12-01'),                                                      // futura
+    c('f', 'Programada', '2025-11-01'),                                                      // previa a la app
+    { ...c('g', 'Pendiente', '2026-10-01'), invoice_no: '10' }, c('g', 'Anticipada', '2026-09-01'),   // ya factura
+    c('h', 'Anticipada', '2026-09-01'), c('h', 'Anulada', '2026-10-01'),                     // la anulada no cuenta
+  ]
+  const anticipos = [{ sale_id: 'a', monto: 70, estado: 'consumido' }, { sale_id: 'a', monto: 30, estado: 'disponible' }, { sale_id: 'e', monto: 0, estado: 'disponible' }]
+  const hoy = '2026-11-02', f = (s, st) => estadoPagoVenta(s, billing, anticipos, hoy)
+  assert.deepEqual(f(v('a')), { estado: 'anticipo', recibido: 100 })
+  assert.deepEqual(f(v('b')), { estado: 'pagada', recibido: 200 })
+  assert.deepEqual(f(v('b', 'Terminado')), { estado: 'pagada', recibido: 200 })
+  assert.deepEqual(f(v('d')), { estado: 'sinprimera', recibido: 0 })
+  assert.equal(f(v('d', 'Terminado')), null)
+  assert.equal(f(v('e')), null); assert.equal(f(v('f')), null); assert.equal(f(v('g')), null)
+  assert.equal(f(v('h')).estado, 'pagada')
+  assert.equal(f(v('a', 'Pausado')), null); assert.equal(f(null), null)
+})
+
+test('cuotas sin primera factura: las vencidas de trabajos que aún no parten, complemento exacto del radar', async () => {
+  const { cuotasSinEmitir, cuotasSinPrimeraFactura } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 'a', status: 'Activo' }, { id: 'b', status: 'Activo' }, { id: 'c', status: 'Terminado' }]
+  const q = (id, sale, due, extra = {}) => ({ id, sale_id: sale, status: 'Programada', due, amount: 100, ...extra })
+  const billing = [q('a1', 'a', '2026-10-01'), q('a2', 'a', '2026-09-01'), q('b1', 'b', '2026-10-01'), q('c1', 'c', '2026-10-01'), q('a3', 'a', '2026-12-01')]
+  const anticipos = [{ sale_id: 'b', monto: 10, estado: 'consumido' }]
+  const base = { billing, sales, anticipos, hasta: '2026-11-01' }
+  assert.deepEqual(cuotasSinPrimeraFactura(base).map(b => b.id).sort(), ['a1', 'a2'])
+  assert.deepEqual(cuotasSinEmitir(base).map(b => b.id), ['b1'])
+  assert.deepEqual(cuotasSinPrimeraFactura({ ...base, noEmitir: new Set(['a1']) }).map(b => b.id), ['a2'])   // «No corresponde» también las silencia
+})
