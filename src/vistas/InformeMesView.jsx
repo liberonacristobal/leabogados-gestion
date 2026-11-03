@@ -166,7 +166,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
             <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:C.bgSoft,fontSize:10,fontWeight:800,color:C.muted,textTransform:'uppercase',letterSpacing:.4}}><span style={{flex:1}}>Indicador</span>{isDesktop&&<span style={{minWidth:80,textAlign:'right'}}>{lblP}</span>}<span style={{minWidth:80,textAlign:'right'}}>{lblM}</span><span style={{minWidth:56,textAlign:'center'}}>Var.</span></div>
             {filasCierre.map(f=>(
               <div key={f.k} onClick={()=>go(DEST_CIERRE[f.k])} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{f.etiqueta}</div>{!isDesktop&&<div style={{fontSize:10.5,color:C.muted}}>{lblP} {valPrev(f)}</div>}</div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{f.etiqueta}</div>{!isDesktop&&fP&&<div style={{fontSize:10.5,color:C.muted}}>{lblP} {valPrev(f)}</div>}</div>
                 {isDesktop&&<span style={{fontSize:13,color:C.muted,fontVariantNumeric:'tabular-nums',minWidth:80,textAlign:'right'}}>{valPrev(f)}</span>}
                 <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',minWidth:80,textAlign:'right',whiteSpace:'nowrap'}}>{valFila(f)}</span>
                 {pill(f)}
