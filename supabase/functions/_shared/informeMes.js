@@ -121,7 +121,10 @@ export function leerInformeIA(raw) {
     const i = t.indexOf('{'), j = t.lastIndexOf('}')
     const o = JSON.parse(t.slice(i, j + 1))
     if (!o || typeof o.frase !== 'string' || !Array.isArray(o.puntos) || o.puntos.length !== TEMAS.length) return null
-    for (let k = 0; k < TEMAS.length; k++) { const p = o.puntos[k]; if (!p || p.tema !== TEMAS[k] || typeof p.titular !== 'string' || typeof p.porque !== 'string') return null }
+    for (let k = 0; k < TEMAS.length; k++) { const p = o.puntos[k]; if (!p || typeof p.titular !== 'string' || typeof p.porque !== 'string') return null
+      const tema = String(p.tema || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+      if (tema !== TEMAS[k]) return null
+      p.tema = tema; p.cifra = String(p.cifra ?? ''); p.variacion = String(p.variacion ?? ''); p.etiqueta = String(p.etiqueta ?? '') }
     return o
   } catch (_) { return null }
 }

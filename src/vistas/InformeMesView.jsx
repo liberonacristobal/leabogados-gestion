@@ -86,7 +86,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
         const v = verificarTexto(textoDeInforme(cand), dossier)
         if(v.ok) ok=cand; else falta=v.faltantes
       }
-      if(!ok) throw new Error('El informe no pasó la verificación de cifras. Intenta de nuevo; la comparación de abajo sigue vigente.')
+      if(!ok) throw new Error(`El informe no pasó la verificación de cifras (${Array.isArray(falta)?`números que no están en el resumen: ${falta.join(', ')}`:'formato inválido'}). Intenta de nuevo; la comparación de abajo sigue vigente.`)
       ok.puntos.forEach(p=>{ p.estado=estados[p.tema]||'sin_cambio' })
       const reg = { ...ok, ym, comparado:ymP, por:user?.name||null, at:new Date().toISOString() }
       await setLearningKV('informe_mes', ym, JSON.stringify(reg)); setInf(reg)
