@@ -24,6 +24,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { selectAll } from '../_shared/paginar.js'
+import { tercerosPorFactura } from '../_shared/comisionesReglas.js'
 import { propuestaDelDia, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision, explicarAsignacion, instantaneaCuota, parcheRegistroCuota } from '../_shared/facturacionReglas.js'
 import { createClient } from '@supabase/supabase-js'
 import type { VentaSII } from './rcv.ts'
@@ -64,7 +65,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const fechasV = ventas.map((v) => String(v.fechaEmision || '').slice(0, 10)).filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f)).sort()
   const dia = (iso: string, d: number) => { const x = new Date(iso + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10) }
   const [ventasRes, ufRes, delMesRes] = fechasV.length ? await Promise.all([
-    selectAll(() => supabase.from('sales').select('id,moneda,uf_value,cobro_config,area').is('deleted_at', null).order('id')),
+    selectAll(() => supabase.from('sales').select('id,moneda,uf_value,amount_uf,cobro_config,area').is('deleted_at', null).order('id')),
     supabase.from('indicadores').select('fecha,valor').eq('codigo', 'uf').gte('fecha', dia(fechasV[0], -6)).lte('fecha', dia(fechasV[fechasV.length - 1], 2)),
     selectAll(() => supabase.from('billing').select('id,sale_id,invoice_no,issued_at,status,deleted_at').not('invoice_no', 'is', null).is('deleted_at', null).gte('issued_at', fechasV[0].slice(0, 7) + '-01').order('id')),
   ]) : [{ data: [] }, { data: [] }, { data: [] }]
@@ -72,10 +73,18 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
   const ufPorFecha: Record<string, number> = {}
   for (const r of ufRes.data || []) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor)
   const facturadasMes = delMesRes.data || []
+  // El pago a un tercero (reparto en % o UF) se calcula sobre la FACTURA emitida: al asignar la cuota se recalcula con el monto del DTE.
+  const ajustarTerceros = async (b: any, monto: number, fecha: string) => {
+    try {
+      const { data: ts } = await supabase.from('terceros_pagos').select('id,estado,tipo_costo,valor,monto,liquido,retencion,bhe_id,comision_pct').eq('billing_id', b.id)
+      const venta = ventasApp.find((x: any) => String(x.id) === String(b.sale_id))
+      for (const c of tercerosPorFactura({ terceros: ts || [], venta, montoFactura: monto, fecha: b.due || fecha })) await supabase.from('terceros_pagos').update(c.patch).eq('id', c.id)
+    } catch (_) { /* no frena el registro */ }
+  }
 
   // Pagos por adelantado (fecha de pago de las cuotas Anticipada), glosa de lo ya bajado del SII y los externos (venta de terceros) ya facturados.
   const [antRes, glosaRes, extRes, tpRes] = fechasV.length ? await Promise.all([
-    supabase.from('anticipos').select('id,fecha'),
+    supabase.from('anticipos').select('id,fecha,estado,billing_id,sale_id,client_id,entity_id,monto,nota'),
     supabase.from('sii_cargas_docs').select('folio,glosa').gte('fecha_emision', fechasV[0]).not('glosa', 'is', null),
     selectAll(() => supabase.from('billing').select('id,client_id').eq('billing_type', 'externo').is('deleted_at', null).order('id')),
     selectAll(() => supabase.from('terceros_pagos').select('billing_id,proveedor_id,proveedor,comision_pct').not('comision_pct', 'is', null).order('id')),
@@ -135,6 +144,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
         if (error) { resultado.errores.push({ folio: v.folio, error: error.message }); console.log(`[sii-sync] ERROR actualizando folio ${v.folio}: ${error.message}`) }
         else {
           progUsadas.add(b.id)
+          await ajustarTerceros(b, v.montoTotal, fechaV)
           resultado.actualizadas.push({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, folio: v.folio, monto: v.montoTotal, fechaEmision: v.fechaEmision, por: 'propuesta del día' })
           // Bitácora con lo necesario para deshacer (la cuota tal como estaba) y el porqué de la asignación.
           await supabase.from('activity_log').insert({ user_email: 'cotejo', action: 'facturacion.asignada_auto', table_name: 'billing', record_id: b.id, estudio_id: 'lea',
@@ -148,7 +158,7 @@ export async function conciliar(ventas: VentaSII[], periodo: string): Promise<Re
       resultado.ambiguas.push({
         folio: v.folio, rut: v.rutReceptor, receptor: v.nombreReceptor, monto: v.montoTotal, fechaEmision: v.fechaEmision, tipoDte: v.tipoDte,
         propuesta: prop.propuesta ? prop.propuesta.id : null, motivo: prop.motivo, nivel: prop.nivel, evidencia: prop.evidencia, glosa: glosaDe.get(String(v.folio)) || null,
-        candidatos: prop.candidatas.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: null, vence: b.due || null, venta: b.sale_id || null, pago: b.paid_at || null, tipo: b.billing_type || null })),
+        candidatos: prop.candidatas.map((b: any) => ({ id: b.id, cliente: nombreCliente(b), concepto: b.concept, monto: b.amount, estado: b.status, folio: null, vence: b.due || null, venta: b.sale_id || null, pago: b.paid_at || null, tipo: b.billing_type || null, anticipoId: b.anticipoId || null })),
       })
       continue
     }

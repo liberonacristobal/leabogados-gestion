@@ -173,7 +173,7 @@ export function glosaApoya(glosa, concepto) {
  *   'atrasada'    una sola calza, pero con devengo de hace más de un mes: se propone y la confirma una persona.
  *   'serie'       varias cuotas de UNA venta: se propone la más antigua (FIFO) y la confirma una persona.
  *   'varias'      cuotas de ventas distintas: sin propuesta; candidatas = solo las que calzan.
- *   'subarriendo' cuotas del subarriendo de oficina (la glosa no se usa): propone la pagada por adelantado más cercana a la emisión, o la más antigua.
+ *   'subarriendo' cuotas del subarriendo de oficina y pagos sin factura (la glosa no se usa): FIFO, propone el período más antiguo sin factura.
  *   'comision'    «Comisión por facturar» (monto exacto): se propone y se confirma, con el registro que ya tiene sus ajustes.
  *   'sin_cuota'   la glosa contradice (otro N° de cuota u otro mes) a todas las que calzan por RUT y monto: no se propone ninguna.
  *   null          ninguna calza exacto (el cotejo sigue con sus tolerancias).
@@ -207,12 +207,25 @@ export function propuestaDelDia({ doc, programadas = [], ents = [], clientes = [
   if (!ok.length) return sin
   const conEv = (b, extra = {}) => ({ ...(evid.get(b.id) || {}), ...extra })
   const ordenar = (lista, prop) => prop ? [prop, ...lista.filter(x => x.id !== prop.id)] : lista
-  // Subarriendo de oficina: la glosa no manda (el texto de estas facturas no describe la cuota).
-  const sub = ok.filter(b => esVentaSubarriendo(ventaDe.get(String(b.sale_id))))
+  // Subarriendo de oficina: la glosa no manda (el texto de estas facturas no describe la cuota). Candidatas = sus cuotas (Programada o
+  // pagada por adelantado) y los pagos recibidos sin factura (anticipos disponibles). FIFO: se propone el período más antiguo sin factura.
+  const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const claveMes = (txt, respaldo) => { const p = periodoDeTexto(txt); return p.mes != null && p.anio != null ? `${p.anio}-${String(p.mes + 1).padStart(2, '0')}` : String(respaldo || '').slice(0, 7) }
+  const etiqueta = k => { const [y, m] = String(k).split('-'); return `${MESES[(+m || 1) - 1].toLowerCase()} de ${y}` }
+  const sub = ok.filter(b => esVentaSubarriendo(ventaDe.get(String(b.sale_id)))).map(b => ({ ...b, _k: claveMes(b.concept, b.due) }))
+  for (const a of anticipos || []) {
+    if (!a || a.estado !== 'disponible' || a.billing_id || !esVentaSubarriendo(ventaDe.get(String(a.sale_id))) || Math.abs((Number(a.monto) || 0) - monto) > 1) continue
+    // Un pago sin factura no trae razón social fija: sirve cualquiera de las del cliente (o el RUT del cliente).
+    const rutsCli = [...(entsDe.get(String(a.client_id)) || []).map(e => rutNorm(e.rut)), rutNorm(clienteDe.get(String(a.client_id))?.rut)]
+    if (!rutsCli.includes(rutD)) continue
+    const k = claveMes(a.nota, a.fecha), [y, m] = k.split('-'), titulo = ventaDe.get(String(a.sale_id))?.title || 'Subarrendamiento oficina'
+    sub.push({ id: 'ant:' + a.id, anticipoId: a.id, esAnticipo: true, client_id: a.client_id, sale_id: a.sale_id, entity_id: a.entity_id || null, amount: Number(a.monto), status: 'Pagada sin factura', paid_at: String(a.fecha || '').slice(0, 10), billing_type: 'subarriendo',
+      concept: `${titulo} — Mensual ${MESES[(+m || 1) - 1]} ${y}`, due: `${k}-01`, _k: k })
+  }
   if (sub.length) {
-    const cercana = sub.filter(b => b.status === 'Anticipada' && fechaPago(b) && _difDias(fechaPago(b), fecha) <= 10).sort((a, b) => _difDias(fechaPago(a), fecha) - _difDias(fechaPago(b), fecha))[0]
-    const prop = cercana || sub[0]
-    return { nivel: 'subarriendo', propuesta: prop, candidatas: ordenar(sub, prop), motivo: cercana ? `cuota del subarriendo cubierta por el pago del ${fechaPago(cercana).split('-').reverse().join('-')}` : 'cuota más antigua del subarriendo', evidencia: conEv(prop, { glosa: 'no_se_usa' }) }
+    sub.sort((a, b) => String(a._k).localeCompare(String(b._k)) || (a.esAnticipo ? 1 : 0) - (b.esAnticipo ? 1 : 0))
+    const prop = sub[0]
+    return { nivel: 'subarriendo', propuesta: prop, candidatas: sub, motivo: `la más antigua sin factura del subarriendo (${etiqueta(prop._k)})`, evidencia: { ...(evid.get(prop.id) || {}), glosa: 'no_se_usa' } }
   }
   const com = ok.filter(b => b.billing_type === 'comision')
   if (com.length) {

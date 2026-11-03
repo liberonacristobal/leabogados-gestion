@@ -9,6 +9,7 @@
 // Lo que la app resuelve con reglas extra (comisión por facturar, cuota anticipada, cuota que habría que retirar) y lo ambiguo
 // (RUT sin cliente, cuotas de ventas distintas) queda en la Bandeja del agente → «Abrir en Facturación». Bitácora de todo.
 // Body: {secret, dryRun?}. Auth: CRON_SECRET. verify_jwt=false. Lo llama el cron diario (después del cuadre del RCV).
+import { tercerosPorFactura } from "../_shared/comisionesReglas.js";
 import { propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, candidatasProgramadas, decidirRegistroSII, ultimoDiaHabilMesEmision, serieYaFacturadaEnMes, sugerirVentas, claveVentaFactura } from "../_shared/facturacionReglas.js";
 import { todasRest } from "../_shared/paginar.js";
 
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
     const out = { registradas: [] as unknown[], a_bandeja: [] as unknown[], cerradas: 0 };
     const [clients, ents, sales, abiertas] = await Promise.all([
       todas("clients?select=id,name,rut"), todas("client_entities?select=id,client_id,rut,name"),
-      todas("sales?select=id,client_id,title,status,area,cobro_config,entity_id,moneda,uf_value,deleted_at&deleted_at=is.null&status=eq.Activo"),
+      todas("sales?select=id,client_id,title,status,area,cobro_config,entity_id,moneda,uf_value,amount_uf,deleted_at&deleted_at=is.null&status=eq.Activo"),
       todas("agente_bandeja?select=id,gmail_id,estado&tipo=eq.factura_sin_registrar&estado=eq.pendiente"),
     ]);
     // Propuestas abiertas cuya factura ya se registró (en la app o aquí) → se cierran solas.
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
     const usadas = new Set<string>();
     // UF de los días de emisión (para la propuesta del día: lo que el Excel «Facturar» proponía = UF de la cuota × UF del día).
     const ufPorFecha: Record<string, number> = {};
-    const anticipos = await todas("anticipos?select=id,fecha").catch(() => []);
+    const anticipos = await todas("anticipos?select=id,fecha,estado,billing_id,sale_id,client_id,entity_id,monto,nota").catch(() => []);
     { const fs = docs.map((d) => String(d.fecha_emision).slice(0, 10)).sort(); const dia = (iso: string, n: number) => { const x = new Date(iso + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
       for (const r of await todas(`indicadores?select=fecha,valor&codigo=eq.uf&fecha=gte.${dia(fs[0], -6)}&fecha=lte.${dia(fs[fs.length - 1], 2)}`).catch(() => [])) ufPorFecha[String(r.fecha).slice(0, 10)] = Number(r.valor); }
     const bandeja = async (d: any, motivo: string, cid: string | null) => {
@@ -147,6 +148,9 @@ Deno.serve(async (req) => {
         const patch = parcheRegistroCuota({ prog: p, folio: d.folio, fecha, due, tipoDte: Number(d.tipo_dte), montoDte: monto, fechaAnticipo: antF, ahora: now });
         await rest(`billing?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(patch) });
         await rest(`sii_cargas_docs?id=eq.${d.id}`, { method: "PATCH", body: JSON.stringify({ estado: "registrada", billing_id: p.id, updated_at: now }) });
+        // El pago a un tercero (reparto en % o UF) se calcula sobre la factura emitida, no sobre la cuota programada.
+        try { const ts = await rest(`terceros_pagos?select=id,estado,tipo_costo,valor,monto,liquido,retencion,bhe_id,comision_pct&billing_id=eq.${p.id}`); const venta = sales.find((x) => x.id === p.sale_id);
+          for (const c of tercerosPorFactura({ terceros: ts || [], venta, montoFactura: monto, fecha: p.due || fecha })) await rest(`terceros_pagos?id=eq.${c.id}`, { method: "PATCH", body: JSON.stringify(c.patch) }); } catch { /* no frena el registro */ }
         const ev = prop.propuesta && prop.propuesta.id === p.id ? prop.evidencia : null;
         await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "facturacion.registrada_auto", table_name: "billing", record_id: p.id, estudio_id: "lea",
           detail: { title: `Factura N° ${d.folio} registrada sola: ${nombre} ${fmt(monto)} → cuota «${p.concept}»`, folio: String(d.folio), monto, concepto: p.concept, cliente: nombre, texto: explicarAsignacion(ev, p.concept), evidencia: ev, prev: instantaneaCuota(p), fecha, antes: { status: p.status, due: p.due, amount: p.amount, concept: p.concept } } }) });
