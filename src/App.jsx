@@ -43,7 +43,7 @@ import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
 import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, propuestaFondoRendicion } from '../supabase/functions/_shared/gastosReglas.js'
-import { pendientesPorCliente } from '../supabase/functions/_shared/pendientesCliente.js'   // Revisar cuentas: pendientes financieros por cliente (regla única)
+import { pendientesPorCliente, nClientesConPendientes } from '../supabase/functions/_shared/pendientesCliente.js'   // Revisar cuentas: pendientes financieros por cliente (regla única)
 import { crearConsultas, resolverConIA } from '../supabase/functions/_shared/consultasCopiloto.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../supabase/functions/_shared/ventaGastoReglas.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta } from '../supabase/functions/_shared/ventasReglas.js'
@@ -66,6 +66,7 @@ const AsistenteRedaccion = lazyVista(() => import('./vistas/AsistenteRedaccion.j
 const ReportBuilder = lazyVista(() => import('./vistas/ReportBuilder.jsx'), 'ReportBuilder')
 const BandejaView = lazyVista(() => import('./vistas/BandejaView.jsx'), 'BandejaView')
 const SociosView = lazyVista(() => import('./vistas/SociosView.jsx'), 'SociosView')
+const PanelSociosView = lazyVista(() => import('./vistas/PanelSociosView.jsx'), 'PanelSociosView')
 const ConciliarFacturasModal = lazyVista(() => import('./vistas/ConciliarFacturasModal.jsx'), 'ConciliarFacturasModal')
 const ResultadoAnioView = lazyVista(() => import('./vistas/ResultadoAnioView.jsx'), 'ResultadoAnioView')
 const RevisionDatosModal = lazyVista(() => import('./vistas/RevisionDatosModal.jsx'), 'RevisionDatosModal')
@@ -105,7 +106,7 @@ function applyEstudioToBrand(e){
 if(DEMO && demoData && demoData.estudio) applyEstudioToBrand(demoData.estudio)
 
 // Vista → módulo que la habilita. Sirve para ocultarla de la nav y bloquear su acceso si el módulo está apagado (para LEA: inerte, todo ON).
-const VIEW_MODULO = { horas:'horas', repricing:'horas', sales:'finanzas', billing:'finanzas', cobranza:'finanzas', conciliacion:'finanzas', anticipos:'finanzas', presupuestoOficina:'finanzas', expenses:'gastos', cajachica:'gastos', cartera:'proyectos', inteligencia:'bi', bi:'bi', portal:'portal' }
+const VIEW_MODULO = { horas:'horas', repricing:'horas', sales:'finanzas', billing:'finanzas', cobranza:'finanzas', conciliacion:'finanzas', anticipos:'finanzas', presupuestoOficina:'finanzas', panelSocios:'finanzas', expenses:'gastos', cajachica:'gastos', cartera:'proyectos', inteligencia:'bi', bi:'bi', portal:'portal' }
 // Fecha breve '15 jun' (omite el año si es el actual; muestra '15 jun 24' si es otro año). Para botones-calendario compactos.
 const fechaBreve = d => { if(!d) return ''; const p=String(d).slice(0,10).split('-'); if(p.length!==3) return String(d); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const cur=new Date().getFullYear(); return `${+p[2]} ${M[+p[1]-1]||p[1]}${+p[0]!==cur?` ${p[0].slice(2)}`:''}` }
 // Fecha breve SIEMPRE con año ('19 jun 26'). Para campos donde el año importa.
@@ -561,6 +562,7 @@ function SideNav({tab,setTab,userRole,onCopiloto,onPalette,onPrioridades,prioAct
         ]},
         {cap:'Finanzas', items:[
           {id:'conciliacion',label:'Banco',ic:'bank',mod:'finanzas'},
+          {id:'panelSocios',label:'Panel de socios',ic:'chart',mod:'finanzas'},
           {id:'proveedores',label:'Comisiones',ic:'pct',mod:'finanzas'},
           {id:'presupuestoOficina',label:'Oficina',ic:'building',mod:'finanzas'},
           {id:'cobranza',label:'Cobranza',ic:'send',mod:'finanzas'},
@@ -5460,7 +5462,7 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
 const VIEWS_PALETTE = {
-  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['calendarioTrib','Calendario tributario'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
+  admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['panelSocios','Panel de socios'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['calendarioTrib','Calendario tributario'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas']],
 }
 // Acciones de la paleta (antes vivían en el menú ☰). Solo admin. id = tipo de modal (o 'conciliacion' = tab).
@@ -5963,7 +5965,7 @@ export default function App() {
       .then(([a,b,m])=>{ if(v) setPendLearn({noEmitir:new Set((a.data||[]).map(r=>String(r.key))),decFact:new Map((b.data||[]).map(r=>[String(r.key),r.value])),movs:m.data||[]}) }).catch(()=>{})
     return ()=>{ v=false } },[userRole,tab])
   const pendCli = useMemo(()=>{ if(userRole!=='admin') return new Map(); try{ return pendientesPorCliente({clients,sales,billing,anticipos,expenses,movsPend:pendLearn.movs,uf:ufFechaCache()||{},hoy:isoLocal(Date.now()),noEmitir:pendLearn.noEmitir,decFact:pendLearn.decFact,esVencida:esVencidaB,saldoBill}) }catch(_){ return new Map() } },[userRole,clients,sales,billing,anticipos,expenses,pendLearn])
-  const misPend = useMemo(()=>{ const yo=_normTxt(user?.name||''); if(!yo) return 0; let n=0; (clients||[]).forEach(c=>{ if(c&&!c.is_internal&&!c.is_occasional&&!c.is_colaborador&&c.status==='Activo'&&_normTxt(c.abogado_responsable||'')===yo&&(pendCli.get(String(c.id))?.items||[]).some(i=>!i.soloFiltro)) n++ }); return n },[clients,user?.name,pendCli])
+  const misPend = useMemo(()=>nClientesConPendientes(pendCli,clients,user?.name,_normTxt),[clients,user?.name,pendCli])
   useEffect(()=>{ if(_TAB_PAGINAS.includes(tab)) return; try{ sessionStorage.setItem(_TAB_KEY,JSON.stringify({tab,at:Date.now()})) }catch(_){} },[tab])   // eslint-disable-line react-hooks/exhaustive-deps
   // Registro de pantallas visitadas (usage_events area 'vista'): para saber con datos qué se usa antes de rediseñar o quitar algo.
   useEffect(()=>{ if(DEMO||!user?.email) return; logEvent('vista',tab,{},user?.name||user?.email) },[tab,user?.email])   // eslint-disable-line
@@ -8481,6 +8483,8 @@ export default function App() {
   if(!userRole) return bootScreen
 
   // Inicio como elemento reutilizable: Counsel AI lo monta oculto para leer el resultado del año cuando se pregunta desde otra pantalla.
+  // Panel de socios: cada cifra salta a su pantalla de origen con navTo (el «‹» vuelve al panel en su lugar).
+  const irPanel=(d,x)=>{ const m={ resultadoAnio:()=>navTo({tab:'resultadoAnio'}), estadoResultados:()=>navTo({tab:'estadoResultados'}), socios:()=>navTo({tab:'socios'}), porSocio:()=>setModal({type:'porSocio'}), cobranza:()=>navTo({tab:'cobranza'}), proveedores:()=>navTo({tab:'proveedores'}), flujoCaja:()=>navTo({tab:'flujoCaja'}), conciliacion:()=>navTo({tab:'conciliacion'}), ventas:()=>navTo({tab:'sales'}), facturas:()=>navTo({tab:'billing',billingIntent:'checklist'}), cierreMes:()=>navTo({tab:'billing',billingIntent:'cierre'}), sinEmitir:()=>navTo({tab:'billing',billingIntent:'sinemitir'}), gastos:()=>{ navTo({tab:'expenses'}); setExpNav('rendirCli') }, cliente:()=>handleOpenClientFicha(x), clientes:()=>navTo({tab:'clients'}), revisarCuentas:()=>{ setPendIntent({resp:x?[x]:[]}); navTo({tab:'clients'}) } }; (m[d]||(()=>{}))() }
   const dashboardEl = userRole==='admin' ? <Dashboard nPendCuentas={misPend} onRendirClientes={()=>{ navTo({tab:'expenses'}); setExpNav('rendirCli') }} proyHitos={proyHitos} onEntregarCaja={(persona,monto)=>setModal({type:'entregarCaja',data:{persona,monto}})} sales={sales} billing={billing} fantasmaIds={fantasmaAltaIds} anticipos={anticipos} clients={clients} clientEntities={clientEntities} expenses={expenses} tasks={tasks} pettyCash={pettyCash} terceros={terceros} proveedores={proveedores} rendiciones={rendiciones} proyectosCartera={proyectosCartera} setTab={setTab} navTo={navTo} user={user} onAddTask={()=>setModal({type:'task',data:null})} onEditTask={t=>setModal({type:'task',data:t})} onCompleteTask={completeTaskWithGate} onPreviewTask={t=>setModal({type:'taskPreview',data:t})} tareasOpen={tareasOpen} onTareasClose={()=>setTareasOpen(false)} costosOfiMes={costosOfiMes} costosOfiRows={costosOfiRows} onOpenCostosOfi={()=>navTo({tab:'presupuestoOficina'})} onOpenEstadoResultados={()=>navTo({tab:'estadoResultados'})} onOpenFlujoCaja={()=>navTo({tab:'flujoCaja'})} onOpenClientFicha={handleOpenClientFicha} onOpenPlazos={()=>setModal({type:'plazos'})} onOpenCalTrib={()=>navTo({tab:'calendarioTrib'})} onOpenProyecto={(pid)=>navTo({tab:'cartera',cartera:pid})} onOpenEmitidoMes={(seg)=>navTo({tab:'facturasDelMes',emitidoSeg:seg})} prioOpen={prioOpen} setPrioOpen={setPrioOpen} onAcceso={(id)=>{ if(id==='revisarCuentas'){ setPendIntent({resp:user?.name?[user.name]:[]}); navTo({tab:'clients'}) } else if(id==='tasks')navTo({tab:'tasks'}); else if(id==='inteligencia')navTo({tab:'inteligencia'}); else if(id==='conciliacion')navTo({tab:'conciliacion'}); else if(id==='facturasMes')navTo({tab:'billing',billingIntent:'checklist'}); else if(id==='cierreMes')navTo({tab:'billing',billingIntent:'cierre'}); else if(id==='micarga')navTo({tab:'miCarga'}); else if(id==='cobranza')navTo({tab:'cobranza'}); else if(id==='repricing')navTo({tab:'repricing'}); else if(id==='oficina')navTo({tab:'presupuestoOficina'}); else if(id==='mas')setPaletteOpen(true) }}/> : null
   return (
     <>
@@ -8748,6 +8752,7 @@ export default function App() {
             {tab==='contactos'&&<ContactosClientes key={contactosKey} isDesktop={isDesktop} clients={clients} sales={sales} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha} onBuscarGmail={()=>setModal({type:'gmailContactos'})}/>}
             {tab==='proveedores'&&userRole==='admin'&&<ProveedoresView proveedores={proveedores} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} onSave={handleSaveProveedor} onRevertirPago={handleRevertirPagoProveedor} onAsignarFacturas={handleAsignarFacturasProveedor} user={user} focoProvId={provFoco} onFocoUsado={()=>setProvFoco(null)} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onBack={goBack} origen={origenNav('Inicio')} saving={saving}/>}
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
+            {tab==='panelSocios'&&userRole==='admin'&&<PanelSociosView sales={sales} billing={billing} clients={clients} terceros={terceros} expenses={expenses} anticipos={anticipos} costosOfiRows={costosOfiRows} fantasmaIds={fantasmaAltaIds} socios={socios} respaldoMap={respaldoMap} pendCli={pendCli} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onGo={irPanel}/>}
             {tab==='socios'&&userRole==='admin'&&<SociosView expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
             {tab==='estadoResultados'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1120,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>

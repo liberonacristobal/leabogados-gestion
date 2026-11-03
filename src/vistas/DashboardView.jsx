@@ -2,12 +2,12 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { useResultadoAnio } from '../lib/resultadoAnio.js'
+import { useResultadoAnio, pctsAnio } from '../lib/resultadoAnio.js'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, diaGrande, fmt, fmtFechaDMY, fmtN, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_CLI, SEÑAL_COL, UF_FALLBACK, _diasDesde, _esOfiCliR, publicarResultadoInicio, _ymPrev, alertasCajaChica, bigDate, carteraMovimiento, claudeCall, cobradoBill, comisPorPagarAnteriores, comisionesVenta, costosOficinaMes, currentYear, daysLeft, daysLeftB, esFacIngreso, esRecurrente, esSubarriendo, esVencidaB, flujoCajaProyectado, fmtDate, fmtMill, fmtMillLR, fmtShort, fmtUFk, gastosPorLiquidarCaja, logEvent, margenDeSale, margenPct, mesCorto, mesTitulo, montoFactura, nDias, porCobrarBills, redondearPartes, resultadoMes, saldoBill, saldoComisiones, saldoDelta, taskAssignees, ufDelDia, urgencyColor, useCalTrib, useFlujoCaja, useFuentesResultado, usePersistedState, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from '../lib/compartido.jsx'
+import { CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_CLI, SEÑAL_COL, UF_FALLBACK, _diasDesde, _esOfiCliR, publicarResultadoInicio, _ymPrev, alertasCajaChica, bigDate, carteraMovimiento, claudeCall, cobradoBill, comisPorPagarAnteriores, comisionesVenta, costosOficinaMes, currentYear, daysLeft, daysLeftB, esFacIngreso, esRecurrente, esSubarriendo, esVencidaB, flujoCajaProyectado, fmtDate, fmtMill, fmtMillLR, fmtShort, fmtUFk, gastosPorLiquidarCaja, logEvent, margenDeSale, margenPct, mesCorto, mesTitulo, montoFactura, nDias, porCobrarBills, redondearPartes, resultadoMes, resumenCartera, saldoBill, saldoComisiones, saldoDelta, taskAssignees, ufDelDia, urgencyColor, useCalTrib, useFlujoCaja, useFuentesResultado, usePersistedState, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from '../lib/compartido.jsx'
 
 // Overhead de oficina por hora (fuente única): costos NO-remuneración/mes ÷ horas del equipo CON costo (Σ metas ×4,33).
 export function overheadHoraDe(costosOfiRows, metas={}, costoHora={}, ym){
@@ -197,7 +197,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const [selYear,setSelYear] = useState(currentYear)
   // Resultado del año: UNA fuente (lib/resultadoAnio.js), la misma del Panel de socios. Fórmulas extraídas sin cambios.
-  const { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio } = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear })
+  const { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio } = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear })
   // Accesos que aprenden: se ordenan por frecuencia de uso de ESTE usuario (cache instantáneo en localStorage) + registro durable en usage_events. Un punto verde marca el último abierto.
   const accUsoKey = `accesoUso_${user?.name||user?.email||'x'}`
   const [accUso,setAccUso] = useState(()=>{ try{ return JSON.parse(localStorage.getItem(accUsoKey))||{c:{},last:''} }catch(_){ return {c:{},last:''} } })
@@ -275,7 +275,6 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   // Meta en UF con la MISMA UF promedio de lo vendido (pesos de las ventas ÷ sus UF): así «% de la meta» = pesos ÷ pesos y no se infla
   // por dividir la meta (pesos) con la UF de hoy mientras lo vendido está en las UF de cada venta. Sin ventas, la UF de hoy.
-  const metaUF = m.meta>0 ? ((m.bruto>0&&m.brutoUF>0) ? m.meta*m.brutoUF/m.bruto : (ufRef>0?m.meta/ufRef:0)) : 0
   const [resDrill,setResDrill] = usePersistedState('d_resdrill',null)   // {tile:'vend'|'fact'|'cob'|'marg', year:number|null} — embudo: nivel1 resumen, nivel2 años, nivel3 clientes
   const [resOrd,setResOrd] = usePersistedState('d_resord','fecha')      // orden del detalle por año: 'fecha' (más reciente) o 'monto' (mayor)
   const [resSeeAll,setResSeeAll] = useState({})                          // {`${tile}-${y}`:true} → ver TODOS los cobros de ese año (si no, tope 6)
@@ -415,10 +414,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const [agingBucket,setAgingBucket] = usePersistedState('d_aging',null)   // tramo del aging abierto para ver su detalle
   const agingData = useMemo(()=>computeAgingCartera(billing.filter(b=>b.billing_type!=='reembolso'), clientesMap),[billing,clientesMap])
   // Vencido = TODO lo vencido (porCobrarBills + esVencidaB), lo mismo que muestra Cobranza; el aging +60 queda solo para su gráfico.
-  const vencidoBills = useMemo(()=>(billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)),[billing])
-  const vencidoTot = vencidoBills.reduce((a,b)=>a+saldoBill(b),0)
-  // Exposición de la cartera (mismo helper que Cobranza): % de lo por cobrar con más de 60 días de mora.
-  const expoCob = useMemo(()=>exposicionCartera((billing||[]).filter(b=>b&&!b.deleted_at&&!['reembolso','nota_credito'].includes(b.billing_type)&&b.invoice_no&&['Pendiente','Vencido'].includes(b.status)&&saldoBill(b)>0).map(b=>({cid:b.client_id,saldo:saldoBill(b),mora:esVencidaB(b)?-daysLeftB(b):0}))),[billing])
+  // Vencido y exposición de la cartera: fuente única resumenCartera (compartido.jsx), la misma del Panel de socios.
+  const {vencidoBills,vencidoTot,expo:expoCob} = useMemo(()=>resumenCartera(billing),[billing])
   // Programadas fantasma (ya emitidas, alta confianza) fuera, para no contar dos veces la cuota y su factura gemela.
   const billingProj = useMemo(()=> (fantasmaIds&&fantasmaIds.size) ? (billing||[]).filter(b=> !fantasmaIds.has(String(b.id))) : (billing||[]), [billing,fantasmaIds])
   // Cuentas por pagar (cifra del tile): deuda a proveedores no pagada (por_pagar + pendiente), excluye facturas anuladas. Mismo criterio que el detalle.
@@ -655,14 +652,11 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         const comisYTD=comisPagadasAnioVenta.total||0                    // comisiones PAGADAS del año por ventas propias (base caja) — se restan
         const percYTD=ingresosPorAnioVenta.percibidas||0                  // comisiones PERCIBIDAS (nuestro % de facturas por cuenta de terceros) — se suman
         const ingReal=ingYTD-comisYTD+percYTD                             // Ingreso real = cobrado propio − comisiones pagadas + comisiones percibidas
-        const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
-        const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
-        const factPct=m.bruto>0?Math.min(100,Math.round(resAnio.fac/m.bruto*100)):0
+        const {ventaPct,ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})   // % de meta y de lo vendido: fuente única (lib/resultadoAnio.js), la misma del Panel de socios
         // Cifras del año en UF con la UF del DÍA de cada movimiento (ufDelDia); en CLP, los pesos tal cual. mRes = cifras de la cascada del resultado.
         const mRes=(k,abs)=>{ const v=(dashMoneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return dashMoneda==='UF'?fmtUFk(x):fmtShort(x) }
         const ingYTDUF=ingresosPorAnioVenta.totalUF||0, comisYTDUF=comisPagadasAnioVenta.totalUF||0, percYTDUF=ingresosPorAnioVenta.percibidasUF||0, ingRealUF=ingYTDUF-comisYTDUF+percYTDUF
         const fmtMonD=(v,iso)=>dashMoneda==='UF'?fmtUFk(Math.round((Number(v)||0)/ufDelDia(ufDias,iso,ufRef))):fmtShort(v)
-        const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%), igual que ventaPct
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>

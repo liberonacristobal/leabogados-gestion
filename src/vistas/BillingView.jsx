@@ -6,6 +6,7 @@ import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { BRAND, C, CUENTA_HONORARIOS, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
@@ -3282,23 +3283,14 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               const _pm=new Date(_now.getFullYear(),_now.getMonth()-1,1)
               const cmK=`${_pm.getFullYear()}-${String(_pm.getMonth()+1).padStart(2,'0')}`
               const cap=s=>s.charAt(0).toUpperCase()+s.slice(1)
-              const emi=bb.filter(b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.issued_at||b.date||'').slice(0,7)===cmK)
-              const mo=b=>montoFactura(b); const ab=b=>Math.max(Number(b.paid_amount)||0,Number(respaldoMap[b.id])||0); const sa=b=>b.status==='Pagado'?0:Math.max(0,mo(b)-ab(b))
-              const tEmi=emi.reduce((a,b)=>a+mo(b),0), tCob=emi.reduce((a,b)=>a+Math.max(0,mo(b)-sa(b)),0), tasa=tEmi>0?Math.round(tCob/tEmi*100):0
-              const mesAct=_now.toISOString().slice(0,7)
-              // Mismas cuotas que el checklist (ventasReglas): las del mes, sin lo atrasado (eso es el paso «Vencidas»).
-              const pemMes=cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirSet||new Set(),mesKey:mesAct,uf:ufFechaCache()||{}}).filter(b=>String(b.due||b.issued_at||'').slice(0,10)>=`${mesAct}-01`)
-              const pemN=pemMes.length, pemTot=pemMes.reduce((a,b)=>a+(b.amount||0),0)
+              // Cierre y ciclo del mes: UNA fuente (_shared/facturacionMes.js), la misma del Panel de socios.
+              const {emi,mo,ab,sa,tEmi,tCob,tasa,mesAct,pemMes,pemN,pemTot,porEnviar,sinEmitirCands,sinEmitirN,sumM,cobPend,porEnvTot}=cicloFacturacionMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirSet||new Set(),respaldoMap,uf:ufFechaCache()||{},now:_now})
               const dupN=yaFacturadasIds.size
               const cob=(billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.invoice_no&&['Vencido','Pendiente'].includes(b.status)&&(b.amount||0)>0&&saldoBill(b)===0)
               const rech=(billing||[]).filter(b=>!b.deleted_at&&/rech/i.test(b.dte_estado||''))
-              const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b))
               const kick={fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',color:C.muted,marginBottom:2}
               // "Por revisar": acciones de higiene (antes KPIs falsos / alertas sueltas). Cada una lleva a su lugar real.
               // Radar "Cuotas vencidas sin facturar": programadas de meses CERRADOS (antes del actual), dentro de la vida de la app (2026-06-06), de ventas Activas, que no marcaste "no corresponde". Candidatas a emitir, por revisar.
-              const _m1=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-01`
-              const sinEmitirCands=cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:_m1})
-              const sinEmitirN=sinEmitirCands.length
               const _emitBasePC=b=>!b.deleted_at&&(b.invoice_no||b.folio)&&b.status!=='Anulada'&&b.billing_type!=='reembolso'
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
               const facSinXmlN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>='2026-06-09').length
@@ -3334,8 +3326,6 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   <div style={{fontSize:10,color:opts.subCol||C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
                 </div>)
               // Ciclo del mes (5 pasos, render aprobado 2026-11-02): cada cifra sale de la misma fuente que su pantalla de destino.
-              const sumM=a=>a.reduce((t,b)=>t+(b.amount||0),0)
-              const cobPend=emi.filter(b=>sa(b)>0), porEnvTot=porEnviar.reduce((t,b)=>t+mo(b),0)
               const mesPrev=MN[_pm.getMonth()].slice(0,3)
               const pasos=[
                 {k:'Vencidas', n:sinEmitirN, v:fmtShort(sumM(sinEmitirCands)), u:`${sinEmitirN} cuota${sinEmitirN!==1?'s':''}`, ic:'alert', col:C.overdueText, on:()=>go('sinemitir')},

@@ -1,7 +1,7 @@
 // Pruebas de pendientes financieros por cliente (vista «Revisar cuentas»). Casos de situaciones reales, sin nombres de clientes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pendientesPorCliente, tiposDe, clientesConPendientes, contables } from '../supabase/functions/_shared/pendientesCliente.js'
+import { pendientesPorCliente, tiposDe, clientesConPendientes, contables, nClientesConPendientes } from '../supabase/functions/_shared/pendientesCliente.js'
 
 const HOY = '2026-11-03'
 const clients = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'ci', is_internal: true }]
@@ -76,4 +76,13 @@ test('fondos viven solo como filtro: no cuentan en «Todos» ni en contables, s�
   assert.deepEqual(clientesConPendientes(m).map(x => x.n), [1])
   assert.deepEqual(clientesConPendientes(m, new Set(['fondos'])).map(x => x.n), [1])
   assert.equal(clientesConPendientes(pendientesPorCliente({ ...base, expenses })).length, 0)
+})
+
+test('nClientesConPendientes: cuenta clientes activos del abogado con pendientes que cuentan, sin internos ni los que solo tienen fondos', () => {
+  const norm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  const cs = [{ id: 'c1', status: 'Activo', abogado_responsable: 'Ana' }, { id: 'c2', status: 'Activo', abogado_responsable: 'ANA' }, { id: 'c3', status: 'Activo', abogado_responsable: 'Luis' },
+    { id: 'c4', status: 'Terminado', abogado_responsable: 'Ana' }, { id: 'c5', status: 'Activo', abogado_responsable: 'Ana', is_internal: true }]
+  const m = new Map([['c1', { n: 1, items: [{ tipo: 'cuotas' }] }], ['c2', { n: 1, items: [{ tipo: 'fondos', soloFiltro: true }] }], ['c3', { n: 1, items: [{ tipo: 'cuotas' }] }], ['c4', { n: 1, items: [{ tipo: 'cuotas' }] }], ['c5', { n: 1, items: [{ tipo: 'cuotas' }] }]])
+  assert.equal(nClientesConPendientes(m, cs, 'ana', norm), 1)
+  assert.equal(nClientesConPendientes(m, cs, '', norm), 0)
 })

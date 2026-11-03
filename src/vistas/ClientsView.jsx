@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, saldosPorCliente, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
 import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
@@ -212,9 +212,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
     if(it.sale_id){ const v=(sales||[]).find(x=>String(x.id)===String(it.sale_id)); if(v&&onOpenSale) return onOpenSale(v) } }
   // Por cobrar de cada cliente: misma fuente que la ficha (porCobrarBills).
   const porCobrarDe = useMemo(()=>{ const g={}; (billing||[]).forEach(b=>{ if(b&&b.client_id!=null) (g[b.client_id]=g[b.client_id]||[]).push(b) }); const m={}; Object.keys(g).forEach(k=>{ m[k]=porCobrarBills(g[k]) }); return m },[billing])
-  const balances = useMemo(()=>{
-    const m={}; expenses.forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+saldoDelta(e) }); return m
-  },[expenses])
+  const balances = useMemo(()=>saldosPorCliente(expenses),[expenses])   // fuente única (compartido.jsx), la misma del Panel de socios
 
   const isDesktop = useIsDesktop()   // Fase 2: en desktop, lista + ficha lado a lado (2-paneles)
   // Alerta proactiva de clientes duplicados/similares (evita fichas y carpetas de Drive repetidas). Abre la fusión.

@@ -91,3 +91,16 @@ export function clientesConPendientes(mapa, tipos = new Set(), ids = null) {
   })
   return res.sort((a, b) => b.n - a.n)
 }
+
+/**
+ * Cuántos clientes ACTIVOS de un abogado tienen pendientes que cuentan (sin los que viven solo como filtro). La usan la tarjeta «Revisar cuentas» de Inicio y el
+ * Panel de socios. norm = normalizador de nombres (minúsculas sin acentos); excluye internos, ocasionales y colaboradores, igual que la lista de Clientes.
+ * @param {Map<string,any>} mapa @param {any[]} clients @param {string} abogado @param {(s:string)=>string} norm
+ */
+export function nClientesConPendientes(mapa, clients, abogado, norm) {
+  const yo = norm(abogado || ''); if (!yo) return 0
+  let n = 0
+  ;(clients || []).forEach(c => { if (c && !c.is_internal && !c.is_occasional && !c.is_colaborador && c.status === 'Activo' && norm(c.abogado_responsable || '') === yo && (mapa.get(String(c.id))?.items || []).some(/** @param {any} i */ i => !i.soloFiltro)) n++ })
+  return n
+}
+
