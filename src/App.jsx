@@ -6041,6 +6041,8 @@ export default function App() {
     setTab(dest.tab); setTimeout(()=>restoreScroll({w:0,d:0}),0)
   },[tab,openFichaId,pagina])
   const goBack=useCallback(()=>{ if(navStack.length) handleBackOrigin(); else setTab(userRole==='admin'?'dashboard':'tasks') },[navStack,userRole,handleBackOrigin])
+  // Barra lateral e inferior = salto a una raíz nueva: vacía la pila, para que el «volver» de la vista no muestre un origen viejo (p. ej. «Panel de socios | Panel de socios»).
+  const irRaiz=useCallback(id=>{ setNavStack([]); setTab(id) },[])
   // Abrir una novedad: marca vistas y salta a su vista (con «Volver» al lugar de origen). Sub-vistas de Gastos vía expNav.
   const abrirNovedad = n => { marcarNovVistas(); const {exp,...d}=n?.destino||{}; if(!d.tab) return; navTo(d); if(exp) setExpNav(exp) }   // d: {tab, conc?, ccRev?, cartera?…} = lo que entiende navTo
   const verNovedades = () => { marcarNovVistas(); if(tab!=='novedades') navTo({tab:'novedades'}) }
@@ -8784,8 +8786,8 @@ export default function App() {
             <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round'><line x1='12' y1='5' x2='12' y2='19'/><line x1='5' y1='12' x2='19' y2='12'/></svg>
           </button>
         )}
-        <SideNav tab={tab} setTab={setTab} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen}/>
-        <BottomNav tab={tab} setTab={setTab} overdueN={overdueN} userRole={userRole}/>
+        <SideNav tab={tab} setTab={irRaiz} userRole={userRole} onCopiloto={()=>setCopilotoOpen(true)} onPalette={()=>setPaletteOpen(true)} onPrioridades={abrirPrioridades} prioActive={tab==='dashboard'&&prioOpen}/>
+        <BottomNav tab={tab} setTab={irRaiz} overdueN={overdueN} userRole={userRole}/>
 
         {modal?.type==='rechazoMotivo'&&<Modal fullscreenOnMobile title={<span style={{color:C.accent}}>Rechazar propuesta</span>} onClose={()=>setModal(null)} closeOnBackdrop={false}><RechazoMotivoModal sale={modal.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></Modal>}
         {modal?.type==='primerasTareas'&&<Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Primeras tareas</span><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:400}}>{modal.data?.title||'Encargo'}</span></>} onClose={()=>setModal(null)} closeOnBackdrop={false} maxWidth={560}><PrimerasTareasModal sale={modal.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></Modal>}
