@@ -23,6 +23,13 @@ Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato
 - **Lo "Chile" es un módulo país:** SII, UF, RUT, IVA, factura electrónica y formatos son de Chile; trátalos como algo que se enchufa, no como el core. Idea a futuro: moneda/impuestos/idioma (es/pt/en) parametrizables.
 - **Pragmatismo:** esto NO frena el avance ni obliga a construir el multi-tenant hoy. Es una **mirada**: entre dos soluciones equivalentes, elige la que escala a más estudios; y no agregues deuda nueva de cableado. Esta regla convive con "menos es más" y con la autonomía autorizada.
 
+## REGLA DE ORO: modal solo para confirmaciones — todo lo demás es página
+
+Nada de ventanas flotantes para trabajar (2026-11-04: se convirtieron ~50 modales a página). Un `Modal` solo se usa para una **pregunta breve que bloquea una acción** y donde no hay nada que mirar al lado: avisos y confirmaciones del sistema (`DialogHost`: `appAlert`/`appConfirm`), «Dar de baja factura» (un motivo), «Deshacer importación», elegir el mes de la tanda (`MesTandaModal`) y el panel de Counsel AI (excepción pedida por el usuario: no se toca).
+- **Todo lo que tenga más de 2–3 campos, listas, previsualizaciones o se use para trabajar es PÁGINA con «← origen»:** si se abre por navegación, tipo `flujo` en `PAGE_OF` de `App.jsx` (`FlujoPagina`); si se abre desde un estado dentro de una vista, `PaginaSobre` (compartido.jsx). Nunca `position:'fixed'` + fondo oscuro a mano.
+- El aviso de novedades al entrar es una banda arriba que no bloquea (`NovedadesAviso`), no una ventana.
+- Al convertir, revisar que el contenido no lea `modal.data` (en página es `pagina.data`) y verificar en 1280 y 375 px.
+
 ## REGLA DE ORO: doble formato — todo nace en móvil Y escritorio
 
 La app tiene **dos presentaciones** (móvil full-screen y escritorio a todo el ancho), elegidas por el hook `useIsDesktop()` (breakpoint único 1024px). **Todo desarrollo nuevo —vista, feature, cambio visible— debe ser útil y funcional en AMBOS formatos**, nunca en uno solo. Ver [[arquitectura-desktop-movil]] (playbook completo, moldes, extracción a `useXModel`).

@@ -417,20 +417,17 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
     {acciones||(onOpen&&<span style={{color:C.done,display:'flex',flexShrink:0}}><Gl n='chevron'/></span>)}
   </div>)
 }
-// Aviso al entrar: panel centrado en escritorio, pantalla completa en el celular. «Entendido» las marca vistas.
-// Aviso al entrar: solo el número de novedades no vistas, sin la lista (no tapa la pantalla). «Ver novedades» abre la página
-// Novedades y «Continuar» lo cierra; en ambos casos quedan vistas. Mismo aviso centrado en escritorio y celular.
+// Aviso al entrar: banda arriba que no bloquea la pantalla, solo con el número de novedades no vistas. «Ver novedades» abre la página
+// Novedades y «Continuar» lo cierra; en ambos casos quedan vistas.
 function NovedadesAviso({items, isDesktop, onClose, onVerTodas}){
   const n=items.length
-  return createPortal(<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:'0 16px'}}>
-    <div onClick={e=>e.stopPropagation()} role='dialog' aria-label='Novedades' style={{width:isDesktop?420:'100%',maxWidth:420,background:C.surface,borderRadius:12,boxShadow:'0 18px 50px rgba(0,30,40,.28)',padding:'20px 20px 16px',display:'flex',flexDirection:'column',gap:14}}>
-      <div style={{display:'flex',alignItems:'center',gap:12}}>
-        <span style={{width:34,height:34,borderRadius:10,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:13,color:C.text,marginTop:2}}>{`Hay ${n} novedad${n!==1?'es':''} desde tu última visita.`}</div></div>
-      </div>
-      <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-        <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 18px',cursor:'pointer',minHeight:38}}>Ver novedades</button>
-        <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'9px 18px',cursor:'pointer',minHeight:38}}>Continuar</button>
+  return createPortal(<div style={{position:'fixed',top:'calc(env(safe-area-inset-top,0px) + 10px)',left:isDesktop?212:0,right:0,zIndex:300,padding:'0 16px',display:'flex',justifyContent:'center',pointerEvents:'none'}}>
+    <div role='status' aria-label='Novedades' style={{pointerEvents:'auto',width:'100%',maxWidth:isDesktop?560:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:'0 8px 28px rgba(0,30,40,.16)',padding:'10px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+      <span style={{width:30,height:30,borderRadius:8,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
+      <div style={{flex:'1 1 160px',minWidth:0,fontSize:13,color:C.text,lineHeight:1.25}}><b style={{color:C.accent}}>Novedades</b> · {`${n} desde tu última visita`}</div>
+      <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
+        <button onClick={onVerTodas} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Ver novedades</button>
+        <button onClick={onClose} style={{fontSize:12,fontWeight:700,color:C.surface,background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Continuar</button>
       </div>
     </div>
   </div>, document.body)
