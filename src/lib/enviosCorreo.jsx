@@ -68,31 +68,35 @@ export async function marcarEnviadaDesdeCorreo(h, quien) {
 export async function descartarEnvioCorreo(h) {
   try { await setLearningKV(CLAVE, `${h.correo_id}|${h.factura_id}`, 'descartada') } catch (e) { registrarError({ origen: 'accion', vista: 'factura_envio_correo', err: e }) }
 }
-// Marca manual («Ya enviada»): sin correo que lo pruebe; queda con la fecha de hoy y quién la marcó.
-export async function marcarEnviadaManual(b, quien) {
-  const at = new Date().toISOString()
+// Marca manual («Ya enviada»): sin correo que lo pruebe; queda con la fecha real que se indique y quién envió.
+export async function marcarEnviadaManual(b, quien, fecha) {
+  const at = fecha ? new Date(String(fecha).slice(0, 10) + 'T12:00:00').toISOString() : new Date().toISOString()   // fecha real del envío; sin ella, hoy
   okDB(await supabase.from('billing').update({ email_sent_at: at, sent_by: quien || null }).eq('id', b.id), 'marcar la factura como enviada')
   return at
 }
 
-// Quién envió una factura que ya figura enviada y no tiene remitente (envíos anteriores al registro de remitente). Solo completa
-// sent_by / sent_to desde el correo enviado de quien abre la app, con la regla estricta («coincide»: destinatario del cliente + folio);
-// no cambia la fecha ni el estado de envío.
+// Facturas que figuran enviadas SIN prueba (sin destinatario registrado: marcadas a mano, o enviadas antes de que se registrara quién y a
+// quién). Se leen los enviados de quien abre la app con la regla estricta («coincide»: destinatario del cliente + folio) y, si el correo
+// está, se completa quién lo envió, a quién y la fecha REAL del correo (una marca a mano llevaba la fecha en que se marcó). No cambia
+// el estado de envío ni cifras; cada corrección queda en la bitácora. Solo alcanza los últimos 60 días de quien abre la app.
 let _atribuido = false
 export async function atribuirEnvios({ facturas, quien }) {
   if (DEMO || _atribuido || !quien || !facturas?.length) return []
-  const sinRemitente = facturas.filter(f => f.email_sent_at && !f.sent_by && f.issued_at)
-  if (!sinRemitente.length) return []
+  const sinPrueba = facturas.filter(f => f.email_sent_at && !f.sent_to && f.issued_at)
+  if (!sinPrueba.length) return []
   _atribuido = true
-  const hall = (await detectarEnviosFacturas({ facturas: sinRemitente })).filter(h => h.nivel === 'coincide')
+  const hall = (await detectarEnviosFacturas({ facturas: sinPrueba })).filter(h => h.nivel === 'coincide')
   const hechos = []
   for (const h of hall) {
-    if (hechos.some(x => x.factura.id === h.factura.id)) continue
+    const f = h.factura
+    if (hechos.some(x => x.factura.id === f.id)) continue
     const dest = [...h.correo.para, ...h.correo.cc].join(', ')
+    const mismoDia = String(f.email_sent_at).slice(0, 10) === h.correo.fecha
+    const at = mismoDia || !h.correo.fecha ? f.email_sent_at : new Date(h.correo.fecha + 'T12:00:00').toISOString()
     try {
-      okDB(await supabase.from('billing').update({ sent_by: quien, sent_to: dest || null }).eq('id', h.factura.id).is('sent_by', null), 'registrar quién envió la factura')
-      logActividad('facturacion.remitente_detectado', { tabla: 'billing', id: h.factura.id, detalle: { por: quien, para: dest, correo: h.correo_id } })
-      hechos.push({ factura: h.factura, sent_by: quien, sent_to: dest })
+      okDB(await supabase.from('billing').update({ email_sent_at: at, sent_by: quien, sent_to: dest || null }).eq('id', f.id).is('sent_to', null), 'registrar el envío de la factura')
+      logActividad('facturacion.remitente_detectado', { tabla: 'billing', id: f.id, detalle: { por: quien, para: dest, correo: h.correo_id, fecha_marcada: String(f.email_sent_at).slice(0, 10), fecha_real: h.correo.fecha } })
+      hechos.push({ factura: f, sent_by: quien, sent_to: dest, email_sent_at: at })
     } catch (e) { registrarError({ origen: 'accion', vista: 'envios_remitente', err: e }) }
   }
   return hechos
