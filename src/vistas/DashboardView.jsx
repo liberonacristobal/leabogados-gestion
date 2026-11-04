@@ -183,9 +183,9 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
-        <div style={{fontSize:10,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
-        <div style={{fontSize:(value&&String(value).length>8)?15:19,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
-        {sub&&<div style={{fontSize:9,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
+        <div style={{...(isDeskRes?{...SEC_LBL,fontSize:10.5}:{fontSize:10,fontWeight:600,color:C.accent}),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
+        <div style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
+        {sub&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
       <span style={{position:'absolute',top:11,right:11,color:C.textSoft,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?<Gl n='chevron'/>:<Gl n='chevD'/>}</span>
     </div>
@@ -660,8 +660,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         return (<>
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
-              <span style={{fontSize:9,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.5px',whiteSpace:'nowrap'}}>Resultado del año</span>
-              <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:'.5px'}}>{selYear}<span style={{fontSize:8,color:C.textSoft}}><Gl n='chevD'/></span></button>
+              <span style={{...SEC_LBL,whiteSpace:'nowrap'}}>Resultado del año</span>
+              <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',...SEC_LBL}}>{selYear}<span style={{fontSize:8,color:C.textSoft}}><Gl n='chevD'/></span></button>
               {yearMenu&&(
                 <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
                   {aniosDisponibles.map(y=>(<button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?C.azulBg:'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>))}
@@ -679,7 +679,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               <button onClick={imprimirResultado} title="Imprimir informe" aria-label="Imprimir informe" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               </button>
-              <span onClick={()=>go('sales')} style={{fontSize:9,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}><span className='fecha-full'>Ver detalle</span><span className='fecha-short'>Detalle</span> <Gl n='chevron'/></span>
+              <span onClick={()=>go('sales')} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><span className='fecha-full'>Ver detalle</span><span className='fecha-short'>Detalle</span> <Gl n='chevron'/></span>
             </div>
           </div>
           <div style={{padding:'6px 20px 0'}}>
@@ -694,20 +694,20 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               }
               // Tarjeta: icono a la izquierda; título, cifra y "% · rótulo" alineados en columna (el % va BAJO la cifra, no rompe en escritorio).
               const kpiTile=(key,label,bg,bd,icoBg,icoCol,fig,pct,cap)=>(
-                <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
-                  <span style={{width:30,height:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
+                <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',cursor:'pointer',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
+                  <span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
-                    <div style={{fontSize:22,fontWeight:800,color:C.accent,letterSpacing:'-.5px',lineHeight:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:5}}>{fig}</div>
-                    {pct!=null&&<div style={{fontSize:10,color:C.muted,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.accent,fontWeight:800}}>{pct}%</b> {cap}</div>}
+                    <div style={{...SEC_LBL,fontSize:isDeskRes?10.5:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
+                    <div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>
+                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
                   </div>
                 </div>
               )
               return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
-                {m.bruto>0 && kpiTile('vend','Vendido','#EAF2FB','#D5E6F6','#D5E6F6',C.azulInfo, vMon(m.brutoUF,m.bruto), m.meta>0?ventaPct:null,'de la meta')}
-                {kpiTile('fact','Facturado','#FDF4E2','#F5E6C6','#F1DFBB','#A8660F', mRes('fac'), m.bruto>0?factPct:null,'de lo vendido')}
-                {kpiTile('cob','Cobrado','#E6F6EF','#CDEBDD','#CDEBDD',C.greenText, vMon(ingYTDUF,ingYTD), metaCobranza>0?cobroPct:null,'de la meta')}
-                {resAnio.ing>0 && kpiTile('marg','Margen','#EDF1F4','#DCE4EA','#DCE4EA',C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'sobre los ingresos')}
+                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, vMon(m.brutoUF,m.bruto), m.meta>0?ventaPct:null,'de la meta')}
+                {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'de lo vendido')}
+                {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, vMon(ingYTDUF,ingYTD), metaCobranza>0?cobroPct:null,'de la meta')}
+                {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'de ingresos')}
               </div>)
             })()}
             {resDrill&&(()=>{
