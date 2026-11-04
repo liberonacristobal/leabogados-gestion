@@ -3470,14 +3470,17 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               </div> }
               const flecha=k=><div key={'f'+k} style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
               const linea=idx=><div style={{display:'flex',alignItems:'stretch'}}>{idx.map((i,k)=>[k>0&&flecha(i),pasoEl(pasos[i],i)])}</div>
-              const cicloMes=(
-                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 15px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                    <div style={{...SEC_LBL,flex:1,minWidth:0}}>Ciclo de {MN[_now.getMonth()]}</div>
-                    {sigI!=null?<span onClick={pasos[sigI].on} role='button' tabIndex={0} style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 9px',background:C.azulBg,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Siguiente: {pasos[sigI].k}</span>:<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 9px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>Todo al día</span>}
-                  </div>
-                  {isDesktop?linea([0,1,2,3,4]):<div style={{display:'flex',flexDirection:'column',gap:6}}>{linea([0,1,2])}{linea([3,4])}</div>}
-                </div>)
+              const CORTO=['Vencidas','Emitir','Cotejar','Enviar','Cobrar']
+              const colMovil=(p,i)=>{ const hecho=p.n===0; return <div key={i} onClick={p.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();p.on()}}} style={{flex:1,minWidth:0,textAlign:'center',cursor:'pointer',padding:'7px 1px 6px',borderRadius:10,background:sigI===i?C.azulBg:'transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                <SIcon n={hecho?'check':p.ic} s={14} c={hecho?C.normal:p.col}/>
+                <div style={{fontSize:12.5,fontWeight:800,color:hecho?C.greenText:p.col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{hecho?'Al día':p.v}</div>
+                <div style={{fontSize:8.5,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',color:C.muted}}>{CORTO[i]}</div>
+              </div> }
+              const cicloMes=(<>
+                <div style={{...SEC_LBL,margin:'2px 2px -3px'}}>Ciclo de {MN[_now.getMonth()]}</div>
+                <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:isDesktop?'14px 15px':'8px 6px'}}>
+                  {isDesktop?linea([0,1,2,3,4]):<div style={{display:'flex',gap:2}}>{pasos.map(colMovil)}</div>}
+                </div></>)
               const P=d=><path d={d}/>
               return (
               <div style={{display:'flex',flexDirection:'column',gap:9,marginBottom:8}}>
@@ -3485,15 +3488,15 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:isDesktop?12:8}}>
                   {[
                     {k:'Por facturar', v:porFacturarRealTot, ic:'clock', col:C.muted, bg:C.surface, bd:C.border, sq:C.bgSoft, on:()=>irAEstado('programadas')},
-                    {k:'Por cobrar', v:porCobrar, ic:'file', col:C.accent, bg:C.azulBg, bd:'#D3E3F3', sq:'#fff', on:()=>irAEstado('emitidas')},
-                    {k:'Pagado', v:cobAll, ic:'check', col:C.greenText, bg:C.greenBg, bd:'#C4E7D9', sq:'#fff', on:()=>irAEstado('pagado')},
+                    {k:'Por cobrar', v:porCobrar, ic:'file', col:C.accent, bg:C.azulBg, bd:C.azulBd, sq:'#fff', on:()=>irAEstado('emitidas')},
+                    {k:'Pagado', v:cobAll, ic:'check', col:C.greenText, bg:C.greenBg, bd:C.greenDeep, sq:'#fff', on:()=>irAEstado('pagado')},
                   ].map(t=><div key={t.k} onClick={t.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t.on()}}} style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:12,padding:isDesktop?'14px 16px':'11px 11px',cursor:'pointer',minHeight:isDesktop?112:98,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                       <span style={{width:isDesktop?30:26,height:isDesktop?30:26,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={t.ic} s={isDesktop?17:15} c={t.col}/></span>
                       <span style={{color:t.col,opacity:.55,fontSize:13}}><Gl n='chevron'/></span>
                     </div>
                     <div>
-                      <div style={{fontSize:isDesktop?11:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.k}</div>
+                      <div style={{fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.k}</div>
                       <div style={{fontSize:isDesktop?26:19,fontWeight:800,letterSpacing:-.6,color:t.col,marginTop:3,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtShort(t.v)}</div>
                     </div>
                   </div>)}
@@ -3504,12 +3507,12 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   const ico=(d,stroke)=><svg width={isDesktop?17:15} height={isDesktop?17:15} viewBox='0 0 24 24' fill='none' stroke={stroke} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{P(d)}</svg>
                   const nombreCierre=cap(MN[_pm.getMonth()])
                   const tiles=[
-                    <HubTile key='ci' icNode={ico('M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 2v4M8 2v4M3 10h18M9 16l2 2 4-4',C.accent)} bg={C.azulBg} t='Cierre de mes' s={emi.length>0?`${nombreCierre} · ${fmtShort(tCob)} de ${fmtShort(tEmi)} · ${tasa}%`:'Quién pagó y quién no'} sM={emi.length>0?`${fmtShort(tCob)} · ${tasa}%`:'Quién pagó'} onClick={()=>setCierreOpen(true)}/>,
-                    revisar.length>0&&<HubTile key='rv' icNode={ico('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',C.soonText)} bg={C.soonBg} t='Por revisar' s={`${revTotal} pendientes · ${revisar.length} ${revisar.length===1?'acción':'acciones'}`} sM={`${revTotal} · ${revisar.length} ${revisar.length===1?'acción':'acciones'}`} sCol={C.soonText} onClick={()=>setPorRevOpen(o=>!o)}/>,
-                    porCompletarN>0&&<HubTile key='pc' icNode={ico('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01',C.overdueText)} bg='#fff' t='Por clasificar' s={`${porCompletarN} sin cliente, venta o tipo`} sM={`${porCompletarN} sin cliente`} sCol={C.overdueText} tCol={C.overdueText} cardBg={C.overdueBg} cardBd={C.overdueBd} onClick={()=>go('porcompletar')}/>,
-                    <HubTile key='an' icNode={ico('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01',C.soonText)} bg={C.soonBg} t='Anticipos' s={antDisp>0?`${fmtShort(antDisp)} a favor de clientes`:'Sin anticipos disponibles'} sM={antDisp>0?fmtShort(antDisp):'Sin anticipos'} sCol={antDisp>0?C.soonText:undefined} onClick={()=>go('anticipos')}/>,
-                    onIrCobranza&&<HubTile key='cb' icNode={ico('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',C.greenText)} bg={C.greenBg} t='Cobranza' s='Por cobrar · recordatorios de pago' sM='Recordatorios' onClick={()=>onIrCobranza()}/>,
-                    onOpenPorSocio&&<HubTile key='ps' icNode={ico('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7',C.accent)} bg={C.azulBg} t='Por socio' s='Facturado y caja · mes y año' sM='Mes y año' onClick={onOpenPorSocio}/>,
+                    <HubTile key='ci' icNode={ico('M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 2v4M8 2v4M3 10h18M9 16l2 2 4-4',C.accent)} bg={C.azulBg} t='Cierre de mes' s={emi.length>0?`${nombreCierre} · ${fmtShort(tCob)} de ${fmtShort(tEmi)}`:'Quién pagó y quién no'} sM={emi.length>0?nombreCierre:'Quién pagó'} fig={emi.length>0?`${tasa}%`:null} figCol={C.azulInfo} onClick={()=>setCierreOpen(true)}/>,
+                    revisar.length>0&&<HubTile key='rv' icNode={ico('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',C.soonText)} bg={C.soonBg} t='Por revisar' s={`${revisar.length} ${revisar.length===1?'acción':'acciones'}`} fig={revTotal} figCol={C.soonText} sCol={C.soonText} onClick={()=>setPorRevOpen(o=>!o)}/>,
+                    porCompletarN>0&&<HubTile key='pc' icNode={ico('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01',C.overdueText)} bg='#fff' t='Por clasificar' s='sin cliente, venta o tipo' sM='sin cliente' fig={porCompletarN} figCol={C.overdueText} sCol={C.overdueText} tCol={C.overdueText} cardBg={C.overdueBg} cardBd={C.overdueBd} onClick={()=>go('porcompletar')}/>,
+                    <HubTile key='an' icNode={ico('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01',C.soonText)} bg={C.soonBg} t='Anticipos' s={antDisp>0?'a favor de clientes':'Sin anticipos disponibles'} sM={antDisp>0?'a favor':'Sin anticipos'} fig={antDisp>0?fmtShort(antDisp):null} figCol={C.soonText} chev sCol={antDisp>0?C.soonText:undefined} onClick={()=>go('anticipos')}/>,
+                    onIrCobranza&&<HubTile key='cb' icNode={ico('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',C.greenText)} bg={C.greenBg} t='Cobranza' s='Por cobrar · recordatorios' sM='Recordatorios' chev onClick={()=>onIrCobranza()}/>,
+                    onOpenPorSocio&&<HubTile key='ps' icNode={ico('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7',C.accent)} bg={C.azulBg} t='Por socio' s='Facturado y caja · mes y año' sM='Mes y año' chev onClick={onOpenPorSocio}/>,
                   ].filter(Boolean)
                   const nCol=isDesktop?(tiles.length===4?2:3):2
                   return <div style={{display:'grid',gridTemplateColumns:`repeat(${nCol},minmax(0,1fr))`,gap:isDesktop?12:8}}>{tiles.map((t,i)=><div key={i} style={{minWidth:0,display:'flex',flexDirection:'column',gridColumn:(!isDesktop&&i===tiles.length-1&&tiles.length%2)?'1 / -1':undefined}}>{t}</div>)}</div> })()}
