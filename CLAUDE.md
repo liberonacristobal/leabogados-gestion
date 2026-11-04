@@ -23,6 +23,14 @@ Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato
 - **Lo "Chile" es un módulo país:** SII, UF, RUT, IVA, factura electrónica y formatos son de Chile; trátalos como algo que se enchufa, no como el core. Idea a futuro: moneda/impuestos/idioma (es/pt/en) parametrizables.
 - **Pragmatismo:** esto NO frena el avance ni obliga a construir el multi-tenant hoy. Es una **mirada**: entre dos soluciones equivalentes, elige la que escala a más estudios; y no agregues deuda nueva de cableado. Esta regla convive con "menos es más" y con la autonomía autorizada.
 
+## REGLA DE ORO: lo que sale al cliente toma sus números de la app, no de texto tipeado
+
+Nace del 2026-11-04: el correo de la factura 500 salió con «Pago 2 de 10» siendo la cuota 3/10 de la app, porque el texto se armaba con la glosa del DTE (escrita a mano en el SII) antes que con el concepto de la app, y lo aprendido guardaba la cuota como texto fijo. Reglas:
+- **Cuota, folio, monto y período de un correo o documento al cliente salen de la app** (`facturaGlosaPartes` toma la cuota del concepto «Cuota N/M»; la glosa del DTE solo si el concepto no trae cuota). Lo que se aprende de un correo editado guarda esos valores como **marcas** (`{folios}`, `{total}`, `{periodo}`, `{cuota}`, `{folio}`; `_shared/correoFacturaPlantilla.js`), nunca el número literal; si una marca no se puede completar, se usa el texto por defecto.
+- **Un dato tipeado a mano que contradice a la app se detecta en su origen, no al enviar:** `cuotaNeDte` (Revisión de datos y auditor) compara la cuota de la glosa del DTE con la de la app. El aviso al enviar es la última red, no la solución.
+- **Una cuota numerada no se salta:** `cuotasSinEmitir` incluye una Programada si ya se emitió una cuota de número mayor de su venta (`cuotaSaltada`), aunque su vencimiento sea futuro.
+- Todo envío de factura registra quién lo hizo (`sent_by`, `sent_to`, bitácora `facturacion.correo_enviado`).
+
 ## REGLA DE ORO: modal solo para confirmaciones — todo lo demás es página
 
 Nada de ventanas flotantes para trabajar (2026-11-04: se convirtieron ~50 modales a página). Un `Modal` solo se usa para una **pregunta breve que bloquea una acción** y donde no hay nada que mirar al lado: avisos y confirmaciones del sistema (`DialogHost`: `appAlert`/`appConfirm`), «Dar de baja factura» (un motivo), «Deshacer importación», elegir el mes de la tanda (`MesTandaModal`) y el panel de Counsel AI (excepción pedida por el usuario: no se toca).

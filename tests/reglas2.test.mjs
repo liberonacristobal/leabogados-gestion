@@ -739,3 +739,26 @@ test('cuotaNeDte: reconoce los formatos reales de la glosa y no marca los que ca
   const r = cuotaNeDte([{ id: 7, concept: 'B — Cuota 4/8', ...d('Servicios legales', 'Pago 4-9\r\nUF 47,52') }])
   assert.deepEqual([r[0].app, r[0].dte], [{ n: 4, tot: 8 }, { n: 4, tot: 9 }])
 })
+
+// Caso real (4-11-2026, anonimizado): venta de 10 cuotas; la 1 (jul), la 3 (sep) y la 4 (oct) emitidas; la 2 quedó Programada con el
+// vencimiento corrido a mayo 2027 y el radar no la veía. Una cuota futura normal (la 5, nov) sigue sin entrar.
+test('radar: una cuota saltada (ya se emitió una de número mayor) entra aunque su vencimiento sea futuro', async () => {
+  const { cuotasSinEmitir, cuotaSaltada, mayorCuotaEmitida } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const sales = [{ id: 'sA', status: 'Activo', amount_clp: 24000000, cobro_type: 'cuotas' }]
+  const c = (id, n, extra) => ({ id, sale_id: 'sA', concept: `Reorganización — Cuota ${n}/10`, amount: 2400000, ...extra })
+  const billing = [
+    c('c1', 1, { invoice_no: '402', status: 'Pagado', issued_at: '2026-07-02', due: '2026-08-01' }),
+    c('c2', 2, { status: 'Programada', due: '2027-05-01' }),
+    c('c3', 3, { invoice_no: '444', status: 'Pagado', issued_at: '2026-09-01', due: '2026-10-01' }),
+    c('c4', 4, { invoice_no: '458', status: 'Pagado', issued_at: '2026-10-02', due: '2026-10-30' }),
+    c('c5', 5, { status: 'Programada', due: '2026-11-01' }),
+    c('c6', 6, { status: 'Programada', due: '2026-12-01' }),
+  ]
+  assert.equal(mayorCuotaEmitida(billing).get('sA'), 4)
+  assert.equal(cuotaSaltada(billing[1], billing), 4)
+  assert.equal(cuotaSaltada(billing[4], billing), null)   // la 5 va después de la 4: no está saltada
+  assert.deepEqual(cuotasSinEmitir({ billing, sales, hasta: '2026-11-01' }).map(b => b.id), ['c2'])
+  assert.equal(cuotasSinEmitir({ billing, sales, hasta: '2026-11-01', noEmitir: new Set(['c2']) }).length, 0)   // «No corresponde»
+  // Una serie sin cuotas numeradas, o sin cuota mayor emitida, no cambia.
+  assert.equal(cuotaSaltada({ id: 'x', sale_id: 's9', status: 'Programada', concept: 'Honorarios' }, billing), null)
+})

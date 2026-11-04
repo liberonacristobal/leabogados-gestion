@@ -7,7 +7,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotaSaltada, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
@@ -3881,7 +3881,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                       <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s?.title||b.concept||'Cuota'}</div>
-                          <div style={{fontSize:11,color:C.overdueText,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Vencía {mesLbl(b.due)} · sin emitir{recib.get(String(b.id))?<span style={{color:C.muted}}> · {fmt(recib.get(String(b.id)))} ya recibido</span>:null}</div>
+                          <div style={{fontSize:11,color:C.overdueText,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cuotaSaltada(b,billing)!=null?`Saltada: ya se emitió la cuota ${cuotaSaltada(b,billing)}`:`Vencía ${mesLbl(b.due)}`} · sin emitir{recib.get(String(b.id))?<span style={{color:C.muted}}> · {fmt(recib.get(String(b.id)))} ya recibido</span>:null}</div>
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(b.amount||0)}</div>
                       </div>
