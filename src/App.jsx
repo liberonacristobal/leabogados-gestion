@@ -273,77 +273,6 @@ const TABS_LIMITED = [
 
 
 // ─── NUEVO CLIENTE LIMITED (con anti-duplicado) ───────────────────────────
-function NuevoClienteLimitedForm({clients,onSave,onClose,saving}) {
-  const [name,setName] = useState('')
-  const [type,setType] = useState('Corporativo')
-  const [rut,setRut] = useState('')
-  const [showConfirm,setShowConfirm] = useState(false)
-
-  const similares = useMemo(()=>{
-    if(name.trim().length<3) return []
-    const q = name.trim().toLowerCase()
-    return clients.filter(c=>
-      _normTxt(c.name).includes(_normTxt(q)) ||
-      _normTxt(q).split(' ').some(w=>w.length>2&&_normTxt(c.name).includes(w))
-    ).slice(0,5)
-  },[name,clients])
-
-  const handleGuardar = () => {
-    if(!name.trim()) return
-    if(similares.length>0 && !showConfirm) { setShowConfirm(true); return }
-    onSave({name:name.trim(),type,rut:rut.trim()||null,status:'Activo'})
-  }
-
-  return (
-    <div>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>Nombre del cliente</div>
-        <input value={name} onChange={e=>{setName(e.target.value);setShowConfirm(false)}} placeholder='Nombre completo...' autoFocus
-          style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:C.bgSoft,fontSize:14,boxSizing:'border-box',outline:'none'}}/>
-        {similares.length>0&&(
-          <div style={{marginTop:8,padding:'10px 12px',borderRadius:8,background:C.ambarBg,border:'1px solid #C77F18'}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.soon,marginBottom:6}}>{'\u26a0\ufe0f'} Clientes similares encontrados:</div>
-            {similares.map(s=>(
-              <div key={s.id} style={{fontSize:12,color:C.soon,padding:'2px 0'}}>{s.name}{s.type?` · ${s.type}`:''}</div>
-            ))}
-            <div style={{fontSize:11,color:C.soon,marginTop:6}}>Verifica que no sea un duplicado antes de continuar.</div>
-          </div>
-        )}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-        <div>
-          <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>Tipo</div>
-          <select value={type} onChange={e=>setType(e.target.value)}
-            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:C.bgSoft,fontSize:13,boxSizing:'border-box'}}>
-            {['Corporativo','Tributario','Laboral','Otro'].map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',letterSpacing:.5,fontWeight:600,marginBottom:6}}>RUT (opcional)</div>
-          <input value={rut} onChange={e=>setRut(e.target.value)} placeholder='12.345.678-9'
-            style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #E4E8EB',background:C.bgSoft,fontSize:13,boxSizing:'border-box',outline:'none'}}/>
-        </div>
-      </div>
-
-      {showConfirm&&(
-        <div style={{padding:'12px 14px',borderRadius:8,background:C.overdueBg,border:'1px solid #E24B4A',marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.overdue,marginBottom:4}}>{'\u00bf'}Confirmas que este cliente NO es un duplicado?</div>
-          <div style={{fontSize:11,color:C.overdue}}>Hay nombres similares. Si es nuevo, confirma para continuar.</div>
-        </div>
-      )}
-
-      <div style={{display:'flex',gap:8,marginTop:4}}>
-        <button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:'1px solid #E4E8EB',background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
-        <button disabled={saving||!name.trim()} onClick={handleGuardar}
-          style={{flex:2,padding:'9px 14px',borderRadius:10,border:'none',background:showConfirm?C.overdue:C.accent,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',opacity:(!name.trim())?.6:1}}>
-          {saving?'Guardando...':(showConfirm?'Sí, crear de todas formas':'Guardar cliente')}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Blindaje general (main.jsx): un error fuera de una pestaña (una página superpuesta, el menú) ya no deja la pantalla en negro.
 export class AppErrorBoundary extends Component {
   constructor(p){ super(p); this.state={err:null} }
   static getDerivedStateFromError(err){ return {err} }
@@ -6055,7 +5984,7 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
+    const PAGE_OF={pdfupload:'flujo',drive:'flujo',importExcel:'flujo',gmailContactos:'flujo',gmailTareas:'flujo',rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
       if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
@@ -6075,7 +6004,7 @@ export default function App() {
       if(tipo==='cliente') handleOpenClientFicha(x.id); else setModal({type:{venta:'sale',factura:'billing',gasto:'expenseEdit',tarea:'task',rechazo:'rechazoMotivo',primeras:'primerasTareas'}[tipo],data:x}); return true }
     window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth,abrir,deshacer:msg=>setUndoToast({msg,onUndo:()=>{}})} },[navTo,setModal,goBack,clients,sales,billing,expenses,tasks,proyectosCartera,handleOpenClientFicha])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
-  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
+  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',pdfupload:'Subir facturas PDF',drive:'Importar desde Drive',importExcel:'Importar Excel',gmailContactos:'Revisar Gmail',gmailTareas:'Revisar Gmail',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
   const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='factura') return 'Factura'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Página abierta desde la ficha de un cliente → '‹ cliente'; si no, el origen de siempre.
@@ -8715,6 +8644,11 @@ export default function App() {
         })} onRetirarFantasmas={rdLog('revision.retirarFantasmas',async(items)=>{ const undos=[]; for(const it of (items||[])){ try{ const u=await handleReplaceProgramada(it.progId, it.realId, {silent:true}); if(u&&u.onUndo) undos.push(u) }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} } const tot=(items||[]).reduce((a,x)=>a+(x.monto||0),0); if(undos.length) setUndoToast({msg:`${undos.length} cuota(s) ya emitida(s) retiradas · ${fmt(tot)}`, onUndo:async()=>{ for(const u of undos){ try{ await u.onUndo() }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} } }}) })} onDismissFantasma={rdLog('revision.dismissFantasma',async(progId)=>{ if(DEMO) return; try{ await setLearningKV('fantasma_no',String(progId),'1') }catch(e){registrarError({origen:'accion',vista:'fantasma_no',err:e})} })}/><div style={{marginTop:12}}><BitacoraLista prefijo='revision.' titulo='Resueltas · historial' etiquetas={{'revision.resolverDupAnticipo':'Anticipo duplicado resuelto','revision.guardarClientRut':'RUT guardado en la ficha','revision.pasarTerminado':'Venta pasada a Terminado','revision.actualizarHonorario':'Honorario ajustado a lo facturado','revision.fixVencimiento':'Vencimiento corregido','revision.resolverCuotaTramo':'Cuota programada + tramo resuelto','revision.resolverGlosa':'Glosa definida','revision.retirarFantasmas':'Cuotas ya emitidas retiradas','revision.dismissFantasma':'Cuota marcada como pendiente'}} vacio='Aún no hay resoluciones registradas.'/></div></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='rechazoMotivo'&&<FlujoPagina origen={origenNav('Ventas')} titulo='Rechazar propuesta' onBack={()=>setModal(null)} maxW={720}><RechazoMotivoModal sale={pagina.data} onConfirm={handleConfirmRechazo} onCancel={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='primerasTareas'&&<FlujoPagina origen={origenNav('Ventas')} titulo='Primeras tareas' ctx={pagina.data?.title||'Encargo'} onBack={()=>setModal(null)} maxW={820}><PrimerasTareasModal sale={pagina.data} clients={clients} clientEntities={clientEntities} user={user} onConfirm={handleCrearPrimerasTareas} onClose={()=>setModal(null)} saving={saving}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='pdfupload'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Subir facturas PDF' onBack={()=>setModal(null)} maxW={1000}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'pdf', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='drive'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Importar facturas desde Drive' onBack={()=>setModal(null)} maxW={1000}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'drive', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='importExcel'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Importar facturas (Excel)' onBack={()=>setModal(null)} maxW={1000}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'excel', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='gmailContactos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisar Gmail — contactos' onBack={()=>setModal(null)} maxW={900}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)} onIrContactos={()=>{ setModal(null); if(tab==='contactos') setContactosKey(k=>k+1); else navTo({tab:'contactos'}) }}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='gmailTareas'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisar Gmail — tareas' onBack={()=>setModal(null)} maxW={900}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='ajuste'&&<FlujoPagina origen={origenCli(pagina.data?.name)} titulo='Ajustar saldo' ctx={origenCli(pagina.data?.name)!==pagina.data?.name?(pagina.data?.name||null):null} onBack={()=>setModal(null)} maxW={980}><AjusteModal asPage expenses={expenses} client={pagina.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);logActividad('clientes.ajuste_saldo',{tabla:'clients',id:f.client_id,detalle:{monto:f.amount,motivo:f.concept}});setModal(null)}} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='conciliar'&&<FlujoPagina origen={origenCli(pagina.data?.client?.name)} titulo='Duplicados' ctx={origenCli(pagina.data?.client?.name)!==pagina.data?.client?.name?(pagina.data?.client?.name||null):null} onBack={()=>setModal(null)} maxW={1180}><ConciliarFacturasModal asPage scope={pagina.data?.client?billing.filter(b=>String(b.client_id)===String(pagina.data.client.id)):billing} clientId={pagina.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='clienteDrive'&&<FlujoPagina origen={origenNav('Clientes')} titulo='Sincronización con Drive' onBack={()=>setModal(null)} maxW={980}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onChanged={async()=>{const c=await getClients();setClients(c)}} onClose={()=>setModal(null)}/></FlujoPagina>}
@@ -8856,17 +8790,16 @@ export default function App() {
         })()}
         {/* 'gastos' / 'fondo' / 'expenseEdit' ya NO son modales: viven en la página navegable 'gasto' (GastoPage, ver render de tabs). setModal los redirige. */}
         {/* 'cargaMasiva' ya NO es modal: página 'flujo' (ver render de tabs). */}
-        {modal?.type==='clientLimited'&&<Modal fullscreenOnMobile title='Nuevo cliente' onClose={()=>setModal(null)} closeOnBackdrop={false}><NuevoClienteLimitedForm clients={clients} onSave={async(f)=>{setSaving(true);try{const{data,error}=await supabase.from('clients').insert({...f}).select().single();if(error)throw error;setClients(p=>[data,...p]);setModal(null)}catch(e){appAlert('Error al guardar: '+e.message)}setSaving(false)}} onClose={()=>setModal(null)} saving={saving}/></Modal>}
         {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
-        {modal?.type==='pdfupload'&&<Modal fullscreenOnMobile title='Subir facturas PDF' onClose={()=>setModal(null)} closeOnBackdrop={false}><PDFUploader clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'pdf', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></Modal>}
-        {modal?.type==='drive'&&<Modal fullscreenOnMobile title='Importar facturas desde Drive' onClose={()=>setModal(null)} closeOnBackdrop={false}><DriveImporter clients={clients} billing={billing} clientEntities={clientEntities} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'drive', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='importExcel'&&<Modal fullscreenOnMobile title='Importar facturas (Excel)' onClose={()=>setModal(null)} closeOnBackdrop={false}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'excel', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></Modal>}
+        {/* 'pdfupload' ya NO es modal: página 'flujo'. */}
+        {/* 'drive' ya NO es modal: página 'flujo'. */}
+        {/* 'importExcel' ya NO es modal: página 'flujo'. */}
         {modal?.type==='users'&&<Modal fullscreenOnMobile title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='aprendizaje'&&<Modal fullscreenOnMobile title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
         {/* 'redaccion' ya NO es modal: página 'flujo'. */}
         {/* 'plazos' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='gmailContactos'&&<Modal fullscreenOnMobile title='Revisar Gmail — contactos' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)} onIrContactos={()=>{ setModal(null); if(tab==='contactos') setContactosKey(k=>k+1); else navTo({tab:'contactos'}) }}/></Modal>}
-        {modal?.type==='gmailTareas'&&<Modal fullscreenOnMobile title='Revisar Gmail — tareas' onClose={()=>setModal(null)} closeOnBackdrop={false}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></Modal>}
+        {/* 'gmailContactos' ya NO es modal: página 'flujo'. */}
+        {/* 'gmailTareas' ya NO es modal: página 'flujo'. */}
         {modal?.type==='redProfesional'&&<Modal fullscreenOnMobile title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
         {modal?.type==='papelera'&&<Modal fullscreenOnMobile title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
           const [s,b,e]=await Promise.all([
