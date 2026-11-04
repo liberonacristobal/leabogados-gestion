@@ -133,7 +133,7 @@ export function CobradasSinRespaldoPage({billing=[],movs=[],clients=[],clientEnt
         <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap'}}>
           <span style={{fontSize:10,fontWeight:700,color:c.exacto?C.greenText:C.soonText,background:c.exacto?C.greenBg:C.soonBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{c.exacto?<><Gl n='tick'/>{" "}monto exacto</>:`dif ${fmtM(Math.abs(c.resto-montoFactura(fac)))}`}</span>
           {c.dias!=null&&<span style={{fontSize:10,fontWeight:700,color:C.muted,background:C.bgSoft,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{diasTxt(c.dias)}</span>}
-          {c.m.descripcion&&<span style={{fontSize:10,color:C.muted,maxWidth:150,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.m.descripcion}</span>}
+          {c.m.descripcion&&<span style={{fontSize:10,color:C.muted,maxWidth:150,lineHeight:1.25,overflowWrap:'anywhere'}}>{c.m.descripcion}</span>}
         </div>
       </div>
       <button disabled={!!busy||loteBusy} onClick={()=>onConciliar(c.m,fac)} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:(busy||loteBusy)?'default':'pointer',flexShrink:0}}>Conciliar</button>
