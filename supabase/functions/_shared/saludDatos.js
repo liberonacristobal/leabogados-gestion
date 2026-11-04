@@ -223,6 +223,24 @@ export function ventasBorradorCobrado(sales, billing) {
 
 // Honorario de la venta distinto de la suma de sus cuotas (vista v_ventas_salud). Una venta terminada cuyas facturas son todas
 // anteriores a la app es histórico importado: no se marca.
+// Glosa del DTE (NmbItem + DscItem) que nombra otra cuota que la de la factura en la app («Cuota 2 de 10» en el DTE, «Cuota 3/10» en la
+// app). La glosa se escribe a mano en el SII y de ahí pasa al correo al cliente. Solo opina si el concepto de la app trae cuota y el DTE
+// nombra alguna; si el DTE nombra varias, basta que una calce.
+const cuotasDeGlosa = g => {
+  const out = [], t = String(g || '')
+  for (const m of t.matchAll(/(?:cuota|pago)\s*(\d+)\s*(?:de|\/|-)\s*(\d+)/gi)) out.push({ n: +m[1], tot: +m[2] })   // «Cuota 2 de 10», «Pago 3/9», «Pago 4-9»
+  for (const m of t.matchAll(/(?<![\d.,\/])(\d+)\s*\/\s*(\d+)(?![\d\/])/g)) out.push({ n: +m[1], tot: +m[2] })   // «Asesoria reorg 5/24»
+  for (const m of t.matchAll(/^\s*(\d+)\s*-\s*(\d+)\s*$/gm)) out.push({ n: +m[1], tot: +m[2] })   // línea sola «1-18»
+  return out
+}
+export const cuotaNeDte = billing => (billing || []).filter(b => !b.deleted_at && b.status !== 'Anulada' && b.status !== 'Programada' && b.dte_xml).map(b => {
+  const c = String(b.concept || '').match(/cuota\s*(\d+)\s*\/\s*(\d+)/i); if (!c) return null
+  const glosa = `${(String(b.dte_xml).match(/<NmbItem>([^<]*)</) || [])[1] || ''} ${(String(b.dte_xml).match(/<DscItem>([^<]*)</) || [])[1] || ''}`
+  const dte = cuotasDeGlosa(glosa); if (!dte.length) return null
+  if (dte.some(x => x.n === +c[1] && x.tot === +c[2])) return null
+  return { b, app: { n: +c[1], tot: +c[2] }, dte: dte[0] }
+}).filter(Boolean)
+
 export function honorarioDescuadrado(saludRows, billing, sales) {
   const ult = {}; (billing || []).forEach(b => { if (!b.sale_id || b.deleted_at) return; const k = String(b.sale_id), f = String(b.issued_at || b.due || ''); if (!ult[k] || f > ult[k]) ult[k] = f })
   const st = {}; (sales || []).forEach(s => { st[String(s.id)] = s.status })
@@ -244,6 +262,7 @@ export function hallazgos(d) {
   folioDup(d.billing).forEach(x => add('folio_duplicado', x.folio, `Factura N° ${x.folio} en ${x.rows.length} filas`, x.rows[0]?.amount, { facturas: x.rows.map(b => b.id) }))
   facDup(d.billing).forEach(x => add('factura_duplicada', x.rows.map(b => b.id).sort().join('+'), `Facturas posiblemente duplicadas · ${nom(x.cid)} · ${x.concept || ''}`.trim(), x.amount, { facturas: x.rows.map(b => b.id) }))
   montoNeDte(d.billing).forEach(x => add('monto_distinto_dte', x.b.id, `Factura N° ${folioN(x.b.invoice_no) || '—'} · monto distinto del DTE · ${nom(x.b.client_id)}`, x.dte - x.b.amount, { factura: x.b.id, monto: x.b.amount, dte: x.dte }))
+  cuotaNeDte(d.billing).forEach(x => add('cuota_distinta_dte', x.b.id, `Factura N° ${folioN(x.b.invoice_no) || '—'} · el DTE dice cuota ${x.dte.n} de ${x.dte.tot} y la app ${x.app.n} de ${x.app.tot} · ${nom(x.b.client_id)}`, null, { factura: x.b.id, app: `${x.app.n}/${x.app.tot}`, dte: `${x.dte.n}/${x.dte.tot}` }))
   ventasDup(d.sales).forEach(a => add('venta_duplicada', a.map(s => s.id).sort().join('+'), `Ventas que podrían estar duplicadas · ${nom(a[0].client_id)}`, null, { ventas: a.map(s => s.id) }))
   cuotaTramo(d.billing, d.sales, d.cuotaTramoNo || new Set()).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
   glosaConflict(d.coRows).forEach(x => add('glosa_conflicto', x.key, `Glosa con más de una categoría aprendida · ${x.key}`, null, { votos: x.votos }))
@@ -275,7 +294,7 @@ export const DETECTOR_LBL = {
   compra_observada_sii: 'Compras de proveedores observados por el SII',
   trabajo_terminado: 'Trabajos activos que parecen terminados', trabajo_detenido_saldo: 'Trabajos sin movimiento con saldo por cobrar',
   banco_sobre: 'Banco conciliado de más', banco_doble: 'Pago contado dos veces', banco_atras: 'Conciliación sin actualizar', comision_sin_banco: 'Comisión pagada sin transferencia',
-  rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE',
+  rut_varias_fichas: 'RUT en varias fichas', folio_duplicado: 'Folio duplicado', factura_duplicada: 'Facturas posiblemente duplicadas', monto_distinto_dte: 'Monto distinto del DTE', cuota_distinta_dte: 'Cuota distinta del DTE',
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
   vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado', anticipo_por_aplicar: 'Anticipo por imputar', subarriendo_por_facturar: 'Subarriendo por facturar', compra_plazo_reclamo: 'Factura recibida en plazo de reclamo',
 }

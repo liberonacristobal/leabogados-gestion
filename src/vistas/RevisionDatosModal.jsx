@@ -38,6 +38,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
   const facDup=useMemo(()=>SD.facDup(billing),[billing])
   const montoNeDte=useMemo(()=>SD.montoNeDte(billing),[billing])
+  const cuotaNeDte=useMemo(()=>SD.cuotaNeDte(billing),[billing])
   const ventasDup=useMemo(()=>SD.ventasDup(sales),[sales])
   // Doble conteo cuota↔tramo: venta NO recurrente donde la suma de cuotas Programadas + facturas Emitidas SUPERA la venta → al emitir el tramo la programada no se redujo, se cuenta dos veces. Excluye recurrentes (mensuales), donde prog+emit>venta es normal (meses futuros+pasados).
   const [ctNo,setCtNo]=useState(()=>new Set())   // ventas marcadas «No es doble conteo» (learnings data_health): no vuelven a aparecer
@@ -216,7 +217,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+cuotaNeDte.length+montoNeDte.length+ventasDup.length+huerfanas.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:9.5,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -250,6 +251,9 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {montoNeDte.length>0&&<div style={secBox}>{sh('Monto distinto al DTE',C.soonText,montoNeDte.length)}
       {montoNeDte.map(({b,dte})=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0}}>{cName(b.client_id)} · Factura N° {folioN(b.invoice_no)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(`DTE ${fmt(dte)}`,`sistema ${fmt(b.amount)}`)}</div>)}
+    </div>}
+    {cuotaNeDte.length>0&&<div style={secBox}>{sh('Cuota distinta al DTE',C.soonText,cuotaNeDte.length)}
+      {cuotaNeDte.map(({b,app,dte})=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0}}>{cName(b.client_id)} · Factura N° {folioN(b.invoice_no)} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(`DTE cuota ${dte.n} de ${dte.tot}`,`sistema ${app.n} de ${app.tot}`)}</div>)}
     </div>}
     {ventasDup.length>0&&<div style={secBox}>{sh('Ventas que podrían estar duplicadas',C.muted,ventasDup.length)}
       {ventasDup.map((arr,i)=><div key={i} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cuotaDe, cuotaIncoherente, destokenizar, quitarDespedida, tokenizar } from '../supabase/functions/_shared/correoFacturaPlantilla.js'
+import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedida, tokenizar } from '../supabase/functions/_shared/correoFacturaPlantilla.js'
 
 // Casos reales anonimizados (4-11-2026): el texto guardado con la cuota de UNA factura se reusaba tal cual en la siguiente.
 const v2 = { folios: 'N° 500', total: '$825.160', periodo: '', cuota: cuotaDe('Cuota 2/10') }
@@ -51,4 +51,8 @@ test('un texto ya guardado con la cuota escrita a mano se corrige al leerlo', ()
   const r = destokenizar(tokenizar(quitarDespedida(guardadoAntes), {}), { folios: 'N° 511', total: '$1.000', cuota: cuotaDe('Cuota 2/18') })
   assert.equal(r.completo, true)
   assert.equal(r.texto, 'Adjuntamos la factura N° 511, correspondiente a la cuota 2 de 18 de nuestros servicios, por $1.000.')
+})
+
+test('los espacios dobles de la glosa del SII no pasan al texto guardado', () => {
+  assert.equal(limpiarEspacios('Asesoria legal oct  26, por {total}.\nLínea  dos'), 'Asesoria legal oct 26, por {total}.\nLínea dos')
 })

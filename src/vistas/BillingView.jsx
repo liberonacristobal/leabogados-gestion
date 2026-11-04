@@ -8,7 +8,7 @@ import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesR
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
-import { cuotaDe, cuotaIncoherente, destokenizar, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
+import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
@@ -4538,11 +4538,15 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const _dynPeriodo=()=> multi ? '' : String((facturaGlosaPartes(factura, saleR)||{}).detalle||'')   // mes/cuota de ESTA factura ("Septiembre 2026", "Pago 7 de 10"): variable, NO se congela
   // La base se guarda por cliente + PROYECTO (una cuota nueva del mismo proyecto reusa tu última redacción; otro proyecto tiene la suya). Multi queda a nivel cliente.
   const msgKey=lg=> multi ? `${client?.id}:n:${lg}` : `${client?.id}:p${saleR?.id||'0'}:${lg}`
-  // Cuota de ESTA factura (concepto «Cuota 3/10» o detalle «Pago 3 de 10»): con ella se completan las marcas {cuota} del texto aprendido.
-  const _cuotaF=multi?null:cuotaDe(`${_dynPeriodo()} ${factura?.concept||''}`.match(/(?:cuota|pago)\s*\d+\s*(?:\/|de)\s*\d+/i)?.[0])
+  // Cuota de ESTA factura: manda la de la app (concepto «Cuota 3/10»); si el concepto no trae cuota, la del DTE («Pago 3 de 10»).
+  // Si el DTE (el PDF que se adjunta, escrito a mano en el SII) nombra otra cuota que la app, se avisa: el texto del correo sale de ese DTE.
+  const _cuotaApp=multi?null:(()=>{ const m=String(factura?.concept||'').match(/cuota\s*\d+\s*\/\s*\d+/i); return m?cuotaDe(m[0]):null })()
+  const _cuotaDte=multi?null:cuotaDe(String(_dynPeriodo()).match(/(?:cuota|pago)\s*\d+\s*(?:\/|de)\s*\d+/i)?.[0])
+  const _cuotaF=_cuotaApp||_cuotaDte
+  const _dteDifiere=!!(_cuotaApp&&_cuotaDte&&(_cuotaApp.n!==_cuotaDte.n||_cuotaApp.tot!==_cuotaDte.tot))
   const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||'')})
-  const _tok=(t,lg)=>tokenizar(quitarDespedida(t),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
-  const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(quitarDespedida(t),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
+  const _tok=(t,lg)=>tokenizar(limpiarEspacios(quitarDespedida(t)),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
+  const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(limpiarEspacios(quitarDespedida(t)),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
   const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; setBody((tpl&&_untok(tpl,lg))||genBody(lg)) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
@@ -4636,8 +4640,9 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const buildHtml=()=>facturaCorreoShell(`${_correoToP(saludo)}${segmentos().map(x=>x.h?x.h:_correoToP(x.t)).join('')}${_correoToP(_saludosCierre)}`, firma, lang)   // HTML: 'Saludos,' y debajo la firma (que trae el nombre)
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
-    const _inc=!multi&&cuotaIncoherente([body,asunto].join('\n'),_cuotaF)   // el texto nombra otra cuota que la de esta factura
-    if(_inc&&!await appConfirm(`El texto del correo dice «cuota ${_inc.dice}», pero esta factura es la cuota ${_inc.es}.\n¿Enviar de todos modos?`)) return
+    if(_dteDifiere){ if(!await appConfirm(`El DTE adjunto dice cuota ${_cuotaDte.n} de ${_cuotaDte.tot}, pero en la app esta factura es la cuota ${_cuotaApp.n} de ${_cuotaApp.tot}.\nRevisa cuál es la correcta antes de enviar. ¿Enviar de todos modos?`)) return }
+    else{ const _inc=!multi&&cuotaIncoherente([body,asunto].join('\n'),_cuotaF)   // el texto nombra otra cuota que la de esta factura
+      if(_inc&&!await appConfirm(`El texto del correo dice «cuota ${_inc.dice}», pero esta factura es la cuota ${_inc.es}.\n¿Enviar de todos modos?`)) return }
     setSending(true)
     try{
       const baseAdj = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
@@ -4677,6 +4682,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const lbl={fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}
   const isDesktop = useIsDesktop()   // escritorio: dos columnas (redacción | panel de envío); móvil: una sola columna (idéntico)
   const _body = (<>
+    {_dteDifiere&&<div style={{background:C.soonBg,color:C.soonText,borderRadius:10,padding:'9px 12px',fontSize:12,lineHeight:1.3,marginBottom:10}}>El DTE dice cuota {_cuotaDte.n} de {_cuotaDte.tot} y en la app esta factura es la cuota {_cuotaApp.n} de {_cuotaApp.tot}.</div>}
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.35fr 1fr':'1fr',gap:isDesktop?20:10,alignItems:'start'}}>
       <div style={{display:'flex',flexDirection:'column',gap:10,minWidth:0}}>
       <div><div style={lbl}>PARA</div><input value={para} onChange={e=>setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp}/>

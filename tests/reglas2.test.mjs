@@ -2,7 +2,7 @@
 // Casos de situaciones reales, sin nombres de clientes. Correr: npm test.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { folioDup, facDup, montoNeDte, rutMulti, comprasEnPlazoReclamo, comprasObservadasSII } from '../supabase/functions/_shared/saludDatos.js'
+import { folioDup, facDup, montoNeDte, cuotaNeDte, rutMulti, comprasEnPlazoReclamo, comprasObservadasSII } from '../supabase/functions/_shared/saludDatos.js'
 import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
 import { liqParaCargo, notariaPendientes, disponibleNotaria, tipoActoNotaria } from '../supabase/functions/_shared/notariaReglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
@@ -703,4 +703,39 @@ test('estado de pago: las cuotas marcadas «No corresponde» no cuentan como ven
   assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02').estado, 'sinprimera')
   assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02', undefined, new Set(['q1'])).estado, 'sinprimera')   // queda q2
   assert.equal(estadoPagoVenta(sale, billing, [], '2026-11-02', undefined, new Set(['q1', 'q2'])), null)
+})
+
+// Caso real (4-11-2026, anonimizado): el DTE emitido en el SII dice «Cuota 2 de 10» y la factura en la app es la cuota 3/10; otro
+// cliente tiene «Pago 3/9» en el DTE y «Cuota 3/8» en la app. Una glosa sin cuota, o que calza, no es hallazgo.
+test('cuotaNeDte: la glosa del DTE nombra otra cuota que la de la app', () => {
+  const dte = (nmb, dsc) => `<NmbItem>${nmb}</NmbItem><DscItem>${dsc}</DscItem>`
+  const r = cuotaNeDte([
+    { id: 1, concept: 'Reorganizacion venta — Cuota 3/10', status: 'Pendiente', dte_xml: dte('Ases legal permanente', 'Cuota 2 de 10 Equivalente a 20 UF') },
+    { id: 2, concept: 'Sucesorio — Cuota 3/8', status: 'Pagado', dte_xml: dte('Servicios legales Pago 3/9', 'UF 47,52') },
+    { id: 3, concept: 'Reorganizacion venta — Cuota 3/10', status: 'Pendiente', dte_xml: dte('Ases legal', 'Cuota 3 de 10') },
+    { id: 4, concept: 'Honorarios', status: 'Pendiente', dte_xml: dte('Asesoria legal', 'Cuota 1 de 18') },
+    { id: 5, concept: 'Mensual — Cuota 2/5', status: 'Pendiente', dte_xml: dte('Asesoria permanente oct 26', '') },
+    { id: 6, concept: 'X — Cuota 1/4', status: 'Programada', dte_xml: dte('X', 'Cuota 2 de 4') },
+    { id: 7, concept: 'X — Cuota 2/4', status: 'Pendiente', deleted_at: '2026-11-01', dte_xml: dte('X', 'Cuota 3 de 4') },
+    { id: 8, concept: 'Y — Cuota 2/4', status: 'Pendiente', dte_xml: dte('Pago 1 de 4 y Pago 2 de 4', '') },
+  ])
+  assert.deepEqual(r.map(x => x.b.id), [1, 2])
+  assert.deepEqual(r[0].dte, { n: 2, tot: 10 })
+  assert.deepEqual(r[1].app, { n: 3, tot: 8 })
+})
+
+// Formatos reales de la glosa en el SII (4-11-2026): «Pago 2-10», «Pago 3/10», línea sola «1-18», «Asesoria reorg 5/24», «pago 3 de 5».
+test('cuotaNeDte: reconoce los formatos reales de la glosa y no marca los que calzan', () => {
+  const d = (nmb, dsc) => ({ status: 'Pendiente', dte_xml: `<NmbItem>${nmb}</NmbItem><DscItem>${dsc}</DscItem>` })
+  const calzan = [
+    { id: 1, concept: 'A — Cuota 2/10', ...d('Servicios legales', 'Pago 2-10\r\nUF 35') },
+    { id: 2, concept: 'A — Cuota 1/18', ...d('Servicios legales', 'Fusiones\r\n1-18\r\nUF 64') },
+    { id: 3, concept: 'A — Cuota 5/24', ...d('Asesoria reorg 5/24', 'Equivalente a 45,83 UF') },
+    { id: 4, concept: 'A — Cuota 3/5', ...d('Servicios legales', 'pago 3 de 5\r\nUF 40') },
+    { id: 5, concept: 'A — Cuota 4/10', ...d('Reorganización societaria', 'Pago septiembre\r\nUF 60') },
+    { id: 6, concept: 'A — Cuota 2/3', ...d('Asesoria laboral', 'Cuota 2 por Asesoría contratos, equivalente a 28,5 UF') },
+  ]
+  assert.deepEqual(cuotaNeDte(calzan), [])
+  const r = cuotaNeDte([{ id: 7, concept: 'B — Cuota 4/8', ...d('Servicios legales', 'Pago 4-9\r\nUF 47,52') }])
+  assert.deepEqual([r[0].app, r[0].dte], [{ n: 4, tot: 8 }, { n: 4, tot: 9 }])
 })
