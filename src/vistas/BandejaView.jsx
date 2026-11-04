@@ -157,7 +157,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
     if(p.accion==='guardar_cuenta') return 'Guardar cuenta como conocida'
     if(p.accion==='revisar') return 'Revisar el comprobante'
     return p.titulo||'Revisar el correo' }
-  const lineaDato=(t,v,k)=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,marginTop:4}}><span style={{color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{t}</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</b></div>
+  const lineaDato=(t,v,k)=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,marginTop:4}}><span style={{color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{t}</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</b></div>
   const adjuntos=r=>(r.adjuntos||[]).length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:7}}>{r.adjuntos.map((a,i)=><span key={i} onClick={e=>{e.stopPropagation(); if(a.path&&!DEMO) abrirDocumento(a.path)}} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'2px 9px',background:C.bgSoft,color:a.path?C.accent:C.textSoft,cursor:a.path?'pointer':'default',maxWidth:'100%',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.nombre}</span>)}</div>
   const cuerpo=r=>abierto===r.id&&r.cuerpo&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.bgSoft,borderRadius:10,padding:'8px 10px',maxHeight:260,overflowY:'auto'}}>{r.cuerpo}</div>
   const btnSec={fontSize:12.5,fontWeight:600,color:C.accent,background:'none',border:'none',padding:'7px 10px',cursor:'pointer'}
@@ -165,13 +165,13 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
   const tarjeta=r=>{ const p=r.propuesta||{}, ev=r.evidencia||[], montos=ev.filter(x=>x.monto!=null), b=busy===r.id, sosp=r.estado==='sospechoso'
     return <div key={r.id} onClick={()=>setAbierto(abierto===r.id?null:r.id)} style={{...card,padding:isDesktop?'12px 16px':'11px 12px',marginBottom:10,cursor:'pointer'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>{linkCli(r)}{chipAbg(r.abogado)}<span style={{flex:1}}/>{isDesktop&&<span style={{fontSize:11,color:C.textSoft,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fechaHoraCL(r.recibido_at)}</span>}</div>
-      <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:2,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre?r.de_nombre+' · ':''}${r.de}`:`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`}</div>
-      <div style={{fontSize:12,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{r.asunto||'(sin asunto)'}</div>
+      <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre?r.de_nombre+' · ':''}${r.de}`:`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`}</div>
+      <div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{r.asunto||'(sin asunto)'}</div>
       <div style={{background:sosp?C.overdueBg:C.bgSoft,borderRadius:10,padding:'9px 11px',marginTop:9}}>
-        <div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>
+        <div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>
         {ev.map((x,i)=>lineaDato(x.texto,x.monto!=null?fmt(x.monto):x.valor,i))}
         {montos.length>1&&!['pedir_boleta','definir_documento','asignar_venta'].includes(p.accion)&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
-        {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.motivo}</div>}
+        {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.motivo}</div>}
         {p.accion==='adjuntar_respaldo'&&(p.candidatos||[]).length>0&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
           <select value={elegido[r.id]||((p.candidatos||[]).length===1?p.candidatos[0].id:'')} onChange={e=>setElegido(o=>({...o,[r.id]:e.target.value}))} style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface}}>
             {(p.candidatos||[]).length>1&&<option value=''>Elige el gasto</option>}
@@ -181,7 +181,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
           <input value={paraBoleta[r.id]??p.para??''} onChange={e=>setParaBoleta(o=>({...o,[r.id]:e.target.value}))} placeholder='Correo del colaborador' style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface,boxSizing:'border-box'}}/>
           {abierto===r.id&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}><b>{asuntoPedidoBoleta(p)}</b>{'\n\n'}{borradorPedidoBoleta(p)}</div>}
         </div>}
-        {p.guardar_cuenta&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
+        {p.guardar_cuenta&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
       </div>
       {adjuntos(r)}
       {cuerpo(r)}
@@ -196,8 +196,8 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',gap:6,alignItems:'center',minWidth:0}}>{linkCli(r)}{isDesktop&&chipAbg(r.abogado)}</div>
-          <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.motivo||r.resumen||'—'}</div>
-          <div style={{fontSize:10.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`:`correo ${fechaHoraCL(r.recibido_at)}`}</div>
+          <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.motivo||r.resumen||'—'}</div>
+          <div style={{fontSize:10.5,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`:`correo ${fechaHoraCL(r.recibido_at)}`}</div>
         </div>
         {m!=null&&<b style={{fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(m)}</b>}
         {conRest&&r.estado==='descartado'&&<button disabled={busy===r.id} onClick={e=>{e.stopPropagation();restaurar(r)}} style={{...btnSec,padding:'3px 4px',fontSize:11.5,flexShrink:0}}>Restaurar</button>}
@@ -223,7 +223,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
         <div style={{...SEC_LBL}}>Correos de la oficina revisados · 30 días</div>
         <div style={{display:'flex',alignItems:'baseline',gap:8}}><span style={{fontSize:isDesktop?26:26,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span><span style={{fontSize:12,color:C.textSoft}}>cada hora</span></div>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
-          {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><span style={{fontSize:11.5,fontWeight:600,color:c,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
+          {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><span style={{fontSize:11.5,fontWeight:600,color:c,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
         </div>
       </div>
       {isDesktop?<div style={{display:'grid',gridTemplateColumns:'minmax(0,1.25fr) minmax(0,1fr)',gap:16,alignItems:'start'}}><div>{pend}</div><div>{lado}</div></div>:<>{pend}{lado}</>}

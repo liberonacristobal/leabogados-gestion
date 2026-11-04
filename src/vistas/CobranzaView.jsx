@@ -58,7 +58,7 @@ export function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sendin
               <div key={id} onClick={()=>toggle(id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:on?C.surface:C.bgSoft}}>
                 <span style={chk(on)}>{on&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4"><path d="M5 13l4 4L19 7"/></svg>}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:on?C.accent:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(x.b.invoice_no)||'—'}{x.b.concept?<span style={{fontWeight:600,color:C.muted}}> · {x.b.concept}</span>:''}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:on?C.accent:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(x.b.invoice_no)||'—'}{x.b.concept?<span style={{fontWeight:600,color:C.muted}}> · {x.b.concept}</span>:''}</div>
                   <div style={{fontSize:11,color:x.venc?C.soonText:C.done}}>{x.venc?`Vencida hace ${nDias(x.diasVenc)}`:'Al día'}</div>
                 </div>
                 <div style={{fontSize:13,fontWeight:700,color:on?C.text:C.muted,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{f0(s)}</div>
@@ -330,14 +330,14 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
       {dd?bigDate(s,sevCol):<div style={{width:44,flexShrink:0,textAlign:'center',fontSize:11,color:C.textSoft}}>—</div>}
       <div style={{flex:1,minWidth:0}}>
         {showRs
-          ? <><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{rsDisplay(rs)}</div>
-              <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?` · ${b.concept}`:''}</div></>
-          : <div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:600}}> · {b.concept}</span>:''}</div>}
+          ? <><div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rsDisplay(rs)}</div>
+              <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?` · ${b.concept}`:''}</div></>
+          : <div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)||'—'}{b.concept?<span style={{color:C.muted,fontWeight:600}}> · {b.concept}</span>:''}</div>}
         <div style={{display:'flex',gap:18,marginTop:3}}>
           <div><div style={kk}>Emitida</div><div style={{...dv,color:C.text,whiteSpace:'nowrap'}}>{b.issued_at?fmtFechaDMY(b.issued_at):'—'}</div></div>
           <div><div style={kk}>{venc?'Vencida':'Vence en'}</div><div style={{...dv,color:sevCol}}>{venc?`${diasVenc} días`:(dl>0?`${dl} días`:'hoy')}</div></div>
         </div>
-        {det&&<div title={`«${det.s.title||'Trabajo'}» sin factura, gasto, tarea ni horas del cliente desde ${fmtFechaDMY(det.ult)}`} style={{fontSize:10.5,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Trabajo detenido desde {fmtFechaDMY(det.ult)}</div>}
+        {det&&<div title={`«${det.s.title||'Trabajo'}» sin factura, gasto, tarea ni horas del cliente desde ${fmtFechaDMY(det.ult)}`} style={{fontSize:10.5,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Trabajo detenido desde {fmtFechaDMY(det.ult)}</div>}
       </div>
       <div style={{textAlign:'right',flexShrink:0}}>
         <div style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{f0(saldoBill(b))}</div>

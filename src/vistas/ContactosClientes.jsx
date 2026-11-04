@@ -176,8 +176,8 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
       </div>
       {!cerrado&&ks.map(k=>{ const p=pendDe(k), on=selK===k; return <div key={k} onClick={()=>{ setSel(k); setVerDet(true); if(!D) window.scrollTo(0,0) }} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on&&D?C.azulBg:'transparent'}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nomCli(k)}</div>
-          <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k===SIN?'Elige el cliente de cada correo':[cli[k]?.status,...arDe(k)].filter(Boolean).join(' · ')||'—'} · {g[k].length} en el filtro</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nomCli(k)}</div>
+          <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{k===SIN?'Elige el cliente de cada correo':[cli[k]?.status,...arDe(k)].filter(Boolean).join(' · ')||'—'} · {g[k].length} en el filtro</div>
         </div>
         <span style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',color:p?C.soonText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{p?`${p} por revisar`:'Revisado'}</span>
       </div> })}
@@ -197,7 +197,7 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
     return <div key={r.id} style={{display:'flex',alignItems:'center',gap:D?12:8,rowGap:6,flexWrap:'wrap',padding:D?'10px 14px':'10px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
       <div style={{flex:'1 1 240px',minWidth:0,opacity:e?.6:1}}>
         <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}}>{r.nombre||r.email.split('@')[0]}{r.cargo?` · ${r.cargo}`:''}</div>
-        <div style={{fontSize:12,color:C.azulInfo,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.email}</div>
+        <div style={{fontSize:12,color:C.azulInfo,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.email}</div>
         {(otros||evTxt)&&<div style={txtSty}>{otros||evTxt}</div>}
         {r.rol!=='contraparte'&&(r.recibe||[]).length>0&&<div style={{...txtSty,color:C.accent}}>Recibe: {r.recibe.join(' · ')}</div>}
       </div>
@@ -232,9 +232,9 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
     {(D||!verDet)&&<>
       <div style={{display:'grid',gridTemplateColumns:D?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:10,marginBottom:12}}>
         {kpis.map(([l,v,s])=><div key={l} style={{...card,padding:'11px 14px',minWidth:0}}>
-          <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+          <div style={{...SEC_LBL,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{l}</div>
           <div style={{fontSize:26,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',lineHeight:1.2}}>{v}</div>
-          <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
+          <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s}</div>
         </div>)}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>

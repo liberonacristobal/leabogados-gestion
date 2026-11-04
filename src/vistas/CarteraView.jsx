@@ -844,10 +844,10 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'flex-start', gap:13, background:'#fff', border:`1px solid ${openId===p.id?C.accent:C.border}`, borderRadius:10, padding:'13px 16px', marginBottom:8, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0, marginTop:6 }}/>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:C.accent, letterSpacing:'-.01em', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre_proyecto}</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{cnm(p.cliente_id)||'—'}</div>
+          <div style={{ fontSize:16, fontWeight:700, color:C.accent, letterSpacing:'-.01em', display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{p.nombre_proyecto}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(p.cliente_id)||'—'}</div>
           <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, fontWeight:600, color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, padding:'3px 9px', marginTop:9, maxWidth:'100%', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>{etapaNm}</div>
-          <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:8, fontSize:13, fontWeight:600, color:tc }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>{stepIcon(cap)}</svg><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cap} · {due}</span></div>
+          <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:8, fontSize:13, fontWeight:600, color:tc }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>{stepIcon(cap)}</svg><span style={{ display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cap} · {due}</span></div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:11, flexShrink:0, marginTop:2 }}>{perAv(resp,24)}<span style={{ color:C.textSoft, fontSize:16 }}><Gl n='chevron'/></span></div>
       </div>
@@ -998,7 +998,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.greenText} strokeWidth="2.5"><path d="M4 12l5 5L20 6"/></svg><span style={{ fontSize:10, fontWeight:700, color:C.greenText, textTransform:'uppercase', letterSpacing:.3 }}>Confirmado automáticamente</span></div>
               {mios.map((x,i)=>(
                 <div key={x.evKey} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid ${C.greenText}22`:'none', padding:'7px 0 2px' }}>
-                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.titulo}</div><div style={{ fontSize:11, color:C.muted }}>evidencia inequívoca · patrón aprendido</div></div>
+                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{x.titulo}</div><div style={{ fontSize:11, color:C.muted }}>evidencia inequívoca · patrón aprendido</div></div>
                   <span onClick={()=>deshacerAuto(x)} style={{ fontSize:12, fontWeight:600, color:C.muted, cursor:'pointer', flexShrink:0 }}>Deshacer</span>
                 </div>
               ))}
@@ -1020,7 +1020,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
               {sug.map((s,i)=>(
                 <div key={s.source+'_'+s.origenId} style={{ borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
                   <div style={{ fontSize:13, color:C.text, fontWeight:600 }}>{s.source==='documento'?'Un documento':s.source==='correo'?'Un correo':s.source==='fondo'?'Un cobro':s.source==='calendario'?'Una cita':'Un trámite'} confirma «{s.hitoTitulo}»{s.fecha?` · ${fmtDia(s.fecha)}`:''}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':s.source==='fondo'?'Cobro':s.source==='calendario'?'Agenda':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span></div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:1 }}><span style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:'#5B3E8E', background:'#EFEAF7', borderRadius:20, padding:'1px 6px', flexShrink:0 }}>{s.source==='documento'?'Drive':s.source==='correo'?'Correo':s.source==='fondo'?'Cobro':s.source==='calendario'?'Agenda':'Gasto'}</span><span style={{ fontSize:11, color:C.muted, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{s.label}</span></div>
                   <div style={{ display:'flex', gap:12, marginTop:6, alignItems:'center' }}>
                     <button onClick={()=>onAplicarEvidencia&&onAplicarEvidencia(p,s)} style={{ fontSize:12, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer' }}>Marcar hecho</button>
                     <span onClick={()=>onDescartarEvidencia&&onDescartarEvidencia(p,s)} style={{ fontSize:12, fontWeight:600, color:C.muted, cursor:'pointer' }}>No corresponde</span>
@@ -1041,7 +1041,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
             const dd=_dias(uc.fecha); const hace = dd==null?'' : dd<=0?'hoy' : dd===1?'ayer' : `hace ${dd} d`; const linkable = uc.threadId&&uc.threadId!=='demo'
             return <div onClick={()=>linkable&&window.open('https://mail.google.com/mail/u/0/#all/'+uc.threadId,'_blank')} style={{ display:'flex', alignItems:'center', gap:9, ...card, cursor:linkable?'pointer':'default' }}>
               <span style={{ width:8, height:8, borderRadius:'50%', background:uc.dir==='out'?C.azulInfo:C.greenText, flexShrink:0 }}/>
-              <div style={{ flex:1, minWidth:0 }}><div style={{...SEC_LBL}}>Último contacto · {uc.dir==='out'?'enviado':'recibido'}</div><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{uc.asunto}</div></div>
+              <div style={{ flex:1, minWidth:0 }}><div style={{...SEC_LBL}}>Último contacto · {uc.dir==='out'?'enviado':'recibido'}</div><div style={{ fontSize:13, color:C.text, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{uc.asunto}</div></div>
               <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:700, color:dd!=null&&dd>45?C.coralText:C.accent }}>{hace}</div>{linkable&&<div style={{ fontSize:10, color:C.azulInfo }}>ver en Gmail <Gl n='chevron'/></div>}</div>
             </div>
           })()}
@@ -1124,7 +1124,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
                     {tareasPaso.map(t=>{ const td=daysLeft(t.due); return (
                       <div key={t.id} style={{ display:'flex', alignItems:'center', gap:7 }}>
                         <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar tarea terminada' style={{ width:13, height:13, borderRadius:4, border:`1.5px solid ${C.azulInfo}`, flexShrink:0, cursor:'pointer' }}/>
-                        <span onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, fontSize:12, color:C.text, cursor:'pointer', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</span>
+                        <span onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, fontSize:12, color:C.text, cursor:'pointer', display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{t.title}</span>
                         <span style={{ fontSize:10, fontWeight:600, color:td==null?C.muted:td<0?C.overdueText:td<=2?C.soonText:C.muted, flexShrink:0 }}>{t.due?(td<0?`vencida ${-td}d`:td===0?'hoy':`en ${td}d`):'tarea'}</span>
                       </div> )})}
                   </div>}
@@ -1171,7 +1171,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
             {items.map((it,i)=>{ const dd=cartDiasPlazo(it.fecha); const k=KIND[it.kind]||KIND.Tarea; const dc=dd==null?C.muted:dd<0?C.overdue:dd<=7?'#E09B2D':C.greenText
               return <div key={i} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:i?`1px solid ${C.border}`:'none' }}>
                 <div style={{ textAlign:'center', minWidth:40, flexShrink:0 }}><div style={{ fontSize:16, fontWeight:700, color:dc, lineHeight:1 }}>{new Date(it.fecha+'T12:00').getDate()}</div><div style={{ fontSize:10, color:C.muted, textTransform:'uppercase' }}>{mesCorto(it.fecha+'T12:00')}</div></div>
-                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.texto}</div><div style={{ fontSize:11, fontWeight:600, color:dc }}>{dd==null?'':dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd} días`}</div></div>
+                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{it.texto}</div><div style={{ fontSize:11, fontWeight:600, color:dc }}>{dd==null?'':dd<0?`vencido ${-dd}d`:dd===0?'hoy':`en ${dd} días`}</div></div>
                 <span style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:.3, color:k.c, background:k.bg, borderRadius:20, padding:'2px 8px', flexShrink:0 }}>{it.kind}</span>
               </div>
             })}
@@ -1185,7 +1185,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
           {tks.map((t,ti)=>{ const d=daysLeft(t.due); const col=d==null?C.muted:d<0?C.overdueText:d<=2?C.soonText:C.muted; return (
             <div key={t.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'7px 0', borderTop:ti?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none' }}>
               <span onClick={()=>onCompleteTask&&onCompleteTask(t)} title='Marcar terminada' style={{ width:17, height:17, borderRadius:8, border:`1.5px solid ${C.done}`, flexShrink:0, cursor:'pointer' }}/>
-              <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}><div style={{ fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div><div style={{ fontSize:10, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div></div>
+              <div onClick={()=>onPreviewTask&&onPreviewTask(t)} style={{ flex:1, minWidth:0, cursor:'pointer' }}><div style={{ fontSize:13, color:C.text, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{t.title}</div><div style={{ fontSize:10, color:col }}>{t.due?(d<0?`vencida ${-d}d`:d===0?'vence hoy':`en ${d}d`):'sin plazo'}{t.who?` · ${INICIALES_RESP[t.who]||t.who}`:''}</div></div>
             </div>
           )})}
           {onAddTaskForProject&&<div style={{ textAlign:'right', paddingTop:8 }}><span onClick={()=>onAddTaskForProject(p)} style={{ fontSize:12, fontWeight:600, color:C.accent, cursor:'pointer' }}>+ Nueva tarea</span></div>}
@@ -1209,7 +1209,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
                 nG:(expenses||[]).filter(e=>p.cliente_id&&!e.deleted_at&&String(e.client_id)===String(p.cliente_id)&&e.created_by===n&&String(e.date||'')>=desde).length})).filter(x=>x.nT+x.nG>=2)
               return sug.map(x=><div key={'s'+x.i} style={{ display:'flex', alignItems:'center', gap:9, padding:'7px 0', borderTop:`1px solid ${C.bgSoft}` }}>
                 {perAv(x.i,22)}
-                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{x.n} · sugerido</div><div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{[x.nT?`${x.nT} tarea${x.nT!==1?'s':''}`:null,x.nG?`${x.nG} gasto${x.nG!==1?'s':''}`:null].filter(Boolean).join(' y ')} en este cliente{isDesktop?' (6 meses)':''}</div></div>
+                <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.text }}>{x.n} · sugerido</div><div style={{ fontSize:11, color:C.muted, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{[x.nT?`${x.nT} tarea${x.nT!==1?'s':''}`:null,x.nG?`${x.nG} gasto${x.nG!==1?'s':''}`:null].filter(Boolean).join(' y ')} en este cliente{isDesktop?' (6 meses)':''}</div></div>
                 <span onClick={()=>onAddMiembro&&onAddMiembro(p.id,x.i,'apoyo')} style={{ fontSize:11, fontWeight:700, color:'#fff', background:C.accent, borderRadius:20, padding:'4px 11px', cursor:'pointer', whiteSpace:'nowrap' }}>Agregar</span>
                 <span onClick={()=>{ setSugEqNo(s=>new Set([...s,`${p.id}:${x.i}`])); if(!DEMO) setLearningKV('equipo_sug_no',`${p.id}:${x.i}`,'1').catch(()=>{}) }} style={{ fontSize:11, fontWeight:600, color:C.muted, cursor:'pointer' }}>No</span>
               </div>) })()}
@@ -1328,7 +1328,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
               <div style={{ fontSize:12, color:C.muted, marginBottom:9 }}>Pasos que varios proyectos agregaron fuera de la plantilla.</div>
               {sug.map((s,i)=>(
                 <div key={s.k} style={{ display:'flex', alignItems:'center', gap:10, borderTop:i?`1px solid #E3DAF2`:'none', padding:'8px 0 2px' }}>
-                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.t}</div><div style={{ fontSize:11, color:C.muted }}>en {s.n} proyectos</div></div>
+                  <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{s.t}</div><div style={{ fontSize:11, color:C.muted }}>en {s.n} proyectos</div></div>
                   <button onClick={()=>setPasos([...pasos,{t:s.t,m:false,subs:[]}])} style={{ fontSize:12, fontWeight:600, color:'#fff', background:C.accent, border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer', flexShrink:0 }}>Agregar a la plantilla</button>
                 </div>
               ))}
@@ -1421,7 +1421,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
     const atasco = Object.entries(demora).map(([k,x])=>({k, t:x.t, media:Math.round(x.sum/x.n), n:x.n, proys:x.proys})).sort((a,b)=>b.media-a.media).slice(0,4)
     const avanceDe = p => { const hs=hitosDe(p); return `${hs.filter(h=>h.hecho).length}/${hs.length}` }
     const subFila = p => <div key={'s'+p.id} onClick={()=>{ setMetOpen(false); abrir(p) }} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px 8px 26px', borderTop:`1px solid ${C.border}`, background:C.bgSoft||'#F7F9FA', cursor:'pointer' }}>
-      <div style={{ flex:1, minWidth:0, fontSize:12, color:C.accent, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
+      <div style={{ flex:1, minWidth:0, fontSize:12, color:C.accent, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
       <div style={{ fontSize:11, fontWeight:700, color:C.muted, flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{avanceDe(p)}</div><span style={{ color:C.textSoft, fontSize:13, flexShrink:0 }}><Gl n='chevron'/></span>
     </div>
     const exportar = () => {
@@ -1463,7 +1463,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
               return <div key={i}>
                 <div onClick={()=>setMetExp(open?null:ek)} style={{ display:'flex', alignItems:'center', padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', fontSize:13, cursor:'pointer' }}>
                   <span style={{ width:12, flexShrink:0, color:C.textSoft, fontSize:10 }}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
-                  <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.nombre}</div>
+                  <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{o.nombre}</div>
                   <div style={{ width:54, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.nProy}</div>
                   <div style={{ width:66, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.done}/{o.total}</div>
                   <div style={{ width:66, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct} %`}</div>
@@ -1477,7 +1477,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
               return <div key={i}>
                 <div onClick={()=>setMetExp(open?null:ek)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:i?`1px solid ${C.border}`:'none', cursor:'pointer' }}>
                   <span style={{ width:12, flexShrink:0, color:C.textSoft, fontSize:10 }}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
-                  <div style={{ flex:1, minWidth:0, fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.t}</div>
+                  <div style={{ flex:1, minWidth:0, fontSize:13, color:C.text, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{a.t}</div>
                   <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:12, fontWeight:700, color:'#E09B2D' }}>+{a.media}d tarde</div><div style={{ fontSize:10, color:C.muted }}>{a.n===1?'1 vez':`${a.n} veces`}</div></div>
                 </div>
                 {open && a.proys.map(subFila)}
@@ -1506,7 +1506,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
     const filaPaso = (x) => { const dc = x.dd<0?C.overdue:x.dd<=2?'#E09B2D':C.soonText; const tc = x.dd<0?C.overdueText:x.dd<=2?C.soonText:C.greenText
       return <div key={x.p.id+'_'+x.h.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'10px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:dc, flexShrink:0 }}/>
-        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.h.titulo}</div><div style={{ fontSize:11, color:C.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div></div>
+        <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, color:C.text, fontWeight:600, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{x.h.titulo}</div><div style={{ fontSize:11, color:C.muted, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div></div>
         <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontSize:11, fontWeight:700, color:tc }}>{x.dd<0?`venció ${-x.dd}d`:x.dd===0?'hoy':`en ${x.dd}d`}</div><div style={{ fontSize:10, color:C.muted }}>{fmtDia(x.h.plazo)}</div></div>
         <span style={{ color:C.textSoft, fontSize:14 }}><Gl n='chevron'/></span>
       </div> }
@@ -1515,8 +1515,8 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       return <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:CART_DOT[p.estado||'verde'], flexShrink:0 }}/>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:14, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
-          <div style={{ fontSize:12, color:tc, fontWeight:600, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{nx?`Siguiente: ${nx.titulo}`:'Plan al día'}{nx&&nx.plazo?` · ${dd<0?`venció ${-dd}d`:dd===0?'hoy':`en ${dd}d`}`:''}</div>
+          <div style={{ fontSize:14, fontWeight:700, color:C.accent, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div>
+          <div style={{ fontSize:12, color:tc, fontWeight:600, marginTop:2, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{nx?`Siguiente: ${nx.titulo}`:'Plan al día'}{nx&&nx.plazo?` · ${dd<0?`venció ${-dd}d`:dd===0?'hoy':`en ${dd}d`}`:''}</div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:9, flexShrink:0 }}>{det&&<span title={`Sin movimiento hace ${c.inact}d · se revisa cada ${c.intervalo}d`} style={{ fontSize:10, fontWeight:700, color:C.grisText, background:C.bgWarm, borderRadius:20, padding:'2px 7px', textTransform:'uppercase', letterSpacing:.3 }}>Sin mover · {c.inact}d</span>}<span style={{ fontSize:10.5, fontWeight:700, color:C.muted }}>{done}/{hs.length}</span><span style={{ color:C.textSoft, fontSize:14 }}><Gl n='chevron'/></span></div>
       </div> }
@@ -1524,8 +1524,8 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       <div key={'r'+x.p.id} onClick={()=>abrir(x.p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
         <span style={{ width:8, height:8, borderRadius:'50%', background:'#E09B2D', flexShrink:0 }}/>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:13, fontWeight:700, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div>
-          <div style={{ fontSize:12, color:C.muted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{x.nx.titulo} · vence {x.dd===0?'hoy':`en ${x.dd}d`} · sin avance {x.inact}d</div>
+          <div style={{ fontSize:13, fontWeight:700, color:C.accent, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(x.p.cliente_id)||x.p.nombre_proyecto}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{x.nx.titulo} · vence {x.dd===0?'hoy':`en ${x.dd}d`} · sin avance {x.inact}d</div>
         </div>
         <span style={{ color:C.textSoft, fontSize:14, flexShrink:0 }}><Gl n='chevron'/></span>
       </div> )
@@ -1571,7 +1571,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
         {sinPlan.length>0 && <div id='foco-sinplan'>{secHd('Sin plan — ármalo',sinPlan.length,C.muted)}<div style={card}>{sinPlan.map(p=>(
           <div key={p.id} onClick={()=>abrir(p)} style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 14px', borderTop:`1px solid ${C.border}`, cursor:'pointer' }}>
             <span style={{ width:8, height:8, borderRadius:'50%', background:C.faint||C.done, flexShrink:0 }}/>
-            <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.accent, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div><div style={{ fontSize:11, color:C.muted }}>Elige la operación y nace con sus pasos</div></div>
+            <div style={{ flex:1, minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:C.accent, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{cnm(p.cliente_id)||p.nombre_proyecto}</div><div style={{ fontSize:11, color:C.muted }}>Elige la operación y nace con sus pasos</div></div>
             <span style={{ color:C.textSoft, fontSize:14 }}><Gl n='chevron'/></span>
           </div>
         ))}</div></div>}
@@ -1822,7 +1822,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
                 : propMatch.length===0 ? <div style={{ fontSize:12, color:C.muted, padding:'10px' }}>{propAll.length?'Sin propuestas que calcen — ajusta la búsqueda o elige del Drive del cliente.':'No se pudo leer la carpeta de propuestas (revisa la conexión a Drive).'}</div>
                 : propMatch.slice(0,20).map(f=>(
                   <div key={f.id} onClick={()=>extraer(f)} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', borderTop:`1px solid ${C.bgSoft||'#F1EFE8'}`, cursor:'pointer' }}>
-                    <span style={{ flex:1, minWidth:0, fontSize:13, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</span>
+                    <span style={{ flex:1, minWidth:0, fontSize:13, color:C.text, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{f.name}</span>
                     <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>{String(f.modifiedTime||'').slice(0,10)}</span>
                     <span style={{ color:C.textSoft, fontSize:14, flexShrink:0 }}><Gl n='chevron'/></span>
                   </div>
@@ -1856,7 +1856,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
                 {fases.map((f,i)=>(
                   <div key={i} style={{ padding:'9px 10px', borderTop:i?`1px solid ${C.bgSoft||'#F1EFE8'}`:'none', opacity:f.on?1:.5 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ fontSize:13, fontWeight:600, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{i+1}. {f.titulo}</span>
+                      <span style={{ fontSize:13, fontWeight:600, color:C.text, flex:1, minWidth:0, display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25 }}>{i+1}. {f.titulo}</span>
                       <input type='date' value={f.fecha} onChange={e=>setFases(a=>a.map((x,j)=>j===i?{...x,fecha:e.target.value}:x))} style={{ fontSize:11, padding:'2px 5px', borderRadius:8, border:`1px solid ${C.border}`, color:C.text }}/>
                       <span onClick={()=>setFases(a=>a.map((x,j)=>j===i?{...x,on:!x.on}:x))} style={{ width:16, height:16, borderRadius:4, flexShrink:0, cursor:'pointer', background:f.on?C.done:'transparent', border:f.on?'none':`1.5px solid ${C.done||'#99ABB4'}`, color:'#fff', fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{f.on?<Gl n='tick'/>:''}</span>
                     </div>

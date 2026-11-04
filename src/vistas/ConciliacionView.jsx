@@ -144,10 +144,10 @@ export function CobradasSinRespaldoPage({billing=[],movs=[],clients=[],clientEnt
     return (
     <div key={fac.id} style={{border:`1px solid ${it.cls==='exacto'?'#BFE3D5':C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
-        <span onClick={()=>onOpenClientFicha&&fac.client_id&&onOpenClientFicha(fac.client_id)} style={{fontSize:14,fontWeight:800,color:C.accent,cursor:onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}</span>
+        <span onClick={()=>onOpenClientFicha&&fac.client_id&&onOpenClientFicha(fac.client_id)} style={{fontSize:14,fontWeight:800,color:C.accent,cursor:onOpenClientFicha?'pointer':'default',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rs}</span>
         <span style={{fontSize:14,fontWeight:800,color:C.text,flexShrink:0}}>{fmtM(fac.amount)}</span>
       </div>
-      <div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{folioN(fac.invoice_no)?`Factura N° ${folioN(fac.invoice_no)} · `:'sin folio · '}{fac.concept||'—'}{fac.paid_at?` · cobrada ${fmtFechaDMY(fac.paid_at)}`:''}{it.parcial?` · parcial (falta ${fmtM((fac.amount||0)-(aplicadoByFactura[fac.id]||0))})`:''}</div>
+      <div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{folioN(fac.invoice_no)?`Factura N° ${folioN(fac.invoice_no)} · `:'sin folio · '}{fac.concept||'—'}{fac.paid_at?` · cobrada ${fmtFechaDMY(fac.paid_at)}`:''}{it.parcial?` · parcial (falta ${fmtM((fac.amount||0)-(aplicadoByFactura[fac.id]||0))})`:''}</div>
       {it.cls==='exacto'&&<Deposito c={it.best} fac={fac}/>}
       {it.cls==='revisar'&&<>
         <div style={{fontSize:10,fontWeight:700,color:C.soonText,marginTop:5}}>{it.ex.length>1?`${it.ex.length} pagos calzan exacto — elige`:'ningún pago calza exacto — revisa los cercanos'}</div>
@@ -217,7 +217,7 @@ export function CobradasSinRespaldoPage({billing=[],movs=[],clients=[],clientEnt
             {otros.length>0&&<div style={{paddingTop:10,marginTop:9,borderTop:`1px solid ${C.border}`}}><div style={{fontSize:12,color:C.text}}><b>{otros.length} sin depósito que calce</b></div><div style={{fontSize:11,color:C.muted,marginTop:2}}>Marcadas como pagadas pero sin movimiento en la cartola: cobros en efectivo, otra cuenta, o una marca de Pagado sin depósito real. No hay nada que conciliar; revisa solo si crees que alguna quedó mal marcada como pagada.</div>
               <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>{otros.slice(0,40).map(it=>{ const fac=it.fac; const rs=fac.receptor_name||cmap[fac.client_id]||'—'
                 return <div key={fac.id} onClick={()=>onOpenClientFicha&&fac.client_id&&onOpenClientFicha(fac.client_id)} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'6px 9px',background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,cursor:onOpenClientFicha?'pointer':'default'}}>
-                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.accent,fontWeight:600}}>{rs}{folioN(fac.invoice_no)?` · N° ${folioN(fac.invoice_no)}`:''}</span>
+                  <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.accent,fontWeight:600}}>{rs}{folioN(fac.invoice_no)?` · N° ${folioN(fac.invoice_no)}`:''}</span>
                   <span style={{color:C.muted,whiteSpace:'nowrap',flexShrink:0}}>{fmtM(fac.amount)}{fac.paid_at?` · ${fmtFechaDMY(fac.paid_at)}`:''}</span>
                 </div> })}
                 {otros.length>40&&<div style={{fontSize:11,color:C.faint||C.muted,textAlign:'center',paddingTop:3}}>y {otros.length-40} más</div>}</div>
@@ -246,8 +246,8 @@ export function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onCo
         return <div key={m.id} onClick={()=>toggle(String(m.id))} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'9px 11px',border:`1px solid ${on?C.greenText:C.border}`,borderRadius:10,background:on?C.greenBg:'#fff',cursor:'pointer'}}>
           <span style={{width:18,height:18,borderRadius:8,border:`1.5px solid ${on?C.greenText:C.done}`,background:on?C.greenText:'#fff',flexShrink:0,marginTop:1,display:'flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nom(m)}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>→ Factura N° {folioN(f.invoice_no)||'—'}{f.issued_at?` · emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.concept?` · ${f.concept}`:''}</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nom(m)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>→ Factura N° {folioN(f.invoice_no)||'—'}{f.issued_at?` · emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.concept?` · ${f.concept}`:''}</div>
             <div style={{fontSize:11,color:C.muted,marginTop:1}}>Pago {fmtFechaDMY(m.fecha)}{m.rut_contraparte?` · RUT ${m.rut_contraparte}`:''}</div>
           </div>
           <div style={{fontSize:13,fontWeight:700,color:C.greenText,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(m.monto)}</div>
@@ -1996,8 +1996,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       <div key={t.id} onClick={()=>toggle(t.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
         <span style={{width:18,height:18,borderRadius:8,flexShrink:0,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'transparent',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>{on?<Gl n='tick'/>:''}</span>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliNom(b)||prov.nombre}{b?.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div>
-          <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.estado==='pagado'&&!t.movimiento_id?`Marcada pagada ${fmtFechaDMY(t.pagado_at)} · falta el banco`:est==='por_pagar'?`Cliente pagó ${fmtFechaDMY(b?.paid_at)}`:'El cliente aún no paga'}{glosaFactura(b)?` · ${glosaFactura(b)}`:''}</div>
+          <div style={{fontSize:12,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cliNom(b)||prov.nombre}{b?.invoice_no?` · Factura N° ${folioN(b.invoice_no)}`:''}</div>
+          <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t.estado==='pagado'&&!t.movimiento_id?`Marcada pagada ${fmtFechaDMY(t.pagado_at)} · falta el banco`:est==='por_pagar'?`Cliente pagó ${fmtFechaDMY(b?.paid_at)}`:'El cliente aún no paga'}{glosaFactura(b)?` · ${glosaFactura(b)}`:''}</div>
         </div>
         <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(pagarT(t))}</span>
       </div>) }
@@ -2067,7 +2067,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       <input value={q} onChange={e=>setCcQ(p=>({...p,[m.id]:e.target.value}))} placeholder={ph} style={{border:'none',outline:'none',fontSize:13,color:C.text,flex:1,minWidth:0,background:'none'}}/>
     </div>
     const rowSty=(i)=>({display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'})
-    const backHd=(label,onBack)=><div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span onClick={onBack} style={{color:C.accent,fontSize:16,cursor:'pointer'}}><Gl n='chevL'/></span><span style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtM(monto)}</span></div>
+    const backHd=(label,onBack)=><div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}><span onClick={onBack} style={{color:C.accent,fontSize:16,cursor:'pointer'}}><Gl n='chevL'/></span><span style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</span><span style={{marginLeft:'auto',fontSize:12,fontWeight:700,color:C.overdue,flexShrink:0}}>{fmtM(monto)}</span></div>
     const sugBar=()=>{ if(!sug) return null
       // Cargo a alguien del equipo CON caja chica: no asumir "Sueldo" — preguntar y dejar elegir (siempre confirma antes de asignar).
       if(sug.ambiguoCaja){ const per=sug.persona
@@ -2086,12 +2086,12 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         </div> }
       if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
       const cnm=cmap[sug.clientId]||'cliente'
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.coralText,color:'#fff'}}>Confirmar</button>
       </div>
     }
@@ -2099,7 +2099,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     const lq=liqParaCargo(m)
     const notaBar=()=>{ if(!lq) return null
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Notaría · liquidación del {fmtFechaDMY(lq.liq.created_at)} · {lq.liq.n_gastos||0} OT</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>{lq.exacto?'mismo monto':`liquidación ${fmtM(lq.liq.total)} · diferencia ${fmtM(Math.abs(lq.dif))}`}</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Notaría · liquidación del {fmtFechaDMY(lq.liq.created_at)} · {lq.liq.n_gastos||0} OT</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>{lq.exacto?'mismo monto':`liquidación ${fmtM(lq.liq.total)} · diferencia ${fmtM(Math.abs(lq.dif))}`}</div></div>
         <button disabled={busy===m.id} onClick={()=>enlazarNotaria(m,lq.liq)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.coralText,color:C.surface}}>Enlazar</button>
       </div> }
     // NIVEL 0 — tres tiles (pasan a dos filas si no caben)
@@ -2137,11 +2137,11 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           {hd}
           <div style={{fontSize:10,color:C.muted,marginBottom:6}}>{provTxt} · ¿de qué venta es? Rebaja el ingreso de esa venta.</div>
           {!st.cid&&sugV.length>0&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:7}}>
-            {sugV.map((v,i)=><div key={v.id} onClick={()=>setSt({cid:v.client_id,saleId:v.id})} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ventaTxt(v)}</span><span style={{fontSize:10,fontWeight:700,color:C.tealText,flexShrink:0}}>sugerida</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
+            {sugV.map((v,i)=><div key={v.id} onClick={()=>setSt({cid:v.client_id,saleId:v.id})} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{ventaTxt(v)}</span><span style={{fontSize:10,fontWeight:700,color:C.tealText,flexShrink:0}}>sugerida</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
           </div>}
           {!st.cid&&<AsignarClienteInline bill={{id:m.id}} clients={clients} onAssign={(_,cid)=>setSt({cid})} label='Buscar cliente' placeholder='Buscar cliente o RUT…'/>}
           {st.cid&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-            {ventasCli.map((v,i)=><div key={v.id} onClick={()=>setSt({saleId:v.id})} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v.title||'venta'}</span><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{v.status}{v.year?` · ${v.year}`:''}</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
+            {ventasCli.map((v,i)=><div key={v.id} onClick={()=>setSt({saleId:v.id})} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v.title||'venta'}</span><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{v.status}{v.year?` · ${v.year}`:''}</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
             {!ventasCli.length&&<div style={{padding:'9px 11px',fontSize:11,color:C.muted}}>Este cliente no tiene ventas activas ni terminadas.</div>}
           </div>}
         </div>
@@ -2177,7 +2177,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         {backHd(`Gasto Oficina › ${cat}`,()=>{setCcCat(p=>({...p,[m.id]:undefined}));setCcQ(p=>({...p,[m.id]:''}))})}
         {inp(`busca o agrega ${subLabel}…`)}
         <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:7}}>
-          {shown.map((s,i)=><div key={s} onClick={()=>registrarCargoOficina(m,cat,s)} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s}</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
+          {shown.map((s,i)=><div key={s} onClick={()=>registrarCargoOficina(m,cat,s)} style={rowSty(i)}><span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s}</span><span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span></div>)}
           {ql&&!exact&&<div onClick={()=>registrarCargoOficina(m,cat,q.trim())} style={{...rowSty(shown.length),background:'#FBFCFD'}}><span style={{fontSize:13,fontWeight:600,color:C.accent}}>+ Crear "{q.trim()}" en {cat}</span></div>}
           {!shown.length&&!ql&&<div style={{padding:'9px 11px',fontSize:11,color:C.muted}}>Escribe para agregar {subLabel}…</div>}
         </div>
@@ -2619,9 +2619,9 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
             <div onClick={onClick} style={{cursor:'pointer',background:opts.bg||C.surface,border:`1px solid ${opts.border||C.border}`,borderRadius:12,padding:D?'12px 13px':'11px 12px',position:'relative',minHeight:D?90:80}}>
               {opts.badge!=null?<span style={{position:'absolute',top:9,right:11,fontSize:16,fontWeight:800,color:valCol}}>{opts.badge}</span>:<span style={{position:'absolute',top:9,right:11,color:C.textSoft,fontSize:12}}><Gl n='chevron'/></span>}
               <span style={{width:28,height:28,borderRadius:8,background:sqbg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><SIcon n={icon} s={16} c={stroke}/></span>
-              <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:tCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{titulo}</div>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:tCol,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{titulo}</div>
               {valor?<div style={{fontSize:opts.big?18:16,fontWeight:800,letterSpacing:-.3,marginTop:4,color:valCol,fontVariantNumeric:'tabular-nums'}}>{valor}</div>:null}
-              <div style={{fontSize:10,color:C.textSoft,marginTop:valor?1:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+              <div style={{fontSize:10,color:C.textSoft,marginTop:valor?1:6,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>
             </div>)
           return <>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:D?12:8,marginBottom:D?12:9}}>
@@ -2675,7 +2675,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
     const lq=liqParaCargo(m)
     if(lq) return (
       <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Notaría · liquidación del {fmtFechaDMY(lq.liq.created_at)} · {lq.liq.n_gastos||0} OT</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>{lq.exacto?'mismo monto':`liquidación ${fmtM(lq.liq.total)} · diferencia ${fmtM(Math.abs(lq.dif))}`}</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Notaría · liquidación del {fmtFechaDMY(lq.liq.created_at)} · {lq.liq.n_gastos||0} OT</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>{lq.exacto?'mismo monto':`liquidación ${fmtM(lq.liq.total)} · diferencia ${fmtM(Math.abs(lq.dif))}`}</div></div>
         <button disabled={busy===m.id} onClick={()=>enlazarNotaria(m,lq.liq)} style={{fontSize:11,fontWeight:700,color:C.surface,background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enlazar</button>
       </div>)
     const grupo=matchGrupoPresupuesto(m), sug=cargoSugerencia(m)
@@ -2687,7 +2687,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
     if(!sug) return null
     if(sug.ambiguoCaja) return (
       <div onClick={stop} style={{marginTop:8,background:C.tealBg,border:'1px solid #BFE6E3',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.tealText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Cargo a {sug.persona} · ¿caja chica o sueldo?</div><div style={{fontSize:10,color:C.tealText,marginTop:1}}>tiene caja chica — elige tú</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.tealText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Cargo a {sug.persona} · ¿caja chica o sueldo?</div><div style={{fontSize:10,color:C.tealText,marginTop:1}}>tiene caja chica — elige tú</div></div>
         <button disabled={busy===m.id} onClick={()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Elegir</button>
       </div>)
     if(sug.fam==='oficina'){
@@ -2695,14 +2695,14 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       const viaTxt=sug.via==='RUT'?'por el RUT · siempre lo clasificas así':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'
       return (
         <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Gasto Oficina <Gl n='chevron'/> {path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><Sparkle/> {viaTxt}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Gasto Oficina <Gl n='chevron'/> {path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><Sparkle/> {viaTxt}</div></div>
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div>)
     }
     const cnm=cmap[sug.clientId]||'cliente'
     return (
       <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Confirmar</button>
       </div>)
   }
@@ -2798,7 +2798,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
             </div>
             {comOpen&&conSug&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 9px',margin:'2px 2px 6px 4px',border:`1px solid ${C.border}`,borderRadius:8,background:C.bgSoft}}>
               {isDesktop?<><span style={{width:6,height:6,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{provSug.p.razon_social||provSug.p.nombre}</div><div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{provSug.por}</div></div></>:<span style={{flex:1}}/>}
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{provSug.p.razon_social||provSug.p.nombre}</div><div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{provSug.por}</div></div></>:<span style={{flex:1}}/>}
               <span onClick={busy===m.id?undefined:()=>{ setIngProvCambiar(m.id); setIngProvQ('') }} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',padding:'4px 6px',flexShrink:0}}>Cambiar</span>
               <button disabled={busy===m.id} onClick={()=>ingresoOficina(m,'Comisión Recibida',provSug.p.id)} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 11px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>{busy===m.id?'Registrando…':'Registrar comisión'}</button>
             </div>}
@@ -2809,7 +2809,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   <input value={ingProvQ} onChange={e=>setIngProvQ(e.target.value)} placeholder='Buscar proveedor o tercero…' style={{border:'none',outline:'none',fontSize:12,color:C.text,flex:1,minWidth:0,background:'none'}}/>
                 </div>
                 <div style={{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8}}>
-                  {provs.slice(0,8).map(p=><div key={p.id} onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',p.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer',fontSize:12}}><span style={{width:6,height:6,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/><span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.razon_social||p.nombre||'—'}</span></div>)}
+                  {provs.slice(0,8).map(p=><div key={p.id} onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',p.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer',fontSize:12}}><span style={{width:6,height:6,borderRadius:'50%',background:C.azulInfo,flexShrink:0}}/><span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{p.razon_social||p.nombre||'—'}</span></div>)}
                   {!provs.length&&!ql&&<div style={{padding:'8px 9px',fontSize:11,color:C.muted}}>Escribe para buscar o crear un tercero…</div>}
                   {ql&&!provs.some(p=>((p.razon_social||p.nombre||'').toLowerCase()===ql))&&<div onClick={busy===m.id?undefined:async()=>{ try{ const {data,error}=await supabase.from('proveedores').insert({razon_social:ingProvQ.trim(),activo:true}).select().single(); if(error) throw error; await ingresoOficina(m,'Comisión Recibida',data?.id||null) }catch(e){ appAlert('No se pudo crear el tercero: '+(e.message||e)) } }} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.accent,cursor:busy===m.id?'default':'pointer',background:'#FBFCFD'}}>+ Crear "{ingProvQ.trim()}" como tercero</div>}
                   <div onClick={busy===m.id?undefined:()=>ingresoOficina(m,'Comisión Recibida',null)} style={{padding:'7px 9px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:600,color:C.muted,cursor:busy===m.id?'default':'pointer'}}>Sin asignar · registrar comisión</div>
@@ -2844,7 +2844,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
           <div style={{background:C.surface,borderRadius:8,marginTop:8,overflow:'hidden'}}>
             {prSub.map((r,i)=>{ const on=concView===r.cv; return (
               <div key={r.cv} onClick={(e)=>{e.stopPropagation();setSub('abonos');setConcView(r.cv)}} title={`${r.n} · ${r.t}`} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 9px',borderTop:i>0?`1px solid ${C.border}`:'none',cursor:'pointer',background:on?C.overdueBg:'transparent'}}>
-                <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:on?700:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.t}</span>
+                <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:on?700:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.t}</span>
                 <span style={{fontSize:11,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtM(r.m)}</span>
                 <span style={{color:C.muted,fontSize:11,flexShrink:0}}><Gl n='chevron'/></span>
               </div>) })}
@@ -2915,7 +2915,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                         <div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
                         <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:12,padding:'10px 12px'}}>
                           <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
-                            <span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span>
+                            <span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sc.nombre}</span>
                             <span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{sc.via==='nombre'?'Por el nombre':sc.via==='glosa'?'La glosa nombra el folio':'Monto exacto'}</span>
                           </div>
                           {sc.via==='nombre'
@@ -2923,8 +2923,8 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             : sc.f ? <div style={{marginTop:8,borderTop:'1px solid #DCEEE5',paddingTop:8}}>
                                 <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12}}><span style={{color:C.textSoft}}>Este depósito</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtM(m.monto)}</b></div>
                                 <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:3}}><span style={{color:C.textSoft}}>Factura N° {folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''}</span><b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtM(fMon)}</b></div>
-                                {sc.f.concept&&<div style={{fontSize:10,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.f.concept}</div>}
-                                {(sc.f.receptor_name||sc.f.receptor_rut)&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Emitida a {sc.f.receptor_name||'—'}{sc.f.receptor_rut?` · ${fmtRutCL(sc.f.receptor_rut)}`:''}</div>}
+                                {sc.f.concept&&<div style={{fontSize:10,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sc.f.concept}</div>}
+                                {(sc.f.receptor_name||sc.f.receptor_rut)&&<div style={{fontSize:10,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Emitida a {sc.f.receptor_name||'—'}{sc.f.receptor_rut?` · ${fmtRutCL(sc.f.receptor_rut)}`:''}</div>}
                                 <div style={{fontSize:10,color:C.textSoft,marginTop:5,lineHeight:1.4}}>La glosa no trae RUT — el calce es por <b>monto exacto</b>. Revisa que sea de este cliente antes de confirmar.</div>
                               </div> : null}
                           <div style={{display:'flex',gap:8,alignItems:'center',marginTop:9}}>
@@ -2974,7 +2974,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   return (<div onClick={e=>e.stopPropagation()} style={{marginTop:5}}>
                     <div style={{border:'1px solid #CFE9DD',background:'#F1FAF6',borderRadius:12,padding:'10px 12px'}}>
                       <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}>
-                        <span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Pago de la rendición</span>
+                        <span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Pago de la rendición</span>
                         <span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>Rendición enviada</span>
                       </div>
                       <div style={{fontSize:11,color:C.greenText,marginTop:2}}>{cmap[m.cliente_id]||'Cliente'} · enviada el {fmtFechaDMY(String(pf.rend.sent_at).slice(0,10))}</div>
@@ -3114,7 +3114,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                                 <div style={{...SEC_LBL,marginBottom:3}}>Los depósitos · {grp.transfers.length}</div>
                                 {grp.transfers.map(t=>(<div key={t.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                                   <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>+{fmtM(t.monto)}</span><span style={{fontSize:10,color:C.textSoft}}>{fmtFechaDMY(t.fecha)}</span></div>
-                                  <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomDep(t)}{t.rut_contraparte?` · ${t.rut_contraparte}`:''}</div>
+                                  <div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nomDep(t)}{t.rut_contraparte?` · ${t.rut_contraparte}`:''}</div>
                                   {t.n_operacion&&<div style={{fontSize:10,color:C.textSoft}}>N° op. {t.n_operacion}</div>}
                                 </div>))}
                                 <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:11,fontWeight:700,color:C.text}}><span>Suma</span><span>{fmtM(depSum)}</span></div>
@@ -3123,8 +3123,8 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                                 <div style={{...SEC_LBL,marginBottom:3}}>Las facturas · {grp.facturas.length}</div>
                                 {grp.facturas.map(f=>(<div key={f.id} style={{padding:'3px 0',borderTop:`1px solid ${C.bgSoft}`}}>
                                   <div style={{display:'flex',justifyContent:'space-between',gap:6}}><span style={{fontSize:11,fontWeight:700,color:C.accent}}>Factura N° {folioN(f.invoice_no)||'—'}</span><span style={{fontSize:11,fontWeight:700,color:C.text}}>{fmtM(saldoFactura(f))}</span></div>
-                                  <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name||cmap[m.cliente_id]||'—'}{f.receptor_rut?` · ${fmtRutCL(f.receptor_rut)}`:''}</div>
-                                  <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.issued_at?fmtFechaDMY(f.issued_at):''}{f.concept?` · ${f.concept}`:''}</div>
+                                  <div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.receptor_name||cmap[m.cliente_id]||'—'}{f.receptor_rut?` · ${fmtRutCL(f.receptor_rut)}`:''}</div>
+                                  <div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.issued_at?fmtFechaDMY(f.issued_at):''}{f.concept?` · ${f.concept}`:''}</div>
                                 </div>))}
                                 <div style={{display:'flex',justifyContent:'space-between',borderTop:`1px solid ${C.border}`,marginTop:4,paddingTop:4,fontSize:11,fontWeight:700,color:C.text}}><span>Suma</span><span>{fmtM(facSum)}</span></div>
                               </div>
@@ -3136,7 +3136,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                           <div onClick={e=>e.stopPropagation()} style={{background:C.ambarBg,border:`1px solid ${C.soon}`,borderRadius:10,padding:'9px 10px',marginBottom:6,display:'flex',alignItems:'center',gap:9}}>
                             <SIcon n='file' s={14} c={C.soonText}/>
                             <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:700,color:C.soonText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{viaGlosa?`La glosa apunta a la N° ${folioN(f.invoice_no)||'—'}`:`Pago parcial de N° ${folioN(f.invoice_no)||'—'}`}</div>
+                              <div style={{fontSize:12,fontWeight:700,color:C.soonText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{viaGlosa?`La glosa apunta a la N° ${folioN(f.invoice_no)||'—'}`:`Pago parcial de N° ${folioN(f.invoice_no)||'—'}`}</div>
                               <div style={{fontSize:10,color:C.soonText,opacity:.9}}>saldo {fmtM(descProta.saldo)}{dif>0?` · pagó ${fmtM(dif)} menos`:dif<0?` · sobran ${fmtM(-dif)}`:''}</div>
                             </div>
                             <button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{fontSize:10,fontWeight:700,color:C.soonText,background:'transparent',border:`1px solid ${C.soonText}`,borderRadius:8,padding:'5px 11px',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Imputar a N° {folioN(f.invoice_no)||'—'}</button>
@@ -3153,7 +3153,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             {rows.map((r,i)=>(
                               <div key={i} onClick={busy===m.id?undefined:r.on} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 6px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none',borderRadius:8,cursor:busy===m.id?'default':'pointer'}}>
                                 {r.icon}
-                                <span style={{flex:1,minWidth:0,fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.lab}</span>
+                                <span style={{flex:1,minWidth:0,fontSize:11,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.lab}</span>
                                 <span style={{fontSize:11,fontWeight:700,color:r.c,fontVariantNumeric:'tabular-nums'}}>{r.val}</span>
                                 <span style={{color:C.textSoft,fontSize:12,flexShrink:0}}><Gl n='chevron'/></span>
                               </div>
@@ -3164,7 +3164,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             <div style={{fontSize:11,fontWeight:700,color:C.accent,marginBottom:5}}>Devolución de un pago nuestro</div>
                             {dv.map(c=>{ const pend=(c.monto||0)-(c.monto_conciliado||0); return (
                               <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-                                <span onClick={()=>irMov(c.id)} style={{minWidth:0,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>Cargo del <b>{fmtFechaDMY(c.fecha)}</b> · {fmtM(pend)}</span>
+                                <span onClick={()=>irMov(c.id)} style={{minWidth:0,fontSize:11,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:'pointer'}}>Cargo del <b>{fmtFechaDMY(c.fecha)}</b> · {fmtM(pend)}</span>
                                 <button disabled={busy===m.id} onClick={()=>registrarDevolucion(m,c)} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:8,padding:'4px 11px',border:'none',cursor:busy===m.id?'default':'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Es la devolución</button>
                               </div>) })}
                           </div> })()}
@@ -3173,7 +3173,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             <div style={{fontSize:11,fontWeight:700,color:C.accent,marginBottom:5}}>Ninguna factura calza sola con {fmtM(m.monto)}. Opciones:</div>
                             {factResto.map(({f,saldo,resto})=>(
                               <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`}}>
-                                <span style={{minWidth:0,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(f.invoice_no)||'—'}</b> · {fmtM(saldo)}{f.receptor_name?<span style={{color:C.muted}}> · {f.receptor_name}</span>:''}<br/><span style={{fontSize:10,color:C.textSoft}}>{f.issued_at?`emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span> <span style={{fontSize:10,color:C.tealText}}>· + {fmtM(resto)} para gastos/anticipo</span></span>
+                                <span style={{minWidth:0,fontSize:11,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b>Factura N° {folioN(f.invoice_no)||'—'}</b> · {fmtM(saldo)}{f.receptor_name?<span style={{color:C.muted}}> · {f.receptor_name}</span>:''}<br/><span style={{fontSize:10,color:C.textSoft}}>{f.issued_at?`emitida ${fmtFechaDMY(f.issued_at)}`:''}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span> <span style={{fontSize:10,color:C.tealText}}>· + {fmtM(resto)} para gastos/anticipo</span></span>
                                 <button disabled={busy===m.id} onClick={()=>reconciliar(m,f,'manual')} style={{background:C.accent,color:'#fff',fontSize:10,fontWeight:600,borderRadius:8,padding:'4px 11px',border:'none',cursor:busy===m.id?'default':'pointer',whiteSpace:'nowrap',flexShrink:0}}>Conciliar esta</button>
                               </div>
                             ))}
@@ -3189,7 +3189,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             </div>}
                         {showOtras&&<>
                         {(()=>{ const gs=gastosReembolsables(m.cliente_id)
-                          const optRow=(icon,ic,ibg,name,hint,onClick,open,extra)=>(<div key={name}><div onClick={busy===m.id?undefined:onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}><span style={{width:26,height:26,borderRadius:8,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={15} c={ic}/></span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{name}</div>{hint&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hint}</div>}</div><span style={{color:C.textSoft,fontSize:13,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span></div>{open&&extra}</div>)
+                          const optRow=(icon,ic,ibg,name,hint,onClick,open,extra)=>(<div key={name}><div onClick={busy===m.id?undefined:onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,cursor:busy===m.id?'default':'pointer'}}><span style={{width:26,height:26,borderRadius:8,background:ibg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icon} s={15} c={ic}/></span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{name}</div>{hint&&<div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{hint}</div>}</div><span style={{color:C.textSoft,fontSize:13,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span></div>{open&&extra}</div>)
                           const fam=abFam[m.id]
                           const backHd=(label)=><div onClick={()=>setAbFam(p=>({...p,[m.id]:undefined}))} style={{display:'flex',alignItems:'center',gap:7,padding:'6px 2px 4px',cursor:'pointer'}}><span style={{color:C.accent,fontSize:16}}><Gl n='chevL'/></span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>{label}</span><span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.soon,flexShrink:0}}>Resta {fmtM(resto)}</span></div>
                           return <div style={{marginBottom:6}}>
@@ -3236,7 +3236,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                             {gs.map(g=>{ const on=devolSel.has(g.id); const cn=clients.find(c=>String(c.id)===String(g.client_id))?.name||''; return (
                               <div key={g.id} onClick={()=>setDevolSel(p=>{const n=new Set(p);n.has(g.id)?n.delete(g.id):n.add(g.id);return n})} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0',cursor:'pointer',fontSize:11}}>
                                 <span style={{width:15,height:15,borderRadius:4,border:`2px solid ${on?C.coralText:C.border}`,background:on?C.coralText:'#fff',color:'#fff',fontSize:10,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>{on?<Gl n='tick'/>:''}</span>
-                                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.category&&g.category!=='Otro'?<b style={{color:C.azulInfo}}>{g.category} </b>:''}{g.concept||'—'} <span style={{color:C.textSoft}}>· {g.date?fmtFechaDMY(g.date):''}</span></span>
+                                <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.category&&g.category!=='Otro'?<b style={{color:C.azulInfo}}>{g.category} </b>:''}{g.concept||'—'} <span style={{color:C.textSoft}}>· {g.date?fmtFechaDMY(g.date):''}</span></span>
                                 <span style={{fontWeight:600,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtM(g.amount)}</span>
                               </div>) })}
                             {gs.length===0&&<div style={{fontSize:10,color:C.muted}}>Este cliente no tiene gastos pendientes de reembolsar.</div>}
@@ -3278,7 +3278,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                                 <div style={{fontSize:10,fontWeight:700,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,marginBottom:3}}>En el SII · {rows.length} que calza{rows.length!==1?'n':''} con este pago</div>
                                 {rows.map(row=>{ const exacto=Math.abs(Number(row.monto)||0)===abs; const ing=siiMovIng===row.folio; return (
                                   <div key={row.folio} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,fontSize:11,padding:'5px 0',borderBottom:`1px solid #F1F1F1`}}>
-                                    <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(row.folio)||row.folio}</b> · {fmtM(row.monto)} <span style={{color:C.textSoft}}>· {fmtFechaDMY(row.fechaEmision)}</span>{exacto&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>Monto exacto</span>}<br/><span style={{color:C.muted,fontSize:10}}>{row.receptor||'—'}{row.rut?` · ${fmtRutCL(row.rut)}`:''}</span></span>
+                                    <span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b>Factura N° {folioN(row.folio)||row.folio}</b> · {fmtM(row.monto)} <span style={{color:C.textSoft}}>· {fmtFechaDMY(row.fechaEmision)}</span>{exacto&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>Monto exacto</span>}<br/><span style={{color:C.muted,fontSize:10}}>{row.receptor||'—'}{row.rut?` · ${fmtRutCL(row.rut)}`:''}</span></span>
                                     <button disabled={ing} onClick={e=>{e.stopPropagation();ingresarYConciliar(m,row)}} style={{fontSize:10,fontWeight:700,borderRadius:8,padding:'4px 11px',border:'none',background:exacto?C.accent:C.muted,color:'#fff',cursor:ing?'default':'pointer',flexShrink:0}}>{ing?'Ingresando…':'Ingresar y conciliar'}</button>
                                   </div>) })}
                               </div>
@@ -3290,8 +3290,8 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                                   <div key={f.id}>
                                     <div onClick={()=>setDetFor(open?null:f.id)} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'5px 0',cursor:'pointer',borderBottom:open?'none':`1px solid #F1F1F1`}}>
                                       <div style={{minWidth:0,flex:1}}>
-                                        <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(f.invoice_no)||'—'}</b> <span style={{color:C.text}}>· {f.concept||'sin concepto'}</span></div>
-                                        <div style={{fontSize:10,color:C.textSoft,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.receptor_name||cmap[m.cliente_id]||'—'}{f.receptor_rut?<> · <span onClick={e=>e.stopPropagation()}><Copyable text={f.receptor_rut} title='Copiar RUT' style={{color:C.textSoft}}>{fmtRutCL(f.receptor_rut)}</Copyable></span></>:''} · emitida {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
+                                        <div style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b>Factura N° {folioN(f.invoice_no)||'—'}</b> <span style={{color:C.text}}>· {f.concept||'sin concepto'}</span></div>
+                                        <div style={{fontSize:10,color:C.textSoft,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.receptor_name||cmap[m.cliente_id]||'—'}{f.receptor_rut?<> · <span onClick={e=>e.stopPropagation()}><Copyable text={f.receptor_rut} title='Copiar RUT' style={{color:C.textSoft}}>{fmtRutCL(f.receptor_rut)}</Copyable></span></>:''} · emitida {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</div>
                                       </div>
                                       <span style={{textAlign:'right',flexShrink:0}}><b style={{whiteSpace:'nowrap'}}>{fmtM(f.amount)}</b><br/>{(()=>{ const e=estadoFacturaLabel(f,aplicadoByFactura[f.id]||0,cartolaHasta); const sld=['Pendiente','Vencido'].includes(f.status); return <span style={{fontSize:10,fontWeight:600,color:(e&&e.fg)||C.muted}}>{(e&&e.label)||f.status}{sld?` · saldo ${fmtM(saldoFactura(f))}`:''}</span> })()}</span>
                                     </div>
@@ -3418,8 +3418,8 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                 <div onClick={()=>go(i)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on?C.azulBg:C.surface,boxShadow:on?`inset 0 0 0 1.5px ${C.accent}`:'none'}}>
                   {diaGrande(m.fecha)}
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{quienMov(m)}</div>
-                    <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ec.t}{m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&(cargoSugerencia(m)||liqParaCargo(m))?' · sugerida':''}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{quienMov(m)}</div>
+                    <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{ec.t}{m.tipo==='cargo'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!m.categoria&&(cargoSugerencia(m)||liqParaCargo(m))?' · sugerida':''}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}</div>
                   </div>
                   <span style={{width:8,height:8,borderRadius:'50%',background:ec.c,flexShrink:0}}/>
                   <span style={{fontSize:13,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
@@ -3555,7 +3555,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                       <div style={{...SEC_LBL,marginBottom:3}}>Muestra · {Math.min(3,e.nuevosRows.length)} de {e.nuevos}</div>
                       {e.nuevosRows.slice(0,3).map((r,ri)=>(
                         <div key={ri} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'3px 0',borderTop:ri?`1px solid ${C.bgSoft}`:'none'}}>
-                          <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.muted}}>{dmy(r.fecha)} · {r.nombre_contraparte||r.descripcion||'—'}</span>
+                          <span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.muted}}>{dmy(r.fecha)} · {r.nombre_contraparte||r.descripcion||'—'}</span>
                           <span style={{whiteSpace:'nowrap',fontWeight:600,color:r.tipo==='abono'?C.greenText:C.overdue}}>{r.tipo==='abono'?'+':'−'}{fmtM(r.monto)}</span>
                         </div>
                       ))}
@@ -3586,7 +3586,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0
               return (
                 <div key={i} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
                   {r.error
                     ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
                     : <div style={{color:C.muted,marginTop:3,lineHeight:1.6}}>
@@ -3613,7 +3613,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               const completo=!r.error&&r.faltan&&r.faltan.length===0
               return (
                 <div key={i} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
                   {r.error
                     ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
                     : <>
@@ -3788,8 +3788,8 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   {exactos.slice(0,25).map(({m,f})=>(
                     <div key={m.id} onClick={()=>{setLoteOpen(false);setModalMov(m.id)}} title='Ver o ajustar este calce' style={{border:`0.5px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginTop:8,cursor:'pointer'}}>
                       <div style={{display:'flex'}}>
-                        <div style={{flex:1,padding:'8px 10px',minWidth:0}}><div style={{...SEC_LBL}}>Transferencia</div><div style={{fontSize:13,fontWeight:700,color:C.greenText,marginTop:1,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div><div style={{fontSize:10,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(m.fecha)} · {cmap[m.cliente_id]||m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div></div>
-                        <div style={{flex:1,padding:'8px 10px',borderLeft:`1px solid ${C.bgSoft}`,minWidth:0}}><div style={{...SEC_LBL}}>Factura</div><div style={{fontSize:13,fontWeight:700,color:C.accent,marginTop:1}}>N° {folioN(f.invoice_no)||'—'}</div><div style={{fontSize:10,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtM(saldoFactura(f))}{f.receptor_name?` · ${f.receptor_name}`:f.concept?` · ${f.concept}`:''}</div></div>
+                        <div style={{flex:1,padding:'8px 10px',minWidth:0}}><div style={{...SEC_LBL}}>Transferencia</div><div style={{fontSize:13,fontWeight:700,color:C.greenText,marginTop:1,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div><div style={{fontSize:10,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtFechaDMY(m.fecha)} · {cmap[m.cliente_id]||m.nombre_contraparte||'—'}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}</div></div>
+                        <div style={{flex:1,padding:'8px 10px',borderLeft:`1px solid ${C.bgSoft}`,minWidth:0}}><div style={{...SEC_LBL}}>Factura</div><div style={{fontSize:13,fontWeight:700,color:C.accent,marginTop:1}}>N° {folioN(f.invoice_no)||'—'}</div><div style={{fontSize:10,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtM(saldoFactura(f))}{f.receptor_name?` · ${f.receptor_name}`:f.concept?` · ${f.concept}`:''}</div></div>
                       </div>
                       <div style={{display:'flex',gap:12,padding:'5px 10px',background:C.bgSoft}}><span style={{fontSize:10,color:C.greenText,fontWeight:600}}><Gl n='tick'/> Monto exacto</span>{f.issued_at&&<span style={{fontSize:10,color:C.textSoft}}>Emitida {fmtFechaDMY(f.issued_at)}{f.due?` · vence ${fmtFechaDMY(f.due)}`:''}</span>}</div>
                     </div>
@@ -3801,7 +3801,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   <div style={{fontSize:10,color:C.muted,marginBottom:4}}>monto no calza exacto o hay varios candidatos — eliges tú</div>
                   {revisar.slice(0,15).map(m=>{ const cs=candidatos(m); return (
                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b> <span style={{color:C.muted}}>· {fmtFechaDMY(m.fecha)} · {fmtM(m.monto)}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{cs.length?` · ${cs.length} candidatas`:''}</span></span>
+                      <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b> <span style={{color:C.muted}}>· {fmtFechaDMY(m.fecha)} · {fmtM(m.monto)}{m.rut_contraparte?` · ${m.rut_contraparte}`:''}{cs.length?` · ${cs.length} candidatas`:''}</span></span>
                       <button onClick={()=>{setLoteOpen(false);setModalMov(m.id)}} style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#fff',border:`1px solid ${C.soon}`,borderRadius:8,padding:'4px 11px',cursor:'pointer',flexShrink:0}}>Elegir <Gl n='chevron'/></button>
                     </div>
                   )})}
@@ -3817,7 +3817,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   <div style={{maxHeight:300,overflowY:'auto',margin:'0 -2px'}}>
                   {sinFac.map(m=>{ const mesPago=String(m.fecha||'').slice(0,7); return (
                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderTop:`1px solid ${C.border}`,fontSize:11}}>
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b>{m.rut_contraparte?<span style={{color:C.muted}}> · {m.rut_contraparte}</span>:''} <span style={{color:C.muted}}>· {fmtM(m.monto)}</span> <span style={{color:C.grisText}}>· {mesPago}</span></span>
+                      <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent}}>{cmap[m.cliente_id]||m.nombre_contraparte||'—'}</b>{m.rut_contraparte?<span style={{color:C.muted}}> · {m.rut_contraparte}</span>:''} <span style={{color:C.muted}}>· {fmtM(m.monto)}</span> <span style={{color:C.grisText}}>· {mesPago}</span></span>
                       {onCotejarSII&&<button onClick={()=>onCotejarSII(mesPago)} title={`Buscar en el SII (${mesPago||'mes del pago'})`} style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'#fff',border:`1px solid ${C.azulInfo}`,borderRadius:8,padding:'4px 11px',cursor:'pointer',flexShrink:0}}>Buscar en SII</button>}
                     </div>
                   )})}
@@ -3859,14 +3859,14 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               <div style={{border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
                   <div style={{width:46,textAlign:'center',flexShrink:0,lineHeight:1.05}}><div style={{fontSize:26,fontWeight:800,color:C.accent}}>{dp.length>=3?+dp[2]:'—'}</div><div style={{fontSize:10,color:C.muted,fontWeight:600}}>{dp.length>=3?`${MM[+dp[1]-1]||''} ${dp[0].slice(2)}`:''}</div></div>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nombre_contraparte||tipoMov(m.descripcion)}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.rut_contraparte||'sin RUT'} · {m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{m.nombre_contraparte||tipoMov(m.descripcion)}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{m.rut_contraparte||'sin RUT'} · {m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</div></div>
                   <div style={{fontSize:16,fontWeight:800,color:C.greenText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>+{fmtM(m.monto)}</div>
                 </div>
                 {m.detalle_aviso&&<div style={{fontSize:11,color:C.text,marginTop:8,lineHeight:1.4}}><b>Mensaje de la transferencia:</b> {m.detalle_aviso}</div>}
                 {m.descripcion&&<div style={{fontSize:10,color:C.muted,marginTop:8,lineHeight:1.4}}><b>Glosa:</b> {(m.descripcion||'').slice(0,90)}{(m.descripcion||'').length>90?'…':''}</div>}
                 {sc
                   ? <div style={{background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:12,padding:'10px 12px',marginTop:12}}>
-                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sc.nombre}</span><span style={{fontSize:10,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{sc.via==='nombre'?'por el nombre':sc.via==='glosa'?`la glosa: N° ${folioN(sc.f?.invoice_no)||'—'}`:`calza N° ${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
+                      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:8}}><span style={{fontSize:14,fontWeight:700,color:C.accent,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sc.nombre}</span><span style={{fontSize:10,fontWeight:700,color:sc.via==='nombre'?C.greenText:C.accent,background:sc.via==='nombre'?C.greenBg:C.azulBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{sc.via==='nombre'?'por el nombre':sc.via==='glosa'?`la glosa: N° ${folioN(sc.f?.invoice_no)||'—'}`:`calza N° ${folioN(sc.f?.invoice_no)||'—'}`}</span></div>
                       {(sc.via==='monto'||sc.via==='glosa')&&sc.f&&<div style={{fontSize:11,color:C.greenText,marginTop:3}}>Factura N° {folioN(sc.f.invoice_no)||'—'}{sc.f.issued_at?` · emitida ${fmtFechaDMY(sc.f.issued_at)}`:''} · {sc.via==='glosa'?'la glosa del banco nombra el folio':'monto exacto'}</div>}
                       {sc.via==='nombre'&&<div style={{fontSize:11,color:C.greenText,marginTop:3}}>Coincide por el nombre de la transferencia</div>}
                       <button disabled={busy===m.id} onClick={()=>identificar(m,sc.cid,true)} style={{marginTop:10,width:'100%',fontSize:13,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:10,padding:'10px',cursor:busy===m.id?'default':'pointer'}}>Es {sc.nombre} <Gl n='tick'/></button>
@@ -3944,12 +3944,12 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                   {diaGrande(m.fecha)}
                   <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                    <span onClick={m.cliente_id&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(m.cliente_id)}:undefined} title={m.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:m.cliente_id&&onOpenClientFicha?'pointer':'inherit'}}>{cliName||nomBanco}</span>
+                    <span onClick={m.cliente_id&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(m.cliente_id)}:undefined} title={m.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:m.cliente_id&&onOpenClientFicha?'pointer':'inherit'}}>{cliName||nomBanco}</span>
                     {m.rol_cuenta==='gastos'&&<span onClick={(e)=>{e.stopPropagation();setCuentaF(cuentaF==='gastos'?'ambas':'gastos')}} title='Cta. Gastos — filtrar por esta cuenta' style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:rc.bg,color:rc.color,cursor:'pointer',flexShrink:0}}>{rc.t}</span>}
                     <span style={{fontSize:14,fontWeight:700,color:m.tipo==='abono'?C.greenText:C.overdue,flexShrink:0}}>{m.tipo==='abono'?'+':'−'}{fmtM(m.monto)}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${fmtRutCL(rsId.rut)}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>revisar RUT</span>:''}</span>
+                    <span title={m.descripcion||''} style={{fontSize:11,color:C.muted,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cliName?(rsId?`${rsId.name}${rsId.rut?` · ${fmtRutCL(rsId.rut)}`:''}`:`${nomBanco}${m.rut_contraparte?` · ${m.rut_contraparte}`:''}`):(m.rut_contraparte||tipoMov(m.descripcion))}{m.detalle_aviso?` · ${m.detalle_aviso}`:''}{m.rut_contraparte&&!rutValido(m.rut_contraparte)?<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>revisar RUT</span>:''}</span>
                     <span style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
                     {(()=>{ const _pr=m.tipo==='abono'&&!m.es_interno&&!(concByMov[m.id]?.length)&&!RESUELTAS_ABO.includes(m.categoria)&&(!m.cliente_id||esConciliable(m)); if(!_pr) return null; const _t=m.fecha?new Date(m.fecha+'T12:00').getTime():NaN; if(isNaN(_t)) return null; const _d=Math.floor((Date.now()-_t)/86400000); if(_d<30) return null; const _c=_d>90?C.overdueText:C.soonText,_b=_d>90?C.overdueBg:C.soonBg; return <span title={`Sin cruzar hace ${_d} días`} style={{fontSize:10,fontWeight:700,color:_c,background:_b,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{_d>90?'+90 días':`${_d} días`}</span> })()}
                     <span onClick={facObj?(e)=>{e.stopPropagation();setFacChip(facChip===m.id?null:m.id)}:undefined} style={{fontSize:10,fontWeight:600,padding:'1px 8px',borderRadius:20,background:ec.bg,color:ec.c,cursor:facObj?'pointer':'default',flexShrink:0}}>{ec.t}{facObj?(facChip===m.id?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span>
@@ -3988,7 +3988,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
                 <div key={s.mov.id} onClick={()=>setRevSugSel(p=>{const n=new Set(p);n.has(s.mov.id)?n.delete(s.mov.id):n.add(s.mov.id);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                   <span style={{width:18,height:18,borderRadius:8,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.mov.nombre_contraparte||'—'}</div>
+                    <div style={{fontSize:12,color:C.text,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.mov.nombre_contraparte||'—'}</div>
                     <div style={{fontSize:10,color:C.muted}}>{s.mov.fecha?fmtFechaDMY(s.mov.fecha):''} · {fmt(s.mov.monto)}</div>
                   </div>
                   <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>→ {cmap[s.cid]||'Cliente'}</span>

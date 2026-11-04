@@ -429,7 +429,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'8px 14px 4px',borderTop:`1px solid ${C.track}`}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cn}</span><span style={{fontSize:12,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(gs.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
           {gs.map(e=>(<div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 22px',fontSize:12}}>
             <span style={{width:74,flexShrink:0,color:C.muted,fontSize:11}}>{fmtFechaDMY(e.date)}</span>
-            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.concept||'—'}<span style={{color:C.muted}}> · {catLabel(e.category)}</span></span>
+            <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.text}}>{e.concept||'—'}<span style={{color:C.muted}}> · {catLabel(e.category)}</span></span>
             <span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtCLP(e.amount)}</span>
           </div>))}
         </div>))}
@@ -503,7 +503,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                       <div key={e.id} style={{padding:'9px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',gap:10,alignItems:'flex-start'}}>
                         <span style={{width:8,height:8,borderRadius:'50%',background:dot,flexShrink:0,marginTop:5}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'} · <span style={{color:C.muted}}>{fmtCLP(e.amount)}</span></div>
+                          <div style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'} · <span style={{color:C.muted}}>{fmtCLP(e.amount)}</span></div>
                           <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>
                             {tipo==='cliente'?'Sin cliente asignado':tipo==='categoria'?'Sin categoría':`Posible duplicado${ref?` (mismo monto y fecha que «${(ref.concept||'—').slice(0,28)}»)`:''}`}
                           </div>
@@ -563,8 +563,8 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
             </div>) })()}
             {_mv.tot.n>0&&<div onClick={()=>setMovOpen(true)} style={{marginTop:8,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
               <span style={{width:30,height:30,borderRadius:9,background:C.tealBg||C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><MovIcon s={15} c={C.tealText||C.accent}/></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Mi movilización{_mvMes&&_mvMes.k!=='sin fecha'?` · ${MES_L[+_mvMes.k.slice(5,7)-1]||''}`:''}</div>
-                <div style={{fontSize:11.5,color:_mv.sinMotivo.length?C.soonText:C.muted,fontWeight:_mv.sinMotivo.length?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{_mv.sinMotivo.length?`${_mv.sinMotivo.length} viaje${_mv.sinMotivo.length!==1?'s':''} sin motivo · complétalos`:`${_mvMes?_mvMes.n:0} viaje${_mvMes&&_mvMes.n===1?'':'s'} este mes · ${_mv.tot.n} en el año`}</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Mi movilización{_mvMes&&_mvMes.k!=='sin fecha'?` · ${MES_L[+_mvMes.k.slice(5,7)-1]||''}`:''}</div>
+                <div style={{fontSize:11.5,color:_mv.sinMotivo.length?C.soonText:C.muted,fontWeight:_mv.sinMotivo.length?600:400,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{_mv.sinMotivo.length?`${_mv.sinMotivo.length} viaje${_mv.sinMotivo.length!==1?'s':''} sin motivo · complétalos`:`${_mvMes?_mvMes.n:0} viaje${_mvMes&&_mvMes.n===1?'':'s'} este mes · ${_mv.tot.n} en el año`}</div></div>
               {_mvMes&&<span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(_mvMes.tot)}</span>}
               <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
             </div>}
@@ -606,7 +606,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                 <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:8,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={e.concept||''}>{e.concept||'—'}</div><div style={{fontSize:11.5,marginTop:1,display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</span>{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</div></td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}} title={e.concept||''}>{e.concept||'—'}</div><div style={{fontSize:11.5,marginTop:1,display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</span>{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</div></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{e.category?<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,fontWeight:700,background:bdg.bg,color:bdg.color,whiteSpace:'nowrap'}}>{catLabel(e.category)}</span>:<span style={{fontSize:10,color:C.soon,fontWeight:600}}>sin categoría</span>}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtCLP(e.amount)}</td>
                 </tr>) })}</tbody>
@@ -622,7 +622,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                 </div>
                 {bigDate(e.date)}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
                   <div style={{fontSize:10,color:C.textSoft,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     {client&&<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>}
                     {(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<span style={{color:C.soonText,fontWeight:600}}>hace {d} días</span>:null })()}
@@ -749,7 +749,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                     {gastosR.map(e=>{ const cl=clients.find(x=>x.id===e.client_id); return (
                       <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0'}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                          <div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
                           <div style={{fontSize:10,color:C.textSoft,marginTop:1}}>{cl?cl.name+' · ':''}{e.date?fmtD(e.date):''}{e.category?' · '+catLabel(e.category):''}</div>
                         </div>
                         <div style={{fontSize:12,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmtCLP(e.amount)}</div>

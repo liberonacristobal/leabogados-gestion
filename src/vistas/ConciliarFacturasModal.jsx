@@ -185,7 +185,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
       ].map(([k,v,tone],i)=>(
         <div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11}}>
           <span style={{color:C.textSoft,whiteSpace:'nowrap'}}>{k}</span>
-          <span style={{fontWeight:600,textAlign:'right',color:tone==='ok'?C.greenText:tone==='no'?C.overdueText:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}{tone==='ok'?<>{" "}<Gl n='tick'/></>:''}</span>
+          <span style={{fontWeight:600,textAlign:'right',color:tone==='ok'?C.greenText:tone==='no'?C.overdueText:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v}{tone==='ok'?<>{" "}<Gl n='tick'/></>:''}</span>
         </div>
       ))}
     </div>
@@ -195,7 +195,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
   const sideFactura = (b, keep) => (
     <div onClick={()=>abrirFac(b)} style={{border:`1px solid ${keep?'#9FCFBB':'#E7B7B4'}`,borderRadius:10,padding:'9px 11px',background:keep?C.greenBg:C.overdueBg,cursor:onEditBilling?'pointer':'default',minWidth:0}}>
       <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:6,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Se conserva':'Se retira'}</span>
-      <div style={{fontSize:13,fontWeight:700,color:keep?C.text:C.muted,textDecoration:keep?'none':'line-through',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.invoice_no?('N° '+folioN(b.invoice_no)):'Sin folio'}</div>
+      <div style={{fontSize:13,fontWeight:700,color:keep?C.text:C.muted,textDecoration:keep?'none':'line-through',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b.invoice_no?('N° '+folioN(b.invoice_no)):'Sin folio'}</div>
       <div style={{fontSize:13,fontWeight:700,marginTop:3,color:keep?C.greenText:C.muted}}>{fmt(montoB(b))}</div>
       {kvFactura(b)}
     </div>
@@ -207,7 +207,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
     return <div key={k} style={{border:`0.5px solid ${C.border}`,borderRadius:10,marginBottom:6,overflow:'hidden'}}>
       <div onClick={()=>toggle(setExpItem,k)} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 10px',cursor:'pointer'}}>
         {bigDate(keep.issued_at||keep.due||(drops[0]&&(drops[0].issued_at||drops[0].due)))}
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',color:C.soonText}}>{tipo}</div><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{keep.concept||drops[0]?.concept||'—'}</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',color:C.soonText}}>{tipo}</div><div style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{keep.concept||drops[0]?.concept||'—'}</div></div>
         <span style={{fontSize:13,fontWeight:800,color:C.overdueText,whiteSpace:'nowrap'}}>{fmt(drops.reduce((s,d)=>s+montoB(d),0))}</span>
         <span style={{fontSize:11,color:C.accent,fontWeight:600,flexShrink:0,marginLeft:4}}>{ex?<Gl n='chevD'/>:<>Ver{" "}<Gl n='chevron'/></>}</span>
       </div>
@@ -234,7 +234,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
         {[['Fecha',fD(a.fecha)],['Nota',a.nota||'—'],['Origen',keep?'banco (conciliado)':'a mano'],['Cargado por',a.created_by||'—']].map(([k,v],i)=>(
           <div key={i} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11}}>
             <span style={{color:C.textSoft,whiteSpace:'nowrap'}}>{k}</span>
-            <span style={{fontWeight:600,textAlign:'right',color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</span>
+            <span style={{fontWeight:600,textAlign:'right',color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v}</span>
           </div>
         ))}
       </div>
@@ -264,7 +264,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
       {!asPage&&<div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
-          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Duplicados{clientId&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span>{(()=>{ const rs=rsLabel(clientId,clients,clientEntities); return (rs.name&&rs.name!==cName(clientId))||rs.rut||rs.multi ? <span style={{color:C.muted,fontWeight:400,fontSize:12}}> · {rs.multi?`${rs.multi} RS`:`${rsDisplay(rs.name)}${rs.rut?` · ${fmtRutCL(rs.rut)}`:''}`}</span> : null })()}</>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
+          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Duplicados{clientId&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{cName(clientId)}</span>{(()=>{ const rs=rsLabel(clientId,clients,clientEntities); return (rs.name&&rs.name!==cName(clientId))||rs.rut||rs.multi ? <span style={{color:C.muted,fontWeight:400,fontSize:12}}> · {rs.multi?`${rs.multi} RS`:`${rsDisplay(rs.name)}${rs.rut?` · ${fmtRutCL(rs.rut)}`:''}`}</span> : null })()}</>}{!clientId&&<span style={{color:C.muted,fontWeight:400,fontSize:12,marginLeft:8}}>Todos los clientes</span>}</span>
         </div>
         <button className='qt-close' onClick={onClose} style={{width:28,height:24,borderRadius:6,border:`0.5px solid ${C.border}`,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
           <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.4' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
@@ -299,7 +299,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
         {Object.keys(done).length>0&&<div style={{display:'flex',flexDirection:'column',gap:6}}>
           {Object.entries(done).map(([k,u])=>(
             <div key={k} style={{display:'flex',alignItems:'center',gap:9,background:C.greenBg,border:`0.5px solid #BFE3D5`,borderRadius:10,padding:'9px 11px'}}>
-              <span style={{flex:1,fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.msg}</span>
+              <span style={{flex:1,fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{u.msg}</span>
               <button onClick={()=>deshacer1(k)} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Deshacer</button>
             </div>
           ))}
@@ -319,7 +319,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
             <div onClick={()=>!clientId&&toggle(setOpenCli,ck)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 14px',cursor:clientId?'default':'pointer'}}>
               <span style={{width:34,height:34,borderRadius:'50%',background:C.accent,color:'#fff',fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(grp.name||'?').split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()}</span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:15,fontWeight:800,letterSpacing:'-.1px',color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{grp.name}</div>
+                <div style={{fontSize:15,fontWeight:800,letterSpacing:'-.1px',color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{grp.name}</div>
                 <div style={{fontSize:11,color:C.muted}}>{grp.items.length} duplicado{grp.items.length!==1?'s':''}</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:C.overdueText}}>{fmt(grp.monto)}</div><div style={{...SEC_LBL}}>a retirar</div></div>

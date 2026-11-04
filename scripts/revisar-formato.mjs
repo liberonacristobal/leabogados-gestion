@@ -47,8 +47,8 @@ const medir = () => {
     const txt = (e.textContent || '').trim()
     if (!txt) return
     const ell = s.textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1
-    const clamp = s.webkitLineClamp && s.webkitLineClamp !== 'none' && e.scrollHeight > e.clientHeight + 1
-    if ((ell || clamp) && !vistos.has(txt.slice(0, 40))) { vistos.add(txt.slice(0, 40)); cortados.push(txt.slice(0, 48)) }
+    const clamp = s.webkitLineClamp && s.webkitLineClamp !== 'none' && e.scrollHeight > e.clientHeight + 3
+    if ((ell || clamp) && !vistos.has(txt.slice(0, 40))) { vistos.add(txt.slice(0, 40)); cortados.push(`${e.tagName.toLowerCase()}|${txt.slice(0, 44)}`) }
   })
   const de = document.documentElement
   return { desborde: de.scrollWidth > de.clientWidth + 1, cortados: cortados.slice(0, 10), nCortados: cortados.length }

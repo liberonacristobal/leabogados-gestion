@@ -110,7 +110,7 @@ export function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onA
       <div style={{...SEC_LBL,marginBottom:2}}>Historial de la factura</div>
       {!ev.length&&<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Sin movimientos aún.</div>}
       {ev.map((e,i)=><div key={i} style={{display:'flex',gap:10,padding:'7px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{e.t}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(String(e.d).slice(0,10))}{e.s?` · ${e.s}`:''}</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{e.t}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtFechaDMY(String(e.d).slice(0,10))}{e.s?` · ${e.s}`:''}</div></div>
         {e.m!=null&&<div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.m)}</div>}
       </div>)}
     </div>) })() : null
@@ -119,7 +119,7 @@ export function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onA
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`0.5px solid ${C.border}`,position:'sticky',top:0,background:'#fff',zIndex:2}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
-          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          <span style={{fontSize:15,fontWeight:500,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>
             {bill?.id?'Editar cobro':'Nuevo cobro'}
             {f.client_id&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{clients.find(c=>String(c.id)===String(f.client_id))?.name||'Cliente'}</span></>}
           </span>
@@ -173,7 +173,7 @@ export function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onA
                     <div style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?'1.5px solid #003C50':`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>
                       {on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                     </div>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div></div>
                     <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,flexShrink:0,background:on?C.greenBg:C.bgSoft,color:on?C.normal:C.done,whiteSpace:'nowrap'}}>{on?'Seleccionado':'Disponible'}</span>
                   </div>
                 )})}
