@@ -3435,7 +3435,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
                 {diaGrande(sel.fecha)}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:18,fontWeight:700,color:sel.cliente_id&&onOpenClientFicha?C.accent:C.text,cursor:sel.cliente_id&&onOpenClientFicha?'pointer':'default',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} onClick={sel.cliente_id&&onOpenClientFicha?()=>onOpenClientFicha(sel.cliente_id):undefined} title={sel.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined}>{quienMov(sel)}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:sel.cliente_id&&onOpenClientFicha?C.accent:C.text,cursor:sel.cliente_id&&onOpenClientFicha?'pointer':'default',lineHeight:1.2,overflowWrap:'anywhere'}} onClick={sel.cliente_id&&onOpenClientFicha?()=>onOpenClientFicha(sel.cliente_id):undefined} title={sel.cliente_id&&onOpenClientFicha?'Ver ficha del cliente':undefined}>{quienMov(sel)}</div>
                   <div style={{fontSize:12,color:C.muted,marginTop:2}}>{fmtFechaDMY(sel.fecha)} · {rolChip(sel.rol_cuenta).t}{sel.rut_contraparte?` · ${sel.rut_contraparte}`:''}{sel.cliente_id&&sel.nombre_contraparte&&sel.nombre_contraparte!==quienMov(sel)?` · ${sel.nombre_contraparte}`:''}</div>
                   {facObj&&<span onClick={onOpenFactura?()=>onOpenFactura(facObj):undefined} style={{display:'inline-block',marginTop:6,fontSize:12,fontWeight:700,color:C.accent,cursor:onOpenFactura?'pointer':'default',textDecoration:onOpenFactura?'underline':'none',textUnderlineOffset:2}}>{lblFacturaN(facObj)} <Gl n='chevron'/></span>}
                 </div>
