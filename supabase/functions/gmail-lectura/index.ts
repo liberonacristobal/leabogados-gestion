@@ -1,6 +1,7 @@
 // Edge Function: gmail-lectura
 // Lee los correos ENVIADOS de cada persona que conectó su Gmail (botón «Mi Gmail») y completa lo que la app no sabe de un envío:
-// quién envió una factura, a quién y en qué fecha (facturas que figuran enviadas sin destinatario registrado). Solo lectura de
+// (1) quién envió una factura, a quién y en qué fecha (facturas que figuran enviadas sin destinatario registrado);
+// (2) la fecha real en que se envió una rendición a un cliente (rendiciones sin envío registrado; _shared/rendicionEnvioReglas.js). Solo lectura de
 // Gmail: no envía, no borra, no mueve correos. Nunca guarda el texto de un correo: de cada uno toma encabezados, nombres de adjuntos
 // y el comienzo del texto, y solo para calzarlo con una factura (_shared/facturaEnvioReglas.js, «coincide»: contacto del mismo cliente
 // + folio). Las reglas puras están en _shared/gmailLectura.js (con pruebas).
@@ -21,6 +22,7 @@ import { cargarEquipo } from "../_shared/equipo.js";
 import { todasRest } from "../_shared/paginar.js";
 import { emailsDe, enviosDetectados } from "../_shared/facturaEnvioReglas.js";
 import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion } from "../_shared/gmailLectura.js";
+import { planRendiciones } from "../_shared/rendicionEnvioReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "", SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
@@ -66,19 +68,20 @@ async function accessToken(rt: string): Promise<string> {
 // Datos que se cargan una vez por corrida: facturas enviadas sin destinatario registrado y el mapa correo → cliente.
 async function cargarDatos() {
   const h = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
-  const [facturas, ctc, cli, lrn, miembros] = await Promise.all([
+  const [facturas, ctc, cli, lrn, miembros, rendiciones] = await Promise.all([
     todasRest(SB_URL, h, "billing?select=id,invoice_no,client_id,issued_at,email_sent_at,sent_to&deleted_at=is.null&email_sent_at=not.is.null&sent_to=is.null&issued_at=not.is.null"),
     todasRest(SB_URL, h, "contacts?select=client_id,email&order=client_id.asc,email.asc"),
     todasRest(SB_URL, h, "clients?select=id,email"),
     todasRest(SB_URL, h, "learnings?select=key,value&kind=in.(factura_to,factura_cc,fondos_contacto)"),
     sbJson("miembros?select=email,nombre,rol"),
+    todasRest(SB_URL, h, "rendiciones?select=id,client_id,correlativo,tipo,created_at,sent_at,anulada_at,dirigido_email&tipo=eq.cliente&anulada_at=is.null&sent_at=is.null&client_id=not.is.null&correlativo=not.is.null"),
   ]);
   const mapa = new Map<string, Set<string>>();
   const agrega = (email: unknown, cid: unknown) => { const e = String(email || "").trim().toLowerCase(); if (!e.includes("@") || !cid) return; const s = mapa.get(e) || new Set<string>(); s.add(String(cid)); mapa.set(e, s); };
   (ctc as Fila[]).forEach((c) => agrega(c.email, c.client_id));
   (cli as Fila[]).forEach((c) => emailsDe(c.email).forEach((e: string) => agrega(e, c.id)));
   (lrn as Fila[]).forEach((l) => { if (/^[0-9a-f-]{36}$/i.test(String(l.key))) emailsDe(l.value).forEach((e: string) => agrega(e, l.key)); else agrega(l.key, l.value); });
-  return { facturas: facturas as Fila[], mapa, miembros: miembros as Fila[] };
+  return { facturas: facturas as Fila[], rendiciones: rendiciones as Fila[], mapa, miembros: miembros as Fila[] };
 }
 
 type Datos = Awaited<ReturnType<typeof cargarDatos>>;
@@ -96,20 +99,27 @@ async function leerBuzon(c: Conexion, datos: Datos, dryRun = false): Promise<Res
     if (!pr.ok) throw new Error(`Gmail respondió ${pr.status}`);
     const dom = c.email.split("@")[1] || "";
     const quien = String(datos.miembros.find((m) => String(m.email).toLowerCase() === c.email)?.nombre || c.email.split("@")[0]);
-    // 2) Solo se leen correos si hay facturas «enviadas» sin prueba que completar.
+    // 2) Solo se leen correos si hay algo que completar: facturas «enviadas» sin prueba o rendiciones a clientes sin envío registrado.
     const cand = datos.facturas.filter((f) => !f.sent_to);
+    const candR = datos.rendiciones.filter((r) => !r.sent_at);
     let fallidos = 0, aplicados = 0;
-    if (cand.length) {
-      const q = encodeURIComponent("in:sent newer_than:60d (factura OR fact OR dte OR folio) -in:trash");
-      const ids: string[] = []; let tok = "";
-      for (let p = 0; p < 3; p++) {
-        const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${tok ? `&pageToken=${tok}` : ""}`, { headers: GH });
-        if (!lr.ok) throw new Error(`Gmail (lista) respondió ${lr.status}`);
-        const lj = await lr.json(); ids.push(...(lj.messages || []).map((m: Fila) => m.id)); tok = lj.nextPageToken || ""; if (!tok) break;
+    if (cand.length || candR.length) {
+      const consultas: string[] = [];
+      if (cand.length) consultas.push("in:sent newer_than:60d (factura OR fact OR dte OR folio) -in:trash");
+      if (candR.length) consultas.push("in:sent newer_than:60d (rendición OR rendicion OR rendiciones) -in:trash");
+      const ids = new Set<string>();
+      for (const consulta of consultas) {
+        const q = encodeURIComponent(consulta); let tok = "";
+        for (let p = 0; p < 3; p++) {
+          const lr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100${tok ? `&pageToken=${tok}` : ""}`, { headers: GH });
+          if (!lr.ok) throw new Error(`Gmail (lista) respondió ${lr.status}`);
+          const lj = await lr.json(); (lj.messages || []).forEach((m: Fila) => ids.add(m.id)); tok = lj.nextPageToken || ""; if (!tok) break;
+        }
       }
+      const lista = [...ids];
       const correos: Fila[] = [];
-      for (let i = 0; i < ids.length; i += 8) {
-        await Promise.all(ids.slice(i, i + 8).map(async (id) => {
+      for (let i = 0; i < lista.length; i += 8) {
+        await Promise.all(lista.slice(i, i + 8).map(async (id) => {
           try {
             const rr = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full&fields=id,internalDate,snippet,payload(headers,filename,mimeType,parts(filename,mimeType,parts(filename,mimeType,parts(filename,mimeType))))`, { headers: GH });
             if (!rr.ok) { fallidos++; return; }
@@ -118,16 +128,31 @@ async function leerBuzon(c: Conexion, datos: Datos, dryRun = false): Promise<Res
         }));
       }
       // Si no se pudo leer una parte importante, NO se da por buena la lectura (mejor «atrasada» que un «al día» falso).
-      if (ids.length >= 5 && fallidos > ids.length * 0.3) throw new Error(`No se pudieron leer ${fallidos} de ${ids.length} correos`);
-      const hall = enviosDetectados({ correos, facturas: cand.map((f) => ({ id: f.id, invoice_no: f.invoice_no, client_id: f.client_id, issued_at: f.issued_at })), mapa: datos.mapa, dominio: dom });
-      const plan = planAtribucion({ facturas: cand, hallazgos: hall, correos, quien });
-      for (const u of plan) {
-        if (dryRun) { aplicados++; continue; }
-        const r = await sb(`billing?id=eq.${u.id}&sent_to=is.null`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ email_sent_at: u.email_sent_at, sent_by: u.sent_by, sent_to: u.sent_to }) });
-        if (!r.ok) { fallidos++; continue; }
-        aplicados++;
-        datos.facturas = datos.facturas.filter((f) => f.id !== u.id);   // ya tiene prueba: el siguiente buzón no la vuelve a tocar
-        await sb("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: c.email, action: "facturacion.remitente_detectado", table_name: "billing", record_id: u.id, detail: JSON.stringify({ por: u.sent_by, para: u.sent_to, correo: u.correo_id, fecha_marcada: u.fecha_marcada, fecha_real: u.fecha_real, fuente: "gmail-lectura" }), estudio_id: "lea" }) }).catch(() => null);
+      if (lista.length >= 5 && fallidos > lista.length * 0.3) throw new Error(`No se pudieron leer ${fallidos} de ${lista.length} correos`);
+      const bitacora = (action: string, id: unknown, detalle: Record<string, unknown>) => sb("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: c.email, action, table_name: action.startsWith("rendicion") ? "rendiciones" : "billing", record_id: id, detail: JSON.stringify({ ...detalle, fuente: "gmail-lectura" }), estudio_id: "lea" }) }).catch(() => null);
+      // Facturas
+      if (cand.length) {
+        const hall = enviosDetectados({ correos, facturas: cand.map((f) => ({ id: f.id, invoice_no: f.invoice_no, client_id: f.client_id, issued_at: f.issued_at })), mapa: datos.mapa, dominio: dom });
+        for (const u of planAtribucion({ facturas: cand, hallazgos: hall, correos, quien })) {
+          if (dryRun) { aplicados++; continue; }
+          const r = await sb(`billing?id=eq.${u.id}&sent_to=is.null`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ email_sent_at: u.email_sent_at, sent_by: u.sent_by, sent_to: u.sent_to }) });
+          if (!r.ok) { fallidos++; continue; }
+          aplicados++;
+          datos.facturas = datos.facturas.filter((f) => f.id !== u.id);   // ya tiene prueba: el siguiente buzón no la vuelve a tocar
+          await bitacora("facturacion.remitente_detectado", u.id, { por: u.sent_by, para: u.sent_to, correo: u.correo_id, fecha_marcada: u.fecha_marcada, fecha_real: u.fecha_real });
+        }
+      }
+      // Rendiciones a clientes
+      if (candR.length) {
+        for (const u of planRendiciones({ rendiciones: candR, correos, mapa: datos.mapa, dominio: dom })) {
+          if (dryRun) { aplicados++; continue; }
+          const cambios: Record<string, unknown> = { sent_at: u.sent_at, estado_envio: u.estado_envio }; if (u.dirigido_email) cambios.dirigido_email = u.dirigido_email;
+          const r = await sb(`rendiciones?id=eq.${u.id}&sent_at=is.null`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(cambios) });
+          if (!r.ok) { fallidos++; continue; }
+          aplicados++;
+          datos.rendiciones = datos.rendiciones.filter((x) => x.id !== u.id);
+          await bitacora("rendicion.envio_detectado", u.id, { por: quien, correo: u.correo_id, fecha_real: u.fecha_real, motivo: u.motivo });
+        }
       }
     }
     if (!dryRun) await patchConexion(c.email, { estado: "activa", ultimo_ok: ahora, ultimo_intento: ahora, error: null });
