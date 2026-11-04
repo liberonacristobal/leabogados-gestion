@@ -78,3 +78,22 @@ test('sin clave de venta se agrupa por el nombre del trabajo de la glosa', () =>
   ] })
   assert.match(t, /a los siguientes trabajos:\n– Asesoria reorg: Pago 7 de 24 \(N° 498\) y Pago 8 de 24 \(N° 519\)\.\n– Ases laboral octubre 26: N° 502\.$/)
 })
+
+import { tratoDeTexto } from '../supabase/functions/_shared/correoFacturaTexto.js'
+import { tratoDeCorreo } from '../supabase/functions/_shared/gmailLectura.js'
+
+test('trato por persona: «esté» es usted, «estés» es tú, «estén» no enseña; manda el aprendido sobre el saludo (correos reales 4-11)', () => {
+  assert.equal(tratoDeTexto('Espero que esté muy bien. Adjuntamos la factura'), 'usted')
+  assert.equal(tratoDeTexto('Espero que estés muy bien.'), 'tu')
+  assert.equal(tratoDeTexto('Espero que estén muy bien.'), null)
+  assert.equal(ajustarTrato('Espero que estén muy bien. Quedamos atentos a sus comentarios.', true, 'usted'), 'Espero que esté muy bien. Quedamos atentos a sus comentarios.')
+  assert.equal(ajustarTrato('Espero que estén muy bien. Quedamos atentos a sus comentarios.', true, null), 'Espero que estés muy bien. Quedamos atentos a tus comentarios.')
+  assert.equal(ajustarTrato('Espero que esté muy bien.', false, 'usted'), 'Espero que estén muy bien.')
+})
+
+test('trato leído de un correo enviado: una dirección de afuera; «estén» y dos destinatarios no enseñan', () => {
+  const c = para => ({ para, fragmento: 'Estimada Gabriela, Espero que esté muy bien. Adjuntamos la factura N° 507' })
+  assert.deepEqual(tratoDeCorreo(c('gmasihy@hotmail.com'), 'leabogados.cl'), { email: 'gmasihy@hotmail.com', trato: 'usted' })
+  assert.equal(tratoDeCorreo(c('a@x.cl, b@y.cl'), 'leabogados.cl'), null)
+  assert.equal(tratoDeCorreo({ para: 'a@x.cl', fragmento: 'Estimados, Espero que estén muy bien.' }, 'leabogados.cl'), null)
+})

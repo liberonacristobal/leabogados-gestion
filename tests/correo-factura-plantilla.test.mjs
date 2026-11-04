@@ -56,3 +56,14 @@ test('un texto ya guardado con la cuota escrita a mano se corrige al leerlo', ()
 test('los espacios dobles de la glosa del SII no pasan al texto guardado', () => {
   assert.equal(limpiarEspacios('Asesoria legal oct  26, por {total}.\nLínea  dos'), 'Asesoria legal oct 26, por {total}.\nLínea dos')
 })
+
+import { partesMes } from '../supabase/functions/_shared/correoFacturaPlantilla.js'
+
+test('mes del texto aprendido: «Octubre de 2026» pasa a marca y vuelve con el mes de la factura; sin mes conocido no se completa', () => {
+  const t = tokenizar('en relación a los servicios de Asesoría permanente del mes de Octubre de 2026, por $825.271.', {})
+  assert.match(t, /del mes de \{Mes\}, por/)
+  assert.equal(destokenizar(t, { mes: partesMes('Noviembre 2026') }).texto, 'en relación a los servicios de Asesoría permanente del mes de Noviembre de 2026, por $825.271.')
+  assert.equal(destokenizar(tokenizar('prestados durante el mes de agosto de 2026', {}), { mes: partesMes('septiembre de 2026') }).texto, 'prestados durante el mes de septiembre de 2026')
+  assert.equal(destokenizar(t, {}).completo, false)
+  assert.equal(partesMes('Pago 3 de 10'), null)
+})

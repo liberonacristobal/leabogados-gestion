@@ -95,6 +95,20 @@ export function planAtribucion({ facturas, hallazgos, correos, quien }) {
 }
 
 /**
+ * Trato con que se escribió a UNA persona de afuera («Espero que esté muy bien» → 'usted', «estés» → 'tu'); «estén» no enseña nada.
+ * @param {{para?:any, fragmento?:string}} correo @param {string} [dominio]
+ * @returns {{email:string, trato:'usted'|'tu'}|null}
+ */
+export function tratoDeCorreo(correo, dominio = '') {
+  const m = String(correo?.fragmento || '').match(/Espero que (est[eé]s?)\s+muy bien/i)
+  if (!m) return null
+  const dom = String(dominio || '').toLowerCase().replace(/^@/, '')
+  const dest = [...new Set(emailsDe(correo?.para))].filter(e => !dom || !e.endsWith('@' + dom))
+  const v = m[1].toLowerCase().replace('é', 'e')
+  return dest.length === 1 && v !== 'esten' ? { email: dest[0], trato: v === 'este' ? 'usted' : 'tu' } : null
+}
+
+/**
  * Saludo con que empieza un correo enviado («Estimada Carolina,»), para aprender el trato de esa persona. Solo si el correo va a UNA dirección
  * de afuera (sin contar la copia) y el saludo es singular con un nombre: «Estimados,» o dos destinatarios no enseñan nada. Toma el comienzo del
  * texto (snippet de Gmail); nunca el cuerpo.
