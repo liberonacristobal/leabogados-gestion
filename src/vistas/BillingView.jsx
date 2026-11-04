@@ -1,5 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
 import { demoData } from '../demoData'
@@ -13,10 +13,10 @@ import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedi
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
-import { BRAND, C, CUENTA_HONORARIOS, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
-import { PaginaSobre, driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { PaginaSobre, equipoPorNombre, mesTitulo, driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Facturas ya registradas con XML guardado y sin ningún PDF adjunto (ni oficial ni copia): lo que falta respaldar en Drive. Fuente única de la tarjeta de la entrada, la página de pendientes y el respaldo masivo.
 export const facturasSinRespaldo = (billing, attIds) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.dte_xml&&b.status!=='Anulada'&&!(attIds&&attIds.has(String(b.id))))
@@ -2708,13 +2708,22 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
     return ()=>{ vivo=false } },[bandejaEnvio])   // eslint-disable-line
   // Facturas ya enviadas sin remitente registrado: se completa quién las envió leyendo los enviados de quien abre la app (una vez por sesión).
   useEffect(()=>{ if(!user?.name||!(billing||[]).length) return; let vivo=true
-    ;(async()=>{ try{ const r=await atribuirEnvios({facturas:billing||[],quien:user.name}); if(vivo&&r.length) setBilling&&setBilling(p=>p.map(x=>{ const h=r.find(y=>String(y.factura.id)===String(x.id)); return h?{...x,sent_by:h.sent_by,sent_to:h.sent_to}:x })) }catch(e){ registrarError({origen:'accion',vista:'envios_remitente',err:e}) } })()
+    ;(async()=>{ try{ const r=await atribuirEnvios({facturas:billing||[],quien:user.name}); if(vivo&&r.length) setBilling&&setBilling(p=>p.map(x=>{ const h=r.find(y=>String(y.factura.id)===String(x.id)); return h?{...x,sent_by:h.sent_by,sent_to:h.sent_to,email_sent_at:h.email_sent_at}:x })) }catch(e){ registrarError({origen:'accion',vista:'envios_remitente',err:e}) } })()
     return ()=>{ vivo=false } },[(billing||[]).length>0,user?.name])   // eslint-disable-line
+  // «Ya enviada» / «Corregir fecha»: el editor se abre en la fila y pide la fecha real del envío (entre la emisión y hoy) y quién lo envió.
+  const [yaEnv,setYaEnv] = useState(null)   // {id, modo:'nueva'|'corregir', fecha, por, otra, err}
+  const [mesesEnv,setMesesEnv] = useState(()=>new Set())   // meses abiertos del historial de enviadas (todos replegados al entrar)
+  const abrirYaEnv=(b,modo)=>setYaEnv(e=>e&&e.id===b.id?null:{id:b.id,modo,fecha:modo==='corregir'?String(b.email_sent_at||'').slice(0,10):'',por:b.sent_by||user?.name||'',otra:modo==='corregir',err:null})
+  const guardarYaEnv=async b=>{ const e=yaEnv; if(!e) return
+    const emi=String(b.issued_at||'').slice(0,10), hoy=isoLocal(Date.now())
+    if(!e.fecha){ setYaEnv({...e,err:'Elige la fecha en que se envió.'}); return }
+    if((emi&&e.fecha<emi)||e.fecha>hoy){ setYaEnv({...e,err:`La fecha debe estar entre la emisión (${fmtFechaDMY(emi)}) y hoy (${fmtFechaDMY(hoy)}).`}); return }
+    try{ const at=await marcarEnviadaManual(b,e.por||user?.name,e.fecha); setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at,sent_by:e.por||user?.name||null}:x)); logActividad('facturacion.envio_marcado',{tabla:'billing',id:b.id,detalle:{fecha:e.fecha,por:e.por||user?.name||null,modo:e.modo}}); setYaEnv(null) }
+    catch(err){ registrarError({origen:'accion',vista:'billing',err}); setYaEnv({...e,err:'No se pudo guardar: '+(err?.message||err)}) } }
   const quitarEnvDet=h=>setEnvDet(d=>d.filter(x=>!(x.correo_id===h.correo_id&&x.factura_id===h.factura_id)))
   const aceptarEnvDet=async h=>{ try{ const at=await marcarEnviadaDesdeCorreo(h,user?.name); setBilling&&setBilling(p=>p.map(x=>x.id===h.factura.id?{...x,email_sent_at:at,sent_by:user?.name||null}:x)); quitarEnvDet(h) }catch(e){ registrarError({origen:'accion',vista:'billing',err:e}); appAlert('No se pudo marcar como enviada: '+(e?.message||e)) } }
   const descartarEnvDet=async h=>{ await descartarEnvioCorreo(h); quitarEnvDet(h) }
-  const marcarYaEnviada=async b=>{ if(!await appConfirm(`¿Marcar la Factura N° ${folioN(b.invoice_no)||b.invoice_no||''} como enviada fuera de la app?\nQueda con la fecha de hoy y sale de «Por enviar».`)) return
-    try{ const at=await marcarEnviadaManual(b,user?.name); setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at,sent_by:user?.name||null}:x)) }catch(e){ registrarError({origen:'accion',vista:'billing',err:e}); appAlert('No se pudo marcar como enviada: '+(e?.message||e)) } }
+  const marcarYaEnviada=b=>abrirYaEnv(b,'nueva')
   const etapaEmision = Number(useConfigValor('sii_emision_etapa'))||1   // paso actual de la puesta en marcha (0 = certificado, ya hecho)
   // Página "Cargar del SII": bitácora (sii_import_batches) e inventario de lo sin registrar se cargan al abrirla. Estado propio (no reusa cargasHist, que abre el modal de historial).
   const [histPage,setHistPage]=useState(null)
@@ -2774,11 +2783,35 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
   // Facturas por enviar = PÁGINA (antes modal). Foto + tabla (escritorio) / lista (móvil) con la cifra a la derecha + historial de envíos (bitácora en billing: email_sent_at/sent_to/sent_by).
   const porEnviarPage = bandejaEnvio ? (()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null
     const tot=porEnviar.reduce((a,b)=>a+(montoFactura(b)||0),0)
-    const enviadas=(billing||[]).filter(b=>!b.deleted_at&&(b.email_sent_at||b.sent_at)).sort((x,y)=>String(y.email_sent_at||y.sent_at).localeCompare(String(x.email_sent_at||x.sent_at))).slice(0,15)
+    const enviadas=(billing||[]).filter(b=>!b.deleted_at&&(b.email_sent_at||b.sent_at)).sort((x,y)=>String(y.email_sent_at||y.sent_at).localeCompare(String(x.email_sent_at||x.sent_at)))
+    const mesesEnviadas=(()=>{ const m=new Map(); enviadas.forEach(b=>{ const k=String(b.email_sent_at||b.sent_at).slice(0,7); if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.entries()] })()
     const cliN=b=>clients.find(c=>String(c.id)===String(b.client_id))?.name||'—'
+    const gruposEnv=(()=>{ const m=new Map(); porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):'sin-'+b.id; if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.values()] })()   // un cliente con 2+ por enviar: «Enviar juntas»
     const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
-    const yaBtn=b=><button onClick={()=>marcarYaEnviada(b)} title='Se envió por otro camino' style={{fontSize:11,fontWeight:600,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Ya enviada</button>
-    const enviarBtn=b=><button onClick={()=>setFacturaEmail(b)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enviar</button>
+    const bSm={height:28,minWidth:84,padding:'0 12px',fontSize:11,fontWeight:600,borderRadius:8,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',justifyContent:'center',boxSizing:'border-box',border:'1px solid',fontFamily:'inherit'}   // Enviar y Ya enviada: misma caja
+    const yaBtn=b=><button onClick={()=>marcarYaEnviada(b)} title='Se envió por otro camino' style={{...bSm,color:C.accent,background:yaEnv?.id===b.id?C.azulBg:C.surface,borderColor:yaEnv?.id===b.id?C.accent:C.border}}>Ya enviada</button>
+    const enviarBtn=b=><button onClick={()=>setFacturaEmail(b)} style={{...bSm,color:C.surface,background:C.accent,borderColor:C.accent}}>Enviar</button>
+    const chipEnv=(on,t,fn)=><button type='button' onClick={fn} style={{fontSize:12,fontWeight:600,borderRadius:20,padding:'6px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:C.surface,color:on?C.accent:C.muted,whiteSpace:'nowrap',fontFamily:'inherit'}}>{t}</button>
+    const editorEnv=b=>{ const e=yaEnv; const hoy=isoLocal(Date.now()), ayer=isoLocal(Date.now()-86400000), emi=String(b.issued_at||'').slice(0,10); const nombres=Object.keys(equipoPorNombre())
+      return <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.accent}}>Factura N° {folioN(b.invoice_no)||b.invoice_no||'—'} · ¿Cuándo se envió?</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:14,alignItems:'flex-end'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:5,minWidth:0}}><span style={SEC_LBL}>Fecha de envío</span>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
+              {chipEnv(!e.otra&&e.fecha===hoy,`Hoy · ${fmtFechaDMY(hoy)}`,()=>setYaEnv({...e,fecha:hoy,otra:false,err:null}))}
+              {(!emi||ayer>=emi)&&chipEnv(!e.otra&&e.fecha===ayer,`Ayer · ${fmtFechaDMY(ayer)}`,()=>setYaEnv({...e,fecha:ayer,otra:false,err:null}))}
+              {chipEnv(!!e.otra,'Otra fecha',()=>setYaEnv({...e,otra:true,err:null}))}
+              {e.otra&&<input type='date' value={e.fecha} min={emi||undefined} max={hoy} onChange={ev=>setYaEnv({...e,fecha:ev.target.value,err:null})} aria-label='Fecha de envío' style={{fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 10px',background:C.surface,color:C.text,fontFamily:'inherit'}}/>}
+            </div></div>
+          <div style={{display:'flex',flexDirection:'column',gap:5,minWidth:0}}><span style={SEC_LBL}>Enviada por</span>
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>{nombres.map(n=>chipEnv(e.por===n,n,()=>setYaEnv({...e,por:n})))}</div></div>
+        </div>
+        <div style={{fontSize:11,color:e.err?C.overdueText:C.muted}}>{e.err||`Desde la emisión (${fmtFechaDMY(emi)}) hasta hoy.`}</div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={()=>setYaEnv(null)} style={{...bSm,minWidth:0,color:C.muted,background:C.surface,borderColor:C.border}}>Cancelar</button>
+          <button onClick={()=>guardarYaEnv(b)} style={{...bSm,minWidth:0,color:C.surface,background:C.accent,borderColor:C.accent}}>Guardar envío</button>
+        </div>
+      </div> }
     return <FlujoPagina origen='Facturación' titulo='Facturas por enviar' onBack={()=>setBandejaEnvio(false)} maxW={1120}>
       <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
         <div style={{flex:1,minWidth:0,width:'100%',display:'flex',flexDirection:'column',gap:12}}>
@@ -2794,8 +2827,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,color:C.text,display:'flex',alignItems:'center',gap:6,minWidth:0}}><span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {folioN(h.factura.invoice_no)||h.factura.invoice_no} · {cliN(h.factura)}</span>{h.nivel==='probable'&&<span title={h.motivo} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap',flexShrink:0}}>Probable</span>}</div>
                   <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{h.correo.asunto||'(sin asunto)'} · {fmtFechaDMY(h.correo.fecha)} · a {h.correo.para.join(', ')}</div></div>
-                <button onClick={()=>aceptarEnvDet(h)} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 11px',cursor:'pointer',flexShrink:0}}>Marcar enviada</button>
-                <button onClick={()=>descartarEnvDet(h)} style={{fontSize:11,fontWeight:600,color:C.muted,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>No corresponde</button>
+                <button onClick={()=>aceptarEnvDet(h)} style={{...bSm,minWidth:0,color:C.surface,background:C.accent,borderColor:C.accent}}>Marcar enviada</button>
+                <button onClick={()=>descartarEnvDet(h)} style={{...bSm,minWidth:0,color:C.muted,background:C.surface,borderColor:C.border}}>No corresponde</button>
               </div>)}
             </div>}
           </div>}
@@ -2803,24 +2836,41 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           {porEnviar.length>0&&<div style={card}>
             {isDesktop
               ? <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Factura','Cliente','Para','Monto',''].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i>=3?'right':'left',padding:'8px 8px 6px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
-                  <tbody>{porEnviar.map(b=>{ const dest=contactoDe(b); return <tr key={b.id}>
+                  <tbody>{gruposEnv.map(g=>{ const filas=g.map(b=>{ const dest=contactoDe(b); return <Fragment key={b.id}><tr>
                     <td onClick={()=>onEdit&&onEdit(b)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'}</td>
                     <td onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>{cliN(b)}</td>
                     <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,color:dest?C.muted:C.overdueText,fontSize:12}}>{dest||'sin correo — lo eliges al enviar'}</td>
                     <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</td>
-                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></td></tr> })}</tbody></table>
-              : porEnviar.map((b,i)=>{ const dest=contactoDe(b); return <div key={b.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
+                    <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,textAlign:'right'}}><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></td></tr>
+                    {yaEnv?.id===b.id&&yaEnv.modo==='nueva'&&<tr><td colSpan={5} style={{background:C.azulBg,padding:'12px',borderBottom:`1px solid ${C.border}`}}>{editorEnv(b)}</td></tr>}</Fragment> })
+                    return g.length>1
+                      ? [<tr key={'h'+g[0].id}><td colSpan={5} style={{background:C.azulBg,padding:'8px 10px'}}><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI}}>{cliN(g[0])}</div><div style={{fontSize:10,color:C.azulInfo}}>{g.length} por enviar · {fmt(g.reduce((a,x)=>a+(montoFactura(x)||0),0))}</div></div><button onClick={()=>setFacturasEmail(g)} style={{...bSm,color:C.surface,background:C.accent,borderColor:C.accent}}>Enviar juntas</button></div></td></tr>,...filas]
+                      : filas })}</tbody></table>
+              : gruposEnv.map((g,gi)=><div key={g[0].id} style={{borderTop:gi?`0.5px solid ${C.bgSoft}`:'none'}}>
+                {g.length>1&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',margin:'6px 0',background:C.azulBg,borderRadius:10}}><div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI}}>{cliN(g[0])}</div><div style={{fontSize:10,color:C.azulInfo}}>{g.length} por enviar · {fmt(g.reduce((a,x)=>a+(montoFactura(x)||0),0))}</div></div><button onClick={()=>setFacturasEmail(g)} style={{...bSm,color:C.surface,background:C.accent,borderColor:C.accent}}>Enviar juntas</button></div>}
+                {g.map((b,i)=>{ const dest=contactoDe(b); return <div key={b.id} style={{borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}><div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0'}}>
                   <div onClick={()=>onEdit&&onEdit(b)} style={{flex:1,minWidth:0,cursor:'pointer'}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'} · {cliN(b)}</div><div style={{fontSize:11,color:dest?C.muted:C.overdueText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{dest||'sin correo — lo eliges al enviar'}</div></div>
-                  <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></div> })}
+                  <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span><div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5}}>{enviarBtn(b)}{yaBtn(b)}</div></div>
+                  {yaEnv?.id===b.id&&yaEnv.modo==='nueva'&&<div style={{background:C.azulBg,borderRadius:10,padding:10,marginBottom:8}}>{editorEnv(b)}</div>}</div> })}</div>)}
             <div style={{display:'flex',alignItems:'center',gap:8,paddingTop:10}}><span style={{fontSize:11,color:C.muted,flex:1,minWidth:0}}>{porEnviar.length} por enviar{(()=>{ const c=porEnviar.filter(b=>factToMap[String(b.client_id)]).length; return c?` · ${c} con correo recordado`:'' })()}</span></div>
           </div>}
         </div>
         <div style={isDesktop?{width:360,flexShrink:0}:{width:'100%'}}>
           <div style={card}><div style={{...SEC_LBL,padding:'8px 0 2px'}}>Enviadas · historial</div>
             {enviadas.length===0?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Aún no hay envíos registrados.</div>
-             :enviadas.map((b,i)=><div key={b.id} onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {folioN(b.invoice_no)||'—'} · {cliN(b)}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtFechaHora(b.email_sent_at||b.sent_at)}{b.sent_to?` · a ${b.sent_to}`:''}{b.sent_by?` · ${b.sent_by}`:''}</div></div>
-               <span style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span></div>)}
+             :mesesEnviadas.map(([mk,bs],mi)=>{ const abierto=mesesEnv.has(mk); return <div key={mk} style={{borderTop:mi?`0.5px solid ${C.bgSoft}`:'none'}}>
+               <div onClick={()=>setMesesEnv(p=>{ const n=new Set(p); n.has(mk)?n.delete(mk):n.add(mk); return n })} role='button' tabIndex={0} aria-expanded={abierto} onKeyDown={ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); setMesesEnv(p=>{ const n=new Set(p); n.has(mk)?n.delete(mk):n.add(mk); return n }) } }} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 0',cursor:'pointer'}}>
+                 <span style={{flex:1,fontSize:13,fontWeight:700,color:C.accent}}>{mesTitulo(mk+'-01T12:00')}</span><span style={{fontSize:11,color:C.muted}}>{bs.length} enviada{bs.length!==1?'s':''}</span>
+                 <span style={{color:C.textSoft,display:'flex',transform:abierto?'rotate(90deg)':'none'}}><Gl n='chevron'/></span></div>
+               {abierto&&bs.map(b=>{ const aMano=!!b.sent_by&&!b.sent_to; return <div key={b.id} style={{borderTop:`0.5px solid ${C.bgSoft}`}}>
+                 <div onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',cursor:'pointer'}}>
+                   {diaGrande(b.email_sent_at||b.sent_at)}
+                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {folioN(b.invoice_no)||'—'} · {cliN(b)}</div>
+                     <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[b.sent_by,b.sent_to?`a ${b.sent_to}`:null].filter(Boolean).join(' · ')||'—'}</div></div>
+                   {aMano&&<span style={{fontSize:10.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>a mano</span>}
+                   <span style={{fontSize:12,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span></div>
+                 {aMano&&<div style={{paddingBottom:8,paddingLeft:54}}><span onClick={()=>abrirYaEnv(b,'corregir')} role='button' tabIndex={0} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer'}}>Corregir fecha</span></div>}
+                 {yaEnv?.id===b.id&&yaEnv.modo==='corregir'&&<div style={{background:C.azulBg,borderRadius:10,padding:10,marginBottom:8}}>{editorEnv(b)}</div>}</div> })}</div> })}
           </div>
         </div>
       </div>
