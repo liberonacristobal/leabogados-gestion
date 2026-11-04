@@ -830,7 +830,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
         {gastoCats.length>1&&<select value={gastoCatF==='__gastos__'?'':gastoCatF} onChange={e=>setGastoCatF(e.target.value)} aria-label='Categoría' style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${gastoCatF&&gastoCatF!=='__gastos__'?C.accent:C.border}`,background:gastoCatF&&gastoCatF!=='__gastos__'?C.azulBg:'#fff',color:gastoCatF&&gastoCatF!=='__gastos__'?C.accent:C.muted}}><option value=''>Todas las categorías</option>{gastoCats.map(c=><option key={c} value={c}>{c}</option>)}</select>}
         {selectedClient&&!ofiSel&&(()=>{ const pags=[...new Set((expenses||[]).filter(e=>String(e.client_id)===String(selectedClient.id)&&e.type!=='fondo'&&!e.deleted_at).map(pagadoPorGasto))].sort(); return pags.length>1&&<select value={gastoPagF} onChange={e=>setGastoPagF(e.target.value)} aria-label='Pagado por' style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${gastoPagF?C.accent:C.border}`,background:gastoPagF?C.azulBg:'#fff',color:gastoPagF?C.accent:C.muted}}><option value=''>Pagado por</option>{pags.map(x=><option key={x} value={x}>{x}</option>)}</select> })()}
         {selectedClient&&!ofiSel&&selEnts.length>1&&<select value={gastoRsF} onChange={e=>setGastoRsF(e.target.value)} aria-label='Razón social' style={{fontSize:12,padding:'5px 9px',borderRadius:8,border:`1px solid ${gastoRsF?C.accent:C.border}`,background:gastoRsF?C.azulBg:'#fff',color:gastoRsF?C.accent:C.muted,maxWidth:200}}><option value=''>Razón social</option>{selEnts.map(x=><option key={x.id} value={x.id}>{rsDisplay(x.name)}</option>)}</select>}
-        {showMover&&<button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} title='Mover gastos a otro cliente' style={{...chipBtn('soft'),fontWeight:500,whiteSpace:'nowrap',marginLeft:'auto'}}>Mover {movMode?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>}
+        {showMover&&<button onClick={()=>{setMovMode(o=>!o);setMovSel(new Set())}} title='Mover gastos a otro cliente' style={{...chipBtn('soft'),fontWeight:600,whiteSpace:'nowrap',marginLeft:'auto'}}>Mover {movMode?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>}
       </div>
       {showMover&&movMode&&(
         <div style={{marginTop:-2,marginBottom:8,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
@@ -1433,7 +1433,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
                 : <span style={{fontSize:10.5,color:C.textSoft,fontWeight:500,whiteSpace:'nowrap'}}>Incobrable · a cargo de la oficina</span>)}
               {e.personal_de&&!opts.sinPersonal&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:11,fontWeight:700,color:C.muted}}>Personal · <b style={{color:pc.color,fontWeight:700}}>{e.personal_de}</b></span>})()}
             </div>
-            <div style={{fontSize:13,color:C.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+            <div style={{fontSize:13,color:C.text,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
             {!isFondo&&!e.personal_de&&!esOficina(e.client_id)&&<div style={{fontSize:10,marginTop:2}}>{e.client_id?<span style={{color:C.muted,fontWeight:600}}>{rsDisplay(rsLabel(e.client_id,clients,clientEntities,e.entity_id).name)}</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>}</div>}
             {movExp===e.id&&!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(()=>{ const catOk=e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()); return (
               <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}} onClick={stop}>
@@ -2723,9 +2723,9 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <button type='button' onClick={()=>setGastoCatF(k)} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:'transparent'}`,borderRadius:12,padding:big?'11px 15px':'11px 14px',cursor:'pointer',fontFamily:'inherit',minWidth:0,...(big?{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:10,...(isDesktop?{}:{gridColumn:'1 / -1'})}:{})}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',opacity:.85}}>{lbl}</div>
-                <div style={{fontSize:big?(isDesktop?30:28):(isDesktop?19:16),fontWeight:700,letterSpacing:big?-.8:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{val}</div>
+                <div style={{fontSize:big?26:(isDesktop?20:18),fontWeight:800,letterSpacing:big?-.6:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{val}</div>
               </div>
-              {note&&<div style={{fontSize:11.5,opacity:.8,whiteSpace:'nowrap'}}>{note}</div>}
+              {note&&<div style={{fontSize:11,opacity:.8,whiteSpace:'nowrap'}}>{note}</div>}
             </button>) }
           return (<div style={{marginBottom:10}}>
             <div style={{display:'grid',gridTemplateColumns:isDesktop?'2fr 1fr 1fr':'1fr 1fr',gap:isDesktop?10:8}}>
