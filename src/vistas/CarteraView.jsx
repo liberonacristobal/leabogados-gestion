@@ -1466,7 +1466,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
                   <div style={{ flex:1, minWidth:0, color:C.text, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.nombre}</div>
                   <div style={{ width:54, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.nProy}</div>
                   <div style={{ width:66, textAlign:'right', color:C.muted, fontVariantNumeric:'tabular-nums' }}>{o.done}/{o.total}</div>
-                  <div style={{ width:66, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct}%`}</div>
+                  <div style={{ width:66, textAlign:'right', fontWeight:700, fontVariantNumeric:'tabular-nums', color:pct==null?C.muted:pct>=80?C.greenText:pct>=50?'#E09B2D':C.overdueText }}>{pct==null?'—':`${pct} %`}</div>
                 </div>
                 {open && o.proys.map(subFila)}
               </div> })}

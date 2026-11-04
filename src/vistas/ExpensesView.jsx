@@ -2593,7 +2593,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 </div>
                 <div role='tablist' aria-label='Estado del cliente' style={{display:'flex',background:C.track,borderRadius:10,padding:3,gap:2,marginBottom:10}}>
                   {ESTS.map(([k,l])=>{ const on=estadoG===k; const n=k==='equipo'?miembros.length:clientsWithMovs.filter(c=>pasaEstadoG(c,k)).filter(matchC).length; return (
-                    <button key={k} type='button' role='tab' aria-selected={on} onClick={()=>setEstadoG(k)} style={{flex:1,minWidth:0,border:'none',borderRadius:8,padding:isDesktop?'6px 4px':'6px 1px',fontSize:isDesktop?12:11,letterSpacing:isDesktop?0:-.2,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:on?C.surface:'transparent',color:on?C.accent:C.muted,boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l} <span style={{fontWeight:600,opacity:.75}}>{n}</span></button>) })}
+                    <button key={k} type='button' role='tab' aria-selected={on} onClick={()=>setEstadoG(k)} style={{flex:'1 1 auto',minWidth:0,border:'none',borderRadius:8,padding:isDesktop?'6px 4px':'6px 1px',fontSize:isDesktop?12:11,letterSpacing:isDesktop?0:-.2,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:on?C.surface:'transparent',color:on?C.accent:C.muted,boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l} <span style={{fontWeight:600,opacity:.75}}>{n}</span></button>) })}
                 </div>
                 {!verEquipo&&castBlock}
                 <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px -4px'}}>

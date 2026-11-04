@@ -537,7 +537,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       // La última cuota absorbe el residuo de redondeo para que la suma de cuotas == total exacto.
       for(let i=0;i<nCuotas;i++) { cobros.push({monto: i===nCuotas-1?(totR-mc*(nCuotas-1)):mc, fecha:mesISO(cobroInicio,i), label:`Cuota ${i+1}/${nCuotas}`}) }
     } else if(cobroType==='porcentaje') {
-      tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:anio4ISO(t.fecha), label:`${t.pct}%`}) })
+      tramos.forEach(t=>{ if(t.pct&&t.fecha) cobros.push({monto:Math.round(totalCLP*t.pct/100), fecha:anio4ISO(t.fecha), label:`${t.pct} %`}) })
       // Si los tramos suman 100%, el último absorbe el residuo de redondeo para que Σ cuotas == total exacto.
       if(cobros.length && Math.round(tramos.reduce((a,t)=>a+(parseInt(t.pct)||0),0))===100){ const totR=Math.round(totalCLP), acc=cobros.reduce((a,c)=>a+c.monto,0); cobros[cobros.length-1].monto += (totR-acc) }
     } else if(cobroType==='personalizada') {
@@ -597,7 +597,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       if(saveF.proposal_amount_uf==null && saveF.proposal_amount_clp==null){ saveF.proposal_amount_uf = parseFloat(saveF.amount_uf)>0?parseFloat(saveF.amount_uf):null; saveF.proposal_amount_clp = saveF.proposal_amount_uf?null:(parseFloat(saveF.amount_clp)>0?Math.round(parseFloat(saveF.amount_clp)):null) }
     }
     // GUARD porcentaje: los tramos deben sumar 100% (si no, la venta se sub-facturaría permanentemente).
-    if(cobroType==='porcentaje'){ const sp=(tramos||[]).reduce((a,t)=>a+(parseInt(t.pct)||0),0); if(sp!==100){ appAlert(`Los tramos "por porcentaje" deben sumar 100% (hoy suman ${sp}%).`); return } }
+    if(cobroType==='porcentaje'){ const sp=(tramos||[]).reduce((a,t)=>a+(parseInt(t.pct)||0),0); if(sp!==100){ appAlert(`Los tramos "por porcentaje" deben sumar 100% (hoy suman ${sp} %).`); return } }
     // GUARD "venta Activa sin cuotas": una venta que NACE Activa (nueva, o al activar una propuesta) sin cuotas generadas
     // quedaría contando en "Vendido" pero fuera de cobranza/proyección, en silencio (raíz de Tarragona/Masihy). Se bloquea.
     const naceActiva = _activandoPropuesta || (!sale?.id && saveF.status==='Activo')
@@ -1208,7 +1208,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {sale?.id&&!propBorr&&(()=>{
         const COBRO_LBL = {cuotas:'Cuotas mensuales',mensual:'Mensual recurrente',porcentaje:'Por porcentaje',personalizada:'Personalizada',hora:'Por hora'}
         const curHon = moneda==='UF' ? (amountUF>0?fmtUF(amountUF):'—') : (montoCLP>0?fmt(montoCLP):'—')
-        const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct}%`:'—'))
+        const curCost = moneda==='UF' ? (parseFloat(f.cost_uf)>0?fmtUF(parseFloat(f.cost_uf)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct} %`:'—')) : (parseFloat(f.cost_clp)>0?fmt(parseFloat(f.cost_clp)):(costMode==='pct'&&parseFloat(costPct)>0?`${costPct} %`:'—'))
         const curCobro = COBRO_LBL[cobroType]||'—'
         const notasPrev = f.notes ? (f.notes.length>48?f.notes.slice(0,48)+'…':f.notes) : '—'
         const titP = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')

@@ -120,7 +120,7 @@ export function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],
         <div style="margin-bottom:16px;padding:10px 14px;background:${A4};border-radius:6px">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px">
             <span style="font-size:10px;font-weight:600;color:${A}">Avance ${metaTxt}</span>
-            <span style="font-size:13px;font-weight:700;color:${A}">${pct}%</span>
+            <span style="font-size:13px;font-weight:700;color:${A}">${pct} %</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>`
