@@ -2513,7 +2513,8 @@ export function facturaGlosaPartes(factura, sale){
     const cn = nmb.match(_RX_CUOTA)
     nombre = nmb.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)\s*$/i,'').trim()   // ítem sin la cuota inline
     // detalle = SOLO la cuota/pago (del DscItem, del NmbItem o del concepto), normalizada a "Pago N de M"; nunca una descripción larga del servicio (eso va en relacion/proyecto) → evita "al Asesoría legal permanente sociedad…".
-    const cuotaRaw = (dscDet.match(_RX_CUOTA) || cn || (factura.concept||'').match(_RX_CUOTA) || [])[0] || ''
+    // MANDA la cuota de la app (concepto «Cuota 3/10»): la glosa del DTE se escribe a mano en el SII y a veces trae otra (folio 500: DTE «2 de 10», app 3/10). Sin cuota en el concepto, la del DTE.
+    const cuotaRaw = ((factura.concept||'').match(_RX_CUOTA) || dscDet.match(_RX_CUOTA) || cn || [])[0] || ''
     const nm = cuotaRaw.match(/(\d+)\D+(\d+)/)
     detalle = nm ? `Pago ${nm[1]} de ${nm[2]}` : (_esPagoLabel(dscDet)?dscDet:'')
   } else {

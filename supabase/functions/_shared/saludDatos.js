@@ -233,10 +233,14 @@ const cuotasDeGlosa = g => {
   for (const m of t.matchAll(/^\s*(\d+)\s*-\s*(\d+)\s*$/gm)) out.push({ n: +m[1], tot: +m[2] })   // línea sola «1-18»
   return out
 }
+/** Cuotas que nombra la glosa del DTE de una factura (puede nombrar varias). @param {any} b @returns {{n:number,tot:number}[]} */
+export const cuotasDeDte = b => {
+  const x = String((b && b.dte_xml) || '')
+  return cuotasDeGlosa(`${(x.match(/<NmbItem>([^<]*)</) || [])[1] || ''} ${(x.match(/<DscItem>([^<]*)</) || [])[1] || ''}`)
+}
 export const cuotaNeDte = billing => (billing || []).filter(b => !b.deleted_at && b.status !== 'Anulada' && b.status !== 'Programada' && b.dte_xml).map(b => {
   const c = String(b.concept || '').match(/cuota\s*(\d+)\s*\/\s*(\d+)/i); if (!c) return null
-  const glosa = `${(String(b.dte_xml).match(/<NmbItem>([^<]*)</) || [])[1] || ''} ${(String(b.dte_xml).match(/<DscItem>([^<]*)</) || [])[1] || ''}`
-  const dte = cuotasDeGlosa(glosa); if (!dte.length) return null
+  const dte = cuotasDeDte(b); if (!dte.length) return null
   if (dte.some(x => x.n === +c[1] && x.tot === +c[2])) return null
   return { b, app: { n: +c[1], tot: +c[2] }, dte: dte[0] }
 }).filter(Boolean)

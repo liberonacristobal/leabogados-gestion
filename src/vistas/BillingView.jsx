@@ -8,6 +8,7 @@ import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesR
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -4541,9 +4542,10 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   // Cuota de ESTA factura: manda la de la app (concepto «Cuota 3/10»); si el concepto no trae cuota, la del DTE («Pago 3 de 10»).
   // Si el DTE (el PDF que se adjunta, escrito a mano en el SII) nombra otra cuota que la app, se avisa: el texto del correo sale de ese DTE.
   const _cuotaApp=multi?null:(()=>{ const m=String(factura?.concept||'').match(/cuota\s*\d+\s*\/\s*\d+/i); return m?cuotaDe(m[0]):null })()
-  const _cuotaDte=multi?null:cuotaDe(String(_dynPeriodo()).match(/(?:cuota|pago)\s*\d+\s*(?:\/|de)\s*\d+/i)?.[0])
+  const _dteCuotas=multi?[]:cuotasDeDte(factura)   // cuotas que nombra el DTE adjunto (glosa escrita en el SII)
+  const _cuotaDte=_dteCuotas[0]||null
   const _cuotaF=_cuotaApp||_cuotaDte
-  const _dteDifiere=!!(_cuotaApp&&_cuotaDte&&(_cuotaApp.n!==_cuotaDte.n||_cuotaApp.tot!==_cuotaDte.tot))
+  const _dteDifiere=!!(_cuotaApp&&_dteCuotas.length&&!_dteCuotas.some(x=>x.n===_cuotaApp.n&&x.tot===_cuotaApp.tot))
   const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||'')})
   const _tok=(t,lg)=>tokenizar(limpiarEspacios(quitarDespedida(t)),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
   const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(limpiarEspacios(quitarDespedida(t)),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
