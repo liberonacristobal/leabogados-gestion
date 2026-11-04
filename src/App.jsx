@@ -8289,8 +8289,8 @@ export default function App() {
           const doc=splitSetDTE(r.dteXml)[0]; const pdf=doc?await facturaDtePdfBase64(doc):null
           const via=await enviarComoUsuario({to:dest, subject:`Factura ${r.folio}`, html, text:bodyTxt, ...(pdf?{pdfBase64:pdf.base64,pdfName:`Factura ${r.folio}.pdf`}:{}), sinAviso:true})   // el resultado se informa abajo, junto con la emisión
           if(via){ const at=new Date().toISOString()
-            await supabase.from('billing').update({email_sent_at:at}).eq('id',ep.billId)
-            setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at}:x))
+            await supabase.from('billing').update({email_sent_at:at,sent_by:user?.name||null,sent_to:dest||null}).eq('id',ep.billId)
+            setBilling(p=>p.map(x=>x.id===ep.billId?{...x,email_sent_at:at,sent_by:user?.name||null,sent_to:dest||null}:x))
             appAlert(`Factura ${r.folio} emitida.\n`+txtEnviado(via,{que:'Correo', para:dest})+driveMsg)
           } else appAlert(`Factura ${r.folio} emitida. El correo NO se envió: queda en «Por enviar».\n\n${TXT_REINGRESO()}`+driveMsg)
         }catch(e){ appAlert(`Factura ${r.folio} emitida. El correo NO se envió: queda en «Por enviar».\n\n${TXT_REINGRESO()}\n\nDetalle: ${e.message}`+driveMsg) }

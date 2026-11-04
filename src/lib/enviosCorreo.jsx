@@ -3,7 +3,7 @@
 // factura y nombrarla. Se propone y se marca con un toque; nada se marca solo. Misma mecánica que fondosCorreo.jsx.
 import { supabase, DEMO } from '../supabase'
 import { BRAND } from './base.jsx'
-import { driveToken, okDB, registrarError, setLearningKV } from './compartido.jsx'
+import { driveToken, logActividad, okDB, registrarError, setLearningKV } from './compartido.jsx'
 import { emailsDe, enviosDetectados } from '../../supabase/functions/_shared/facturaEnvioReglas.js'
 
 const CLAVE = 'factura_envio_correo'   // learnings: key = «id del correo|id de la factura», value = 'marcada' | 'descartada' (no vuelve a proponerse)
@@ -73,4 +73,27 @@ export async function marcarEnviadaManual(b, quien) {
   const at = new Date().toISOString()
   okDB(await supabase.from('billing').update({ email_sent_at: at, sent_by: quien || null }).eq('id', b.id), 'marcar la factura como enviada')
   return at
+}
+
+// Quién envió una factura que ya figura enviada y no tiene remitente (envíos anteriores al registro de remitente). Solo completa
+// sent_by / sent_to desde el correo enviado de quien abre la app, con la regla estricta («coincide»: destinatario del cliente + folio);
+// no cambia la fecha ni el estado de envío.
+let _atribuido = false
+export async function atribuirEnvios({ facturas, quien }) {
+  if (DEMO || _atribuido || !quien || !facturas?.length) return []
+  const sinRemitente = facturas.filter(f => f.email_sent_at && !f.sent_by && f.issued_at)
+  if (!sinRemitente.length) return []
+  _atribuido = true
+  const hall = (await detectarEnviosFacturas({ facturas: sinRemitente })).filter(h => h.nivel === 'coincide')
+  const hechos = []
+  for (const h of hall) {
+    if (hechos.some(x => x.factura.id === h.factura.id)) continue
+    const dest = [...h.correo.para, ...h.correo.cc].join(', ')
+    try {
+      okDB(await supabase.from('billing').update({ sent_by: quien, sent_to: dest || null }).eq('id', h.factura.id).is('sent_by', null), 'registrar quién envió la factura')
+      logActividad('facturacion.remitente_detectado', { tabla: 'billing', id: h.factura.id, detalle: { por: quien, para: dest, correo: h.correo_id } })
+      hechos.push({ factura: h.factura, sent_by: quien, sent_to: dest })
+    } catch (e) { registrarError({ origen: 'accion', vista: 'envios_remitente', err: e }) }
+  }
+  return hechos
 }

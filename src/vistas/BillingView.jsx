@@ -8,9 +8,10 @@ import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesR
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotaDe, cuotaIncoherente, destokenizar, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
-import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
+import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { BRAND, C, CUENTA_HONORARIOS, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
@@ -2704,6 +2705,10 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
   useEffect(()=>{ if(!bandejaEnvio) return; let vivo=true
     ;(async()=>{ try{ const fs=(billing||[]).filter(b=>facturaSinEnviar(b)&&b.issued_at); const r=await detectarEnviosFacturas({facturas:fs}); if(vivo) setEnvDet(r) }catch(e){ registrarError({origen:'accion',vista:'envios_correo',err:e}) } })()
     return ()=>{ vivo=false } },[bandejaEnvio])   // eslint-disable-line
+  // Facturas ya enviadas sin remitente registrado: se completa quién las envió leyendo los enviados de quien abre la app (una vez por sesión).
+  useEffect(()=>{ if(!user?.name||!(billing||[]).length) return; let vivo=true
+    ;(async()=>{ try{ const r=await atribuirEnvios({facturas:billing||[],quien:user.name}); if(vivo&&r.length) setBilling&&setBilling(p=>p.map(x=>{ const h=r.find(y=>String(y.factura.id)===String(x.id)); return h?{...x,sent_by:h.sent_by,sent_to:h.sent_to}:x })) }catch(e){ registrarError({origen:'accion',vista:'envios_remitente',err:e}) } })()
+    return ()=>{ vivo=false } },[(billing||[]).length>0,user?.name])   // eslint-disable-line
   const quitarEnvDet=h=>setEnvDet(d=>d.filter(x=>!(x.correo_id===h.correo_id&&x.factura_id===h.factura_id)))
   const aceptarEnvDet=async h=>{ try{ const at=await marcarEnviadaDesdeCorreo(h,user?.name); setBilling&&setBilling(p=>p.map(x=>x.id===h.factura.id?{...x,email_sent_at:at,sent_by:user?.name||null}:x)); quitarEnvDet(h) }catch(e){ registrarError({origen:'accion',vista:'billing',err:e}); appAlert('No se pudo marcar como enviada: '+(e?.message||e)) } }
   const descartarEnvDet=async h=>{ await descartarEnvioCorreo(h); quitarEnvDet(h) }
@@ -2823,7 +2828,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
   const origenFact = bandejaEnvio?'Facturas por enviar':xmlHub?'Cargar XML':filter==='checklist'?'Facturas del mes':filter==='anticipos'?'Anticipos':filter==='clientes'?'Por cliente':filter==='all'?'Facturas':'Facturación'
   const emailPage = (facturasEmail&&facturasEmail.length>0)||facturaEmail ? (()=>{ const lista=(facturasEmail&&facturasEmail.length>0)?facturasEmail:null; const f0=lista?lista[0]:facturaEmail; const cli=clients.find(c=>String(c.id)===String(f0.client_id)); const cerrar=()=>{ if(lista) setFacturasEmail(null); else setFacturaEmail(null) }
     return <FlujoPagina origen={origenFact} titulo={lista?'Enviar facturas':'Enviar factura'} ctx={[lista?`${lista.length} facturas`:(f0.invoice_no?`N° ${folioN(f0.invoice_no)}`:null), cli?.name].filter(Boolean).join(' · ')||null} onBack={cerrar} maxW={1120}>
-      <FacturaEmailModal asPage factura={f0} facturas={lista||undefined} sales={sales} client={cli} sale={(sales||[]).find(s=>String(s.id)===String(f0.sale_id))} user={user} billing={billing} onSent={(id,at)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at}:b))} onClose={cerrar}/>
+      <FacturaEmailModal asPage factura={f0} facturas={lista||undefined} sales={sales} client={cli} sale={(sales||[]).find(s=>String(s.id)===String(f0.sale_id))} user={user} billing={billing} onSent={(id,at,por,dest)=>setBilling&&setBilling(p=>p.map(b=>b.id===id?{...b,email_sent_at:at,sent_by:por||b.sent_by||null,sent_to:dest||b.sent_to||null}:b))} onClose={cerrar}/>
     </FlujoPagina> })() : null
   const recPage = recPreview ? (()=>{ const rPrev=recordatorioCobro(recPreview.b, recNota); const cli=clients.find(c=>String(c.id)===String(recPreview.b.client_id))
     return <FlujoPagina origen={origenFact} titulo='Recordatorio de cobro' ctx={[recPreview.b.invoice_no?`N° ${folioN(recPreview.b.invoice_no)}`:null, cli?.name].filter(Boolean).join(' · ')||null} onBack={()=>setRecPreview(null)} maxW={1120}>
@@ -4533,9 +4538,12 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const _dynPeriodo=()=> multi ? '' : String((facturaGlosaPartes(factura, saleR)||{}).detalle||'')   // mes/cuota de ESTA factura ("Septiembre 2026", "Pago 7 de 10"): variable, NO se congela
   // La base se guarda por cliente + PROYECTO (una cuota nueva del mismo proyecto reusa tu última redacción; otro proyecto tiene la suya). Multi queda a nivel cliente.
   const msgKey=lg=> multi ? `${client?.id}:n:${lg}` : `${client?.id}:p${saleR?.id||'0'}:${lg}`
-  const _tok=(t,lg)=>{ let s=String(t).split(_dynFolios(lg)).join('{folios}').split(_dynTotal()).join('{total}'); const per=_dynPeriodo(); if(per&&per.length>=4) s=s.split(per).join('{periodo}'); return s }
-  const _untok=(t,lg)=>{ let s=String(t).split('{folios}').join(_dynFolios(lg)).split('{total}').join(_dynTotal()); const per=_dynPeriodo(); return s.split('{periodo}').join(per) }
-  const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; setBody(tpl?_untok(tpl,lg):genBody(lg)) }
+  // Cuota de ESTA factura (concepto «Cuota 3/10» o detalle «Pago 3 de 10»): con ella se completan las marcas {cuota} del texto aprendido.
+  const _cuotaF=multi?null:cuotaDe(`${_dynPeriodo()} ${factura?.concept||''}`.match(/(?:cuota|pago)\s*\d+\s*(?:\/|de)\s*\d+/i)?.[0])
+  const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||'')})
+  const _tok=(t,lg)=>tokenizar(quitarDespedida(t),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
+  const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(quitarDespedida(t),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
+  const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; setBody((tpl&&_untok(tpl,lg))||genBody(lg)) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
@@ -4548,6 +4556,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const saldoTocado=useRef(false); const fondoTocado=useRef(false)
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
+  const asuntoTocado=useRef(false)   // asunto editado a mano → se aprende (por cliente + proyecto, con el folio como marca)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
   // Facturas del cliente con saldo pendiente (excluye esta/estas, reembolsos y ya pagadas). El sistema SÍ sabe cuáles son → se citan por folio.
   const otrasPendientes = useMemo(()=> (billing||[]).filter(b=>String(b.client_id)===String(client?.id||'') && !listF.some(f=>String(f.id)===String(b.id)) && !b.deleted_at && (b.billing_type||'')!=='reembolso' && ['Pendiente','Vencido'].includes(b.status)).map(b=>({b,saldo:saldoBill(b)})).filter(x=>x.saldo>0).sort((a,z)=>String(a.b.due||'').localeCompare(String(z.b.due||''))), [billing,client,factura,facturas])
@@ -4581,7 +4590,10 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   useEffect(()=>{ if(!bodyTocado.current) applyDefaultBody(lang) },[dteTotals])
   // Carga la plantilla aprendida del cliente (una|varias · idioma) y, si no la editaste, la aplica con los folios/total actuales.
   useEffect(()=>{ if(!client?.id) return; let alive=true
-    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',msgKey(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current) setBody(_untok(data.value,lg)) },()=>{}) })
+    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',msgKey(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current){ const u=_untok(data.value,lg); if(u) setBody(u) } },()=>{}) })
+    if(!multi) supabase.from('learnings').select('value').eq('kind','factura_asunto').eq('key',msgKey('es')).maybeSingle().then(({data})=>{ if(!alive||!data?.value||asuntoTocado.current) return; const r=destokenizar(data.value,{..._vals('es'),cuota:_cuotaF}); if(r.completo) setAsunto(r.texto) },()=>{})
+    supabase.from('learnings').select('value').eq('kind','factura_saludo').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; setSaludoAuto(false); setSaludo(String(data.value)) },()=>{})   // el saludo que editaste a mano para este cliente
+    supabase.from('learnings').select('value').eq('kind','factura_opts').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; try{ const o=JSON.parse(data.value); if(o.incPago) setIncPago(true); if(o.recordarSaldo) setRecordarSaldo(true) }catch(_){} },()=>{})
     return ()=>{alive=false} },[client?.id])
   const [iaBusy,setIaBusy]=useState(false)
   // ✦ Redactar con IA: pule SOLO la prosa (glosa cruda → frase natural). Folio y monto van como dato exacto, la IA no los altera. Sin vencimiento.
@@ -4624,6 +4636,8 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const buildHtml=()=>facturaCorreoShell(`${_correoToP(saludo)}${segmentos().map(x=>x.h?x.h:_correoToP(x.t)).join('')}${_correoToP(_saludosCierre)}`, firma, lang)   // HTML: 'Saludos,' y debajo la firma (que trae el nombre)
   const enviar=async()=>{
     if(!para.trim()){ appAlert('Falta el destinatario.'); return }
+    const _inc=!multi&&cuotaIncoherente([body,asunto].join('\n'),_cuotaF)   // el texto nombra otra cuota que la de esta factura
+    if(_inc&&!await appConfirm(`El texto del correo dice «cuota ${_inc.dice}», pero esta factura es la cuota ${_inc.es}.\n¿Enviar de todos modos?`)) return
     setSending(true)
     try{
       const baseAdj = multi ? atts.map(a=>({base64:a.base64,name:a.name,mime:a.mime})) : (pdf?[{base64:pdf.base64,name:pdf.name,mime:'application/pdf'}]:[])
@@ -4647,7 +4661,14 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
         if(dedup.length){ const {data:ins}=await supabase.from('contacts').insert(dedup.map(e=>({client_id:client.id,nombre:e.split('@')[0],email:e}))).select(); if(ins) setContacts(p=>[...p,...ins]) }
       }catch(e){registrarError({origen:'accion',vista:'contacts',err:e})} }
       const at=new Date().toISOString()
-      for(const f of listF){ try{ okDB(await supabase.from('billing').update({email_sent_at:at}).eq('id',f.id),'marcar la factura como enviada') }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}; onSent&&onSent(f.id,at) }
+      const dest=[para.trim(),...cc].filter(Boolean).join(', ')
+      for(const f of listF){ try{ okDB(await supabase.from('billing').update({email_sent_at:at,sent_by:user?.name||null,sent_to:dest||null}).eq('id',f.id),'marcar la factura como enviada'); logActividad('facturacion.correo_enviado',{tabla:'billing',id:f.id,detalle:{por:user?.name||null,para:dest,cuenta:via}}) }catch(e){registrarError({origen:'accion',vista:'billing',err:e})}; onSent&&onSent(f.id,at,user?.name||null,dest) }
+      // Aprende lo que editaste: asunto (por proyecto, con el folio como marca), saludo escrito a mano y las casillas de cuenta de pago / saldo.
+      if(client?.id){
+        if(asuntoTocado.current&&!multi) try{ await setLearningKV('factura_asunto',msgKey('es'),tokenizar(asunto,_vals('es'))) }catch(e){registrarError({origen:'accion',vista:'factura_asunto',err:e})}
+        if(!saludoAuto&&saludo.trim()) try{ await setLearningKV('factura_saludo',String(client.id),saludo.trim()) }catch(e){registrarError({origen:'accion',vista:'factura_saludo',err:e})}
+        try{ await setLearningKV('factura_opts',String(client.id),JSON.stringify({incPago:!!incPago,recordarSaldo:!!recordarSaldo})) }catch(e){registrarError({origen:'accion',vista:'factura_opts',err:e})}
+      }
       appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
     }catch(e){ appAlert(txtNoEnviado('La factura', e.message||String(e))) }
     setSending(false)
@@ -4669,7 +4690,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
         <span style={{fontSize:10,color:C.muted,fontWeight:600}}>IDIOMA</span>
         <span style={{display:'inline-flex',borderRadius:20,overflow:'hidden',background:C.bgSoft}}>{[['es','Español'],['en','English']].map(([v,l])=><button key={v} type='button' onClick={()=>setLang(v)} style={{fontSize:11,fontWeight:600,padding:'3px 13px',border:'none',cursor:'pointer',background:lang===v?C.accent:'transparent',color:lang===v?'#fff':C.muted}}>{l}</button>)}</span>
       </div>
-      <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>setAsunto(e.target.value)} style={fInp}/></div>
+      <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e=>{asuntoTocado.current=true;setAsunto(e.target.value)}} style={fInp}/></div>
       <div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3,gap:8}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>SALUDO</span>
