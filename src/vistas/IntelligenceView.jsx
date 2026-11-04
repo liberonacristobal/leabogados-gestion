@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { C, Gl, SEC_LBL, appAlert, fmt, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Copyable, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
 import { PorSocioVista } from '../lib/porSocio.jsx'
 
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
@@ -248,6 +248,34 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
   }
 
 
+  if(addOpen) return <FlujoPagina origen='Inteligencia' titulo='Agregar novedad SII' onBack={()=>!addBusy&&setAddOpen(false)} maxW={720}>
+              {(()=>{ const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',background:'#fff',fontFamily:'inherit'}; const lab={fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',display:'block',marginBottom:4}; return (<>
+                <div style={{marginBottom:10}}><label style={lab}>Título *</label><input value={addForm.titulo} onChange={e=>setAddForm(f=>({...f,titulo:e.target.value}))} style={inp} placeholder='Ej: Fiscalización IVA servicios digitales'/></div>
+                <div style={{marginBottom:10}}><label style={lab}>Resumen</label><textarea value={addForm.resumen} onChange={e=>setAddForm(f=>({...f,resumen:e.target.value}))} rows={2} style={{...inp,resize:'vertical'}} placeholder='Qué dice, en una frase'/></div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={lab}>Tipo</label><select value={addForm.tipo} onChange={e=>setAddForm(f=>({...f,tipo:e.target.value}))} style={inp}>{['circular','resolucion','oficio','jurisprudencia','pgct','ley'].map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+                  <div style={{flex:1}}><label style={lab}>N°</label><input value={addForm.numero} onChange={e=>setAddForm(f=>({...f,numero:e.target.value}))} style={inp} placeholder='42'/></div>
+                </div>
+                <div style={{display:'flex',gap:8,marginBottom:10}}>
+                  <div style={{flex:1}}><label style={lab}>Fecha</label><input type='date' value={addForm.fecha} onChange={e=>setAddForm(f=>({...f,fecha:e.target.value}))} style={inp}/></div>
+                  <div style={{flex:1}}><label style={lab}>Prioridad</label><select value={addForm.prioridad} onChange={e=>setAddForm(f=>({...f,prioridad:e.target.value}))} style={inp}>{['alta','media','baja'].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+                </div>
+                <div style={{marginBottom:10}}><label style={lab}>Fuente (URL oficial)</label><input value={addForm.url} onChange={e=>setAddForm(f=>({...f,url:e.target.value}))} style={inp} placeholder='https://www.sii.cl/...'/></div>
+                <div style={{marginBottom:13}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <label style={{...lab,marginBottom:0}}>Áreas afectadas</label>
+                    <button onClick={sugerirAreas} disabled={iaAreasBusy} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>{iaAreasBusy?'…':<>{IA_SPK}Sugerir con IA</>}</button>
+                  </div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                    {areasFirma.length===0&&<span style={{fontSize:11,color:C.muted}}>Sin áreas registradas en ventas.</span>}
+                    {areasFirma.map(a=>{ const on=addForm.areas.includes(a); return (
+                      <button key={a} onClick={()=>setAddForm(f=>({...f,areas:on?f.areas.filter(x=>x!==a):[...f.areas,a]}))} style={{fontSize:11,fontWeight:on?600:500,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{a}</button>
+                    )})}
+                  </div>
+                </div>
+              </>)})()}
+    <div style={{marginTop:14}}><button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:44,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button></div>
+  </FlujoPagina>
   return (
     <div style={isDesktop?{maxWidth:1040,margin:'0 auto'}:undefined}>
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10}}>
@@ -366,35 +394,6 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
             </div>
           )})}
         </div></div>)}
-        {addOpen&&(
-          <Modal title='Agregar novedad SII' fullscreenOnMobile onClose={()=>!addBusy&&setAddOpen(false)} footer={<button onClick={guardarNovedad} disabled={addBusy||!addForm.titulo.trim()} style={{width:'100%',height:44,borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:13,fontWeight:600,cursor:(addBusy||!addForm.titulo.trim())?'default':'pointer',opacity:(addBusy||!addForm.titulo.trim())?.5:1}}>{addBusy?'Guardando…':'Guardar novedad'}</button>}>
-              {(()=>{ const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,color:C.text,outline:'none',boxSizing:'border-box',background:'#fff',fontFamily:'inherit'}; const lab={fontSize:10,fontWeight:600,color:C.muted,textTransform:'uppercase',letterSpacing:'.04em',display:'block',marginBottom:4}; return (<>
-                <div style={{marginBottom:10}}><label style={lab}>Título *</label><input value={addForm.titulo} onChange={e=>setAddForm(f=>({...f,titulo:e.target.value}))} style={inp} placeholder='Ej: Fiscalización IVA servicios digitales'/></div>
-                <div style={{marginBottom:10}}><label style={lab}>Resumen</label><textarea value={addForm.resumen} onChange={e=>setAddForm(f=>({...f,resumen:e.target.value}))} rows={2} style={{...inp,resize:'vertical'}} placeholder='Qué dice, en una frase'/></div>
-                <div style={{display:'flex',gap:8,marginBottom:10}}>
-                  <div style={{flex:1}}><label style={lab}>Tipo</label><select value={addForm.tipo} onChange={e=>setAddForm(f=>({...f,tipo:e.target.value}))} style={inp}>{['circular','resolucion','oficio','jurisprudencia','pgct','ley'].map(t=><option key={t} value={t}>{t}</option>)}</select></div>
-                  <div style={{flex:1}}><label style={lab}>N°</label><input value={addForm.numero} onChange={e=>setAddForm(f=>({...f,numero:e.target.value}))} style={inp} placeholder='42'/></div>
-                </div>
-                <div style={{display:'flex',gap:8,marginBottom:10}}>
-                  <div style={{flex:1}}><label style={lab}>Fecha</label><input type='date' value={addForm.fecha} onChange={e=>setAddForm(f=>({...f,fecha:e.target.value}))} style={inp}/></div>
-                  <div style={{flex:1}}><label style={lab}>Prioridad</label><select value={addForm.prioridad} onChange={e=>setAddForm(f=>({...f,prioridad:e.target.value}))} style={inp}>{['alta','media','baja'].map(p=><option key={p} value={p}>{p}</option>)}</select></div>
-                </div>
-                <div style={{marginBottom:10}}><label style={lab}>Fuente (URL oficial)</label><input value={addForm.url} onChange={e=>setAddForm(f=>({...f,url:e.target.value}))} style={inp} placeholder='https://www.sii.cl/...'/></div>
-                <div style={{marginBottom:13}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                    <label style={{...lab,marginBottom:0}}>Áreas afectadas</label>
-                    <button onClick={sugerirAreas} disabled={iaAreasBusy} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer'}}>{iaAreasBusy?'…':<>{IA_SPK}Sugerir con IA</>}</button>
-                  </div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                    {areasFirma.length===0&&<span style={{fontSize:11,color:C.muted}}>Sin áreas registradas en ventas.</span>}
-                    {areasFirma.map(a=>{ const on=addForm.areas.includes(a); return (
-                      <button key={a} onClick={()=>setAddForm(f=>({...f,areas:on?f.areas.filter(x=>x!==a):[...f.areas,a]}))} style={{fontSize:11,fontWeight:on?600:500,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted}}>{a}</button>
-                    )})}
-                  </div>
-                </div>
-              </>)})()}
-          </Modal>
-        )}
         {biSec==='cartera'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>

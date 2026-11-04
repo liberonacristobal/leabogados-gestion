@@ -4368,7 +4368,7 @@ export function AnticiposPanel({anticipos=[],clients=[],clientEntities=[],billin
             <button key={v} onClick={()=>setFil(v)} style={filterPill(fil===v)}>{l}</button>
           ))}
         </div>
-        <button onClick={()=>onNuevo&&onNuevo()} style={{padding:'6px 14px',borderRadius:20,background:C.greenText,color:'#fff',border:'none',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>+ Anticipo</button>
+        <button onClick={()=>onNuevo&&onNuevo()} style={{padding:'6px 14px',borderRadius:20,background:C.greenText,color:'#fff',border:'none',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Conciliar depósito</button>
       </div>
       {lista.length===0&&<div style={{textAlign:'center',color:C.textSoft,fontSize:13,padding:30}}>No hay anticipos {fil==='disponible'?'disponibles':fil==='consumido'?'consumidos':'registrados'}</div>}
       {Object.keys(grupos).map(cid=>{

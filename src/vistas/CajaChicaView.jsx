@@ -453,27 +453,8 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
         : <div style={{display:'flex',flexDirection:'column',gap:12}}>{panel.props.children[0]}{lista}{panel.props.children.slice(1)}</div>}
     </FlujoPagina>
   }
-  if(movOpen) return <MovilizacionView expenses={expenses} clients={clients} persona={me} origen='Caja chica' onBack={()=>setMovOpen(false)} onEdit={onEditExpense}/>
-  const _mv = movilizacionDatos(expenses, clients, {persona:me, anio:String(new Date().getFullYear())}), _mvMes=_mv.meses[0]
-  return (
-    <div style={{maxWidth:isDesktop?1120:820,margin:'0 auto'}}>{/* escritorio: PENDIENTES y CAJA lado a lado (1120). Móvil: columna + pestañas, idéntico. */}
-      {/* Confirmación post-liquidación (PASO 3) */}
-      {toast&&(
-        <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
-          <div style={{background:'#fff',border:'1px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+  if(asistOpen) return <FlujoPagina origen='Caja chica' titulo='Asistente de liquidación' onBack={()=>setAsistOpen(false)} maxW={900}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Liquidación registrada</div>
-              <div style={{fontSize:12,color:C.text,marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
-              {toast.correo&&<div style={{fontSize:11,color:toast.correo.ok?C.greenText:C.soonText,marginTop:5,fontWeight:600}}>{toast.correo.t}</div>}
-            </div>
-            <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}><Gl n='x'/></button>
-          </div>
-        </div>
-      )}
-      {/* ── Asistente IA de liquidación (modal centrado; no cierra al tocar fuera) ── */}
-      {asistOpen&&(
-        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:44,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
-            <div style={{margin:'-14px -16px'}}>
               {asistBusy&&(
                 <div style={{padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Revisando tus gastos pendientes…</div>
               )}
@@ -530,7 +511,24 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                 </>)
               })()}
             </div>
-        </Modal>
+      <div style={{marginTop:14}}><button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:44,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button></div>
+    </FlujoPagina>
+  if(movOpen) return <MovilizacionView expenses={expenses} clients={clients} persona={me} origen='Caja chica' onBack={()=>setMovOpen(false)} onEdit={onEditExpense}/>
+  const _mv = movilizacionDatos(expenses, clients, {persona:me, anio:String(new Date().getFullYear())}), _mvMes=_mv.meses[0]
+  return (
+    <div style={{maxWidth:isDesktop?1120:820,margin:'0 auto'}}>{/* escritorio: PENDIENTES y CAJA lado a lado (1120). Móvil: columna + pestañas, idéntico. */}
+      {/* Confirmación post-liquidación (PASO 3) */}
+      {toast&&(
+        <div style={{position:'fixed',top:12,left:0,right:0,zIndex:400,display:'flex',justifyContent:'center',padding:'0 16px',pointerEvents:'none'}}>
+          <div style={{background:'#fff',border:'1px solid #1D9E75',borderRadius:10,padding:'12px 16px',maxWidth:520,width:'100%',boxShadow:'0 6px 24px rgba(0,0,0,.15)',pointerEvents:'auto',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:C.greenText}}>Liquidación registrada</div>
+              <div style={{fontSize:12,color:C.text,marginTop:2}}>{toast.n} gasto{toast.n!==1?'s':''} liquidado{toast.n!==1?'s':''} por {fmtCLP(toast.total)}</div>
+              {toast.correo&&<div style={{fontSize:11,color:toast.correo.ok?C.greenText:C.soonText,marginTop:5,fontWeight:600}}>{toast.correo.t}</div>}
+            </div>
+            <button onClick={()=>setToast(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,lineHeight:1,padding:0}}><Gl n='x'/></button>
+          </div>
+        </div>
       )}
       <div style={{padding:'20px 20px 10px',position:'sticky',top:0,background:C.bgSoft,zIndex:10}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:12}}>

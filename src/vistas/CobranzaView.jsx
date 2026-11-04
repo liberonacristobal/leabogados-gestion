@@ -90,7 +90,7 @@ export function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sendin
         <button disabled={okDisabled} onClick={()=>onEnviar({bs:selBs, combinado:selBs.length>1?combinado:true, adjuntar, nota})} style={{background:okDisabled?C.done:C.accent,border:'none',borderRadius:10,padding:'9px 18px',fontSize:13,fontWeight:700,color:'#fff',cursor:okDisabled?'default':'pointer',display:'inline-flex',alignItems:'center',gap:7}}>{sending?<Spin/>:null}{sending?'Enviando…':`Enviar ${nCorreos>1?`(${nCorreos})`:'recordatorio'}`}</button>
       </div>
   </>)
-  return asPage ? _body : <Modal fullscreen fsMaxWidth={isDesktop?900:640} title='Recordatorio de cobro' onClose={onClose}>{_body}</Modal>
+  return _body
 }
 
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
