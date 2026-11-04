@@ -170,7 +170,7 @@ const PILL = {
   frm: { t: 'Formulario listo', bg: C.azulBg, c: C.azulInfo },
   cnf: { t: 'Cliente confirmó', bg: C.azulBg, c: C.azulInfo },
 }
-const TABS = [['reg', 'Por registrar'], ['esp', 'Esperando'], ['rec', 'Recibidas']]
+const TABS = [['reg', 'Por registrar'], ['esp', 'En curso'], ['rec', 'Recibidas']]
 const segBtn = on => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.bgSoft, color: on ? '#fff' : C.muted, fontFamily: 'inherit' })
 
 // modo 'pagina' = el panel completo (compuerta, esperando y recibidas); modo 'resumen' = no dibuja nada y entrega los conteos (onResumen) para la tarjeta de Gastos.
