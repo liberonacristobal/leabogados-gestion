@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { BRAND, C, Gl, SEC_LBL, _normTxt, fmtFechaDMY, fmtN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Buscador, MESES, Modal, TaskPreview, _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre } from '../lib/compartido.jsx'
+import { Buscador, MESES,   _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre } from '../lib/compartido.jsx'
 
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
 // hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
@@ -62,7 +62,6 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
   const [grpCerrado,setGrpCerrado] = useState({})          // grupos por urgencia plegados (venc/sem/mas)
   const [verTodasVenc,setVerTodasVenc] = useState(false)   // móvil: vencidas muestra 3 + '+N más'
   const [asigPersOpen,setAsigPersOpen] = useState({})
-  const [preview,setPreview] = useState(null)
   // Popup flotante de detalle (hover en desktop / long-press en móvil) sobre las tareas del calendario
   const [hoverTask,setHoverTask] = useState(null)
   const [hoverPos,setHoverPos] = useState({x:0,y:0})
@@ -157,7 +156,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
     ] : []
     return (
       <div key={t.id} style={{marginBottom:5}}><FilaDeslizable acciones={acciones}>
-      <div onClick={()=>(onPreview||setPreview)(t)} className='tk-card' {...(dnd?{onPointerDown:dnd.onPointerDown}:{})} style={{...(dnd?dnd.style:{}),background:C.card,borderRadius:8,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:mover&&isDesktop?'grab':'pointer'}}>
+      <div onClick={()=>onPreview(t)} className='tk-card' {...(dnd?{onPointerDown:dnd.onPointerDown}:{})} style={{...(dnd?dnd.style:{}),background:C.card,borderRadius:8,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:mover&&isDesktop?'grab':'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>
@@ -422,7 +421,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
               <button onClick={()=>setSelDay(null)} style={{marginLeft:'auto',background:'none',border:'none',color:C.textSoft,cursor:'pointer',fontSize:16,lineHeight:1,padding:0}}><Gl n='x'/></button>
             </div>
             {ts.map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); return (
-              <div key={t.id} onClick={()=>(onPreview||setPreview)(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+              <div key={t.id} onClick={()=>onPreview(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:u.dot,flexShrink:0,marginTop:4}}/>
                 <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t.title}</div><div style={{fontSize:11,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
               </div>
@@ -536,13 +535,6 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
           </div>
         )
       })()}
-      {preview&&(
-        <Modal title='Detalle de tarea' onClose={()=>setPreview(null)}>
-          <TaskPreview task={preview} clients={clients} onClose={()=>setPreview(null)}
-            onEdit={t=>{setPreview(null);onEdit(t)}}
-            onComplete={t=>{onComplete(t);setPreview(null)}}/>
-        </Modal>
-      )}
   </>);
   // Desktop: banda de 4 KPIs (el pulso del día). En escritorio reemplaza al _hero; el móvil sigue con _hero intacto.
   const _kpiband = (()=>{ const tiles=[

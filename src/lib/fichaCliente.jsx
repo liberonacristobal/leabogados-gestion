@@ -1072,7 +1072,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                 {antDisp.length>0
                   ? <span style={{fontSize:11,fontWeight:600,color:C.soonText,background:C.soonBg,padding:'2px 9px',borderRadius:20}}>{antDisp.length} por facturar</span>
                   : <span/>}
-                <button onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{height:24,padding:'0 12px',borderRadius:8,background:'#fff',color:C.accent,border:`0.5px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer'}}>+ Registrar</button>
+                <button onClick={()=>onNuevoAnticipo&&onNuevoAnticipo()} style={{height:24,padding:'0 12px',borderRadius:8,background:'#fff',color:C.accent,border:`0.5px solid ${C.border}`,fontSize:11,fontWeight:600,cursor:'pointer'}}>Conciliar depósito</button>
               </div>
               {antSorted.length===0
                 ? <div style={{fontSize:12,color:C.textSoft,padding:'4px 0 2px'}}>Sin anticipos aún.</div>

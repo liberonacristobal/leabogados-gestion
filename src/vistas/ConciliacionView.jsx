@@ -2730,6 +2730,21 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
   const traspasosAuto = useMemo(()=> (movs||[]).filter(m=>{ const s=traspasoSweep(m); return s && s.gap<=7 }), [movs,concByMov])   // eslint-disable-line
   useEffect(()=>{ if(DEMO) return; traspasosAuto.forEach(m=>{ if(!ccAutoRef.current.has(m.id)){ ccAutoRef.current.add(m.id); marcarTraspasoInterno(m) } }) }, [traspasosAuto])   // eslint-disable-line
   // Conciliar varias = PÁGINA (antes modal): misma compuerta antes de tocar plata, con la foto de los calces y la bitácora del banco.
+  if(revSugOpen) return <FlujoPagina origen='Banco' titulo='Identificar por nombre' onBack={()=>setRevSugOpen(false)} maxW={900}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
+              {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
+              {sugeridosId.map(s=>{ const on=revSugSel.has(s.mov.id); return (
+                <div key={s.mov.id} onClick={()=>setRevSugSel(p=>{const n=new Set(p);n.has(s.mov.id)?n.delete(s.mov.id):n.add(s.mov.id);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
+                  <span style={{width:18,height:18,borderRadius:8,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:C.text,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.mov.nombre_contraparte||'—'}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{s.mov.fecha?fmtFechaDMY(s.mov.fecha):''} · {fmt(s.mov.monto)}</div>
+                  </div>
+                  <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>→ {cmap[s.cid]||'Cliente'}</span>
+                </div>
+              )})}
+    <div style={{marginTop:14}}><div style={{display:'flex',gap:8}}><button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button><button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:44,borderRadius:10,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button></div></div>
+  </FlujoPagina>
   if(loteConfirm) return <div style={isDesktop?{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}:undefined}><FlujoPagina origen='Banco' titulo='Conciliar varias' onBack={()=>!loteBusy&&setLoteConfirm(null)} maxW={900}>
     {loteBusy&&<div style={{background:C.azulBg,color:C.accent,borderRadius:10,padding:'9px 12px',fontSize:13,fontWeight:600,marginBottom:10}}>Conciliando {loteProg} de {loteConfirm.length}…</div>}
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}><ConciliarLoteModal rows={loteConfirm} cmap={cmap} clients={clients} onClose={()=>!loteBusy&&setLoteConfirm(null)} onConfirm={(sel)=>conciliarLote(sel)}/></div>
@@ -3980,22 +3995,6 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
         </div>
         </>}
       </div>
-      {revSugOpen&&(
-        <Modal title='Identificar por nombre' fullscreenOnMobile onClose={()=>setRevSugOpen(false)} footer={<div style={{display:'flex',gap:8}}><button onClick={()=>setRevSugOpen(false)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button><button disabled={revSugBusy||revSugSel.size===0} onClick={identificarLote} style={{flex:2,height:44,borderRadius:10,border:'none',background:revSugSel.size===0?C.done:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:revSugSel.size===0?'default':'pointer'}}>{revSugBusy?'Identificando…':`Identificar ${revSugSel.size}`}</button></div>}>
-            <div style={{fontSize:11,color:C.muted,marginBottom:6}}>Abonos con un cliente sugerido por nombre único — confirma los correctos.</div>
-              {sugeridosId.length===0&&<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:24}}>Sin sugerencias pendientes.</div>}
-              {sugeridosId.map(s=>{ const on=revSugSel.has(s.mov.id); return (
-                <div key={s.mov.id} onClick={()=>setRevSugSel(p=>{const n=new Set(p);n.has(s.mov.id)?n.delete(s.mov.id):n.add(s.mov.id);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
-                  <span style={{width:18,height:18,borderRadius:8,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,color:C.text,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.mov.nombre_contraparte||'—'}</div>
-                    <div style={{fontSize:10,color:C.muted}}>{s.mov.fecha?fmtFechaDMY(s.mov.fecha):''} · {fmt(s.mov.monto)}</div>
-                  </div>
-                  <span style={{fontSize:11,color:C.greenText,fontWeight:600,flexShrink:0,maxWidth:140,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>→ {cmap[s.cid]||'Cliente'}</span>
-                </div>
-              )})}
-        </Modal>
-      )}
       {ccRevOpen && <Modal fullscreen fsMaxWidth={720} title={<span style={{color:C.accent}}>Revisión de caja chica</span>} onClose={()=>setCcRevOpen(false)}>
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
