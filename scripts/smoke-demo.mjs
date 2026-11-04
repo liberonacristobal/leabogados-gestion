@@ -18,7 +18,7 @@ const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', '
   'repricing', 'cartera', 'presupuestoOficina', 'socios', 'panelSocios', 'informeMes', 'proveedores', 'subarriendo', 'resultadoAnio', 'facturasDelMes', 'estadoResultados',
   'flujoCaja', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'misComisiones', 'porCobrarMios']
 // Páginas y ventanas que se abren sin datos (desde menú o tarjetas).
-const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']
+const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional', 'pdfupload', 'drive', 'importExcel', 'gmailContactos', 'gmailTareas']
 // Detalles con datos: los tres primeros de cada tipo (ficha del cliente, venta, factura, gasto, tarea).
 const DETALLES = ['cliente', 'venta', 'factura', 'gasto', 'tarea']
 const VISTAS = [['escritorio', 1280, 900], ['celular', 375, 812]]

@@ -1,3 +1,4 @@
+- 2026-11-04 · Modales → páginas: Subir facturas PDF, Importar desde Drive, Importar Excel y Revisar Gmail (contactos y tareas); se quita el formulario «Nuevo cliente» del rol limitado, que nada abría.
 - 2026-11-04 · Modales → páginas: Asistente de liquidación (Caja chica), Agregar novedad SII (Inteligencia) e Identificar por nombre (Conciliación); se quita el aviso «Anticipo» (los botones llevan directo a Conciliación como «Conciliar depósito») y el código muerto de Detalle de tarea y Recordatorio de cobro.
 - 2026-11-04 · Modales → páginas: Anticipo, Rechazar propuesta y Primeras tareas ahora son páginas con «← origen» (molde `flujo`), sin panel flotante; el informe de formato y la prueba de la demo las recorren.
 - 2026-11-04 · Informe de formato cubre las seis pestañas de cada proyecto de Cartera (Resumen, Plan, Calendario, Tareas, Equipo, Bitácora) en 1280, 1024 y 375 px: sin hallazgos; glosa del banco en Conciliación se lee completa.
