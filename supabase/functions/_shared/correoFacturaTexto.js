@@ -98,3 +98,16 @@ export function saludoPara({ para, contactos, aprendido, generoF, esPersona }) {
   if (!nombre || nrm(nombre) === nrm(local) || !esPersona(nombre)) return 'Estimados,'   // sin nombre conocido (o el «nombre» es el propio correo)
   return `${generoF(nombre) ? 'Estimada' : 'Estimado'} ${nombre.split(/\s+/)[0]},`
 }
+
+/**
+ * Frase que avisa que una o más facturas del envío ya están pagadas (la agrega quien envía, con un botón; nunca sola).
+ * @param {string[]} folios folios ya pagados @param {string} [lang]
+ */
+export function notaPagadas(folios, lang = 'es') {
+  const l = (folios || []).map(f => String(f || '').trim()).filter(Boolean)
+  if (!l.length) return ''
+  const y = lang === 'en' ? 'and' : 'y'
+  const lista = unir(l, y)
+  if (lang === 'en') return l.length === 1 ? `Invoice No. ${lista} has already been paid.` : `Invoices No. ${lista} have already been paid.`
+  return l.length === 1 ? `La factura N° ${lista} ya se encuentra pagada.` : `Las facturas N° ${lista} ya se encuentran pagadas.`
+}
