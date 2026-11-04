@@ -48,3 +48,8 @@ entrypoint = "./functions/pendientes-semanal/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/tu-semana/index.ts"
+
+[functions.gmail-lectura]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/gmail-lectura/index.ts"

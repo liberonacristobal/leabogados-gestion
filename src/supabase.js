@@ -102,6 +102,26 @@ export const saveDriveRefresh = async (refresh_token, email) => {
   try { const { data, error } = await supabase.functions.invoke('calendario-conectar', { body: { refresh_token, destino: 'drive' } }); return !error && !!data?.ok } catch (_) { return false }
 }
 
+// «Mi Gmail»: conexión de lectura de los correos ENVIADOS de cada persona. prompt:consent fuerza a Google a emitir un refresh token, que al volver se
+// guarda en gmail_conexiones por la función gmail-lectura (nunca en drive_auth: no debe pisar la conexión de la oficina). La marca lleva quién la inició.
+export const connectGmailPersonal = async () => {
+  let quien = ''; try { quien = (await supabase.auth.getSession())?.data?.session?.user?.email || '' } catch (_) {}
+  try { localStorage.setItem('conectar_gmail', Date.now() + '|' + quien.toLowerCase()) } catch (_) {}
+  return supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      queryParams: { hd: BRAND.emailDominio, access_type: 'offline', prompt: 'consent' },
+      scopes: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events',
+      redirectTo: window.location.origin,
+    },
+  })
+}
+// Acciones de la función gmail-lectura (guardar · estado · estados · leer · desconectar). Devuelve null si no respondió.
+export const gmailLlamar = async (accion, extra = {}) => {
+  if (DEMO) return accion === 'estados' ? { ok: true, filas: [] } : { ok: true, estado: null, ultimo_ok: null }
+  try { const { data, error } = await supabase.functions.invoke('gmail-lectura', { body: { accion, ...extra } }); return error ? null : data } catch (_) { return null }
+}
+
 export const signOut = () => supabase.auth.signOut()
 
 export const getSession = () => supabase.auth.getSession()

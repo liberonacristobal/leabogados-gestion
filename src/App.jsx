@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { _SOCIO_RET } from './lib/compartido.jsx'
 import { tonoMargen } from './lib/compartido.jsx'
 import { conciliarVentasSaldadas, fechaHoraCL, TAB_LABELS } from './lib/compartido.jsx'
+import { estadoConexion } from '../supabase/functions/_shared/gmailLectura.js'
 import { MEDIOS_MOV, MEDIO_CON_DETALLE, medioMovDe, glosaMovilizacion, FloatFld, CATS_GASTO, useDeQueAprendido, deQueOpciones, subOtro } from './lib/compartido.jsx'
 import { clientesParecidos, _tipoDupLbl, Sel, Txt, PaginaSobre } from './lib/compartido.jsx'
 import { normRut } from './lib/compartido.jsx'
@@ -26,7 +27,7 @@ import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
   getClients, getBilling, selectAll,
   getClientEntities, upsertClientEntity, deleteClientEntity, getAllEntities,
-  getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh, connectCalendarioEstudio, saveCalendarioRefresh,
+  getDriveToken, connectDrive, saveDriveToken, connectDrivePermanente, saveDriveRefresh, connectCalendarioEstudio, saveCalendarioRefresh, connectGmailPersonal, gmailLlamar,
   upsertClient, deleteClient as dbDeleteClient,
   upsertBilling, updateBillingStatus, DEMO, alFalloDeEscritura
 } from './supabase'
@@ -53,6 +54,7 @@ import { RendicionModal, DevolucionEmailModal, RendicionEmailModal, rendicionPdf
 import { ContactoTab, EstadoCuentaTab, AsignarProyectoRS, CotejoVenta, FinancieroTab, FotoCliente, CausaFila, CausasVenta, PropiedadesVenta, DocumentosDrive } from './lib/fichaCliente.jsx'
 import { PorSocioVista } from './lib/porSocio.jsx'
 const ClienteDriveImporter = lazyVista(() => import('./vistas/ClienteDriveImporter.jsx'), 'ClienteDriveImporter')
+const MiGmailView = lazyVista(() => import('./vistas/MiGmailView.jsx'), 'MiGmailView')
 const SubarriendoView = lazyVista(() => import('./vistas/SubarriendoView.jsx'), 'SubarriendoView')
 const SolicitarFondosModal = lazyVista(() => import('./vistas/SolicitarFondosModal.jsx'), 'SolicitarFondosModal')
 const ImportFacturasExcel = lazyVista(() => import('./vistas/ImportFacturasExcel.jsx'), 'ImportFacturasExcel')
@@ -200,6 +202,8 @@ function DialogHost(){
   </Modal>
 }
 
+// Marca de «Conectar mi Gmail» (vence a los 10 min): quién la inició. Se lee UNA vez al cargar la página, como la del calendario.
+const _gmailPend = (()=>{ try{ const [t,q]=String(localStorage.getItem('conectar_gmail')||'').split('|'); return Date.now()-Number(t||0)<10*60*1000 ? {email:(q||'').toLowerCase(),hecho:false} : null }catch(_){ return null } })()
 // Marca del ingreso «Conectar calendario» (vence a los 10 min): esa cuenta no es miembro, así que no se le evalúa el rol por ninguna vía.
 const _marcaCalendario=()=>{ try{ const [t,q]=String(localStorage.getItem('conectar_calendario')||'').split('|'); return Date.now()-Number(t||0)<10*60*1000 ? (q||'*') : null }catch(_){ return null } }
 // Se lee UNA vez al cargar la página: al volver de Google supabase-js dispara varios eventos de sesión seguidos y el primero borraba la marca,
@@ -5801,6 +5805,12 @@ export default function App() {
   const [session,setSession]=useState(null)
   const [loadingAuth,setLoadingAuth]=useState(true)
   const [bootSlow,setBootSlow]=useState(false)   // arranque tarda >10s (sesión o rol sin resolver) → ofrecer Recargar, nunca dejar al usuario atrapado
+  const [gmailEst,setGmailEst]=useState(null)   // {estado, ultimo_ok, error} de la conexión «Mi Gmail» de quien entró (null = sin conectar)
+  const [gmailMsg,setGmailMsg]=useState('')
+  const refrescarGmail=useCallback(async()=>{ const r=await gmailLlamar('estado'); if(r?.ok) setGmailEst(r.estado?{estado:r.estado,ultimo_ok:r.ultimo_ok,error:r.error}:null) },[])
+  const conectarGmail=useCallback(()=>{ setGmailMsg(''); connectGmailPersonal() },[])
+  const leerGmail=useCallback(async()=>{ setGmailMsg(''); const r=await gmailLlamar('leer'); if(r?.ok){ setGmailEst(r.estado?{estado:r.estado,ultimo_ok:r.ultimo_ok,error:r.error}:null); if(!r.lectura) setGmailMsg('La lectura falló: '+String(r.error||'sin detalle').slice(0,160)) } else setGmailMsg('No se pudo leer ahora. Vuelve a intentarlo.') },[])
+  const desconectarGmail=useCallback(async()=>{ const r=await gmailLlamar('desconectar'); if(r?.ok){ setGmailEst(null); setGmailMsg('') } else setGmailMsg('No se pudo desconectar. Vuelve a intentarlo.') },[])
   const [calMsg,setCalMsg]=useState('')   // resultado de «Conectar calendario»: esa cuenta (contacto@) solo guarda su permiso de Calendar y sale
   const [accessDenied,setAccessDenied]=useState(false)   // autenticó pero no está invitado (sin fila en miembros ni user_roles) → cerrar sesión + avisar, no auto-crear
   const [user,setUser]=useState(null)
@@ -6128,11 +6138,13 @@ export default function App() {
       setDeepLinkTick(t=>t+1) }
     navigator.serviceWorker.addEventListener('message',on); return ()=>navigator.serviceWorker.removeEventListener('message',on) },[])
   // Espera a que userRole esté resuelto (arranca null, async) para no borrar el parámetro antes de conocer el rol.
+  useEffect(()=>{ if(user&&userRole) refrescarGmail() },[user?.email,userRole,tab==='migmail'])   // eslint-disable-line
   useEffect(()=>{ if(DEMO||!user||!userRole) return
     try{ const ir=new URLSearchParams(window.location.search).get('ir'); if(!ir) return
       logActividad('correo.clic',{detalle:{title:`Abrió «${ir}» desde un correo o aviso`,destino:ir},completo:true})   // mide qué correos llevan a una acción (correos-resumen)
       try{ window.history.replaceState({},'',window.location.pathname) }catch(_){}
       // Vistas del equipo limitado (correo "Tu semana"): disponibles para todos.
+      if(ir==='migmail') return setTab('migmail')   // aviso de Gmail desconectado
       if(ir==='gastos') return setTab('expenses')
       if(ir==='notaria'){ setTab('expenses'); return setExpNav('deuda') }   // correo › Deuda de notaría
       if(ir==='rendir'){ setTab('expenses'); return setExpNav('rendirPedir') }   // correo de cierre › Rendir a clientes · Rendir y pedir
@@ -6289,6 +6301,9 @@ export default function App() {
             setCalMsg(ok?'Calendario conectado con '+email+'. Entra ahora con tu cuenta.':'No se pudo guardar la conexión del calendario. Vuelve a intentarlo.')
             try{ await signOut() }catch(_){}
             try{ localStorage.removeItem('conectar_calendario') }catch(_){}; return }   // la cuenta del calendario no es un miembro: no se evalúa el rol ni se deja la sesión abierta
+          else if(prt&&_gmailPend&&!_gmailPend.hecho&&_gmailPend.email===String(email).toLowerCase()){   // «Mi Gmail»: el permiso es de esta persona; NO se guarda como el de la oficina
+            _gmailPend.hecho=true; try{ localStorage.removeItem('conectar_gmail') }catch(_){}
+            gmailLlamar('guardar',{refresh_token:prt}).then(r=>{ if(r?.ok){ setGmailEst(r.estado?{estado:r.estado,ultimo_ok:r.ultimo_ok,error:r.error}:null); setGmailMsg(r.lectura?'':'Quedó conectado, pero la primera lectura falló: '+String(r.error||'sin detalle').slice(0,160)) } else setGmailMsg('No se pudo guardar la conexión. Vuelve a intentarlo.'); setTab('migmail') }) }
           else saveDriveRefresh(prt, email) }   // conexión permanente de Drive (plan B)
         if(event==='TOKEN_REFRESHED') return   // renovar el token no cambia el rol (y no debe mandar al limitado a Tareas cada hora)
         let u=null; try{ u = await loadUserRole(email) }catch(_){}
@@ -6322,7 +6337,7 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'||tab==='causas'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
+    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='migmail'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'||tab==='causas'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
     if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
@@ -8524,6 +8539,11 @@ export default function App() {
                   Novedades
                   {novNuevas.length>0&&<span style={{marginLeft:'auto',minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:C.greenText,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{novNuevas.length}</span>}
                 </div>
+                <div style={ddItem} onClick={()=>{setMenuOpen(false);navTo({tab:'migmail'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                  <span style={{display:'flex',color:'#99ABB4',fontSize:16}}><Gl n='mail' w={2}/></span>
+                  Mi Gmail
+                  {(()=>{ const k=estadoConexion(gmailEst).k; return k==='sin'?null:<span style={{marginLeft:'auto',width:8,height:8,borderRadius:'50%',background:k==='ok'?C.greenText:k==='atrasada'?C.soonText:C.overdueText}} title={k==='ok'?'Al día':k==='atrasada'?'Atrasado':'Hay que reconectar'}/> })()}
+                </div>
                 {userRole==='admin'&&<>
                 <div style={ddItem} onClick={()=>{setMenuOpen(false);setModal({type:'conciliaHub'})}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><line x1='3' y1='21' x2='21' y2='21'/><line x1='3' y1='10' x2='21' y2='10'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='12' y1='14' x2='12' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></svg>
@@ -8684,7 +8704,7 @@ export default function App() {
             {tab==='editCliente'&&<EditClientePage client={editClientId==='__new__'?null:(clients.find(c=>String(c.id)===String(editClientId))||null)} sales={sales} clients={clients} saving={saving} onSave={handleSaveClient} onDelete={handleDeleteClient} onOpenExisting={c=>handleOpenClientFicha(c.id)} onLinkDriveFolder={handleLinkDriveFolder} onBack={goBack}/>}
             {tab==='inteligencia'&&userRole==='admin'&&<IntelligenceView sales={sales} billing={billing} clients={clients} clientEntities={clientEntities} expenses={expenses} terceros={terceros} anticipos={anticipos} fantasmaIds={fantasmaAltaIds} setTab={setTab} navTo={navTo} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onOpenClientFicha={handleOpenClientFicha} onOpenSale={(s)=>setModal({type:'sale',data:s})}/>}
             {tab==='sales'&&userRole==='admin'&&<SalesView sales={sales} clients={clients} clientEntities={clientEntities} billing={billing} anticipos={anticipos} terceros={terceros} onEdit={s=>setModal({type:'sale',data:s})} onAdd={()=>setModal({type:'sale',data:null})} onAddPropuesta={()=>setModal({type:'sale',data:{status:'Propuesta'}})} onRechazar={handleRechazarPropuesta} onAprobarPropuesta={handleAprobarPropuesta} onDevolverPropuesta={handleDevolverPropuesta} onActivar={handleActivarPropuesta} onOpenClientFicha={handleOpenClientFicha} onIngestPropuesta={handleIngestPropuestaDrive}/>}
-            {tab==='billing'&&userRole==='admin'&&<BillingView billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>navTo({tab:'conciliacion'})} onProveedores={(provId)=>navTo(provId?{tab:'proveedores',provId}:{tab:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const nb=await getBilling().catch(()=>null);if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} onReclasificarTercero={handleReclasificarTercero} onBuscarSII={handleBuscarSII} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)} onVolver={goBack} origenVolver={navStack.length?origenNav('Inicio'):null}/>}
+            {tab==='billing'&&userRole==='admin'&&<BillingView gmailEst={gmailEst} onGmail={()=>navTo({tab:'migmail'})} billing={billing} fantasmaIds={fantasmaAltaIds} clients={clients} sales={sales} clientEntities={clientEntities} user={user} setBilling={setBilling} anticipos={anticipos} terceros={terceros} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onNuevoAnticipo={()=>navTo({tab:'conciliacion'})} onProveedores={(provId)=>navTo(provId?{tab:'proveedores',provId}:{tab:'proveedores'})} onConciliarTerceros={handleConciliarTerceros} onCubrirCuotas={handleCubrirCuotas} onDescubrirCuotas={handleDescubrirCuotas} onDeshacerConsumo={handleDeshacerConsumoAnticipo} onFusionarAnticipos={handleFusionarAnticipos} onAbrirAnticipo={setAnticipoPanel} onFacturarBloque={handleFacturarBloqueAnticipo} onFacturarAdelantos={handleFacturarAdelantos} onAssignClient={handleAssignClient} onStatusChange={handleStatusChange} onRevertirPago={handleRevertirPago} onReactivar={handleReactivarFactura} onDelete={handleDeleteBillingBulk} onAdd={()=>setModal({type:'billing',data:null})} onEdit={b=>setModal({type:'billing',data:b})} onImport={()=>setModal({type:'drive',data:null})} onImportExcel={()=>setModal({type:'importExcel',data:null})} onUpload={()=>setModal({type:'pdfupload',data:null})} onEmitir={handleEmitirProgramada} onAnular={handleAnularFactura} onSetVentaAnio={handleSetVentaAnio} onReprocesarSinAnio={handleReprocesarSinAnio} onAssignSeries={handleAssignSeries} onDepurarCobradas={handleDepurarCobradas} onRefresh={async()=>{const nb=await getBilling().catch(()=>null);if(nb)setBilling(nb)}} onConciliar={(c)=>setModal({type:'conciliar',data:{client:c}})} onOpenClientFicha={handleOpenClientFicha} onReplaceProgramada={handleReplaceProgramada} onIngresarSII={handleIngresarSII} onCrearVentaRapida={handleCrearVentaRapida} onFacturaTercero={handleFacturaTercero} onReclasificarTercero={handleReclasificarTercero} onBuscarSII={handleBuscarSII} proveedores={proveedores} onSaveProveedor={handleSaveProveedor} onIrConciliacion={()=>navTo({tab:'conciliacion'})} onOpenPorSocio={()=>setModal({type:'porSocio'})} onIrCobranza={()=>navTo({tab:'cobranza'})} onConsumeAnticipos={handleConsumeAnticipos} onCrearVentaForm={(item)=>setModal({type:'sale',data:{client_id:item.clienteId,title:(item.glosa||item.row?.concepto||'').split('—')[0].trim()||undefined}})} intent={billingIntent} onIntentDone={()=>setBillingIntent(null)} onVolver={goBack} origenVolver={navStack.length?origenNav('Inicio'):null}/>}
             {tab==='tasks'&&<>{userRole==='admin'&&navStack.length>0&&<div style={{padding:'6px 2px 0'}}><button onClick={goBack} style={{border:'none',background:'none',color:C.accent,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5,fontSize:14,fontWeight:600,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>{TAB_LABELS[navStack[navStack.length-1].tab]||'Volver'}</button></div>}<TasksOnlyView tasks={tasks} clients={clients} sales={sales} expenses={expenses} pettyCash={pettyCash} rendiciones={rendiciones} onAddTask={(preDue)=>setModal({type:'task',data:(typeof preDue==='string'&&preDue)?{preDue}:null})} onEdit={t=>setModal({type:'task',data:t})} onComplete={completeTaskWithGate} onPreview={t=>setModal({type:'taskPreview',data:t})} onReprogramar={handleReprogramarTask} currentUserName={user?.name} setTab={setTab} navTo={navTo} isAdmin={userRole==='admin'} onOpenClientFicha={handleOpenClientFicha}/></>}
             {tab==='conciliacion'&&userRole==='admin'&&<ConciliacionView setTercerosRoot={setTerceros} openCajaChicaRev={ccRevFocus} sales={sales} rendiciones={rendiciones} setRendiciones={setRendiciones} onCajaChicaRevConsumed={()=>setCcRevFocus(false)} onOpenProveedor={id=>navTo({tab:'proveedores',provId:id})} onOpenFactura={b=>setModal({type:'billing',data:b})} clients={clients} clientEntities={clientEntities} billing={billing} setBilling={setBilling} anticipos={anticipos} setAnticipos={setAnticipos} expenses={expenses} setExpenses={setExpenses} proveedores={proveedores} pettyCash={pettyCash} setPettyCash={setPettyCash} user={user} focusMovId={concFocus} onFocusConsumed={()=>setConcFocus(null)} focusBuscar={concBuscar} onBuscarConsumed={()=>setConcBuscar(null)} openProp={openConcProp} onPropOpened={()=>setOpenConcProp(false)} onClose={goBack} onOpenClientFicha={handleOpenClientFicha} onCotejarSII={(mes)=>navTo({tab:'billing',billingIntent:/^\d{4}-\d{2}$/.test(mes||'')?('cotejo:'+mes):'cotejo'})} onBuscarSII={handleBuscarSII} onIngresarSII={handleIngresarSII} onFacturaPagada={handleConciliarTerceros}/>}
             {tab==='misComisiones'&&userRole==='limited'&&miProv&&<ProveedoresView soloProvId={miProv.id} proveedores={[miProv]} terceros={terceros} setTerceros={setTerceros} billing={billing} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} user={user} onOpenClientFicha={handleOpenClientFicha} onBack={goBack} origen={origenLim||origenNav('Mi cartera')}/>}
@@ -8701,6 +8721,7 @@ export default function App() {
             </div>}
             {tab==='calendarioTrib'&&userRole==='admin'&&<CalendarioTributarioView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} expenses={expenses} user={user}/>}
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})} onOpenClientFicha={handleOpenClientFicha}/>}
+            {tab==='migmail'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Mi Gmail' onBack={goBack} maxW={760}><MiGmailView est={gmailEst} onConectar={conectarGmail} onLeer={leerGmail} onDesconectar={desconectarGmail} esAdmin={userRole==='admin'} mensaje={gmailMsg} isDesktop={isDesktop}/></FlujoPagina>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} onIrSinVenta={()=>navTo({tab:'billing',billingIntent:'porcompletar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
