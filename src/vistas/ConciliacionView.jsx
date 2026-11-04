@@ -2607,7 +2607,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       <div style={{maxWidth:D?860:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,padding:D?'14px 2px 12px':'16px 8px 10px'}}>
           <button onClick={onClose} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px 0 0'}}><Gl n='chevL'/></button>
-          <div style={{fontSize:D?22:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Conciliación bancaria</div>
+          <div style={{fontSize:D?20:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Conciliación bancaria</div>
           {loading&&<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>Cargando…</span>}
         </div>
         <CartolaGapCard cartolaHasta={cartolaHasta} onCargar={()=>{setHubOpen(false);setVerCarga(true)}}/>

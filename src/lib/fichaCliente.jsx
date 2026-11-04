@@ -1363,7 +1363,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
     return <div key={k} style={{borderTop:`1px solid ${C.track}`}}>
       <div onClick={()=>!hayFiltro&&toggle(setAb,k)} style={{display:'flex',alignItems:'center',gap:8,padding:nivel&&D?'10px 12px 10px 30px':'10px 12px',background:nivel?C.bgSoft:undefined,cursor:'pointer'}}>
         <span style={{fontSize:12,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-        <span style={{fontSize:nivel?13:13.5,fontWeight:700,color:nivel?C.text:C.accent,flex:1,minWidth:0}}>{t}</span>
+        <span style={{fontSize:nivel?13:14,fontWeight:700,color:nivel?C.text:C.accent,flex:1,minWidth:0}}>{t}</span>
         <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{xs.length} rol{xs.length!==1?'es':''}</span>
         {D&&monto(xs)}
       </div>

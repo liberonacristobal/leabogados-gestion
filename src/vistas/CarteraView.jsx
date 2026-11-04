@@ -962,7 +962,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
           <div style={{ ...card, padding:0, overflow:'hidden' }}>
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', borderBottom:`1px solid ${C.border}` }}>
               <div style={{ flexShrink:0 }}>
-                {avancePct!=null ? <><div style={{ fontSize:30, fontWeight:800, color:C.accent, letterSpacing:'-.02em', lineHeight:1 }}>{avancePct}%</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>avance</div></> : <><div style={{ fontSize:17, fontWeight:700, color:C.muted, lineHeight:1.1 }}>Sin plan</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>ármalo en Plan</div></>}
+                {avancePct!=null ? <><div style={{ fontSize:30, fontWeight:800, color:C.accent, letterSpacing:'-.02em', lineHeight:1 }}>{avancePct} %</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>avance</div></> : <><div style={{ fontSize:17, fontWeight:700, color:C.muted, lineHeight:1.1 }}>Sin plan</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>ármalo en Plan</div></>}
               </div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:C.text }}>{hs.length ? (nextPaso?`Siguiente: ${nextPaso.titulo}`:'Plan al día') : 'Aún sin pasos — ármalo en la pestaña Plan'}</div>
@@ -1447,7 +1447,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
           {/* Protagonista: cumplimiento de plazos, con a tiempo / tarde anidados */}
           <div style={card}>
             <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px' }}>
-              <div style={{ flexShrink:0 }}><div style={{ fontSize:32, fontWeight:800, color:cumpl==null?C.muted:cumpl>=80?C.greenText:cumpl>=50?'#E09B2D':C.overdueText, letterSpacing:'-.02em', lineHeight:1 }}>{cumpl==null?'—':`${cumpl}%`}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>plazos cumplidos</div></div>
+              <div style={{ flexShrink:0 }}><div style={{ fontSize:32, fontWeight:800, color:cumpl==null?C.muted:cumpl>=80?C.greenText:cumpl>=50?'#E09B2D':C.overdueText, letterSpacing:'-.02em', lineHeight:1 }}>{cumpl==null?'—':`${cumpl} %`}</div><div style={{ fontSize:10, fontWeight:600, color:C.muted, marginTop:2 }}>plazos cumplidos</div></div>
               <div style={{ flex:1, minWidth:0, fontSize:12, color:C.muted, lineHeight:1.5 }}>De {conFecha} paso{conFecha!==1?'s':''} completado{conFecha!==1?'s':''} con plazo, <b style={{ color:C.greenText }}>{aTiempo} a tiempo</b> y <b style={{ color:C.overdueText }}>{tarde} tarde</b>.</div>
             </div>
             <div style={{ display:'flex', borderTop:`1px solid ${C.border}` }}>

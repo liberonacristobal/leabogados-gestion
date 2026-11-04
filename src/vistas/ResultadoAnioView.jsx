@@ -139,7 +139,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
         Ingresos − Costos − Comisiones = Resultado). Misma fuente: resultadoMes por mes. */}
     {(()=>{
       const num={fontVariantNumeric:'tabular-nums'}
-      const kLbl={fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
       const kt=(k,ic,[bg,fg],lab,val,sub,on,{sel,chev,big=true}={})=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
         {(isDesktop||big)&&<KpiIco n={ic} c={fg} soft={blanco}/>}
         <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?(big?26:22):(big?20:18),fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>}</div>
@@ -250,7 +250,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))
       const pct=bud>0?Math.abs(dv)/bud*100:0
       const per=maxM===12?String(yr):`ene–${MES_C[maxM-1]}`
-      const kLb={fontSize:isDesktop?10:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const kLb={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
       const kt=(k,ic,bg,fg,lab,val,sub)=>{ const blanco=bg===C.card; return <div key={k} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'13px 13px':'11px 10px',display:'flex',gap:isDesktop?11:8,alignItems:'center',minWidth:0}}>
         <KpiIco n={ic} c={fg} soft={blanco}/>
         <div style={{minWidth:0,flex:1}}><div style={{...kLb,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?20:18,fontWeight:800,color:fg,letterSpacing:-.5,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
@@ -259,13 +259,13 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       // Fila única para ambos formatos: escritorio = 4 columnas; celular = nombre con «ppto.» debajo, desvío y real a la derecha.
       const fila=(key,lab,b,r,{est,sub,open,on,tot:esTot,ppto}={})=>{ const d=r==null?null:r-b
         const nameCol=sub?C.muted:C.accent
-        if(isDesktop) return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,alignItems:'center',padding:sub?'5px 14px 5px 30px':'9px 14px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?11.5:12.5,fontVariantNumeric:'tabular-nums'}}>
+        if(isDesktop) return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,alignItems:'center',padding:sub?'5px 14px 5px 30px':'9px 14px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?12:13,fontVariantNumeric:'tabular-nums'}}>
           <span style={{fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}{on?<span style={{marginLeft:6,display:'inline-block',verticalAlign:'middle'}}>{chev(open)}</span>:null}</span>
           <span style={{textAlign:'right',color:sub?C.muted:C.text,fontWeight:esTot?800:500}}>{fmtMill(b)}</span>
           <span style={{textAlign:'right',color:sub?C.muted:C.text,fontWeight:esTot?800:600}}>{r==null?<span style={{color:C.done}}>{ppto||'—'}</span>:fmtMill(r)}</span>
           <span style={{textAlign:'right',fontWeight:sub?600:700,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
         </div>
-        return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:10,alignItems:'center',padding:sub?'6px 12px 6px 24px':'9px 12px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?11.5:12.5,fontVariantNumeric:'tabular-nums'}}>
+        return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:10,alignItems:'center',padding:sub?'6px 12px 6px 24px':'9px 12px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?12:13,fontVariantNumeric:'tabular-nums'}}>
           <span style={{minWidth:0}}><span style={{display:'block',fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}</span><span style={{display:'block',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>ppto. {fmtMill(b)}</span></span>
           <span style={{fontSize:12,fontWeight:700,textAlign:'right',minWidth:54,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
           <span style={{fontWeight:esTot?800:700,textAlign:'right',minWidth:58,color:sub?C.muted:C.text}}>{r==null?<span style={{color:C.done,fontWeight:400}}>{ppto||'—'}</span>:fmtMill(r)}</span>

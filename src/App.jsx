@@ -225,7 +225,7 @@ function LoginScreen({loading, denied, onRetry, calMsg}) {
         <span style={{display:'block',height:'11%',width:'68%',borderRadius:4,background:GREY}}/>
         <span style={{display:'block',height:'11%',width:'84%',borderRadius:4,background:GREY}}/>
       </div>
-      <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?27:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
+      <div style={{fontFamily:MONO,fontWeight:700,fontSize:sm?26:31,letterSpacing:'-.02em',color:INK}}>Firm<span style={{color:GRN}}>Desk</span></div>
       <div style={{fontFamily:MONO,fontSize:12,color:'#95A0A2',marginTop:8,marginBottom:denied?20:38}}>Every number, in its place.</div>
       {calMsg&&!denied&&<div style={{maxWidth:320,background:'#E8F6EF',border:'1px solid #BFE5D2',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#0E7A41',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>{calMsg}</div>}
       {denied&&<div style={{maxWidth:320,background:'#FDECEA',border:'1px solid #F3C9C4',borderRadius:12,padding:'11px 15px',fontSize:13,color:'#A3312B',marginBottom:22,lineHeight:1.5,textAlign:'center'}}>Tu cuenta no tiene acceso a FirmDesk. Pídele a un administrador de tu oficina que te invite y vuelve a entrar.</div>}
@@ -482,7 +482,7 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
   return (<div onClick={()=>onOpen&&onOpen(n)} style={{display:'flex',alignItems:'center',gap:compact?9:12,padding:compact?'11px 12px':'11px 18px',borderTop:first?'none':`1px solid ${C.bgSoft}`,cursor:onOpen?'pointer':'default',minWidth:0}}>
     {diaGrande(n.fecha)}
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:compact?13:13.5,fontWeight:600,color:C.text,lineHeight:1.3}}>{n.titulo}</div>
+      <div style={{fontSize:compact?13:14,fontWeight:600,color:C.text,lineHeight:1.3}}>{n.titulo}</div>
       <div style={{fontSize:12,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[n.area,equipo?'también al equipo':null].filter(Boolean).join(' · ')}</div>
     </div>
     {acciones||(onOpen&&<span style={{color:C.done,display:'flex',flexShrink:0}}><Gl n='chevron'/></span>)}
@@ -1599,7 +1599,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
     {procs&&<>
       <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',marginBottom:12}}>
         <div style={{...SEC_LBL}}>Procesos automáticos</div>
-        <div style={{fontSize:isDesktop?26:24,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</div>
+        <div style={{fontSize:isDesktop?26:26,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</div>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
           {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:12,fontWeight:600,color:c}}>{t}</span><span style={{fontSize:16,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
         </div>
@@ -1816,7 +1816,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
     </div>
 
     {/* KPIs (preponderantes): Resultado = Ingresos − Egresos, y su margen. Composición = las partes, en tarjetas chicas que SUMAN los KPIs. */}
-    {(()=>{ const kLbl={fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+    {(()=>{ const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
       const per = scope==='mes' ? `${MESNOM[selMR-1]} ${year}` : `ene–${MES_C[_curM-1]} ${year}`
       const estado = scope==='mes' ? (rMesSel?.cerrado?'cerrado':'provisorio') : 'al día'
       const egr = R.cos+R.com
@@ -1906,7 +1906,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
   const togBloque = k => { setAbierto(a=>a===k?null:k); setSub2(null) }
   const num={fontVariantNumeric:'tabular-nums'}
   const Sec = ({t,extra}) => <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 2px -4px'}}><span style={{...SEC_LBL,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span>{extra}</div>
-  const kLbl={fontSize:isDesktop?10:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+  const kLbl={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
   // Tarjeta del canon (estilo Inicio/Proveedores): ícono + etiqueta + cifra + 1 línea. Toda tarjeta es tocable.
   const kt = ({k,ic,tone,lab,val,sub,on,sel,chev,big}) => { const [bg,fg]=tone; const blanco=bg===C.card; return <div key={k} onClick={on} className='er-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:big?12:10,padding:big?(isDesktop?'14px':'11px 10px'):(isDesktop?'11px 12px':'10px'),display:'flex',gap:big?12:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
@@ -2025,7 +2025,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   // Molde Oficina (2026-10-17): 4 tarjetas de color (resultado) + «Composición» en tarjetas chicas (sus partes), cada una abre su lista.
   const sfTot=F.duda.monto+F.sinEmitir.monto
   const [morV,pfV]=redondearPartes([F.duda.monto,F.sinEmitir.monto],sfTot>=1e6?1e5:1e4,[0])   // las dos partes suman la tarjeta Trabajo impago; la morosa redondea normal, el ajuste va a Por facturar
-  const kLbl={fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+  const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
   const tog=f=>()=>{ setFil(v=>v===f?'todos':f); irA(cliRef) }
   const kt=(key,ic,[bg,fg],lab,val,sub,f)=>{ const blanco=bg===C.card, on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'flex-start',minWidth:0,cursor:go?'pointer':'default',outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
       <KpiIco n={ic} c={fg} soft={blanco}/>
@@ -2793,7 +2793,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
   const porFacturar = pend.reduce((a,b)=>a+(b.amount||0),0), nPaus = pend.filter(b=>b.status==='Pausada').length
   const hUF = ventaUF(sale,ufRef), hCLP = ventaCLP(sale,ufRef)
   const hon = sale.moneda==='CLP' ? (hCLP>0?fmt(Math.round(hCLP)):null) : (hUF>0?fmtUF(hUF):null)
-  const ln = (l,v,col,{sub=false,top=false,bold=false}={}) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:sub?'3px 0 3px 12px':'5px 0',borderTop:top?`1px solid ${C.track}`:'none',marginTop:top?4:0,fontSize:sub?12:12.5}}><span style={{color:sub?C.muted:C.text,fontWeight:bold?700:500}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
+  const ln = (l,v,col,{sub=false,top=false,bold=false}={}) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:sub?'3px 0 3px 12px':'5px 0',borderTop:top?`1px solid ${C.track}`:'none',marginTop:top?4:0,fontSize:sub?12:13}}><span style={{color:sub?C.muted:C.text,fontWeight:bold?700:500}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
   const ents = (clientEntities||[]).filter(e=>String(e.client_id)===String(sale.client_id))
   // Comisiones de la venta (fuente única comisionesVenta). Base del neto: lo facturado; si aún no hay facturas, el honorario.
   const com = comisionesVenta(sale, terceros, billing, ufRef)
@@ -4428,7 +4428,7 @@ function CausasEstudio({isDesktop, clients=[], user, onBack, origen, onOpenClien
     <PageHeader origen={origen||'Clientes'} onBack={onBack} titulo='Causas' right={<button onClick={revisarTodas} disabled={busy} style={{...chipBtn('soft'),color:C.accent}}>{busy?'Revisando…':D?'Revisar todas ahora':'Revisar todas'}</button>} style={{margin:D?'-12px -20px 12px':'-8px -16px 12px'}}/>
     {rows===null?<div style={{fontSize:12,color:C.muted}}>Cargando…</div>:<div style={{display:'flex',flexDirection:'column',gap:12}}>
       <div style={{...card,display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))'}}>
-        {[['Causas activas',(rows||[]).filter(c=>c.estado==='activa').length,C.text,'Cortes de Apelaciones y Suprema'],['En tabla',(rows||[]).filter(c=>c.estado==='activa'&&c.ultima_tabla?.fecha>=hoy).length,C.azulInfo,'próximas vistas'],['Por confirmar',(rows||[]).filter(c=>c.estado==='por_confirmar').length,C.soonText,'se agregan desde la venta']].map(([l,v,col,s],i)=><div key={l} style={{padding:D?'12px 16px':'10px 10px',borderLeft:i?`1px solid ${C.track}`:'none'}}><div style={{...SEC_LBL,fontSize:D?11:9.5,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:D?22:17,fontWeight:700,color:col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{v}</div>{D&&<div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap'}}>{s}</div>}</div>)}
+        {[['Causas activas',(rows||[]).filter(c=>c.estado==='activa').length,C.text,'Cortes de Apelaciones y Suprema'],['En tabla',(rows||[]).filter(c=>c.estado==='activa'&&c.ultima_tabla?.fecha>=hoy).length,C.azulInfo,'próximas vistas'],['Por confirmar',(rows||[]).filter(c=>c.estado==='por_confirmar').length,C.soonText,'se agregan desde la venta']].map(([l,v,col,s],i)=><div key={l} style={{padding:D?'12px 16px':'10px 10px',borderLeft:i?`1px solid ${C.track}`:'none'}}><div style={{...SEC_LBL,fontSize:D?11:10,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:D?20:17,fontWeight:700,color:col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{v}</div>{D&&<div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap'}}>{s}</div>}</div>)}
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <div style={{flex:D?'1 1 260px':'1 1 100%',display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',minWidth:0}}><SIcon n='search' s={14} c={C.done}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, carátula o rol' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%',minWidth:0}}/></div>
@@ -5215,7 +5215,7 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
       <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.4fr 1fr':'1fr',gap:10}}>
         <div style={{...card,padding:'14px 16px'}}>
           <div style={SEC_LBL}>Honorarios por cobrar</div>
-          <div style={{fontSize:isDesktop?26:24,fontWeight:800,color:C.accent,letterSpacing:-.5,marginTop:3,...num}}>{fmt(d.honor)}</div>
+          <div style={{fontSize:isDesktop?26:26,fontWeight:800,color:C.accent,letterSpacing:-.5,marginTop:3,...num}}>{fmt(d.honor)}</div>
           <div style={{display:'flex',gap:22,marginTop:10,paddingTop:9,borderTop:`1px solid ${C.bgSoft}`,fontSize:12}}>
             <span><span style={{color:C.muted}}>Vencido</span> <b style={{color:d.venc>0?C.overdueText:C.muted,...num}}>{fmt(d.venc)}</b></span>
             <span><span style={{color:C.muted}}>Al día</span> <b style={{color:C.accent,...num}}>{fmt(d.alDia)}</b></span>
@@ -5427,7 +5427,7 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
   if(asPage){
     // Página: el ajuste rebaja el saldo → se muestra en qué queda (fuente única fgCliente).
     const antes = fgCliente(expenses, client.id).saldo, despues = antes - m
-    const ln = (l,v,col,b) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'4px 0',fontSize:b?13:12.5,fontWeight:b?700:500,borderTop:b?`1px solid ${C.track}`:'none',marginTop:b?4:0,paddingTop:b?8:4}}><span style={{color:b?C.text:C.muted}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col}}>{v}</span></div>
+    const ln = (l,v,col,b) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'4px 0',fontSize:b?13:13,fontWeight:b?700:500,borderTop:b?`1px solid ${C.track}`:'none',marginTop:b?4:0,paddingTop:b?8:4}}><span style={{color:b?C.text:C.muted}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col}}>{v}</span></div>
     const saldoCard = <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
       <div style={{...SEC_LBL,marginBottom:4}}>Fondos</div>
       {ln('Antes',fmtSaldoG(antes),antes<0?C.overdueText:C.tealText)}
@@ -8518,6 +8518,7 @@ export default function App() {
              Zoom a nivel body (como el zoom del navegador: usa el viewport de referencia -> sin desborde horizontal ni romper alturas vh).
              Sube TODO ~8% de forma consistente (sidebar, contenido, modales) SIN tocar el movil (<1024) ni retocar px inline. */
           body{zoom:1.18}
+          @media (max-width:1279px){ body{zoom:1.06} }   /* pantallas de 1024–1279 px: con la barra lateral queda poco ancho útil; zoom menor para que las tarjetas y tablas no corten textos ni cifras */
           .bottomnav{display:none!important}
           /* Parte B: afordancia de hover (no existe en tactil). Wash translucido en filas + lift en tarjetas clickeables.
              box-shadow inset no pelea con el background inline (que a veces marca seleccion) -> seguro y universal. */

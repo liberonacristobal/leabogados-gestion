@@ -26,7 +26,7 @@ export function CxRow({sg='',label,extra,pill,val,kind,onClick,open,isDesk,tenue
   const tot=kind==='tot', res=kind==='res'||kind==='resNeg', sub=kind==='sub', fuerte=tot||res
   return (<div onClick={onClick} style={{display:'grid',gridTemplateColumns:isDesk?'16px minmax(0,1fr) auto 10px auto':'14px minmax(0,1fr) auto 10px auto',columnGap:6,alignItems:'center',padding:res?'12px 14px':sub?'7px 14px':'9px 14px',borderTop:fuerte?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:res?'#EDF1F4':sub?C.bgSoft:undefined,cursor:onClick?'pointer':'default'}}>
     <span style={{fontSize:14,fontWeight:700,color:fuerte?C.accent:C.muted,textAlign:'center'}}>{sg}</span>
-    <span style={{fontSize:sub?11.5:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,display:'flex',alignItems:'baseline',gap:6,minWidth:0,whiteSpace:'nowrap',overflow:'hidden'}}>{label}{extra}</span>
+    <span style={{fontSize:sub?12:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,display:'flex',alignItems:'baseline',gap:6,minWidth:0,whiteSpace:'nowrap',overflow:'hidden'}}>{label}{extra}</span>
     <span style={{justifySelf:'end'}}>{pill||null}</span>
     <span style={{color:C.textSoft,display:'flex',justifyContent:'center'}}>{open!=null&&<ChevAb open={open}/>}</span>
     <span style={{fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',justifySelf:'end',color:(kind==='neg'||kind==='resNeg')?C.overdueText:(tenue&&!fuerte)?C.textSoft:C.accent,fontSize:res?20:tot?15:sub?11.5:13,letterSpacing:res?'-.4px':undefined}}>{val}</span>
@@ -183,9 +183,9 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
-        <div style={{...(isDeskRes?{...SEC_LBL,fontSize:11}:{fontSize:10,fontWeight:600,color:C.accent}),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
+        <div style={{...(isDeskRes?{...SEC_LBL,fontSize:11}:{fontSize:10,fontWeight:600,color:C.accent}),display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,paddingRight:12}}>{title}</div>
         <div style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
-        {sub&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
+        {sub&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}
       </div>
       <span style={{position:'absolute',top:11,right:11,color:C.textSoft,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?<Gl n='chevron'/>:<Gl n='chevD'/>}</span>
     </div>
@@ -697,9 +697,9 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                 <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',cursor:'pointer',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
                   <span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{...SEC_LBL,fontSize:isDeskRes?10.5:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
+                    <div style={{...SEC_LBL,fontSize:isDeskRes?11:10,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
                     <div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>
-                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
+                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
                   </div>
                 </div>
               )
@@ -737,7 +737,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                   <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.5px',color:capC}}>{cap}</div>
                   <div style={{display:'flex',marginTop:8}}>{half(bK,bV,bP,colB,false,bS)}{half(nK,nV,nP,colN,true,nS)}</div>
                 </div>) }
-              const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',marginLeft:4,whiteSpace:'nowrap'}}>{pctV}%</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
+              const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',marginLeft:4,whiteSpace:'nowrap'}}>{pctV} %</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
               const verlink=(txt,dest)=>(<div onClick={()=>go(dest)} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>{txt} <Gl n='chevron'/></div>)
               // Lista de comisiones pagadas del año (base caja), para "ver los pagos" dentro del panel
               const comisPagos=(terceros||[]).filter(x=>x&&x.estado==='pagado'&&x.comision_pct==null&&String(x.pagado_at||'').startsWith(String(selYear))).sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||'')))
@@ -1063,7 +1063,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             {[['Al día','current',C.greenText,C.greenBg],['31-60 días','warning',C.soonText,C.ambarBg],['+60 días','overdue',C.overdueText,C.overdueBg]].map(([l,k,col,bg])=>{ const bk=agingData.buckets[k], abierto=agingBucket===k, vacio=bk.monto===0; return (
               <div key={k} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{background:bg,borderRadius:10,padding:'9px 10px',cursor:vacio?'default':'pointer',border:`1px solid ${abierto?col:'transparent'}`,opacity:vacio?.55:1}}>
                 <div style={{fontSize:16,fontWeight:700,color:col,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtShort(bk.monto)}</div>
-                <div style={{fontSize:10,fontWeight:600,color:col,opacity:.8,marginTop:1}}>{bk.pct}%</div>
+                <div style={{fontSize:10,fontWeight:600,color:col,opacity:.8,marginTop:1}}>{bk.pct} %</div>
                 <div style={{fontSize:10,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>{l}</div>
               </div>
             )})}
