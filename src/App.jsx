@@ -1905,29 +1905,32 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
   const nav = d => { const [a,m]=ym.split('-').map(Number); const x=new Date(a,m-1+d,1); setYm(`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`); setSub2(null) }
   const togBloque = k => { setAbierto(a=>a===k?null:k); setSub2(null) }
   const num={fontVariantNumeric:'tabular-nums'}
+  const Sec = ({t,extra}) => <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 2px -4px'}}><span style={{...SEC_LBL,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span>{extra}</div>
   const kLbl={fontSize:isDesktop?10:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
   // Tarjeta del canon (estilo Inicio/Proveedores): ícono + etiqueta + cifra + 1 línea. Toda tarjeta es tocable.
-  const kt = ({k,ic,tone,lab,val,sub,on,sel,chev}) => { const [bg,fg]=tone; const blanco=bg===C.card; return <div key={k} onClick={on} className='er-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:10,padding:isDesktop?'11px 12px':'10px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-    {isDesktop&&<KpiIco n={ic} c={fg} soft={blanco}/>}
-    <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?22:18,fontWeight:800,color:fg,letterSpacing:-.4,marginTop:1,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>}</div>
+  const kt = ({k,ic,tone,lab,val,sub,on,sel,chev,big}) => { const [bg,fg]=tone; const blanco=bg===C.card; return <div key={k} onClick={on} className='er-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:big?12:10,padding:big?(isDesktop?'14px':'11px 10px'):(isDesktop?'11px 12px':'10px'),display:'flex',gap:big?12:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+    {isDesktop&&<span style={{width:big?34:28,height:big?34:28,borderRadius:8,background:blanco?C.bgSoft:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={big?17:16} c={fg}/></span>}
+    <div style={{minWidth:0,flex:1}}><div style={{...kLbl,fontSize:big&&isDesktop?10.5:kLbl.fontSize,color:fg}}>{lab}</div><div style={{fontSize:big?(isDesktop?26:20):(isDesktop?22:18),fontWeight:800,color:fg,letterSpacing:big?-.6:-.4,marginTop:big?2:1,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>}</div>
     {chev&&<span style={{color:C.done,fontSize:13}}>{sel?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</div> }
   const tResultado=r.res>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
-  const kpis = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
-    {kt({k:'res',ic:'chart',tone:tResultado,lab:'Resultado del mes',val:fmtMill(r.res),sub:`margen ${pct(r.margen)}`,on:()=>togBloque(abierto?null:'ing')})}
-    {kt({k:'vs',ic:'exchange',tone:[C.azulBg,C.accent],lab:`Vs ${MES_L[(cM+10)%12].toLowerCase()}`,val:(dif>0?'+':'')+fmtMill(dif),sub:`${MES_L[(cM+10)%12].toLowerCase()} ${fmtMill(rp.res)}`,on:()=>nav(-1)})}
-    {kt({k:'acu',ic:'grid',tone:[C.tealBg,C.tealText],lab:`Acumulado ${Y}`,val:fmtMill(ytd.res),sub:`margen ${pct(ytd.ing?ytd.res/ytd.ing*100:null)}`,on:onOpenResultadoAnio})}
-    {r.cerrado ? kt({k:'cie',ic:'check',tone:[C.greenBg,C.greenText],lab:'Mes cerrado',val:r.cerradoAt?fmtFechaDMY(String(r.cerradoAt).slice(0,10)):'Cerrado',sub:'fecha de cierre',on:onOpenResultadoAnio})
-      : kt({k:'cie',ic:'clock',tone:[C.soonBg,C.soonText],lab:'Provisorio',val:cierre,sub:'fecha de cierre',on:onOpenResultadoAnio})}
+  const kpiRes = kt({k:'res',big:true,ic:'chart',tone:tResultado,lab:'Resultado del mes',val:fmtMill(r.res),sub:`margen ${pct(r.margen)}`,on:()=>togBloque(abierto?null:'ing')})
+  const kpis = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
+    {kpiRes}
+    {kt({k:'vs',big:true,ic:dif<0?'arrowDown':'arrowUp',tone:[C.azulBg,C.accent],lab:`Vs ${MES_L[(cM+10)%12].toLowerCase()}`,val:(dif>0?'+':dif<0?'−':'')+fmtMill(Math.abs(dif)),sub:`${MES_L[(cM+10)%12].toLowerCase()} ${fmtMill(rp.res)}`,on:()=>nav(-1)})}
+    <div style={{minWidth:0,gridColumn:isDesktop?undefined:'1 / -1',display:'flex',flexDirection:'column'}}>{kt({k:'acu',big:true,ic:'grid',tone:[C.card,C.accent],lab:`Acumulado ${Y}`,val:fmtMill(ytd.res),sub:`margen ${pct(ytd.ing?ytd.res/ytd.ing*100:null)}`,on:onOpenResultadoAnio})}</div>
   </div>
+  const estadoChip = r.cerrado
+    ? <span style={{display:'inline-flex',alignItems:'center',height:24,padding:'0 11px',borderRadius:20,background:C.greenBg,color:C.greenText,fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>Cerrado · {r.cerradoAt?fmtFechaDMY(String(r.cerradoAt).slice(0,10)):'cerrado'}</span>
+    : <span style={{display:'inline-flex',alignItems:'center',height:24,padding:'0 11px',borderRadius:20,background:C.soonBg,color:C.soonText,fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>Provisorio · cierre {cierre}</span>
   // Cascada (18-10): sg = signo (+ / =) en columna fija; tot = fila de total (suma de las de arriba); sinMenos = la cifra va sin «−»
   // porque el bloque entero es una suma de costos. La diferencia vs mes anterior conserva su color (subir un costo = rojo).
   const ln = ({k,l,v,p,neg,est,on,open,children,sg,tot,sinMenos}) => { const d=p==null?null:v-p, dc=d==null||d===0?C.done:((d>0)===!!neg?C.overdueText:C.greenText)
-    return <Fragment key={k}><div onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:sg!==undefined?7:10,padding:'8px 14px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,background:tot?'#EDF1F4':undefined,fontSize:12.5,cursor:on?'pointer':'default'}}>
+    return <Fragment key={k}><div onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:sg!==undefined?7:10,padding:'8px 0 8px 14px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,background:tot?C.azulTenue:undefined,fontSize:12.5,cursor:on?'pointer':'default'}}>
       {sg!==undefined&&<span style={{width:12,flexShrink:0,textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>}
-      <span style={{flex:1,minWidth:0,fontWeight:tot?800:600,color:(on||tot)?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}{est&&<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px',marginLeft:6}}>est.</span>}{children!==undefined&&<span style={{color:C.textSoft,marginLeft:5}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</span>
-      {d!=null&&<span style={{fontSize:11,fontWeight:700,color:dc,minWidth:64,textAlign:'right',whiteSpace:'nowrap',...num}}>{d===0?'=':(d>0?'+':'')+fmtMill(d)}</span>}
-      <span style={{fontWeight:tot?800:700,minWidth:72,textAlign:'right',whiteSpace:'nowrap',color:tot?C.accent:(v?C.text:C.done),...num}}>{v?((neg&&!sinMenos)?'−':'')+fmtMill(v):'$0'}</span></div>
+      <span style={{flex:1,minWidth:0,fontWeight:tot?800:500,color:tot?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}{est&&<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px',marginLeft:6}}>est.</span>}{children!==undefined&&<span style={{color:C.textSoft,marginLeft:5}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</span>
+      {d!=null&&<span style={{fontSize:11,fontWeight:700,color:dc,minWidth:isDesktop?84:60,textAlign:'right',whiteSpace:'nowrap',...num}}>{d===0?'=':(d>0?'+':'')+fmtMill(d)}</span>}
+      <span style={{fontWeight:tot?800:700,minWidth:isDesktop?96:72,alignSelf:'stretch',display:'flex',alignItems:'center',justifyContent:'flex-end',padding:'0 14px 0 8px',margin:'-8px 0',background:tot?'transparent':C.bgSoft,whiteSpace:'nowrap',color:tot?C.accent:(v?C.text:C.done),...num}}>{v?((neg&&!sinMenos)?'−':'')+fmtMill(v):'$0'}</span></div>
       {open&&children}</Fragment> }
   const subFila = (k,a,b,m,on) => <div key={k} onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 26px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:11.5,cursor:on?'pointer':'default'}}>
     <span style={{fontWeight:600,color:on?C.accent:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span><span style={{flex:1,minWidth:0,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b}</span><span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{m<0?'−'+fmt(-m):fmt(m)}</span></div>
@@ -1943,38 +1946,38 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
     : r.comList.length ? <>{r.comList.map((x,i)=>ln({k:'c'+(x.pid||x.nombre),sg:i?'+':'',sinMenos:true,l:x.nombre,v:x.m,neg:true,on:x.pid&&onOpenProveedor?()=>onOpenProveedor(x.pid):null}))}
         {r.comList.length>1&&ln({k:'comT',sg:'=',sinMenos:true,l:'Comisiones pagadas',v:r.com,neg:true,tot:true})}</>
     : <div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones pagadas este mes</div>
-  const detCard = k => <div style={{...card}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones pagadas'})[k]} de {MES_L[cM-1].toLowerCase()}</span>{k!=='com'&&<span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>vs {MES_L[(cM+10)%12].toLowerCase()}</span>}</div>{detalle(k)}</div>
+  const detCard = k => { const vsMes=k!=='com'; return <>
+    <Sec t={`${({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones pagadas'})[k]} de ${MES_L[cM-1].toLowerCase()}`}/>
+    <div style={{...card}}><div style={{display:'flex',justifyContent:'flex-end',padding:'8px 0 6px'}}>{vsMes&&<span style={{...kLbl,fontSize:9.5,color:C.textSoft,minWidth:isDesktop?84:60,textAlign:'right',letterSpacing:.4}}>vs {MES_L[(cM+10)%12].toLowerCase().slice(0,isDesktop?20:3)}</span>}<span style={{...kLbl,fontSize:9.5,color:C.textSoft,minWidth:isDesktop?110:80,textAlign:'right',paddingRight:14,letterSpacing:.4}}>{isDesktop?MES_L[cM-1].toLowerCase():mesC(ym)}</span></div>{detalle(k)}</div></> }
   const mill0 = (v,neg) => v ? (neg?'−':'')+fmtMill(v) : '$0'
   const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:mill0(r.ing)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:mill0(r.cos,true)},{k:'com',ic:'tPct',lab:'Comisiones pagadas',val:mill0(r.com,true)}]
   const bloques = isDesktop
-    ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8}}>{B.map(b=>kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)}))}</div>{abierto&&detCard(abierto)}</>
-    : <div style={{display:'flex',flexDirection:'column',gap:8}}>{B.map(b=><Fragment key={b.k}>{kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)})}{abierto===b.k&&detCard(b.k)}</Fragment>)}</div>
+    ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{B.map(b=>kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)}))}</div>{abierto&&detCard(abierto)}</>
+    : <div style={{display:'flex',flexDirection:'column',gap:10}}>{B.map(b=><Fragment key={b.k}>{kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)})}{abierto===b.k&&detCard(b.k)}</Fragment>)}</div>
   // Comparativa mensual (opción 2): todos los meses lado a lado; la fila de resultado lleva el color del margen. Tocar un mes lo abre.
-  const selC = m => m.ym===ym ? {background:'#F4F9FE'} : {}
+  const selC = m => m.ym===ym ? {background:C.azulTenue} : {}
   const th = {fontSize:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft,padding:'7px 8px',textAlign:'right',whiteSpace:'nowrap'}
-  const td = {padding:'7px 8px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontSize:12,...num}
+  const td = {padding:'8px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontSize:12.5,...num}
   const filaT = (lab,get,neg,blk) => <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:600}}>{lab}</td>,...meses.map(m=>{ const v=get(m); return <td key={m.ym} onClick={()=>{ setYm(m.ym); if(blk){ setAbierto(blk); setSub2(null) } }} className='er-c' style={{...td,...selC(m),cursor:'pointer',color:v?C.text:C.done}}>{v?(neg?'−':'')+fmtMill(v):'—'}</td> }),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{(neg?'−':'')+fM(get(tot))}</td>]}</tr>
-  const tabla = <div style={{...card}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Comparativa mensual · {Y}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>toca un mes para verlo</span></div>
+  const tabla = <><Sec t={`Comparativa mensual · ${Y}`}/><div style={{...card}}>
     <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{meses.map(m=><th key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...th,cursor:'pointer',...(m.ym===ym?{background:C.azulBg}:{})}}>{mesC(m.ym)}</th>)}<th style={th}>{Y}</th></tr></thead>
     <tbody>{filaT('Ingresos',m=>m.ing,false,'ing')}{filaT('Costos de operación',m=>m.cos,true,'cos')}{filaT('Comisiones pagadas',m=>m.com,true,'com')}
       <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,borderTop:`1px solid ${C.border}`}}>Resultado</td>,...meses.map(m=>{ const [bg,fg]=tonoMargen(m.margen); return <td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1px solid ${C.border}`,outline:m.ym===ym?`1.5px solid ${C.accent}`:'none',outlineOffset:-1.5}}>{fmtMill(m.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:C.greenText,borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>{fmtMill(tot.res)}</td>]}</tr>
-      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...meses.map(m=><td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,...selC(m),fontWeight:700,fontSize:11.5,cursor:'pointer',color:tonoMargen(m.margen)[1]}}>{pct(m.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</td>]}</tr>
-    </tbody></table></div></div>
+      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...meses.map(m=><td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,...selC(m),fontWeight:500,fontSize:12,cursor:'pointer',color:C.muted}}>{pct(m.margen)}</td>),<td key='t' style={{...td,fontWeight:500,fontSize:12,color:C.muted,background:C.bgSoft,borderLeft:`1px solid ${C.border}`}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</td>]}</tr>
+    </tbody></table></div></div></>
   // Celular: cada mes en una línea (margen · vs mes anterior · resultado), del más nuevo al más antiguo.
-  const listaMeses = <div style={{...card}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Mes a mes · {Y}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>vs mes anterior</span></div>
-    {[...meses].reverse().map((m,i,arr)=>{ const prev=arr[i+1], d=prev?m.res-prev.res:null, [bg,fg]=tonoMargen(m.margen); return <div key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:m.ym===ym?'#F4F9FE':'transparent'}}>
+  const listaMeses = <><Sec t={`Mes a mes · ${Y}`} extra={<span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>vs mes anterior</span>}/><div style={{...card}}>
+    {[...meses].reverse().map((m,i,arr)=>{ const prev=arr[i+1], d=prev?m.res-prev.res:null, [bg,fg]=tonoMargen(m.margen); return <div key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:m.ym===ym?C.azulTenue:'transparent'}}>
       <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{mesC(m.ym)} {String(Y).slice(2)}{!m.cerrado&&<span style={{fontSize:8.5,fontWeight:700,color:C.textSoft,marginLeft:5}}>prov.</span>}</span>
       <span style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 8px',background:bg,color:fg,minWidth:58,textAlign:'center',whiteSpace:'nowrap',...num}}>{pct(m.margen)}</span>
       <span style={{fontSize:11,fontWeight:700,minWidth:64,textAlign:'right',whiteSpace:'nowrap',color:d==null?C.done:d>0?C.greenText:C.overdueText,...num}}>{d==null?'':(d>0?'+':'')+fmtMill(d)}</span>
       <span style={{fontSize:12.5,fontWeight:800,minWidth:70,textAlign:'right',whiteSpace:'nowrap',...num}}>{fmtMill(m.res)}</span></div> })}
     <div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.border}`}}><span style={{flex:1,fontSize:12.5,fontWeight:800}}>{Y}</span><span style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,minWidth:58,textAlign:'center',...num}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</span><span style={{minWidth:64}}/><span style={{fontSize:12.5,fontWeight:800,minWidth:70,textAlign:'right',color:C.greenText,...num}}>{fmtMill(tot.res)}</span></div>
-  </div>
-  const info = (k,dot,txt,go,on,open,children) => <div key={k} style={{...card}}><div onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:on?'pointer':'default'}}><span style={{width:7,height:7,borderRadius:'50%',background:dot,flexShrink:0}}/><span style={{flex:1,minWidth:0,fontSize:12.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{txt}</span>{go&&<span style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{go}</span>}</div>{open&&children}</div>
+  </div></>
+  const info = (k,dot,txt,go,on,open,children) => <div key={k} style={{...card}}><div onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:on?'pointer':'default'}}>{typeof dot==='string'?<span style={{width:7,height:7,borderRadius:'50%',background:dot,flexShrink:0}}/>:dot}<span style={{flex:1,minWidth:0,fontSize:12.5,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{txt}</span>{go&&<span style={{fontSize:11.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{go}</span>}</div>{open&&children}</div>
   const avisos = [
     r.sinReg.length>0&&info('sr',C.soonText,<><b>{r.sinReg.length} factura{r.sinReg.length!==1?'s':''} del SII sin registro</b> · {isDesktop?`N° ${r.sinReg.map(d=>d.folio).join(' y ')} · `:''}{fmtMill(r.sinReg.reduce((a,d)=>a+(Number(d.monto)||0),0))}</>,<>Ver <Gl n={sub2==='sinreg'?'chevU':'chevD'}/></>,()=>setSub2(s=>s==='sinreg'?null:'sinreg'),sub2==='sinreg',r.sinReg.map((d,i)=>subFila('s'+i,`Factura N° ${d.folio}`,d.receptor_name||'',Number(d.monto)||0,null))),
-    r.ppm>0&&info('ppm',C.done,<>PPM de {MES_L[cM-1].toLowerCase()} <b>{fmtMill(r.ppm)}</b> · {isDesktop?'anticipo de impuesto, va aparte':'va aparte'}</>,isDesktop?<>Planilla <Gl n='chevron'/></>:null,onOpenResultadoAnio),
+    r.ppm>0&&info('ppm',<SIcon n='tPct' s={13} c={C.textSoft}/>,<>PPM de {MES_L[cM-1].toLowerCase()} <b>{fmtMill(r.ppm)}</b> · va aparte</>,isDesktop?<>Planilla <Gl n='chevron'/></>:null,onOpenResultadoAnio),
   ].filter(Boolean)
   const exportar = () => { try{ const head=['Mes','Ingresos','Costos de operación','Comisiones pagadas','Resultado','Margen %','PPM (aparte)']
     const rows=[...meses.map(m=>[mesL(m.ym),Math.round(m.ing),Math.round(m.cos),Math.round(m.com),Math.round(m.res),m.margen==null?'':m.margen.toFixed(1),Math.round(m.ppm)]),[String(Y),Math.round(tot.ing),Math.round(tot.cos),Math.round(tot.com),Math.round(tot.res),tot.ing?(tot.res/tot.ing*100).toFixed(1):'','']]
@@ -1982,12 +1985,13 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+[head,...rows].map(x=>x.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`estado_resultados_${Y}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const navBtn = d => <button onClick={()=>nav(d)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:'pointer',color:C.muted,fontSize:13,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><Gl n={d<0?'chevL':'chevron'}/></button>
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+    <div style={{display:'flex',flexDirection:'column',gap:isDesktop?12:10}}>
       <style>{`.er-c:hover{filter:brightness(.985)}`}</style>
       <div style={{display:'flex',alignItems:'center',justifyContent:isDesktop?'space-between':'center',gap:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>{navBtn(-1)}<span style={{fontSize:14,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>{mesL(ym)}</span>{navBtn(1)}</div>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>{navBtn(-1)}<span style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>{mesL(ym)}</span>{navBtn(1)}{isDesktop&&estadoChip}</div>
         {isDesktop&&<button onClick={exportar} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><SIcon n='download' s={13} c={C.accent}/>Excel</button>}
       </div>
+      {!isDesktop&&<div style={{display:'flex',justifyContent:'center'}}>{estadoChip}</div>}
       {kpis}
       {bloques}
       {isDesktop?tabla:listaMeses}
