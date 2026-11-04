@@ -13,6 +13,7 @@ import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_sh
 import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
 import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { partesMes } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
+import { FACTURACION_ROOT } from '../../supabase/functions/_shared/pdfOficialReglas.js'
 import { desescaparXml } from '../../supabase/functions/_shared/xmlTexto.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -1820,7 +1821,7 @@ export function HubTile({ic,icNode,t,tM,s,sM,sCol,col,bg,cardBg,cardBd,tCol,onCl
     </div>)
 }
 
-export const FACTURACION_ROOT='1GtcDmnq2FpGQlaZRETyOU4Zwf5MfCi7V'
+export { FACTURACION_ROOT }   // misma carpeta que usa el servidor (_shared/pdfOficialReglas.js)
 
 // ── DRIVE: escritura de adjuntos (carpeta compartida "Respaldo Gastos APP") ──────
 export const ADJUNTOS_ROOT='1iuWqAB9UNZfDSqj5MSeTTngPaplzBTEH'
@@ -4095,7 +4096,7 @@ export const fechaHoraCL = iso => { if(!iso) return '—'; const p=new Intl.Date
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 // Etiqueta legible de cada vista (para "volver a {origen}" y la paleta).
-export const TAB_LABELS = {novedades:'Novedades',migmail:'Mi Gmail',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',panelSocios:'Panel de socios',informeMes:'Cierre del mes',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',calendarioTrib:'Calendario tributario',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
+export const TAB_LABELS = {pdfSinOficial:'Facturas sin PDF oficial',novedades:'Novedades',migmail:'Mi Gmail',proponerVenta:'Proponer venta',misComisiones:'Mis comisiones',porCobrarMios:'Cuentas por cobrar',tarea:'Tarea',factura:'Factura',gasto:'Gasto',flujo:'Volver',dashboard:'Inicio',sales:'Ventas',billing:'Facturación',expenses:'Gastos',clients:'Clientes',tasks:'Tareas',conciliacion:'Banco',inteligencia:'Inteligencia',cajachica:'Caja chica',cobranza:'Cobranza',horas:'Horas',repricing:'Repricing',cartera:'Mis proyectos',presupuestoOficina:'Oficina',socios:'Socios',panelSocios:'Panel de socios',informeMes:'Cierre del mes',proveedores:'Proveedores',subarriendo:'Subarriendo',resultadoAnio:'Resultado del año',facturasDelMes:'Facturas del mes',estadoResultados:'Estado de resultados',flujoCaja:'Flujo de caja',procesos:'Procesos automáticos',calendarioTrib:'Calendario tributario',bandeja:'Bandeja del agente',miCarga:'Mi carga',editCliente:'Editar cliente',contactos:'Contactos',causas:'Causas'}
 
 export const tonoMargen = m => m==null ? [C.bgSoft,C.muted] : m<0 ? [C.overdueBg,C.overdueText] : m<30 ? [C.soonBg,C.soonText] : m<55 ? [C.greenSoft,C.greenText] : m<70 ? [C.greenBg,C.greenText] : [C.greenDeep,C.greenText]
 

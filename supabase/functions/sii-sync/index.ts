@@ -24,6 +24,10 @@ import { firmarDocumento } from './firma.ts'
 import { armarEnvioDTE, enviarAlSII, consultarEstado } from './emision.ts'
 import { armarLibroVentas } from './libro.ts'
 import { bajarXmlEmitidos, pdfEmitidoSii, XML_DESDE, type Pendiente } from './xmlEmitidos.ts'
+import { todasRest } from '../_shared/paginar.js'
+import { FACTURACION_ROOT, INTENTOS_AVISO, carpetaFacturacion, nombrePdf, planPdfOficial } from '../_shared/pdfOficialReglas.js'
+import { archivosPorNombre, bajarArchivo, carpetaHija, subirPdf, tokenDrive } from '../_shared/driveServidor.ts'
+import { enviarPush } from '../_shared/push.ts'
 import { guardarYRevisarGlosa } from './glosa.ts'
 import { leerEnvioRecibido, armarRecepcionEnvio, armarResultadoDTE, armarEnvioRecibos } from './intercambio.ts'
 
@@ -112,8 +116,9 @@ serve(async (req) => {
   // Acceso: admin (email en el JWT) O el cron con su secreto, pero el secreto SOLO autoriza los jobs de reporte
   // (nunca emitir/anular/libro). Así, si el secreto se filtrara, no puede emitir DTE en tu nombre.
   // xml-emitidos entra aca: solo LEE el SII (descarga el respaldo XML) y completa billing.dte_xml vacío.
+  // pdf-oficial entra aca: LEE el PDF oficial del SII y lo guarda en Drive y como adjunto de la factura (nunca emite ni anula).
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos']
+  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos', 'pdf-oficial']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !(await esAdminDelEstudio(email)))) {
@@ -591,6 +596,93 @@ serve(async (req) => {
       if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
       const r = await pdfEmitidoSii(getEmisor().rut.replace(/\./g, ''), String(body.folio || '').replace(/\D/g, ''), Number(body.tipo) || null)
       return json(r, r.ok ? 200 : r.captcha ? 409 : 404)
+    }
+    // PDF OFICIAL de cada factura emitida → Drive (Facturación/año/mes) y adjunto «PDF oficial SII». Solo LEE el SII. Cron cada hora; el calendario de
+    // reintentos (6 horas, luego un día) está en _shared/pdfOficialReglas.js. A la 3ª falla seguida avisa (push) una vez; sigue intentando hasta el tope.
+    if (body.action === 'pdf-oficial') {
+      if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
+      const SB = Deno.env.get('SUPABASE_URL')!, KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const sb = createClient(SB, KEY)
+      const hd = { apikey: KEY, Authorization: `Bearer ${KEY}` }
+      const ahoraMs = Date.now()
+      const [facturas, adj, intr, avisos] = await Promise.all([
+        todasRest(SB, hd, 'billing?select=id,invoice_no,status,issued_at,deleted_at,billing_type,receptor_name&deleted_at=is.null&invoice_no=not.is.null&issued_at=gte.' + XML_DESDE),
+        todasRest(SB, hd, 'billing_attachments?select=billing_id&uploaded_by=eq.PDF%20oficial%20SII'),
+        todasRest(SB, hd, 'learnings?select=id,key,hits,meta,updated_at&kind=eq.pdf_oficial_intentos'),
+        todasRest(SB, hd, 'learnings?select=key&kind=eq.pdf_oficial_aviso'),
+      ])
+      const conPdf = new Set((adj as { billing_id: string }[]).map((a) => a.billing_id))
+      const intentos = new Map((intr as { key: string; hits: number; meta: { at?: string; ultimo?: string } | null }[]).map((l) => [l.key, { n: Number(l.hits) || 0, ultimoMs: Date.parse(l.meta?.at || '') || 0, ultimo: l.meta?.ultimo || '' }]))
+      // «Reintentar ahora» desde la app (una factura, un admin): ignora la espera del calendario pero conserva la cuenta de intentos.
+      const unaId = body.facturaId ? String(body.facturaId) : ''
+      const plan = planPdfOficial({ facturas: unaId ? (facturas as { id: string }[]).filter((f) => f.id === unaId) : facturas, conPdf, intentos: unaId ? new Map() : intentos, ahoraMs, desde: XML_DESDE, limite: Number(body.limite) || 6 })
+      if (unaId) for (const f of plan.aBuscar as { id: string; n: number }[]) f.n = intentos.get(f.id)?.n || 0
+      const rut = getEmisor().rut.replace(/\./g, '')
+      const resultados: Record<string, unknown>[] = []
+      let captcha = false
+      if (plan.aBuscar.length) {
+        const ids = plan.aBuscar.map((f: { id: string }) => f.id)
+        const { data: xmls } = await sb.from('billing').select('id, dte_xml').in('id', ids)
+        const xmlDe = new Map((xmls || []).map((x: { id: string; dte_xml: string | null }) => [x.id, x.dte_xml || '']))
+        const dt = body.dryRun ? '' : await tokenDrive()
+        for (const f of plan.aBuscar as { id: string; folio: string; n: number; issued_at: string; billing_type?: string; receptor_name?: string }[]) {
+          const xml = String(xmlDe.get(f.id) || '')
+          const tipo = Number((xml.match(/<TipoDTE>(\d+)<\/TipoDTE>/) || [])[1]) || (f.billing_type === 'nota_credito' ? 61 : null)
+          const razon = ((xml.match(/<RznSocRecep>([^<]*)/) || [])[1] || f.receptor_name || '').replace(/&amp;/g, '&')
+          let motivo = ''
+          try {
+            const r = await pdfEmitidoSii(rut, f.folio, tipo)
+            if (r.captcha) { captcha = true; motivo = 'el SII activó el captcha' }
+            else if (!r.ok || !r.base64) motivo = r.motivo || 'el SII no entregó el PDF'
+            else if (body.dryRun) { resultados.push({ folio: f.folio, estado: 'bajaria', bytes: r.bytes }); continue }
+            else {
+              const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0))
+              const cf = carpetaFacturacion(f.issued_at)
+              const carpeta = await carpetaHija(dt, await carpetaHija(dt, FACTURACION_ROOT, cf.anio), cf.mes)
+              // Un archivo con el mismo nombre puede ser el mismo PDF (se enlaza) o la copia que arma la app desde el XML (el oficial va aparte, con su marca): nunca se pisa nada.
+              let fileId = '', url: string | null = null
+              for (const nombre of [nombrePdf(f.folio, razon), nombrePdf(f.folio, razon, true)]) {
+                for (const ex of await archivosPorNombre(dt, carpeta, nombre)) {
+                  const b = await bajarArchivo(dt, ex.id)
+                  if (b && b.length === bytes.length && b.every((v, i) => v === bytes[i])) { fileId = ex.id; url = ex.webViewLink || null; break }
+                }
+                if (fileId) break
+              }
+              if (!fileId) {
+                const hayNombre = (await archivosPorNombre(dt, carpeta, nombrePdf(f.folio, razon))).length > 0
+                const up = await subirPdf(dt, carpeta, nombrePdf(f.folio, razon, hayNombre), bytes)
+                fileId = up.id; url = up.webViewLink
+              }
+              const { error: ie } = await sb.from('billing_attachments').insert({ billing_id: f.id, drive_file_id: fileId, name: nombrePdf(f.folio, razon, false), url, uploaded_by: 'PDF oficial SII' })
+              if (ie) throw new Error('subió a Drive pero no se pudo adjuntar a la factura: ' + ie.message)
+              await sb.from('billing_attachments').delete().eq('billing_id', f.id).eq('uploaded_by', 'Respaldo SII')
+              await sb.from('learnings').delete().eq('kind', 'pdf_oficial_intentos').eq('key', f.id)
+              await sb.from('activity_log').insert({ user_email: 'pdf-oficial-sii', action: 'facturacion.pdf_oficial_guardado', table_name: 'billing', record_id: f.id, detail: JSON.stringify({ folio: f.folio, carpeta: `${cf.anio}/${cf.mes}`, intento: f.n + 1 }), estudio_id: 'lea' })
+              resultados.push({ folio: f.folio, estado: 'guardado' }); continue
+            }
+          } catch (e) { motivo = e instanceof Error ? e.message : String(e) }
+          if (!body.dryRun) {
+            const fila = { kind: 'pdf_oficial_intentos', key: f.id, value: f.folio, hits: f.n + 1, meta: { at: new Date().toISOString(), ultimo: motivo }, estudio_id: 'lea' }
+            if (intentos.has(f.id)) await sb.from('learnings').update(fila).eq('kind', fila.kind).eq('key', f.id)
+            else await sb.from('learnings').insert(fila)
+          }
+          resultados.push({ folio: f.folio, estado: 'fallo', intento: f.n + 1, motivo })
+          if (captcha) break   // el captcha es del SII, no de la factura: no se insiste con las demás
+        }
+      }
+      // Aviso (una vez por factura) cuando llega a la tercera falla seguida.
+      const yaAvisadas = new Set((avisos as { key: string }[]).map((a) => a.key))
+      const nuevas = resultados.filter((r) => r.estado === 'fallo' && Number(r.intento) >= INTENTOS_AVISO).map((r) => plan.aBuscar.find((f: { folio: string }) => f.folio === r.folio)).filter((f) => f && !yaAvisadas.has(f.id)) as { id: string; folio: string }[]
+      let avisadas = 0
+      if (nuevas.length && !body.dryRun) {
+        const { data: cfg } = await sb.from('learnings').select('value').eq('kind', 'config').eq('key', 'vigilancia_avisar_a').maybeSingle()
+        const para = String(cfg?.value || '').split(/[,;\s]+/).map((x: string) => x.trim().toLowerCase()).filter((e: string) => e.includes('@'))
+        if (para.length) await enviarPush(SB, KEY, para, { titulo: nuevas.length === 1 ? 'Factura sin PDF oficial' : `${nuevas.length} facturas sin PDF oficial`, cuerpo: `N° ${nuevas.map((f) => f.folio).join(', ')} · no se pudo guardar tras varios intentos`, url: '/?ir=facturas', etiqueta: 'pdf-oficial' }, 'sistema').catch(() => null)
+        for (const f of nuevas) { await sb.from('learnings').insert({ kind: 'pdf_oficial_aviso', key: f.id, value: f.folio, estudio_id: 'lea' }); avisadas++ }
+      }
+      console.log(`[sii-sync] pdf-oficial: ${resultados.filter((r) => r.estado === 'guardado').length} guardados, ${resultados.filter((r) => r.estado === 'fallo').length} con falla, ${plan.sinPdf} sin PDF oficial${captcha ? ' · CAPTCHA ACTIVO' : ''}`)
+      const salida = { ok: !captcha, sinPdf: plan.sinPdf, intentadas: resultados.length, guardadas: resultados.filter((r) => r.estado === 'guardado').length, fallidas: plan.fallidas.length, a_mano: plan.aMano.map((x: { folio: string }) => x.folio), avisadas, dryRun: !!body.dryRun, resultados }
+      return json(captcha ? { ...salida, error: 'El SII activó el captcha: el proceso se detuvo sin saltarlo; se reintenta según el calendario.' } : salida, captcha ? 409 : 200)
     }
     if (body.action === 'xml-emitidos') {
       if (ambiente !== 'produccion') return json({ error: 'Solo en produccion.', ambiente }, 400)
