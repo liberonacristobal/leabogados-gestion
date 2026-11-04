@@ -1239,7 +1239,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                 <span style={{width:30,height:30,borderRadius:10,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n={ICONO[cat]||'wallet'} s={16} c={C.accent}/></span>
                 <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cat}</div>
                 <div style={{fontSize:16,fontWeight:700,color:items.length?C.accent:C.done,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{items.length?fmt(sub):'—'}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{items.length} ítem{items.length!==1?'s':''}{items.length&&pct?` · ${pct}%`:''}{verReal&&real!=null?` · real ${fmtShort(real)}`:''}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{items.length} ítem{items.length!==1?'s':''}{items.length&&pct?` · ${pct} %`:''}{verReal&&real!=null?` · real ${fmtShort(real)}`:''}</div>
               </div>
             )})}
           </div>
@@ -1827,9 +1827,9 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       const tRes = R.res>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
       const sg = v => (v<0?'−':'')+fmtMill(Math.abs(v))
       // Tarjeta chica (composición / gestión): ícono + etiqueta + cifra; misma forma para todas las hermanas.
-      const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+      const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:on?'pointer':'default'}}>
         <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
-        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
       const abrirRes=()=>scope==='mes'?(onOpenEstadoResultados&&onOpenEstadoResultados()):(onOpenResultadoAnio&&onOpenResultadoAnio())
       return <>
@@ -1856,9 +1856,9 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       const scO=saldoComisiones(terceros,billing), pp=scO.porPagar, ppAnt=comisPorPagarAnteriores(scO)
       const retPer = ret.rows.filter(r=>enPer(r.date)).reduce((a,r)=>a+r.amount,0)
       const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)&&d.sii_estado!=='PENDIENTE').reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
-      const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
+      const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:on?'pointer':'default'}}>
         <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
-        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       const fin=flujo.fin, finCol=fin>=0?C.greenText:C.overdueText
       return <>
         {L('Caja')}
@@ -2030,9 +2030,9 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   const kt=(key,ic,[bg,fg],lab,val,sub,f)=>{ const blanco=bg===C.card, on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'flex-start',minWidth:0,cursor:go?'pointer':'default',outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
       <KpiIco n={ic} c={fg} soft={blanco}/>
       <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
-  const st=(key,ic,ibg,icol,lab,val,f)=>{ const on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:C.card,border:`1px solid ${on?icol:C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,cursor:go?'pointer':'default'}}>
+  const st=(key,ic,ibg,icol,lab,val,f)=>{ const on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:C.card,border:`1px solid ${on?icol:C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:go?'pointer':'default'}}>
       <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={15} c={icol}/></span>
-      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:icol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div> }
+      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:icol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div> }
   const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
   const secL=t=><div style={{...kLbl,color:C.accent,margin:'14px 2px 7px'}}>{t}</div>
   const nF=F.duda.n, nC=F.sinEmitir.n
@@ -2284,7 +2284,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
       </div>
       <div style={{display:'flex',gap:8,marginBottom:12}}>
         <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,color:C.muted}}>Emitidas en el sistema</div><div style={{fontSize:16,fontWeight:700,color:C.text}}>{emitidas}</div></div>
-        <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,color:C.muted}}>Cobertura</div><div style={{fontSize:16,fontWeight:700,color:pct>=100?C.greenText:C.soonText}}>{pct}%</div></div>
+        <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,color:C.muted}}>Cobertura</div><div style={{fontSize:16,fontWeight:700,color:pct>=100?C.greenText:C.soonText}}>{pct} %</div></div>
       </div>
       {orphansAll.length>=8&&<input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar: N°, razón social, RUT, monto…' style={{width:'100%',boxSizing:'border-box',fontSize:12,padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,marginBottom:9,outline:'none'}}/>}
       {meses.map(mk=>(
@@ -4768,7 +4768,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
           <div style={{fontSize:16,fontWeight:700,color:C.accent,marginBottom:4}}>Revisando tu Gmail</div>
           <div style={{fontSize:12,color:C.muted,marginBottom:18}}>{prog.label||'Conectando…'}</div>
           <div style={{height:8,background:C.track,borderRadius:8,overflow:'hidden',maxWidth:340,margin:'0 auto'}}><div style={{height:'100%',width:`${pct}%`,background:C.accent,borderRadius:8,transition:'width .3s'}}/></div>
-          <div style={{display:'flex',justifyContent:'space-between',maxWidth:340,margin:'8px auto 0',fontSize:11,color:C.textSoft}}><span>{prog.total>0?`${prog.done} / ${prog.total}`:''}</span><span style={{fontWeight:700,color:C.accent}}>{pct}%</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',maxWidth:340,margin:'8px auto 0',fontSize:11,color:C.textSoft}}><span>{prog.total>0?`${prog.done} / ${prog.total}`:''}</span><span style={{fontWeight:700,color:C.accent}}>{pct} %</span></div>
           <div style={{fontSize:10,color:C.textSoft,marginTop:18,lineHeight:1.5,maxWidth:300,marginLeft:'auto',marginRight:'auto'}}>Leo solo los encabezados (De/Para/Asunto) para encontrar tus contactos. Puede tardar un poco.</div>
         </div>
       )})()}
@@ -5070,7 +5070,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose, orige
         <div key={r.cid} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px 0',marginBottom:isDesktop?0:10}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
             <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(r.cid)} style={{display:'inline-flex',alignItems:'center',gap:4,minWidth:0,fontSize:14,fontWeight:700,color:C.accent,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cn(r.cid)}</span>{onOpenClientFicha&&<span style={{color:C.textSoft,fontSize:13,flexShrink:0}}><Gl n='chevron'/></span>}</span>
-            <span style={{flexShrink:0,fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px',fontVariantNumeric:'tabular-nums'}}>+{r.deltaPct}% · +{deltaStr}</span>
+            <span style={{flexShrink:0,fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,borderRadius:20,padding:'3px 9px',fontVariantNumeric:'tabular-nums'}}>+{r.deltaPct} % · +{deltaStr}</span>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',margin:'11px 0 0'}}>
             <div style={{padding:'10px 12px'}}>
@@ -5820,7 +5820,7 @@ export function PortalApp(){
             {c.asuntos.map((a,ai)=>(
               <div key={ai} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginBottom:10}}>
                 <div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.35}}>{a.nombre}</div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'7px 0 6px'}}><span style={{fontSize:11,color:C.muted}}>{a.etapa}</span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>{a.avance}%</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'7px 0 6px'}}><span style={{fontSize:11,color:C.muted}}>{a.etapa}</span><span style={{fontSize:11,fontWeight:700,color:C.accent}}>{a.avance} %</span></div>
                 <div style={{height:6,borderRadius:4,background:'#EAEEF1',overflow:'hidden'}}><div style={{height:'100%',width:a.avance+'%',background:C.accent,borderRadius:4}}/></div>
                 {a.proximo&&<div style={{fontSize:11,color:C.muted,marginTop:7}}>Próximo: <b style={{color:C.text}}>{a.proximo}</b>{a.vence?` · ${fFecha(a.vence)}`:''}</div>}
               </div>

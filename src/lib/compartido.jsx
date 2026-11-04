@@ -962,7 +962,7 @@ export async function facturaDtePdfBase64(docXml, opts={}){
   p.setTextColor(...MUT); p.setFont('helvetica','normal'); p.setFontSize(7)
   p.text('Timbre Electrónico SII',TX,ty+th+3.5); p.text(`Res. ${resol.nro} de ${resol.anio} · Verifique documento: www.sii.cl`,TX,ty+th+6.8)
   p.setFontSize(9); p.setTextColor(...GRAF); p.setFont('helvetica','normal')
-  if(D.neto>0){ p.text('Monto neto',138,ty+1); p.text('$ '+fmtN(D.neto),W-M,ty+1,{align:'right'}); p.text(`IVA ${D.tasaIva}%`,138,ty+7.5); p.text('$ '+fmtN(D.iva),W-M,ty+7.5,{align:'right'}) }
+  if(D.neto>0){ p.text('Monto neto',138,ty+1); p.text('$ '+fmtN(D.neto),W-M,ty+1,{align:'right'}); p.text(`IVA ${D.tasaIva} %`,138,ty+7.5); p.text('$ '+fmtN(D.iva),W-M,ty+7.5,{align:'right'}) }
   else { p.text('Impuesto adicional',138,ty+1); p.text('$ '+fmtN(0),W-M,ty+1,{align:'right'})
   p.text('Monto exento',138,ty+7.5); p.text('$ '+fmtN(D.exe),W-M,ty+7.5,{align:'right'}) }
   p.setDrawColor(...NAVY); p.setLineWidth(0.5); p.line(138,ty+10.5,W-M,ty+10.5)
@@ -1807,11 +1807,11 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
 export function HubTile({ic,icNode,t,tM,s,sM,sCol,col,bg,cardBg,cardBd,tCol,onClick,fig,figCol,chev}){   // fig = cifra al extremo derecho (en móvil pasa al detalle); chev = flecha si no hay cifra
   const D=useIsDesktop()
   return (
-    <div onClick={onClick} style={{cursor:onClick?'pointer':'default',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'12px 14px':'10px 11px',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0}}>
+    <div onClick={onClick} style={{cursor:onClick?'pointer':'default',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'12px 14px':'10px 11px',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0,boxSizing:'border-box',height:'100%'}}>
       <span style={{width:D?34:30,height:D?34:30,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icNode||<SIcon n={ic} s={D?17:15} c={col}/>}</span>
       <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:D?14.5:13,fontWeight:600,color:tCol||C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?t:(tM||t)}</div>
-        <div style={{fontSize:D?12:11,color:sCol||C.muted,fontWeight:sCol?600:400,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?s:((fig!=null&&fig!==''?fig+' · ':'')+(sM||s))}</div>
+        <div style={{fontSize:D?14:13,fontWeight:600,color:tCol||C.text,lineHeight:1.25,...(D?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{D?t:(tM||t)}</div>
+        <div style={{fontSize:D?12:11,color:sCol||C.muted,fontWeight:sCol?600:400,marginTop:1,lineHeight:1.25,...(D?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{D?s:((fig!=null&&fig!==''?fig+' · ':'')+(sM||s))}</div>
       </div>
       {D&&fig!=null&&fig!==''&&<span style={{fontSize:20,fontWeight:800,color:figCol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',flexShrink:0}}>{fig}</span>}
       {D&&chev&&(fig==null||fig==='')&&<span style={{flexShrink:0,display:'inline-flex'}}><SIcon n='chevron' s={15} c={C.textSoft}/></span>}
@@ -2026,7 +2026,7 @@ export function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opt
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
     if(best){ usados.add(best.x.id); const dM=Math.abs((best.x.amount||0)-a)/a; const raz=[]
       if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else if(cuotaOrdOf(p.concept)&&cuotaOrdOf(p.concept)===cuotaOrdOf(best.x.concept)) raz.push(`cuota ${cuotaOrdOf(p.concept)} de la misma venta`); else raz.push('mismo RUT/RS')
-      raz.push(dM<0.01?'mismo monto':`dif ${(dM*100).toFixed(1).replace(/\.0$/,'')}% (UF)`)
+      raz.push(dM<0.01?'mismo monto':`dif ${(dM*100).toFixed(1).replace(/\.0$/,'')} % (UF)`)
       out.push({prog:p, real:best.x, razones:raz}) } })
   return out
 }

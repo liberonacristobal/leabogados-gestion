@@ -72,9 +72,9 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
   const estados = estadosTemas({ filas, pctVencido, comisionDias:diasCom, flujo:flujo.fin, difRetiros:ret.difAcum })
 
   // ── Resumen para la IA ──
-  const fmtV = { clp:fmtShort, uf:n=>fmtUFk(n), n:n=>String(n), pts:n=>`${pct1(n)}%` }
+  const fmtV = { clp:fmtShort, uf:n=>fmtUFk(n), n:n=>String(n), pts:n=>`${pct1(n)} %` }
   const dossier = useMemo(()=>construirDossier({ mes:etiquetaMes(ym), comparado:etiquetaMes(ymP), filas, f:fmtV, estados,
-    extras:{ porCobrar:fmtShort(porCobrar), vencido:fmtShort(cart.vencidoTot), porcentajeVencido:pctVencido==null?null:`${Math.round(pctVencido*100)}%`, vencidoMasDeSesentaDias:fmtShort(cart.expo.m60), flujoCajaProximasSemanas:`${flujo.fin>0?'+':''}${fmtShort(flujo.fin)}`, semanas:8,
+    extras:{ porCobrar:fmtShort(porCobrar), vencido:fmtShort(cart.vencidoTot), porcentajeVencido:pctVencido==null?null:`${Math.round(pctVencido*100)} %`, vencidoMasDeSesentaDias:fmtShort(cart.expo.m60), flujoCajaProximasSemanas:`${flujo.fin>0?'+':''}${fmtShort(flujo.fin)}`, semanas:8,
       comisionesPorPagar:fmtShort(sc.porPagar), diasComisionMasAntigua:diasCom, retirosAcumuladosCadaSocio:ret.SOC.map(s=>`${s} ${fmtShort(ret.retTot[s]||0)}`), diferenciaRetiros:fmtShort(Math.abs(ret.difAcum)), carteraAlCierre:resumenFoto(fM,fP,fmtShort) } }),[filas,fM,fP,ym,estados.resultado,estados.cobranza,porCobrar,cart.vencidoTot,flujo.fin,sc.porPagar,diasCom,ret.difAcum])
 
   // ── Informe guardado / generado ──
@@ -105,8 +105,8 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
   const copiar = async () => { if(!inf) return; const t=[`Informe de ${etiquetaMes(ym)}`, inf.frase, ...inf.puntos.map(p=>`${TEMA_LBL[p.tema]}: ${p.titular} ${p.porque}`)].join('\n'); try{ await navigator.clipboard.writeText(t); setCopiado(true); setTimeout(()=>setCopiado(false),1800) }catch(_){} }
 
   // ── Presentación ──
-  const valFila = f => f.m==null?'—':f.tipo==='clp'?fmtShort(f.m):f.tipo==='uf'?fmtUFk(f.m):f.tipo==='pts'?`${pct1(f.m)}%`:String(f.m)
-  const valPrev = f => f.p==null?'—':f.tipo==='clp'?fmtShort(f.p):f.tipo==='uf'?fmtUFk(f.p):f.tipo==='pts'?`${pct1(f.p)}%`:String(f.p)
+  const valFila = f => f.m==null?'—':f.tipo==='clp'?fmtShort(f.m):f.tipo==='uf'?fmtUFk(f.m):f.tipo==='pts'?`${pct1(f.m)} %`:String(f.m)
+  const valPrev = f => f.p==null?'—':f.tipo==='clp'?fmtShort(f.p):f.tipo==='uf'?fmtUFk(f.p):f.tipo==='pts'?`${pct1(f.p)} %`:String(f.p)
   const pill = f => { const [bg,fg]=PILL[f.tono]||PILL.nt; return <span style={{fontSize:11,fontWeight:800,borderRadius:20,padding:'2px 9px',minWidth:56,textAlign:'center',whiteSpace:'nowrap',background:bg,color:fg}}>{textoVariacion(f)}</span> }
   const tarjeta = (p,i) => { const [lb,bg,fg]=ESTADO[p.estado||'sin_cambio']; return (
     <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:12,display:'flex',flexDirection:'column',gap:6,minWidth:0}}>
@@ -175,7 +175,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
           </div> : <div style={{padding:'10px 12px',fontSize:12,color:C.muted}}>Sin foto de cartera de {etiquetaMes(ym)}.</div>)}
         {caja('Hoy', 'Cobranza', ()=>go('cobranza'),
           <div>
-            {[['Por cobrar',fmtShort(porCobrar),pctVencido!=null?`${Math.round(pctVencido*100)}% vencido`:'', 'cobranza'],['Vencido',fmtShort(cart.vencidoTot),`${fmtShort(cart.expo.m60)} con más de 60 días`,'cobranza'],['Comisiones por pagar',fmtShort(sc.porPagar),diasCom!=null?`la más antigua, hace ${diasCom} días`:'','proveedores'],['Flujo de caja · 8 semanas',(flujo.fin>0?'+':'')+fmtShort(flujo.fin),'','flujoCaja']].map(([l,v,s,dest])=>(
+            {[['Por cobrar',fmtShort(porCobrar),pctVencido!=null?`${Math.round(pctVencido*100)} % vencido`:'', 'cobranza'],['Vencido',fmtShort(cart.vencidoTot),`${fmtShort(cart.expo.m60)} con más de 60 días`,'cobranza'],['Comisiones por pagar',fmtShort(sc.porPagar),diasCom!=null?`la más antigua, hace ${diasCom} días`:'','proveedores'],['Flujo de caja · 8 semanas',(flujo.fin>0?'+':'')+fmtShort(flujo.fin),'','flujoCaja']].map(([l,v,s,dest])=>(
               <div key={l} onClick={()=>go(dest)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{l}</div>{s&&<div style={{fontSize:10.5,color:C.muted}}>{s}</div>}</div>
                 <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{v}</span>

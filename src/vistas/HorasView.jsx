@@ -444,7 +444,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
             </div>
             <div style={{height:8,borderRadius:8,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:8}}/></div>
             <div style={{fontSize:10,color:C.textSoft,marginTop:5,display:'flex',justifyContent:'space-between'}}><span>{fh(real)} de {meta?fh(meta):'—'} · {book} tarea{book!==1?'s':''} abierta{book!==1?'s':''}</span><span onClick={()=>setMetaEdit(metaEdit===name?null:name)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>meta</span></div>
-            {real>0 && <div style={{fontSize:10,marginTop:3,fontWeight:600,color:factPct>=70?C.greenText:factPct>=40?C.soonText:C.overdueText}}>{fh(fact)} facturables · {factPct}% del tiempo{factPct<70?' · revisar':''}</div>}
+            {real>0 && <div style={{fontSize:10,marginTop:3,fontWeight:600,color:factPct>=70?C.greenText:factPct>=40?C.soonText:C.overdueText}}>{fh(fact)} facturables · {factPct} % del tiempo{factPct<70?' · revisar':''}</div>}
             {metaEdit===name && (()=>{ const dia=metaUnit==='dia'; const wk=Number(metas[name])||0; return <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
               <span style={{fontSize:11,color:C.muted}}>Meta</span>
               <input key={name+metaUnit} type='number' step='0.5' defaultValue={dia?(wk?+(wk/5).toFixed(1):''):(wk||'')} onBlur={e=>{ const v=parseFloat(e.target.value)||0; setMeta(name, dia? Math.round(v*5*10)/10 : v); setMetaEdit(null) }} style={{...inp,height:32,width:72,textAlign:'right'}} autoFocus/>

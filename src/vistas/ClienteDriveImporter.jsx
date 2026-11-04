@@ -175,7 +175,7 @@ export function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
               {newClients.filter(f=>f._maybe).map(f=>(
                 <div key={f.id} style={{border:`1px solid ${C.soon}`,borderRadius:10,padding:'10px 11px',marginBottom:7,background:C.soonBg}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>{f.name}</div>
-                  <div style={{fontSize:11,color:C.text,margin:'3px 0 8px'}}>Se parece a <b>{f._maybe.name}</b> ({f._maybe.ratio}%). ¿Es el mismo cliente?</div>
+                  <div style={{fontSize:11,color:C.text,margin:'3px 0 8px'}}>Se parece a <b>{f._maybe.name}</b> ({f._maybe.ratio} %). ¿Es el mismo cliente?</div>
                   <div style={{display:'flex',gap:7}}>
                     <button onClick={()=>vincularFolder(f)} style={{flex:1,padding:'7px 10px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Es el mismo · vincular</button>
                     <button onClick={()=>marcarNuevo(f)} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Es nuevo</button>

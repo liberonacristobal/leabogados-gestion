@@ -300,7 +300,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
     const desde=G.items.filter(i=>i.venc).map(i=>venceBill(i.b)).filter(Boolean).sort()[0]
     return (<div onClick={e=>e.stopPropagation()} style={{margin:mini?'2px 0 4px':'10px 0 4px'}}>
       {!mini&&<div style={SEC_LBL}>Gestiones de cobro</div>}
-      {mini&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>{chipPunt(g.cid)}<span style={{color:C.muted,fontSize:12}}>{(()=>{ const e=punt.get(String(g.cid)); return e&&e.n>0?`${e.n} pagada${e.n!==1?'s':''} · ${e.promedio} d en promedio · ${e.pct30}% en 30 d`:'Ninguna pagada en 12 meses' })()}</span></div>}
+      {mini&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>{chipPunt(g.cid)}<span style={{color:C.muted,fontSize:12}}>{(()=>{ const e=punt.get(String(g.cid)); return e&&e.n>0?`${e.n} pagada${e.n!==1?'s':''} · ${e.promedio} d en promedio · ${e.pct30} % en 30 d`:'Ninguna pagada en 12 meses' })()}</span></div>}
       {x&&<div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',fontSize:12,color:C.text,marginTop:5}}><span>Compromiso de pago <b>{fmtFechaDMY(x.c.fecha)}</b>{x.c.monto?` · ${f0(x.c.monto)}`:''}{x.c.por?` · ${x.c.por}`:''}</span>{chipComp(g.cid)}<span onClick={()=>quitarCompromiso(g.cid)} style={{fontSize:11,color:C.muted,cursor:'pointer',textDecoration:'underline'}}>Quitar</span></div>}
       {recs.length>0 ? <div style={{fontSize:12,color:C.muted,marginTop:5}}>Último recordatorio {fmtFechaDMY(recs[recs.length-1])}</div>
         : (G.vencido>0&&!x&&desde) ? <div style={{fontSize:12,color:C.muted,marginTop:5}}>Sin gestiones registradas en la app desde el {fmtFechaDMY(desde)}</div> : null}

@@ -175,8 +175,8 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
       const brief = `Datos del estudio (NO inventes ni cambies cifras; si la respuesta no está en estos datos, dilo claramente):
 - Vendido ${yr}: ${fmtUFk(kpis.vendidoYTD)}; por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}; crecimiento vs ${tendencias.prevYr}: ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'}.
 - Cartera: ${carteraTot.activos} clientes activos, valor histórico ${fmtUFk(carteraTot.ufTotal)}. Sanos ${cartera.sano.length}, en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}, ocasionales ${cartera.ocasional.length}.
-- Servicios por área: ${servicios.slice(0,6).map(s=>`${s.area}: ${fmtUFk(s.uf)}, ticket ${fmtUFk(s.ticket)}, ${s.recPct}% recurrente`).join('; ')}.
-- Por abogado ${yr} (vs ${tendencias.prevYr}): ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join('; ')}.
+- Servicios por área: ${servicios.slice(0,6).map(s=>`${s.area}: ${fmtUFk(s.uf)}, ticket ${fmtUFk(s.ticket)}, ${s.recPct} % recurrente`).join('; ')}.
+- Por abogado ${yr} (vs ${tendencias.prevYr}): ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct} %)`:''}`).join('; ')}.
 - Oportunidades: dormidos ${opp.dormidos.length} (${opp.dormidos.slice(0,3).map(x=>x.c.name).join(', ')||'—'}); cobranza vencida ${opp.cobranza.length}; cross-sell ${opp.crossSell.length}; sin recurrencia ${opp.sinRec.length}; win-back ${opp.winback.length}.`
       const prompt = `Eres el analista de negocio de un estudio de abogados chileno. Responde la pregunta del socio USANDO SOLO los datos entregados (no inventes nombres ni cifras; si no está, dilo). Español de Chile, directo, máximo 4 frases, con cifras cuando aporten.\n\nPREGUNTA: ${q}\n\nDATOS:\n${brief}`
       const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:400,messages:[{role:'user',content:prompt}]})
@@ -216,7 +216,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     try{
       const radarTxt = radar.length ? radar.slice(0,6).map(n=>`${n.titulo} [${(n.areas||[]).join('/')||'s/área'}; ${n.expuestos.length} clientes]`).join('; ') : 'sin novedades del SII cargadas aún'
       const oppTxt = OPPS.map(o=> o.rows.length?`${o.t} ${o.rows.length}`:null).filter(Boolean).join(', ')
-      const brief = `INTERNO — vendido ${yr} ${fmtUFk(kpis.vendidoYTD)} (crecimiento ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'} vs ${tendencias.prevYr}); por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}. Cartera ${carteraTot.activos} activos (en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}). Áreas top: ${servicios.slice(0,4).map(s=>`${s.area} ${fmtUFk(s.uf)} (${s.recPct}% rec)`).join(', ')}. Por abogado: ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct}%)`:''}`).join(', ')}. Oportunidades: ${oppTxt||'—'}. EXTERNO (Radar SII): ${radarTxt}.`
+      const brief = `INTERNO — vendido ${yr} ${fmtUFk(kpis.vendidoYTD)} (crecimiento ${tendencias.pctTot==null?'s/d':tendencias.pctTot+'%'} vs ${tendencias.prevYr}); por cobrar ${fmt(kpis.porCobrar)}; cobrado ${fmt(kpis.cobradoYTD)}. Cartera ${carteraTot.activos} activos (en riesgo ${cartera.riesgo.length}, dormidos ${cartera.dormido.length}). Áreas top: ${servicios.slice(0,4).map(s=>`${s.area} ${fmtUFk(s.uf)} (${s.recPct} % rec)`).join(', ')}. Por abogado: ${tendencias.abogados.map(a=>`${a.k} ${fmtUFk(a.cur)}${a.pct!=null?` (${a.pct>=0?'+':''}${a.pct} %)`:''}`).join(', ')}. Oportunidades: ${oppTxt||'—'}. EXTERNO (Radar SII): ${radarTxt}.`
       const prompt = `Eres el asesor estratégico del socio de un estudio de abogados chileno. Con los datos INTERNOS + el outlook del SII (EXTERNO), escribe un PLAN DEL AÑO en 5-6 frases concretas: dónde concentrar, qué áreas potenciar, qué clientes/segmentos priorizar, qué riesgos de cobranza atacar, y qué oportunidades regulatorias del SII aprovechar (con su cruce por área). Español de Chile, directo, con cifras cuando aporten. Usa SOLO estos datos, no inventes; si algo no está, no lo afirmes. Sin markdown ni viñetas.\n\nDATOS:\n${brief}`
       const data = await claudeCall({feature:'IntelligenceView',model:'claude-opus-4-8',max_tokens:600,messages:[{role:'user',content:prompt}]})
       setPlanAnio((data.content?.[0]?.text||'').trim()||'No se pudo generar el plan.')
@@ -326,7 +326,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
             {k:'oport',bg:C.azulBg,fg:C.azulInfo,t:'Oportunidades',sub:'dormidos · cobranza · cross-sell',ct:oportN,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>},
             {k:'cartera',bg:C.greenBg,fg:C.greenText,t:'Seguimiento',sub:`${cartera.riesgo.length+cartera.dormido.length} sin avanzar · toca empujar`,ct:cartera.riesgo.length+cartera.dormido.length,ctCol:(cartera.riesgo.length+cartera.dormido.length)>0?C.soonText:C.greenText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 5.8"/><path d="M17 14.5a5 5 0 0 1 3.5 4.5"/></svg>},
             {k:'servicios',bg:C.ambarBg,fg:C.soonText,t:'Servicios y precios',sub:serviciosTot.areas&&servicios[0]?`Top: ${servicios[0].area}`:'',ct:serviciosTot.areas,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3.5 3.5h7l9.5 9.5-7 7L3.5 10.5z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>},
-            {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot}%`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
+            {k:'tendencias',bg:C.tealBg,fg:C.tealText,t:'Tendencias',sub:`vs ${tendencias.prevYr} · por abogado`,ct:tendencias.pctTot==null?null:`${tendencias.pctTot>=0?'+':''}${tendencias.pctTot} %`,ctCol:tendencias.pctTot>=0?C.greenText:C.overdueText,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><path d="M3 17l6-6 4 4 8-8"/><path d="M16 7h5v5"/></svg>},
             {k:'socios',bg:C.azulBg,fg:C.accent,t:'Socios · la foto',sub:'todas las cifras por abogado',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" {...ico}><circle cx="8" cy="8" r="3"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 19a4 4 0 0 1 6.5-3.1"/></svg>},
             {k:'ia',bg:'#EFEAF7',fg:'#5B3E8E',t:'Asesor IA · Foco y Plan',sub:'Pregúntale · Foco semana · Plan del Año',ct:null,svg:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z"/></svg>},
           ]; return SECS.map((s)=>{ const open=biSec===s.k; return (
@@ -444,9 +444,9 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
               <div onClick={()=>setOpenArea(open?null:s.area)} style={{cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                   <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
-                  <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)}% del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)} % del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
                 </div>
-                                <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
+                                <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct} % recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
               </div>
               {open&&s.clientes.slice(0,8).map(c=>(
                 <div key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0 6px 14px',borderTop:`0.5px solid ${C.track}`,cursor:'pointer'}}>
@@ -472,7 +472,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
             {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
               <div key={s.area} style={{marginBottom:9}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.textSoft,fontWeight:400}}>· {s.conCosto}/{s.n} con costo</span></span></div>
-                <div style={{display:'flex',gap:6}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>{mp}% margen</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{cp}% terceros</span></div>
+                <div style={{display:'flex',gap:6}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>{mp} % margen</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{cp} % terceros</span></div>
               </div>
             )})}
             {areasCon.length===0&&<div style={{fontSize:11,color:C.grisText,marginBottom:8}}>Aún ninguna área con costo cargado.</div>}
@@ -494,7 +494,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:11}}>
             <div><div style={{...SEC_LBL}}>Vendido {yr}</div><div style={{fontSize:20,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
-            {tendencias.pctTot!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:14,fontWeight:700,color:tendencias.pctTot>=0?C.greenText:C.overdueText}}>{tendencias.pctTot>=0?'+':''}{tendencias.pctTot}%</div><div style={{fontSize:10,color:C.muted}}>vs {tendencias.prevYr} · {fmtUFk(tendencias.totPrv)}</div></div>}
+            {tendencias.pctTot!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:14,fontWeight:700,color:tendencias.pctTot>=0?C.greenText:C.overdueText}}>{tendencias.pctTot>=0?'+':''}{tendencias.pctTot} %</div><div style={{fontSize:10,color:C.muted}}>vs {tendencias.prevYr} · {fmtUFk(tendencias.totPrv)}</div></div>}
           </div>
           <div style={{...SEC_LBL,marginBottom:4}}>Por abogado · vs {tendencias.prevYr}</div>
           {tendencias.abogados.map(a=>{ const pc=personChip(a.k); return (
@@ -502,7 +502,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
               <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/>
               <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.k}</span>
               <span style={{fontSize:13,fontWeight:400,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(a.cur)}</span>
-              <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct}%`}</span>
+              <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct} %`}</span>
             </div>
           )})}
         </div>

@@ -856,7 +856,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
         const T={ok:{bg:C.greenBg,fg:C.greenText},am:{bg:C.soonBg,fg:C.soonText},hacer:{bg:C.overdueBg,fg:C.overdueText},gr:{bg:C.bgSoft,fg:C.muted}}[e.tono]||{bg:C.bgSoft,fg:C.muted}
         return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={SEC_LBL}>Puntualidad de pago</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',background:T.bg,color:T.fg,whiteSpace:'nowrap'}}>{e.etiqueta}</span></div>
-          <div style={{fontSize:12,color:C.muted,marginTop:5,lineHeight:1.45}}>{e.n>0?`${e.n} factura${e.n!==1?'s':''} pagada${e.n!==1?'s':''} en los últimos 12 meses · ${e.promedio} días en promedio desde la emisión · ${e.pct30}% dentro de 30 días`:'Ninguna factura pagada en los últimos 12 meses.'}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:5,lineHeight:1.45}}>{e.n>0?`${e.n} factura${e.n!==1?'s':''} pagada${e.n!==1?'s':''} en los últimos 12 meses · ${e.promedio} días en promedio desde la emisión · ${e.pct30} % dentro de 30 días`:'Ninguna factura pagada en los últimos 12 meses.'}</div>
         </div>)
       })()}
 
@@ -883,7 +883,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:16,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
                 <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
               </div>
-              {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct}% cobrado</span></div>}
+              {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct} % cobrado</span></div>}
             </div>
             {open&&<div style={{padding:'0 11px 11px'}}>
               {hasBills&&<CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>}
@@ -1352,7 +1352,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
         {dato('Superficie',p.superficie_m2?`${Number(p.superficie_m2).toLocaleString('es-CL',{maximumFractionDigits:2})} m²`:null)}
         {dato('Avalúo fiscal',Number(p.avaluo_fiscal)>0?fmt(p.avaluo_fiscal):null)}
         {dato('Avalúo afecto',p.avaluo_afecto!=null?fmt(p.avaluo_afecto):null)}
-        {dato('% de derecho',p.porcentaje_derecho!=null?`${Number(p.porcentaje_derecho).toLocaleString('es-CL')}%`:null)}
+        {dato('% de derecho',p.porcentaje_derecho!=null?`${Number(p.porcentaje_derecho).toLocaleString('es-CL')} %`:null)}
         {dato('Arriendo',p.arrendado?'Arrendado':null)}
         {dato('Deuda informada',Number(p.deuda_contribuciones)>0?fmt(p.deuda_contribuciones):null)}
         {dato('Origen',String(p.fuente||'').split(' · ').slice(-1)[0]||null)}

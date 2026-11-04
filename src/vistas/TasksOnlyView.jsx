@@ -492,7 +492,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
               {colHd(`Mi caja este mes · ${MESES[new Date().getMonth()]}`)}
               <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8}}>
                 {tile('Gastado', fmtCLP(gastadoMes), `${delMes.length} gasto${delMes.length!==1?'s':''}`)}
-                {tile('Por liquidar', totalPorLiquidar>0?fmtCLP(totalPorLiquidar):'—', totalPorLiquidar>0?`${porLiquidar.length}${masAntiguo?(isDesktop?` · desde el ${fmtFecha(masAntiguo).slice(0,5)} (${diasAntiguo} días)`:` · ${diasAntiguo} días`):''}`:'al día', viejo?C.soonText:null, totalPorLiquidar>0?()=>irCaja('liquidar'):null)}
+                {tile('Por liquidar', totalPorLiquidar>0?fmtCLP(totalPorLiquidar):'—', totalPorLiquidar>0?`${porLiquidar.length}${masAntiguo?` · ${diasAntiguo} días`:''}`:'al día', viejo?C.soonText:null, totalPorLiquidar>0?()=>irCaja('liquidar'):null)}
                 {tile('Liquidación', ultLiq?fmtCLP(ultLiq.total||0):'—', ultLiq?`última · ${fmtFecha(String(ultLiq.created_at||'').slice(0,10))}`:'aún no hay', null, ultLiq?()=>irCaja('caja'):null)}
               </div>
             </div>

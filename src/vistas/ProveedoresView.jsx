@@ -104,7 +104,7 @@ export function cuadreComisiones({ts=[], billing=[], anticipos=[], concs=[], sal
 
 // ── Facturas del tercero (2026-11-02): la factura que emite el proveedor por su parte de cada cuota, cuadrada con la cuota del cliente.
 // Reglas en _shared/terceroFacturasReglas.js (cuadre propuesto, alertas, cadena); aquí solo la presentación (escritorio y móvil).
-const _pctTxt = p => `${(Math.abs(p)*100).toFixed(1).replace('.',',')}%`
+const _pctTxt = p => `${(Math.abs(p)*100).toFixed(1).replace('.',',')} %`
 export const TERC_ALERTA = {
   esperada_sin_emitir:'Factura del proveedor sin emitir',
   monto:'Monto fuera de tolerancia',
@@ -924,7 +924,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
       const boletaLnk=t=>{ const bh=bheDe(t); return bh?lnk(`la boleta N° ${bh.folio}`,bh.storage_path?()=>abrirDocumento(bh.storage_path):null):'una comisión' }
       const txtDe=x=> x.tipo==='banco' ? {t:lnk(`Transferencia del ${dmy(csAll.find(m=>String(m.id)===String(x.mid))?.fecha||x.ts?.[0]?.pagado_at)}`,(!ro&&onIrBanco)?()=>onIrBanco(x.mid):()=>verComis(x.sid),C.text),
           s:<>Se transfirieron {fmt(x.aplic)} por {x.ts.map((t,i)=><Fragment key={t.id}>{i?' y ':''}{boletaLnk(t)}</Fragment>)}, cuyo líquido era {fmt(x.liq)}.</>}
-        : x.tipo==='base' ? {t:lnk(`${x.monto>0?'Comisión pagada en exceso':'Comisión pendiente de pago'} respecto de lo pagado por el cliente`,()=>verComis(x.sid),C.text), s:<>{lnk(`El cliente pagó ${fmt(x.cobrado)}`,()=>irCli(x.sid))}; el {x.pct}% es {fmt(x.corr)} y {lnk(`las comisiones registradas suman ${fmt(x.reg)} líquido`,()=>verComis(x.sid))}.</>}
+        : x.tipo==='base' ? {t:lnk(`${x.monto>0?'Comisión pagada en exceso':'Comisión pendiente de pago'} respecto de lo pagado por el cliente`,()=>verComis(x.sid),C.text), s:<>{lnk(`El cliente pagó ${fmt(x.cobrado)}`,()=>irCli(x.sid))}; el {x.pct} % es {fmt(x.corr)} y {lnk(`las comisiones registradas suman ${fmt(x.reg)} líquido`,()=>verComis(x.sid))}.</>}
         : {t:lnk(`Factura N° ${folioN(x.b.invoice_no)} sin comisión registrada`,(!ro&&onOpenFactura)?()=>onOpenFactura(x.b):()=>irCli(x.sid),C.text), s:<>{glosaFactura(x.b)} · {fmt(montoFactura(x.b))}. ¿Cambió lo acordado o falta registrar la comisión?</>}
       const btn=(l,on)=><span onClick={on} className='pv-c' style={{fontSize:12,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{l}</span>
       const porCli={}; items.forEach(x=>{ const k=String(x.sid||'x'); (porCli[k]=porCli[k]||[]).push(x) })
@@ -948,7 +948,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
           {totMas>0&&<b onClick={()=>setVerFilasCuadre(true)} style={{color:C.soonText,whiteSpace:'nowrap',cursor:'pointer',...num}}>Pagado en exceso {fmt(totMas)}</b>}</div>}
         {verFilasCuadre&&filas.map(f=><div key={f.sid} onClick={()=>verComis(f.sid)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,cursor:'pointer'}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lnk(cliN(f.sid),()=>irCli(f.sid))}{isDesktop&&f.sale?.title?<span style={{fontWeight:400,color:C.muted}}> · {lnk(f.sale.title,()=>irVenta(f.sid),C.muted)}</span>:null}</div>
-            <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>pagó {fmt(f.cobrado)} · {f.pct}% {fmt(f.corr)} · {isDesktop?'comisiones ':''}{fmt(f.reg)}</div></div>
+            <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>pagó {fmt(f.cobrado)} · {f.pct} % {fmt(f.corr)} · {isDesktop?'comisiones ':''}{fmt(f.reg)}</div></div>
           <span style={{fontWeight:700,color:C.muted,flexShrink:0,...num}}>{Math.abs(f.dif)<1?'$0':(f.dif>0?'+':'−')+fmt(Math.abs(f.dif))}</span><span style={{color:C.textSoft,fontSize:11,flexShrink:0}}><Gl n='chevron'/></span></div>)}
       </div> })()
     const bolStrip = esBoletaProv(sel) ? (()=>{ const py=tPag.filter(t=>yOf(t.pagado_at||t.created_at)===yr), cto=sumM(py), liq=py.reduce((a,t)=>a+pagarT(t),0), nB=new Set(py.map(t=>t.bhe_id).filter(Boolean)).size
