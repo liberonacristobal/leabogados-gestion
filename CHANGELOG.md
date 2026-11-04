@@ -1,3 +1,4 @@
+- 2026-11-04 · El aviso de novedades al entrar pasa de ventana centrada a banda arriba que no bloquea; regla «modal solo para confirmaciones» agregada a CLAUDE.md.
 - 2026-11-04 · Modales → páginas: Registrar pago, Panel SII (historial, libro y set de pruebas), Vista previa de emisión, Nueva/Editar caja chica y Tareas del Inicio.
 - 2026-11-04 · Modales → páginas: Anticipo, Asignar a 1 factura, Fusionar anticipos, Costos de Oficina, Compras · IVA, Alcance del proyecto, Revisión de caja chica, Enviar devolución (App) y Hub de Conciliación; se quita el modal de factura que nada abría.
 - 2026-11-04 · Modales → páginas: Gestión de usuarios, Roles y permisos, Módulos, Papelera, Lo que aprendí, Red profesional, Cobertura SII y Por socio; en Por socio las tarjetas pasan a columnas que se ajustan al ancho y la tabla de Oficina deja de montar cifras.
