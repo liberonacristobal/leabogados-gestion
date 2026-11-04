@@ -224,7 +224,7 @@ export function ContactoTab({client, entities, onSaveFields, clientBilling=[], o
   const sPer = (
         <IconSection icon='users' title='Personas de contacto' summary={loadingC?'…':(contacts.length||'—')} open={sec.personas} onToggle={()=>tog('personas')}>
           <div style={{paddingTop:4}}>
-            {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:6}}>+ Agregar</button>}
+            {!showAdd&&<button onClick={()=>{setEdit(null);setCForm({nombre:'',cargo:'',email:'',telefono:''});setShowAdd(true)}} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:6}}>+ Agregar</button>}
             {loadingC&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Cargando...</div>}
             {!loadingC&&contacts.length===0&&!showAdd&&<div style={{fontSize:12,color:C.muted,padding:'6px 0'}}>Sin contactos.</div>}
             {[...contacts].sort((a,b)=>(b.principal?1:0)-(a.principal?1:0)).map(c=>(
@@ -232,7 +232,7 @@ export function ContactoTab({client, entities, onSaveFields, clientBilling=[], o
                 <button onClick={()=>togglePrincipal(c)} title={c.principal?'Principal':'Marcar principal'} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,lineHeight:1,color:c.principal?C.soon:'#CBD5DB',flexShrink:0,padding:0}}>{c.principal?'★':'☆'}</button>
                 <div style={{width:34,height:34,borderRadius:'50%',background:C.azulBg,color:C.accent,fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{initials(c.nombre)}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.principal&&<span style={{fontSize:9,fontWeight:700,color:C.soonText,background:C.soonBg,padding:'1px 7px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nombre}{c.principal&&<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,padding:'1px 7px',borderRadius:20,marginLeft:5,textTransform:'uppercase',letterSpacing:.3}}>Principal</span>}{c.cargo&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {c.cargo}</span>}</div>
                   <div style={{fontSize:11,color:C.muted,display:'flex',gap:8,flexWrap:'wrap'}}>
                     {c.email&&<a href={`mailto:${c.email}`} style={{color:C.accent,textDecoration:'none'}}>{c.email}</a>}
                     {c.telefono&&<Copyable text={c.telefono} title='Copiar teléfono'>{c.telefono}</Copyable>}
@@ -329,8 +329,8 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
     const cmp=ord==='monto'?(x,y)=>(y.amount||0)-(x.amount||0):ord==='proyecto'?(x,y)=>((ventaById[x.sale_id]?.title||x.concept||'zzz')).localeCompare(ventaById[y.sale_id]?.title||y.concept||'zzz')||((x.issued_at||'')<(y.issued_at||'')?1:-1):(x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1
     Object.values(g).forEach(a=>a.sort(cmp));return g},[facturas,ord,ventaById])
   const porProy=useMemo(()=>{const p={};facturas.forEach(b=>{const v=ventaById[b.sale_id];const k=b.sale_id||'_';const o=p[k]||(p[k]={key:k,sale_id:b.sale_id||null,venta:v||null,titulo:v?.title||'Sin proyecto',area:v?.area||'',year:v?.year||null,status:v?.status||null,fact:0,pag:0,facs:[]});o.fact+=montoFactura(b);o.pag+=cobradoBill(b);o.facs.push(b)});Object.values(p).forEach(o=>o.facs.sort((x,y)=>(x.issued_at||'')<(y.issued_at||'')?1:-1));return Object.values(p)},[facturas,ventaById])
-  const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{...SEC_LBL}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:9,color:C.textSoft,lineHeight:1.3}}>{sub}</div></div>)
-  const Hdr=({icon,title,purpose,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{title}</div>{purpose&&<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1}}>{purpose}</div>}</div>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
+  const kpi=(label,val,sub,col,corner)=>(<div style={{background:C.bgSoft,borderRadius:8,padding:'8px 9px',position:'relative'}}>{corner}<div style={{...SEC_LBL}}>{label}</div><div style={{fontSize:13,fontWeight:600,color:col}}>{fmt(val)}</div><div style={{fontSize:10,color:C.textSoft,lineHeight:1.3}}>{sub}</div></div>)
+  const Hdr=({icon,title,purpose,summary,sumCol,k})=>(<div onClick={()=>secT(k)} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 13px',cursor:'pointer',borderBottom:`0.5px solid ${C.bgWarm}`,background:sec[k]?C.bgPanel:'transparent'}}><SIcon n={icon} s={18} c={C.muted}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{title}</div>{purpose&&<div style={{fontSize:10,color:C.muted,fontWeight:600,marginTop:1}}>{purpose}</div>}</div>{summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:sec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg></div>)
   return (<div style={{padding:'14px 20px 40px',maxWidth:isDesktop?900:undefined,margin:isDesktop?'0 auto':undefined}}>
     {/* Banda accionable: lo único que de verdad importa en una cuenta donde casi solo entra plata — lo que falta conciliar */}
     {(()=>{ const movBase=movs.filter(m=>!m.es_interno); const sinC=movBase.filter(m=>!conc.find(x=>x.movimiento_id===m.id)); if(!sinC.length) return null; const tot=sinC.reduce((s,m)=>s+(m.monto||0),0); return (
@@ -361,33 +361,33 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
       {lista.map(m=>{ const c=conc.find(x=>x.movimiento_id===m.id); const open=detMov===m.id; const dest=c?(c.tipo_destino==='fondo'?'→ Fondo':c.tipo_destino==='anticipo'?'→ Anticipo':c.tipo_destino==='gasto'?(m.tipo==='cargo'?'→ Gasto por cuenta del cliente':'→ Reembolso gastos'):(()=>{const f=clientBilling.find(b=>b.id===c.factura_id);return f?`→ Factura N° ${folioN(f.invoice_no)||'—'}`:'→ por resolver · re-conciliar'})()):'sin conciliar'; const d=dCol(m.fecha); const cta=m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'; return (
         <div key={m.id}>
           <div onClick={()=>setDetMov(open?null:m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:open?'none':'1px solid #F1F1F1',cursor:'pointer'}}>
-            <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:9,color:C.textSoft}}>{d.sub}</div></div>
-            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:9.5,fontWeight:700,background:m.rol_cuenta==='gastos'?C.ambarBg:C.azulBg,color:m.rol_cuenta==='gastos'?C.soonText:C.accent,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</span></div><div style={{fontSize:11,color:c?C.muted:C.soon,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
+            <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:10,color:C.textSoft}}>{d.sub}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:10,fontWeight:700,background:m.rol_cuenta==='gastos'?C.ambarBg:C.azulBg,color:m.rol_cuenta==='gastos'?C.soonText:C.accent,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</span></div><div style={{fontSize:11,color:c?C.muted:C.soon,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
             <b style={{color:m.tipo==='abono'?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
             <span style={{color:C.textSoft,fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
           </div>
-          {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.7,margin:'0 0 6px'}}>
+          {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:8,fontSize:11,color:C.muted,lineHeight:1.7,margin:'0 0 6px'}}>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Cuenta: <b style={{color:C.text}}>{cta}</b></span><span>Tipo: <b style={{color:C.text}}>{m.tipo==='abono'?'Abono':'Cargo'}</b></span>{m.n_operacion&&<span>N° op.: <b style={{color:C.text}}>{m.n_operacion}</b></span>}</div>
             {m.descripcion&&<div>Glosa: <b style={{color:C.text}}>{m.descripcion}</b></div>}
             <div style={{marginTop:4,paddingTop:4,borderTop:`1px solid #E4E8EB`,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><span style={{color:c?C.text:C.soon}}>{c?<>{dest} <span style={{color:C.greenText,fontWeight:600}}><Gl n='tick'/> conciliado</span></>:'sin conciliar'}</span>{onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(m.id)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>ver en Conciliación ↗</span>}</div>
           </div>}
         </div>) })}
     </div>) })()}
-    <div style={{fontSize:9,color:C.textSoft,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',padding:'13px 13px 6px',borderTop:`0.5px solid ${C.bgWarm}`}}>Específico · por categoría de pago</div>
+    <div style={{fontSize:10,color:C.textSoft,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',padding:'13px 13px 6px',borderTop:`0.5px solid ${C.bgWarm}`}}>Específico · por categoría de pago</div>
     {Hdr({icon:'file',title:'Honorarios',k:'honorarios',summary:`${facturas.length} factura${facturas.length!==1?'s':''}`})}
     {sec.honorarios&&<div style={{padding:'2px 13px 12px'}}>
       {porProy.length>0&&(()=>{
         const tile=p=>{ const open=openProy===p.key; const falta=(p.fact||0)-(p.pag||0); return (
           <div key={p.key}>
             <div onClick={()=>setOpenProy(open?null:p.key)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid #F1F1F1`,cursor:'pointer'}}>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</div><div style={{display:'flex',gap:6,alignItems:'center',marginTop:2}}>{p.area&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:p.area==='Corporativo'?C.azulBg:C.bgWarm,color:p.area==='Corporativo'?C.accent:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{p.area}</span>}<span style={{fontSize:10,color:C.textSoft}}>{p.year?`${p.year} · `:''}{p.facs.length} factura{p.facs.length!==1?'s':''}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</div><div style={{display:'flex',gap:6,alignItems:'center',marginTop:2}}>{p.area&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:p.area==='Corporativo'?C.azulBg:C.bgWarm,color:p.area==='Corporativo'?C.accent:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{p.area}</span>}<span style={{fontSize:10,color:C.textSoft}}>{p.year?`${p.year} · `:''}{p.facs.length} factura{p.facs.length!==1?'s':''}</span></div></div>
               <div style={{textAlign:'right',whiteSpace:'nowrap'}}><div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{fmt(p.fact)}</div><div style={{fontSize:10,color:falta>0?C.overdue:C.greenText}}>{falta>0?`falta ${fmt(falta)}`:'pagado'}</div></div>
               <span style={{color:C.textSoft,fontSize:16,lineHeight:1,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
             </div>
             {open&&<div style={{padding:'2px 0 6px'}}>{p.facs.map(b=>{ const pagada=b.status==='Pagado'; return (
               <div key={b.id} onClick={()=>onOpenSale&&p.venta&&onOpenSale(p.venta)} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0 4px 12px',fontSize:11,cursor:onOpenSale&&p.venta?'pointer':'default'}}>
                 <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span></span>
-                {(()=>{ const e=estadoFacturaLabel(b,aplicadoByFac[b.id]||0,cartolaHastaEC); return <span style={{fontSize:9,fontWeight:600,color:(e&&e.fg)||C.soon}}>{(e&&e.short)||(pagada?'Pagada':'pend.')}</span> })()}
+                {(()=>{ const e=estadoFacturaLabel(b,aplicadoByFac[b.id]||0,cartolaHastaEC); return <span style={{fontSize:10,fontWeight:600,color:(e&&e.fg)||C.soon}}>{(e&&e.short)||(pagada?'Pagada':'pend.')}</span> })()}
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>) })}</div>}
           </div>) }
@@ -397,7 +397,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
         return (<div style={{background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 11px 8px',marginBottom:10}}>
           <div onClick={()=>setPorProyOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',cursor:'pointer'}}>
             <span style={{fontSize:14,color:C.textSoft,lineHeight:1,transform:porProyOpen?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-            <span style={{flex:1,fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3}}>Por proyecto</span>
+            <span style={{flex:1,fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3}}>Por proyecto</span>
             <span style={{fontSize:10,color:C.textSoft,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(totFact)}{totPend>0?<span style={{color:C.accent}}> · por cobrar {fmt(totPend)}</span>:''}</span>
           </div>
           {porProyOpen&&<>
@@ -407,7 +407,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
           </div>) })}
           {sinP&&(()=>{ const open=openProy==='_'; return (<div style={{borderTop:`1px solid ${C.border}`,marginTop:4}}>
             <div onClick={()=>setOpenProy(open?null:'_')} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0 8px',cursor:'pointer'}}>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,color:C.overdueText}}>Sin proyecto</div><div style={{fontSize:10,color:C.textSoft,marginTop:2}}>{sinP.facs.length} factura{sinP.facs.length!==1?'s':''} · toca para asignar proyecto</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:400,color:C.overdueText}}>Sin proyecto</div><div style={{fontSize:10,color:C.textSoft,marginTop:2}}>{sinP.facs.length} factura{sinP.facs.length!==1?'s':''} · toca para asignar proyecto</div></div>
               <div style={{fontSize:13,fontWeight:600,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(sinP.fact)}</div>
             </div>
             {open&&<div style={{padding:'2px 0 6px'}}>{sinP.facs.map(b=>(
@@ -428,7 +428,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
       {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=porCobrarBills(fs); return (<div key={rs} style={{marginBottom:8}}>
         <div onClick={()=>setOpenRS(p=>({...p,[rs]:!p[rs]}))} style={{display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${C.border}`,paddingBottom:4,marginBottom:1,cursor:'pointer'}}>
           <span style={{fontSize:14,color:C.textSoft,lineHeight:1,transform:abierta?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:C.textSoft,fontWeight:600}}> · {rut}</span>:''}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:C.textSoft,fontWeight:600}}> · {rut}</span>:''}</div></div>
           <span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap'}}>{fs.length} fact.{pend>0?<span style={{color:C.overdue}}> · por cobrar {fmt(pend)}</span>:''}</span>
         </div>
         {abierta&&fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
@@ -437,14 +437,14 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
           <div key={b.id}>
             <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer',borderBottom:open?'none':`1px solid ${C.border}`}}>
               {diaGrande(b.issued_at)}
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:eBg,color:eCol,whiteSpace:'nowrap'}}>{pagada?((estB&&estB.short)||'Pagada'):(ag?ag.t:'pendiente')}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:eBg,color:eCol,whiteSpace:'nowrap'}}>{pagada?((estB&&estB.short)||'Pagada'):(ag?ag.t:'pendiente')}</span></div></div>
               <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
             </div>
-            {open&&<div style={{padding:'7px 9px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
+            {open&&<div style={{padding:'7px 9px',background:C.bgSoft,borderRadius:8,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
               <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{b.billing_type||'honorarios'}</b></span><span>Emisión: <b style={{color:C.text}}>{fmtFechaDMY(b.issued_at)}</b></span>{b.due&&<span>Vence: <b style={{color:C.text}}>{fmtFechaDMY(b.due)}</b></span>}</div>
               <div>Monto: <b style={{color:C.text}}>{fmt(montoFactura(b))}</b> · {pagada?((estB&&estB.label)||'Pagada'):`Saldo ${fmt(saldoBill(b))}`}</div>
-              {v&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Venta / proyecto</span>{onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}</div><div onClick={onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:onOpenSale?'pointer':'default'}}><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</div></div>}
-              {pagada&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Pago</span>{c&&onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver movimiento ↗</span>}</div>
+              {v&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Venta / proyecto</span>{onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}</div><div onClick={onOpenSale?(ev)=>{ev.stopPropagation();onOpenSale(v)}:undefined} style={{color:C.text,cursor:onOpenSale?'pointer':'default'}}><b>{v.title}</b>{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</div></div>}
+              {pagada&&<div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}><span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Pago</span>{c&&onOpenConciliacion&&<span onClick={(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver movimiento ↗</span>}</div>
                 {c?<div onClick={onOpenConciliacion?(ev)=>{ev.stopPropagation();onOpenConciliacion(c.movimiento_id)}:undefined} style={{color:C.text,cursor:onOpenConciliacion?'pointer':'default'}}>Transferencia <b>{fmt(c.monto_aplicado)}</b>{mv?` · ${fmtFechaDMY(mv.fecha)} · ${mv.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}${mv.n_operacion?` · N° op. ${mv.n_operacion}`:''}`:''} <span style={{color:C.greenText,fontWeight:600}}><Gl n='tick'/> verificado en banco</span></div>
                   :<div style={{color:C.soon}}>Marcada pagada a mano — sin movimiento bancario enlazado</div>}
               </div>}
@@ -463,16 +463,16 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
             {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
               {/* Fila limpia (regla sutil): tipo o categoría + OT con su sello de pagada; caja chica, banco y rendición quedan en el detalle (recorridoGasto). */}
-              {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,color:C.textSoft,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)}</span>}</div>:null}
+              {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)}</span>}</div>:null}
               <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo'):'Gasto')}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:isDev?C.muted:col,flexShrink:0}}>{isDev?'−'+fmt(Math.abs(e.amount)):(signo>0?'+':'−')+fmt(e.amount)}</div>
             <span style={{color:C.textSoft,fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
           </div>
-          {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:6,fontSize:11,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
+          {open&&<div style={{padding:'8px 10px',background:C.bgSoft,borderRadius:8,fontSize:11,color:C.muted,lineHeight:1.6,margin:'0 0 7px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:3}}><span style={{fontSize:12,color:C.text,fontWeight:600,minWidth:0}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto')}</span>{onEditExpense&&<span onClick={(ev)=>{ev.stopPropagation();onEditExpense(e)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer',flexShrink:0}}>editar gasto ↗</span>}</div>
             <div style={{display:'flex',gap:12,flexWrap:'wrap'}}><span>Tipo: <b style={{color:C.text}}>{signo>0?(isDev?'Devolución':'Fondo recibido'):'Gasto'}</b></span><span>Fecha: <b style={{color:C.text}}>{fmtFechaDMY(e.date)}</b></span><span>Monto: <b style={{color:isDev?C.muted:col}}>{isDev?'−'+fmt(Math.abs(e.amount)):fmt(e.amount)}</b></span>{e.category&&<span>Categoría: <b style={{color:C.text}}>{e.category}</b></span>}</div>
-            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&ultAsig.n===1&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}</span></div>
+            <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid #E4E8EB`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}><span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>Venta / proyecto · razón social</span><span style={{display:'flex',gap:10,flexShrink:0}}>{v&&onOpenSale&&<span onClick={(ev)=>{ev.stopPropagation();onOpenSale(v)}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>ver venta ↗</span>}{ultAsig?.ids.has(e.id)&&ultAsig.n===1&&<span onClick={(ev)=>{ev.stopPropagation();deshacerAsig()}} style={{fontSize:10,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>deshacer</span>}</span></div>
               {(()=>{ const entName=id=>{ const en=(clientEntities||[]).find(x=>String(x.id)===String(id)); return en?en.name:'Razón social asignada' }
                 const txtProy = v?<><b>{v.title}</b>{e.subproject?<b>{` · ${e.subproject}`}</b>:null}{v.area?` · ${v.area}`:''}{v.responsible?` · ${v.responsible}`:''}{v.status?` · ${v.status}`:''}</>:(e.project?<b>{e.project}{e.subproject?` · ${e.subproject}`:''}</b>:null)
                 // Corregir: el dato mismo se toca → selectores con lo actual → Confirmar (con "antes" a la vista). Deshacer queda en línea.
@@ -486,7 +486,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
                       {ents.length>0&&<select value={corrG.ent||''} onChange={ev=>setCorrG(c=>({...c,ent:ev.target.value}))} aria-label='Razón social' style={sel}><option value=''>Razón social…</option>{ents.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:10,marginTop:6,flexWrap:'wrap'}}>
-                      <span style={{flex:1,minWidth:0,fontSize:10.5,color:C.muted}}>antes: {[v?.title||e.project||'sin proyecto', e.entity_id?entName(e.entity_id):'sin razón social'].join(' · ')}</span>
+                      <span style={{flex:1,minWidth:0,fontSize:11,color:C.muted}}>antes: {[v?.title||e.project||'sin proyecto', e.entity_id?entName(e.entity_id):'sin razón social'].join(' · ')}</span>
                       <span onClick={()=>setCorrG(null)} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>cancelar</span>
                       <button disabled={!cambia} onClick={confirmar} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:'6px 12px',border:'none',background:cambia?C.accent:C.done,color:C.surface,cursor:cambia?'pointer':'default'}}>Confirmar</button>
                     </div></div> }
@@ -503,7 +503,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
             {(()=>{ const links=recorridoGasto(e,{conc,movById,expenses}).map(p=>({k:p.k, t:p.t, d:[p.fecha?fmtFechaDMY(p.fecha):null, p.d].filter(Boolean).join(' · '), on:p.mov&&onOpenConciliacion?()=>onOpenConciliacion(p.mov):p.fondo?()=>setDetG(p.fondo):null}))
               if(!links.length) return null
               return <div style={{marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}>
-                <span style={{fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>{signo>0?'Depósito':'Pago'}</span>
+                <span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase'}}>{signo>0?'Depósito':'Pago'}</span>
                 {links.map(l=><div key={l.k} onClick={l.on?(ev)=>{ev.stopPropagation();l.on()}:undefined} style={{display:'flex',gap:6,alignItems:'baseline',color:C.text,cursor:l.on?'pointer':'default'}}><b>{l.t}</b><span style={{color:C.muted}}>{l.d}</span>{l.on&&<span style={{marginLeft:'auto',color:C.azulInfo,fontWeight:600,flexShrink:0}}>Ver <Gl n='chevron'/></span>}</div>)}
               </div> })()}
             {(e.created_by||e.notas)&&<div style={{marginTop:3}}>{e.created_by?`Registrado por ${e.created_by}`:''}{e.notas?` · ${e.notas}`:''}</div>}
@@ -518,11 +518,11 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
           <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
         </div>
       </div>
-      {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
-      <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
+      {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
+      <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
       {fondosV.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {fondosV.map(e=>fila(e,1,C.greenText))}
-      <div style={{fontSize:9,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
+      <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',margin:'8px 0 2px'}}>Gastos</div>
       {gastosV.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {gastosV.map(e=>fila(e,-1,C.overdueText))}
       <BitacoraLista plano prefijo={`clientes.${client.id}.`} autor='Administración' limite={50}/>
@@ -530,7 +530,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
     {Hdr({icon:'clock',title:'Anticipos',k:'adelantos',summary:anticipos.length?`${anticipos.length}`:'sin anticipos'})}
     {sec.adelantos&&<div style={{padding:'2px 13px 12px'}}>
       {(anticipos||[]).length===0&&<div style={{fontSize:11,color:C.muted}}>Sin adelantos.</div>}
-      {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>{ const bill=(clientBilling||[]).find(b=>String(b.id)===String(a.billing_id)); const clickable=a.estado!=='disponible'&&bill&&onEditBilling; return (<div key={a.id} onClick={clickable?()=>onEditBilling(bill):undefined} title={clickable?`Ver factura N° ${folioN(bill.invoice_no)||'—'}`:undefined} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1',cursor:clickable?'pointer':'default'}}><span>{(a.nota||'Anticipo').slice(0,30)} <span style={{color:C.textSoft}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:C.greenText}}>{fmt(a.monto)}</b> <span style={{fontSize:9,color:a.estado==='disponible'?C.greenText:C.done}}>{a.estado}</span>{clickable?<span style={{color:C.textSoft,marginLeft:4}}><Gl n='chevron'/></span>:''}</span></div>) })}
+      {(anticipos||[]).slice().sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).map(a=>{ const bill=(clientBilling||[]).find(b=>String(b.id)===String(a.billing_id)); const clickable=a.estado!=='disponible'&&bill&&onEditBilling; return (<div key={a.id} onClick={clickable?()=>onEditBilling(bill):undefined} title={clickable?`Ver factura N° ${folioN(bill.invoice_no)||'—'}`:undefined} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'4px 0',borderBottom:'1px solid #F1F1F1',cursor:clickable?'pointer':'default'}}><span>{(a.nota||'Anticipo').slice(0,30)} <span style={{color:C.textSoft}}>· {fmtFechaDMY(a.fecha)}</span></span><span style={{textAlign:'right'}}><b style={{color:C.greenText}}>{fmt(a.monto)}</b> <span style={{fontSize:10,color:a.estado==='disponible'?C.greenText:C.done}}>{a.estado}</span>{clickable?<span style={{color:C.textSoft,marginLeft:4}}><Gl n='chevron'/></span>:''}</span></div>) })}
     </div>}
     </div>
   </div>)
@@ -569,14 +569,14 @@ export function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=
           <option value=''>Razón social…</option>
           {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
         </select>}
-        {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
+        {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
       </div>
       <div style={{marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}`}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:2}}><b style={{fontSize:11.5,color:C.text}}>Otros sin proyecto · ¿van a este mismo?</b><span onClick={()=>setMarc(extra.length===lista.length?new Set():new Set(lista.map(x=>x.id)))} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{extra.length===lista.length?'Desmarcar':'Marcar todos'}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:2}}><b style={{fontSize:12,color:C.text}}>Otros sin proyecto · ¿van a este mismo?</b><span onClick={()=>setMarc(extra.length===lista.length?new Set():new Set(lista.map(x=>x.id)))} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{extra.length===lista.length?'Desmarcar':'Marcar todos'}</span></div>
         {lista.map(x=>{ const on=marc.has(x.id); const ot=x.ot_number?(String(x.ot_number).toUpperCase().startsWith('OT')?x.ot_number:'OT-'+x.ot_number):null
           return <div key={x.id} onClick={()=>setMarc(s=>{ const n=new Set(s); n.has(x.id)?n.delete(x.id):n.add(x.id); return n })} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 0',borderBottom:`1px solid ${C.border}`,cursor:'pointer'}}>
             {ck(on)}
-            <span style={{flex:1,minWidth:0,display:'grid',gap:1}}><span style={{fontSize:12,color:C.text,lineHeight:1.35}}>{String(x.concept||x.category||'Sin descripción').replace(/^gastos notariales\s*[—–-]\s*/i,'')}</span><span style={{fontSize:10.5,color:C.muted}}>{[fmtFechaDMY(x.date),ot].filter(Boolean).join(' · ')}</span></span>
+            <span style={{flex:1,minWidth:0,display:'grid',gap:1}}><span style={{fontSize:12,color:C.text,lineHeight:1.35}}>{String(x.concept||x.category||'Sin descripción').replace(/^gastos notariales\s*[—–-]\s*/i,'')}</span><span style={{fontSize:11,color:C.muted}}>{[fmtFechaDMY(x.date),ot].filter(Boolean).join(' · ')}</span></span>
             <span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.abs(x.amount||0))}</span>
           </div> })}
         <div style={{display:'flex',justifyContent:'flex-end',marginTop:8}}>{btn}</div>
@@ -594,7 +594,7 @@ export function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=
         {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
       </select>}
       {btn}
-      {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:10.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
+      {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
     </div>)
 }
 
@@ -646,19 +646,19 @@ export function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=n
   // ── Celdas de la línea de tiempo ──
   const celdaCuota = (b) => { const olv=olvidadasSet.has(String(b.id))
     return (<div style={{background:emit(b)?'#fff':(olv?'#FCEBEB':(C.soonBg||'#FFFBF0')),border:`1px solid ${emit(b)?C.border:(olv?C.overdueText:(C.soon||'#EBD9AE'))}`,borderRadius:10,padding:'8px 10px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text,fontWeight:600}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
-      <div style={{fontSize:10.5,color:olv?C.overdueText:C.muted,marginTop:2}}>{emit(b)?`Vence ${dmy(b.due)}`:`Vence ${dmy(effDue(b))}`}{olv?' · sin facturar':''}</div>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:13,color:C.text,fontWeight:600}}>{etiqueta(b)}</span><span style={{fontSize:13,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+      <div style={{fontSize:11,color:olv?C.overdueText:C.muted,marginTop:2}}>{emit(b)?`Vence ${dmy(b.due)}`:`Vence ${dmy(effDue(b))}`}{olv?' · sin facturar':''}</div>
     </div>) }
   const celdaFactura = (b) => emit(b) ? (
     <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',cursor:onOpenFactura?'pointer':'default'}}>
-      <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{fontSize:12.5,color:C.accent,fontWeight:700}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
-      <div style={{fontSize:10.5,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}<span style={{color:C.textSoft,marginLeft:'auto'}}><Gl n='chevron'/></span></div>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{fontSize:13,color:C.accent,fontWeight:700}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div>
+      <div style={{fontSize:11,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}<span style={{color:C.textSoft,marginLeft:'auto'}}><Gl n='chevron'/></span></div>
     </div>
   ) : (
     <div data-soltar={b.id} data-soltar-grupo={grupoArr}
       style={{border:`1.5px dashed ${(hover===b.id||arrF.sobre===String(b.id))?C.accent:(C.soon||'#EBD9AE')}`,background:(hover===b.id||arrF.sobre===String(b.id))?(C.azulBg||'#EAF0F3'):'transparent',borderRadius:10,padding:'8px 10px',display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',transition:'background .1s'}}>
       <span style={{fontSize:12,color:C.soonText}}>por emitir</span>
-      {orphans.length>0&&<span style={{fontSize:10.5,color:C.muted}}>{isDesktop?'arrastra aquí':''}</span>}
+      {orphans.length>0&&<span style={{fontSize:11,color:C.muted}}>{isDesktop?'arrastra aquí':''}</span>}
     </div>
   )
 
@@ -667,19 +667,19 @@ export function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=n
       {/* Encabezado: proyecto + cliente + razón social + RUT + métricas */}
       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
         <div style={{minWidth:0}}>
-          {!nested&&<div style={{fontSize:14.5,fontWeight:700,color:C.text}}>{sale.title}</div>}
-          {client&&<div style={{fontSize:11.5,color:C.muted,marginTop:1}}>Cliente <b style={{color:C.text,fontWeight:600}}>{client.name}</b>{rsList.length?' · facturado a':''}</div>}
-          {rsList.length>0&&<div style={{display:'inline-flex',alignItems:'center',gap:6,background:C.azulBg||'#EAF0F3',color:C.accent,borderRadius:8,padding:'3px 9px',fontSize:12,fontWeight:600,marginTop:6}}>{rsDisplay?rsDisplay(rsList[0].name):rsList[0].name}{rsList[0].rut&&<span style={{color:C.muted,fontWeight:500}}>· {rsList[0].rut}</span>}{rsList.length>1&&<span style={{color:C.muted,fontWeight:500}}>+{rsList.length-1}</span>}</div>}
+          {!nested&&<div style={{fontSize:14,fontWeight:700,color:C.text}}>{sale.title}</div>}
+          {client&&<div style={{fontSize:12,color:C.muted,marginTop:1}}>Cliente <b style={{color:C.text,fontWeight:600}}>{client.name}</b>{rsList.length?' · facturado a':''}</div>}
+          {rsList.length>0&&<div style={{display:'inline-flex',alignItems:'center',gap:6,background:C.azulBg||'#EAF0F3',color:C.accent,borderRadius:8,padding:'3px 9px',fontSize:12,fontWeight:600,marginTop:6}}>{rsDisplay?rsDisplay(rsList[0].name):rsList[0].name}{rsList[0].rut&&<span style={{color:C.muted,fontWeight:400}}>· {rsList[0].rut}</span>}{rsList.length>1&&<span style={{color:C.muted,fontWeight:400}}>+{rsList.length-1}</span>}</div>}
         </div>
-        {isDesktop&&<div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:9,overflow:'hidden',flexShrink:0}}>
-          {[['linea','Línea'],['tabla','Tabla']].map(([v,l])=><button key={v} onClick={()=>setViewP(v)} style={{border:'none',background:view===v?C.accent:'#fff',color:view===v?'#fff':C.muted,fontSize:11.5,fontWeight:600,padding:'6px 13px',cursor:'pointer'}}>{l}</button>)}
+        {isDesktop&&<div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',flexShrink:0}}>
+          {[['linea','Línea'],['tabla','Tabla']].map(([v,l])=><button key={v} onClick={()=>setViewP(v)} style={{border:'none',background:view===v?C.accent:'#fff',color:view===v?'#fff':C.muted,fontSize:12,fontWeight:600,padding:'6px 13px',cursor:'pointer'}}>{l}</button>)}
         </div>}
       </div>
       {!sinMetricas&&<div style={{display:'flex',gap:16,marginTop:10,flexWrap:'wrap'}}>
-        <div style={{fontSize:10.5,color:C.muted}}>Plan<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nTot} cuota{nTot!==1?'s':''}{uf>0?` · ${fmtUF(uf)}`:''}</div></div>
-        <div style={{fontSize:10.5,color:C.muted}}>Cobrado<div style={{fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(cobrado)}</div></div>
-        <div style={{fontSize:10.5,color:C.muted}}>Facturado<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nEmit} de {nTot}</div></div>
-        <div style={{fontSize:10.5,color:C.muted}}>Por emitir<div style={{fontSize:13,fontWeight:700,color:nHueco?C.soonText:C.muted,fontVariantNumeric:'tabular-nums'}}>{nHueco?fmtShort(porEmitir):'$0'}</div></div>
+        <div style={{fontSize:11,color:C.muted}}>Plan<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nTot} cuota{nTot!==1?'s':''}{uf>0?` · ${fmtUF(uf)}`:''}</div></div>
+        <div style={{fontSize:11,color:C.muted}}>Cobrado<div style={{fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(cobrado)}</div></div>
+        <div style={{fontSize:11,color:C.muted}}>Facturado<div style={{fontSize:13,fontWeight:700,color:C.text}}>{nEmit} de {nTot}</div></div>
+        <div style={{fontSize:11,color:C.muted}}>Por emitir<div style={{fontSize:13,fontWeight:700,color:nHueco?C.soonText:C.muted,fontVariantNumeric:'tabular-nums'}}>{nHueco?fmtShort(porEmitir):'$0'}</div></div>
       </div>}
 
       {/* AVISO: cuota(s) que quedaron sin facturar (una cuota posterior las dejó atrás) */}
@@ -698,7 +698,7 @@ export function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=n
           {cuotas.map((b,i)=>{ const olv=olvidadasSet.has(String(b.id))
             return (<div key={b.id} onClick={()=>emit(b)&&onOpenFactura&&onOpenFactura(b)} style={{display:'grid',gridTemplateColumns:'26px 1.1fr 92px 1.1fr 96px 92px',gap:'0 12px',alignItems:'center',padding:'9px 10px',borderTop:`1px solid ${C.border}`,background:emit(b)?'#fff':(olv?'#FEF4F4':'#FEFDF9'),cursor:emit(b)&&onOpenFactura?'pointer':'default',fontSize:12}}>
               <span style={{color:C.muted}}>{cuotaNMof(b.concept)?.n||i+1}</span>
-              <span><span style={{fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{display:'block',fontSize:10.5,color:olv?C.overdueText:C.muted}}>{dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</span></span>
+              <span><span style={{fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{display:'block',fontSize:11,color:olv?C.overdueText:C.muted}}>{dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</span></span>
               <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.text}}>{fmt(b.amount||0)}</span>
               <span>{emit(b)?<><span style={{fontWeight:700,color:C.accent}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</span> <span style={{color:estCol(b),fontSize:11}}>{estTxt(b)}</span><span style={{display:'block',fontSize:10,color:C.muted}}>Emitida {dmy(b.issued_at)}</span></>:<span style={{color:C.soonText,fontWeight:600}}>Por emitir</span>}</span>
               <span style={{fontSize:11,color:C.muted}}>{rutTxt(b)||'—'}</span>
@@ -707,7 +707,7 @@ export function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=n
         </div>
       ) : isDesktop ? (
         <div style={{display:'grid',gridTemplateColumns:'1fr 24px 1fr',gap:'0 8px',alignItems:'center'}}>
-          <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>PROGRAMADO</div><div/><div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>EMITIDO</div>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>PROGRAMADO</div><div/><div style={{fontSize:10,color:C.muted,letterSpacing:.4,fontWeight:700,padding:'0 2px 4px'}}>EMITIDO</div>
           {cuotas.map(b=>(<Fragment key={b.id}>
             <div style={{marginBottom:8}}>{celdaCuota(b)}</div>
             <div style={{display:'flex',justifyContent:'center',marginBottom:8,color:emit(b)?C.greenText:(C.soon||'#C9A94A')}}>{emit(b)?<SIcon n='check' s={14} c={C.greenText}/>:<span style={{fontSize:13,color:C.soonText}}>·</span>}</div>
@@ -717,37 +717,37 @@ export function CotejoVenta({sale, saleBills=[], orphans=[], isDesktop, client=n
       ) : (
         <div style={{display:'flex',flexDirection:'column',gap:7}}>
           {cuotas.map(b=>{ const olv=olvidadasSet.has(String(b.id))
-            return (<div key={b.id} style={{border:`1px solid ${emit(b)?C.border:(olv?C.overdueText:(C.soon||'#EBD9AE'))}`,borderRadius:11,overflow:'hidden'}}>
+            return (<div key={b.id} style={{border:`1px solid ${emit(b)?C.border:(olv?C.overdueText:(C.soon||'#EBD9AE'))}`,borderRadius:10,overflow:'hidden'}}>
             <div style={{padding:'8px 10px',background:emit(b)?'#fff':(olv?'#FCEBEB':(C.soonBg||'#FFFBF0'))}}>
-              <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
-              <div style={{fontSize:10.5,color:olv?C.overdueText:C.muted,marginTop:2}}>Vence {dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</div>
+              <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:13,fontWeight:600,color:C.text}}>{etiqueta(b)}</span><span style={{fontSize:13,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount||0)}</span></div>
+              <div style={{fontSize:11,color:olv?C.overdueText:C.muted,marginTop:2}}>Vence {dmy(emit(b)?b.due:effDue(b))}{olv?' · sin facturar':''}</div>
             </div>
             {emit(b)
-              ? <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{padding:'8px 10px 8px 18px',borderTop:`1px solid ${C.border}`}}><div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:12,color:C.muted}}>↳</span><span style={{flex:1,fontSize:12,color:C.accent,fontWeight:700}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div><div style={{fontSize:10.5,color:C.muted,marginTop:2,paddingLeft:19,display:'flex',gap:6,flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}</div></div>
+              ? <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{padding:'8px 10px 8px 18px',borderTop:`1px solid ${C.border}`}}><div style={{display:'flex',alignItems:'center',gap:7}}><span style={{fontSize:12,color:C.muted}}>↳</span><span style={{flex:1,fontSize:12,color:C.accent,fontWeight:700}}>Factura N° {folioN(b.invoice_no)||b.invoice_no}</span><span style={{fontSize:12,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(b)||b.amount||0)}</span></div><div style={{fontSize:11,color:C.muted,marginTop:2,paddingLeft:19,display:'flex',gap:6,flexWrap:'wrap'}}><span style={{color:estCol(b),fontWeight:600}}>{estTxt(b)}</span><span>Emitida {dmy(b.issued_at)}</span>{rutTxt(b)&&<span>· {rutTxt(b)}</span>}</div></div>
               : <div style={{padding:'8px 10px 8px 18px',display:'flex',alignItems:'center',gap:7,borderTop:`1px dashed ${C.soon||'#EBD9AE'}`}}><span style={{fontSize:12,color:C.soonText}}>↳</span><span style={{flex:1,fontSize:12,color:C.soonText}}>por emitir · hueco</span></div>}
           </div>) })}
         </div>
       )}
       </div>
-      {planN>0 && cuotas.length<planN && <div style={{fontSize:10.5,color:C.muted,marginTop:6}}>El plan tiene {planN} cuotas; faltan {planN-cuotas.length} por generar.</div>}
+      {planN>0 && cuotas.length<planN && <div style={{fontSize:11,color:C.muted,marginTop:6}}>El plan tiene {planN} cuotas; faltan {planN-cuotas.length} por generar.</div>}
 
       {orphans.length>0 && (()=>{ const fifo=huecoFIFO(saleBills)
         return (<div style={{marginTop:11,borderTop:`1px solid ${C.border}`,paddingTop:9}}>
-          <div style={{fontSize:9.5,color:C.muted,letterSpacing:.4,fontWeight:700,marginBottom:6}}>MISMO RUT · SIN ASOCIAR · {orphans.length}</div>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:.4,fontWeight:700,marginBottom:6}}>MISMO RUT · SIN ASOCIAR · {orphans.length}</div>
           {orphans.map(o=>{ const sug = fifo || huecos.find(h=>Math.abs((h.amount||0)-(montoFactura(o)||o.amount||0))/Math.max(1,h.amount||1)<0.03)
             const dnd = huecos.length>0 ? arrF.props(o.id, `Factura N° ${folioN(o.invoice_no)||o.invoice_no}`) : null
             return (<div key={o.id} onPointerDown={dnd?.onPointerDown}
               style={{...(dnd?.style||{}),border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',marginBottom:6,background:'#fff',cursor:isDesktop&&huecos.length?'grab':'default'}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 {isDesktop&&huecos.length>0&&<span style={{color:C.muted,fontSize:14}}>⠿</span>}
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>Factura N° {folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · emitida {dmy(o.issued_at||o.due)}</span></div>{sug&&<div style={{fontSize:10.5,color:C.accent}}>llena el hueco más antiguo · {etiqueta(sug)}</div>}</div>
-                <div style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(o)||o.amount||0)}</div>
-                {huecos.length>0&&!isDesktop&&<button onClick={()=>setPickFor(pickFor===o.id?null:o.id)} style={{fontSize:11.5,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:16,padding:'3px 10px',background:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Asociar</button>}
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Factura N° {folioN(o.invoice_no)||o.invoice_no}<span style={{fontWeight:400,color:C.muted}}> · emitida {dmy(o.issued_at||o.due)}</span></div>{sug&&<div style={{fontSize:11,color:C.accent}}>llena el hueco más antiguo · {etiqueta(sug)}</div>}</div>
+                <div style={{fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montoFactura(o)||o.amount||0)}</div>
+                {huecos.length>0&&!isDesktop&&<button onClick={()=>setPickFor(pickFor===o.id?null:o.id)} style={{fontSize:12,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:12,padding:'3px 10px',background:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Asociar</button>}
               </div>
               {pickFor===o.id && (
                 <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5}}>
-                  <div style={{fontSize:10.5,color:C.muted}}>Asociar a la cuota:</div>
-                  {huecos.map(h=>(<button key={h.id} onClick={()=>doAssoc(h.id,o.id)} style={{textAlign:'left',border:`1px solid ${sug&&sug.id===h.id?C.accent:C.border}`,background:sug&&sug.id===h.id?(C.azulBg||'#EAF0F3'):'#fff',borderRadius:9,padding:'7px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:12.5,color:C.text}}>{etiqueta(h)}{sug&&sug.id===h.id?' · más antigua':''}</span><span style={{fontSize:12.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(h.amount||0)}</span></button>))}
+                  <div style={{fontSize:11,color:C.muted}}>Asociar a la cuota:</div>
+                  {huecos.map(h=>(<button key={h.id} onClick={()=>doAssoc(h.id,o.id)} style={{textAlign:'left',border:`1px solid ${sug&&sug.id===h.id?C.accent:C.border}`,background:sug&&sug.id===h.id?(C.azulBg||'#EAF0F3'):'#fff',borderRadius:10,padding:'7px 10px',cursor:'pointer',display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontSize:13,color:C.text}}>{etiqueta(h)}{sug&&sug.id===h.id?' · más antigua':''}</span><span style={{fontSize:13,color:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(h.amount||0)}</span></button>))}
                 </div>
               )}
             </div>) })}
@@ -837,7 +837,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
   const sTitle = (t)=>(<div style={{...SEC_LBL,marginBottom:10}}>{t}</div>)
   const VHdr = ({icon,iconCol,title,purpose,summary,sumCol,k}) => (<div onClick={()=>vtog(k)} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',cursor:'pointer',background:vSec[k]?'#F7F9FA':'#fff'}}>
     <SIcon n={icon} s={18} c={iconCol||C.muted}/>
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:vSec[k]?700:600,color:vSec[k]?C.accent:C.text}}>{title}</div>{purpose&&<div style={{fontSize:10,color:C.muted,fontWeight:500,marginTop:1}}>{purpose}</div>}</div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:vSec[k]?700:600,color:vSec[k]?C.accent:C.text}}>{title}</div>{purpose&&<div style={{fontSize:10,color:C.muted,fontWeight:400,marginTop:1}}>{purpose}</div>}</div>
     {summary!=null&&<span style={{fontSize:11,color:sumCol||C.muted,fontWeight:sumCol&&sumCol!==C.muted?700:400,whiteSpace:'nowrap'}}>{summary}</span>}
     <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:vSec[k]?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
   </div>)
@@ -856,7 +856,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
         const T={ok:{bg:C.greenBg,fg:C.greenText},am:{bg:C.soonBg,fg:C.soonText},hacer:{bg:C.overdueBg,fg:C.overdueText},gr:{bg:C.bgSoft,fg:C.muted}}[e.tono]||{bg:C.bgSoft,fg:C.muted}
         return (<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'11px 13px',marginBottom:10}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={SEC_LBL}>Puntualidad de pago</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',background:T.bg,color:T.fg,whiteSpace:'nowrap'}}>{e.etiqueta}</span></div>
-          <div style={{fontSize:11.5,color:C.muted,marginTop:5,lineHeight:1.45}}>{e.n>0?`${e.n} factura${e.n!==1?'s':''} pagada${e.n!==1?'s':''} en los últimos 12 meses · ${e.promedio} días en promedio desde la emisión · ${e.pct30}% dentro de 30 días`:'Ninguna factura pagada en los últimos 12 meses.'}</div>
+          <div style={{fontSize:12,color:C.muted,marginTop:5,lineHeight:1.45}}>{e.n>0?`${e.n} factura${e.n!==1?'s':''} pagada${e.n!==1?'s':''} en los últimos 12 meses · ${e.promedio} días en promedio desde la emisión · ${e.pct30}% dentro de 30 días`:'Ninguna factura pagada en los últimos 12 meses.'}</div>
         </div>)
       })()}
 
@@ -880,10 +880,10 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
               <div style={{display:'flex',alignItems:'center',gap:9}}>
                 <SIcon n={ai} s={19} c={C.muted}/>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}{(()=>{ const n=(causasCli.rows||[]).filter(c=>String(c.sale_id||'')===String(s.id)).length; return n?` · ${n} causa${n!==1?'s':''}`:'' })()}</div></div>
-                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:8,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
+                <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:16,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
                 <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
               </div>
-              {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct}% cobrado</span></div>}
+              {fac>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginTop:8}}><span style={{fontSize:10,color:C.muted}}>Facturado <b style={{color:C.text}}>{fmtShort(fac)}</b> · Cobrado <b style={{color:C.text}}>{fmtShort(cob)}</b></span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:pct>=80?C.greenBg:C.soonBg,color:pct>=80?C.greenText:C.soonText,whiteSpace:'nowrap'}}>{pct}% cobrado</span></div>}
             </div>
             {open&&<div style={{padding:'0 11px 11px'}}>
               {hasBills&&<CotejoVenta sale={s} saleBills={sb} orphans={onReplaceProgramada?cotejoOrphansFor(s):[]} isDesktop={isDesktop} client={client} entities={entities} nested onOpenFactura={onEditBilling} onAssociate={onReplaceProgramada?cotejoAsociar:undefined}/>}
@@ -898,15 +898,15 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
           {/* Facturas del cliente sin venta: aviso siempre visible (aunque Proyectos esté colapsado) con la misma asignación de Por clasificar. */}
           {sinVentaF.map(b=>{ const op=svOpen===b.id; return <div key={b.id} style={{padding:'0 13px 10px'}}>
             <div onClick={()=>setSvOpen(op?null:b.id)} style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:10,padding:'9px 11px',cursor:'pointer',minWidth:0}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||b.invoice_no} sin venta</span>
-              {isDesktop&&<span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap'}}>· {fmtFechaDMY(b.issued_at)}</span>}
-              <span style={{marginLeft:'auto',fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>
+              <span style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||b.invoice_no} sin venta</span>
+              {isDesktop&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>· {fmtFechaDMY(b.issued_at)}</span>}
+              <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(montoFactura(b))}</span>
               <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:op?'rotate(180deg)':'none'}}><path d='M6 9l6 6 6-6'/></svg>
             </div>
             {op&&<AsignarVentaFactura factura={b} sales={sales} billing={billing} onHecho={()=>setSvOpen(null)}/>}
           </div> })}
           {vSec.proyectos&&<div style={{padding:'6px 13px 12px'}}>
-            {onAddSale&&<button onClick={onAddSale} style={{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:9}}>+ Venta</button>}
+            {onAddSale&&<button onClick={onAddSale} style={{padding:'4px 10px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',marginBottom:9}}>+ Venta</button>}
             {activas.length===0&&terminadas.length===0&&<div style={{fontSize:12,color:C.muted,padding:'4px 2px 6px'}}>Sin ventas registradas.</div>}
             {activas.length>0&&<><div style={{...SEC_LBL,margin:'2px 2px 7px'}}>Vigentes · {activas.length}</div>
             {activas.map(projCard)}</>}
@@ -968,20 +968,20 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:9,color:C.muted,marginLeft:5}}>{tipoFacturaLbl(b)}</span>}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:10,color:C.muted,marginLeft:5}}>{tipoFacturaLbl(b)}</span>}</div>
                     {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
-                    {(proj||rsNm)&&<div style={{fontSize:9,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
+                    {(proj||rsNm)&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
-                      ? <><div style={{fontSize:9,color:C.textSoft}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:C.overdueText,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:9,color:C.textSoft,marginTop:1}}>Abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
+                      ? <><div style={{fontSize:10,color:C.textSoft}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:C.overdueText,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:10,color:C.textSoft,marginTop:1}}>Abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
                       : <div style={{fontSize:13,fontWeight:600,color:esVencidaB(b)?C.overdueText:(pend?C.accent:C.text)}}>{fmt(b.amount)}</div> })()}
                     {pend&&<ActBtn variant='softNavy' onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{marginTop:5}}>Recordar</ActBtn>}
-                    {b.invoice_no&&b.dte_xml&&<button onClick={(ev)=>{ev.stopPropagation();verFacturaPdf(b)}} title='Descargar copia PDF (con timbre)' style={{marginTop:5,display:'block',marginLeft:'auto',fontSize:10,fontWeight:700,color:C.tealText,background:'#fff',border:`0.5px solid ${C.tealText}`,borderRadius:7,padding:'3px 10px',cursor:'pointer'}}>PDF ↓</button>}
+                    {b.invoice_no&&b.dte_xml&&<button onClick={(ev)=>{ev.stopPropagation();verFacturaPdf(b)}} title='Descargar copia PDF (con timbre)' style={{marginTop:5,display:'block',marginLeft:'auto',fontSize:10,fontWeight:700,color:C.tealText,background:'#fff',border:`0.5px solid ${C.tealText}`,borderRadius:8,padding:'3px 10px',cursor:'pointer'}}>PDF ↓</button>}
                   </div>
                 </div>
                 {(b.anulada_por||'').startsWith('Nota de crédito')&&<div style={{marginTop:6,marginLeft:49,fontSize:10,lineHeight:1.4,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',background:'#FFFBF4',border:'1px solid #EAD9B8',borderRadius:8,padding:'6px 9px'}}>
-                  <span style={{fontSize:9,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,flexShrink:0}}>NC</span>
+                  <span style={{fontSize:10,fontWeight:800,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'2px 6px',textTransform:'uppercase',letterSpacing:.3,flexShrink:0}}>NC</span>
                   <span style={{color:C.text,minWidth:0}}>{b.anulada_por} anula esta factura{b.reemplazada_por_billing_id&&(()=>{ const rp=(billing||[]).find(x=>x.id===b.reemplazada_por_billing_id); return rp?<> · reemplazada por <b style={{color:C.accent,fontWeight:700}}>Factura N° {folioN(rp.invoice_no)}</b>{String(rp.client_id)!==String(client.id)&&(rsShort(rp)||rp.receptor_name)?` · ${rsShort(rp)||rp.receptor_name}`:''}</>:null })()}</span>
                   <span style={{marginLeft:'auto',fontWeight:800,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>− {fmt(b.amount)}</span>
                   <span style={{fontSize:10,color:C.greenText,fontWeight:700,flexShrink:0}}>saldo $0</span>
@@ -990,7 +990,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                 {e&&<div style={{marginTop:6,marginLeft:49}}><EstadoFacturaChip b={b} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} chevron={conciliada}/></div>}
                 {conciliada&&detOpen&&(()=>{ const cs=fConcByFac[b.id]||[]; const mv=fMovById[cs[0]?.movimiento_id]; return (
                   <div style={{marginTop:8,marginLeft:49,background:'#F0F7F4',border:`1px solid #CFE9DD`,borderRadius:8,padding:'8px 10px'}}>
-                    <div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Movimiento bancario</div>
+                    <div style={{fontSize:10,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.4,marginBottom:4}}>Movimiento bancario</div>
                     {mv ? <>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'1px 0'}}><span style={{color:C.muted}}>Fecha</span><span style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(mv.fecha)}</span></div>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'1px 0'}}><span style={{color:C.muted}}>Monto</span><span style={{color:C.text,fontWeight:600}}>{fmt(mv.monto)}</span></div>
@@ -1036,7 +1036,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
               ]
               return (<>
                 {rsArr.length>=2&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-                  {[{k:'all',name:'Todas las RS'},...rsArr].map(r=>{ const on=ficRs===r.k; return <span key={r.k} onClick={()=>setFicRs(r.k)} style={{fontSize:9,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,whiteSpace:'nowrap'}}>{r.name}</span> })}
+                  {[{k:'all',name:'Todas las RS'},...rsArr].map(r=>{ const on=ficRs===r.k; return <span key={r.k} onClick={()=>setFicRs(r.k)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 9px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,whiteSpace:'nowrap'}}>{r.name}</span> })}
                 </div>}
                 {ESTADOS.map(([lbl,pred,tok,money,ord,defOpen])=>{
                   const gr=facturas.filter(pred); if(!gr.length) return null
@@ -1044,7 +1044,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                   const subT=gr.reduce((a,b)=>a+money(b),0)
                   return (<div key={lbl} style={{marginBottom:7}}>
                     <div onClick={()=>setFicEst(p=>({...p,[lbl]:!isOpen}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:4}}>
-                      <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><SIcon n={tok.icon||'file'} s={15} c={tok.text}/><span style={{fontSize:10,fontWeight:700,background:tok.bg,color:tok.text,borderRadius:14,padding:'2px 10px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span></span>
+                      <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><SIcon n={tok.icon||'file'} s={15} c={tok.text}/><span style={{fontSize:10,fontWeight:700,background:tok.bg,color:tok.text,borderRadius:12,padding:'2px 10px',textTransform:'uppercase',letterSpacing:.4}}>{lbl} · {gr.length} {isOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span></span>
                       <span style={{fontSize:12,fontWeight:700,color:tok.text}}>{fmt(subT)}</span>
                     </div>
                     {isOpen&&ord(gr).map(b=>renderFactura(b,needsProj(b)))}
@@ -1084,12 +1084,12 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                         : <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div>
+                      <div style={{fontSize:13,fontWeight:400,color:C.text}}>{fmt(a.monto)}</div>
                       <div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                       {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N° {folio}</span>}
-                      <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:C.bgSoft,color:disp?C.greenText:C.done,whiteSpace:'nowrap'}}>{disp?'Disponible':'Consumido'}</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:C.bgSoft,color:disp?C.greenText:C.done,whiteSpace:'nowrap'}}>{disp?'Disponible':'Consumido'}</span>
                     </div>
                   </div>
                 )})}
@@ -1135,7 +1135,7 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
           const kc=(l,v,sub,col,go)=>(<div onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',cursor:go?'pointer':'default'}}>
             <div style={{...SEC_LBL}}>{l}</div>
             <div style={{fontSize:17,fontWeight:800,color:col,marginTop:4,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{v}</div>
-            <div style={{fontSize:9,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
           </div>)
           const nFact=clientBilling.filter(esFacturada).length
           const _MAf=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -1157,7 +1157,7 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
               return <div key={k} style={{background:C.surface,border:`1px solid ${borde||C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}}>
                 <div onClick={body?()=>alt(k):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:ab?`1px solid ${C.bgSoft}`:'none',cursor:body?'pointer':'default'}}>
                   <span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icn} s={15} c={icol}/></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
                   {val!=null&&<span style={{fontSize:13,fontWeight:800,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</span>}
                   {body&&<span style={{color:C.done,fontSize:13,flexShrink:0,display:'inline-flex',transform:ab?'rotate(180deg)':'none',transition:'transform .12s'}}><Gl n='chevD'/></span>}
                 </div>{ab&&body}</div> }
@@ -1179,15 +1179,15 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
                 :tks.map(t=>fila(t.id,onEditTask?()=>onEditTask(t):undefined,<span style={{width:7,height:7,borderRadius:'50%',background:urgencyColor(t.due,t.status),flexShrink:0}}/>,tt(t.title,`${taskAssignees(t).join(', ')||'—'}${t.due?` · vence ${fmtFechaDMY(t.due)}`:''}`),null))}
               {onAddTask&&<div onClick={()=>onAddTask()} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>+ Nueva tarea</div>}</>)
             const goCal=g=>g==='financiero'?()=>setFtab('financiero'):undefined
-            const chipD=f=>{ const d=_diasA(cal.hoy,f), pr=d<=31; return <span style={{fontSize:10.5,fontWeight:700,borderRadius:10,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,background:d<0?C.overdueBg:pr?C.soonBg:C.track,color:d<0?C.overdueText:pr?C.soonText:C.muted}}>{d<0?'Vencido':d===0?'Hoy':`En ${d} día${d===1?'':'s'}`}</span> }
+            const chipD=f=>{ const d=_diasA(cal.hoy,f), pr=d<=31; return <span style={{fontSize:11,fontWeight:700,borderRadius:10,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0,background:d<0?C.overdueBg:pr?C.soonBg:C.track,color:d<0?C.overdueText:pr?C.soonText:C.muted}}>{d<0?'Vencido':d===0?'Hoy':`En ${d} día${d===1?'':'s'}`}</span> }
             const sCal=sec('cal','cal',C.azulBg,C.accent,'Calendario',cal.items.length?`en ${CAL_CLI_DIAS} días · próximo ${fmtFechaDMY(cal.items[0].fecha)}`:`en ${CAL_CLI_DIAS} días`,String(cal.items.length),C.accent,<>
               {cal.items.length?cal.items.map((x,i)=>fila(i,goCal(x.go),diaGrande(x.fecha,x.vencido?C.overdueText:undefined),tt(x.t,x.s),chipD(x.fecha)))
                 :<div style={{padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.greenText}}>Sin vencimientos en {CAL_CLI_DIAS} días</div>}
-              {cal.noRev>0&&fila('nor',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>,<span style={{color:C.overdueText,fontSize:11.5,fontWeight:600}}>{cal.noRev} causa{cal.noRev!==1?'s':''} sin revisar · falló la última revisión</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
-              {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:11.5}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
+              {cal.noRev>0&&fila('nor',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>,<span style={{color:C.overdueText,fontSize:12,fontWeight:600}}>{cal.noRev} causa{cal.noRev!==1?'s':''} sin revisar · falló la última revisión</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
+              {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:12}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700}}><span style={{color:C.muted,fontWeight:600,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Obligaciones tributarias · {cal.oblTxt||'por definir'}</span><span onClick={()=>setElegir(v=>!v)} style={{color:C.azulInfo,cursor:'pointer',flexShrink:0}}>{elegir?'Listo':'Elegir'}</span></div>
               {elegir&&<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`}}>{OBL_CLIENTE.map(([tp,fo,lb])=>{ const on=cal.elegidas.some(o=>o.tipo===tp&&String(o.formulario||'')===String(fo||''))
-                return <span key={lb} onClick={()=>calCli.alternar(tp,fo,lb)} style={{fontSize:11.5,fontWeight:600,border:`1px solid ${on?C.accent:C.border}`,borderRadius:14,padding:'4px 10px',background:on?C.accent:C.surface,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{lb}</span> })}</div>}</>)
+                return <span key={lb} onClick={()=>calCli.alternar(tp,fo,lb)} style={{fontSize:12,fontWeight:600,border:`1px solid ${on?C.accent:C.border}`,borderRadius:12,padding:'4px 10px',background:on?C.accent:C.surface,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{lb}</span> })}</div>}</>)
             // Escritorio: dos columnas (Por rendir · Próximas tareas | Vencidas · Calendario); celular: una columna en ese orden.
             const col=xs=><div style={{display:'flex',flexDirection:'column',gap:12,minWidth:0}}>{xs.filter(Boolean)}</div>
             return isDesktop
@@ -1222,14 +1222,14 @@ export function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
       onCambio&&onCambio({...c,...patch}) }catch(err){ appAlert('No se pudo guardar: '+(err.message||err)) }
     setBusy(false) }
   const confirmar=()=>{ if(!/^\d+$/.test(String(rol||''))){ setEdit(true); appAlert('Completa el rol de la causa antes de confirmarla.'); return } guardar({estado:'activa',rol:String(rol)},'causas.confirmada') }
-  const ab={fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}
+  const ab={fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}
   const predio=String(c.origen||'').split(' · ')[0].trim()   // antecedente de primera instancia o predio (p. ej. «Tira Larga»)
   const detalle=[cliente, _rolTxt(c), predio||null, _libroLegible(c.libro_nombre), _corteCorta(c.corte_nombre), c.ultima_tabla?.sala&&c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())?`${c.ultima_tabla.sala}${c.ultima_tabla.numero?` · N° ${c.ultima_tabla.numero}`:''}${c.ultima_tabla.viendo?` · se está viendo el N° ${c.ultima_tabla.viendo}`:''}`:null, c.abogado].filter(Boolean).flatMap((x,i)=>i?[' · ',x]:[x]).map((x,i)=><Fragment key={i}>{x}</Fragment>)   // cliente puede venir como enlace (nodo): se intercala, no se une como texto
   const chip=<span style={{fontSize:11,fontWeight:600,color:eCol,background:eBg,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap',flexShrink:0}}>{e0}</span>
   return (<div style={{borderTop:`1px solid ${C.track}`}}>
     <div onClick={D?undefined:()=>setOp(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'10px 14px':'10px 12px',cursor:D?'default':'pointer'}}>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:13.5,fontWeight:600,color:C.text,...(D?{}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{c.caratula||'Sin carátula'}</div>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,...(D?{}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{c.caratula||'Sin carátula'}</div>
         <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{D?detalle:[_rolTxt(c),predio].filter(Boolean).join(' · ')}</div>
       </div>
       {chip}
@@ -1241,15 +1241,15 @@ export function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
         <div style={{display:'flex',gap:14,marginTop:8,flexWrap:'wrap'}}>{c.estado==='por_confirmar'?<button onClick={confirmar} disabled={busy} style={ab}>Confirmar</button>:<button onClick={revisar} disabled={busy} style={ab}>{busy?'Revisando…':'Revisar ahora'}</button>}<button onClick={toggleSeg} style={ab}>Seguimiento</button><button onClick={()=>setEdit(v=>!v)} style={{...ab,color:C.muted}}>Editar</button></div></>}
       {edit&&<div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:8}}>
         <input value={rol} onChange={ev=>setRol(ev.target.value.replace(/\D/g,''))} placeholder='Rol' inputMode='numeric' style={{width:90,fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px',outline:'none'}}/>
-        <span style={{fontSize:12.5,color:C.textSoft}}>-{c.anio}</span>
-        <button disabled={busy||!rol} onClick={()=>{ guardar({rol:String(rol)},'causas.editada'); setEdit(false) }} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'7px 12px',cursor:'pointer',opacity:!rol?.5:1}}>Guardar</button>
+        <span style={{fontSize:13,color:C.textSoft}}>-{c.anio}</span>
+        <button disabled={busy||!rol} onClick={()=>{ guardar({rol:String(rol)},'causas.editada'); setEdit(false) }} style={{fontSize:13,fontWeight:700,borderRadius:10,border:'none',background:C.accent,color:'#fff',padding:'7px 12px',cursor:'pointer',opacity:!rol?.5:1}}>Guardar</button>
         <button disabled={busy} onClick={async()=>{ if(await appConfirm('¿Dar por terminada esta causa? Deja de revisarse en las tablas.')){ guardar({estado:'terminada'},'causas.terminada') } }} style={{...ab,color:C.muted}}>Terminar causa</button>
       </div>}
       {verSeg&&<div style={{marginTop:8,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}>
         <div style={{...SEC_LBL,fontSize:10,marginBottom:4}}>Seguimiento</div>
         {seg===null?<div style={{fontSize:12,color:C.textSoft}}>Cargando…</div>:!seg.length?<div style={{fontSize:12,color:C.textSoft}}>Sin revisiones todavía.</div>
           :seg.map(x=><div key={x.id} style={{display:'flex',flexDirection:D?'row':'column',gap:D?10:1,fontSize:12,padding:'3px 0'}}><span style={{color:C.textSoft,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmtFechaDMY(isoLocal(x.revisado_at))} {new Date(x.revisado_at).toTimeString().slice(0,5)}</span><span style={{minWidth:0}}><b style={{color:C.accent,fontWeight:600}}>{x.origen==='agente'?'Revisión automática':'Revisión manual'}</b> · {x.resultado}</span></div>)}
-        <div style={{fontSize:11.5,color:C.textSoft,marginTop:5}}>Programación de Salas 3 veces al día · Monitor de Salas el día de la vista</div>
+        <div style={{fontSize:12,color:C.textSoft,marginTop:5}}>Programación de Salas 3 veces al día · Monitor de Salas el día de la vista</div>
       </div>}
     </div>}
   </div>)
@@ -1275,21 +1275,21 @@ export function CausasVenta({client, sale, isDesktop, user, causas}){
       if(!DEMO){ const {data}=await supabase.functions.invoke('causas-tablas',{body:{causa_id:nuevo.id}}).catch(()=>({data:null})); const t=(data?.en_tabla||[])[0]; recargar(); appAlert(data?.ok?(t?`Causa guardada. Está en tabla: ${t.sala||''}${t.numero?`, N° ${t.numero}`:''}, ${fmtFechaDMY(t.fecha)}.`:'Causa guardada. Hoy no está en tabla; se revisa en los próximos horarios.'):'Causa guardada. Se revisa en los próximos horarios.') }
     }catch(err){ appAlert('No se pudo guardar la causa: '+(err.message||err)) }
     setBusy(false) }
-  const fld=(label,el,st)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0,...st}}><span style={{display:'block',fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>{el}</label>
+  const fld=(label,el,st)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0,...st}}><span style={{display:'block',fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>{label}</span>{el}</label>
   const inS={width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:'2px 0',minWidth:0}
   const nPc=mias.filter(c=>c.estado==='por_confirmar').length, nTab=mias.filter(c=>c.ultima_tabla?.fecha>=isoLocal(new Date().toISOString())).length
   const resumen=[nTab?`${nTab} en tabla`:null,nPc?`${nPc} por confirmar`:null].filter(Boolean).join(' · ')
   return (<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:C.surface}} onClick={ev=>ev.stopPropagation()}>
     <div onClick={D?undefined:()=>setAbierto(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgPanel,cursor:D?'default':'pointer'}}>
-      <span style={{...SEC_LBL,fontSize:10.5,flex:1}}>Causas{mias.length?` · ${mias.length}`:''}</span>
+      <span style={{...SEC_LBL,fontSize:11,flex:1}}>Causas{mias.length?` · ${mias.length}`:''}</span>
       {resumen&&<span style={{fontSize:11,fontWeight:600,color:nTab?C.accent:C.textSoft,background:nTab?C.azulBg:C.track,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap'}}>{resumen}</span>}
-      {D?<button onClick={()=>setNueva(v=>!v)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button>
+      {D?<button onClick={()=>setNueva(v=>!v)} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button>
         :<span style={{color:C.done,fontSize:12,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
     </div>
     {abierto&&<>
       {mias.map(c=><CausaFila key={c.id} c={c} isDesktop={D} user={user} onCambio={x=>x?setRows(p=>p.map(y=>y.id===x.id?x:y).filter(y=>y.estado!=='terminada')):recargar()}/>)}
       {!mias.length&&!nueva&&<div style={{fontSize:12,color:C.textSoft,padding:'10px 12px',borderTop:`1px solid ${C.track}`}}>Sin causas en esta venta.</div>}
-      {!D&&!nueva&&<div style={{padding:'9px 12px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>setNueva(true)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button></div>}
+      {!D&&!nueva&&<div style={{padding:'9px 12px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>setNueva(true)} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Causa</button></div>}
       {nueva&&<div style={{borderTop:`1px solid ${C.track}`,padding:'11px 12px'}}>
         <div style={{...SEC_LBL,fontSize:10,marginBottom:8}}>Agregar causa a esta venta</div>
         <div style={{display:'grid',gridTemplateColumns:D?'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,.7fr) minmax(0,.6fr)':'1fr 1fr',gap:8}}>
@@ -1302,8 +1302,8 @@ export function CausasVenta({client, sale, isDesktop, user, causas}){
           {fld('Carátula',<input value={f.caratula} onChange={ev=>setF(x=>({...x,caratula:ev.target.value}))} style={inS}/>)}
           {fld('Abogado',<select value={f.abogado} onChange={ev=>setF(x=>({...x,abogado:ev.target.value}))} style={inS}><option value=''>—</option>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(n=><option key={n} value={n}>{n}</option>)}</select>)}
           <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:D?'flex-start':'flex-end'}}>
-            <button onClick={()=>setNueva(false)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-            <button disabled={!listo||busy} onClick={guardar} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar y revisar'}</button>
+            <button onClick={()=>setNueva(false)} style={{fontSize:13,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+            <button disabled={!listo||busy} onClick={guardar} style={{fontSize:13,fontWeight:700,borderRadius:10,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar y revisar'}</button>
           </div>
         </div>
       </div>}
@@ -1335,16 +1335,16 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
     g.push([`Otros roles de ${c}`,xs.filter(p=>!usados.has(p))])
     return g.filter(x=>x[1].length).map(([t,ys])=>[t,ys.slice().sort((a,b)=>(Number(b.deuda_contribuciones)||0)-(Number(a.deuda_contribuciones)||0)||_ordRol(a,b)),true]) }
   const monto=xs=>{ const d=suma(xs,'deuda_contribuciones'), a=suma(xs,'avaluo_fiscal')
-    return <span style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{a>0?fmtShort(a):''}{a>0&&d>0?' · ':''}{d>0&&<span style={{color:C.soonText}}>{fmtShort(d)} deuda</span>}</span> }
+    return <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{a>0?fmtShort(a):''}{a>0&&d>0?' · ':''}{d>0&&<span style={{color:C.soonText}}>{fmtShort(d)} deuda</span>}</span> }
   const fila=(p,i)=>{ const op=det===p.id
     const sub=[p.lote?`Lote ${p.lote}`:null, _nomProp(p.propietario)||null, p.destino||(p.estado_sii?'Sin propiedad en el SII':null), D&&p.superficie_m2?`${Number(p.superficie_m2).toLocaleString('es-CL',{maximumFractionDigits:2})} m²`:null, D&&p.arrendado?'arrendado':null].filter(Boolean).join(' · ')
     const der=Number(p.deuda_contribuciones)>0?[fmtShort(p.deuda_contribuciones),'deuda',C.soonText]:Number(p.avaluo_fiscal)>0?[fmtShort(p.avaluo_fiscal),'avalúo',C.text]:null
-    const dato=(l,v)=><div style={{minWidth:0}}><div style={{fontSize:11,color:C.textSoft}}>{l}</div><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{v||'—'}</div></div>
+    const dato=(l,v)=><div style={{minWidth:0}}><div style={{fontSize:11,color:C.textSoft}}>{l}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v||'—'}</div></div>
     return <div key={p.id}>
       <div onClick={()=>setDet(op?null:p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'8px 12px 8px 30px':'8px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{p.rol}{p.nombre?` · ${p.nombre}`:''}</div>
-          <div style={{fontSize:11.5,color:C.textSoft,marginTop:1}}>{!p.nombre&&p.direccion?`${p.direccion} · `:''}{sub}</div></div>
-        {der&&<div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12.5,fontWeight:600,color:der[2],fontVariantNumeric:'tabular-nums'}}>{der[0]}</div><div style={{fontSize:11,color:C.textSoft}}>{der[1]}</div></div>}
+          <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{!p.nombre&&p.direccion?`${p.direccion} · `:''}{sub}</div></div>
+        {der&&<div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:der[2],fontVariantNumeric:'tabular-nums'}}>{der[0]}</div><div style={{fontSize:11,color:C.textSoft}}>{der[1]}</div></div>}
       </div>
       {op&&<div style={{background:C.bgSoft,borderTop:`1px solid ${C.track}`,padding:D?'8px 12px 10px 30px':'8px 12px 10px',display:'grid',gridTemplateColumns:D?'repeat(3,minmax(0,1fr))':'1fr 1fr',gap:'8px 16px'}}>
         {dato('Inscripción',p.inscripcion_fojas?`Fs ${p.inscripcion_fojas} N° ${p.inscripcion_numero||'—'}${p.inscripcion_anio?` ${p.inscripcion_anio}`:''}`:null)}
@@ -1367,7 +1367,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
         <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{xs.length} rol{xs.length!==1?'es':''}</span>
         {D&&monto(xs)}
       </div>
-      {op&&<>{xs.slice(0,lim).map(fila)}{xs.length>lim&&<div style={{padding:D?'8px 12px 10px 30px':'8px 12px 10px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>toggle(setTodos,k)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver los {xs.length}</button></div>}</>}
+      {op&&<>{xs.slice(0,lim).map(fila)}{xs.length>lim&&<div style={{padding:D?'8px 12px 10px 30px':'8px 12px 10px',borderTop:`1px solid ${C.track}`}}><button onClick={()=>toggle(setTodos,k)} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver los {xs.length}</button></div>}</>}
     </div> }
   const exportar=async()=>{ try{ const XLSX=await loadXLSXStyle()
     const data=lista.slice().sort((a,b)=>a.comuna.localeCompare(b.comuna,'es')||_ordRol(a,b)).map(p=>[p.comuna,p.rol,p.lote||'',p.nombre||p.direccion||'',p.destino||(p.estado_sii?'Sin propiedad en el SII':''),_nomProp(p.propietario),_nomProp(p.propietario_actual),p.inscripcion_fojas?`Fs ${p.inscripcion_fojas} N° ${p.inscripcion_numero||''} ${p.inscripcion_anio||''}`:'',Number(p.superficie_m2)||'',Number(p.avaluo_fiscal)||'',Number(p.deuda_contribuciones)||'',p.arrendado?'Sí':''])
@@ -1384,25 +1384,25 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
     }catch(err){ appAlert('No se pudo guardar el rol: '+(err.message||err)) }
     setBusy(false) }
   const inS={width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:'2px 0',minWidth:0}
-  const fld=(label,el)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0}}><span style={{display:'block',fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.4,fontWeight:700}}>{label}</span>{el}</label>
-  const selSty={fontSize:12.5,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',minWidth:0,maxWidth:D?220:'100%'}
+  const fld=(label,el)=><label style={{display:'block',background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',minWidth:0}}><span style={{display:'block',fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.4,fontWeight:700}}>{label}</span>{el}</label>
+  const selSty={fontSize:13,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',minWidth:0,maxWidth:D?220:'100%'}
   return (<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:C.surface}} onClick={ev=>ev.stopPropagation()}>
     <div onClick={()=>setAbierto(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:C.bgPanel,cursor:'pointer'}}>
-      <span style={{...SEC_LBL,fontSize:10.5}}>Roles · {mias.length}</span>
+      <span style={{...SEC_LBL,fontSize:11}}>Roles · {mias.length}</span>
       {D&&<span style={{fontSize:12,color:C.textSoft,flex:1}}>{[suma(mias,'avaluo_fiscal')>0?`${fmtShort(suma(mias,'avaluo_fiscal'))} avalúo`:null,suma(mias,'deuda_contribuciones')>0?`${fmtShort(suma(mias,'deuda_contribuciones'))} deuda`:null].filter(Boolean).join(' · ')}</span>}
       {!D&&<span style={{flex:1}}/>}
-      {abierto&&D?<button onClick={ev=>{ev.stopPropagation();setNuevo(v=>!v)}} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>
+      {abierto&&D?<button onClick={ev=>{ev.stopPropagation();setNuevo(v=>!v)}} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>
         :<span style={{color:C.done,fontSize:12,transform:abierto?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
     </div>
     {abierto&&<>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',padding:'10px 12px',borderTop:`1px solid ${C.track}`}}>
         <div style={{flex:D?'1 1 220px':'1 1 100%',display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',minWidth:0}}>
           <SIcon n='search' s={14} c={C.done}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={D?'Buscar rol, lote, dirección o propietario':'Buscar rol o propietario'} style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder={D?'Buscar rol, lote, dirección o propietario':'Buscar rol o propietario'} style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%',minWidth:0}}/>
         </div>
         {propietarios.length>1&&<select value={prop} onChange={e=>setProp(e.target.value)} style={selSty}><option value=''>Todos los propietarios</option>{propietarios.map(x=><option key={x} value={x}>{_nomProp(x)}</option>)}</select>}
-        {D&&<button onClick={exportar} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Excel</button>}
-        {!D&&<button onClick={()=>setNuevo(v=>!v)} style={{fontSize:12.5,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>}
+        {D&&<button onClick={exportar} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Excel</button>}
+        {!D&&<button onClick={()=>setNuevo(v=>!v)} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>}
       </div>
       {nuevo&&<div style={{borderTop:`1px solid ${C.track}`,padding:'10px 12px',display:'grid',gridTemplateColumns:D?'minmax(0,1fr) minmax(0,.7fr) minmax(0,1.3fr) minmax(0,1.3fr) auto':'1fr 1fr',gap:8,alignItems:'stretch'}}>
         {fld('Comuna',<input value={f.comuna} onChange={e=>setF(x=>({...x,comuna:e.target.value}))} style={inS}/>)}
@@ -1411,8 +1411,8 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
         {fld('Propietario',<input value={f.propietario} onChange={e=>setF(x=>({...x,propietario:e.target.value}))} list={`prop-${sale.id}`} style={inS}/>)}
         <datalist id={`prop-${sale.id}`}>{propietarios.map(x=><option key={x} value={x}/>)}</datalist>
         <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:'flex-end',gridColumn:D?undefined:'1 / -1'}}>
-          <button onClick={()=>setNuevo(false)} style={{fontSize:12.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-          <button disabled={!listo||busy} onClick={guardar} style={{fontSize:12.5,fontWeight:700,borderRadius:9,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar'}</button>
+          <button onClick={()=>setNuevo(false)} style={{fontSize:13,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+          <button disabled={!listo||busy} onClick={guardar} style={{fontSize:13,fontWeight:700,borderRadius:10,border:'none',background:C.accent,color:'#fff',padding:'9px 13px',cursor:listo?'pointer':'default',opacity:listo&&!busy?1:.5,whiteSpace:'nowrap'}}>{busy?'Guardando…':'Guardar'}</button>
         </div>
       </div>}
       {ordenC.map(c=>{ const xs=comunas[c], sg=subgrupos(c,xs); const op=hayFiltro||ab.has('c:'+c)
@@ -1420,7 +1420,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
         return <div key={c} style={{borderTop:`1px solid ${C.track}`}}>
           <div onClick={()=>!hayFiltro&&toggle(setAb,'c:'+c)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
             <span style={{fontSize:12,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-            <span style={{fontSize:13.5,fontWeight:700,color:C.accent,flex:1,minWidth:0}}>{c}</span>
+            <span style={{fontSize:14,fontWeight:700,color:C.accent,flex:1,minWidth:0}}>{c}</span>
             <span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{xs.length} roles</span>{D&&monto(xs)}
           </div>
           {op&&sg.map(([t,ys])=>grupo(`g:${c}:${t}`,t,ys,1))}

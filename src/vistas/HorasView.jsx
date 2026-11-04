@@ -386,7 +386,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
     }catch(e){ appAlert('No se pudo enviar: '+(e.message||e)); setRep(r=>({...r,sending:false})) }
   }
   const step = {display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',background:'#fff'}
-  const stepB = {width:26,height:30,display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontSize:15,background:C.bgSoft,cursor:'pointer',userSelect:'none'}
+  const stepB = {width:26,height:30,display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontSize:16,background:C.bgSoft,cursor:'pointer',userSelect:'none'}
   const inp = {width:'100%',height:38,border:`1px solid ${C.border}`,borderRadius:10,padding:'0 11px',fontSize:13,background:'#fff',color:C.text,boxSizing:'border-box',outline:'none'}
   const lbl = {fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em',margin:'2px 2px 8px'}
 
@@ -414,7 +414,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
               <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:tope>0?8:0}}>
                 <span style={{width:28,height:28,borderRadius:8,background:stBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stCol} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI}}>{cn(s.client_id)}</div><div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div></div>
-                {tope>0&&<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:stBg,color:stCol,flexShrink:0,whiteSpace:'nowrap'}}>{Math.round(pct)}%</span>}
+                {tope>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:stBg,color:stCol,flexShrink:0,whiteSpace:'nowrap'}}>{Math.round(pct)}%</span>}
               </div>
               {tope>0
                 ? <>
@@ -442,7 +442,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
               <span style={{fontSize:13,fontWeight:700,color:C.text}}>{name}</span>
               <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:pct>100?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{meta>0?pct+'%':'sin meta'}</span>
             </div>
-            <div style={{height:8,borderRadius:6,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:6}}/></div>
+            <div style={{height:8,borderRadius:8,background:C.bgSoft,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:Math.min(100,pct)+'%',background:util,borderRadius:8}}/></div>
             <div style={{fontSize:10,color:C.textSoft,marginTop:5,display:'flex',justifyContent:'space-between'}}><span>{fh(real)} de {meta?fh(meta):'—'} · {book} tarea{book!==1?'s':''} abierta{book!==1?'s':''}</span><span onClick={()=>setMetaEdit(metaEdit===name?null:name)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>meta</span></div>
             {real>0 && <div style={{fontSize:10,marginTop:3,fontWeight:600,color:factPct>=70?C.greenText:factPct>=40?C.soonText:C.overdueText}}>{fh(fact)} facturables · {factPct}% del tiempo{factPct<70?' · revisar':''}</div>}
             {metaEdit===name && (()=>{ const dia=metaUnit==='dia'; const wk=Number(metas[name])||0; return <div style={{marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
@@ -458,21 +458,21 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
 
         {eqView==='agenda' && (()=>{ const MD=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return <>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <button onClick={()=>setWkOff(o=>o-1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:15,color:C.muted,cursor:'pointer'}}><Gl n='chevL'/></button>
+            <button onClick={()=>setWkOff(o=>o-1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:16,color:C.muted,cursor:'pointer'}}><Gl n='chevL'/></button>
             <span style={{fontSize:12,fontWeight:700,color:C.accent}}>{wkOff===0?'Esta semana':wkOff===1?'Próxima semana':wkOff===-1?'Semana pasada':`Semana del ${new Date(weekMon+'T00:00').getDate()} ${MD[new Date(weekMon+'T00:00').getMonth()]}`}</span>
-            <button onClick={()=>setWkOff(o=>o+1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:15,color:C.muted,cursor:'pointer'}}><Gl n='chevron'/></button>
+            <button onClick={()=>setWkOff(o=>o+1)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,width:30,height:30,fontSize:16,color:C.muted,cursor:'pointer'}}><Gl n='chevron'/></button>
           </div>
           <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}><div style={{minWidth:420}}>
             <div style={{display:'grid',gridTemplateColumns:'58px repeat(5,1fr)',gap:3,marginBottom:3}}>
-              <div/>{weekDias.map(iso=>{ const dd=new Date(iso+'T00:00'); const isHoy=iso===hoy; return <div key={iso} style={{textAlign:'center',fontSize:9,fontWeight:700,color:isHoy?C.azulInfo:C.done,textTransform:'uppercase'}}>{['lun','mar','mié','jue','vie'][weekDias.indexOf(iso)]}<div style={{fontSize:11,color:isHoy?C.azulInfo:C.muted}}>{dd.getDate()}</div></div> })}
+              <div/>{weekDias.map(iso=>{ const dd=new Date(iso+'T00:00'); const isHoy=iso===hoy; return <div key={iso} style={{textAlign:'center',fontSize:10,fontWeight:700,color:isHoy?C.azulInfo:C.done,textTransform:'uppercase'}}>{['lun','mar','mié','jue','vie'][weekDias.indexOf(iso)]}<div style={{fontSize:11,color:isHoy?C.azulInfo:C.muted}}>{dd.getDate()}</div></div> })}
             </div>
             {EQUIPO.map(name=>{ const col=personChip(name).color; return (
               <div key={name} style={{display:'grid',gridTemplateColumns:'58px repeat(5,1fr)',gap:3,marginBottom:3,alignItems:'stretch'}}>
-                <div style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:20,height:20,borderRadius:'50%',background:col,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{INICIALES_RESP[name]||name.slice(0,2)}</span></div>
+                <div style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:20,height:20,borderRadius:'50%',background:col,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{INICIALES_RESP[name]||name.slice(0,2)}</span></div>
                 {weekDias.map(iso=>{ const h=horasDiaDe(name,iso); const tk=tareasDiaDe(name,iso); const load=h+tk.length*1.5; const bg=load<=0?'#fff':load<3?C.greenBg:load<6?C.ambarBg:C.overdueBg; const tc=load<3?C.greenText:load<6?C.soonText:C.overdueText; const sel=cellSel&&cellSel.name===name&&cellSel.iso===iso; const empty=h<=0&&tk.length===0; return (
                   <div key={iso} onClick={()=>!empty&&setCellSel(sel?null:{name,iso})} style={{background:bg,border:`1px solid ${sel?C.accent:(iso===hoy?C.azulInfo+'55':C.border)}`,borderRadius:8,minHeight:38,padding:'4px 2px',textAlign:'center',cursor:empty?'default':'pointer'}}>
                     {h>0&&<div style={{fontSize:11,fontWeight:700,color:tc,fontVariantNumeric:'tabular-nums'}}>{fh(h).replace(' h','')}</div>}
-                    {tk.length>0&&<div style={{fontSize:8,color:h>0?tc:C.soonText,marginTop:h>0?0:6}}>{tk.length} plazo{tk.length!==1?'s':''}</div>}
+                    {tk.length>0&&<div style={{fontSize:10,color:h>0?tc:C.soonText,marginTop:h>0?0:6}}>{tk.length} plazo{tk.length!==1?'s':''}</div>}
                     {empty&&<div style={{fontSize:11,color:'#C4CDD2',marginTop:6}}>·</div>}
                   </div>
                 )})}
@@ -483,7 +483,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginTop:10}}>
               <div style={{fontSize:12,fontWeight:700,color:C.accent,marginBottom:7}}>{cellSel.name} · {['lun','mar','mié','jue','vie','sáb','dom'][(dd.getDay()+6)%7]} {dd.getDate()} {MD[dd.getMonth()]}</div>
               {h.map(x=><div key={x.id} onClick={()=>cliOpen(x.client_id)} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.text}}>{cn(x.client_id)}</b><span style={{color:C.textSoft}}>{x.glosa?' · '+x.glosa:''}</span></span><span style={{color:C.accent,fontWeight:700,flexShrink:0,marginLeft:8}}>{fh(x.horas)}</span></div>)}
-              {tk.map(t=><div key={t.id} onClick={()=>cliOpen(t.client_id)} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:8,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:6,padding:'1px 5px',marginRight:5}}>PLAZO</span><b style={{color:C.text}}>{cn(t.client_id)}</b><span style={{color:C.textSoft}}>{t.title?' · '+t.title:''}</span></span></div>)}
+              {tk.map(t=><div key={t.id} onClick={()=>cliOpen(t.client_id)} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderTop:`1px solid ${C.bgSoft}`,cursor:onOpenClientFicha?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:8,padding:'1px 5px',marginRight:5}}>PLAZO</span><b style={{color:C.text}}>{cn(t.client_id)}</b><span style={{color:C.textSoft}}>{t.title?' · '+t.title:''}</span></span></div>)}
               {h.length===0&&tk.length===0&&<div style={{fontSize:11,color:C.textSoft}}>Sin carga ese día.</div>}
             </div>
           )})()}
@@ -509,7 +509,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
         {permanentes.length>0 && <>
           {hayCostos && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
             <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Margen real · permanentes · {anioAct}</div>
-            <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums',color:margenTot.margen>=0?'#fff':'#FFD2CC'}}>{f0(margenTot.margen)}</div>
+            <div style={{fontSize:20,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums',color:margenTot.margen>=0?'#fff':'#FFD2CC'}}>{f0(margenTot.margen)}</div>
             <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Ingreso {f0(margenTot.ing)} − costo {f0(margenTot.costo)} (horas × costo/hora{margenData.some(d=>d.comisCLP>0)?' + costos de terceros':''}).</div>
           </div>}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'0 2px 7px',gap:8}}>
@@ -538,7 +538,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
                 </div>
                 {tiene&&hayOverhead&&<>
                   <div style={{height:13,borderRadius:4,background:'#fff',overflow:'hidden',display:'flex',margin:'6px 0 4px'}}><span style={{width:sPct+'%',background:C.accent}}/><span style={{flex:1,background:C.soonText}}/></div>
-                  <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:C.muted}}><span>sueldo {f0(s)} + oficina {f0(Math.round(oh))}</span><span style={{color:C.accent,fontWeight:800}}>{f0(Math.round(cargado))}/h cargado</span></div>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted}}><span>sueldo {f0(s)} + oficina {f0(Math.round(oh))}</span><span style={{color:C.accent,fontWeight:800}}>{f0(Math.round(cargado))}/h cargado</span></div>
                 </>}
               </div>
             )})}
@@ -559,10 +559,10 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
                 <span onClick={()=>cliOpen(d.cid)} style={{...NOMBRE_CLI,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</span>
                 <span style={{fontSize:12,fontWeight:800,color:neg?C.overdueText:C.greenText}}>{d.ingCLP>0?((d.margen>=0?'+':'')+d.pct+'%'):'—'}</span>
               </div>
-              <div style={{height:18,borderRadius:6,background:C.bgSoft,overflow:'hidden',display:'flex',margin:'8px 0 5px'}}>{neg?<span style={{width:'100%',height:'100%',background:C.overdue}}/>:<><span style={{width:(d.ingCLP>0?Math.round(d.costoCLP/d.ingCLP*100):0)+'%',height:'100%',background:'#E9A9A0'}}/><span style={{flex:1,height:'100%',background:C.normal}}/></>}</div>
+              <div style={{height:18,borderRadius:8,background:C.bgSoft,overflow:'hidden',display:'flex',margin:'8px 0 5px'}}>{neg?<span style={{width:'100%',height:'100%',background:C.overdue}}/>:<><span style={{width:(d.ingCLP>0?Math.round(d.costoCLP/d.ingCLP*100):0)+'%',height:'100%',background:'#E9A9A0'}}/><span style={{flex:1,height:'100%',background:C.normal}}/></>}</div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted}}><span>paga {f0(d.ingCLP)}</span><span>cuesta {f0(d.costoCLP)}</span><span style={{color:neg?C.overdueText:C.greenText,fontWeight:700}}>{neg?'pierdes '+f0(-d.margen):'margen '+f0(d.margen)}</span></div>
               {neg && <div style={{fontSize:10,color:C.overdueText,fontWeight:600,marginTop:5}}>Te cuesta más de lo que paga — reajustar o conversar.</div>}
-              {d.faltaCosto && <div style={{fontSize:9,color:C.soonText,marginTop:4}}>Falta costo/hora de algún abogado — el costo está subestimado.</div>}
+              {d.faltaCosto && <div style={{fontSize:10,color:C.soonText,marginTop:4}}>Falta costo/hora de algún abogado — el costo está subestimado.</div>}
             </div>
           )})}</div>}
           {hayCostos && margenTab==='abogado' && (margenAbogado.length>0
@@ -573,9 +573,9 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
                   <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{a.name}</span>
                   <span style={{fontSize:12,fontWeight:800,color:neg?C.overdueText:C.greenText}}>{a.genera>0?((a.margen>=0?'+':'')+a.pct+'%'):'—'}</span>
                 </div>
-                <div style={{height:18,borderRadius:6,background:C.bgSoft,overflow:'hidden',display:'flex',margin:'8px 0 5px'}}>{neg?<span style={{width:'100%',height:'100%',background:C.overdue}}/>:<><span style={{width:(a.genera>0?Math.round(a.costo/a.genera*100):0)+'%',height:'100%',background:'#E9A9A0'}}/><span style={{flex:1,height:'100%',background:C.normal}}/></>}</div>
+                <div style={{height:18,borderRadius:8,background:C.bgSoft,overflow:'hidden',display:'flex',margin:'8px 0 5px'}}>{neg?<span style={{width:'100%',height:'100%',background:C.overdue}}/>:<><span style={{width:(a.genera>0?Math.round(a.costo/a.genera*100):0)+'%',height:'100%',background:'#E9A9A0'}}/><span style={{flex:1,height:'100%',background:C.normal}}/></>}</div>
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:C.muted}}><span>genera {f0(a.genera)}</span><span>cuesta {f0(a.costo)}</span><span style={{color:neg?C.overdueText:C.greenText,fontWeight:700}}>{neg?'pierdes '+f0(-a.margen):'margen '+f0(a.margen)}</span></div>
-                <div style={{fontSize:9,color:C.textSoft,marginTop:4}}>{fh(a.horasFact)} facturables de {fh(a.horasTot)} · valoradas a {tarifaUF} UF/h</div>
+                <div style={{fontSize:10,color:C.textSoft,marginTop:4}}>{fh(a.horasFact)} facturables de {fh(a.horasTot)} · valoradas a {tarifaUF} UF/h</div>
               </div>
             )})}</div>
             : <div style={{fontSize:12,color:C.textSoft,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:13}}>Aún no hay horas con costo/hora definido por abogado.</div>)}
@@ -583,7 +583,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
         </>}
         {excedenteYTD>0 && <div style={{background:C.accent,borderRadius:12,padding:'13px 15px',marginBottom:10,color:'#fff'}}>
           <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.06em',opacity:.85,fontWeight:700}}>Podrías haber facturado · {anioAct}</div>
-          <div style={{fontSize:23,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(excedenteYTD)}</div>
+          <div style={{fontSize:20,fontWeight:800,margin:'3px 0 2px',letterSpacing:'-.5px',fontVariantNumeric:'tabular-nums'}}>{f0(excedenteYTD)}</div>
           <div style={{fontSize:11,opacity:.85,lineHeight:1.4}}>Trabajo facturable por sobre lo incluido cada mes, a tu valor hora. Cobrarlo es opcional — es tu base para reajustar tarifas.</div>
         </div>}
         {ytdData.length===0 && <div style={{fontSize:12,color:C.textSoft,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:14}}>Sin asesorías permanentes configuradas.</div>}
@@ -593,9 +593,9 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
             <div onClick={()=>cliOpen(d.cid)} style={{...NOMBRE_CLI,marginBottom:7,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
             {d.sinCfg ? <div style={{fontSize:11,color:C.textSoft}}>Sin valor de asesoría para calcular las horas.</div> : <>
               <div style={{display:'flex',gap:6}}>
-                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.est)}</div><div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase'}}>Incluidas</div></div>
-                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.cons)}</div><div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase'}}>Consumidas</div></div>
-                <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase'}}>Holgura</div></div>
+                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.est)}</div><div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase'}}>Incluidas</div></div>
+                <div style={{flex:1,textAlign:'center',background:C.bgSoft,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fh(d.cons)}</div><div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase'}}>Consumidas</div></div>
+                <div style={{flex:1,textAlign:'center',background:d.over?C.overdueBg:C.greenBg,borderRadius:8,padding:'7px 4px'}}><div style={{fontSize:13,fontWeight:700,color:d.over?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{d.est>0?Math.round((d.est-d.cons)/d.est*100)+'%':'—'}</div><div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase'}}>Holgura</div></div>
               </div>
               <div style={{fontSize:11,fontWeight:600,marginTop:7,color:d.exceso>0?C.overdueText:C.greenText}}>{d.exceso>0
                 ? <>Trabajaste <b>{fh(d.exceso)}</b> de más este año{d.excesoFact>0 ? <> · <b>{f0(d.exCLP)}</b> facturable que podrías cobrar (opcional)</> : <> · nada facturable por sobre lo incluido</>}. Base para reajustar la tarifa.</>
@@ -617,7 +617,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
         <div style={{background:C.accent,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
           <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:9}}>
             <span style={{width:9,height:9,borderRadius:'50%',background:'#5FE0A0',boxShadow:'0 0 0 4px rgba(95,224,160,.22)',flexShrink:0}}/>
-            <span style={{fontFamily:'ui-monospace,monospace',fontSize:23,fontWeight:700,color:'#fff',letterSpacing:'.02em',fontVariantNumeric:'tabular-nums'}}>{elapsedTxt()}</span>
+            <span style={{fontFamily:'ui-monospace,monospace',fontSize:20,fontWeight:700,color:'#fff',letterSpacing:'.02em',fontVariantNumeric:'tabular-nums'}}>{elapsedTxt()}</span>
             <span onClick={cancelTimer} style={{marginLeft:'auto',color:'#fff',opacity:.7,fontSize:12,cursor:'pointer'}}>Cancelar</span>
           </div>
           {timer.clientId ? (
@@ -638,9 +638,9 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       <div style={{display:'flex',gap:6,marginBottom:16}}>
         {semDias.map((iso,i)=>{ const hh=misHorasDia(iso); const td=misTareasDia(iso); const isHoy=iso===hoy; return (
           <div key={iso} style={{flex:1,textAlign:'center',background:isHoy?C.azulBg:'#fff',border:`1px solid ${isHoy?C.azulInfo:C.border}`,borderRadius:10,padding:'8px 2px'}}>
-            <div style={{fontSize:9,color:C.textSoft,textTransform:'uppercase',fontWeight:700}}>{['lun','mar','mié','jue','vie'][i]}</div>
+            <div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',fontWeight:700}}>{['lun','mar','mié','jue','vie'][i]}</div>
             <div style={{fontSize:13,fontWeight:700,color:hh>0?C.accent:'#99ABB4',marginTop:2,fontVariantNumeric:'tabular-nums'}}>{hh>0?fh(hh).replace(' h',''):'·'}</div>
-            {td>0 && <div style={{fontSize:8,color:C.soonText,marginTop:2}}>{td} plazo{td!==1?'s':''}</div>}
+            {td>0 && <div style={{fontSize:10,color:C.soonText,marginTop:2}}>{td} plazo{td!==1?'s':''}</div>}
           </div>
         )})}
       </div>
@@ -713,11 +713,11 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       )}
       {agenda.map(ev=>(
         <div key={ev.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
-          <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}><Gl n='x'/></span>
-          {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText],NOTA:[C.soonBg,C.soonText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em',whiteSpace:'nowrap'}}>{ev.tag||'AGENDA'}</span> })()}
-          {ev.iaLoading&&<span style={{fontSize:9,fontWeight:700,color:C.azulInfo,marginLeft:6}}>Redactando con IA…</span>}
-          {ev.ia&&<span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em',display:'inline-flex',alignItems:'center',gap:3,whiteSpace:'nowrap'}}><svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8z'/></svg>IA</span>}
-          {ev.fecha&&<span style={{fontSize:9,color:C.textSoft,marginLeft:6}}>{fFecha(ev.fecha)}</span>}
+          <span onClick={()=>descartar(ev.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}><Gl n='x'/></span>
+          {(()=>{ const tg={AGENDA:[C.tealBg,C.tealText],CORREO:[C.azulBg,C.azulInfo],DOCUMENTO:[C.greenBg,C.greenText],NOTA:[C.soonBg,C.soonText]}[ev.tag||'AGENDA']||[C.tealBg,C.tealText]; return <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:tg[0],color:tg[1],letterSpacing:'.02em',whiteSpace:'nowrap'}}>{ev.tag||'AGENDA'}</span> })()}
+          {ev.iaLoading&&<span style={{fontSize:10,fontWeight:700,color:C.azulInfo,marginLeft:6}}>Redactando con IA…</span>}
+          {ev.ia&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.greenBg,color:C.greenText,marginLeft:6,letterSpacing:'.02em',display:'inline-flex',alignItems:'center',gap:3,whiteSpace:'nowrap'}}><svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8z'/></svg>IA</span>}
+          {ev.fecha&&<span style={{fontSize:10,color:C.textSoft,marginLeft:6}}>{fFecha(ev.fecha)}</span>}
           {ev.client_id ? <div onClick={()=>cliOpen(ev.client_id)} style={{...NOMBRE_CLI,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(ev.client_id)}</div>
             : <div style={{margin:'7px 0 4px'}}><input value={agq[ev.id]||''} onChange={e=>setAgq(q=>({...q,[ev.id]:e.target.value}))} placeholder='¿De qué cliente? Buscar…' style={{...inp,height:32,fontSize:12}}/>{(agq[ev.id]||'').trim()&&<div style={{border:`1px solid ${C.border}`,borderRadius:8,marginTop:3,overflow:'hidden',maxHeight:120,overflowY:'auto'}}>{clients.filter(c=>c.status!=='Terminado'&&_normTxt(c.name).includes(_normTxt(agq[ev.id]))).slice(0,6).map(c=><div key={c.id} onClick={()=>{setAgenda(a=>a.map(x=>x.id===ev.id?{...x,client_id:String(c.id)}:x));setAgq(q=>({...q,[ev.id]:''}))}} style={{padding:'7px 10px',fontSize:12,color:C.text,cursor:'pointer',borderTop:`1px solid ${C.bgSoft}`}}>{c.name}</div>)}</div>}</div>}
           <div style={{fontSize:12,color:ev.ia?C.text:C.muted,lineHeight:1.35}}>{ev.iaLoading ? <span style={{color:C.textSoft}}>Leyendo el contenido y redactando la glosa…</span> : (ev.ia ? ev.glosa : ev.titulo)}</div>
@@ -730,8 +730,8 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       ))}
       {delegadasHoy.map(d=>(
         <div key={'co'+d.cid} style={{position:'relative',background:'#FFFDF6',border:`1px solid ${C.soonBg}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
-          <span onClick={()=>descartar('coord:'+d.cid)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}><Gl n='x'/></span>
-          <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.ambarBg,color:C.soonText,letterSpacing:'.02em',whiteSpace:'nowrap'}}>COORDINACIÓN</span>
+          <span onClick={()=>descartar('coord:'+d.cid)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}><Gl n='x'/></span>
+          <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.ambarBg,color:C.soonText,letterSpacing:'.02em',whiteSpace:'nowrap'}}>COORDINACIÓN</span>
           <div onClick={()=>cliOpen(d.cid)} style={{...NOMBRE_CLI,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(d.cid)}</div>
           <div style={{fontSize:12,color:C.muted,lineHeight:1.35}}>Delegaste {d.n} tarea{d.n!==1?'s':''} — coordinación (facturable)</div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',marginTop:10,gap:9}}><span style={{fontSize:11,color:C.textSoft}}>0,2 h</span><button onClick={()=>registrarCoord(d.cid,d.n)} style={{background:C.accent,color:'#fff',border:'none',borderRadius:10,padding:'8px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>Registrar</button></div>
@@ -740,8 +740,8 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       {(misTareasHoy.length===0 && agenda.length===0 && delegadasHoy.length===0) && <div style={{fontSize:12,color:C.textSoft,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'14px',marginBottom:9}}>{agDone?'Nada pendiente por registrar.':'Toca “Revisar mi día” para traer tus reuniones, correos y documentos, o registra el tiempo con “+ Registrar tiempo”.'}</div>}
       {misTareasHoy.map(t=>(
         <div key={t.id} style={{position:'relative',background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
-          <span onClick={()=>descartar('tarea:'+t.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer'}}><Gl n='x'/></span>
-          <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em',whiteSpace:'nowrap'}}>TAREA</span>
+          <span onClick={()=>descartar('tarea:'+t.id)} title='Descartar — no volver a proponerlo' style={{position:'absolute',top:8,right:9,width:24,height:24,borderRadius:'50%',background:C.bgSoft,color:C.textSoft,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer'}}><Gl n='x'/></span>
+          <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.azulInfo,letterSpacing:'.02em',whiteSpace:'nowrap'}}>TAREA</span>
           <div onClick={()=>cliOpen(t.client_id)} style={{...NOMBRE_CLI,margin:'7px 0 2px',cursor:onOpenClientFicha?'pointer':'default'}}>{cn(t.client_id)}</div>
           <div style={{fontSize:12,color:C.muted,lineHeight:1.35}}>{t.title||'Tarea'}</div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,gap:8}}>

@@ -104,7 +104,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const dupRend = posiblesDuplicadosGastos(allMovs.filter(e=>e.type==='gasto'))
   const keyP = e => e.project || (sales||[]).find(s=>String(s.id)===String(e.sale_id))?.title || ''
   // Chips del gasto (proyecto y fondo): se corrigen tocándolos, sin marcar ni desmarcar el gasto.
-  const chipSty = warn => ({fontSize:9.5,fontWeight:700,color:warn?C.soonText:C.accent,background:warn?C.soonBg:C.bgSoft,border:`1px dashed ${warn?C.soonText:C.done}`,borderRadius:20,padding:'1px 6px',maxWidth:'100%',cursor:'pointer',fontFamily:'inherit'})
+  const chipSty = warn => ({fontSize:10,fontWeight:700,color:warn?C.soonText:C.accent,background:warn?C.soonBg:C.bgSoft,border:`1px dashed ${warn?C.soonText:C.done}`,borderRadius:20,padding:'1px 6px',maxWidth:'100%',cursor:'pointer',fontFamily:'inherit'})
   const _stop = ev => ev.stopPropagation()
   const disponibles = allMovs.filter(e=>{
     if(e.type!=='gasto') return false
@@ -404,7 +404,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   {/* Razón social: 1 → fija; varias → la elige el emisor (acota los gastos) */}
   const bRS = entsCli.length>0&&(()=>{
         const flBox = {background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:8}
-        const flLbl = {fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
+        const flLbl = {fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.accent,fontWeight:600,padding:0,height:22,appearance:'none'}
         return (
         <div style={flBox}>
@@ -418,7 +418,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   {/* Proyecto + Dirigido a + Subproyecto */}
   const bProyecto = (()=>{
         const flBox = on => ({background:C.bgSoft,border:`0.5px solid ${on?C.accent:C.border}`,borderRadius:8,padding:'6px 11px'})
-        const flLbl = {fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
+        const flLbl = {fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}
         const sug = contacts.filter(c=>c.email)
         return (<>
@@ -448,7 +448,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
           </div>
         </div>
         {!enFondo&&proyF.size===0&&nSinProyR>0&&proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
-        {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:9,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:14,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
+        {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:10,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
         {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginBottom:8}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
         {!showSub && !subproyecto && <div onClick={()=>setShowSub(true)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',marginBottom:12,width:'fit-content'}}>+ Subproyecto</div>}
         {(showSub||subproyecto)&&<div style={{...flBox(false),marginBottom:12}}>
@@ -460,7 +460,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
       })()
   // Cifras de la rendición en UNA tarjeta, filas con el monto a la derecha (antes 3 tarjetas + un resumen aparte): lo seleccionado, fondos, ya rendido y el saldo que resulta.
   const lnR=(l,v,col,big)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'3px 0'}}><span style={{fontSize:12,color:big?col:C.muted,fontWeight:big?700:400}}>{l}</span><span style={{fontSize:big?15:12.5,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
-  const segBtn = (k,t,sub,on,dis) => <button key={k} type='button' disabled={dis} onClick={()=>elegirModo(k)} style={{flex:1,minWidth:0,border:'none',borderLeft:k!=='junto'?`1px solid ${C.border}`:'none',padding:'7px 4px',background:on?C.accent:C.surface,color:on?'#fff':(dis?C.done:C.muted),cursor:dis?'not-allowed':'pointer',fontFamily:'inherit',lineHeight:1.25}}><div style={{fontSize:11.5,fontWeight:600}}>{t}</div><div style={{fontSize:10,opacity:.85}}>{sub}</div></button>
+  const segBtn = (k,t,sub,on,dis) => <button key={k} type='button' disabled={dis} onClick={()=>elegirModo(k)} style={{flex:1,minWidth:0,border:'none',borderLeft:k!=='junto'?`1px solid ${C.border}`:'none',padding:'7px 4px',background:on?C.accent:C.surface,color:on?'#fff':(dis?C.done:C.muted),cursor:dis?'not-allowed':'pointer',fontFamily:'inherit',lineHeight:1.25}}><div style={{fontSize:12,fontWeight:600}}>{t}</div><div style={{fontSize:10,opacity:.85}}>{sub}</div></button>
   const bModo = multiT && (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
         <div style={{...SEC_LBL,marginBottom:6}}>Cómo se envía · {trabajosSel.length} proyectos</div>
@@ -473,18 +473,18 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
           const sugDe=x=>{ const c={}; x.gastos.forEach(g=>{ const k=keyP(g); if(k) c[k]=(c[k]||0)+1 }); return Object.keys(c).sort((a,b)=>c[b]-c[a])[0]||'' }
           return <div style={{borderTop:`1px solid ${C.track}`,marginTop:8,paddingTop:8}}>
             <div style={{...SEC_LBL,color:C.soonText,marginBottom:4}}>Antes de separar</div>
-            <div style={{fontSize:11.5,color:C.textSoft,marginBottom:6}}>{sinP.length===1?'Este fondo no tiene proyecto: elige a cuál va.':`Estos ${sinP.length} fondos no tienen proyecto: elige a cuál va cada uno.`}</div>
+            <div style={{fontSize:12,color:C.textSoft,marginBottom:6}}>{sinP.length===1?'Este fondo no tiene proyecto: elige a cuál va.':`Estos ${sinP.length} fondos no tienen proyecto: elige a cuál va cada uno.`}</div>
             {sinP.map(x=>{ const sg=sugDe(x); return <div key={x.f.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'4px 0',flexWrap:'wrap'}}>
               <span style={{fontSize:12,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>Fondo {fmtFechaDMY(x.f.date)} · {fmtN(x.f.amount)}</span>
               <span style={{display:'inline-flex',gap:6,alignItems:'center'}}>
-                {sg&&<button type='button' onClick={()=>asignarProyFondo(x.f,sg)} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Sugerido: {sg}</button>}
+                {sg&&<button type='button' onClick={()=>asignarProyFondo(x.f,sg)} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Sugerido: {sg}</button>}
                 <select value='' onChange={ev=>{ if(ev.target.value) asignarProyFondo(x.f,ev.target.value) }} style={{...chipSty(true),fontSize:11}}><option value=''>Elegir proyecto</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}</option>)}</select>
               </span>
             </div> })}
           </div> })()}
         <div style={{marginTop:8}}>{porT.map((o,i)=><div key={o.t} style={{borderTop:`1px solid ${C.track}`,padding:'7px 0 3px'}}>
           <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{modoEf!=='junto'?`N° ${nextCorr+i} · `:''}{o.t}</span><span style={{fontSize:13,fontWeight:700,color:o.saldo<0?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{o.saldo<0?'−':'+'}{fmtN(Math.abs(o.saldo))}</span></div>
-          <div style={{fontSize:11.5,color:C.textSoft,display:'flex',justifyContent:'space-between',gap:8}}><span>fondos {fmtN(o.f.totFondos)}{o.f.rendido?` · ya rendido ${fmtN(o.f.rendido)}`:''} · {o.gs.length} gasto{o.gs.length!==1?'s':''} {fmtN(o.tg)}</span>{modoEf!=='junto'&&<button type='button' onClick={()=>verPdfVirtual(virtuales()[i])} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Ver PDF</button>}</div>
+          <div style={{fontSize:12,color:C.textSoft,display:'flex',justifyContent:'space-between',gap:8}}><span>fondos {fmtN(o.f.totFondos)}{o.f.rendido?` · ya rendido ${fmtN(o.f.rendido)}`:''} · {o.gs.length} gasto{o.gs.length!==1?'s':''} {fmtN(o.tg)}</span>{modoEf!=='junto'&&<button type='button' onClick={()=>verPdfVirtual(virtuales()[i])} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Ver PDF</button>}</div>
         </div>)}</div>
       </div>
   )
@@ -495,8 +495,8 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const totPendG = (cntProy.__todos||{n:0,m:0})
   const totFondosRS = fondosRS.reduce((a,x)=>a+(Number(x.f.amount)||0),0)
   const cardModo = (k,ic,bg,col,t,sub,der,on,onClick) => <div key={k} onClick={onClick} style={{display:'flex',alignItems:'center',gap:isDesktop?10:8,background:C.surface,border:`1px solid ${on?C.accent:C.border}`,boxShadow:on?`inset 0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:isDesktop?'11px 13px':'9px 10px',cursor:'pointer',minWidth:0}}>
-      <span style={{width:isDesktop?34:28,height:isDesktop?34:28,borderRadius:9,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={isDesktop?17:15} c={col}/></span>
-      <span style={{minWidth:0,flex:1}}><span style={{display:'block',fontSize:isDesktop?13.5:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap'}}>{isDesktop?sub:der}</span></span>
+      <span style={{width:isDesktop?34:28,height:isDesktop?34:28,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={isDesktop?17:15} c={col}/></span>
+      <span style={{minWidth:0,flex:1}}><span style={{display:'block',fontSize:isDesktop?14:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{isDesktop?sub:der}</span></span>
       {isDesktop&&<span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{der}</span>}
     </div>
   const bElegir = verModoFondo && (
@@ -514,18 +514,18 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
               {x.f.project
                 ? <span style={{display:'block',fontSize:13,fontWeight:on?700:500,color:C.accent}}>{x.f.project}</span>
                 : <select value='' onClick={_stop} onChange={ev=>{ _stop(ev); if(ev.target.value) asignarProyFondo(x.f,ev.target.value) }} style={{...chipSty(true),fontSize:11}}><option value=''>Asignar proyecto</option>{proyectosDisp.map(p=><option key={p} value={p}>{p}</option>)}</select>}
-              <span style={{display:'block',fontSize:10.5,color:C.textSoft,marginTop:1}}>{fmtFechaDMY(x.f.date)} · {np?`${np} gasto${np!==1?'s':''} por rendir`:'sin gastos por rendir'}</span>
+              <span style={{display:'block',fontSize:11,color:C.textSoft,marginTop:1}}>{fmtFechaDMY(x.f.date)} · {np?`${np} gasto${np!==1?'s':''} por rendir`:'sin gastos por rendir'}</span>
             </span>
             <span style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
               <span style={{display:'block',fontSize:13,fontWeight:700,color:C.text}}>{fmtN(x.f.amount)}</span>
-              <span style={{fontSize:10.5,color:x.quedan<0?C.overdueText:C.textSoft}}>{x.quedan<0?`excedido ${fmtN(-x.quedan)}`:`queda ${fmtN(x.quedan)}`}</span>
+              <span style={{fontSize:11,color:x.quedan<0?C.overdueText:C.textSoft}}>{x.quedan<0?`excedido ${fmtN(-x.quedan)}`:`queda ${fmtN(x.quedan)}`}</span>
             </span>
           </div> })}
       </div>)
   // Cuadratura del cliente con el reparto (fuente única): Σ fondos − gastos = saldo de la ficha. Si alguna vez no calza, se avisa.
   const _fgC = fgCliente(expenses, client.id), _cuadra = Math.round(_fgC.saldo)===Math.round(repF.saldo)
   const bCuadra = verModoFondo && (
-      <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,color:C.textSoft,padding:'8px 12px',background:C.bgSoft,borderRadius:9,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,color:C.textSoft,padding:'8px 12px',background:C.bgSoft,borderRadius:10,marginBottom:12,flexWrap:'wrap'}}>
         <span style={{fontVariantNumeric:'tabular-nums'}}>Fondos <b style={{color:C.text}}>{fmtN(_fgC.fondos)}</b> − gastos <b style={{color:C.text}}>{fmtN(_fgC.gastos)}</b> = <b style={{color:C.text}}>{fmtSaldoG(_fgC.saldo)}</b></span>
         <span style={{fontWeight:700,color:_cuadra?C.greenText:C.overdueText}}>{_cuadra?'igual a la ficha':`no cuadra con la ficha (${fmtSaldoG(repF.saldo)})`}</span>
       </div>)
@@ -536,7 +536,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         {lnR(enFondo?'Fondo entregado':_uno?'Fondos de este trabajo':'Fondos', fmtN(_uno?_uno.f.totFondos:fondosDisp))}
         {lnR(enFondo?'Ya rendido de este fondo':'Ya rendido', fmtN(_uno?_uno.f.rendido:_fondoRend.rendido))}
         {(()=>{ const sal=_uno?_uno.saldo:saldoTrasRendicion; return <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(sal<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(sal)), sal<0?C.overdueText:C.greenText, true)}</div> })()}
-        {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:11.5,color:C.textSoft,marginTop:4}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
+        {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:12,color:C.textSoft,marginTop:4}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
       </div>
     </div>
   )
@@ -572,9 +572,9 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:600,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>}
           <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:'3px 5px',alignItems:'center'}}>
             {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
-            {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{e.category}</span>}
+            {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{e.category}</span>}
             {chipsG(e)}
-            {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:9.5,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
+            {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
           </div>
         </div>
         <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
@@ -582,15 +582,15 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
     )
   }
   const bLista = (<>
-      {!isDesktop&&nDupR>0&&<div style={{fontSize:11.5,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
+      {!isDesktop&&nDupR>0&&<div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
       {wipRec&&gastosSel.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
-        <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
-        <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:11.5,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
+        <span style={{flex:1,minWidth:0,fontSize:12,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
+        <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
       {enFondo&&(()=>{ const nSin=repF.sinFondo.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g)).length
         return <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
           <span style={{fontSize:11,color:C.muted}}>Gastos del fondo del {fmtFechaDMY(fondoObj?.date)}</span>
-          {nSin>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:10.5,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${nSin})`}</button>}
+          {nSin>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${nSin})`}</button>}
         </div> })()}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -617,9 +617,9 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         {gruposL ? gruposL.map(gr=>(<Fragment key={gr.k||'__sin__'}>
             <div onClick={()=>toggleGrupo(gr)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,margin:'10px 2px 5px',cursor:'pointer'}}>
               <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:gr.k?C.accent:C.soonText,minWidth:0}}>{gr.k||'Sin proyecto'}</span>
-              <span style={{fontSize:11.5,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{gr.gs.length} · {fmtN(gr.tot)}</span>
+              <span style={{fontSize:12,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{gr.gs.length} · {fmtN(gr.tot)}</span>
             </div>
-            {!gr.k&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(gr.gs,proyectoSugerido)} style={{fontSize:10.5,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {gr.gs.length===1?'a':'los '+gr.gs.length+' a'} {proyectoSugerido}</button>}
+            {!gr.k&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(gr.gs,proyectoSugerido)} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {gr.gs.length===1?'a':'los '+gr.gs.length+' a'} {proyectoSugerido}</button>}
             {gr.gs.map(filaG)}
           </Fragment>)) : disponibles.map(filaG)}
       </div>
@@ -636,7 +636,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
           </div>
         : <button onClick={()=>setExtOpen(true)} disabled={!puedeRendir} style={{marginTop:8,background:'none',border:'none',padding:0,color:puedeRendir?C.accent:C.done,fontSize:12,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed'}}>Ya la rendí por fuera de la app</button>)
   const bBotones = navBorr&&!esEdicion ? (<>
-      {faltaProyR&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
+      {faltaProyR&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('borrador')}
         style={{width:'100%',padding:'11px 14px',borderRadius:10,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',fontSize:14,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
         {saving?'Guardando…':(navBorr.i<navBorr.n-1?'Guardar borrador y continuar':'Guardar borrador')}
@@ -647,7 +647,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
       </div>
       {bExterna}
   </>) : (<>
-      {faltaProyR&&<div style={{fontSize:11.5,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
+      {faltaProyR&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <div style={{display:'flex',gap:8}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         {esEdicion ? (
@@ -674,7 +674,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   </>)
 
   // Recorrer los borradores preparados sin volver a la lista (escritorio: arriba a la derecha · celular: al pie).
-  const _navBtn = (dir,dis) => <button onClick={ev=>{ ev.stopPropagation(); if(!saving) (dir<0?navBorr.onPrev:navBorr.onNext)() }} disabled={dis||saving} aria-label={dir<0?'Anterior':'Siguiente'} style={{width:26,height:26,borderRadius:13,border:`1px solid ${C.border}`,background:C.surface,color:dis?C.done:C.accent,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:dis?'default':'pointer',padding:0,flexShrink:0}}><Gl n={dir<0?'chevL':'chevron'}/></button>
+  const _navBtn = (dir,dis) => <button onClick={ev=>{ ev.stopPropagation(); if(!saving) (dir<0?navBorr.onPrev:navBorr.onNext)() }} disabled={dis||saving} aria-label={dir<0?'Anterior':'Siguiente'} style={{width:26,height:26,borderRadius:12,border:`1px solid ${C.border}`,background:C.surface,color:dis?C.done:C.accent,display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:dis?'default':'pointer',padding:0,flexShrink:0}}><Gl n={dir<0?'chevL':'chevron'}/></button>
   const bNav = navBorr&&!esEdicion&&(isDesktop
     ? <span style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:12,color:C.muted,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 4px 3px 12px',whiteSpace:'nowrap'}}>Borrador <b style={{color:C.accent}}>{navBorr.i+1} de {navBorr.n}</b>{_navBtn(-1,navBorr.i<=0)}{_navBtn(1,navBorr.i>=navBorr.n-1)}</span>
     : <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'6px 8px'}}>
@@ -780,10 +780,10 @@ export function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, 
         <div style={{marginBottom:12}}>
           <label style={flabel}>CC</label>
           {(()=>{ const ccVis=cc.filter(e=>e&&e.toLowerCase()!==(para||'').trim().toLowerCase()); return ccVis.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
-            {ccVis.map(e=><span key={e} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 7px 3px 10px',fontSize:12}}>{e}<button onClick={()=>removeCc(e)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}><Gl n='x'/></button></span>)}
+            {ccVis.map(e=><span key={e} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:12,padding:'3px 7px 3px 10px',fontSize:12}}>{e}<button onClick={()=>removeCc(e)} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}><Gl n='x'/></button></span>)}
           </div> })()}
           <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'||e.key===','){ e.preventDefault(); addCc(ccInput) } }} onBlur={()=>ccInput.trim()&&addCc(ccInput)} placeholder='Agregar correo y Enter' style={inp}/>
-          {sugCc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{sugCc.slice(0,6).map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
+          {sugCc.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>{sugCc.slice(0,6).map(c=><button key={c.email} onClick={()=>addCc(c.email)} style={{fontSize:11,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,borderRadius:12,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre||c.email}</button>)}</div>}
           {studioEmails.length>0&&<label style={{display:'flex',gap:7,alignItems:'center',marginTop:8,fontSize:11,color:C.muted,cursor:'pointer'}}><input type='checkbox' checked={studioOn} onChange={e=>setStudioOn(e.target.checked)}/>Copia a la oficina ({studioEmails.join(', ')})</label>}
         </div>
         <div style={{marginBottom:12}}>
@@ -1174,7 +1174,7 @@ Saludos cordiales,`
       <div style={{fontSize:11,color:C.textSoft,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span></div>
       {/* Destinatarios: un solo bloque con chips (Para = principal navy, Cc = copias azules). Si Para está vacío, lo que escribes/eliges entra como Para. */}
       {(()=>{
-        const flLbl={fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
+        const flLbl={fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
         const addOne = em => { const e=String(em||'').trim(); if(!e) return; if(!para.trim()) setPara(e); else addCc(e); setCcInput('') }
         const sug=fichaContacts.filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase()))
         return (
@@ -1182,13 +1182,13 @@ Saludos cordiales,`
           <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}>
             <div style={{...flLbl,marginBottom:5}}>Destinatarios</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:5,alignItems:'center'}}>
-              {para.trim()&&<span style={{display:'inline-flex',alignItems:'center',gap:5,background:C.accent,color:'#fff',borderRadius:16,padding:'3px 7px 3px 9px',fontSize:12}}><span style={{fontSize:9,opacity:.65,fontWeight:600,letterSpacing:.5}}>PARA</span>{para}<button onClick={()=>setPara('')} aria-label='Quitar' style={{background:'none',border:'none',color:'#fff',cursor:'pointer',fontSize:14,lineHeight:1,padding:0,opacity:.8}}><Gl n='x'/></button></span>}
-              {cc.map(em=><span key={em} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:16,padding:'3px 6px 3px 8px',fontSize:12}}><span style={{fontSize:9,color:C.azulInfo,fontWeight:600,letterSpacing:.5}}>CC</span>{em}<button onClick={()=>removeCc(em)} aria-label='Quitar' style={{background:'none',border:'none',color:C.azulInfo,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}><Gl n='x'/></button></span>)}
+              {para.trim()&&<span style={{display:'inline-flex',alignItems:'center',gap:5,background:C.accent,color:'#fff',borderRadius:12,padding:'3px 7px 3px 9px',fontSize:12}}><span style={{fontSize:10,opacity:.65,fontWeight:600,letterSpacing:.5}}>PARA</span>{para}<button onClick={()=>setPara('')} aria-label='Quitar' style={{background:'none',border:'none',color:'#fff',cursor:'pointer',fontSize:14,lineHeight:1,padding:0,opacity:.8}}><Gl n='x'/></button></span>}
+              {cc.map(em=><span key={em} style={{display:'inline-flex',alignItems:'center',gap:5,background:C.azulBg,color:C.accent,borderRadius:12,padding:'3px 6px 3px 8px',fontSize:12}}><span style={{fontSize:10,color:C.azulInfo,fontWeight:600,letterSpacing:.5}}>CC</span>{em}<button onClick={()=>removeCc(em)} aria-label='Quitar' style={{background:'none',border:'none',color:C.azulInfo,cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}><Gl n='x'/></button></span>)}
               <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addOne(ccInput) } }} onBlur={()=>ccInput.trim()&&addOne(ccInput)} placeholder={para.trim()?'+ agregar copia…':'correo del cliente…'} style={{flex:1,minWidth:130,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
             </div>
           </div>
           {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
-            {sug.map(c=><button key={c.email} onClick={()=>addOne(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:16,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
+            {sug.map(c=><button key={c.email} onClick={()=>addOne(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
           </div>}
           {!DEMO&&(verSug
             ? <div style={{marginTop:8,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px',background:C.surface}}>
@@ -1210,12 +1210,12 @@ Saludos cordiales,`
         )
       })()}
       <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginBottom:12}}>
-        <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>Asunto</div>
+        <div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>Asunto</div>
         <input value={asunto} onChange={e=>setAsunto(e.target.value)} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
       </div>
       {_netoAplica&&(()=>{ const net=_debM-_favM
         const fila=(k,l,v,col,b)=>(<div key={k} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',columnGap:10,alignItems:'baseline',padding:b?'7px 0 2px':'4px 0',borderTop:b?`1px solid ${C.border}`:'none',marginTop:b?3:0,fontSize:13}}><div style={{minWidth:0}}>{l}</div><span style={{fontWeight:b?700:600,color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(v)}</span></div>)
-        const est=t=><span style={isDesktop?{marginLeft:8,fontSize:11.5,color:C.textSoft}:{display:'block',fontSize:11.5,color:C.textSoft}}>{t}</span>
+        const est=t=><span style={isDesktop?{marginLeft:8,fontSize:12,color:C.textSoft}:{display:'block',fontSize:12,color:C.textSoft}}>{t}</span>
         return (<div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:C.accent,marginBottom:2}}>Saldos de los trabajos</div>
           {(_saldosM||[]).filter(o=>Math.abs(o.saldo)>=1).map((o,i)=>fila(i,<><span>N° {o.corr||'?'} · {o.trabajo}</span>{est(o.saldo<0?'A su cargo':'A su favor')}</>,Math.abs(o.saldo),o.saldo<0?C.overdueText:C.greenText))}
@@ -1227,7 +1227,7 @@ Saludos cordiales,`
       <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',marginBottom:12}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{fontSize:13,fontWeight:600,color:C.accent}}>Fondos adicionales</span>
           {ultFondo&&!adic.on&&<button type='button' onClick={()=>setAdic(p=>({...p,monto:String(Math.round(ultFondo.amount))}))} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',whiteSpace:'nowrap'}}>Último fondo {fmt(ultFondo.amount)}</button>}
-          {adic.on&&<span style={{marginLeft:'auto',fontSize:11.5,color:C.muted,whiteSpace:'nowrap'}}>{_multi?`a transferir ${fmt(Math.max(0,_debM+(parseInt(adic.monto)||0)-(_netoAplica&&!devolverFav?_favM:0)))}`:saldoCliente<0?`total a transferir ${fmt(Math.abs(saldoCliente)+(parseInt(adic.monto)||0))}`:saldoCliente>0?`a transferir ${fmt(Math.max(0,(parseInt(adic.monto)||0)-saldoCliente))}`:''}</span>}
+          {adic.on&&<span style={{marginLeft:'auto',fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{_multi?`a transferir ${fmt(Math.max(0,_debM+(parseInt(adic.monto)||0)-(_netoAplica&&!devolverFav?_favM:0)))}`:saldoCliente<0?`total a transferir ${fmt(Math.abs(saldoCliente)+(parseInt(adic.monto)||0))}`:saldoCliente>0?`a transferir ${fmt(Math.max(0,(parseInt(adic.monto)||0)-saldoCliente))}`:''}</span>}
         </div>
         {<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
           <span style={{display:'flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,background:'#fff',width:150}}><span style={{fontSize:13,color:C.muted,padding:'0 2px 0 10px'}}>$</span><input value={adic.monto?Number(adic.monto).toLocaleString('es-CL'):''} onChange={e=>setAdic(p=>({...p,monto:e.target.value.replace(/\D/g,'')}))} inputMode='numeric' placeholder='Monto' style={{border:'none',outline:'none',fontSize:13,padding:'8px 8px 8px 2px',width:'100%',background:'none'}}/></span>
@@ -1237,10 +1237,10 @@ Saludos cordiales,`
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6,marginBottom:4}}>
         <Lbl>Mensaje</Lbl>
         <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
-          {lang==='es'&&<div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+          {lang==='es'&&<div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             {[['tu','Tú'],['usted','Usted'],['ustedes','Ustedes']].map(([k,l])=><button key={k} onClick={()=>elegirTrato(k)} style={{fontSize:10,fontWeight:600,padding:'4px 10px',border:'none',cursor:'pointer',background:trato===k?C.accent:'transparent',color:trato===k?'#fff':C.muted}}>{l}</button>)}
           </div>}
-          <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+          <div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             {['es','en'].map(l=><button key={l} onClick={()=>setLang(l)} style={{fontSize:10,fontWeight:600,padding:'4px 10px',border:'none',cursor:'pointer',background:lang===l?C.accent:'transparent',color:lang===l?'#fff':C.muted}}>{l.toUpperCase()}</button>)}
           </div>
           <button onClick={redactarIA} disabled={aiBusy} style={{...chipBtn('soft'),height:24,opacity:aiBusy?.6:1}}>{aiBusy?(lang==='en'?'Writing…':'Redactando…'):(lang==='en'?'Draft with AI':'Redactar con IA')}</button>
@@ -1253,7 +1253,7 @@ Saludos cordiales,`
         {showFirma&&<><div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           {[['nombre','Nombre'],['cargo','Cargo'],['telefono','Teléfono']].map(([k,lbl])=>(
             <div key={k} style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px'}}>
-              <div style={{fontSize:8,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>{lbl}</div>
+              <div style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}}>{lbl}</div>
               <input value={firma[k]||''} onChange={e=>setFirma(f=>({...f,[k]:e.target.value}))} style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
             </div>
           ))}

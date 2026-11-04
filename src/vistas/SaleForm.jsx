@@ -30,12 +30,12 @@ export function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultNa
       <div style={{fontSize:12,fontWeight:600,color:C.accent,marginBottom:10}}>Nuevo cliente</div>
       <Fld label='Nombre'><Inp value={f.name} onChange={e=>up('name',e.target.value)} placeholder='Nombre del cliente...' autoFocus/></Fld>
       {parecidos.length>0&&(
-        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:9,padding:'9px 11px',margin:'0 0 10px'}}>
+        <div style={{background:C.soonBg,border:`1px solid ${C.soon}`,borderRadius:10,padding:'9px 11px',margin:'0 0 10px'}}>
           <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Ya existe {parecidos.length>1?'n fichas parecidas':'una ficha parecida'} — no dupliques:</div>
           {parecidos.slice(0,4).map(({cliente,tipo})=>(
             <div key={cliente.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
-              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliente.name} <span style={{fontSize:9,fontWeight:700,color:C.soonText}}>· {_tipoDupLbl(tipo)}</span></span>
-              {onPickExisting&&<span onClick={()=>onPickExisting(cliente)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,borderRadius:7,padding:'4px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Usar esta</span>}
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliente.name} <span style={{fontSize:10,fontWeight:700,color:C.soonText}}>· {_tipoDupLbl(tipo)}</span></span>
+              {onPickExisting&&<span onClick={()=>onPickExisting(cliente)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,borderRadius:8,padding:'4px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Usar esta</span>}
             </div>
           ))}
           <label style={{display:'flex',alignItems:'center',gap:7,marginTop:7,cursor:'pointer'}}>
@@ -166,7 +166,7 @@ function PreguntaFactura({sale,billing,anticipos}){
     <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',margin:'10px 0'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
         <span style={{fontSize:13,fontWeight:800,color:C.accent}}>¿Se emitirá factura?</span>
-        <span style={{fontSize:10.5,fontWeight:700,background:C.greenBg,color:C.greenText,borderRadius:20,padding:'2px 9px'}}>Pagada sin factura</span>
+        <span style={{fontSize:11,fontWeight:700,background:C.greenBg,color:C.greenText,borderRadius:20,padding:'2px 9px'}}>Pagada sin factura</span>
         <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(ep.recibido)}</span>
       </div>
       <div style={{display:'flex',gap:8,marginTop:9,flexWrap:'wrap'}}>
@@ -308,7 +308,7 @@ export function SaleForm({asPage=false,afterHero=null,sale,clients:initialClient
   },[f,selectedClient,cobroType,nCuotas,cobroInicio,mensualInicio,costMode,costPct,tramos,cuotasCustom])
   const resetMod = () => { setModCobro(false); setModMode('ajustar'); setNewHon(''); setNewVig(''); setNewCosto(''); setNewFmt(''); setNewNCuotas(3); setNewCobroInicio(''); setNewCuotasCustom([{id:1,monto:'',fecha:''}]); setNewCostMode('fijo'); setNewCostPct('') }
 
-  const AiBadge = ({field}) => aiFields.has(field) ? <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.border,color:C.muted,marginLeft:5,verticalAlign:'middle',lineHeight:1,whiteSpace:'nowrap'}}>IA</span> : null
+  const AiBadge = ({field}) => aiFields.has(field) ? <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.border,color:C.muted,marginLeft:5,verticalAlign:'middle',lineHeight:1,whiteSpace:'nowrap'}}>IA</span> : null
   const clearDraft = () => { localStorage.removeItem(DRAFT_KEY); setHasDraft(false) }
   const restoreDraft = () => {
     try {
@@ -853,7 +853,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           </div>
           <div style={{display:'flex',gap:8,flexShrink:0}}>
             <button onClick={clearDraft} style={{background:'none',border:'none',color:'#7A5C00',fontSize:12,cursor:'pointer',fontWeight:600}}>Descartar</button>
-            <button onClick={restoreDraft} style={{padding:'5px 12px',borderRadius:6,border:'none',background:'#E8CC6A',color:'#4A3800',fontSize:12,fontWeight:700,cursor:'pointer'}}>Recuperar</button>
+            <button onClick={restoreDraft} style={{padding:'5px 12px',borderRadius:8,border:'none',background:'#E8CC6A',color:'#4A3800',fontSize:12,fontWeight:700,cursor:'pointer'}}>Recuperar</button>
           </div>
         </div>
       )}
@@ -872,7 +872,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         const pct = base>0 ? Math.max(0,Math.min(100,Math.round(margen/base*100))) : 0
         const fmtU = v => moneda==='UF' ? `${(+v.toFixed(1)).toLocaleString('es-CL')} UF` : fmt(Math.round(v))
         return (
-        <div style={{background:'linear-gradient(135deg,#003C50,#0A5168)',color:'#fff',borderRadius:16,padding:'16px 16px 15px',marginBottom:14}}>
+        <div style={{background:'linear-gradient(135deg,#003C50,#0A5168)',color:'#fff',borderRadius:12,padding:'16px 16px 15px',marginBottom:14}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
             <span style={{fontSize:12,fontWeight:700,opacity:.92,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient?.name||'Sin cliente'}</span>
             {cobroType!=='hora'&&<span style={{display:'inline-flex',border:'1.5px solid rgba(255,255,255,.35)',borderRadius:8,overflow:'hidden',flexShrink:0}}>
@@ -880,17 +880,17 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </span>}
           </div>
           <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,lineHeight:1.25,margin:'9px 0 11px'}}>{(f.title||'').trim()||'Nueva venta'}</div>
-          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}{cobroType==='mensual'&&base>0&&<span style={{fontSize:15,fontWeight:700,opacity:.75,letterSpacing:0}}> /mes</span>}</div>
+          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}{cobroType==='mensual'&&base>0&&<span style={{fontSize:16,fontWeight:700,opacity:.75,letterSpacing:0}}> /mes</span>}</div>
           <div style={{fontSize:12,opacity:.72,fontWeight:600,marginTop:4}}>{honSub}</div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
             {[f.area||'Corporativo', (f.responsible||'sin responsable'), `${f.status||'Activo'} · ${f.year||currentYear}`].map((t,i)=>(
-              <span key={i} style={{fontSize:9.5,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{t}</span>
+              <span key={i} style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{t}</span>
             ))}
           </div>
           {costHero>0&&base>0&&(
             <div style={{marginTop:13,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.18)'}}>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:10,fontWeight:700,opacity:.8,marginBottom:6}}><span>Margen {pct}%</span><span>Costo {100-pct}%</span></div>
-              <div style={{height:9,borderRadius:5,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.15)'}}><span style={{width:pct+'%',background:'#2BD49E'}}/><span style={{width:(100-pct)+'%',background:'#E8B873'}}/></div>
+              <div style={{height:9,borderRadius:8,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.15)'}}><span style={{width:pct+'%',background:'#2BD49E'}}/><span style={{width:(100-pct)+'%',background:'#E8B873'}}/></div>
               <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
                 <span style={{fontSize:11,opacity:.85}}>Margen<b style={{fontSize:14,fontWeight:800,display:'block',color:'#8FE3C4'}}>{fmtU(margen)}</b></span>
                 <span style={{fontSize:11,opacity:.85,textAlign:'right'}}>{comR.real?'Costos de terceros':'Costo proveedores'}<b style={{fontSize:14,fontWeight:800,display:'block'}}>{fmtU(costHero)}</b></span>
@@ -929,7 +929,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                     style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.border}`,fontSize:13}}
                     onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft}
                     onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    <div style={{fontWeight:500}}>{c.name}</div>
+                    <div style={{fontWeight:400}}>{c.name}</div>
                     {c.rut&&<div style={{fontSize:11,color:C.muted}}>{fmtRutCL(c.rut)}</div>}
                   </div>
                 ))}
@@ -948,17 +948,17 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {reasignCli&&sale?.id&&<div style={{fontSize:11,color:C.coralText,marginTop:6}}>Mueve esta {f.status==='Propuesta'?'propuesta':'venta'} a otro cliente. Las facturas ya emitidas mantienen su receptor; revisa la razón social a facturar tras cambiar.</div>}
         </Fld>
       ) : (sale?.id ? null : (
-        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'11px 13px',borderRadius:13,background:C.azulBg,border:`1.5px solid #CFE0EA`,display:'flex',alignItems:'center',gap:11,cursor:'pointer'}}>
+        <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'11px 13px',borderRadius:12,background:C.azulBg,border:`1.5px solid #CFE0EA`,display:'flex',alignItems:'center',gap:11,cursor:'pointer'}}>
           <span style={{width:34,height:34,borderRadius:10,background:C.accent,color:'#fff',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(selectedClient.name||'?').trim().slice(0,2).toUpperCase()}</span>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>
             {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{fmtRutCL(selectedClient.rut)}</div>}
           </div>
-          <span style={{fontSize:11.5,fontWeight:700,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:9,padding:'6px 12px',flexShrink:0}}>Cambiar</span>
+          <span style={{fontSize:12,fontWeight:700,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'6px 12px',flexShrink:0}}>Cambiar</span>
         </div>
       ))}
       {showNewClient&&<MiniClientForm defaultName={clientQ} clients={clients} defaultStatus={f.status==='Propuesta'?'Prospecto':'Activo'} onPickExisting={c=>{setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onSave={c=>{setClients(p=>[...p,c]);setSelectedClient(c);up('client_id',c.id);setShowNewClient(false);setClientQ('')}} onCancel={()=>setShowNewClient(false)}/>}
-      {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:6,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
+      {showNewClient&&f.status==='Propuesta'&&<div style={{fontSize:11,color:'#7A5C00',background:'#FFFBF0',border:'1px solid #E8CC6A',borderRadius:8,padding:'5px 10px',marginTop:-8,marginBottom:8}}>Se crea como Prospecto; al activar la propuesta pasa a Activo.</div>}
 
       <Fld label={<>Proyecto<AiBadge field='title'/></>}><Inp value={f.title||''} onChange={e=>up('title',e.target.value)} placeholder='Ej: Reorganización societaria…'/></Fld>
 
@@ -985,7 +985,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </select>
           ):(
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:13,fontWeight:500,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(()=>{const e=clientEntitiesList.find(x=>String(x.id)===String(f.entity_id));return e?`${e.name}${e.rut?' · '+e.rut:''}`:'— Elegir —'})()}{clientEntitiesList.length>1&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · propuesta</span>}</span>
+              <span style={{fontSize:13,fontWeight:400,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(()=>{const e=clientEntitiesList.find(x=>String(x.id)===String(f.entity_id));return e?`${e.name}${e.rut?' · '+e.rut:''}`:'— Elegir —'})()}{clientEntitiesList.length>1&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · propuesta</span>}</span>
               <button type='button' onClick={()=>setRsMode('pick')} style={chipBtn('soft')}>Cambiar</button>
             </div>
           )}
@@ -996,7 +996,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {(()=>{ const open=!!openSec.clasif; return (
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
         <div onClick={()=>setOpenSec(p=>({...p,clasif:!p.clasif}))} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
-          <span style={{width:22,height:22,borderRadius:6,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg></span>
+          <span style={{width:22,height:22,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg></span>
           <span style={{fontSize:12,fontWeight:700,color:C.accent,flex:1}}>Clasificación</span>
           {!open&&<span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'46%'}}>{f.area||'Corporativo'} · {f.responsible||'sin resp.'} · {f.year||currentYear}</span>}
           <span style={{color:C.textSoft,fontSize:12,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
@@ -1032,7 +1032,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {formNuevo&&cobroType!=='hora'&&(<>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
           <div style={{...SEC_LBL}}>Honorarios y costos<AiBadge field='amount_uf'/><AiBadge field='amount_clp'/></div>
-          <div style={{display:'flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
+          <div style={{display:'flex',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
             {['UF','CLP'].map(mo=>(
               <button key={mo} type='button' onClick={()=>up('moneda',mo)} style={{padding:'3px 11px',border:'none',background:moneda===mo?C.accent:'transparent',color:moneda===mo?'#fff':C.muted,fontSize:11,fontWeight:700,cursor:'pointer',letterSpacing:.3}}>{mo}</button>
             ))}
@@ -1051,8 +1051,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <div style={{minWidth:0}}>
             <div style={{height:22,display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,gap:6}}>
               <span style={{fontSize:10.5,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Costo prov.</span>
-              <span style={{display:'inline-flex',background:'#EAEEF0',borderRadius:7,padding:2}}>
-                {[['fijo',moneda==='UF'?'UF':'$'],['pct','%']].map(([v,l])=>(<button key={v} type='button' onClick={()=>setCostMode(v)} style={{padding:'2px 8px',border:'none',borderRadius:5,background:costMode===v?C.accent:'transparent',color:costMode===v?'#fff':C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>))}
+              <span style={{display:'inline-flex',background:'#EAEEF0',borderRadius:8,padding:2}}>
+                {[['fijo',moneda==='UF'?'UF':'$'],['pct','%']].map(([v,l])=>(<button key={v} type='button' onClick={()=>setCostMode(v)} style={{padding:'2px 8px',border:'none',borderRadius:8,background:costMode===v?C.accent:'transparent',color:costMode===v?'#fff':C.muted,fontSize:10,fontWeight:700,cursor:'pointer'}}>{l}</button>))}
               </span>
             </div>
             <div style={{display:'flex',alignItems:'center',height:46,border:`1.5px solid ${C.border}`,borderRadius:12,background:C.bgSoft,padding:'0 12px',boxSizing:'border-box'}}>
@@ -1076,11 +1076,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             {[['cuotas','Cuotas mensuales','monto fijo en N pagos'],['mensual','Mensual recurrente','sin fecha de término'],['porcentaje','Por porcentaje','% de éxito'],['personalizada','Personalizada','cuotas a medida'],['hora','Por hora','sin monto fijo · según horas']].map(([v,l,d])=>{ const on=cobroType===v; const wide=v==='hora'; return (
               <button key={v} type='button' onClick={()=>setCobroType(v)} style={{gridColumn:wide?'1 / -1':'auto',display:'flex',alignItems:'center',gap:9,padding:'10px 11px',borderRadius:12,border:`1.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
                 <span style={{width:28,height:28,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted}}>{COBRO_IC[v]}</span>
-                <span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,color:on?C.accent:C.text,lineHeight:1.15}}>{l}</span><span style={{display:'block',fontSize:9.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d}</span></span>
+                <span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,color:on?C.accent:C.text,lineHeight:1.15}}>{l}</span><span style={{display:'block',fontSize:10,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d}</span></span>
               </button>) })}
           </div>
           {cobroType==='mensual'&&(
-            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:12,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,marginBottom:8}}>
                 {moneda==='UF'
                   ? <Fld label='Monto mensual UF'><Inp type='number' step='0.01' value={f.amount_uf||''} onChange={e=>up('amount_uf',e.target.value)} placeholder='0.00'/></Fld>
@@ -1097,7 +1097,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='hora'&&(
-            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:12,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10}}>
                 <Fld label='Tarifa (UF/hora)'><Inp type='number' step='0.1' value={tarifaHoraUF} onChange={e=>setTarifaHoraUF(e.target.value)} placeholder='3.0 (oficina)'/></Fld>
                 <Fld label='Tope de horas'><Inp type='number' value={topeHoras} onChange={e=>setTopeHoras(e.target.value)} placeholder='Ej: 20'/></Fld>
@@ -1111,7 +1111,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='cuotas'&&(
-            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:12,padding:'13px 14px'}}>
               <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr)',gap:10,marginBottom:8}}>
                 <Fld label='N° cuotas'><Inp type='number' min='1' max='60' value={nCuotas} onChange={e=>setNCuotas(Math.max(1,parseInt(e.target.value)||1))}/></Fld>
                 <Fld label='Inicio cobro'><Inp type='date' value={cobroInicio} onChange={e=>setCobroInicio(anio4ISO(e.target.value))}/></Fld>
@@ -1137,7 +1137,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='porcentaje'&&(
-            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:12,padding:'13px 14px'}}>
               {tramos.map((t,i)=>(
                 <div key={t.id} style={{display:'grid',gridTemplateColumns:'60px 1fr 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'%':''}><Inp type='number' min='0' max='100' value={t.pct} onChange={e=>setTramos(p=>p.map(x=>x.id===t.id?{...x,pct:parseInt(e.target.value)||0}:x))}/></Fld>
@@ -1150,7 +1150,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </div>
           )}
           {cobroType==='personalizada'&&(
-            <div style={{background:'#fff',border:`1px solid `,borderRadius:14,padding:'13px 14px'}}>
+            <div style={{background:'#fff',border:`1px solid `,borderRadius:12,padding:'13px 14px'}}>
               {cuotasCustom.map((c,i)=>(
                 <div key={c.id} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1fr) 32px',gap:8,marginBottom:8,alignItems:'flex-end'}}>
                   <Fld label={i===0?'Monto':''}>
@@ -1195,7 +1195,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {formNuevo&&(()=>{ const open=!!openSec.notas; return (
       <div style={{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:'hidden'}}>
         <div onClick={()=>setOpenSec(p=>({...p,notas:!p.notas}))} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
-          <span style={{width:22,height:22,borderRadius:6,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='8' y1='13' x2='16' y2='13'/></svg></span>
+          <span style={{width:22,height:22,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={C.muted} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><line x1='8' y1='13' x2='16' y2='13'/></svg></span>
           <span style={{fontSize:12,fontWeight:700,color:C.accent,flex:1}}>Notas<AiBadge field='notes'/></span>
           {!open&&f.notes&&<span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'50%'}}>{f.notes}</span>}
           <span style={{color:C.textSoft,fontSize:12,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
@@ -1220,7 +1220,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <div key={key} onClick={()=>setOpenCondicion(openCondicion===key?null:key)}
             style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:isLast?'none':`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
             <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>{lbl}</div>
-            <div style={{flex:1,fontSize:13,fontWeight:500,color:val==='—'?C.muted:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val}</div>
+            <div style={{flex:1,fontSize:13,fontWeight:400,color:val==='—'?C.muted:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val}</div>
             <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion===key?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}><Gl n='chevron'/></span>
           </div>
         )
@@ -1231,15 +1231,15 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               {row('Honorarios',curHon,'honorarios',false)}
               {openCondicion==='honorarios'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
-                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Honorario</span><span style={{fontWeight:500,color:C.text}}>{curHon}</span></div>
-                  {curCost!=='—'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Costo</span><span style={{fontWeight:500,color:C.text}}>{curCost}</span></div>}
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Honorario</span><span style={{fontWeight:400,color:C.text}}>{curHon}</span></div>
+                  {curCost!=='—'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Costo</span><span style={{fontWeight:400,color:C.text}}>{curCost}</span></div>}
                   <button type='button' onClick={()=>{ setModCobro(true); setModMode('ajustar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Ajustar honorario</button>
                 </div>
               )}
               <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
                 <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Costos de proveedores</div>
                 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontSize:13,fontWeight:500,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
+                  <span style={{fontSize:13,fontWeight:400,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
                   {provLabel
                     ? <span style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {provLabel}</span>
                     : (costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
@@ -1256,10 +1256,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 const mesLbl = iso => { if(!iso) return '—'; const p=String(iso).slice(0,7).split('-'); return p.length===2?`${MONTHS[parseInt(p[1])-1]||p[1]} ${p[0]}`:String(iso) }
                 return (
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
-                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Forma</span><span style={{fontWeight:500,color:C.text}}>{curCobro}</span></div>
-                  {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:500,color:C.text}}>{mesLbl(mensualInicio)} · 12 meses</span></div>}
-                  {cobroType==='cuotas'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Cuotas</span><span style={{fontWeight:500,color:C.text}}>{nCuotas} desde {mesLbl(cobroInicio)}</span></div>}
-                  {cobroType==='hora'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Por hora</span><span style={{fontWeight:500,color:C.text}}>{(parseFloat(String(tarifaHoraUF).replace(',','.'))||3)} UF/h · tope {topeHoras||'—'} h/{topePeriodo==='total'?'total':'mes'}</span></div>}
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Forma</span><span style={{fontWeight:400,color:C.text}}>{curCobro}</span></div>
+                  {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:400,color:C.text}}>{mesLbl(mensualInicio)} · 12 meses</span></div>}
+                  {cobroType==='cuotas'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Cuotas</span><span style={{fontWeight:400,color:C.text}}>{nCuotas} desde {mesLbl(cobroInicio)}</span></div>}
+                  {cobroType==='hora'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Por hora</span><span style={{fontWeight:400,color:C.text}}>{(parseFloat(String(tarifaHoraUF).replace(',','.'))||3)} UF/h · tope {topeHoras||'—'} h/{topePeriodo==='total'?'total':'mes'}</span></div>}
                   <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.4}}>Para cambiar el formato o el inicio se regeneran las cuotas programadas (las emitidas/pagadas no se tocan).</div>
                   <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Cambiar forma de cobro</button>
                 </div>
@@ -1387,8 +1387,8 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                     {antVenta.length===0&&<div style={{padding:'10px 12px',fontSize:12,color:C.muted}}>Sin anticipos en este proyecto.</div>}
                     {antVenta.map(a=>{ const disp=a.estado==='disponible'; const cubre=cuotasV.some(b=>String(b.prepaid_anticipo_id)===String(a.id)); return (
                       <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderBottom:`1px solid ${C.border}`}}>
-                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.textSoft}}>{fmtDA(a.fecha)}{a.nota?` · ${a.nota}`:''}</div></div>
-                        <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:cubre?C.azulBg:C.bgSoft,color:disp?C.normal:cubre?C.accent:C.done,whiteSpace:'nowrap'}}>{disp?'Disponible':cubre?'En cuotas':'Consumido'}</span>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:400,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.textSoft}}>{fmtDA(a.fecha)}{a.nota?` · ${a.nota}`:''}</div></div>
+                        <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:disp?C.greenBg:cubre?C.azulBg:C.bgSoft,color:disp?C.normal:cubre?C.accent:C.done,whiteSpace:'nowrap'}}>{disp?'Disponible':cubre?'En cuotas':'Consumido'}</span>
                         {disp&&onCubrirCuotas&&<button type='button' onClick={()=>setCubrirAnt(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Imputar a cuotas</button>}
                         {!disp&&cubre&&!a.billing_id&&onFacturarBloque&&<button type='button' onClick={()=>setFacturarAntS(a)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Emitir factura</button>}
                         {!disp&&cubre&&onDescubrirCuotas&&<button type='button' onClick={()=>onDescubrirCuotas(a.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>}
@@ -1478,7 +1478,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                         <Fld label='Primera cuota'><Inp type='month' value={newCobroInicio} onChange={e=>setNewCobroInicio(e.target.value)}/></Fld>
                         <Fld label='Costo (opc.)'><Inp type='number' value={newCosto} onChange={e=>setNewCosto(e.target.value)} placeholder='0'/></Fld>
                       </div>
-                      {newHon&&newNCuotas>0&&(()=>{const tot=moneda==='CLP'?parseFloat(newHon)||0:(parseFloat(newHon)||0)*ufVal;const mc=tot>0?Math.round(tot/newNCuotas):0;return mc>0?<div style={{fontSize:11,color:C.muted,background:'#fff',borderRadius:6,padding:'6px 8px',border:`0.5px solid ${C.border}`}}>{newNCuotas} cuotas de <strong style={{color:C.accent}}>{fmt(mc)}</strong></div>:null})()}
+                      {newHon&&newNCuotas>0&&(()=>{const tot=moneda==='CLP'?parseFloat(newHon)||0:(parseFloat(newHon)||0)*ufVal;const mc=tot>0?Math.round(tot/newNCuotas):0;return mc>0?<div style={{fontSize:11,color:C.muted,background:'#fff',borderRadius:8,padding:'6px 8px',border:`0.5px solid ${C.border}`}}>{newNCuotas} cuotas de <strong style={{color:C.accent}}>{fmt(mc)}</strong></div>:null})()}
                     </div>
                   )}
                   {newFmt==='mensual'&&(
@@ -1544,7 +1544,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                       <div style={{fontSize:12,fontWeight:700,color:C.accent}}>{cur==='CLP'?fmt(t.honorario):fmtUF(t.honorario)}</div>
                       {t.costo>0&&<div style={{fontSize:10,color:C.overdue}}>Costo {cur==='CLP'?fmt(t.costo):fmtUF(t.costo)}</div>}
                     </div>
-                    <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,padding:'2px 7px',borderRadius:4,background:vigente?C.greenBg:C.border,color:vigente?C.greenText:C.muted}}>{vigente?'Vigente':'Histórico'}</span>
+                    <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,padding:'2px 7px',borderRadius:4,background:vigente?C.greenBg:C.border,color:vigente?C.greenText:C.muted}}>{vigente?'Vigente':'Histórico'}</span>
                   </div>
                 </div>
               )

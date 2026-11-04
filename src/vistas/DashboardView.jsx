@@ -72,10 +72,10 @@ export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onO
   const lista=(k,arr)=>open===k&&[...arr].sort((a,b)=>a.t-b.t).map(x=>{ const b=x.b, cid=b.client_id; return (
     <div key={k+String(b.id)} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:cid?'pointer':'default'}}>
       {diaGrande(isoDe(x.t))}
-      <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,fontSize:13}}>{cliById[String(cid)]?.name||'Sin cliente'}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'Cuota por emitir')}</div></div>
+      <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,fontSize:13}}>{cliById[String(cid)]?.name||'Sin cliente'}</div><div style={{fontSize:11,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:(b.concept||'Cuota por emitir')}</div></div>
       <span style={{fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.round(x.m))}</span>
     </div>) })
-  const sel=anios.length>1&&<select value={anio} onClick={e=>e.stopPropagation()} onChange={e=>{setAnio(e.target.value);setOpen(null)}} style={{fontSize:11,fontWeight:600,padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',textTransform:'none',letterSpacing:0}}>
+  const sel=anios.length>1&&<select value={anio} onClick={e=>e.stopPropagation()} onChange={e=>{setAnio(e.target.value);setOpen(null)}} style={{fontSize:11,fontWeight:600,padding:'3px 7px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',textTransform:'none',letterSpacing:0}}>
     <option value='todos'>Año venta: todos</option>{anios.map(y=><option key={y} value={y}>Año venta {y}</option>)}</select>
   const d=isDesktop
   return (<div style={{background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,overflow:'hidden'}}>
@@ -183,7 +183,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
-        <div style={{...(isDeskRes?{...SEC_LBL,fontSize:10.5}:{fontSize:10,fontWeight:600,color:C.accent}),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
+        <div style={{...(isDeskRes?{...SEC_LBL,fontSize:11}:{fontSize:10,fontWeight:600,color:C.accent}),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',paddingRight:12}}>{title}</div>
         <div style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
         {sub&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div>}
       </div>
@@ -636,7 +636,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                     <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.2}}>{a.t}</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1}}>{a.s}</div>
                   </div>
-                  <span onClick={a.go} style={{fontSize:9,fontWeight:800,color:C.accent,whiteSpace:'nowrap',cursor:'pointer'}}>{a.goLbl} →</span>
+                  <span onClick={a.go} style={{fontSize:10,fontWeight:800,color:C.accent,whiteSpace:'nowrap',cursor:'pointer'}}>{a.goLbl} →</span>
                   <span onClick={e=>{e.stopPropagation();descartarAlerta(a)}} title='Descartar' style={{color:C.textSoft,cursor:'pointer',flexShrink:0,display:'flex'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg></span>
                 </div>
               )})}
@@ -661,7 +661,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           <div style={{padding:'14px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,position:'relative'}}>
               <span style={{...SEC_LBL,whiteSpace:'nowrap'}}>Resultado del año</span>
-              <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',...SEC_LBL}}>{selYear}<span style={{fontSize:8,color:C.textSoft}}><Gl n='chevD'/></span></button>
+              <button onClick={()=>setYearMenu(o=>!o)} style={{display:'inline-flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer',...SEC_LBL}}>{selYear}<span style={{fontSize:10,color:C.textSoft}}><Gl n='chevD'/></span></button>
               {yearMenu&&(
                 <div style={{position:'absolute',left:0,top:'calc(100% + 4px)',background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:20,overflow:'hidden',minWidth:70}}>
                   {aniosDisponibles.map(y=>(<button key={y} onClick={()=>{setSelYear(y);setYearMenu(false)}} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 14px',border:'none',background:y===selYear?C.azulBg:'#fff',color:y===selYear?C.accent:C.text,fontSize:12,fontWeight:y===selYear?600:500,cursor:'pointer'}}>{y}</button>))}
@@ -730,14 +730,14 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                 const [bg,bd,capC,colB,colN0]=TN[tone]||TN.gr, colN=nCol||colN0
                 const half=(k,v,p,col,brd,suf)=>(<div style={{flex:1,minWidth:0,...(brd?{borderLeft:`1px solid ${bd}`,paddingLeft:14}:{})}}>
                   <div style={{...SEC_LBL}}>{k}</div>
-                  <div style={{fontSize:22,fontWeight:800,letterSpacing:'-.5px',lineHeight:1,margin:'3px 0 4px',color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>
+                  <div style={{fontSize:20,fontWeight:800,letterSpacing:'-.5px',lineHeight:1,margin:'3px 0 4px',color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>
                   {p!=null&&<div style={{fontSize:11,color:C.muted}}><b style={{color:col,fontWeight:800}}>{p}%</b> {suf}</div>}
                 </div>)
                 return (<div style={{padding:'12px 15px',background:bg}}>
                   <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.5px',color:capC}}>{cap}</div>
                   <div style={{display:'flex',marginTop:8}}>{half(bK,bV,bP,colB,false,bS)}{half(nK,nV,nP,colN,true,nS)}</div>
                 </div>) }
-              const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',marginLeft:4,whiteSpace:'nowrap'}}>{pctV}%</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
+              const metaBand=(l,pctV,val)=>(<div style={{...R,background:C.azulBg}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{l} <span style={{background:C.azulInfo,color:'#fff',fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',marginLeft:4,whiteSpace:'nowrap'}}>{pctV}%</span></span><span style={{...rowV,color:C.azulInfo}}>{val}</span></div>)
               const verlink=(txt,dest)=>(<div onClick={()=>go(dest)} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>{txt} <Gl n='chevron'/></div>)
               // Lista de comisiones pagadas del año (base caja), para "ver los pagos" dentro del panel
               const comisPagos=(terceros||[]).filter(x=>x&&x.estado==='pagado'&&x.comision_pct==null&&String(x.pagado_at||'').startsWith(String(selYear))).sort((a,b)=>String(b.pagado_at||'').localeCompare(String(a.pagado_at||'')))
@@ -753,7 +753,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               // visibles suman el total (cuadra → redondearPartes). kind: neg (resta, rojo) · tot (subtotal) · res (resultado) · sub (detalle chico).
               const cxR=({k,...p})=><CxRow key={k||String(p.label)} isDesk={isDeskRes} {...p}/>
               const capR=(txt,line)=>(<div style={{padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,color:C.accent,borderTop:line?`1px solid ${C.border}`:undefined}}>{txt}</div>)
-              const pctX=(p,suf)=>p!=null&&<span style={{fontSize:11,fontWeight:500,color:C.muted,marginLeft:2}}><b style={{color:C.accent,fontWeight:800}}>{p}%</b>{isDeskRes?` ${suf}`:''}</span>   // en el teléfono solo el % (la tarjeta ya dice de qué)
+              const pctX=(p,suf)=>p!=null&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginLeft:2}}><b style={{color:C.accent,fontWeight:800}}>{p}%</b>{isDeskRes?` ${suf}`:''}</span>   // en el teléfono solo el % (la tarjeta ya dice de qué)
               // Cifras de una cascada en la moneda del panel. pares=[[uf,clp],…] (con signo) → sumas que cuadran; fijos = índices que también se ven en otra tarjeta.
               const cuadra=(pares,fijos=[])=>{ const enUF=dashMoneda==='UF', paso=enUF?1:1e5, v=redondearPartes(pares.map(p=>Number(enUF?p[0]:p[1])||0),paso,fijos), f=x=>enUF?fmtUFk(Math.abs(x)):fmtMillLR(Math.abs(x)), tv=v.reduce((a,x)=>a+x,0); return {s:v.map(f), tot:(tv<0?'−':'')+f(tv), neg:tv<0} }
               const comisChip=filaG('cp',e=>{e.stopPropagation();setResComis(v=>!v)},<span style={rowL}>Comisiones pagadas</span>,null,`− ${vMon(comisYTDUF,comisYTD)}`,vNeg,resComis)
@@ -762,10 +762,10 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               const percChip=filaG('pc',e=>{e.stopPropagation();setResPerc(v=>!v)},<span style={rowL}>Comisiones percibidas</span>,null,`+ ${vMon(percYTDUF,percYTD)}`,vPos,resPerc)
               const subFila=(k,cid,txt,val,col,onClick)=>(<div key={k} onClick={onClick} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:onClick?'pointer':'default'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{txt}</span><span style={{fontWeight:700,color:col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{val}</span></div>)
               const rxIt=(k,cid,fecha,folio,extra,val,col)=>(<div key={k} onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',alignItems:'center',gap:10,padding:isDeskRes?'7px 14px 7px 30px':'7px 14px 7px 22px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer'}}>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{cn(cid)}</div><div style={{fontSize:10.5,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap'}}>{fecha?fmtFechaDMY(fecha):'—'}{folio?` · F${folioN(folio)||folio}`:''}{extra?` · ${extra}`:''}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{cn(cid)}</div><div style={{fontSize:11,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap'}}>{fecha?fmtFechaDMY(fecha):'—'}{folio?` · F${folioN(folio)||folio}`:''}{extra?` · ${extra}`:''}</div></div>
                 <span style={{fontSize:12,fontWeight:800,color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Math.round(val))}</span></div>)
               const percList = resPerc && <>{percItems.map(it=>rxIt(it.id,it.client_id,it.paid_at,it.folio,null,it._cobrado,C.greenText))}
-                {rexDet.tot>=1&&<div onClick={e=>{e.stopPropagation(); setResRex(true); setResRexL('pend'); setResDrill({tile:'marg',year:null})}} style={{display:'flex',justifyContent:'space-between',gap:10,padding:isDeskRes?'8px 14px 8px 30px':'8px 14px 8px 22px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:11.5,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>de {fmt(Math.round(rexDet.tot))} facturada · {rexDet.tPend>=1?`${fmt(Math.round(rexDet.tPend))} por cobrar`:'toda cobrada'}</span><Gl n='chevron'/></div>}</>
+                {rexDet.tot>=1&&<div onClick={e=>{e.stopPropagation(); setResRex(true); setResRexL('pend'); setResDrill({tile:'marg',year:null})}} style={{display:'flex',justifyContent:'space-between',gap:10,padding:isDeskRes?'8px 14px 8px 30px':'8px 14px 8px 22px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.azulInfo,fontWeight:700,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>de {fmt(Math.round(rexDet.tot))} facturada · {rexDet.tPend>=1?`${fmt(Math.round(rexDet.tPend))} por cobrar`:'toda cobrada'}</span><Gl n='chevron'/></div>}</>
               const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?mesCorto(x.pagado_at+'T12:00'):''; return (
                 <div key={x.id||i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{x.proveedor||'Colaborador'}{mes?` · ${mes}`:''}</span><span style={{fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMonD(Number(x.monto)||0,x.pagado_at)}</span></div>) })
 
@@ -810,7 +810,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                   {resAnio.rex!==0&&resRex&&<>
                     {rexDet.tCob>=1&&cxR({k:'rexc',label:'Cobrada · '+rexDet.cob.length+(rexDet.cob.length===1?' factura':' facturas'),val:fmt(Math.round(rexDet.tCob)),kind:'sub',onClick:()=>setResRexL(l=>l==='cob'?null:'cob'),open:resRexL==='cob'})}
                     {resRexL==='cob'&&rexDet.cob.map(x=>rxIt('rc'+x.b.id,x.b.client_id,x.b.paid_at||x.b.issued_at,x.b.invoice_no,null,x.cob,C.greenText))}
-                    {rexDet.tPend>=1&&cxR({k:'rexp',label:'Por cobrar · '+rexDet.pend.length+(isDeskRes?(rexDet.pend.length===1?' factura':' facturas'):''),pill:rexDet.nVenc>0&&<span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',color:C.overdueText,background:C.overdueBg}}>{rexDet.nVenc} vencida{rexDet.nVenc!==1?'s':''}</span>,val:fmt(Math.round(rexDet.tPend)),kind:'sub',onClick:()=>setResRexL(l=>l==='pend'?null:'pend'),open:resRexL==='pend'})}
+                    {rexDet.tPend>=1&&cxR({k:'rexp',label:'Por cobrar · '+rexDet.pend.length+(isDeskRes?(rexDet.pend.length===1?' factura':' facturas'):''),pill:rexDet.nVenc>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',color:C.overdueText,background:C.overdueBg}}>{rexDet.nVenc} vencida{rexDet.nVenc!==1?'s':''}</span>,val:fmt(Math.round(rexDet.tPend)),kind:'sub',onClick:()=>setResRexL(l=>l==='pend'?null:'pend'),open:resRexL==='pend'})}
                     {resRexL==='pend'&&rexDet.pend.map(x=>rxIt('rp'+x.b.id,x.b.client_id,x.b.issued_at,x.b.invoice_no,x.b.status==='Vencido'?'vencida':'por vencer',x.pend,C.accent))}
                   </>}
                   {lin('=','Ingresos',mRes('ing'),'tot',onOpenEstadoResultados||null)}
@@ -842,13 +842,13 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               const fe=facturadoEmitido, propioUF=yrs.reduce((a,y)=>a+(byYearUF[y]||0),0), otros=Math.max(0,fe.total-facturadoYr-facturadoTerceros.total-fe.reemb-fe.subarr), otrosUF=Math.max(0,fe.totalUF-propioUF-(facturadoTerceros.totalUF||0)-fe.reembUF-fe.subarrUF)
               return (<div style={box}>
                 {capR(isCob?`Resultado cobrado ${selYear}`:`Resultado facturado ${selYear}`)}
-                {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 14px 8px'}}><span style={{fontSize:9,fontWeight:800,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:10,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
+                {anyOpen&&(<div style={{display:'flex',alignItems:'center',gap:6,padding:'0 14px 8px'}}><span style={{fontSize:10,fontWeight:800,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.4px',marginRight:'auto'}}>Orden</span><span style={{display:'inline-flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:2}}>{['fecha','monto'].map(o=>(<span key={o} onClick={()=>setResOrd(o)} style={{fontSize:10,fontWeight:800,padding:'2px 10px',borderRadius:12,cursor:'pointer',color:resOrd===o?'#fff':C.muted,background:resOrd===o?C.accent:'transparent'}}>{o==='fecha'?'Fecha':'Monto'}</span>))}</span></div>)}
                 {yrs.map((y,i)=>{ const open=resDrill.year===y
                   // % de lo vendido de ESE año (fuente única metricasAnio.bruto, CLP; mismo plano que byYear). Tono por nivel.
                   const vY = y ? (metricasAnio(y).bruto||0) : 0
                   const pctV = (y && vY>0) ? Math.round((byYear[y]||0)/vY*100) : null
                   const pTone = pctV==null ? {c:C.muted,bg:C.bgSoft} : pctV>=60 ? {c:C.greenText,bg:C.greenBg} : pctV>=40 ? {c:C.azulInfo,bg:C.azulBg} : {c:C.coralText,bg:C.ambarBg}
-                  const pill = y ? <span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',color:pTone.c,background:pTone.bg}}>{pctV==null?'—':(isDeskRes?`${pctV}% de lo vendido`:`${pctV}%`)}</span> : null
+                  const pill = y ? <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',color:pTone.c,background:pTone.bg}}>{pctV==null?'—':(isDeskRes?`${pctV}% de lo vendido`:`${pctV}%`)}</span> : null
                   return (<Fragment key={y}>
                     {cxR({k:'y'+y,sg:i?'+':'',label:y?`De ventas ${y}`:'Sin venta asociada',pill,val:Y.s[i],onClick:()=>openYear(y),open})}
                     {open&&filaDocs(`${t}-${y}`,listByYear[y]||[])}
@@ -915,10 +915,10 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         <div onClick={onTareasClose} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:440,background:'#fff',borderRadius:18,maxHeight:'88vh',overflowY:'auto',padding:'16px 18px 22px',boxShadow:'0 12px 40px rgba(0,0,0,.18)'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-              <span style={{fontSize:19,fontWeight:500,color:C.accent,letterSpacing:-.3}}>Tareas</span>
+              <span style={{fontSize:19,fontWeight:400,color:C.accent,letterSpacing:-.3}}>Tareas</span>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
                 {onAddTask&&<button onClick={()=>{onTareasClose&&onTareasClose();onAddTask()}} style={{display:'inline-flex',alignItems:'center',gap:7,background:C.muted,color:'#fff',border:'none',borderRadius:20,padding:'7px 14px',fontSize:13,fontWeight:600,cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='5' y='4' width='14' height='17' rx='2'/><rect x='9' y='2.5' width='6' height='3.5' rx='1'/><path d='M8.5 11.5l1.5 1.5 3-3'/><line x1='8.5' y1='16' x2='15.5' y2='16'/></svg>Nueva tarea</button>}
-                <span onClick={onTareasClose} style={{fontSize:21,color:C.muted,cursor:'pointer',lineHeight:1}}><Gl n='x'/></span>
+                <span onClick={onTareasClose} style={{fontSize:20,color:C.muted,cursor:'pointer',lineHeight:1}}><Gl n='x'/></span>
               </div>
             </div>
 
@@ -953,14 +953,14 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:13}}>
               <span style={{fontSize:10,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:.6}}>Equipo</span>
               {me&&<div style={{display:'flex',gap:6}}>
-                {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:500,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
+                {[['todas','Todas'],['delegaron','Me delegaron'],['delegue','Delegué']].map(([v,l])=>{ const on=corte===v; return <button key={v} onClick={()=>setTareasCorte(v)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l}</button> })}
               </div>}
             </div>
             {personas.length===0
               ? <div style={{fontSize:12,color:C.muted}}>{corte==='delegaron'?'No tienes tareas que te delegaron.':corte==='delegue'?'No has delegado tareas.':'Sin tareas activas.'}</div>
               : <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                   {personas.map(pn=>{ const arr=porP[pn]; const vn=arr.filter(esVenc).length; const pc=personChip(pn); const open=!!tareaPersOpen[pn]; return (
-                    <span key={pn} onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} title={pn} style={{display:'inline-flex',alignItems:'center',gap:7,background:open?pc.color:pc.bg,color:open?'#fff':pc.color,borderRadius:20,padding:'5px 7px 5px 12px',fontSize:13,fontWeight:500,cursor:'pointer'}}>
+                    <span key={pn} onClick={()=>setTareaPersOpen(o=>({...o,[pn]:!o[pn]}))} title={pn} style={{display:'inline-flex',alignItems:'center',gap:7,background:open?pc.color:pc.bg,color:open?'#fff':pc.color,borderRadius:20,padding:'5px 7px 5px 12px',fontSize:13,fontWeight:600,cursor:'pointer'}}>
                       {pn}
                       <span style={{background:open?'rgba(255,255,255,.25)':(vn>0?C.overdue:pc.color),color:'#fff',borderRadius:10,minWidth:19,height:19,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,padding:'0 5px'}}>{arr.length}</span>
                     </span>
@@ -979,7 +979,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                         <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
                         {(cl||t.project)&&<div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cl?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(cl.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{cl.name}</span>:''}{t.project?`${cl?' › ':''}${t.project}`:''}</div>}
                       </div>
-                      <span onClick={e=>{e.stopPropagation();onCompleteTask&&onCompleteTask(t)}} title='Marcar terminada' style={{width:18,height:18,borderRadius:6,border:`1.5px solid #D7DEE3`,flexShrink:0,cursor:'pointer'}}/>
+                      <span onClick={e=>{e.stopPropagation();onCompleteTask&&onCompleteTask(t)}} title='Marcar terminada' style={{width:18,height:18,borderRadius:8,border:`1.5px solid #D7DEE3`,flexShrink:0,cursor:'pointer'}}/>
                     </div>
                   )})}
                 </div>
@@ -1030,11 +1030,11 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           <div onClick={()=>kToggle('estemes_emit')} style={{padding:'11px 12px',cursor:'pointer'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <span style={{display:'flex',alignItems:'center',gap:7,fontSize:13,fontWeight:700,color:C.text}}><span style={{color:C.accent,fontSize:11,transform:opE?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}><Gl n='chevD'/></span>Emitido este mes</span>
-              <span style={{fontSize:14.5,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emFacTot)}</span>
+              <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emFacTot)}</span>
             </div>
             {opE&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'10px 0 3px 20px'}}>
-              <div onClick={e=>{e.stopPropagation();onOpenEmitidoMes&&emFacPagN>0&&onOpenEmitidoMes('pagadas')}} style={{background:C.greenBg,borderRadius:9,padding:'8px 10px',cursor:onOpenEmitidoMes&&emFacPagN>0?'pointer':'default',border:'1px solid #CDEBDD'}}><div style={{fontSize:10,color:C.greenText,fontWeight:700}}>Pagadas</div><div style={{fontSize:15,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emFacPagTot)}</div><div style={{fontSize:9.5,color:C.muted,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span>{emFacPagN} factura{emFacPagN!==1?'s':''}</span>{onOpenEmitidoMes&&emFacPagN>0&&<span style={{color:C.greenText,fontWeight:700}}>Ver <Gl n='chevron'/></span>}</div></div>
-              <div onClick={e=>{e.stopPropagation();onOpenEmitidoMes&&emPorCobN>0&&onOpenEmitidoMes('porcobrar')}} style={{background:C.ambarBg||'#FFF8EC',borderRadius:9,padding:'8px 10px',cursor:onOpenEmitidoMes&&emPorCobN>0?'pointer':'default',border:'1px solid #EAD9A8'}}><div style={{fontSize:10,color:C.soonText,fontWeight:700}}>Por cobrar</div><div style={{fontSize:15,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emPorCob)}</div><div style={{fontSize:9.5,color:C.muted,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span>{emPorCobN} factura{emPorCobN!==1?'s':''}</span>{onOpenEmitidoMes&&emPorCobN>0&&<span style={{color:C.soonText,fontWeight:700}}>Ver <Gl n='chevron'/></span>}</div></div>
+              <div onClick={e=>{e.stopPropagation();onOpenEmitidoMes&&emFacPagN>0&&onOpenEmitidoMes('pagadas')}} style={{background:C.greenBg,borderRadius:10,padding:'8px 10px',cursor:onOpenEmitidoMes&&emFacPagN>0?'pointer':'default',border:'1px solid #CDEBDD'}}><div style={{fontSize:10,color:C.greenText,fontWeight:700}}>Pagadas</div><div style={{fontSize:16,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emFacPagTot)}</div><div style={{fontSize:10,color:C.muted,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span>{emFacPagN} factura{emFacPagN!==1?'s':''}</span>{onOpenEmitidoMes&&emFacPagN>0&&<span style={{color:C.greenText,fontWeight:700}}>Ver <Gl n='chevron'/></span>}</div></div>
+              <div onClick={e=>{e.stopPropagation();onOpenEmitidoMes&&emPorCobN>0&&onOpenEmitidoMes('porcobrar')}} style={{background:C.ambarBg||'#FFF8EC',borderRadius:10,padding:'8px 10px',cursor:onOpenEmitidoMes&&emPorCobN>0?'pointer':'default',border:'1px solid #EAD9A8'}}><div style={{fontSize:10,color:C.soonText,fontWeight:700}}>Por cobrar</div><div style={{fontSize:16,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emPorCob)}</div><div style={{fontSize:10,color:C.muted,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span>{emPorCobN} factura{emPorCobN!==1?'s':''}</span>{onOpenEmitidoMes&&emPorCobN>0&&<span style={{color:C.soonText,fontWeight:700}}>Ver <Gl n='chevron'/></span>}</div></div>
             </div>}
           </div>
           <div style={{height:1,background:C.track,margin:'0 12px'}}/>
@@ -1056,15 +1056,15 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         <div style={{background:'#fff',border:'0.5px solid #E4E8EB',borderRadius:12,padding:'1rem 1.25rem'}}>
           {/* Sin repetir el total ($60M ya está en el tile de arriba): el detalle arranca directo en los tramos de antigüedad. */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <span style={{fontSize:9,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.05em'}}>Por antigüedad</span>
+            <span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.05em'}}>Por antigüedad</span>
             <button onClick={()=>setTop5Open(o=>!o)} style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:C.muted,padding:0,fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.04em',flexShrink:0}}>Detalle <span style={{fontSize:12,transform:top5Open?'rotate(180deg)':'none',transition:'transform .2s'}}><Gl n='chevD'/></span></button>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
             {[['Al día','current',C.greenText,C.greenBg],['31-60 días','warning',C.soonText,C.ambarBg],['+60 días','overdue',C.overdueText,C.overdueBg]].map(([l,k,col,bg])=>{ const bk=agingData.buckets[k], abierto=agingBucket===k, vacio=bk.monto===0; return (
               <div key={k} onClick={()=>!vacio&&setAgingBucket(abierto?null:k)} style={{background:bg,borderRadius:10,padding:'9px 10px',cursor:vacio?'default':'pointer',border:`1px solid ${abierto?col:'transparent'}`,opacity:vacio?.55:1}}>
                 <div style={{fontSize:16,fontWeight:700,color:col,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{fmtShort(bk.monto)}</div>
-                <div style={{fontSize:9,fontWeight:600,color:col,opacity:.8,marginTop:1}}>{bk.pct}%</div>
-                <div style={{fontSize:9,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>{l}</div>
+                <div style={{fontSize:10,fontWeight:600,color:col,opacity:.8,marginTop:1}}>{bk.pct}%</div>
+                <div style={{fontSize:10,fontWeight:600,color:col,textTransform:'uppercase',letterSpacing:'.3px',marginTop:2}}>{l}</div>
               </div>
             )})}
           </div>
@@ -1088,21 +1088,21 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           })()}
           {top5Open&&<div style={{borderTop:'0.5px solid #E4E8EB',marginTop:11,paddingTop:11}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,margin:'9px 0 12px'}}>
-                <div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>DSO</div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>~{Math.round(Math.max(0,agingData.dso))} días</div></div>
+                <div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>DSO</div><div style={{fontSize:16,fontWeight:600,color:C.accent}}>~{Math.round(Math.max(0,agingData.dso))} días</div></div>
                 <div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px',minWidth:0}}><div style={{fontSize:10,color:C.muted}}>Mayor exposición</div><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{agingData.mayorExposicion.nombre}</div><div style={{fontSize:10,color:C.muted}}>{fmtMon(agingData.mayorExposicion.monto)}</div></div>
-                <div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>Top 1</div><div style={{fontSize:15,fontWeight:600,color:C.accent}}>{agingData.concentracionTop1Pct.toFixed(1)}%</div></div>
+                <div style={{background:C.bgSoft,borderRadius:8,padding:'9px 11px'}}><div style={{fontSize:10,color:C.muted}}>Top 1</div><div style={{fontSize:16,fontWeight:600,color:C.accent}}>{agingData.concentracionTop1Pct.toFixed(1)}%</div></div>
               </div>
               <div style={{...SEC_LBL,marginBottom:2}}>Top 5 clientes</div>
               {agingData.top5.map((c,i)=>(
                 <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<agingData.top5.length-1?'0.5px solid #E4E8EB':'none'}}>
                   <div style={{width:28,height:28,borderRadius:'50%',background:C.border,color:C.muted,fontSize:10,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{c.iniciales}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
+                    <div style={{fontSize:13,fontWeight:400,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
                     <div style={{fontSize:11,color:C.muted}}>{c.facturas} factura{c.facturas!==1?'s':''}</div>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                    <span style={{fontSize:13,fontWeight:500,color:C.accent}}>{fmtMon(c.monto)}</span>
-                    <span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:c.bucketBg,color:c.bucketColor,whiteSpace:'nowrap',fontWeight:700}}>{c.bucketLabel}</span>
+                    <span style={{fontSize:13,fontWeight:400,color:C.accent}}>{fmtMon(c.monto)}</span>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:c.bucketBg,color:c.bucketColor,whiteSpace:'nowrap',fontWeight:700}}>{c.bucketLabel}</span>
                   </div>
                 </div>
               ))}
@@ -1128,18 +1128,18 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         const nm=p=>clients.find(c=>String(c.id)===String(p.cliente_id))?.name||p.nombre_proyecto||'—'
         const ico=(d,c)=><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke={c} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
         const abrir=p=>{ onOpenProyecto?onOpenProyecto(p.id):go('cartera') }
-        const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:6,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
+        const groupHd=(icoEl,label,n,col,bg)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 6px',background:C.bgSoft,borderTop:'1px solid #DDE2E6'}}><span style={{width:20,height:20,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span><span style={{flex:1,fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color:col}}>{label}</span><span style={{fontSize:10,fontWeight:800,color:col}}>{n}</span></div>
         const rowCurso=p=>{ const m=movByP[p.id], s=m.ultima, dd=m.dias, cu=dd==null?'':dd<=0?'hoy':dd===1?'ayer':(s&&s.iso?fmtFechaDMY(s.iso):`hace ${nDias(dd)}`); const col=CART_DOT[p.estado||'verde']; return (
           <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:col+'1A',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/></span>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>{s&&<span style={{width:6,height:6,borderRadius:'50%',background:SEÑAL_COL[s.tipo]||C.muted,flexShrink:0}}/>}{s?s.texto:(p.nota||p.nombre_proyecto||'sin señales')}</div></div>
-            <span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap'}}>{s?cu:''}</span><span style={{color:C.textSoft,fontSize:15,flexShrink:0}}><Gl n='chevron'/></span>
+            <span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap'}}>{s?cu:''}</span><span style={{color:C.textSoft,fontSize:16,flexShrink:0}}><Gl n='chevron'/></span>
           </div>) }
         const rowSimple=(p,sub,badge,icoEl,bg,pill)=>(
           <div key={p.id} onClick={()=>abrir(p)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:'1px solid #DDE2E6',background:'#fff',cursor:'pointer'}}>
             <span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icoEl}</span>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm(p)}</div><div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sub}</div></div>
-            <span style={{fontSize:9,fontWeight:700,borderRadius:20,padding:'2px 9px',flexShrink:0,...pill}}>{badge}</span><span style={{color:C.textSoft,fontSize:15,flexShrink:0}}><Gl n='chevron'/></span>
+            <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',flexShrink:0,...pill}}>{badge}</span><span style={{color:C.textSoft,fontSize:16,flexShrink:0}}><Gl n='chevron'/></span>
           </div>)
         const pausaIco=c=>ico(<><line x1='8' y1='5' x2='8' y2='19'/><line x1='16' y1='5' x2='16' y2='19'/></>,c)
         const checkIco=c=>ico(<path d='M20 6L9 17l-5-5'/>,c)
@@ -1149,8 +1149,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           <div style={{border:'1px solid #DDE2E6',borderRadius:12,overflow:'hidden'}}>
             <div style={{display:'flex',alignItems:'center',gap:11,padding:'12px 13px',background:C.accent}}>
               <span style={{width:32,height:32,borderRadius:10,background:'rgba(255,255,255,.14)',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></svg></span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'rgba(255,255,255,.75)'}}>Mis proyectos</div><div style={{fontSize:15,fontWeight:800,color:'#fff',marginTop:1}}>{enCurso.length+enPausa.length+term.length} en total</div></div>
-              <div style={{display:'flex',gap:5,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>{cnt.map(([n,l],i)=><span key={i} style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:'rgba(255,255,255,.16)',color:'#fff',whiteSpace:'nowrap'}}>{n} {l}</span>)}</div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:'rgba(255,255,255,.75)'}}>Mis proyectos</div><div style={{fontSize:16,fontWeight:800,color:'#fff',marginTop:1}}>{enCurso.length+enPausa.length+term.length} en total</div></div>
+              <div style={{display:'flex',gap:5,flexShrink:0,flexWrap:'wrap',justifyContent:'flex-end'}}>{cnt.map(([n,l],i)=><span key={i} style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:'rgba(255,255,255,.16)',color:'#fff',whiteSpace:'nowrap'}}>{n} {l}</span>)}</div>
             </div>
             {enCurso.length>0 && groupHd(ico(<polygon points='6 4 20 12 6 20 6 4' fill={C.greenText} stroke='none'/>,C.greenText),'En curso',enCurso.length,C.greenText,C.greenBg)}
             {sorted.slice(0,6).map(rowCurso)}

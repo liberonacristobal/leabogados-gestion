@@ -62,19 +62,19 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terc
   const [genV,cosV,comV,ppmV]=redondearPartes([caja.gen,caja.cos,caja.com,caja.ppm],1e5,[0])
   const [sinV,retV]=redondearPartes([caja.sin,totalRet],1e5,[0])
   const fMLR=n=>fmtMillLR(n)
-  const ln=(sg,l,v,{tot,menos}={})=><div style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:12.5}}>
+  const ln=(sg,l,v,{tot,menos}={})=><div style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:13}}>
     <span style={{textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
     <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span>
     <span style={{fontWeight:tot?800:700,color:tot?C.accent:(menos?(v==='$0'?C.done:C.overdueText):C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
   const colH=(t,sub)=><div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}><span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{t}</span><span style={{marginLeft:'auto',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>{sub}</span></div>
-  const colSt={border:`1px solid ${C.border}`,borderRadius:14,padding:'13px 14px 9px',minWidth:0}
+  const colSt={border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px 9px',minWidth:0}
   const resLbl=editRes
     ? <span style={{display:'inline-flex',alignItems:'center',gap:6}}><input autoFocus onFocus={e=>e.target.select()} inputMode='numeric' value={resTxt} onChange={e=>{ const d=e.target.value.replace(/\D/g,''); setResTxt(d?Number(d).toLocaleString('es-CL'):'') }} onKeyDown={e=>{ if(e.key==='Enter') guardarReserva(); if(e.key==='Escape') setEditRes(false) }} style={{width:118,fontSize:12,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.accent}}/><button onClick={guardarReserva} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 10px',cursor:'pointer'}}>Guardar</button></span>
     : <span onClick={()=>{ setResTxt(Number(reserva).toLocaleString('es-CL')); setEditRes(true) }} style={{fontSize:11,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>reserva {fmtMill(reserva)} · <span style={{color:C.azulInfo,fontWeight:700}}>editar</span></span>
   const perLbl=maxM===12?String(yr):`ene–${MES_C[maxM-1]}${isDesktop?' '+yr:''}`
   return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}}>
     <div style={{padding:'15px 18px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-      <span style={{width:30,height:30,borderRadius:9,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>
+      <span style={{width:30,height:30,borderRadius:10,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>
       <span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>¿Cuánto se puede retirar?</span>
       <span style={{marginLeft:'auto'}}>{resLbl}</span>
     </div>
@@ -170,7 +170,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
   const sugSocio=r=>{ let a=0,b=0; rondas.forEach(x=>{ a+=(x[A]||0); b+=(x[B]||0) }); return a<=b?A:B }
   const asignar=async(r,soc)=>{ if(!(await appConfirm(`Asignar este retiro de ${fmt(r.amt)} (${fechaLbl(r.d0,r.d1)}) a ${soc}. Es reversible. ¿Confirmas?`))) return; setBusy(r.socio+'|'+r.d0); try{ const ids=r.movs.map(x=>x.e.id); await supabase.from('expenses').update({subcategory:soc,updated_at:new Date().toISOString()}).in('id',ids); setExpenses&&setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,subcategory:soc}:x)) }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) } setBusy(null) }
   const exportar=()=>{ const H=['Socio','Fecha','Monto','Transferencias']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=[...retSoc].sort((a,b)=>a.socio.localeCompare(b.socio)||a.d0.localeCompare(b.d0)).map(r=>[r.socio,r.d0,Math.round(r.amt),r.movs.length].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`retiros_socios_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
-  const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:10.5,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
+  const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}
   const _thB=`1px solid ${C.border}`
   const thL={...TH_BAND,textAlign:'left',padding:'8px 18px',borderBottom:_thB}
@@ -179,20 +179,20 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
   const tdMesEmpty={fontSize:11,fontWeight:600,padding:'8px 18px',textAlign:'right',color:C.textSoft,borderTop:`1px solid ${C.bgSoft}`}
   const tdRet={fontSize:13,padding:'10px 18px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,color:C.text,fontVariantNumeric:'tabular-nums'}
   const tdTot={fontSize:13,fontWeight:800,padding:'12px 18px',textAlign:'right',background:C.bgSoft,borderTop:`2px solid ${C.border}`,color:C.accent,fontVariantNumeric:'tabular-nums'}
-  const pill={display:'inline-flex',alignItems:'center',fontSize:10.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:6,padding:'3px 9px',whiteSpace:'nowrap'}
+  const pill={display:'inline-flex',alignItems:'center',fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:8,padding:'3px 9px',whiteSpace:'nowrap'}
   const dotEl=col=><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:col,marginRight:5,verticalAlign:'middle'}}/>
-  const chTi=(t,bg,sv)=><div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:30,height:30,borderRadius:9,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{sv}</span><span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>{t}</span></div>
+  const chTi=(t,bg,sv)=><div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:30,height:30,borderRadius:10,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{sv}</span><span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>{t}</span></div>
   const chv=up=><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d={up?'m18 15-6-6-6 6':'m6 9 6 6 6-6'}/></svg>
   const bankIc=<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M7 7h10v10'/><path d='M7 17 17 7'/></svg>
   const retRow=(r)=>{ const key=r.socio+'|'+r.d0; const open=expRet===key; return (<div key={key}>
     <div onClick={()=>setExpRet(open?null:key)} style={{display:'flex',alignItems:'center',gap:13,padding:'12px 18px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',background:open?'#FBFCFD':'transparent'}}>
       <span style={{fontWeight:700,color:C.accent,fontSize:14,width:isDesktop?130:98}}>{fechaLbl(r.d0,r.d1)}</span>
-      <span style={{color:C.muted,fontSize:11.5}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}</span>
-      <span style={{marginLeft:'auto',fontWeight:800,color:COL[r.socio]||C.text,fontVariantNumeric:'tabular-nums',fontSize:15}}>{fmt(r.amt)}</span>
+      <span style={{color:C.muted,fontSize:12}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}</span>
+      <span style={{marginLeft:'auto',fontWeight:800,color:COL[r.socio]||C.text,fontVariantNumeric:'tabular-nums',fontSize:16}}>{fmt(r.amt)}</span>
       <span style={{flexShrink:0}}>{chv(open)}</span>
     </div>
-    {open&&<><div style={{padding:'7px 18px 7px 40px',fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft,background:'#FBFCFD',borderTop:`1px solid ${C.bgSoft}`}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}{r.movs.length>1?' · partido por el límite diario':''}</div>
-      {r.movs.map((mv,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 18px 9px 40px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5,background:'#FBFCFD'}}>
+    {open&&<><div style={{padding:'7px 18px 7px 40px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft,background:'#FBFCFD',borderTop:`1px solid ${C.bgSoft}`}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}{r.movs.length>1?' · partido por el límite diario':''}</div>
+      {r.movs.map((mv,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 18px 9px 40px',borderTop:`1px solid ${C.bgSoft}`,fontSize:13,background:'#FBFCFD'}}>
         <span style={{color:C.muted,width:58,flexShrink:0}}>{_mc(mv.date)}</span>
         <span style={{color:C.textSoft,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{mv.e.concept||'Transferencia'}</span>
         <span style={{fontWeight:700,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(mv.amt)}</span>
@@ -203,7 +203,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
   <div style={{maxWidth:isDesktop?1060:'100%',margin:'0 auto',padding:isDesktop?'0 20px 44px':'0 16px 44px'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 18px',flexWrap:'wrap'}}>
       <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Oficina</button>
-      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5}}>Socios · retiros y sueldos</h1>
+      <h1 style={{fontSize:isDesktop?20:19,fontWeight:800,color:C.accent,letterSpacing:-.5}}>Socios · retiros y sueldos</h1>
       {difAcum===0
         ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'6px 12px'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>Retiros al día</span>
         : <span style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'6px 12px'}}>Por igualar · {faltaTxt(difAcum)}</span>}
@@ -218,15 +218,15 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
         <div style={{display:'flex',alignItems:'center',gap:7,fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'#9FC6D8'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#9FC6D8' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>A favor de socios · {yr}</div>
         <div style={{fontSize:40,fontWeight:800,letterSpacing:-1.5,lineHeight:1,margin:'11px 0 10px',fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet+sueldoTot)}</div>
         <div style={{display:'flex',gap:10}}>
-          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Retiros</div><div style={{fontSize:15,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet)}</div></div>
-          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos</div><div style={{fontSize:15,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoTot)}</div></div>
+          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Retiros</div><div style={{fontSize:16,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet)}</div></div>
+          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos</div><div style={{fontSize:16,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoTot)}</div></div>
         </div>
       </div>
       {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,C.azulInfo,<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos socios',fmtM(sueldoTot),SOC.join(' + '),BG[B]||'#F8F1DE','#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
-        <div key={i} onClick={()=>scrollA(i===0?listaRef:porSocioRef)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,padding:'16px 17px',cursor:'pointer',position:'relative'}}>
-          <span style={{position:'absolute',top:15,right:14,color:C.textSoft,fontSize:15,fontWeight:700}}><Gl n='chevron'/></span>
+        <div key={i} onClick={()=>scrollA(i===0?listaRef:porSocioRef)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'16px 17px',cursor:'pointer',position:'relative'}}>
+          <span style={{position:'absolute',top:15,right:14,color:C.textSoft,fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
           <span style={{width:34,height:34,borderRadius:10,background:k[3],display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={k[4]} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>{k[5]}</svg></span>
-          <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.9,fontVariantNumeric:'tabular-nums'}}>{k[1]}</div>
+          <div style={{fontSize:26,fontWeight:800,color:C.accent,letterSpacing:-.9,fontVariantNumeric:'tabular-nums'}}>{k[1]}</div>
           <div style={{...SEC_LBL,marginTop:3}}>{k[0]}</div>
           <div style={{fontSize:11,color:C.textSoft,marginTop:5}}>{k[2]}</div>
         </div>)}
@@ -240,8 +240,8 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
         {seg(eqMode,setEqMode,[['ambos','Retiro + sueldo'],['retiros','Solo retiros']])}
       </div>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,padding:'2px 16px 16px'}}>
-        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:15,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
-          <span style={{position:'absolute',top:15,right:15,color:COL[s],opacity:.5,fontSize:15,fontWeight:700}}><Gl n='chevron'/></span>
+        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:12,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
+          <span style={{position:'absolute',top:15,right:15,color:COL[s],opacity:.5,fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span><span style={{marginLeft:'auto',marginRight:16,fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</span></div>
           <div style={{fontSize:34,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div>
           <div style={{...SEC_LBL,marginTop:4}}>total a favor · {yr}</div>
@@ -251,7 +251,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'10px 12px'}}>
             <div style={{...SEC_LBL,lineHeight:1.3}}>Promedio<br/>mensual</div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:18,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(promDe(s))}</div><div style={{fontSize:9.5,color:C.textSoft,fontWeight:600}}>÷ {mesesComp} meses{mesesComp>0?` · ene–${MC[Math.min(12,mesesComp)]}`:''}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:18,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(promDe(s))}</div><div style={{fontSize:10,color:C.textSoft,fontWeight:600}}>÷ {mesesComp} meses{mesesComp>0?` · ene–${MC[Math.min(12,mesesComp)]}`:''}</div></div>
           </div>
         </div> })}
       </div>
@@ -261,7 +261,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         {chTi('Retiros por mes',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}
         <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
-          <span onClick={()=>setOcultarVacios(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:10.5,fontWeight:700,color:C.muted,cursor:'pointer'}}>
+          <span onClick={()=>setOcultarVacios(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:11,fontWeight:700,color:C.muted,cursor:'pointer'}}>
             <span style={{width:30,height:17,borderRadius:10,background:ocultarVacios?C.accent:C.border,position:'relative',transition:'.15s',flexShrink:0}}><span style={{position:'absolute',top:2,left:ocultarVacios?15:2,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/></span>
             Ocultar meses sin retiros
           </span>
@@ -298,7 +298,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
                   <td style={tdRet}>{tablaMode==='acum'?(acum===0?<span style={{color:C.textSoft}}>$0</span>:<span style={{color:acum>0?C.accent:'#8A6D12',fontWeight:700}}>{acum>0?'+':'−'}{fmt(Math.abs(acum))}</span>):(d===0?<span style={{color:C.textSoft}}>$0</span>:<span style={pill}>{faltaTxt(d)}</span>)}</td>
                 </tr>) })
             }
-            out.push(<tr key='tot'><td style={{...tdTot,textAlign:'left'}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{...tdTot,color:COL[A]}}>{fmt(retTot[A]||0)}</td><td style={{...tdTot,color:COL[B]}}>{fmt(retTot[B]||0)}</td></>}<td style={tdTot}>{difAcum===0?<span style={{color:C.textSoft}}>$0</span>:<span style={{fontSize:10.5,color:C.soonText,fontWeight:700}}>{faltaTxt(difAcum)}</span>}</td></tr>)
+            out.push(<tr key='tot'><td style={{...tdTot,textAlign:'left'}}>Total {yr}</td>{tablaMode==='monto'&&<><td style={{...tdTot,color:COL[A]}}>{fmt(retTot[A]||0)}</td><td style={{...tdTot,color:COL[B]}}>{fmt(retTot[B]||0)}</td></>}<td style={tdTot}>{difAcum===0?<span style={{color:C.textSoft}}>$0</span>:<span style={{fontSize:11,color:C.soonText,fontWeight:700}}>{faltaTxt(difAcum)}</span>}</td></tr>)
             return out
           })()}
         </tbody>
@@ -312,7 +312,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
       </div>
       {nRet===0&&<div style={{padding:'22px 18px',textAlign:'center',color:C.textSoft,fontSize:13}}>Sin retiros registrados en {yr}.</div>}
       {otros.map((r,oi)=>{ const sg=sugSocio(r); return <div key={'o'+oi} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:'#FFFCF4',borderTop:`1px solid ${C.bgSoft}`,flexWrap:'wrap'}}>
-        <span style={{width:30,height:30,borderRadius:9,background:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v18'/><path d='m6 8 6-4 6 4'/><path d='M6 8 3 14a3.5 3.5 0 0 0 6 0Z'/><path d='m18 8-3 6a3.5 3.5 0 0 0 6 0Z'/></svg></span>
+        <span style={{width:30,height:30,borderRadius:10,background:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v18'/><path d='m6 8 6-4 6 4'/><path d='M6 8 3 14a3.5 3.5 0 0 0 6 0Z'/><path d='m18 8-3 6a3.5 3.5 0 0 0 6 0Z'/></svg></span>
         <div style={{flex:'1 1 200px',fontSize:12,color:C.text,lineHeight:1.45}}>Retiro de <b style={{color:C.accent}}>{fmt(r.amt)}</b> ({fechaLbl(r.d0,r.d1)}) sin socio. Por la paridad correspondería a <b style={{color:C.accent}}>{sg}</b>.</div>
         <div style={{display:'flex',gap:8,flexShrink:0}}><button disabled={busy===r.socio+'|'+r.d0} onClick={()=>asignar(r,sg)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'7px 13px',background:C.accent,color:'#fff',cursor:'pointer'}}>Sí, es {sg}</button><button onClick={()=>asignar(r,sg===A?B:A)} style={{fontSize:11,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 11px',background:'#fff',color:C.muted,cursor:'pointer'}}>Otro</button></div>
       </div> })}

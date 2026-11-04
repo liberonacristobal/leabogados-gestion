@@ -147,14 +147,14 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
 
   // Presentación
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
-  const lblSty={...SEC_LBL,fontSize:9.5}
+  const lblSty={...SEC_LBL,fontSize:10}
   const btnPri={fontSize:12,fontWeight:700,border:'none',borderRadius:8,padding:'7px 12px',background:C.accent,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}
   const btnSec={fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 11px',background:C.card,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}
   const btnTxt={fontSize:12,fontWeight:600,border:'none',background:'none',color:C.muted,padding:'7px 4px',cursor:'pointer',whiteSpace:'nowrap'}
   const activos=clients.filter(c=>!c.is_internal&&c.status!=='Terminado').sort((a,b)=>String(a.name).localeCompare(String(b.name),'es'))
 
   const pend=rs.filter(r=>!est(r)), conf=confirmables(rs), nCliL=new Set(pend.map(kCli)).size, quedan=pend.length-conf.length
-  const loteBox=<div style={{...card,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'8px 12px',marginBottom:12,fontSize:12.5,color:C.text}}>
+  const loteBox=<div style={{...card,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:'8px 12px',marginBottom:12,fontSize:13,color:C.text}}>
     {!pend.length? <span style={{flex:1}}>{filtrar(false,false).length?'Grupo revisado.':'Sin personas con estos filtros.'}</span>
     : lote? <>
         <span style={{flex:'1 1 220px',minWidth:0}}>{lote==='ok'?<>Confirmar <b style={{color:C.accent}}>{conf.length}</b> en la ficha de su cliente{quedan?` · ${quedan} sin cliente o contraparte quedan por revisar`:''}</>:<>Descartar <b style={{color:C.accent}}>{pend.length}</b> persona{pend.length!==1?'s':''}</>}</span>
@@ -172,12 +172,12 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
     {orden.length? AB_ORD.filter(a=>porAb[a]).map((a,ai)=>{ const ks=porAb[a], cerrado=!!cerrados[a]; return <div key={a}>
       <div onClick={()=>setCerrados(p=>({...p,[a]:!p[a]}))} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'9px 13px',background:C.bgSoft,borderTop:ai?`1px solid ${C.border}`:'none',cursor:'pointer'}}>
         <span style={{...SEC_LBL}}>{a===SIN?'Por asignar cliente':a}</span>
-        <span style={{fontSize:11.5,color:C.muted}}>{ks.length} cliente{ks.length!==1?'s':''} {cerrado?'▸':'▾'}</span>
+        <span style={{fontSize:12,color:C.muted}}>{ks.length} cliente{ks.length!==1?'s':''} {cerrado?'▸':'▾'}</span>
       </div>
       {!cerrado&&ks.map(k=>{ const p=pendDe(k), on=selK===k; return <div key={k} onClick={()=>{ setSel(k); setVerDet(true); if(!D) window.scrollTo(0,0) }} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:`1px solid ${C.track}`,cursor:'pointer',background:on&&D?C.azulBg:'transparent'}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13.5,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nomCli(k)}</div>
-          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k===SIN?'Elige el cliente de cada correo':[cli[k]?.status,...arDe(k)].filter(Boolean).join(' · ')||'—'} · {g[k].length} en el filtro</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{nomCli(k)}</div>
+          <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k===SIN?'Elige el cliente de cada correo':[cli[k]?.status,...arDe(k)].filter(Boolean).join(' · ')||'—'} · {g[k].length} en el filtro</div>
         </div>
         <span style={{fontSize:12,fontWeight:600,whiteSpace:'nowrap',color:p?C.soonText:C.greenText,fontVariantNumeric:'tabular-nums'}}>{p?`${p} por revisar`:'Revisado'}</span>
       </div> })}
@@ -189,14 +189,14 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
     const otros=(r.posibles||[]).length>1?`También calza con: ${r.posibles.filter(n=>n!==nomCli(k)).join(', ')}`:''
     const dot={alta:C.greenText,media:C.soon,baja:C.textSoft}[r.confianza]||C.textSoft
     const txtSty={fontSize:11,color:C.muted,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}
-    const acc = r.estado==='registrado' ? <span style={{fontSize:11.5,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>Ya en la ficha</span>
-      : e ? <><span style={{fontSize:11.5,fontWeight:600,color:e==='ok'?C.greenText:C.muted,whiteSpace:'nowrap'}}>{e==='ok'?'Confirmado':'Descartado'}</span><button disabled={busy} onClick={()=>deshacer(r)} style={btnTxt}>Deshacer</button></>
+    const acc = r.estado==='registrado' ? <span style={{fontSize:12,fontWeight:600,color:C.greenText,whiteSpace:'nowrap'}}>Ya en la ficha</span>
+      : e ? <><span style={{fontSize:12,fontWeight:600,color:e==='ok'?C.greenText:C.muted,whiteSpace:'nowrap'}}>{e==='ok'?'Confirmado':'Descartado'}</span><button disabled={busy} onClick={()=>deshacer(r)} style={btnTxt}>Deshacer</button></>
       : k===SIN ? <><select value={cliPick[r.id]||''} onChange={ev2=>{ setCliPick(p=>({...p,[r.id]:ev2.target.value})); asignarCli(r,ev2.target.value) }} style={{fontSize:12,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.surface,minWidth:0,flex:D?'0 1 200px':'1 1 auto',maxWidth:D?200:'none'}}><option value=''>Elige el cliente</option>{activos.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><button disabled={busy} onClick={()=>aRed(r)} style={btnTxt}>→ Red</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
       : r.rol==='contraparte' ? <><button disabled={busy} onClick={()=>esDelCliente(r)} style={btnSec}>Es del cliente</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
       : <><select value={f} onChange={ev2=>setFunPick(p=>({...p,[r.id]:ev2.target.value}))} title='Función' style={{fontSize:12,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 6px',background:C.surface,minWidth:0,flex:D?'0 1 170px':'1 1 auto',maxWidth:D?170:'none'}}>{FUN_CONTACTO_ORD.map(x=><option key={x} value={x}>{FUN_CONTACTO[x]}</option>)}</select><button disabled={busy} onClick={()=>confirmar([r])} style={btnPri}>Confirmar</button><button disabled={busy} onClick={()=>descartar([r])} style={btnTxt}>Descartar</button></>
     return <div key={r.id} style={{display:'flex',alignItems:'center',gap:D?12:8,rowGap:6,flexWrap:'wrap',padding:D?'10px 14px':'10px 12px',borderTop:i?`1px solid ${C.track}`:'none'}}>
       <div style={{flex:'1 1 240px',minWidth:0,opacity:e?.6:1}}>
-        <div style={{fontSize:13.5,fontWeight:600,color:C.text,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}}>{r.nombre||r.email.split('@')[0]}{r.cargo?` · ${r.cargo}`:''}</div>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:D?'nowrap':'normal',overflow:'hidden',textOverflow:'ellipsis'}}>{r.nombre||r.email.split('@')[0]}{r.cargo?` · ${r.cargo}`:''}</div>
         <div style={{fontSize:12,color:C.azulInfo,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.email}</div>
         {(otros||evTxt)&&<div style={txtSty}>{otros||evTxt}</div>}
         {r.rol!=='contraparte'&&(r.recibe||[]).length>0&&<div style={{...txtSty,color:C.accent}}>Recibe: {r.recibe.join(' · ')}</div>}
@@ -233,27 +233,27 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
       <div style={{display:'grid',gridTemplateColumns:D?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:10,marginBottom:12}}>
         {kpis.map(([l,v,s])=><div key={l} style={{...card,padding:'11px 14px',minWidth:0}}>
           <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
-          <div style={{fontSize:24,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',lineHeight:1.2}}>{v}</div>
-          <div style={{fontSize:11.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
+          <div style={{fontSize:26,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',lineHeight:1.2}}>{v}</div>
+          <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s}</div>
         </div>)}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
         <div style={{display:'flex',gap:6,overflowX:'auto',flex:1,minWidth:0,scrollbarWidth:'none'}}>
-          {abChips.map(([k,l,n])=>{ const on=F.ab===k; return <button key={k||'todos'} onClick={()=>{ setFil('ab',k); setSel(null) }} style={{fontSize:12.5,fontWeight:600,borderRadius:20,padding:'6px 13px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{l} <span style={{fontWeight:500,opacity:.8}}>{n}</span></button> })}
+          {abChips.map(([k,l,n])=>{ const on=F.ab===k; return <button key={k||'todos'} onClick={()=>{ setFil('ab',k); setSel(null) }} style={{fontSize:13,fontWeight:600,borderRadius:20,padding:'6px 13px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{l} <span style={{fontWeight:600,opacity:.8}}>{n}</span></button> })}
         </div>
-        {D&&<span style={{fontSize:12.5,color:C.muted,whiteSpace:'nowrap'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></span>}
+        {D&&<span style={{fontSize:13,color:C.muted,whiteSpace:'nowrap'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></span>}
       </div>
       <div style={{display:'grid',gridTemplateColumns:D?'repeat(6,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:6,marginBottom:8}}>
         {SELS.map(([k,l,ops])=>{ const act=F[k]&&!(k==='rev'&&F[k]==='pend'); return <label key={k} style={{background:C.card,border:`1px solid ${act?C.accent:C.border}`,borderRadius:8,padding:'4px 9px 5px',minWidth:0,display:'block'}}>
           <span style={{...lblSty,display:'block',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</span>
-          <select value={F[k]} onChange={e=>setFil(k,e.target.value)} style={{width:'100%',border:'none',outline:'none',background:'none',fontSize:12.5,color:C.text,padding:0,cursor:'pointer'}}>{ops.map(([v,t])=><option key={v} value={v}>{t}</option>)}</select>
+          <select value={F[k]} onChange={e=>setFil(k,e.target.value)} style={{width:'100%',border:'none',outline:'none',background:'none',fontSize:13,color:C.text,padding:0,cursor:'pointer'}}>{ops.map(([v,t])=><option key={v} value={v}>{t}</option>)}</select>
         </label> })}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:6,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 10px',marginBottom:10}}>
         <SIcon n='search' s={14} c={C.done}/>
-        <input value={q} onChange={e=>{ setQ(e.target.value); setLote(null) }} placeholder='Buscar cliente, persona o correo' style={{border:'none',background:'none',outline:'none',fontSize:12.5,color:C.text,width:'100%',minWidth:0}}/>
+        <input value={q} onChange={e=>{ setQ(e.target.value); setLote(null) }} placeholder='Buscar cliente, persona o correo' style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%',minWidth:0}}/>
       </div>
-      {!D&&<div style={{fontSize:12.5,color:C.muted,margin:'0 2px 8px'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></div>}
+      {!D&&<div style={{fontSize:13,color:C.muted,margin:'0 2px 8px'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></div>}
       {loteBox}
     </>}
     {D ? <div style={{display:'grid',gridTemplateColumns:'340px minmax(0,1fr)',gap:14,alignItems:'start'}}>{lista}{det}</div>
