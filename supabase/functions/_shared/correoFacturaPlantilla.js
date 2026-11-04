@@ -1,9 +1,19 @@
-// Plantilla aprendida del correo de una factura: se guarda con marcas ({folios}, {total}, {periodo}, {cuota}, {folio}) en vez de
+// Plantilla aprendida del correo de una factura: se guarda con marcas ({folios}, {total}, {periodo}, {cuota}, {folio}, {mes}) en vez de
 // los valores de ESA factura, para que la próxima cuota del mismo proyecto no repita el número de la anterior.
 // Pura (sin red ni base): la usa el envío de facturas (BillingView) y se prueba en tests/correo-factura-plantilla.test.mjs.
 
 // «cuota 1 de 18», «pago 2 de 10», «la cuota de 1 de 2»: el N° y el total son variables.
 const RX_CUOTA = /\b(cuota|pago)(\s+(?:de\s+)?)(\d+)\s+de\s+(\d+)\b/gi
+
+// «octubre de 2026» / «Octubre de 2026»: el mes y el año cambian cada mes, así que se guardan como marca ({mes} en minúscula, {Mes} capitalizado).
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const RX_MES = new RegExp(`\\b(${MESES.join('|')})\\s+de\\s+(20\\d{2})\\b`, 'gi')
+
+/** «Octubre 2026» / «octubre de 2026» → {mes:'octubre', anio:'2026'}; otro texto → null. @param {any} t @returns {{mes:string, anio:string}|null} */
+export function partesMes(t) {
+  const m = String(t || '').trim().match(new RegExp(`^(${MESES.join('|')})\\s+(?:de\\s+)?(20\\d{2})$`, 'i'))
+  return m ? { mes: m[1].toLowerCase(), anio: m[2] } : null
+}
 
 // Despedidas que agrega el propio envío (CORREO_DESPEDIDA y «Saludos,»): no deben quedar guardadas dentro del cuerpo.
 const RX_DESPEDIDA = /^\s*(?:les?\s+saluda(?:mos)?\s+(?:atentamente|cordialmente)|saludos(?:\s+cordiales)?|atentamente|cordialmente|quedamos\s+atentos[^\n]*|quedo\s+atento[^\n]*)\s*[,.]?\s*$/i
@@ -34,13 +44,14 @@ export function tokenizar(texto, v = {}) {
   if (v.total) s = s.split(v.total).join('{total}')
   if (v.periodo && String(v.periodo).length >= 4) s = s.split(v.periodo).join('{periodo}')
   if (v.folio && String(v.folio).length >= 3 && !s.includes('{folios}')) s = s.replace(new RegExp(`(?<![\\d.,])${String(v.folio).replace(/[^\w]/g, '')}(?![\\d])`, 'g'), '{folio}')
+  s = s.replace(RX_MES, m => (/^[A-ZÁÉÍÓÚ]/.test(m) ? '{Mes}' : '{mes}'))
   return s.replace(RX_CUOTA, (_m, pal, sep) => `${pal}${sep}{cuota}`)
 }
 
 /**
  * Devuelve las marcas a su valor. Si queda una marca sin valor (p. ej. {cuota} en una factura que no es cuota), `completo` es false
  * y quien llama usa el texto por defecto: mejor un texto genérico que una cuota equivocada.
- * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, cuota?:{n:number,tot:number}|null, folio?:string}} v
+ * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, cuota?:{n:number,tot:number}|null, folio?:string, mes?:{mes:string,anio:string}|null}} v
  * @returns {{texto:string, completo:boolean}}
  */
 export function destokenizar(texto, v = {}) {
@@ -50,7 +61,8 @@ export function destokenizar(texto, v = {}) {
   if (v.periodo != null && v.periodo !== '') s = s.split('{periodo}').join(v.periodo)
   if (v.folio != null && v.folio !== '') s = s.split('{folio}').join(v.folio)
   if (v.cuota) s = s.split('{cuota}').join(`${v.cuota.n} de ${v.cuota.tot}`)
-  return { texto: s, completo: !/\{(?:folios|total|periodo|cuota|folio)\}/.test(s) }
+  if (v.mes) s = s.split('{mes}').join(`${v.mes.mes} de ${v.mes.anio}`).split('{Mes}').join(`${v.mes.mes.charAt(0).toUpperCase()}${v.mes.mes.slice(1)} de ${v.mes.anio}`)
+  return { texto: s, completo: !/\{(?:folios|total|periodo|cuota|folio|mes|Mes)\}/.test(s) }
 }
 
 /**

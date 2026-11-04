@@ -21,15 +21,27 @@ export function periodoDe(...textos) {
 export const esSaludoSingular = saludo => /^\s*estimad[oa]\b/i.test(String(saludo || ''))
 
 /**
- * Pasa las frases de trato entre «ustedes» y «tú» (solo esas): «Espero que estén muy bien» ↔ «Espero que estés muy bien» y
- * «sus comentarios» ↔ «tus comentarios». Sirve también sobre un cuerpo ya editado. No toca el inglés.
- * @param {any} texto @param {boolean} singular
+ * Trato que usa el texto con UNA persona: «Espero que esté muy bien» → 'usted', «Espero que estés muy bien» → 'tu'; otro texto (o «estén») → null.
+ * Es por persona, no se deduce del saludo: «Estimada Gabriela» con «esté», «Estimado Juan Pablo» con «estés» (correos reales de 4-11-2026).
+ * @param {any} texto @returns {'usted'|'tu'|null}
  */
-export function ajustarTrato(texto, singular) {
+export function tratoDeTexto(texto) {
+  const m = String(texto || '').match(/Espero que (est[eé]s?)\s+muy bien/i)
+  if (!m) return null
+  const v = m[1].toLowerCase().replace('é', 'e')
+  return v === 'estes' ? 'tu' : v === 'este' ? 'usted' : null
+}
+
+/**
+ * Pasa las frases de trato entre «ustedes», «tú» y «usted» (solo esas): «Espero que estén muy bien» ↔ «estés» ↔ «esté» y «sus comentarios» ↔ «tus comentarios».
+ * Con una sola persona manda el trato aprendido de ella; sin él, «tú». Sirve también sobre un cuerpo ya editado. No toca el inglés.
+ * @param {any} texto @param {boolean} singular @param {'usted'|'tu'|null} [trato]
+ */
+export function ajustarTrato(texto, singular, trato = null) {
   let s = String(texto == null ? '' : texto)
-  if (singular) s = s.replace(/Espero que est[eé]n muy bien/g, 'Espero que estés muy bien').replace(/\bsus comentarios\b/g, 'tus comentarios')
-  else s = s.replace(/Espero que est[eé]s muy bien/g, 'Espero que estén muy bien').replace(/\btus comentarios\b/g, 'sus comentarios')
-  return s
+  if (singular && trato === 'usted') return s.replace(/Espero que est[eé]n?s? muy bien/g, 'Espero que esté muy bien').replace(/\btus comentarios\b/g, 'sus comentarios')
+  if (singular) return s.replace(/Espero que est[eé]n?(?=\s+muy bien)/g, 'Espero que estés').replace(/\bsus comentarios\b/g, 'tus comentarios')
+  return s.replace(/Espero que est[eé]s?(?=\s+muy bien)/g, 'Espero que estén').replace(/\btus comentarios\b/g, 'sus comentarios')
 }
 
 /**

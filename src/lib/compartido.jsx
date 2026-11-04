@@ -12,6 +12,7 @@ import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
 import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
+import { partesMes } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { desescaparXml } from '../../supabase/functions/_shared/xmlTexto.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -2545,6 +2546,10 @@ export function facturaCorreoBody(factura, sale, lang, sinCierre=false){
     const desc = detalle ? `the ${detalle} of our professional services` : 'our professional services'
     const rel = relacion ? (esProyecto ? ` in connection with the ${relacion} project` : ` in connection with ${relacion}`) : ''
     return `We are pleased to attach invoice No. ${folio}, corresponding to ${desc}${rel}, in the amount of ${fmtN(factura.amount)}.${cierre}`
+  }
+  const mes = relacion ? partesMes(detalle) : null
+  if(mes){   // factura mensual: «correspondiente a los servicios de Asesoría Permanente del mes de octubre de 2026» (como la redactan a mano)
+    return `Espero que estén muy bien. Adjuntamos la factura N° ${folio}, correspondiente a los servicios de ${relacion} del mes de ${mes.mes} de ${mes.anio}, por ${fmtN(factura.amount)}.${cierre}`
   }
   const artDet = /^cuota/i.test(detalle)?'a la':'al'   // "al Pago 1 de 10" / "a la Cuota 1/2"
   const desc = detalle ? `${artDet} ${detalle} de nuestros servicios profesionales` : 'a nuestros servicios profesionales'

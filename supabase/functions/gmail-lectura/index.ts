@@ -21,7 +21,7 @@ import { enviarPush } from "../_shared/push.ts";
 import { cargarEquipo } from "../_shared/equipo.js";
 import { todasRest } from "../_shared/paginar.js";
 import { emailsDe, enviosDetectados } from "../_shared/facturaEnvioReglas.js";
-import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion, saludoDeCorreo } from "../_shared/gmailLectura.js";
+import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion, saludoDeCorreo, tratoDeCorreo } from "../_shared/gmailLectura.js";
 import { planRendiciones } from "../_shared/rendicionEnvioReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "", SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -68,7 +68,7 @@ async function accessToken(rt: string): Promise<string> {
 // Datos que se cargan una vez por corrida: facturas enviadas sin destinatario registrado y el mapa correo → cliente.
 async function cargarDatos() {
   const h = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
-  const [facturas, ctc, cli, lrn, miembros, rendiciones, saludos] = await Promise.all([
+  const [facturas, ctc, cli, lrn, miembros, rendiciones, saludos, tratos] = await Promise.all([
     todasRest(SB_URL, h, "billing?select=id,invoice_no,client_id,issued_at,email_sent_at,sent_to&deleted_at=is.null&email_sent_at=not.is.null&sent_to=is.null&issued_at=not.is.null"),
     todasRest(SB_URL, h, "contacts?select=client_id,email&order=client_id.asc,email.asc"),
     todasRest(SB_URL, h, "clients?select=id,email"),
@@ -76,13 +76,14 @@ async function cargarDatos() {
     sbJson("miembros?select=email,nombre,rol"),
     todasRest(SB_URL, h, "rendiciones?select=id,client_id,correlativo,tipo,created_at,sent_at,anulada_at,dirigido_email&tipo=eq.cliente&anulada_at=is.null&sent_at=is.null&client_id=not.is.null&correlativo=not.is.null"),
     todasRest(SB_URL, h, "learnings?select=id,key,value&kind=eq.factura_saludo_gmail"),
+    todasRest(SB_URL, h, "learnings?select=id,key,value&kind=eq.factura_trato_gmail"),
   ]);
   const mapa = new Map<string, Set<string>>();
   const agrega = (email: unknown, cid: unknown) => { const e = String(email || "").trim().toLowerCase(); if (!e.includes("@") || !cid) return; const s = mapa.get(e) || new Set<string>(); s.add(String(cid)); mapa.set(e, s); };
   (ctc as Fila[]).forEach((c) => agrega(c.email, c.client_id));
   (cli as Fila[]).forEach((c) => emailsDe(c.email).forEach((e: string) => agrega(e, c.id)));
   (lrn as Fila[]).forEach((l) => { if (/^[0-9a-f-]{36}$/i.test(String(l.key))) emailsDe(l.value).forEach((e: string) => agrega(e, l.key)); else agrega(l.key, l.value); });
-  return { facturas: facturas as Fila[], rendiciones: rendiciones as Fila[], saludos: new Map((saludos as Fila[]).map((x) => [String(x.key).toLowerCase(), x])), mapa, miembros: miembros as Fila[] };
+  return { facturas: facturas as Fila[], rendiciones: rendiciones as Fila[], saludos: new Map((saludos as Fila[]).map((x) => [String(x.key).toLowerCase(), x])), tratos: new Map((tratos as Fila[]).map((x) => [String(x.key).toLowerCase(), x])), mapa, miembros: miembros as Fila[] };
 }
 
 type Datos = Awaited<ReturnType<typeof cargarDatos>>;
@@ -142,6 +143,16 @@ async function leerBuzon(c: Conexion, datos: Datos, dryRun = false): Promise<Res
           const r = ex ? await sb(`learnings?id=eq.${ex.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ value: v.saludo, updated_at: new Date().toISOString() }) })
             : await sb("learnings", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ kind: "factura_saludo_gmail", key: email, value: v.saludo, estudio_id: "lea" }) });
           if (r.ok) { const fila = ex || (await r.json().catch(() => []))?.[0] || {}; datos.saludos.set(email, { ...fila, key: email, value: v.saludo }); } else fallidos++;
+        }
+        // Trato de cada persona («esté» / «estés»): se guarda aparte del saludo porque no se deduce de él.
+        const tratoPor = new Map<string, { trato: string; fecha: string }>();
+        for (const cm of correos) { const t = tratoDeCorreo(cm, dom); if (t && (!tratoPor.has(t.email) || String(cm.fecha) > tratoPor.get(t.email)!.fecha)) tratoPor.set(t.email, { trato: t.trato, fecha: String(cm.fecha) }); }
+        for (const [email, v] of tratoPor) {
+          const ex = datos.tratos.get(email);
+          if (ex && ex.value === v.trato) continue;
+          const r = ex ? await sb(`learnings?id=eq.${ex.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ value: v.trato, updated_at: new Date().toISOString() }) })
+            : await sb("learnings", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ kind: "factura_trato_gmail", key: email, value: v.trato, estudio_id: "lea" }) });
+          if (r.ok) { const fila = ex || (await r.json().catch(() => []))?.[0] || {}; datos.tratos.set(email, { ...fila, key: email, value: v.trato }); } else fallidos++;
         }
       }
       // Facturas

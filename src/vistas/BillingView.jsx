@@ -9,8 +9,8 @@ import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { cuotaSaltada, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
-import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara } from '../../supabase/functions/_shared/correoFacturaTexto.js'
-import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
+import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara, tratoDeTexto } from '../../supabase/functions/_shared/correoFacturaTexto.js'
+import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { estadoConexion } from '../../supabase/functions/_shared/gmailLectura.js'
@@ -4511,11 +4511,11 @@ export function facturaGlosa(factura, sale){
 // Cuerpo para VARIAS facturas del mismo cliente en UN correo: una línea por TRABAJO (leído de la glosa de cada factura, con el proyecto de la venta
 // como respaldo cuando el ítem es genérico), con su cuota o período y su N°. Sin total. Orden: de la más antigua a la más nueva.
 // saleOf(f) resuelve la venta de cada factura. La redacción vive en _shared/correoFacturaTexto.js (con pruebas).
-export function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false, singular=false){
+export function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false, singular=false, trato=null){
   const arr = [...list].sort((a,b)=> String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||'')) || String(folioN(a.invoice_no||'')).localeCompare(String(folioN(b.invoice_no||'')),undefined,{numeric:true}))
   const items = arr.map(f=>{ const sale=saleOf?saleOf(f):null; const p=facturaGlosaPartes(f, sale); return { folio: folioN(f.invoice_no||'')||f.invoice_no||'', relacion:p.relacion, detalle:p.detalle, periodo:p.periodo } })   // el trabajo se agrupa por lo que dice la GLOSA (relacion), no por la venta vinculada: una factura mal vinculada no se funde con otro trabajo
-  const cuerpo = lang==='es' ? ajustarTrato(cuerpoVariasFacturas({ items, lang }), singular) : cuerpoVariasFacturas({ items, lang })
-  return sinCierre ? cuerpo : `${cuerpo}\n\n${CORREO_DESPEDIDA(lang, singular)}`
+  const cuerpo = lang==='es' ? ajustarTrato(cuerpoVariasFacturas({ items, lang }), singular, trato) : cuerpoVariasFacturas({ items, lang })
+  return sinCierre ? cuerpo : `${cuerpo}\n\n${CORREO_DESPEDIDA(lang, singular&&trato!=='usted')}`
 }
 
 // Recordatorio de saldo pendiente: las OTRAS facturas Pendiente/Vencido del mismo cliente (excluye las que van en ESTE correo).
@@ -4552,9 +4552,10 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const saleOf=f=>mejorVenta(f, sales, f.client_id||client?.id) || (String(f.id)===String(factura.id)?saleR:null)
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
+  const [trato,setTrato]=useState(null)   // 'usted' | 'tu' aprendido para la persona del «Para» (null = tú)
   const singular = esSaludoSingular(saludo)   // «Estimado Agustín» / «Estimada Carolina»: el cuerpo habla de tú; con «Estimados» sigue de ustedes
   // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
-  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true, singular) : facturaCorreoBody({...factura,amount:amountOf(factura)}, saleR, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
+  const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true, singular, trato) : facturaCorreoBody({...factura,amount:amountOf(factura)}, saleR, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
   const foliosMulti=listF.map(f=>folioN(f.invoice_no||'')||f.invoice_no||'').filter(Boolean)
   const concept=(factura.concept||'').trim()
@@ -4592,10 +4593,11 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const _cuotaDte=_dteCuotas[0]||null
   const _cuotaF=_cuotaApp||_cuotaDte
   const _dteDifiere=!!(_cuotaApp&&_dteCuotas.length&&!_dteCuotas.some(x=>x.n===_cuotaApp.n&&x.tot===_cuotaApp.tot))
-  const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||'')})
+  const _dynMes=()=> multi ? null : partesMes((facturaGlosaPartes(factura, saleR)||{}).periodo)   // mes y año de ESTA factura mensual (de la glosa o el concepto); null si no es mensual
+  const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||''),mes:_dynMes()})
   const _tok=(t,lg)=>tokenizar(limpiarEspacios(quitarDespedida(t)),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
   const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(limpiarEspacios(quitarDespedida(t)),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
-  const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; const t=(tpl&&_untok(tpl,lg))||genBody(lg); setBody(lg==='es'?ajustarTrato(t,singular):t) }
+  const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; const t=(tpl&&_untok(tpl,lg))||genBody(lg); setBody(lg==='es'?ajustarTrato(t,singular,trato):t) }
   // Abre el PDF (base64) en una pestaña para previsualizarlo antes de enviar.
   const verPdf=(base64,nombre)=>{ try{ const bin=atob(base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(_){ appAlert('No se pudo abrir el PDF.') } }
   const [incPago,setIncPago]=useState(false)   // incluir datos de transferencia en el correo
@@ -4608,7 +4610,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const saldoTocado=useRef(false); const fondoTocado=useRef(false)
   const [sending,setSending]=useState(false)
   const bodyTocado=useRef(false)
-  useEffect(()=>{ if(lang==='es') setBody(b=>ajustarTrato(b,singular)) },[singular,lang])   // el cuerpo sigue al saludo, también si lo editaste
+  useEffect(()=>{ if(lang==='es') setBody(b=>ajustarTrato(b,singular,trato)) },[singular,trato,lang])   // el cuerpo sigue al saludo, también si lo editaste
   const asuntoTocado=useRef(false)   // asunto editado a mano → se aprende (por cliente + proyecto, con el folio como marca)
   // Saldo pendiente del cliente en OTRAS facturas (excluye esta, reembolsos y ya pagadas). Fuente única saldoBill.
   // Facturas del cliente con saldo pendiente (excluye esta/estas, reembolsos y ya pagadas). El sistema SÍ sabe cuáles son → se citan por folio.
@@ -4622,6 +4624,9 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const [saludoAprendido,setSaludoAprendido]=useState(null)   // {email, saludo} aprendido para la dirección del «Para»
   useEffect(()=>{ setSaludoAprendido(null); if(paraLista.length!==1) return; let alive=true
     supabase.from('learnings').select('kind,value,updated_at').in('kind',['factura_saludo_dest','factura_saludo_gmail']).eq('key',paraLista[0]).then(({data})=>{ if(!alive) return; const fila=(data||[]).find(x=>x.kind==='factura_saludo_dest')||(data||[])[0]; if(fila?.value) setSaludoAprendido({email:paraLista[0],saludo:String(fila.value)}) },()=>{})   // lo escrito a mano en la app manda sobre lo leído de Gmail
+    return ()=>{ alive=false } },[paraLista.join(',')])
+  useEffect(()=>{ setTrato(null); if(paraLista.length!==1) return; let alive=true
+    supabase.from('learnings').select('kind,value').in('kind',['factura_trato_dest','factura_trato_gmail']).eq('key',paraLista[0]).then(({data})=>{ if(!alive) return; const fila=(data||[]).find(x=>x.kind==='factura_trato_dest')||(data||[])[0]; if(fila?.value==='usted'||fila?.value==='tu') setTrato(fila.value) },()=>{})   // lo escrito a mano en la app manda sobre lo leído de Gmail
     return ()=>{ alive=false } },[paraLista.join(',')])
   const contactosSaludo = useMemo(()=>{ const l=[...(contacts||[])]; if(client?.email&&client?.name&&!l.some(c=>String(c.email||'').toLowerCase()===String(client.email).toLowerCase())) l.push({email:client.email,nombre:client.name}); return l },[contacts,client])
   const destNombre = useMemo(()=>{ if(paraLista.length!==1) return ''; const c=contactosSaludo.find(x=>String(x.email||'').toLowerCase()===paraLista[0]); const nom=String(c?.nombre||'').trim(); return nom&&_normTxt(nom)!==_normTxt(paraLista[0].split('@')[0])?nom:'' },[paraLista.join(','),contactosSaludo])   // nombre del destinatario para los botones del saludo
@@ -4653,7 +4658,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   useEffect(()=>{ if(!bodyTocado.current) applyDefaultBody(lang) },[dteTotals])
   // Carga la plantilla aprendida del cliente (una|varias · idioma) y, si no la editaste, la aplica con los folios/total actuales.
   useEffect(()=>{ if(!client?.id) return; let alive=true
-    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',msgKey(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current){ const u=_untok(data.value,lg); if(u) setBody(lg==='es'?ajustarTrato(u,singular):u) } },()=>{}) })
+    ;['es','en'].forEach(lg=>{ supabase.from('learnings').select('value').eq('kind','factura_msg').eq('key',msgKey(lg)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; learnedTpl.current[lg]=data.value; if(lg===lang&&!bodyTocado.current){ const u=_untok(data.value,lg); if(u) setBody(lg==='es'?ajustarTrato(u,singular,trato):u) } },()=>{}) })
     if(!multi) supabase.from('learnings').select('value').eq('kind','factura_asunto').eq('key',msgKey('es')).maybeSingle().then(({data})=>{ if(!alive||!data?.value||asuntoTocado.current) return; const r=destokenizar(data.value,{..._vals('es'),cuota:_cuotaF}); if(r.completo) setAsunto(r.texto) },()=>{})
     supabase.from('learnings').select('value').eq('kind','factura_opts').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(!alive||!data?.value) return; try{ const o=JSON.parse(data.value); if(o.incPago) setIncPago(true); if(o.recordarSaldo) setRecordarSaldo(true) }catch(_){} },()=>{})
     return ()=>{alive=false} },[client?.id])
@@ -4690,7 +4695,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
     if(recordarSaldo && otroSaldo>0 && saldoMsg.trim()) s.push({t:saldoMsg.trim()})
     if(incPago){ s.push({t:pagoFrase()}); s.push({t:cuentaTxt(H_PAGO,CUENTA_HONORARIOS), h:cuentaHtml(H_PAGO,CUENTA_HONORARIOS)}) }
     if(pedirFondo){ if(fondoMsg.trim()) s.push({t:fondoMsg.trim()}); s.push({t:cuentaTxt(H_FONDO,ctaGastos), h:cuentaHtml(H_FONDO,ctaGastos,true)}) }
-    s.push({t:CORREO_DESPEDIDA(lang,singular)})
+    s.push({t:CORREO_DESPEDIDA(lang,singular&&trato!=='usted')})
     return s
   }
   const _saludosCierre = lang==='en'?'Best regards,':'Saludos,'
@@ -4730,6 +4735,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
       if(client?.id){
         if(asuntoTocado.current&&!multi) try{ await setLearningKV('factura_asunto',msgKey('es'),tokenizar(asunto,_vals('es'))) }catch(e){registrarError({origen:'accion',vista:'factura_asunto',err:e})}
         if(!saludoAuto&&saludo.trim()&&paraLista.length===1) try{ await setLearningKV('factura_saludo_dest',paraLista[0],saludo.trim()) }catch(e){registrarError({origen:'accion',vista:'factura_saludo_dest',err:e})}   // aprende el saludo de ESA persona
+        { const tr=bodyTocado.current&&lang==='es'&&singular&&paraLista.length===1?tratoDeTexto(body):null; if(tr) try{ await setLearningKV('factura_trato_dest',paraLista[0],tr) }catch(e){registrarError({origen:'accion',vista:'factura_trato_dest',err:e})} }   // aprende el trato (esté/estés) de ESA persona
         try{ await setLearningKV('factura_opts',String(client.id),JSON.stringify({incPago:!!incPago,recordarSaldo:!!recordarSaldo})) }catch(e){registrarError({origen:'accion',vista:'factura_opts',err:e})}
       }
       appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
