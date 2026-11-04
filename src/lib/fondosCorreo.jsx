@@ -173,7 +173,8 @@ const PILL = {
 const TABS = [['reg', 'Por registrar'], ['esp', 'Esperando'], ['rec', 'Recibidas']]
 const segBtn = on => ({ fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.bgSoft, color: on ? '#fff' : C.muted, fontFamily: 'inherit' })
 
-export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenClientFicha }) {
+// modo 'pagina' = el panel completo (compuerta, esperando y recibidas); modo 'resumen' = no dibuja nada y entrega los conteos (onResumen) para la tarjeta de Gastos.
+export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenClientFicha, modo = 'pagina', onResumen }) {
   const [det, setDet] = useState(null)
   const [reqs, setReqs] = useState(null)
   const [tab, setTab] = useState(null)
@@ -304,7 +305,9 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
       return { k: st.k !== 'rec' && confs[String(r.id)]?.estado === 'confirmo' ? 'cnf' : st.k, tab: st.k === 'rec' ? 'rec' : 'esp', id: 'r' + r.id, r, st, client_id: r.client_id, monto: r.monto, asunto: r.asunto, fecha: String(r.enviada_at || '').slice(0, 10), por: r.enviada_por || '' }
     }),
   ]
-  if (!filas.length) return null
+  const nReg = filas.filter(f => f.tab === 'reg').length, nEsp = filas.filter(f => f.tab === 'esp').length, nRec = filas.filter(f => f.tab === 'rec').length
+  useEffect(() => { if (onResumen) onResumen({ reg: nReg, esp: nEsp, rec: nRec }) }, [nReg, nEsp, nRec])   // eslint-disable-line react-hooks/exhaustive-deps
+  if (!filas.length || modo === 'resumen') return null
   const personas = [...new Set(filas.map(f => f.por).filter(Boolean))]
   const cuenta = t => filas.filter(f => f.tab === t).length
   const tabAct = tab || (cuenta('reg') ? 'reg' : cuenta('esp') ? 'esp' : 'rec')
@@ -406,8 +409,8 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     return pasos
   }
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '10px 14px', marginBottom: 12 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: C.accent, marginBottom: 6 }}>Solicitudes de fondos</div>
+    <div>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px' }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
         {TABS.map(([k, t]) => <button key={k} type='button' onClick={() => setTab(k)} style={segBtn(tabAct === k)}>{t} · {cuenta(k)}</button>)}
       </div>
@@ -425,8 +428,8 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
                 <div onClick={onOpenClientFicha && f.client_id ? e => { e.stopPropagation(); onOpenClientFicha(f.client_id) } : undefined} style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onOpenClientFicha && f.client_id ? 'pointer' : 'default' }}>{sinCli ? (f.it.cliente || 'Sin cliente') : nombre(f.client_id)}</div>
                 <div style={{ fontSize: 11, color: C.textSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtFechaDMY(f.fecha)}{f.ruta ? ` · ${f.ruta}` : f.por ? ` · ${f.por}` : ''}{f.asunto ? ` · ${f.asunto}` : ''}</div>
               </div>
-              <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 7px', background: pl.bg, color: pl.c, whiteSpace: 'nowrap' }}>{pl.t}</span>
-              <span style={{ fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(f.monto)}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '2px 8px', background: pl.bg, color: pl.c, whiteSpace: 'nowrap' }}>{pl.t}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(f.monto)}</span>
               {f.k === 'ped' && <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                 {sinCli && selCli(f)}
                 {!sinCli && <button type='button' disabled={busy === f.id} onClick={() => registrarPedido(f)} style={chipBtn('primary')}>Registrar pedido</button>}
@@ -451,6 +454,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

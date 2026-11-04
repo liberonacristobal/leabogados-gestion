@@ -2256,6 +2256,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
   // Pedir fondos: clientes que la oficina financia (saldo<0), agrupados por su abogado a cargo, para pedirle provisión.
+  const [showSolicitudes,setShowSolicitudes] = useState(false)   // página «Solicitudes de fondos» (compuerta + esperando + recibidas)
+  const [solRes,setSolRes] = useState(null)   // conteos de solicitudes {reg,esp,rec} para la tarjeta del hub
   const [pedirOpen,setPedirOpen] = useState(false)   // modal "pedir fondos a los abogados"
   const [pedirSent,setPedirSent] = useState({})      // estado de envío por correo de abogado
   const PEDIR_EMAILS=equipoPorNombre()
@@ -2528,8 +2530,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <button key={k} type='button' onClick={()=>setSaldoFilter(on?'todos':k)} aria-pressed={on} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(k==='cero'?C.border:'transparent')}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minWidth:0,fontFamily:'inherit',display:'flex',gap:10,alignItems:'center'}}>
                   {isDesktop&&<KpiIco n={ic} c={col} soft={k==='cero'}/>}
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:10,fontWeight:600,letterSpacing:.4,textTransform:'uppercase',opacity:.9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
-                    <div style={{fontSize:isDesktop?19:16,fontWeight:700,letterSpacing:-.4,lineHeight:1.2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{n} <span style={{fontSize:isDesktop?13:12,fontWeight:600}}>cliente{n!==1?'s':''}</span></div>
+                    <div style={{fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+                    <div style={{fontSize:isDesktop?20:18,fontWeight:800,letterSpacing:-.4,lineHeight:1.2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{n} <span style={{fontSize:isDesktop?13:12,fontWeight:600}}>cliente{n!==1?'s':''}</span></div>
                   </div>
                 </button>) })
               // Cuentas del equipo (lo propio de cada miembro: personal_de sin cliente). Saldo = fondos − gastos, mismo criterio que dispPersona/fgCliente.
@@ -2594,11 +2596,11 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                     <button key={k} type='button' role='tab' aria-selected={on} onClick={()=>setEstadoG(k)} style={{flex:1,minWidth:0,border:'none',borderRadius:8,padding:isDesktop?'6px 4px':'6px 1px',fontSize:isDesktop?12:11,letterSpacing:isDesktop?0:-.2,fontWeight:600,fontFamily:'inherit',cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',background:on?C.surface:'transparent',color:on?C.accent:C.muted,boxShadow:on?'0 1px 2px rgba(0,0,0,.08)':'none'}}>{l} <span style={{fontWeight:500,opacity:.75}}>{n}</span></button>) })}
                 </div>
                 {!verEquipo&&castBlock}
-                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px'}}>
-                    <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{verEquipo?'Equipo':(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1]}{!verEquipo&&(saldoFilter==='neg'?' · Por cobrar':saldoFilter==='pos'?' · A favor':saldoFilter==='cero'?' · En $0':'')} · {verEquipo?miembros.length:list.length}</span>
+                <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px -4px'}}>
+                    <span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{verEquipo?'Equipo':(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1]}{!verEquipo&&(saldoFilter==='neg'?' · Por cobrar':saldoFilter==='pos'?' · A favor':saldoFilter==='cero'?' · En $0':'')} · {verEquipo?miembros.length:list.length}</span>
                     <select value={cliOrd} onChange={e=>setCliOrd(e.target.value)} aria-label='Ordenar clientes' style={{marginLeft:'auto',minWidth:0,maxWidth:'62%',fontSize:12,color:C.muted,background:C.bgSoft,border:'none',borderRadius:20,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>{ORDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
-                  </div>
+                </div>
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {/* Gastos sin cliente: primera fila, en tono de aviso y borde punteado (no es un cliente). No suma en los tiles; desaparece en cero. */}
                   {verEquipo&&miembros.map(rowMiembro)}
                   {!verEquipo&&!q2&&orphans.length>0&&(()=>{ const tot=orphans.reduce((a,e)=>a+(Number(e.amount)||0),0); const desde=orphans.map(e=>String(e.date||'').slice(0,10)).filter(Boolean).sort()[0]
@@ -4242,6 +4244,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       </div>}
     </FlujoPagina>)
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
+  if(showSolicitudes){ const solPage=<FlujoPagina origen='Gastos' titulo='Solicitudes de fondos' onBack={()=>setShowSolicitudes(false)} maxW={960}><SolicitudesFondos modo='pagina' clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/></FlujoPagina>
+    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{solPage}</div>:solPage }
   if(pedirOpen) return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pedirModal}</div>:pedirModal
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
@@ -4333,18 +4337,19 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
-    if(revisarRes&&D) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
+    if(solRes&&(solRes.reg+solRes.esp+solRes.rec)>0){ const sr=solRes, pend=sr.reg>0; cards.push({t:'Solicitudes de fondos', tM:'Solicitudes', ic:'mail', s:pend?`${sr.reg} por registrar · ${sr.esp} esperando`:`${sr.esp} esperando · ${sr.rec} recibidas`, sM:pend?`${sr.reg} por registrar`:`${sr.esp} esperando`, sCol:pend?C.soonText:undefined, col:pend?C.soonText:C.accent, bg:pend?C.soonBg:C.azulBg, go:()=>setShowSolicitudes(true)}) }
+    if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',padding:D?'14px 2px 12px':'16px 8px 10px'}}>
           <div style={{display:'flex',alignItems:'baseline',gap:7,minWidth:0}}>
             <span style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,whiteSpace:'nowrap'}}>Gastos y Fondos</span>
           </div>
-          <div style={{display:'flex',gap:8}}>{!D&&revisarRes&&<button type='button' onClick={()=>setShowRevisar(true)} style={{...chipBtn(),...(revisarRes.resumen?{color:revisarRes.col}:{})}}>Revisar</button>}<button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button></div>
+          <div style={{display:'flex',gap:8}}><button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button></div>
         </div>
-        <SolicitudesFondos clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/>
-        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length},minmax(0,1fr))`:'1fr 1fr',gap:D?12:8,marginBottom:12}}>
-          {cards.map(c=><HubTile key={c.t} ic={c.ic} t={c.t} s={c.s} sCol={c.sCol} col={c.col} bg={c.bg} onClick={c.go}/>)}
+        <SolicitudesFondos modo='resumen' onResumen={setSolRes} clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/>
+        <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length>3?2:cards.length},minmax(0,1fr))`:'1fr 1fr',gap:D?12:8,marginBottom:12}}>
+          {cards.map((c,i)=><div key={c.t} style={{minWidth:0,gridColumn:(!D&&i===cards.length-1&&cards.length%2)?'1 / -1':undefined}}><HubTile ic={c.ic} t={c.t} tM={c.tM} s={c.s} sM={c.sM} sCol={c.sCol} col={c.col} bg={c.bg} onClick={c.go}/></div>)}
         </div>
         {/* Avisos de caja chica por persona (alertasCajaChica, fuente única): en negativo / baja → "Entregar caja" (Nueva Caja prellenada). Solo si hay alguno.
             SOLO ADMIN: un limited ve únicamente SU caja (regla del proyecto); antes este bloque no revisaba el rol y mostraba la caja de todo el equipo + "Entregar caja". */}
