@@ -21,7 +21,7 @@ import { enviarPush } from "../_shared/push.ts";
 import { cargarEquipo } from "../_shared/equipo.js";
 import { todasRest } from "../_shared/paginar.js";
 import { emailsDe, enviosDetectados } from "../_shared/facturaEnvioReglas.js";
-import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion } from "../_shared/gmailLectura.js";
+import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion, saludoDeCorreo } from "../_shared/gmailLectura.js";
 import { planRendiciones } from "../_shared/rendicionEnvioReglas.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "", SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -68,20 +68,21 @@ async function accessToken(rt: string): Promise<string> {
 // Datos que se cargan una vez por corrida: facturas enviadas sin destinatario registrado y el mapa correo → cliente.
 async function cargarDatos() {
   const h = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
-  const [facturas, ctc, cli, lrn, miembros, rendiciones] = await Promise.all([
+  const [facturas, ctc, cli, lrn, miembros, rendiciones, saludos] = await Promise.all([
     todasRest(SB_URL, h, "billing?select=id,invoice_no,client_id,issued_at,email_sent_at,sent_to&deleted_at=is.null&email_sent_at=not.is.null&sent_to=is.null&issued_at=not.is.null"),
     todasRest(SB_URL, h, "contacts?select=client_id,email&order=client_id.asc,email.asc"),
     todasRest(SB_URL, h, "clients?select=id,email"),
     todasRest(SB_URL, h, "learnings?select=key,value&kind=in.(factura_to,factura_cc,fondos_contacto)"),
     sbJson("miembros?select=email,nombre,rol"),
     todasRest(SB_URL, h, "rendiciones?select=id,client_id,correlativo,tipo,created_at,sent_at,anulada_at,dirigido_email&tipo=eq.cliente&anulada_at=is.null&sent_at=is.null&client_id=not.is.null&correlativo=not.is.null"),
+    todasRest(SB_URL, h, "learnings?select=id,key,value&kind=eq.factura_saludo_gmail"),
   ]);
   const mapa = new Map<string, Set<string>>();
   const agrega = (email: unknown, cid: unknown) => { const e = String(email || "").trim().toLowerCase(); if (!e.includes("@") || !cid) return; const s = mapa.get(e) || new Set<string>(); s.add(String(cid)); mapa.set(e, s); };
   (ctc as Fila[]).forEach((c) => agrega(c.email, c.client_id));
   (cli as Fila[]).forEach((c) => emailsDe(c.email).forEach((e: string) => agrega(e, c.id)));
   (lrn as Fila[]).forEach((l) => { if (/^[0-9a-f-]{36}$/i.test(String(l.key))) emailsDe(l.value).forEach((e: string) => agrega(e, l.key)); else agrega(l.key, l.value); });
-  return { facturas: facturas as Fila[], rendiciones: rendiciones as Fila[], mapa, miembros: miembros as Fila[] };
+  return { facturas: facturas as Fila[], rendiciones: rendiciones as Fila[], saludos: new Map((saludos as Fila[]).map((x) => [String(x.key).toLowerCase(), x])), mapa, miembros: miembros as Fila[] };
 }
 
 type Datos = Awaited<ReturnType<typeof cargarDatos>>;
@@ -103,9 +104,9 @@ async function leerBuzon(c: Conexion, datos: Datos, dryRun = false): Promise<Res
     const cand = datos.facturas.filter((f) => !f.sent_to);
     const candR = datos.rendiciones.filter((r) => !r.sent_at);
     let fallidos = 0, aplicados = 0;
-    if (cand.length || candR.length) {
+    {
       const consultas: string[] = [];
-      if (cand.length) consultas.push("in:sent newer_than:60d (factura OR fact OR dte OR folio) -in:trash");
+      consultas.push("in:sent newer_than:60d (factura OR fact OR dte OR folio) -in:trash");
       if (candR.length) consultas.push("in:sent newer_than:60d (rendición OR rendicion OR rendiciones) -in:trash");
       const ids = new Set<string>();
       for (const consulta of consultas) {
@@ -130,6 +131,19 @@ async function leerBuzon(c: Conexion, datos: Datos, dryRun = false): Promise<Res
       // Si no se pudo leer una parte importante, NO se da por buena la lectura (mejor «atrasada» que un «al día» falso).
       if (lista.length >= 5 && fallidos > lista.length * 0.3) throw new Error(`No se pudieron leer ${fallidos} de ${lista.length} correos`);
       const bitacora = (action: string, id: unknown, detalle: Record<string, unknown>) => sb("activity_log", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_email: c.email, action, table_name: action.startsWith("rendicion") ? "rendiciones" : "billing", record_id: id, detail: JSON.stringify({ ...detalle, fuente: "gmail-lectura" }), estudio_id: "lea" }) }).catch(() => null);
+      // Saludo de cada persona: de los correos de facturas ya enviados («Estimada Carolina,» → la próxima vez ya sale así). Se guarda aparte de lo que
+      // se escribe a mano en la app (factura_saludo_gmail): lo escrito a mano manda. Solo el comienzo del texto; nunca el cuerpo.
+      if (!dryRun) {
+        const porEmail = new Map<string, { saludo: string; fecha: string }>();
+        for (const cm of correos) { const sl = saludoDeCorreo(cm, dom); if (sl && (!porEmail.has(sl.email) || String(cm.fecha) > porEmail.get(sl.email)!.fecha)) porEmail.set(sl.email, { saludo: sl.saludo, fecha: String(cm.fecha) }); }
+        for (const [email, v] of porEmail) {
+          const ex = datos.saludos.get(email);
+          if (ex && ex.value === v.saludo) continue;
+          const r = ex ? await sb(`learnings?id=eq.${ex.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ value: v.saludo, updated_at: new Date().toISOString() }) })
+            : await sb("learnings", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ kind: "factura_saludo_gmail", key: email, value: v.saludo, estudio_id: "lea" }) });
+          if (r.ok) { const fila = ex || (await r.json().catch(() => []))?.[0] || {}; datos.saludos.set(email, { ...fila, key: email, value: v.saludo }); } else fallidos++;
+        }
+      }
       // Facturas
       if (cand.length) {
         const hall = enviosDetectados({ correos, facturas: cand.map((f) => ({ id: f.id, invoice_no: f.invoice_no, client_id: f.client_id, issued_at: f.issued_at })), mapa: datos.mapa, dominio: dom });

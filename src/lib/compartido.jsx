@@ -11,6 +11,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
+import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { desescaparXml } from '../../supabase/functions/_shared/xmlTexto.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -2511,7 +2512,7 @@ export function facturaGlosaPartes(factura, sale){
   let nombre, detalle
   if(nmb){
     const cn = nmb.match(_RX_CUOTA)
-    nombre = nmb.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+)\s*$/i,'').trim()   // ítem sin la cuota inline
+    nombre = nmb.replace(/\s*[—\-·|:]?\s*(cuota\s*\d+\s*\/\s*\d+|pago\s+\d+\s+de\s+\d+|\d+\s*\/\s*\d+)\s*$/i,'').trim()   // ítem sin la cuota inline
     // detalle = SOLO la cuota/pago (del DscItem, del NmbItem o del concepto), normalizada a "Pago N de M"; nunca una descripción larga del servicio (eso va en relacion/proyecto) → evita "al Asesoría legal permanente sociedad…".
     // MANDA la cuota de la app (concepto «Cuota 3/10»): la glosa del DTE se escribe a mano en el SII y a veces trae otra (folio 500: DTE «2 de 10», app 3/10). Sin cuota en el concepto, la del DTE.
     const cuotaRaw = ((factura.concept||'').match(_RX_CUOTA) || dscDet.match(_RX_CUOTA) || cn || [])[0] || ''
@@ -2529,11 +2530,11 @@ export function facturaGlosaPartes(factura, sale){
   let relacion = nombre, esProyecto = false
   if(esGenerico && proyecto){ relacion = proyecto; esProyecto = true }   // el proyecto reemplaza al ítem genérico
   else if(!nombre){ relacion = proyecto; esProyecto = !!proyecto }
-  return { relacion:(relacion||'').trim(), detalle:(detalle||'').trim(), esProyecto }
+  return { relacion:(relacion||'').trim(), detalle:(detalle||'').trim(), esProyecto, periodo:periodoDe(dscDet, factura?.concept) }   // periodo = «Octubre 2026» si la glosa o el concepto lo nombran (facturas mensuales)
 }
 
 // despedida = SIEMPRE va al final del correo (después de los bloques insertados). Con sinCierre no la incluye el cuerpo (el modal la agrega al final).
-export const CORREO_DESPEDIDA = lang => lang==='en'?'We remain at your disposal for any questions.':'Quedamos atentos a sus comentarios.'
+export const CORREO_DESPEDIDA = (lang, singular=false) => lang==='en'?'We remain at your disposal for any questions.':(singular?'Quedamos atentos a tus comentarios.':'Quedamos atentos a sus comentarios.')
 
 export function facturaCorreoBody(factura, sale, lang, sinCierre=false){
   const folio=folioN(factura.invoice_no||'')||factura.invoice_no||''
