@@ -54,6 +54,7 @@ import { RendicionModal, DevolucionEmailModal, RendicionEmailModal, rendicionPdf
 import { ContactoTab, EstadoCuentaTab, AsignarProyectoRS, CotejoVenta, FinancieroTab, FotoCliente, CausaFila, CausasVenta, PropiedadesVenta, DocumentosDrive } from './lib/fichaCliente.jsx'
 import { PorSocioVista } from './lib/porSocio.jsx'
 const ClienteDriveImporter = lazyVista(() => import('./vistas/ClienteDriveImporter.jsx'), 'ClienteDriveImporter')
+const PdfSinOficialView = lazyVista(() => import('./vistas/PdfSinOficialView.jsx'), 'PdfSinOficialView')
 const MiGmailView = lazyVista(() => import('./vistas/MiGmailView.jsx'), 'MiGmailView')
 const SubarriendoView = lazyVista(() => import('./vistas/SubarriendoView.jsx'), 'SubarriendoView')
 const SolicitarFondosModal = lazyVista(() => import('./vistas/SolicitarFondosModal.jsx'), 'SolicitarFondosModal')
@@ -403,6 +404,10 @@ class ViewErrorBoundary extends Component {
 // SideNav (escritorio): barra lateral fija que reusa TABS_ADMIN/LIMITED + moduloOn. Oculta bajo 1024px por CSS (.sidenav).
 // ── NOVEDADES de la app: al entrar, lo nuevo que le sirve a cada persona (tabla `novedades`, por estudio).
 // El equipo ve las de su rol; los socios ven todas (las del equipo rotuladas «también al equipo»). «Ya vista» = learnings novedades_vista (key = email, value = ISO).
+const PDF_FALLOS_DEMO = [
+  {id:'pf1', folio:'1340', n:4, at:new Date(Date.now()-5*3600000).toISOString(), ultimo:'el folio no aparece en Documentos Emitidos', client_id:'c5'},
+  {id:'pf2', folio:'1338', n:3, at:new Date(Date.now()-29*3600000).toISOString(), ultimo:'el SII activó el captcha', client_id:'c2'},
+]
 const NOV_DEMO = [
   {id:'nv1', fecha:'2026-10-20', titulo:'Borradores: ahora se editan y se eliminan', area:'Rendir a cliente › Borradores', roles:['admin','limited'], destino:{tab:'expenses',exp:'rendirCli'}, created_at:'2026-10-20T20:00:00Z'},
   {id:'nv2', fecha:'2026-10-20', titulo:'Cada factura tiene su tipo', area:'Facturación › Por clasificar', roles:['admin'], destino:{tab:'billing'}, created_at:'2026-10-20T19:00:00Z'},
@@ -435,6 +440,21 @@ function NovedadesAviso({items, isDesktop, onClose, onVerTodas}){
       <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
         <button onClick={onVerTodas} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Ver novedades</button>
         <button onClick={onClose} style={{fontSize:12,fontWeight:700,color:C.surface,background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Continuar</button>
+      </div>
+    </div>
+  </div>, document.body)
+}
+// Aviso al entrar, junto al de novedades: facturas cuyo PDF oficial el proceso automático no logró guardar tras varios intentos.
+// Se limpia solo cuando se guardan. «Ver» abre la lista con el motivo y «Reintentar ahora»; «Cerrar» lo oculta en esta sesión.
+function AvisoPdfSii({filas, isDesktop, apilado, onClose, onVer}){
+  const n=filas.length, folios=filas.slice(0,3).map(f=>f.folio).join(', ')+(n>3?'…':'')
+  return createPortal(<div style={{position:'fixed',top:`calc(env(safe-area-inset-top,0px) + ${apilado?68:10}px)`,left:isDesktop?212:0,right:0,zIndex:299,padding:'0 16px',display:'flex',justifyContent:'center',pointerEvents:'none'}}>
+    <div role='status' aria-label='Facturas sin PDF oficial' style={{pointerEvents:'auto',width:'100%',maxWidth:isDesktop?560:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:'0 8px 28px rgba(0,30,40,.16)',padding:'10px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+      <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,color:C.coralText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='alert'/></span>
+      <div style={{flex:'1 1 160px',minWidth:0,fontSize:13,color:C.text,lineHeight:1.25}}><b style={{color:C.accent}}>{n===1?'1 factura sin PDF oficial':`${n} facturas sin PDF oficial`}</b> · N° {folios}</div>
+      <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
+        <button onClick={onVer} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Ver</button>
+        <button onClick={onClose} style={{fontSize:12,fontWeight:700,color:C.surface,background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Cerrar</button>
       </div>
     </div>
   </div>, document.body)
@@ -5825,6 +5845,17 @@ export default function App() {
   const [userRole,setUserRole]=useState(null)   // vista actual: 'admin' | 'limited' | null (admin puede previsualizar 'limited')
   const [actualRole,setActualRole]=useState(null) // rol REAL e inmutable de la DB — fuente de verdad para permisos
   // Novedades de la app: se cargan al entrar; el aviso sale solo si hay alguna no vista por esta persona.
+  // Facturas sin PDF oficial tras varios intentos (solo socios): se leen de los intentos del proceso automático y salen solas al guardarse.
+  const [pdfFallos,setPdfFallos]=useState([]), [pdfAvisoCerrado,setPdfAvisoCerrado]=useState(false)
+  const cargarPdfFallos=useCallback(async()=>{
+    if(DEMO){ setPdfFallos(PDF_FALLOS_DEMO); return }
+    const {data}=await supabase.from('learnings').select('key,value,hits,meta').eq('kind','pdf_oficial_intentos').gte('hits',3)
+    const ids=(data||[]).map(r=>r.key); if(!ids.length){ setPdfFallos([]); return }
+    const {data:fs}=await supabase.from('billing').select('id,client_id,invoice_no').in('id',ids).is('deleted_at',null)
+    const por=new Map((fs||[]).map(f=>[f.id,f]))
+    setPdfFallos((data||[]).filter(r=>por.has(r.key)).map(r=>({id:r.key,folio:String(r.value||por.get(r.key).invoice_no||''),n:Number(r.hits)||0,at:r.meta?.at||'',ultimo:r.meta?.ultimo||'',client_id:por.get(r.key).client_id})).sort((a,b)=>b.n-a.n||a.folio.localeCompare(b.folio,undefined,{numeric:true})))
+  },[])   // eslint-disable-line
+  useEffect(()=>{ if(user?.email&&userRole==='admin') cargarPdfFallos().catch(()=>{}) },[user?.email,userRole])   // eslint-disable-line
   const [novRows,setNovRows]=useState([]), [novVista,setNovVista]=useState(undefined), [novAviso,setNovAviso]=useState(false)
   useEffect(()=>{ if(!user?.email||!userRole) return; let alive=true
     if(DEMO){ setNovRows(NOV_DEMO); setNovVista(null); return }
@@ -6341,7 +6372,7 @@ export default function App() {
   // Guard de navegación: en vista limited solo se permiten sus tabs; cualquier otro (dashboard/ventas/
   // facturación) redirige a Tareas. Cubre manipulación de estado/URL y la previsualización de admin.
   useEffect(()=>{
-    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='migmail'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'||tab==='causas'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
+    const esPagina=tab==='editCliente'||tab==='novedades'||tab==='migmail'||tab==='pdfSinOficial'||tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura'||(userRole==='limited'&&(tab==='misComisiones'||tab==='porCobrarMios'||tab==='proponerVenta'||tab==='contactos'||tab==='causas'))   // páginas de edición (drill fuera de la barra) + páginas del responsable limitado
     if((tab==='tarea'||tab==='gasto'||tab==='flujo'||tab==='factura')&&!pagina){ setTab(userRole==='admin'?'dashboard':'tasks'); return }   // página sin contenido (estado huérfano) → a casa
     if(userRole==='limited' && !esPagina && !TABS_LIMITED.some(t=>t.id===tab)) setTab('tasks')
     // Admin: si cae en un tab que no le corresponde (ej. cajachica, que es del equipo limited) → al Inicio, no a una pantalla en blanco.
@@ -8728,6 +8759,8 @@ export default function App() {
             {tab==='migmail'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Mi Gmail' onBack={goBack} maxW={760}><MiGmailView est={gmailEst} onConectar={conectarGmail} onLeer={leerGmail} onDesconectar={desconectarGmail} esAdmin={userRole==='admin'} mensaje={gmailMsg} isDesktop={isDesktop}/></FlujoPagina>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
             {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
+            {userRole==='admin'&&pdfFallos.length>0&&!pdfAvisoCerrado&&tab!=='pdfSinOficial'&&<AvisoPdfSii filas={pdfFallos} isDesktop={isDesktop} apilado={novAviso&&novNuevas.length>0} onClose={()=>setPdfAvisoCerrado(true)} onVer={()=>{ setPdfAvisoCerrado(true); navTo({tab:'pdfSinOficial'}) }}/>}
+            {tab==='pdfSinOficial'&&userRole==='admin'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Facturas sin PDF oficial' onBack={goBack} maxW={820}><PdfSinOficialView filas={pdfFallos} clients={clients} isDesktop={isDesktop} onResuelta={id=>setPdfFallos(p=>p.filter(f=>f.id!==id))} onAbrirCliente={handleOpenClientFicha}/></FlujoPagina>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} onIrSinVenta={()=>navTo({tab:'billing',billingIntent:'porcompletar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='causas'&&<CausasEstudio isDesktop={isDesktop} clients={clients} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='contactos'&&<ContactosClientes key={contactosKey} isDesktop={isDesktop} clients={clients} sales={sales} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha} onBuscarGmail={()=>setModal({type:'gmailContactos'})}/>}
