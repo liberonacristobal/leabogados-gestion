@@ -88,7 +88,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const FF=[['emit','','Facturas emitidas','Emitidas'],['cext','+','Comisión de externos','Com. externos'],['reemb','−','Reembolsos de gastos','Reembolsos'],['nc','−','Notas de crédito','NC']]
   const FC=[['fac','','Cobrado de facturas','De facturas'],['ant','+','Anticipos','Anticipos'],['reemb','−','Reembolsos de gastos','Reembolsos'],[null,'=','Cobrado propio','Cobrado propio'],['com','−','Comisiones pagadas','Com. pagadas'],['perc','+','Comisiones percibidas','Percibidas']]
   const colsT=ps?(isDesk?[null,...COLS]:COLS):[null]
-  const th={fontSize:isDesk?10:9,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:isDesk?'8px 12px':'8px 5px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}
+  const th={fontSize:isDesk?10:10,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:isDesk?'8px 12px':'8px 5px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}
   const td={padding:isDesk?'8px 12px':'8px 5px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?(ps?12:12.5):11.5,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
   const sgn={display:'inline-block',width:isDesk?13:10,textAlign:'center',fontWeight:700,color:C.muted}
   const wCols=n=>n===1?['60%','40%']:n===3?['34%','22%','22%','22%']:['24%','19%','19%','19%','19%']

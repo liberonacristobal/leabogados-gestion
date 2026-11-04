@@ -1658,7 +1658,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     {bucket==='rev'&&(
                       <select value='' onChange={e=>e.target.value&&asignar(r.id,e.target.value)} style={{width:'100%',padding:'7px 9px',borderRadius:8,border:`1px solid ${C.overdue}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}>
                         <option value=''>Elige el cliente… ({r.candidates.length} candidatos)</option>
-                        {r.candidates.map(c=><option key={c.id} value={c.id}>{c.name} ({c.score}%)</option>)}
+                        {r.candidates.map(c=><option key={c.id} value={c.id}>{c.name} ({c.score} %)</option>)}
                       </select>
                     )}
                     {bucket==='man'&&(

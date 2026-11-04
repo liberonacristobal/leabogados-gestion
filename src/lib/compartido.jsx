@@ -792,7 +792,7 @@ export function PageHeader({origen,onBack,titulo,ctx,right,style}){
         <BackBtn origen={origen} onBack={onBack}/>
         <span style={{color:C.textSoft,fontWeight:400}}>|</span>
         <span style={{fontSize:16,fontWeight:800,color:C.accent,flexShrink:0}}>{titulo}</span>
-        {ctx&&<><span style={{color:C.textSoft,fontWeight:400}}>|</span><span style={{fontSize:13,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctx}</span></>}
+        {ctx&&<><span style={{color:C.textSoft,fontWeight:400}}>|</span><span style={{fontSize:13,color:C.muted,minWidth:0,lineHeight:1.25,overflowWrap:'anywhere'}}>{ctx}</span></>}
         {right&&<span style={{marginLeft:'auto',flexShrink:0}}>{right}</span>}
       </div>
     </div>
@@ -1783,7 +1783,7 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
       <div style={{fontSize:isDesktop?30:26,fontWeight:700,color:C.accent,...num,letterSpacing:-.5}}>{fmt(d.tot.tot)}</div>
       <div style={{fontSize:13,color:C.muted}}>{d.tot.n} viaje{d.tot.n!==1?'s':''} · promedio {prom(d.tot)} por viaje</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:1,background:C.border,borderRadius:8,overflow:'hidden',marginTop:10}}>
-        {[['A la oficina',d.tot.ofi],['A clientes',d.tot.cli],['Personales',d.tot.per]].map(([l,v])=><div key={l} style={{background:C.bgSoft,padding:'8px 11px',minWidth:0}}><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:isDesktop?16:13.5,fontWeight:700,color:C.text,...num}}>{fmt(v)}</div><div style={{fontSize:11,color:C.textSoft}}>{d.tot.tot?Math.round(v*100/d.tot.tot):0}%</div></div>)}
+        {[['A la oficina',d.tot.ofi],['A clientes',d.tot.cli],['Personales',d.tot.per]].map(([l,v])=><div key={l} style={{background:C.bgSoft,padding:'8px 11px',minWidth:0}}><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:isDesktop?16:14,fontWeight:700,color:C.text,...num}}>{fmt(v)}</div><div style={{fontSize:11,color:C.textSoft}}>{d.tot.tot?Math.round(v*100/d.tot.tot):0}%</div></div>)}
       </div>
     </div>
     {(d.sinMotivo.length>0||d.duplicados.length>0)&&<div style={{display:'grid',gridTemplateColumns:isDesktop&&d.sinMotivo.length&&d.duplicados.length?'minmax(0,1fr) minmax(0,1fr)':'minmax(0,1fr)',gap:10,marginTop:10,alignItems:'start'}}>

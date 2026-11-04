@@ -339,14 +339,14 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
           {bigDate(b.issued_at||b.due,C.accent)}
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-              <span style={{fontSize:compact?12.5:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span>
+              <span style={{fontSize:compact?13:13,fontWeight:600,color:C.text}}>Factura N° {folioN(b.invoice_no)||b.folio||'—'}</span>
               {sent&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>Enviada {String(b.email_sent_at||'').slice(0,10).split('-').reverse().slice(0,2).join('-')}</span>}
             </div>
-            <div onClick={e=>abrirCli(e,b)} style={{fontSize:compact?10.5:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{compact?'':`${c?.name||'Sin cliente'} · `}{rs?rsDisplay(rs):(c?.name||'')}{(rs&&rs.rut)||b.receptor_rut?` · ${(rs&&rs.rut)||b.receptor_rut}`:''}</div>
+            <div onClick={e=>abrirCli(e,b)} style={{fontSize:compact?11:11,color:onOpenClientFicha&&b.client_id?C.accent:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{compact?'':`${c?.name||'Sin cliente'} · `}{rs?rsDisplay(rs):(c?.name||'')}{(rs&&rs.rut)||b.receptor_rut?` · ${(rs&&rs.rut)||b.receptor_rut}`:''}</div>
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-            <div style={{fontSize:compact?12.5:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
-            <div style={{display:'flex',gap:6}}>{b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{background:C.surface,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding: compact?'3px 9px':'5px 10px',fontSize: compact?10.5:11.5,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}{onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?10.5:11.5,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}</div>
+            <div style={{fontSize:compact?13:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
+            <div style={{display:'flex',gap:6}}>{b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{background:C.surface,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding: compact?'3px 9px':'5px 10px',fontSize: compact?11:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}{onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?11:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}</div>
           </div>
           <span style={{fontSize:12,color:C.muted,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
         </div>
@@ -2914,7 +2914,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
         <div onClick={()=>setAbiertosResp(p=>{ const n=new Set(p); n.has(g.k)?n.delete(g.k):n.add(g.k); return n })} style={{display:'flex',alignItems:'center',gap:10,padding:D?'11px 14px':'10px 12px',cursor:'pointer'}}>
           <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}><span onClick={e=>{ if(g.cid&&onOpenClientFicha){ e.stopPropagation(); onOpenClientFicha(g.cid) } }} style={{cursor:g.cid&&onOpenClientFicha?'pointer':'default'}}>{g.nom}</span> <span style={{fontSize:11,fontWeight:600,color:C.textSoft,whiteSpace:'nowrap'}}>· {g.bills.length} factura{g.bills.length!==1?'s':''}</span></div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Más antigua {fmtFechaDMY(g.bills.map(b=>b.issued_at).filter(Boolean).sort()[0]||'')}</div></div>
-          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?15:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</div><span style={{fontSize:10,borderRadius:20,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:C.ambarBg,color:C.soonText}}>Sin PDF</span></div>
+          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?16:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(g.total)}</div><span style={{fontSize:10,borderRadius:20,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:C.ambarBg,color:C.soonText}}>Sin PDF</span></div>
         </div>
         {open&&<div>{g.bills.map(filaB)}</div>}
       </div> }
@@ -3496,7 +3496,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                       <span style={{color:t.col,opacity:.55,fontSize:13}}><Gl n='chevron'/></span>
                     </div>
                     <div>
-                      <div style={{fontSize:isDesktop?10.5:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.k}</div>
+                      <div style={{fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.k}</div>
                       <div style={{fontSize:isDesktop?26:19,fontWeight:800,letterSpacing:-.6,color:t.col,marginTop:3,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtShort(t.v)}</div>
                     </div>
                   </div>)}
@@ -3688,7 +3688,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 </div>) })()}
                 {!porConciliar&&pagosFor!==b.id&&['Pendiente','Vencido'].includes(er)&&(()=>{ const cc=calcesCercanos(b); if(!cc.length) return null; const top=cc[0]; const saldo=saldoBill(b); const pct=saldo>0?(top.dif/saldo*100):0; return (<div style={{width:'100%',marginTop:6,display:'flex',alignItems:'center',gap:8,background:C.tealBg,border:`1px solid ${C.tealText}`,borderRadius:10,padding:'7px 10px'}}>
                   <SIcon n='check' s={15} c={C.tealText}/>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.tealText,letterSpacing:.3}}>DIFERENCIA DE UF · MISMO RUT</div><div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(top.m.fecha)} · <b>{fmt(top.m.monto)}</b> · pagó lo programado · dif {fmt(top.dif)} (~{pct.toFixed(1)}%) por UF</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.tealText,letterSpacing:.3}}>DIFERENCIA DE UF · MISMO RUT</div><div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(top.m.fecha)} · <b>{fmt(top.m.monto)}</b> · pagó lo programado · dif {fmt(top.dif)} (~{pct.toFixed(1)} %) por UF</div></div>
                   <button disabled={pagoBusy} onClick={()=>setPagosFor(b.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',flexShrink:0}}>Revisar</button>
                 </div>) })()}
                 {!porConciliar&&pagosFor!==b.id&&['Pendiente','Vencido'].includes(er)&&(()=>{ const pr=pagosRutSugeridos(b).filter(x=>!esCalceCercano(x.m,b)); if(!pr.length) return null; const top=pr[0]; const mult=pr.length>1; return (<div style={{width:'100%',marginTop:6,display:'flex',alignItems:'center',gap:8,background:C.tealBg,border:`1px solid ${C.tealText}44`,borderRadius:10,padding:'7px 10px'}}>
@@ -4189,7 +4189,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 </div>) })()}
                 {!porConciliar&&pagosFor!==b.id&&['Pendiente','Vencido'].includes(er)&&(()=>{ const cc=calcesCercanos(b); if(!cc.length) return null; const top=cc[0]; const saldo=saldoBill(b); const pct=saldo>0?(top.dif/saldo*100):0; return (<div style={{width:'100%',marginTop:6,display:'flex',alignItems:'center',gap:8,background:C.tealBg,border:`1px solid ${C.tealText}`,borderRadius:10,padding:'7px 10px'}}>
                   <SIcon n='check' s={15} c={C.tealText}/>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.tealText,letterSpacing:.3}}>DIFERENCIA DE UF · MISMO RUT</div><div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(top.m.fecha)} · <b>{fmt(top.m.monto)}</b> · pagó lo programado · dif {fmt(top.dif)} (~{pct.toFixed(1)}%) por UF</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.tealText,letterSpacing:.3}}>DIFERENCIA DE UF · MISMO RUT</div><div style={{fontSize:11,color:C.text,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDate(top.m.fecha)} · <b>{fmt(top.m.monto)}</b> · pagó lo programado · dif {fmt(top.dif)} (~{pct.toFixed(1)} %) por UF</div></div>
                   <button disabled={pagoBusy} onClick={()=>setPagosFor(b.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.tealText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',flexShrink:0}}>Revisar</button>
                 </div>) })()}
                 {!porConciliar&&pagosFor!==b.id&&['Pendiente','Vencido'].includes(er)&&(()=>{ const pr=pagosRutSugeridos(b).filter(x=>!esCalceCercano(x.m,b)); if(!pr.length) return null; const top=pr[0]; const mult=pr.length>1; return (<div style={{width:'100%',marginTop:6,display:'flex',alignItems:'center',gap:8,background:C.tealBg,border:`1px solid ${C.tealText}44`,borderRadius:10,padding:'7px 10px'}}>

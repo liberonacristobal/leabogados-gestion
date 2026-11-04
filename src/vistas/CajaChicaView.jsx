@@ -421,7 +421,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
     const porCli = {}; gastosSel.forEach(e=>{ const cn=clients.find(cl=>cl.id===e.client_id)?.name||'Sin cliente'; (porCli[cn]=porCli[cn]||[]).push(e) })
     const grupos = Object.entries(porCli).sort((a,b)=>a[0].localeCompare(b[0],'es'))
     const inp = {width:'100%',boxSizing:'border-box',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',fontSize:13,background:C.bgSoft,color:C.text,outline:'none'}
-    const ln = (l,v,col,b) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:b?'8px 0 2px':'4px 0',borderTop:b?`1px solid ${C.track}`:'none',marginTop:b?4:0,fontSize:b?13:12.5,fontWeight:b?700:500}}><span style={{color:b?C.text:C.muted}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
+    const ln = (l,v,col,b) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:b?'8px 0 2px':'4px 0',borderTop:b?`1px solid ${C.track}`:'none',marginTop:b?4:0,fontSize:b?13:13,fontWeight:b?700:500}}><span style={{color:b?C.text:C.muted}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
     const lista = (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <div style={{...SEC_LBL,padding:'10px 14px 6px'}}>Gastos a liquidar · período {periodoDeGastos(gastosSel)}</div>

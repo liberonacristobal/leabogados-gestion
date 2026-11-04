@@ -414,7 +414,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
               <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:tope>0?8:0}}>
                 <span style={{width:28,height:28,borderRadius:8,background:stBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stCol} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/></svg></span>
                 <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI}}>{cn(s.client_id)}</div><div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div></div>
-                {tope>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:stBg,color:stCol,flexShrink:0,whiteSpace:'nowrap'}}>{Math.round(pct)}%</span>}
+                {tope>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:stBg,color:stCol,flexShrink:0,whiteSpace:'nowrap'}}>{Math.round(pct)} %</span>}
               </div>
               {tope>0
                 ? <>

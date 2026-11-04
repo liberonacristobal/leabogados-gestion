@@ -24,9 +24,9 @@ const KpiAnio = ({ic,tono='nt',label,value,sub,onClick,D}) => { const [bg,fg,bd]
   <div onClick={onClick} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:D?'14px':'11px 10px',display:'flex',alignItems:'center',gap:12,cursor:onClick?'pointer':'default',minWidth:0}}>
     {D&&<span style={{width:34,height:34,borderRadius:8,background:tono==='nt'?C.bgSoft:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={17} c={fg}/></span>}
     <div style={{minWidth:0,flex:1}}>
-      <div style={{fontSize:D?10.5:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:fg,...ELIPSIS}}>{label}</div>
+      <div style={{fontSize:D?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:fg,...DOS_LINEAS}}>{label}</div>
       <div style={{fontSize:D?26:19,fontWeight:800,letterSpacing:-.6,color:fg,marginTop:2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
-      {sub&&<div style={{fontSize:11,color:fg,opacity:.85,...ELIPSIS}}>{sub}</div>}
+      {sub&&<div style={{fontSize:11,color:fg,opacity:.85,...DOS_LINEAS}}>{sub}</div>}
     </div>
   </div>) }
 const Fila = ({tono='az',label,sub,value,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
@@ -38,9 +38,9 @@ const Fila = ({tono='az',label,sub,value,vcol,onClick}) => { const [bg,fg]=TONO[
 const KpiMes = ({ic,label,value,sub,vcol,onClick}) => (
   <div onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:12,display:'flex',gap:10,alignItems:'center',cursor:onClick?'pointer':'default',minWidth:0}}>
     <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={C.muted}/></span>
-    <div style={{minWidth:0,flex:1}}><div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,...ELIPSIS}}>{label}</div>
+    <div style={{minWidth:0,flex:1}}><div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,...DOS_LINEAS}}>{label}</div>
       <div style={{fontSize:20,fontWeight:800,letterSpacing:-.4,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
-      {sub&&<div style={{fontSize:11,color:C.muted,...ELIPSIS}}>{sub}</div>}</div>
+      {sub&&<div style={{fontSize:11,color:C.muted,...DOS_LINEAS}}>{sub}</div>}</div>
   </div>)
 // Título de sección fuera de la tarjeta (como en el resto de la app): etiqueta de acento a la izquierda; extra y enlace a la derecha.
 const Sec = ({t,link,onLink,extra}) => (

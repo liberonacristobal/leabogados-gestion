@@ -89,7 +89,7 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terc
             <span style={{fontSize:14,fontWeight:800,color:disp>=0?C.greenText:C.overdueText,alignSelf:'center',width:14,textAlign:'center',flexShrink:0}}>=</span>
             <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:disp>=0?C.greenText:C.overdueText,whiteSpace:'nowrap'}}>{disp>=0?(isDesktop?'Disponible para retirar':'Disponible'):'Bajo la reserva'}
               {disp>0&&nSocios>1&&<span style={{display:'block',fontSize:11,fontWeight:600,textTransform:'none',letterSpacing:0,marginTop:2,opacity:.85}}>{fmtMill(disp/nSocios)} por socio</span>}</span>
-            <span style={{marginLeft:'auto',fontSize:isDesktop?26:22,fontWeight:800,letterSpacing:-.6,color:disp>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fMLR(dispV)}</span>
+            <span style={{marginLeft:'auto',fontSize:isDesktop?26:20,fontWeight:800,letterSpacing:-.6,color:disp>=0?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fMLR(dispV)}</span>
           </div></>
           : <div style={{fontSize:12,color:C.muted,padding:'8px 0 6px'}}>Falta una cartola con saldo de la cuenta de honorarios.</div>}
       </div>}

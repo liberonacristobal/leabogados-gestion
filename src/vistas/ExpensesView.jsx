@@ -348,7 +348,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
   const foto=<div style={{...card,display:'grid',gridTemplateColumns:D?'minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr)':'1fr 1fr',overflow:'hidden'}}>
       <div style={{padding:D?'13px 16px':'11px 13px',gridColumn:D?undefined:'1 / -1',borderRight:D?`1px solid ${C.border}`:'none',borderBottom:D?'none':`1px solid ${C.border}`}}>
         {D&&<div style={{...SEC_LBL}}>Documentos de la notaría</div>}
-        <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:D?2:0}}><span style={{fontSize:D?27:23,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{vivos.length}</span><span style={{fontSize:12,color:C.muted}}>{D?'':'documentos '}{meses.length?`desde ${fmtFechaDMY(meses[meses.length-1]+'-01')}`:''}</span></div>
+        <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:D?2:0}}><span style={{fontSize:D?26:20,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{vivos.length}</span><span style={{fontSize:12,color:C.muted}}>{D?'':'documentos '}{meses.length?`desde ${fmtFechaDMY(meses[meses.length-1]+'-01')}`:''}</span></div>
       </div>
       {[['guard','En su carpeta',guard.length,C.text,D?'se abren desde la app':null,null],['por','Por asignar',porAsig.length,porAsig.length?C.soonText:C.text,D?`${nConSug} con sugerencia`:null,porAsig.length?()=>setSub('por'):null]].map(([k,l,v,col,s,fn],i)=><div key={k} onClick={fn||undefined} style={{padding:D?'13px 16px':'10px 13px',borderLeft:i&&D?`1px solid ${C.track}`:i?`1px solid ${C.track}`:'none',cursor:fn?'pointer':'default'}}>
         <div style={{...SEC_LBL,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:D?20:17,fontWeight:700,color:col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{v}</div>{s&&<div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap'}}>{s}</div>}
@@ -2088,8 +2088,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
         {pasos.map((p,i)=>(<Fragment key={p.k}>{i>0&&<div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:14,padding:'0 2px'}}>→</div>}
           <div onClick={()=>setG(p.k==='rendir'?(enRendir?g:'pedir'):p.k)} style={{flex:1,minWidth:0,textAlign:'center',cursor:'pointer',borderRadius:10,padding:D?'6px 4px':'5px 2px',background:on(p.k)?C.azulBg:'transparent'}}>
             {D&&<SIcon n={p.ic} s={19} c={p.col}/>}
-            <div style={{fontSize:D?9.5:9,fontWeight:700,letterSpacing:.3,textTransform:'uppercase',color:p.col,marginTop:D?4:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?p.t:p.tm}</div>
-            <div style={{fontSize:D?16:15,fontWeight:800,color:p.col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{p.v}</div>
+            <div style={{fontSize:D?10:10,fontWeight:700,letterSpacing:.3,textTransform:'uppercase',color:p.col,marginTop:D?4:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?p.t:p.tm}</div>
+            <div style={{fontSize:D?16:16,fontWeight:800,color:p.col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{p.v}</div>
             {D&&<div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.sub}</div>}
           </div></Fragment>))}
       </div>
@@ -3559,7 +3559,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         // ── Lista. Celdas comunes de la fila (escritorio: grilla NOTA_GC; móvil: dos líneas con el estado bajo la cifra).
         const colSaldo=(saldo,queda)=><div style={{textAlign:'right',minWidth:0}}><div style={{...SEC_LBL}}>Saldo</div><div style={{fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(saldo)}</div>{queda!=null&&<div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>queda {fmt(queda)}</div>}</div>
         const colD=(k,v,col)=><div style={{textAlign:'right',minWidth:0}}><div style={{...SEC_LBL}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:col||C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div></div>
-        const montoEst=(v,est)=><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?15:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div>{est&&<span style={{fontSize:10,borderRadius:20,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:est.bg,color:est.c}}>{est.l}</span>}</div>
+        const montoEst=(v,est)=><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:D?16:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div>{est&&<span style={{fontSize:10,borderRadius:20,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap',display:'inline-block',marginTop:3,background:est.bg,color:est.c}}>{est.l}</span>}</div>
         const nombreOT=(nodo,n)=><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,overflowWrap:'anywhere'}}>{nodo} <span style={{fontSize:11,fontWeight:400,color:C.textSoft,whiteSpace:'nowrap'}}>· {n} OT</span></div>   // nombre completo del cliente, nunca cortado (si no cabe, baja de línea)
         const filaCab=(open,onClick,nombre,sub,cols,derecha)=> D
           ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}}>
@@ -3803,7 +3803,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <div style={{display:'flex',alignItems:'center',gap:8,background:alta?C.greenBg:C.bgSoft,borderRadius:8,padding:'6px 8px 6px 10px'}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:600,color:alta?C.greenText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
-                    <div style={{fontSize:10,color:alta?'#3E7A66':C.muted,marginTop:1}}>{s.via} · {s.conf}%</div>
+                    <div style={{fontSize:10,color:alta?'#3E7A66':C.muted,marginTop:1}}>{s.via} · {s.conf} %</div>
                   </div>
                   <button onClick={()=>aplicarOrf(e,s.client_id)} title='Asignar' style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:30,height:24,background:alta?C.greenText:C.accent,border:'none',borderRadius:8,cursor:'pointer',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></button>
                   <button onClick={()=>setOrfPickFor(e.id)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:'0 4px',flexShrink:0}}>otro</button>

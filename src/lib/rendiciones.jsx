@@ -459,7 +459,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         </>)
       })()
   // Cifras de la rendición en UNA tarjeta, filas con el monto a la derecha (antes 3 tarjetas + un resumen aparte): lo seleccionado, fondos, ya rendido y el saldo que resulta.
-  const lnR=(l,v,col,big)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'3px 0'}}><span style={{fontSize:12,color:big?col:C.muted,fontWeight:big?700:400}}>{l}</span><span style={{fontSize:big?15:12.5,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
+  const lnR=(l,v,col,big)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'3px 0'}}><span style={{fontSize:12,color:big?col:C.muted,fontWeight:big?700:400}}>{l}</span><span style={{fontSize:big?16:13,fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
   const segBtn = (k,t,sub,on,dis) => <button key={k} type='button' disabled={dis} onClick={()=>elegirModo(k)} style={{flex:1,minWidth:0,border:'none',borderLeft:k!=='junto'?`1px solid ${C.border}`:'none',padding:'7px 4px',background:on?C.accent:C.surface,color:on?'#fff':(dis?C.done:C.muted),cursor:dis?'not-allowed':'pointer',fontFamily:'inherit',lineHeight:1.25}}><div style={{fontSize:12,fontWeight:600}}>{t}</div><div style={{fontSize:10,opacity:.85}}>{sub}</div></button>
   const bModo = multiT && (
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px',marginBottom:12}}>
@@ -496,7 +496,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const totFondosRS = fondosRS.reduce((a,x)=>a+(Number(x.f.amount)||0),0)
   const cardModo = (k,ic,bg,col,t,sub,der,on,onClick) => <div key={k} onClick={onClick} style={{display:'flex',alignItems:'center',gap:isDesktop?10:8,background:C.surface,border:`1px solid ${on?C.accent:C.border}`,boxShadow:on?`inset 0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:isDesktop?'11px 13px':'9px 10px',cursor:'pointer',minWidth:0}}>
       <span style={{width:isDesktop?34:28,height:isDesktop?34:28,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={isDesktop?17:15} c={col}/></span>
-      <span style={{minWidth:0,flex:1}}><span style={{display:'block',fontSize:isDesktop?14:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{isDesktop?sub:der}</span></span>
+      <span style={{minWidth:0,flex:1}}><span style={{display:'block',fontSize:isDesktop?14:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{t}</span><span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{isDesktop?sub:der}</span></span>
       {isDesktop&&<span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{der}</span>}
     </div>
   const bElegir = verModoFondo && (
