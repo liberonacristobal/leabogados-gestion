@@ -97,3 +97,11 @@ test('trato leído de un correo enviado: una dirección de afuera; «estén» y 
   assert.equal(tratoDeCorreo(c('a@x.cl, b@y.cl'), 'leabogados.cl'), null)
   assert.equal(tratoDeCorreo({ para: 'a@x.cl', fragmento: 'Estimados, Espero que estén muy bien.' }, 'leabogados.cl'), null)
 })
+
+import { notaPagadas } from '../supabase/functions/_shared/correoFacturaTexto.js'
+test('nota de facturas ya pagadas: una, varias, ninguna e inglés (caso real 439 en el envío 448+439)', () => {
+  assert.equal(notaPagadas(['439']), 'La factura N° 439 ya se encuentra pagada.')
+  assert.equal(notaPagadas(['439', '440']), 'Las facturas N° 439 y 440 ya se encuentran pagadas.')
+  assert.equal(notaPagadas([]), '')
+  assert.equal(notaPagadas(['439'], 'en'), 'Invoice No. 439 has already been paid.')
+})

@@ -9,7 +9,7 @@ import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { cuotaSaltada, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
-import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara, tratoDeTexto } from '../../supabase/functions/_shared/correoFacturaTexto.js'
+import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -4553,6 +4553,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [trato,setTrato]=useState(null)   // 'usted' | 'tu' aprendido para la persona del «Para» (null = tú)
+  const foliosPag=listF.filter(f=>f.status==='Pagado').map(f=>folioN(f.invoice_no||'')||f.invoice_no||'')   // facturas de este envío que ya están pagadas: se ofrece avisarlo, nunca se agrega solo
   const singular = esSaludoSingular(saludo)   // «Estimado Agustín» / «Estimada Carolina»: el cuerpo habla de tú; con «Estimados» sigue de ustedes
   // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
   const genBody=lg=> multi ? facturaCorreoBodyMulti(listF, saleOf, lg, amountOf, true, singular, trato) : facturaCorreoBody({...factura,amount:amountOf(factura)}, saleR, lg, true)   // sinCierre: la despedida la agrega cuerpoFull al final
@@ -4570,6 +4571,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const glosaFac=facturaGlosa(factura, saleR)   // misma glosa que el cuerpo (proyecto o glosa de la factura, sin "cuota N/M")
   const [asunto,setAsunto]=useState(multi ? `Facturas N° ${foliosMulti.length<=1?(foliosMulti[0]||''):foliosMulti.slice(0,-1).join(', ')+' y '+foliosMulti[foliosMulti.length-1]} | ${client?.name||''}` : `Factura ${folio}${glosaFac?` | ${glosaFac}`:(client?.name?` | ${client.name}`:'')}`)   // número | glosa de la factura (separador | en el asunto, por pedido del usuario)
   const [lang,setLang]=useState('es')   // idioma del correo: 'es' | 'en'
+  const notaPag=notaPagadas(foliosPag,lang)
   const [body,setBody]=useState(multi ? facturaCorreoBodyMulti(listF, saleOf, 'es', undefined, true) : facturaCorreoBody(factura, saleR, 'es', true))
   const [pdf,setPdf]=useState(null)
   const [pdfErr,setPdfErr]=useState(null)   // por qué no se pudo auto-generar el PDF del DTE (para no fallar en silencio)
@@ -4777,6 +4779,10 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
           </div>
         </div>
         <textarea value={body} onChange={e=>{bodyTocado.current=true;setBody(e.target.value)}} rows={11} style={{...fInp,minHeight:isDesktop?280:210,lineHeight:1.6,resize:'vertical',fontFamily:'inherit'}}/>
+        {notaPag&&!body.includes(notaPag)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginTop:6,padding:'7px 10px',background:C.ambarBg,borderRadius:8,fontSize:12,color:C.coralText}}>
+          <span>{foliosPag.length===1?`La factura N° ${foliosPag[0]} ya está pagada`:`Las facturas N° ${foliosPag.join(', ')} ya están pagadas`}</span>
+          <button type='button' onClick={()=>{ bodyTocado.current=true; setBody(b=>`${b.replace(/\s+$/,'')}\n\n${notaPag}`) }} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>Agregar al correo</button>
+        </div>}
       </div>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:10,minWidth:0}}>
