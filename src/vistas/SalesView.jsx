@@ -271,8 +271,8 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
       {vis.map(s=>{ const cli=clients.find(c=>String(c.id)===String(s.client_id)); const rp=respVenta(s); const pc=rp&&rp!=='Sin abogado'?personChip(rp):null; const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), com=comDe(s), comUF=comUFde(s)
         return (<div key={s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:13}}>
           <div style={{minWidth:0,overflow:'hidden'}}>
-            <div style={{fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'—'}</div>
-            <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><span onClick={cli&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(cli.id)}:undefined} title={cli?'Ver ficha del cliente':undefined} style={{color:C.accent,cursor:cli?'pointer':'default'}}>{cli?.name||'—'}</span>{s.year?` · ${s.month?String(s.month).padStart(2,'0')+'-':''}${s.year}`:''}</div>
+            <div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title||'—'}</div>
+            <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={cli&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(cli.id)}:undefined} title={cli?'Ver ficha del cliente':undefined} style={{color:C.accent,cursor:cli?'pointer':'default'}}>{cli?.name||'—'}</span>{s.year?` · ${s.month?String(s.month).padStart(2,'0')+'-':''}${s.year}`:''}</div>
             {(pc||chipPago(s))&&<div style={{marginTop:3,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>{pc&&<span style={{fontSize:10.5,fontWeight:700,color:pc.color,background:pc.bg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{rp}</span>}{chipPago(s)}</div>}
           </div>
           <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',fontWeight:700,color:C.text}}>{(ufA>0||clpA>0)?<>{fmtMonto(ufA,clpA)}{esRecurrente(s)?<span style={{fontSize:10,fontWeight:600,color:C.muted}}> /año</span>:null}</>:<span style={{fontWeight:400,color:C.muted}}>{porHoras(s)?'por horas':'—'}</span>}{com>0&&<div style={{fontSize:11,fontWeight:400,color:C.muted}}>terceros −{fmtMonto(comUF,com)}</div>}</span>
@@ -303,9 +303,9 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:9,marginBottom:5}}>
           <SIcon n={areaIcon(s.area)} s={18} c={C.muted}/>
           <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div>
-            <div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={client&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{client?.name||'—'}</div>
-            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (_normTxt(rs.name)!==_normTxt(client?.name))?<div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{rsDisplay(rs.name)}{rs.rut?` · ${fmtRutCL(rs.rut)}`:''}</div>:null })()}
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title}</div>
+            <div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={client&&onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{client?.name||'—'}</div>
+            {(()=>{ const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return (_normTxt(rs.name)!==_normTxt(client?.name))?<div onClick={client&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:client&&onOpenClientFicha?'pointer':'inherit'}}>{rsDisplay(rs.name)}{rs.rut?` · ${fmtRutCL(rs.rut)}`:''}</div>:null })()}
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             {(()=>{ const com=comDe(s); if(!(com>0)||!(clpA>0)) return null
@@ -357,10 +357,10 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
           <div onClick={()=>setHubView(v=>v==='vendido'?null:'vendido')} style={{background:C.azulBg,border:`1px solid ${C.azulBd}`,borderRadius:12,padding:'12px',cursor:'pointer',position:'relative',...(hubView==='vendido'?{outline:`2px solid ${C.azulInfo}`,outlineOffset:1}:{})}}>
             <span style={{position:'absolute',top:10,right:11,color:C.textSoft,fontSize:13,transform:hubView==='vendido'?'rotate(90deg)':'none'}}><Gl n='chevron'/></span>
             <span style={{width:30,height:30,borderRadius:8,background:C.azulBd,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M23 6l-9.5 9.5-5-5L1 18'/><path d='M17 6h6v6'/></svg></span>
-            <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vendido {fYear||'total'}</div>
+            <div style={{...SEC_LBL,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Vendido {fYear||'total'}</div>
             <div style={{fontSize:isDesktop?26:20,fontWeight:800,color:C.accent,letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{fmtMonto(vendUF,vendCLP)}</div>
-            {vendCom>0&&<div style={{fontSize:10,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>terceros −{fmtMonto(vendComUF,vendCom)}{isDesktop?` · neto ${fmtMonto(netoUF,netoCLP)}`:''}</div>}
-            <div style={{fontSize:10,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
+            {vendCom>0&&<div style={{fontSize:10,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>terceros −{fmtMonto(vendComUF,vendCom)}{isDesktop?` · neto ${fmtMonto(netoUF,netoCLP)}`:''}</div>}
+            <div style={{fontSize:10,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{vendSrc.length} · {actYr.length} activas · {termYr.length} terminadas</div>
           </div>
           {/* Propuestas */}
           {(()=>{ const vacio=propuestasFiltradas.length===0; const tard=propuestasFiltradas.filter(s=>{const d=s.created_at?Math.floor((Date.now()-new Date(s.created_at))/86400000):0;return d>14}).length; return (
@@ -369,7 +369,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
             <span style={{width:30,height:30,borderRadius:8,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:8}}><SIcon n='check' s={16} c={C.muted}/></span>
             <div style={{...SEC_LBL}}>Propuestas</div>
             <div style={{fontSize:isDesktop?26:20,fontWeight:800,color:C.accent,letterSpacing:-.4,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{vacio?'—':fmtUF(pipelineUF)}</div>
-            <div style={{fontSize:10,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{vacio?'+ Crear la primera':(()=>{ const nAp=propuestasFiltradas.filter(x=>x.aprobacion==='pendiente').length; return `${propuestasFiltradas.length} en pipeline${nAp?` · ${nAp} por aprobar`:tard?` · ${tard} tardía${tard!==1?'s':''}`:''}` })()}</div>
+            <div style={{fontSize:10,color:vacio?C.accent:C.done,fontWeight:vacio?700:400,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{vacio?'+ Crear la primera':(()=>{ const nAp=propuestasFiltradas.filter(x=>x.aprobacion==='pendiente').length; return `${propuestasFiltradas.length} en pipeline${nAp?` · ${nAp} por aprobar`:tard?` · ${tard} tardía${tard!==1?'s':''}`:''}` })()}</div>
           </div>
           )})()}
           </div>
@@ -461,8 +461,8 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
                     <div key={file.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
                       <span style={{width:28,height:34,borderRadius:8,background:C.overdueBg,border:`1px solid ${C.overdueBd}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:10,fontWeight:800,color:C.overdueText}}>PDF</span>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</div>
-                        <div style={{fontSize:10,color:C.textSoft,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtDrvDate(file.modifiedTime)}{file.size?` · ${fmtKB(file.size)}`:''} · {reg?'registrada':cli?`cliente ${cli.name}`:'cliente por confirmar'}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{file.name}</div>
+                        <div style={{fontSize:10,color:C.textSoft,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtDrvDate(file.modifiedTime)}{file.size?` · ${fmtKB(file.size)}`:''} · {reg?'registrada':cli?`cliente ${cli.name}`:'cliente por confirmar'}</div>
                       </div>
                       {reg
                         ? <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap',flexShrink:0}}>Borrador <Gl n='tick'/></span>
@@ -523,7 +523,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
                     {sinReg.slice(0,6).map((file,i)=>{ const match=matchCli(file.name); const cli=match?clients.find(c=>String(c.id)===String(match.client_id)):null; const busy=drvBusy===file.id; return (
                       <div key={file.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderTop:i>0?`1px solid ${C.bgSoft}`:'none'}}>
                         <span style={{width:24,height:30,borderRadius:8,background:C.overdueBg,border:`1px solid ${C.overdueBd}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:10,fontWeight:800,color:C.overdueText}}>PDF</span>
-                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name}</div><div style={{fontSize:10,color:C.textSoft}}>{cli?`cliente ${cli.name}`:'cliente por confirmar'}</div></div>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{file.name}</div><div style={{fontSize:10,color:C.textSoft}}>{cli?`cliente ${cli.name}`:'cliente por confirmar'}</div></div>
                         <button onClick={()=>registrarDrive(file)} disabled={busy} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 11px',cursor:busy?'default':'pointer',display:'inline-flex',alignItems:'center',gap:5,flexShrink:0}}>{busy?<Spin/>:null}{busy?'Leyendo…':'Registrar'}</button>
                       </div>)})}
                     {sinReg.length>1&&<div style={{padding:'8px 12px',borderTop:`1px solid ${C.bgSoft}`}}><button onClick={async()=>{ for(const f of sinReg){ await registrarDrive(f) } }} style={{fontSize:11,fontWeight:700,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'6px 11px',cursor:'pointer'}}>Registrar las {sinReg.length} como borrador</button></div>}
@@ -555,7 +555,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
                 <div key={g.key} onClick={()=>{setSelGroup(on?null:g.key);setVerTodasV(false);setOpenYearV(null)}} style={{display:'grid',gridTemplateColumns:GT,columnGap:10,alignItems:'center',padding:'9px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.bgSoft:(sin?C.bgPanel:'transparent')}}>
                   <span style={{display:'flex',alignItems:'center',gap:7,minWidth:0}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
-                    <span style={{fontSize:14,fontWeight:600,color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.key}</span>
+                    <span style={{fontSize:14,fontWeight:600,color:col,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.key}</span>
                     {sin&&<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>Asignar</span>}
                   </span>
                   <span style={{...nc,fontSize:13,color:C.muted}}>{g.count}</span>

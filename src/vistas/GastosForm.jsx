@@ -364,7 +364,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   const listaCli = (lista) => (
     <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
       {lista.map((c,i)=><button key={c.id} type='button' onClick={()=>elegirCliente(c,tipo?{cat:tipo}:{})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none',minHeight:48}}>
-        {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:400,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(c)}</span>
+        {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:400,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nombreCli(c)}</span>
         {ultFecha[c.id]&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
       </button>)}
     </div>)
@@ -394,7 +394,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
       </button>
       {verSinProy&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,marginTop:6,overflow:'hidden'}}>
         {sinProyecto.map((x,i)=><button key={x.c.id} type='button' onClick={()=>onIrCliente(x.c.id)} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'flex',justifyContent:'space-between',gap:8,padding:'10px 12px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none',fontSize:13,color:C.text}}>
-          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.c.name}</span><span style={{color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.n} <Gl n='chevron'/></span>
+          <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.c.name}</span><span style={{color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.n} <Gl n='chevron'/></span>
         </button>)}
       </div>}
     </div>)
@@ -410,16 +410,16 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     </>)
   const tarjetaRep = x => (
     <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} style={{...btnReset,background:C.azulTenue,borderRadius:12,padding:12,minHeight:86,display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
-      <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{catLbl(x.cat)}</div></div>
+      <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{nombreCli(x.c)}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{catLbl(x.cat)}</div></div>
       <div style={{marginTop:6,minWidth:0}}>
-        <div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}</div>
+        <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.ult.concept}</div>
         <div style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:2}}>{fmt(x.med)}</div>
       </div>
     </button>)
   const filaRep = (x,i) => (
     <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.5fr) 84px',gap:12,alignItems:'center',padding:'10px 14px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none'}}>
-      <span style={{fontWeight:600,color:C.accent,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</span>
-      <span style={{fontSize:13,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}<span style={{color:C.textSoft}}> · {catLbl(x.cat)}</span></span>
+      <span style={{fontWeight:600,color:C.accent,fontSize:14,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nombreCli(x.c)}</span>
+      <span style={{fontSize:13,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.ult.concept}<span style={{color:C.textSoft}}> · {catLbl(x.cat)}</span></span>
       <span style={{textAlign:'right',fontWeight:700,fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.med)}</span>
     </button>)
   const landing = isDesktop ? (
@@ -492,7 +492,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
           <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',columnGap:10}}>
             <FloatFld label='Cliente'>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,height:24}}>
-                <span style={{fontSize:14,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</span>
+                <span style={{fontSize:14,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{selectedClient.name}</span>
                 <button type='button' onClick={()=>setSelectedClient(null)} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Cambiar</button>
               </div>
             </FloatFld>

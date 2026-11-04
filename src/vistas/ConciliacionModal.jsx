@@ -156,7 +156,7 @@ export function ConciliacionModal({billing=[], setBilling, clients=[], clientEnt
                   <div style={{...NOMBRE_CLI}}>{c?.name||'Cliente'}</div>
                   {ents.length>1
                     ? <select value={rsSel} onChange={e=>setPickRS(p=>({...p,[cid]:e.target.value}))} style={{fontSize:10,color:rsSel?C.accent:C.muted,fontWeight:rsSel?600:400,border:`0.5px solid ${rsSel?C.accent:C.border}`,borderRadius:6,padding:'2px 6px',background:'#fff',marginTop:2,maxWidth:'100%'}}><option value=''>Todas las razones sociales</option>{ents.map(e=><option key={e.id} value={e.id}>{e.name}{e.rut?` · ${fmtRutCL(e.rut)}`:''}</option>)}</select>
-                    : (ents[0]?<div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ents[0].name}{ents[0].rut?` | ${ents[0].rut}`:''}</div>:(rutDe(cid)?<div style={{fontSize:10,color:C.textSoft}}>{rutDe(cid)}</div>:null))}
+                    : (ents[0]?<div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{ents[0].name}{ents[0].rut?` | ${ents[0].rut}`:''}</div>:(rutDe(cid)?<div style={{fontSize:10,color:C.textSoft}}>{rutDe(cid)}</div>:null))}
                 </div>)
               })()}
               <div style={{textAlign:'right',flexShrink:0}}><div style={lbl}>Sin folio · {grupo.length}</div><div style={{fontSize:13,fontWeight:600,color:C.overdue}}>{fmt(sumF)}</div></div>
@@ -204,7 +204,7 @@ export function ConciliacionModal({billing=[], setBilling, clients=[], clientEnt
                     <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden'}}>
                       {cands.map(x=>{ const sel=String((chosenCand[b.id]||(cands[0]&&cands[0].r.id)))===String(x.r.id); return (
                         <div key={x.r.id} onClick={()=>setChosenCand(p=>({...p,[b.id]:x.r.id}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`,cursor:'pointer',background:sel?C.azulBg:'#fff'}}>
-                          <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.text}}>{folio(x.r.invoice_no)}</div><div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.r.concept||'—'}</div></div>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,fontWeight:sel?700:500,color:sel?C.accent:C.text}}>{folio(x.r.invoice_no)}</div><div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.r.concept||'—'}</div></div>
                           <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.r.amount)}</div><div style={{fontSize:9,color:x.score>=0.6?C.greenText:C.soon}}>{Math.round(x.score*100)} %</div></div>
                         </div>
                       )})}
@@ -214,7 +214,7 @@ export function ConciliacionModal({billing=[], setBilling, clients=[], clientEnt
                     <div style={{border:`0.5px solid ${C.border}`,borderRadius:8,marginTop:6,overflow:'hidden',maxHeight:'34vh',overflowY:'auto'}}>
                       {otras.map(x=>{ const [sl,sc,sb]=stPillCuota(x.status); const same=Math.abs((x.amount||0)-(b.amount||0))<=Math.max(1000,(b.amount||0)*0.01); return (
                         <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 10px',borderBottom:`0.5px solid ${C.border}`}}>
-                          <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:C.textSoft}}>{x.invoice_no?`Factura N° ${folioNum(x.invoice_no)} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
+                          <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.concept||'—'}{same&&<span style={{color:C.soon,fontWeight:600}}> · = monto</span>}</div><div style={{fontSize:9,color:C.textSoft}}>{x.invoice_no?`Factura N° ${folioNum(x.invoice_no)} · `:''}{x.status==='Pagado'?`pagada ${x.paid_at?fmtFechaDMY(x.paid_at):''}`:`vence ${x.due?fmtFechaDMY(x.due):'—'}`}</div></div>
                           <div style={{textAlign:'right',flexShrink:0,display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:sb,color:sc,whiteSpace:'nowrap'}}>{sl}</span><span style={{fontSize:11,fontWeight:600,color:C.text}}>{fmt(x.amount)}</span></div>
                         </div>
                       )})}
@@ -252,7 +252,7 @@ export function ConciliacionModal({billing=[], setBilling, clients=[], clientEnt
                   <div style={{fontSize:10,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,padding:'7px 14px 3px',borderTop:`0.5px solid ${C.border}`,background:C.bgPanel}}>{c?.name||'Cliente'} · {list.length}</div>
                   {list.map(x=>(
                     <div key={x.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 14px',borderTop:`0.5px solid ${C.border}`}}>
-                      <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.greenText}}>Factura N° {folioNum(x.invoice_no)}</b> · {x.concept||'—'}</div><div style={{fontSize:9,color:C.textSoft}}>Pagada {x.paid_at?fmtFechaDMY(x.paid_at):'—'}</div></div>
+                      <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.greenText}}>Factura N° {folioNum(x.invoice_no)}</b> · {x.concept||'—'}</div><div style={{fontSize:9,color:C.textSoft}}>Pagada {x.paid_at?fmtFechaDMY(x.paid_at):'—'}</div></div>
                       <span style={{fontSize:11,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(x.amount)}</span>
                     </div>
                   ))}
@@ -270,7 +270,7 @@ export function ConciliacionModal({billing=[], setBilling, clients=[], clientEnt
           </div>
           {showResueltas&&resueltas.map((rz,i)=>(
             <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 14px',borderTop:`0.5px solid ${C.border}`}}>
-              <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rz.b.concept||'—'} · {fmt(rz.b.amount)}</div><div style={{fontSize:9,color:C.textSoft}}>{rz.tipo==='baja'?'Dada de baja (en Papelera)':'Marcada legítima'}</div></div>
+              <div style={{minWidth:0}}><div style={{fontSize:11,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rz.b.concept||'—'} · {fmt(rz.b.amount)}</div><div style={{fontSize:9,color:C.textSoft}}>{rz.tipo==='baja'?'Dada de baja (en Papelera)':'Marcada legítima'}</div></div>
               <button disabled={busy} onClick={()=>rz.tipo==='baja'?deshacerBaja(rz.b):deshacerLegit(rz.b)} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer',flexShrink:0}}>Deshacer</button>
             </div>
           ))}

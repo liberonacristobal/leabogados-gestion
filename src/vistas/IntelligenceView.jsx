@@ -335,8 +335,8 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
                 <span style={{width:34,height:34,borderRadius:10,background:s.bg,color:s.fg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{s.svg}</span>
                 {s.ct!=null&&<span style={{fontSize:16,fontWeight:800,color:s.ctCol||s.fg,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{s.ct}</span>}
               </div>
-              <div style={{fontSize:14,fontWeight:700,color:C.accent,marginTop:9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.t}</div>
-              {s.sub&&<div style={{fontSize:11,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.sub}</div>}
+              <div style={{fontSize:14,fontWeight:700,color:C.accent,marginTop:9,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.t}</div>
+              {s.sub&&<div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.sub}</div>}
             </div>
           )}) })()}
         </div>
@@ -355,7 +355,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
                     <span style={{width:7,height:7,borderRadius:'50%',background:o.col,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{...NOMBRE_CLI}}>{x.c.name}</div>
-                      <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.ctx(x)}</div>
+                      <div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{o.ctx(x)}</div>
                     </div>
                     <span style={{fontSize:13,fontWeight:700,color:o.col,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{o.val(x)}</span>
                     <span style={{color:C.textSoft,fontSize:13,flexShrink:0}}><Gl n='chevron'/></span>
@@ -421,8 +421,8 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
                 <div key={x.c.id} onClick={()=>x.c.id&&onOpenClientFicha&&onOpenClientFicha(x.c.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0 7px 18px',borderTop:`0.5px solid ${C.track}`,cursor:'pointer'}}>
                   <div style={{minWidth:0}}>
                     <div style={{...NOMBRE_CLI}}>{x.c.name}</div>
-                    {(()=>{ const rs=rsLabel(x.c.id,clients,clientEntities); const bits=[rs.name&&rs.name!==x.c.name?rsDisplay(rs.name):null,rs.rut].filter(Boolean); return bits.length?<div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{bits.join(' · ')}</div>:null })()}
-                    <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.area} · {fmtUFk(x.uf)}{x.meses<900?` · hace ${x.meses}m`:''}{x.saldoVenc>0?` · saldo ${fmt(x.saldoVenc)}`:(x.rec?' · recurrente':'')}</div>
+                    {(()=>{ const rs=rsLabel(x.c.id,clients,clientEntities); const bits=[rs.name&&rs.name!==x.c.name?rsDisplay(rs.name):null,rs.rut].filter(Boolean); return bits.length?<div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{bits.join(' · ')}</div>:null })()}
+                    <div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.area} · {fmtUFk(x.uf)}{x.meses<900?` · hace ${x.meses}m`:''}{x.saldoVenc>0?` · saldo ${fmt(x.saldoVenc)}`:(x.rec?' · recurrente':'')}</div>
                   </div>
                   <span style={{fontSize:12,color:seg.col,flexShrink:0}}><Gl n='chevron'/></span>
                 </div>
@@ -443,7 +443,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
             <div key={s.area} style={{borderTop:`0.5px solid ${C.border}`,padding:'10px 0 2px'}}>
               <div onClick={()=>setOpenArea(open?null:s.area)} style={{cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.area}</span>
                   <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)} % del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
                 </div>
                                 <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct} % recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
@@ -480,7 +480,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
               <div style={{...SEC_LBL,marginBottom:4}}>Cargar costo de terceros</div>
               {ventasSinCosto.slice(0,6).map(s=>{ const cli=(clients||[]).find(c=>String(c.id)===String(s.client_id)); return (
                 <div key={s.id} onClick={()=>onOpenSale(s)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'7px 0',borderTop:`0.5px solid ${C.track}`,cursor:'pointer'}}>
-                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title||'Venta'}</div><div style={{fontSize:10,color:C.muted}}>{cli?.name||'—'} · {s.area||'Sin área'}</div></div>
+                  <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title||'Venta'}</div><div style={{fontSize:10,color:C.muted}}>{cli?.name||'—'} · {s.area||'Sin área'}</div></div>
                   <span style={{fontSize:11,fontWeight:600,color:C.accent,flexShrink:0,whiteSpace:'nowrap'}}>+ costo <Gl n='chevron'/></span>
                 </div>
               )})}
@@ -500,7 +500,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
           {tendencias.abogados.map(a=>{ const pc=personChip(a.k); return (
             <div key={a.k} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderTop:`0.5px solid ${C.track}`}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/>
-              <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.k}</span>
+              <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.k}</span>
               <span style={{fontSize:13,fontWeight:400,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(a.cur)}</span>
               <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct} %`}</span>
             </div>

@@ -64,7 +64,7 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terc
   const fMLR=n=>fmtMillLR(n)
   const ln=(sg,l,v,{tot,menos}={})=><div style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:13}}>
     <span style={{textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
-    <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span>
+    <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{l}</span>
     <span style={{fontWeight:tot?800:700,color:tot?C.accent:(menos?(v==='$0'?C.done:C.overdueText):C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
   const colH=(t,sub)=><div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}><span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{t}</span><span style={{marginLeft:'auto',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>{sub}</span></div>
   const colSt={border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px 9px',minWidth:0}
@@ -194,7 +194,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
     {open&&<><div style={{padding:'7px 18px 7px 40px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft,background:'#FBFCFD',borderTop:`1px solid ${C.bgSoft}`}}>{r.movs.length} transferencia{r.movs.length!==1?'s':''}{r.movs.length>1?' · partido por el límite diario':''}</div>
       {r.movs.map((mv,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:11,padding:'9px 18px 9px 40px',borderTop:`1px solid ${C.bgSoft}`,fontSize:13,background:'#FBFCFD'}}>
         <span style={{color:C.muted,width:58,flexShrink:0}}>{_mc(mv.date)}</span>
-        <span style={{color:C.textSoft,fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{mv.e.concept||'Transferencia'}</span>
+        <span style={{color:C.textSoft,fontSize:11,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,flex:1}}>{mv.e.concept||'Transferencia'}</span>
         <span style={{fontWeight:700,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(mv.amt)}</span>
         <span onClick={e=>{e.stopPropagation(); onIrBanco&&onIrBanco(_SOCIO_RUT_DISP[r.socio]||r.socio)}} style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',width:72,flexShrink:0}}>Banco {bankIc}</span>
       </div>)}</>}

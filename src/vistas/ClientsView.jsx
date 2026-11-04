@@ -29,7 +29,7 @@ function PendientesCliente({pend,billing,sales,onGo}){
       </div>
       {items.length+fondos.length>0&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
         {[...items,...fondos].map((it,i)=>(<div key={it.key} onClick={()=>onGo(it)} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:it.soloFiltro?500:700,color:it.soloFiltro?C.muted:C.text}}>{it.titulo}</div><div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(it)}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:it.soloFiltro?500:700,color:it.soloFiltro?C.muted:C.text}}>{it.titulo}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{det(it)}</div></div>
           {it.monto>0&&<span style={{fontSize:13,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(it.monto)}</span>}
           <ActBtn variant={it.tipo==='cuotas'?'primary':undefined} onClick={e=>{e.stopPropagation();onGo(it)}}>{it.tipo==='cuotas'?'Emitir':'Ver'} →</ActBtn>
         </div>))}
@@ -87,7 +87,7 @@ export function ClientFicha({pend=null,onPendGo=null,setExpenses=null,onAsociarT
               <div onClick={()=>onEdit(client)} title='Tocar para editar' style={{fontSize:18,fontWeight:700,color:C.text,lineHeight:1.2,overflowWrap:'anywhere',cursor:'pointer'}}>{client.name}</div>
               {(()=>{ const pc=responsable?personChip(responsable):null; return <><span style={{color:C.textSoft,fontWeight:400,fontSize:16,flexShrink:0}}>|</span><button onClick={()=>setRespPick(v=>!v)} style={{flexShrink:0,fontSize:10,background:pc?pc.bg:C.bgWarm,color:pc?pc.color:C.grisText,borderRadius:10,padding:'1px 8px',fontWeight:600,border:'none',cursor:'pointer'}}>{responsable?`${responsable} ▾`:<>Asignar{" "}<Gl n='chevD'/></>}</button></> })()}
             </div>
-            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div onClick={()=>setFtab('contacto')} title='Ver razones sociales' style={{fontSize:11,color:C.muted,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${fmtRutCL(rs.rut)}`:''}`}</div>:null })()}
+            {(()=>{ const rs=rsLabel(client.id,clients,clientEntities); return (rs.name!==client.name||rs.multi)?<div onClick={()=>setFtab('contacto')} title='Ver razones sociales' style={{fontSize:11,color:C.muted,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:'pointer'}}>{rs.multi?`${rs.multi} razones sociales`:`${rsDisplay(rs.name)}${rs.rut?` · ${fmtRutCL(rs.rut)}`:''}`}</div>:null })()}
             <div style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:6}}>
               {client.type}
               {client.is_occasional&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.grisText,fontWeight:700,whiteSpace:'nowrap'}}>Ocasional</span>}
@@ -301,8 +301,8 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
     <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,padding:'8px 16px',...TH_BAND}}><span>Cliente</span><span>Tipo de pendiente</span><span style={{textAlign:'right'}}>Pendientes</span><span/></div>
     {cl.map(c=>{ const its=itemsDe(c), suma=its.reduce((a,i)=>a+(i.monto||0),0); return (
       <div key={c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-        <div style={{minWidth:0}}><div style={{...NOMBRE_CLI}}>{c.name}</div>{subDe(c)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subDe(c)}</div>}</div>
-        <span style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{txtTipos(its,true)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</span>
+        <div style={{minWidth:0}}><div style={{...NOMBRE_CLI}}>{c.name}</div>{subDe(c)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subDe(c)}</div>}</div>
+        <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{txtTipos(its,true)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</span>
         <span style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{its.length}</span>
         <SIcon n='chevron' s={12} c={C.done}/>
       </div>) })}
@@ -312,7 +312,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
     <div key={c.id} onClick={()=>abrir(c)} style={{background:C.card,borderRadius:12,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{...NOMBRE_CLI}}>{c.name}</div>
-        <div style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{txtTipos(its,false)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</div>
+        <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{txtTipos(its,false)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</div>
       </div>
       <span style={{fontSize:13,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{its.length}</span>
     </div>) })}<div style={{fontSize:11,color:C.muted,margin:'8px 2px 0'}}>{cl.length} cliente{cl.length!==1?'s':''}</div></div>)
@@ -321,7 +321,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
       <SIcon n='alert' s={18} c={C.soonText}/>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>{dupGrupos.length} posible{dupGrupos.length!==1?'s':''} cliente{dupGrupos.length!==1?'s':''} duplicado{dupGrupos.length!==1?'s':''}</div>
-        <div style={{fontSize:11,color:C.soonText,opacity:.9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nf} fichas con nombres iguales o muy parecidos</div>
+        <div style={{fontSize:11,color:C.soonText,opacity:.9,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nf} fichas con nombres iguales o muy parecidos</div>
       </div>
       <ActBtn variant='softAmber' onClick={e=>{e.stopPropagation();onOpenFusion()}}>Revisar</ActBtn>
     </div> )})()
@@ -359,7 +359,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
                   <div onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',opacity:c.status==='Terminado'?.6:1}}>
                     <div style={{minWidth:0}}>
                       <div style={{...NOMBRE_CLI}}>{c.name}{tagsDe(c)}</div>
-                      {subDe(c)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subDe(c)}</div>}
+                      {subDe(c)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subDe(c)}</div>}
                     </div>
                     <span>{resp?<span style={{fontSize:10,fontWeight:700,color:pc.color,background:pc.bg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{resp}</span>:<span style={{color:C.textSoft}}>—</span>}</span>
                     <span style={{textAlign:'right'}}>{tc>0?<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{tc}</span>:<span style={{color:C.textSoft}}>—</span>}</span>
@@ -421,7 +421,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
                 <span style={{width:38,height:38,borderRadius:10,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresaC(c)?'building':'user'} s={18} c={pc.color}/></span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{...NOMBRE_CLI}}>{c.name}{tagsDe(c)}</div>
-                  <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{resp&&<b style={{color:pc.color}}>{resp}</b>}{resp&&(sub||tareasC>0)?' · ':''}{sub}{sub&&tareasC>0?' · ':''}{tareasC>0?`${tareasC} tarea${tareasC!==1?'s':''}`:''}</div>
+                  <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{resp&&<b style={{color:pc.color}}>{resp}</b>}{resp&&(sub||tareasC>0)?' · ':''}{sub}{sub&&tareasC>0?' · ':''}{tareasC>0?`${tareasC} tarea${tareasC!==1?'s':''}`:''}</div>
                 </div>
                 {bal<0&&<div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmtSaldoG(bal)}</div><div style={{fontSize:10,fontWeight:700,color:C.overdueText}}>por reponer</div></div>}
               </div>

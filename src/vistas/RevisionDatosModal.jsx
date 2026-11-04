@@ -273,7 +273,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
       {onRetirarFantasmas&&cfAlta.length>0&&<button disabled={cfBusy} onClick={async()=>{ if(!(await appConfirm(`Voy a retirar ${cfAlta.length} cuota(s) programada(s) que ya están emitidas (alta confianza), por ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}. Cada una queda enlazada a su factura y es REVERSIBLE (undo). ¿Confirmas?`))) return; setCfBusy(true); try{ await onRetirarFantasmas(cfAlta.map(x=>({progId:x.prog.id, realId:x.posterior?.id||null, monto:x.monto}))); setCfRetiradas(s=>new Set([...s,...cfAlta.map(x=>String(x.prog.id))])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setCfBusy(false) }} style={{width:'100%',padding:'9px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:cfBusy?'default':'pointer',opacity:cfBusy?.6:1,marginBottom:4}}>{cfBusy?'Retirando…':`Retirar las ${cfAlta.length} de alta confianza · ${fmt(cfAlta.reduce((a,x)=>a+(x.monto||0),0))}`}</button>}
       {cuotasFantasma.slice(0,40).map(({prog,sale,monto,razones,conf,posterior})=><div key={prog.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
-          <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(prog.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
+          <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(prog.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(prog.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {prog.concept||sale?.title||'—'}</span></div>
           <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(monto)}</span>
         </div>
         <div style={{fontSize:10.5,color:C.muted,marginTop:2}}><span style={{fontWeight:700,color:conf==='alta'?C.greenText:C.soonText}}>{conf==='alta'?<><Gl n='tick'/>{" "}alta confianza</>:'Revisar'}</span> · {razones.join(' · ')}</div>
@@ -288,21 +288,21 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {glosaConflict.filter(x=>!glDone.has(x.key)).length>0&&<div style={secBox}>{sh('Glosa con dos categorías (Retiro/Sueldo)',C.overdueText,glosaConflict.filter(x=>!glDone.has(x.key)).length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>la misma glosa enseñó categorías distintas → la sugerencia sale no determinista · define cuál es</div>
       {glosaConflict.filter(x=>!glDone.has(x.key)).map(({key,votos})=>{ const sel=glPick[key]||votos[0].cat; return <div key={key} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>«{key}»</div>
+        <div style={{fontSize:12,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>«{key}»</div>
         <div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{votos.map(v=>`${v.cat} ${v.n}×`).join(' · ')}</div>
         {onResolverGlosa&&<><div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{['Retiros','Sueldos','Otros'].map(cat=><button key={cat} onClick={()=>setGlPick(p=>({...p,[key]:cat}))} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 12px',cursor:'pointer',border:`1px solid ${sel===cat?C.accent:C.border}`,background:sel===cat?C.azulBg:'#fff',color:sel===cat?C.accent:C.muted}}>{cat}</button>)}</div>
         <button disabled={glBusy===key} onClick={async()=>{ if(!(await appConfirm(`Definir esta glosa como ${sel}. Cambia cómo se clasifican los próximos movimientos (y con eso el margen y las comisiones). ¿Confirmas?`))) return; setGlBusy(key); try{ await onResolverGlosa(key,sel); setGlDone(d=>new Set([...d,key])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setGlBusy(null) }} style={{marginTop:8,padding:'8px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:glBusy===key?'default':'pointer',opacity:glBusy===key?.6:1}}>{glBusy===key?'Guardando…':`Definir como ${sel}`}</button></>}
       </div> })}
     </div>}
     {huerfanas.length>0&&<div style={secBox}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
-      {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(fmt(b.amount||0))}</div>)}
+      {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(fmt(b.amount||0))}</div>)}
       {huerfanas.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {huerfanas.length-30} más…</div>}
     </div>}
     {vencIncoh.length>0&&<div style={secBox}>{sh('Vencimiento anterior a la emisión',C.soonText,vencIncoh.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>emitida hoy pero con vencimiento en el pasado (se ve "vencida" sin serlo) · el plazo debe correr desde la emisión</div>
       {vencIncoh.map(b=><div key={b.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',display:'flex',alignItems:'center',gap:8,justifyContent:'space-between'}}>
         <div style={{minWidth:0,flex:1}}>
-          <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)} · {b.receptor_name||cName(b.client_id)}</div>
+          <div onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)} · {b.receptor_name||cName(b.client_id)}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:1}}>Emitida {fmtFechaDMY(b.issued_at)} · vence {fmtFechaDMY(b.due)} <span style={{color:C.overdueText}}>(antes de emitir)</span></div>
         </div>
         {onFixVencimiento&&<button onClick={async()=>{ setFixing(b.id); try{ await onFixVencimiento(b) }catch(_){}; setFixing(null) }} disabled={fixing===b.id} style={{flexShrink:0,background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:fixing===b.id?'default':'pointer',opacity:fixing===b.id?.6:1}}>{fixing===b.id?'Corrigiendo…':'Corregir'}</button>}</div>)}
@@ -312,7 +312,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
         <div style={{fontSize:13,fontWeight:700,color:C.text}}><span onClick={()=>onOpenClientFicha&&onOpenClientFicha(manual.client_id)} style={{cursor:'pointer'}}>{cName(manual.client_id)}</span><span style={{fontSize:9.5,fontWeight:700,color:'#fff',background:C.soonText,borderRadius:20,padding:'2px 8px',marginLeft:7,whiteSpace:'nowrap'}}>calce exacto</span></div>
         <div style={{display:'flex',gap:8,marginTop:6}}>
           <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}><div style={{fontSize:9,fontWeight:700,color:C.greenText,textTransform:'uppercase',letterSpacing:.3}}>Del banco</div>{banks.map(b=><div key={b.id} style={{fontSize:11,color:C.muted,marginTop:2}}>{fmt(b.monto||0)}</div>)}<div style={{fontSize:12,fontWeight:700,color:C.greenText,marginTop:3}}>Total {fmt(suma)}</div></div>
-          <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3}}>A mano · sin respaldo</div><div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginTop:2}}>{fmt(manual.monto||0)}</div><div style={{fontSize:10,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{manual.nota||'—'}</div></div>
+          <div style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}><div style={{fontSize:9,fontWeight:700,color:C.overdueText,textTransform:'uppercase',letterSpacing:.3}}>A mano · sin respaldo</div><div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginTop:2}}>{fmt(manual.monto||0)}</div><div style={{fontSize:10,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{manual.nota||'—'}</div></div>
         </div>
         <div style={{display:'flex',gap:8,marginTop:8}}>
           <button onClick={()=>onResolverDupAnticipo&&onResolverDupAnticipo(manual.id,true)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Es duplicado · dejar el del banco</button>
@@ -323,7 +323,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {anticipoCubre.length>0&&<div style={secBox}>{sh('Pago recibido que cubre cuotas',C.greenText,anticipoCubre.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el cliente ya pagó (anticipo de la misma venta) y la cuota sigue por facturar · la diferencia es variación UF</div>
       {anticipoCubre.map(({a,extra=[],cuotas,sum,pagado})=><div key={a.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(a.client_id)}</div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(a.client_id)}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{extra.length?`${extra.length+1} pagos desde el ${fmtFechaDMY(a.fecha)}`:`pago del ${fmtFechaDMY(a.fecha)}`} · {cuotas.length} cuota{cuotas.length!==1?'s':''} desde {fmtFechaDMY(cuotas[0].due)}</div></div>
           {amt(fmt(pagado??(Number(a.monto)||0)),`cuotas ${fmt(sum)}`,C.greenText)}</div>
         {onCubrirCuotas&&<button onClick={async()=>{ await onCubrirCuotas(a.id,cuotas.map(c=>c.id),extra.map(x=>x.id)); setCubiertasRD(p=>new Set([...p,String(a.id),...extra.map(x=>String(x.id))])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir {cuotas.length>1?`las ${cuotas.length} cuotas`:'la cuota'}</button>}
@@ -331,15 +331,15 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {errGrupos.length>0&&<div style={secBox}>{sh('Errores de la app',C.overdueText,errGrupos.length)}
       {errGrupos.map(g=><div key={g.k} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={g.mensaje}>{g.mensaje}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{TAB_LABELS[g.vista]||g.vista||'Fuera de una vista'} · {[...g.usuarios].join(', ')||'—'} · {fmtFechaDMY(isoLocal(g.ult))}</div></div>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}} title={g.mensaje}>{g.mensaje}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{TAB_LABELS[g.vista]||g.vista||'Fuera de una vista'} · {[...g.usuarios].join(', ')||'—'} · {fmtFechaDMY(isoLocal(g.ult))}</div></div>
           {amt(`${g.ids.length}`,g.ids.length===1?'vez':'veces',C.overdueText)}</div>
         <div style={{display:'flex',gap:6,marginTop:7}}><button onClick={()=>errResuelto(g)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Resuelto</button></div>
       </div>)}
     </div>}
     {observadas.length>0&&<div style={secBox}>{sh('Compras de proveedores observados por el SII',C.overdueText,observadas.length)}
       {observadas.map(x=><div key={x.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(x.emisor_name||'Proveedor')}</div>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{titleCase(x.emisor_name||'Proveedor')}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>Factura N° {x.folio}{x.periodo?` · ${mesTitulo(String(x.periodo).slice(0,7)+'-15T12:00')}`:''} · IVA objetado en el F29</div></div>
           {amt(fmt(Number(x.observado_iva)||0),'IVA',C.overdueText)}</div>
         <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>{[['rectificar','Se rectifica'],['acreditar','Se acredita']].map(([k,l])=><button key={k} onClick={()=>decidirObservada(x,k)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>{l}</button>)}</div>
@@ -347,8 +347,8 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {detSaldo.length>0&&<div style={secBox}>{sh('Trabajos sin movimiento con saldo por cobrar',C.overdueText,detSaldo.length)}
       {detSaldo.map(x=><div key={x.s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.s.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s.title||'Trabajo'} · sin movimiento desde {fmtFechaDMY(x.ult)}</div></div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(x.s.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.s.title||'Trabajo'} · sin movimiento desde {fmtFechaDMY(x.ult)}</div></div>
           {amt(fmt(x.porCobrar),`${x.facturas} factura${x.facturas!==1?'s':''} por cobrar`,C.overdueText)}</div>
       </div>)}
     </div>}
@@ -360,8 +360,8 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
           {onCerrarTrabajo&&xs.length>1&&<button onClick={()=>cerrarVarios(abg,xs)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Cerrar los {xs.length}</button>}
         </div>
         {xs.map(x=><div key={x.s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-          <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.s.client_id)}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s.title||'Trabajo'}</div></div>
+          <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(x.s.client_id)}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.s.title||'Trabajo'}</div></div>
             {amt(`${x.dias} días`,`desde ${fmtFechaDMY(x.ult)}`,C.soonText)}</div>
           <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
             {onCerrarTrabajo&&<button onClick={()=>cerrarTrabajo(x)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Cerrar trabajo</button>}
@@ -372,8 +372,8 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {termGastos.length>0&&<div style={secBox}>{sh('Trabajos terminados que siguen recibiendo gastos',C.soonText,termGastos.length)}
       {termGastos.map(x=><div key={x.s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.s.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.s.title||'Trabajo'} · {x.gastos.length} gasto{x.gastos.length!==1?'s':''} · último {fmtFechaDMY(x.ultimo)}</div></div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(x.s.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.s.title||'Trabajo'} · {x.gastos.length} gasto{x.gastos.length!==1?'s':''} · último {fmtFechaDMY(x.ultimo)}</div></div>
           {amt(fmt(x.monto),null,C.soonText)}</div>
         <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
           {onReabrirTrabajo&&<button onClick={()=>reabrirTrabajo(x)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Reabrir trabajo</button>}
@@ -384,9 +384,9 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {rsAjena.length>0&&<div style={secBox}>{sh('Gastos con razón social de otro cliente',C.overdueText,rsAjena.length)}
       {rsAjena.map(e=>{ const en=(clientEntities||[]).find(x=>String(x.id)===String(e.entity_id)); return <div key={e.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(e.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(e.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtFechaDMY(e.date)} · {e.concept||'Gasto'}</div>
-          <div style={{fontSize:11,color:C.overdueText,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(en?.name||'')} · razón social de {cName(en?.client_id)}</div></div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(e.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(e.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtFechaDMY(e.date)} · {e.concept||'Gasto'}</div>
+          <div style={{fontSize:11,color:C.overdueText,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{titleCase(en?.name||'')} · razón social de {cName(en?.client_id)}</div></div>
           {amt(fmt(e.amount||0),null,C.text)}</div>
         <div style={{display:'flex',gap:6,marginTop:7,flexWrap:'wrap'}}>
           {onQuitarRsGasto&&<button onClick={()=>quitarRs(e)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer'}}>Quitar razón social</button>}
@@ -396,7 +396,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {enReclamo.length>0&&<div style={secBox}>{sh('Facturas recibidas en plazo de reclamo',C.soonText,enReclamo.length)}
       {enReclamo.map(x=><div key={x.d.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{titleCase(x.d.emisor_name||'Proveedor')}</div>
+        <div style={fila}><div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{titleCase(x.d.emisor_name||'Proveedor')}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>Factura N° {x.d.folio} · plazo hasta el {fmtFechaDMY(x.vence)}</div></div>
           {amt(fmt(Number(x.d.monto)||0),x.quedan===0?'vence hoy':`quedan ${x.quedan} día${x.quedan!==1?'s':''}`,x.quedan<=2?C.overdueText:C.soonText)}</div>
         {x.calce&&<div style={{fontSize:11,color:C.greenText,marginTop:5}}>Calza con {x.calce.length} comisi{x.calce.length===1?'ón':'ones'} sin factura de este proveedor ({fmt(x.calce.reduce((a,t)=>a+(Number(t.monto)||0),0))})</div>}
@@ -408,7 +408,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {antSub.length>0&&<div style={secBox}>{sh('Pagos de subarriendo',C.greenText,antSub.length)}
       {antSub.map(x=><div key={x.a.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(x.a.client_id)}</div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(x.a.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(x.a.client_id)}</div>
           <div style={{fontSize:11,color:C.muted,marginTop:2}}>{SD.perTexto(x.per)} · {x.tipo==='aplicar'?`Factura N° ${folioN(x.b.invoice_no)}`:'pendiente de emisión'}</div></div>
           {amt(fmt(Number(x.a.monto)||0),x.tipo==='aplicar'?'calce exacto':'sin factura',x.tipo==='aplicar'?C.greenText:C.soonText)}</div>
         {x.tipo==='aplicar'&&onConsumeAnticipos&&<button onClick={async()=>{ await onConsumeAnticipos([x.a.id],x.b.id); setAntSubDone(p=>new Set([...p,String(x.a.id)])) }} style={{marginTop:7,fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer'}}>Cubrir la Factura N° {folioN(x.b.invoice_no)}</button>}
@@ -417,14 +417,14 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {cuotasSinGen.length>0&&<div style={secBox}>{sh('Cuotas sin generar',C.azulInfo,cuotasSinGen.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>ventas Activas a cuotas con menos cuotas que el plan · solo formato "cuotas" (excluye personalizada/mensual)</div>
       {cuotasSinGen.map(v=><div key={v.id} onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:'pointer'}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}</span></div>
+        <div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}</span></div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>plan {v.nplan} · generadas {Number(v.n_cuotas)} · <span style={{color:C.azulInfo,fontWeight:700}}>faltan {v.nplan-Number(v.n_cuotas)}</span> {lk(()=>onOpenClientFicha&&onOpenClientFicha(v.client_id))}</div>
       </div>)}
     </div>}
     {honorarioDesc.filter(v=>!ahDone.has(String(v.id))).length>0&&(()=>{ const hd=honorarioDesc.filter(v=>!ahDone.has(String(v.id))); return <div style={secBox}>{sh('Honorario ≠ lo facturado',C.soonText,hd.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el honorario registrado no coincide con la suma facturada · higiene de dato (lo facturado es la realidad)</div>
       {hd.map(v=>{ const fact=Math.round(Number(v.suma_cuotas)||0); return <div key={v.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>{amt(`facturado ${fmt(fact)}`,`registrado ${fmt(v.amount_clp||0)}`)}</div>
+        <div style={fila}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{cName(v.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {v.title||'—'}{v.status!=='Activo'?` · ${v.status}`:''}</span></div>{amt(`facturado ${fmt(fact)}`,`registrado ${fmt(v.amount_clp||0)}`)}</div>
         {onActualizarHonorario&&<div style={{display:'flex',gap:8,marginTop:7}}>
           <button disabled={ahBusy===v.id} onClick={async()=>{ if(!(await appConfirm(`Voy a fijar el honorario de "${v.title||'—'}" de ${cName(v.client_id)} en ${fmt(fact)} (lo facturado), en vez de ${fmt(v.amount_clp||0)}. Ajusta "Vendido"${v.year?' '+v.year:''} a la realidad. Es reversible. ¿Confirmas?`))) return; setAhBusy(v.id); try{ await onActualizarHonorario(v.id, fact); setAhDone(d=>new Set([...d,String(v.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setAhBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ahBusy===v.id?'default':'pointer',opacity:ahBusy===v.id?.6:1}}>{ahBusy===v.id?'Ajustando…':`Honorario = ${fmt(fact)}`}</button>
           <button onClick={()=>onOpenClientFicha&&onOpenClientFicha(v.client_id)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Abrir ficha</button>
@@ -434,7 +434,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))).length>0&&(()=>{ const vbc=ventasBorradorCobrado.filter(x=>!ptDone.has(String(x.s.id))); return <div style={secBox}>{sh('Ventas cobradas en borrador',C.overdueText,vbc.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>tienen facturas pagadas pero siguen en Borrador/Propuesta → quedan FUERA de "Vendido" (solo cuenta Activo/Terminado) · pásalas a Terminado</div>
       {vbc.map(({s,emitido,pagado,n})=><div key={s.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0'}}>
-        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
+        <div style={fila}><div style={{minWidth:0}}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(s.client_id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cName(s.client_id)} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {s.title||'—'} · {s.status}</span></div>
         <div style={{fontSize:11,color:C.muted,marginTop:2}}>{n} factura{n!==1?'s':''} fuera de Vendido</div></div>{amt(`cobrado ${fmt(pagado)}`,emitido!==pagado?`emitido ${fmt(emitido)}`:null,C.overdueText)}</div>
         {onPasarTerminado&&<div style={{display:'flex',gap:8,marginTop:7}}>
           <button disabled={ptBusy===s.id} onClick={async()=>{ if(!(await appConfirm(`Voy a pasar "${s.title||'—'}" de ${cName(s.client_id)} a Terminado y fijar su honorario en ${fmt(emitido)} (lo facturado). Así suma en Vendido ${s.year}. Es reversible. ¿Confirmas?`))) return; setPtBusy(s.id); try{ await onPasarTerminado(s, emitido); setPtDone(d=>new Set([...d,String(s.id)])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) } setPtBusy(null) }} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:ptBusy===s.id?'default':'pointer',opacity:ptBusy===s.id?.6:1}}>{ptBusy===s.id?'Pasando…':`Pasar a Terminado · honorario ${fmt(emitido)}`}</button>
@@ -445,7 +445,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {siiRows.length>0&&<div style={secBox}>{sh('DTE del SII sin enlazar',C.tealText,siiRows.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>facturas emitidas en el SII que la app aún no vinculó a una venta · se cargan en Facturación</div>
       {siiRows.slice(0,30).map((v,i)=>{ const cl=v.client_id; return <div key={(v.folio||'')+'-'+i} onClick={cl?(()=>onOpenClientFicha&&onOpenClientFicha(cl)):undefined} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',cursor:cl?'pointer':'default',display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}>
-        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>N° {v.folio} · {v.receptor_name||'—'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{fmtFechaDMY(v.fecha_emision)} · {cl?'con cliente':'sin cliente'}</div></div>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {v.folio} · {v.receptor_name||'—'}</div><div style={{fontSize:10.5,color:C.muted,marginTop:1}}>{fmtFechaDMY(v.fecha_emision)} · {cl?'con cliente':'sin cliente'}</div></div>
         <span style={{fontSize:12,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(Math.round(Number(v.monto)||0))}</span>
       </div> })}
       {siiRows.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {siiRows.length-30} más…</div>}
@@ -453,7 +453,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {bancoRut.length>0&&<div style={secBox}>{sh('Clientes sin RUT · el banco sugiere uno',C.azulInfo,bancoRut.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el RUT no está en la ficha ni en una razón social, pero aparece en un movimiento del banco con el mismo nombre · revisa la evidencia y confirma</div>
       {bancoRut.map(p=><div key={p.client.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'10px 0'}}>
-        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.client.name} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {p.nFact} factura{p.nFact!==1?'s':''}</span></div>
+        <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client.id)} style={{fontSize:13,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{p.client.name} <span style={{fontSize:10,fontWeight:400,color:C.muted}}>· {p.nFact} factura{p.nFact!==1?'s':''}</span></div>
         <div style={{display:'flex',gap:8,marginTop:6,background:C.azulBg,borderRadius:9,padding:'8px 10px',alignItems:'flex-start'}}>
           <SIcon n='tBanco' s={14} c={C.azulInfo}/>
           <div style={{fontSize:11,color:C.text,lineHeight:1.4,minWidth:0,flex:1}}>Banco: <span style={{color:C.muted}}>{p.bankName}</span> · <b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtRutCL(p.rut)}</b><div style={{fontSize:10,color:C.muted,marginTop:2}}>{p.nMovs} movimiento{p.nMovs!==1?'s':''}</div></div>{amt(fmt(Math.round(p.total)))}

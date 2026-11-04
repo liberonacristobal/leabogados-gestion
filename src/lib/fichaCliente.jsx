@@ -97,7 +97,7 @@ export function DocumentosDrive({client, onCount, onPick}){
         {items.map(f=>{ const esCarpeta=f.mimeType===FOLDER; return (
           <button key={f.id} type='button' onClick={()=>esCarpeta?entrarSub(f):(onPick?onPick(f):abrir(f))} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:esCarpeta?C.bgSoft:'#fff',cursor:'pointer',textAlign:'left'}}>
             <SIcon n={esCarpeta?'building':'file'} s={14} c={esCarpeta?C.muted:C.accent}/>
-            <span style={{flex:1,minWidth:0,fontSize:12,color:esCarpeta?C.text:C.accent,fontWeight:esCarpeta?600:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+            <span style={{flex:1,minWidth:0,fontSize:12,color:esCarpeta?C.text:C.accent,fontWeight:esCarpeta?600:500,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.name}</span>
             <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{esCarpeta?<Gl n='chevron'/>:(f.modifiedTime?fmtFechaDMY(isoLocal(f.modifiedTime)):'')}</span>
           </button>
         )})}
@@ -211,7 +211,7 @@ export function ContactoTab({client, entities, onSaveFields, clientBilling=[], o
                 const nFac=(clientBilling||[]).filter(b=>!b.deleted_at&&b.invoice_no&&(String(b.entity_id)===String(e.id)||(e.rut&&crNormRut(b.receptor_rut||'')===crNormRut(e.rut)))).length
                 return (
                 <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`0.5px solid ${C.bgWarm}`}}>
-                  <span onClick={onOpenFinanciero?()=>onOpenFinanciero():undefined} title={onOpenFinanciero?'Ver sus facturas en Financiero':undefined} style={{fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenFinanciero?'pointer':'inherit'}}>{rsDisplay(e.name)||'—'}</span>
+                  <span onClick={onOpenFinanciero?()=>onOpenFinanciero():undefined} title={onOpenFinanciero?'Ver sus facturas en Financiero':undefined} style={{fontSize:12,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:onOpenFinanciero?'pointer':'inherit'}}>{rsDisplay(e.name)||'—'}</span>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                     {nFac>0&&onOpenFinanciero&&<span onClick={()=>onOpenFinanciero()} style={{fontSize:10,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'2px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>{nFac} factura{nFac!==1?'s':''} →</span>}
                     <Copyable text={e.rut} title='Copiar RUT'><span style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{fmtRutCL(e.rut)}</span></Copyable>
@@ -362,7 +362,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
         <div key={m.id}>
           <div onClick={()=>setDetMov(open?null:m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:open?'none':'1px solid #F1F1F1',cursor:'pointer'}}>
             <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.1}}><div style={{fontSize:13,fontWeight:600,color:C.accent}}>{d.dia}</div><div style={{fontSize:10,color:C.textSoft}}>{d.sub}</div></div>
-            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:10,fontWeight:700,background:m.rol_cuenta==='gastos'?C.ambarBg:C.azulBg,color:m.rol_cuenta==='gastos'?C.soonText:C.accent,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</span></div><div style={{fontSize:11,color:c?C.muted:C.soon,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{dest}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{marginBottom:2}}><span style={{fontSize:10,fontWeight:700,background:m.rol_cuenta==='gastos'?C.ambarBg:C.azulBg,color:m.rol_cuenta==='gastos'?C.soonText:C.accent,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{m.rol_cuenta==='gastos'?'Cta. Gastos':'Cta. Honorarios'}</span></div><div style={{fontSize:11,color:c?C.muted:C.soon,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{dest}</div></div>
             <b style={{color:m.tipo==='abono'?C.greenText:C.overdueText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{m.tipo==='abono'?'+':'−'}{fmt(m.monto)}</b>
             <span style={{color:C.textSoft,fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
           </div>
@@ -380,13 +380,13 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
         const tile=p=>{ const open=openProy===p.key; const falta=(p.fact||0)-(p.pag||0); return (
           <div key={p.key}>
             <div onClick={()=>setOpenProy(open?null:p.key)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid #F1F1F1`,cursor:'pointer'}}>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.titulo}</div><div style={{display:'flex',gap:6,alignItems:'center',marginTop:2}}>{p.area&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:p.area==='Corporativo'?C.azulBg:C.bgWarm,color:p.area==='Corporativo'?C.accent:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{p.area}</span>}<span style={{fontSize:10,color:C.textSoft}}>{p.year?`${p.year} · `:''}{p.facs.length} factura{p.facs.length!==1?'s':''}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:400,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{p.titulo}</div><div style={{display:'flex',gap:6,alignItems:'center',marginTop:2}}>{p.area&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:p.area==='Corporativo'?C.azulBg:C.bgWarm,color:p.area==='Corporativo'?C.accent:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{p.area}</span>}<span style={{fontSize:10,color:C.textSoft}}>{p.year?`${p.year} · `:''}{p.facs.length} factura{p.facs.length!==1?'s':''}</span></div></div>
               <div style={{textAlign:'right',whiteSpace:'nowrap'}}><div style={{fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums'}}>{fmt(p.fact)}</div><div style={{fontSize:10,color:falta>0?C.overdue:C.greenText}}>{falta>0?`falta ${fmt(falta)}`:'pagado'}</div></div>
               <span style={{color:C.textSoft,fontSize:16,lineHeight:1,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
             </div>
             {open&&<div style={{padding:'2px 0 6px'}}>{p.facs.map(b=>{ const pagada=b.status==='Pagado'; return (
               <div key={b.id} onClick={()=>onOpenSale&&p.venta&&onOpenSale(p.venta)} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0 4px 12px',fontSize:11,cursor:onOpenSale&&p.venta?'pointer':'default'}}>
-                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span></span>
+                <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span></span>
                 {(()=>{ const e=estadoFacturaLabel(b,aplicadoByFac[b.id]||0,cartolaHastaEC); return <span style={{fontSize:10,fontWeight:600,color:(e&&e.fg)||C.soon}}>{(e&&e.short)||(pagada?'Pagada':'pend.')}</span> })()}
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>) })}</div>}
@@ -412,7 +412,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
             </div>
             {open&&<div style={{padding:'2px 0 6px'}}>{sinP.facs.map(b=>(
               <div key={b.id} onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0 5px 12px',fontSize:11,cursor:onEditBilling?'pointer':'default',borderBottom:`1px solid #F1F1F1`}}>
-                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span>{onEditBilling&&<span style={{color:C.azulInfo,fontWeight:600}}> · asignar venta</span>}</span>
+                <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span>{onEditBilling&&<span style={{color:C.azulInfo,fontWeight:600}}> · asignar venta</span>}</span>
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>))}</div>}
           </div>) })()}
@@ -428,7 +428,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
       {Object.entries(grupos).map(([rs,fs])=>{ const abierta=!!openRS[rs]; const rut=(fs.find(b=>b.receptor_rut)||{}).receptor_rut||(clientEntities.find(en=>en.name===rs)||{}).rut||''; const pend=porCobrarBills(fs); return (<div key={rs} style={{marginBottom:8}}>
         <div onClick={()=>setOpenRS(p=>({...p,[rs]:!p[rs]}))} style={{display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${C.border}`,paddingBottom:4,marginBottom:1,cursor:'pointer'}}>
           <span style={{fontSize:14,color:C.textSoft,lineHeight:1,transform:abierta?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rs}{rut?<span style={{color:C.textSoft,fontWeight:600}}> · {rut}</span>:''}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rs}{rut?<span style={{color:C.textSoft,fontWeight:600}}> · {rut}</span>:''}</div></div>
           <span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap'}}>{fs.length} fact.{pend>0?<span style={{color:C.overdue}}> · por cobrar {fmt(pend)}</span>:''}</span>
         </div>
         {abierta&&fs.map(b=>{ const open=det===b.id; const pagada=b.status==='Pagado'; const ag=!pagada?aging(b.due):null; const c=concByFac[b.id]; const mv=c?movById[c.movimiento_id]:null; const v=ventaById[b.sale_id]
@@ -437,7 +437,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
           <div key={b.id}>
             <div onClick={()=>setDet(open?null:b.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer',borderBottom:open?'none':`1px solid ${C.border}`}}>
               {diaGrande(b.issued_at)}
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:eBg,color:eCol,whiteSpace:'nowrap'}}>{pagada?((estB&&estB.short)||'Pagada'):(ag?ag.t:'pendiente')}</span></div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b>Factura N° {folioN(b.invoice_no)||'—'}</b> <span style={{color:C.muted}}>· {b.concept||'—'}</span></div><div style={{marginTop:3}}><span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:eBg,color:eCol,whiteSpace:'nowrap'}}>{pagada?((estB&&estB.short)||'Pagada'):(ag?ag.t:'pendiente')}</span></div></div>
               <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{fmt(b.amount)}</div>
             </div>
             {open&&<div style={{padding:'7px 9px',background:C.bgSoft,borderRadius:8,fontSize:11,color:C.muted,lineHeight:1.6,margin:'2px 0 5px'}}>
@@ -464,7 +464,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
             <div style={{flex:1,minWidth:0}}>
               {/* Fila limpia (regla sutil): tipo o categoría + OT con su sello de pagada; caja chica, banco y rendición quedan en el detalle (recorridoGasto). */}
               {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)}</span>}</div>:null}
-              <div style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo'):'Gasto')}</div>
+              <div style={{fontSize:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo'):'Gasto')}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:isDev?C.muted:col,flexShrink:0}}>{isDev?'−'+fmt(Math.abs(e.amount)):(signo>0?'+':'−')+fmt(e.amount)}</div>
             <span style={{color:C.textSoft,fontSize:16,lineHeight:1,flexShrink:0,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
@@ -518,7 +518,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
           <button onClick={()=>setFgOrd(o=>o==='desc'?'asc':'desc')} title='Ordenar por fecha' style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Fecha {fgOrd==='desc'?'↓':'↑'}</button>
         </div>
       </div>
-      {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.greenText,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
+      {onRendicion&&(()=>{ const pr=gastosPorRendirCli(expenses,client.id); if(!pr.length) return null; const m=pr.reduce((t,e)=>t+(Number(e.amount)||0),0); return <div style={{display:'flex',alignItems:'center',gap:10,background:C.greenBg,borderRadius:10,padding:'7px 8px 7px 13px',marginBottom:10}}><span style={{flex:1,minWidth:0,fontSize:13,fontWeight:600,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Por rendir · {pr.length} gasto{pr.length!==1?'s':''}</span><b style={{color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(m)}</b><ActBtn variant='success' onClick={onRendicion}>Rendir</ActBtn></div> })()}
       <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',marginBottom:2}}>Fondos recibidos</div>
       {fondosV.length===0&&<div style={{fontSize:11,color:C.muted}}>—</div>}
       {fondosV.map(e=>fila(e,1,C.greenText))}
@@ -569,7 +569,7 @@ export function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=
           <option value=''>Razón social…</option>
           {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
         </select>}
-        {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
+        {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}} title={sug.porque}>Sugerido · {sug.porque}</div>}
       </div>
       <div style={{marginTop:7,paddingTop:7,borderTop:`1px solid ${C.border}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,marginBottom:2}}><b style={{fontSize:12,color:C.text}}>Otros sin proyecto · ¿van a este mismo?</b><span onClick={()=>setMarc(extra.length===lista.length?new Set():new Set(lista.map(x=>x.id)))} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{extra.length===lista.length?'Desmarcar':'Marcar todos'}</span></div>
@@ -594,7 +594,7 @@ export function AsignarProyectoRS({e, items, otros=[], ventas=[], ents=[], subs=
         {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
       </select>}
       {btn}
-      {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={sug.porque}>Sugerido · {sug.porque}</div>}
+      {faltaV&&sug.venta&&String(sug.venta.id)===String(v)&&sug.porque&&<div style={{flexBasis:'100%',fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}} title={sug.porque}>Sugerido · {sug.porque}</div>}
     </div>)
 }
 
@@ -879,7 +879,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
             <div onClick={()=>toggleCj(s.id)} style={{padding:'10px 12px',cursor:'pointer'}}>
               <div style={{display:'flex',alignItems:'center',gap:9}}>
                 <SIcon n={ai} s={19} c={C.muted}/>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}{(()=>{ const n=(causasCli.rows||[]).filter(c=>String(c.sale_id||'')===String(s.id)).length; return n?` · ${n} causa${n!==1?'s':''}`:'' })()}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title}</div><div style={{fontSize:10,color:olvN?C.overdueText:C.muted}}>{uf>0?fmtUF(uf):''}{s.year?` · ${s.year}`:''}{olvN?` · ${olvN} sin facturar`:''}{(()=>{ const n=(causasCli.rows||[]).filter(c=>String(c.sale_id||'')===String(s.id)).length; return n?` · ${n} causa${n!==1?'s':''}`:'' })()}</div></div>
                 <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,whiteSpace:'nowrap'}}>Por cobrar</div><div style={{fontSize:16,fontWeight:800,color:pen>0?C.accent:C.greenText,lineHeight:1,marginTop:1}}>{pen>0?fmtShort(pen):'$0'}</div></div>
                 <svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
               </div>
@@ -968,9 +968,9 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lblFolio(b)}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:10,color:C.muted,marginLeft:5}}>{tipoFacturaLbl(b)}</span>}</div>
-                    {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.concept||'—'}</div>}
-                    {(proj||rsNm)&&<div style={{fontSize:10,color:C.muted,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{lblFolio(b)}{['reembolso','comision','externo'].includes(b.billing_type)&&<span style={{fontSize:10,color:C.muted,marginLeft:5}}>{tipoFacturaLbl(b)}</span>}</div>
+                    {b.invoice_no&&<div style={{fontSize:10,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b.concept||'—'}</div>}
+                    {(proj||rsNm)&&<div style={{fontSize:10,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{proj||''}{proj&&rsNm?' · ':''}{rsNm&&<b style={{fontWeight:600}}>{rsNm}</b>}</div>}
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     {(()=>{ const sal=saldoBill(b); const parcial=(b.paid_amount||0)>0&&!['Pagado','Anulada'].includes(b.status); return parcial
@@ -1085,7 +1085,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:400,color:C.text}}>{fmt(a.monto)}</div>
-                      <div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div>
+                      <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
                       {!disp&&folio&&<span style={{fontSize:11,color:C.muted,textDecoration:'underline'}}>Factura N° {folio}</span>}
@@ -1135,7 +1135,7 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
           const kc=(l,v,sub,col,go)=>(<div onClick={go?()=>setFtab(go):undefined} className={go?'lf-kpi':undefined} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',cursor:go?'pointer':'default'}}>
             <div style={{...SEC_LBL}}>{l}</div>
             <div style={{fontSize:17,fontWeight:800,color:col,marginTop:4,letterSpacing:-.3,fontVariantNumeric:'tabular-nums'}}>{v}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>
           </div>)
           const nFact=clientBilling.filter(esFacturada).length
           const _MAf=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -1157,15 +1157,15 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
               return <div key={k} style={{background:C.surface,border:`1px solid ${borde||C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}}>
                 <div onClick={body?()=>alt(k):undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',borderBottom:ab?`1px solid ${C.bgSoft}`:'none',cursor:body?'pointer':'default'}}>
                   <span style={{width:28,height:28,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={icn} s={15} c={icol}/></span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>
                   {val!=null&&<span style={{fontSize:13,fontWeight:800,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</span>}
                   {body&&<span style={{color:C.done,fontSize:13,flexShrink:0,display:'inline-flex',transform:ab?'rotate(180deg)':'none',transition:'transform .12s'}}><Gl n='chevD'/></span>}
                 </div>{ab&&body}</div> }
             const fila=(key,on,izq,centro,der)=><div key={key} onClick={on} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:on?'pointer':'default',fontSize:12}}>{izq}<div style={{flex:1,minWidth:0}}>{centro}</div>{der}</div>
             const pie=(txt,col,on)=><div onClick={on} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:col,cursor:on?'pointer':'default'}}>{txt} <Gl n='chevron'/></div>
-            const tt=(a,b)=><><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a}</div>{b&&<div style={{fontSize:10,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b}</div>}</>
+            const tt=(a,b)=><><div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a}</div>{b&&<div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</div>}</>
             const sRend=porRendir.length>0&&onRendicion&&sec('rend','wallet',C.greenBg,C.greenText,'Por rendir al cliente',`${porRendir.length} gasto${porRendir.length!==1?'s':''}${porRendir[0]?.date?` · desde ${fmtFechaDMY(porRendir[0].date)}`:''}`,fmt(porRendirTot),C.greenText,<>
-              {porRendir.slice(0,3).map(e=>fila(e.id,onEditExpense?()=>onEditExpense(e):undefined,null,<div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||e.category||'Gasto'}</div>,<><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(e.date)}</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span></>))}
+              {porRendir.slice(0,3).map(e=>fila(e.id,onEditExpense?()=>onEditExpense(e):undefined,null,<div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||e.category||'Gasto'}</div>,<><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(e.date)}</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span></>))}
               {porRendir.length>3&&pie(`Ver los ${porRendir.length} en Cartola`,C.greenText,()=>setFtab('documentos'))}
               <div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><ActBtn variant='success' full onClick={()=>onRendicion(client)}>Rendir</ActBtn></div></>,C.greenText)
             const sVenc=venc.length>0
@@ -1185,7 +1185,7 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
                 :<div style={{padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontWeight:700,color:C.greenText}}>Sin vencimientos en {CAL_CLI_DIAS} días</div>}
               {cal.noRev>0&&fila('nor',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.overdue,flexShrink:0}}/>,<span style={{color:C.overdueText,fontSize:12,fontWeight:600}}>{cal.noRev} causa{cal.noRev!==1?'s':''} sin revisar · falló la última revisión</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
               {cal.seguimiento>0&&fila('seg',()=>setFtab('financiero'),<span style={{width:7,height:7,borderRadius:'50%',background:C.done,flexShrink:0}}/>,<span style={{color:C.text,fontSize:12}}>{cal.seguimiento} causa{cal.seguimiento!==1?'s':''} en seguimiento · sin tabla</span>,<span style={{fontSize:11,fontWeight:700,color:C.azulInfo,flexShrink:0}}>Ver <Gl n='chevron'/></span>)}
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700}}><span style={{color:C.muted,fontWeight:600,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Obligaciones tributarias · {cal.oblTxt||'por definir'}</span><span onClick={()=>setElegir(v=>!v)} style={{color:C.azulInfo,cursor:'pointer',flexShrink:0}}>{elegir?'Listo':'Elegir'}</span></div>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700}}><span style={{color:C.muted,fontWeight:600,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Obligaciones tributarias · {cal.oblTxt||'por definir'}</span><span onClick={()=>setElegir(v=>!v)} style={{color:C.azulInfo,cursor:'pointer',flexShrink:0}}>{elegir?'Listo':'Elegir'}</span></div>
               {elegir&&<div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`}}>{OBL_CLIENTE.map(([tp,fo,lb])=>{ const on=cal.elegidas.some(o=>o.tipo===tp&&String(o.formulario||'')===String(fo||''))
                 return <span key={lb} onClick={()=>calCli.alternar(tp,fo,lb)} style={{fontSize:12,fontWeight:600,border:`1px solid ${on?C.accent:C.border}`,borderRadius:12,padding:'4px 10px',background:on?C.accent:C.surface,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>{lb}</span> })}</div>}</>)
             // Escritorio: dos columnas (Por rendir · Próximas tareas | Vencidas · Calendario); celular: una columna en ese orden.
@@ -1229,7 +1229,7 @@ export function CausaFila({c, isDesktop, cliente=null, onCambio, user}){
   return (<div style={{borderTop:`1px solid ${C.track}`}}>
     <div onClick={D?undefined:()=>setOp(v=>!v)} style={{display:'flex',alignItems:'center',gap:10,padding:D?'10px 14px':'10px 12px',cursor:D?'default':'pointer'}}>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:14,fontWeight:600,color:C.text,...(D?{}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{c.caratula||'Sin carátula'}</div>
+        <div style={{fontSize:14,fontWeight:600,color:C.text,...(D?{}:{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25})}}>{c.caratula||'Sin carátula'}</div>
         <div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{D?detalle:[_rolTxt(c),predio].filter(Boolean).join(' · ')}</div>
       </div>
       {chip}

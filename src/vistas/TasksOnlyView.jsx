@@ -164,7 +164,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
             <div style={{fontSize:13,fontWeight:600,color:done?C.muted:C.text,lineHeight:1.3,textDecoration:done?'line-through':'none'}}>{t.title}</div>
             {(client||t.project||t.subproject||(showWho&&taskAssignees(t).length>0))&&(
               <div style={{fontSize:10,color:C.textSoft,marginTop:3,display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                {(client||t.project||t.subproject)&&<span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client&&<span onClick={onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{color:C.muted,fontWeight:600,cursor:onOpenClientFicha?'pointer':'inherit'}}>{client.name}</span>}{t.project&&<span>{client?' · ':''}{t.project}</span>}{t.subproject&&<span>{(client||t.project)?<>{" "}<Gl n='chevron'/>{" "}</>:''}{t.subproject}</span>}</span>}
+                {(client||t.project||t.subproject)&&<span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{client&&<span onClick={onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(client.id)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{color:C.muted,fontWeight:600,cursor:onOpenClientFicha?'pointer':'inherit'}}>{client.name}</span>}{t.project&&<span>{client?' · ':''}{t.project}</span>}{t.subproject&&<span>{(client||t.project)?<>{" "}<Gl n='chevron'/>{" "}</>:''}{t.subproject}</span>}</span>}
                 {showWho&&taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{flexShrink:0,fontSize:11,color:pc.color,fontWeight:700}}>{w}</span>})}
               </div>
             )}
@@ -272,8 +272,8 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
               {sugVisibles.map(a=>(
                 <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'8px 10px',background:C.bgSoft,borderRadius:8}}>
                   <div onClick={()=>onEdit&&onEdit({title:a.title,client_id:a.client_id,due:a.due,note:a.note})} style={{flex:1,minWidth:0,cursor:'pointer'}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.title}</div>
-                    <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.title}</div>
+                    <div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
                   </div>
                   <button onClick={()=>descartarSug(a)} title='Descartar' style={{background:'none',border:'none',color:C.textSoft,cursor:'pointer',fontSize:16,lineHeight:1,padding:'0 2px',flexShrink:0}}><Gl n='x'/></button>
                 </div>
@@ -410,7 +410,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
           })
         })()}
         {ultMov&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:10,padding:'8px 12px',margin:'0 0 10px'}}>
-          <span style={{minWidth:0,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isDesktop?<><b style={{color:C.text,fontWeight:600}}>{ultMov.t.title}</b> · reprogramada al {fmtFechaDMY(ultMov.a)}</>:<>Reprogramada al <b style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(ultMov.a)}</b></>}</span>
+          <span style={{minWidth:0,flex:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{isDesktop?<><b style={{color:C.text,fontWeight:600}}>{ultMov.t.title}</b> · reprogramada al {fmtFechaDMY(ultMov.a)}</>:<>Reprogramada al <b style={{color:C.text,fontWeight:600}}>{fmtFechaDMY(ultMov.a)}</b></>}</span>
           <button onClick={async()=>{ const m=ultMov; setUltMov(null); await onReprogramar({...m.t,due:m.a},m.de) }} style={{background:'none',border:'none',color:C.accent,fontWeight:700,fontSize:12,cursor:'pointer',padding:0,flexShrink:0}}>Deshacer</button>
         </div>}
         {selDay&&(()=>{ const ts=tasks.filter(t=>t.due===selDay&&t.status!=='Terminado'&&(enMiLista(t,me)||t.assigned_by===me)); const d=new Date(selDay+'T12:00'); const lbl0=d.toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'}); const lbl=lbl0.charAt(0).toUpperCase()+lbl0.slice(1)
@@ -424,7 +424,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
             {ts.map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); return (
               <div key={t.id} onClick={()=>(onPreview||setPreview)(t)} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 0',borderTop:`0.5px solid ${C.border}`,cursor:'pointer'}}>
                 <span style={{width:7,height:7,borderRadius:'50%',background:u.dot,flexShrink:0,marginTop:4}}/>
-                <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div><div style={{fontSize:11,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
+                <div style={{minWidth:0,flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t.title}</div><div style={{fontSize:11,color:C.muted}}>{cl?cl.name:'Sin cliente'}{taskAssignees(t).length?` · ${taskAssignees(t).join(', ')}`:''}</div></div>
               </div>
             )})}
             <button onClick={()=>onAddTask(selDay)} style={{marginTop:8,fontSize:11,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Nueva tarea este día</button>
@@ -473,9 +473,9 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
           const colHd = t => <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>{t}</div>
           const tile = (lbl,val,sub,col,onClick) => (
             <div onClick={onClick} style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'9px 11px',minWidth:0,height:66,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'center',cursor:onClick?'pointer':'default'}}>
-              <div style={{...SEC_LBL,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lbl}{onClick?<>{" "}<Gl n='chevron'/></>:''}</div>
+              <div style={{...SEC_LBL,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{lbl}{onClick?<>{" "}<Gl n='chevron'/></>:''}</div>
               <div style={{fontSize:13,fontWeight:600,color:col||C.text,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{val}</div>
-              <div style={{fontSize:10,color:col||C.muted,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+              <div style={{fontSize:10,color:col||C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>
             </div>)
           return (<>
             {/* Saldo (igual que antes) + última caja recibida; el chip lleva a liquidar */}
@@ -483,7 +483,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
               <div style={{minWidth:0,flex:'1 1 200px'}}>
                 <div style={{fontSize:10,fontWeight:600,color:saldoSch.label,textTransform:'uppercase',letterSpacing:.5,marginBottom:4}}>Saldo en tu caja{saldo<0?' · te debemos':''}</div>
                 <div style={{fontSize:22,fontWeight:700,color:saldoSch.num,lineHeight:1.1}}>{fmtSaldoG(saldo)}</div>
-                {ultCaja&&<div style={{fontSize:10,color:C.muted,marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Última caja recibida · {fmtFecha(ultCaja.delivered_at)} · {fmtCLP(ultCaja.amount)}</div>}
+                {ultCaja&&<div style={{fontSize:10,color:C.muted,marginTop:4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Última caja recibida · {fmtFecha(ultCaja.delivered_at)} · {fmtCLP(ultCaja.amount)}</div>}
               </div>
               {totalPorLiquidar>0&&<span onClick={()=>irCaja('liquidar')} style={{flexShrink:0,fontSize:11,fontWeight:600,color:liqSch.num,background:'#fff',border:`0.5px solid ${liqSch.bd}`,padding:'5px 11px',borderRadius:20,whiteSpace:'nowrap',cursor:'pointer'}}>{porLiquidar.length} por liquidar · {fmtCLP(totalPorLiquidar)} <Gl n='chevron'/></span>}
             </div>
@@ -503,9 +503,9 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
                 {ultimos.map(e=>{ const cl=clients.find(c=>c.id===e.client_id); const liq=!!e.rendered_at; return (
                   <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,background:C.card,borderRadius:8,padding:'0 11px',height:50,boxSizing:'border-box',marginBottom:6,border:`0.5px solid ${C.border}`}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
                       <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',minWidth:0}}>
-                        <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{[cl?.name,fmtFecha(e.date)].filter(Boolean).join(' · ')}</span>
+                        <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{[cl?.name,fmtFecha(e.date)].filter(Boolean).join(' · ')}</span>
                         {!e.paid_by_client&&<span style={{padding:'2px 8px',borderRadius:20,fontWeight:700,fontSize:9.5,background:liq?C.greenBg:C.soonBg,color:liq?C.greenText:C.soonText,flexShrink:0,whiteSpace:'nowrap'}}>{liq?'liquidado':'por liquidar'}</span>}
                       </div>
                     </div>
@@ -569,8 +569,8 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
       {sugOpen&&sugVisibles.length>0&&<div style={{marginTop:8}}>{sugVisibles.map(a=>(
         <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'8px 10px',background:C.bgSoft,borderRadius:8}}>
           <div onClick={()=>onEdit&&onEdit({title:a.title,client_id:a.client_id,due:a.due,note:a.note})} style={{flex:1,minWidth:0,cursor:'pointer'}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.title}</div>
-            <div style={{fontSize:10,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
+            <div style={{fontSize:12,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.title}</div>
+            <div style={{fontSize:10,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.fromName}{a.client_id?` · ${clients.find(c=>c.id===a.client_id)?.name||''}`:''}{a.due?` · vence ${fmtVenceShort(a.due)}`:''}</div>
           </div>
           <button onClick={()=>descartarSug(a)} title='Descartar' style={{background:'none',border:'none',color:C.textSoft,cursor:'pointer',fontSize:16,lineHeight:1,padding:'0 2px',flexShrink:0}}><Gl n='x'/></button>
         </div>

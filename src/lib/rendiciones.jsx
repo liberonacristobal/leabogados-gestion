@@ -483,7 +483,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             </div> })}
           </div> })()}
         <div style={{marginTop:8}}>{porT.map((o,i)=><div key={o.t} style={{borderTop:`1px solid ${C.track}`,padding:'7px 0 3px'}}>
-          <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.accent,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{modoEf!=='junto'?`N° ${nextCorr+i} · `:''}{o.t}</span><span style={{fontSize:13,fontWeight:700,color:o.saldo<0?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{o.saldo<0?'−':'+'}{fmtN(Math.abs(o.saldo))}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'baseline'}}><span style={{fontSize:13,fontWeight:700,color:C.accent,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{modoEf!=='junto'?`N° ${nextCorr+i} · `:''}{o.t}</span><span style={{fontSize:13,fontWeight:700,color:o.saldo<0?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{o.saldo<0?'−':'+'}{fmtN(Math.abs(o.saldo))}</span></div>
           <div style={{fontSize:12,color:C.textSoft,display:'flex',justifyContent:'space-between',gap:8}}><span>fondos {fmtN(o.f.totFondos)}{o.f.rendido?` · ya rendido ${fmtN(o.f.rendido)}`:''} · {o.gs.length} gasto{o.gs.length!==1?'s':''} {fmtN(o.tg)}</span>{modoEf!=='junto'&&<button type='button' onClick={()=>verPdfVirtual(virtuales()[i])} style={{fontSize:11,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Ver PDF</button>}</div>
         </div>)}</div>
       </div>
@@ -584,7 +584,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const bLista = (<>
       {!isDesktop&&nDupR>0&&<div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
       {wipRec&&gastosSel.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
-        <span style={{flex:1,minWidth:0,fontSize:12,color:C.accent,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
+        <span style={{flex:1,minWidth:0,fontSize:12,color:C.accent,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
         <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
       {enFondo&&(()=>{ const nSin=repF.sinFondo.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g)).length
@@ -790,7 +790,7 @@ export function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, 
           <label style={flabel}>Comprobante de transferencia</label>
           {comp?(
             <div style={{display:'flex',alignItems:'center',gap:8,background:C.greenBg,borderRadius:8,padding:'9px 11px'}}>
-              <span style={{fontSize:12,color:C.greenText,fontWeight:600,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><Gl n='tick'/> {comp.name}</span>
+              <span style={{fontSize:12,color:C.greenText,fontWeight:600,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><Gl n='tick'/> {comp.name}</span>
               <button onClick={()=>setComp(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:12}}>Quitar</button>
             </div>
           ):(
@@ -1197,8 +1197,8 @@ Saludos cordiales,`
                 {sugMail&&!sugMail.length&&<div style={{fontSize:12,color:C.textSoft,padding:'6px 0'}}>No encontré correos con este cliente.</div>}
                 {(sugMail||[]).map(x=>{ const esPara=(para||'').toLowerCase()===x.email, esCc=cc.includes(x.email); return (
                   <div key={x.email} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:`1px solid ${C.track}`}}>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.name||x.email}{x.name&&<span style={{fontWeight:400,color:C.textSoft}}> · {x.email}</span>}</div>
-                      <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{motivoSug(x)}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.name||x.email}{x.name&&<span style={{fontWeight:400,color:C.textSoft}}> · {x.email}</span>}</div>
+                      <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{motivoSug(x)}</div></div>
                     <button onClick={()=>ponerPara(x.email)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 10px',border:`1px solid ${esPara?C.accent:C.border}`,background:esPara?C.azulBg:C.surface,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>Para</button>
                     <button onClick={()=>esCc?removeCc(x.email):addCc(x.email)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'3px 10px',border:`1px solid ${esCc?C.accent:C.border}`,background:esCc?C.azulBg:C.surface,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>CC</button>
                   </div>) })}

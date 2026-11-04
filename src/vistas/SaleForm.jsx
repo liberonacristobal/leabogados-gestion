@@ -34,7 +34,7 @@ export function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultNa
           <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Ya existe {parecidos.length>1?'n fichas parecidas':'una ficha parecida'} — no dupliques:</div>
           {parecidos.slice(0,4).map(({cliente,tipo})=>(
             <div key={cliente.id} style={{display:'flex',alignItems:'center',gap:8,padding:'3px 0'}}>
-              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cliente.name} <span style={{fontSize:10,fontWeight:700,color:C.soonText}}>· {_tipoDupLbl(tipo)}</span></span>
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cliente.name} <span style={{fontSize:10,fontWeight:700,color:C.soonText}}>· {_tipoDupLbl(tipo)}</span></span>
               {onPickExisting&&<span onClick={()=>onPickExisting(cliente)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,borderRadius:8,padding:'4px 10px',cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>Usar esta</span>}
             </div>
           ))}
@@ -711,7 +711,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   setPropuestaStep('drive')
                 }
               }} style={{padding:'10px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,textAlign:'left',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</div>
+                <div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.name}</div>
                 <div style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(isoLocal(f.modifiedTime))}</div>
               </button>
             ))}
@@ -874,7 +874,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         return (
         <div style={{background:'linear-gradient(135deg,#003C50,#0A5168)',color:'#fff',borderRadius:12,padding:'16px 16px 15px',marginBottom:14}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-            <span style={{fontSize:12,fontWeight:700,opacity:.92,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient?.name||'Sin cliente'}</span>
+            <span style={{fontSize:12,fontWeight:700,opacity:.92,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{selectedClient?.name||'Sin cliente'}</span>
             {cobroType!=='hora'&&<span style={{display:'inline-flex',border:'1.5px solid rgba(255,255,255,.35)',borderRadius:8,overflow:'hidden',flexShrink:0}}>
               {['UF','CLP'].map(mo=><span key={mo} onClick={()=>up('moneda',mo)} style={{fontSize:11,fontWeight:700,padding:'4px 11px',cursor:'pointer',background:moneda===mo?'#fff':'transparent',color:moneda===mo?C.accent:'rgba(255,255,255,.7)'}}>{mo}</span>)}
             </span>}
@@ -951,7 +951,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         <div onClick={()=>{setReasignCli(true);setClientQ('')}} title='Cambiar cliente' style={{marginBottom:10,padding:'11px 13px',borderRadius:12,background:C.azulBg,border:`1.5px solid #CFE0EA`,display:'flex',alignItems:'center',gap:11,cursor:'pointer'}}>
           <span style={{width:34,height:34,borderRadius:10,background:C.accent,color:'#fff',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(selectedClient.name||'?').trim().slice(0,2).toUpperCase()}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{selectedClient.name}</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{selectedClient.name}</div>
             {selectedClient.rut&&<div style={{fontSize:11,color:C.muted}}>{fmtRutCL(selectedClient.rut)}</div>}
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'6px 12px',flexShrink:0}}>Cambiar</span>
@@ -985,7 +985,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             </select>
           ):(
             <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <span style={{fontSize:13,fontWeight:400,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(()=>{const e=clientEntitiesList.find(x=>String(x.id)===String(f.entity_id));return e?`${e.name}${e.rut?' · '+e.rut:''}`:'— Elegir —'})()}{clientEntitiesList.length>1&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · propuesta</span>}</span>
+              <span style={{fontSize:13,fontWeight:400,color:C.text,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{(()=>{const e=clientEntitiesList.find(x=>String(x.id)===String(f.entity_id));return e?`${e.name}${e.rut?' · '+e.rut:''}`:'— Elegir —'})()}{clientEntitiesList.length>1&&<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · propuesta</span>}</span>
               <button type='button' onClick={()=>setRsMode('pick')} style={chipBtn('soft')}>Cambiar</button>
             </div>
           )}
@@ -1180,7 +1180,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             <div style={{marginTop:9,borderRadius:10,padding:'9px 11px',background:av?C.soonBg:C.azulBg,border:`1px solid ${av?'#EBD9AE':C.border}`}}>
               {av&&<div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><line x1='12' y1='9' x2='12' y2='13'/><line x1='12' y1='17' x2='12.01' y2='17'/></svg>Se programará la facturación · revisa antes de guardar</div>}
               <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                {cobros.slice(0,6).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:av?C.soonText:C.accent}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.label} · {fmtFechaDMY(c.fecha)}</span><span style={{fontWeight:700,whiteSpace:'nowrap',marginLeft:8}}>{fmt(c.monto)}</span></div>)}
+                {cobros.slice(0,6).map((c,i)=><div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:av?C.soonText:C.accent}}><span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.label} · {fmtFechaDMY(c.fecha)}</span><span style={{fontWeight:700,whiteSpace:'nowrap',marginLeft:8}}>{fmt(c.monto)}</span></div>)}
                 {cobros.length>6&&<div style={{fontSize:10,color:C.textSoft}}>+ {cobros.length-6} cuota{cobros.length-6!==1?'s':''} más</div>}
               </div>
               <div style={{fontSize:10,color:av?C.soonText:C.done,marginTop:6}}>Se {av?'reprograman':'crean'} {cobros.length} cuota{cobros.length!==1?'s':''} programada{cobros.length!==1?'s':''}. Las emitidas/pagadas no se tocan.</div>
@@ -1220,7 +1220,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <div key={key} onClick={()=>setOpenCondicion(openCondicion===key?null:key)}
             style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:isLast?'none':`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
             <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>{lbl}</div>
-            <div style={{flex:1,fontSize:13,fontWeight:400,color:val==='—'?C.muted:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{val}</div>
+            <div style={{flex:1,fontSize:13,fontWeight:400,color:val==='—'?C.muted:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{val}</div>
             <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion===key?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}><Gl n='chevron'/></span>
           </div>
         )
@@ -1241,7 +1241,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontSize:13,fontWeight:400,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
                   {provLabel
-                    ? <span style={{fontSize:12,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {provLabel}</span>
+                    ? <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>· {provLabel}</span>
                     : (costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
                 </div>
                 <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion==='costos'?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}><Gl n='chevron'/></span>

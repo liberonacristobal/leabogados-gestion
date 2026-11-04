@@ -416,7 +416,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
         <div key={k} style={{...card,overflow:'hidden'}}>
           <div onClick={()=>!hayFiltro&&setAbiertos(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })} style={{display:'flex',alignItems:'center',gap:8,padding:D?'11px 14px':'10px 12px',cursor:'pointer'}}>
             <span style={{fontSize:13,color:C.textSoft,transform:op?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>
-            <span style={{fontSize:14,fontWeight:700,color:C.accent,flex:1,minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{etq(k)}</span>
+            <span style={{fontSize:14,fontWeight:700,color:C.accent,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{etq(k)}</span>
             <span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap'}}>{ds.length} documento{ds.length!==1?'s':''}</span>
             {agrupar==='cliente'&&onOpenClientFicha&&<button onClick={ev=>{ev.stopPropagation();onOpenClientFicha(k)}} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'0 0 0 4px'}}>Ficha</button>}
           </div>
@@ -477,7 +477,7 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
       return D
         ? <div key={'r'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
             <span style={{width:32,height:32,borderRadius:10,background:C.azulBg,color:C.azulInfo,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='mail' s={16} c={C.azulInfo}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Liquidación recibida el ${f} · por revisar`}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[quien,d.nombre?`«${d.nombre}»`:null].filter(Boolean).join(' · ')}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Liquidación recibida el ${f} · por revisar`}</div><div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[quien,d.nombre?`«${d.nombre}»`:null].filter(Boolean).join(' · ')}</div></div>
             <button onClick={()=>revisar(x)} style={btn}>Revisar liquidación</button>
           </div>
         : <div key={'r'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',display:'flex',flexDirection:'column',gap:9}}>
@@ -488,7 +488,7 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
       return D
         ? <div key={'s'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
             <span style={{width:32,height:32,borderRadius:10,background:C.soonBg,color:C.soonText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='mail' s={16} c={C.soonText}/></span>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Pedido del ${f} sin respuesta`}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{`3 días hábiles${x.p.d.desde?` · desde el ${fmtFechaDMY(x.p.d.desde)}`:''}`}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{`Pedido del ${f} sin respuesta`}</div><div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{`3 días hábiles${x.p.d.desde?` · desde el ${fmtFechaDMY(x.p.d.desde)}`:''}`}</div></div>
             <button disabled={busy===x.slot} onClick={()=>seguir(x)} style={{...btn,opacity:busy===x.slot?.6:1}}>{busy===x.slot?'Enviando…':'Enviar seguimiento'}</button>
           </div>
         : <div key={'s'+x.slot} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'11px 12px',display:'flex',flexDirection:'column',gap:9}}>
@@ -502,12 +502,12 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
         return <div key={x.slot+'-'+i} style={{display:'flex',gap:12,padding:D?'12px 14px':'11px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none',minWidth:0}}>
           {diaGrande(isoLocal(x.p.created_at))}
           <div style={{flex:1,minWidth:0}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><div style={{fontSize:14,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.desde?`Desde el ${fmtFechaDMY(d.desde)}`:'A la fecha'}</div><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',background:bg,color:col}}>{lbl}</span></div>
-            <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{D?`A ${(d.to||[]).join(' y ')}${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`:`A la notaría${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`}</div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}><div style={{fontSize:14,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{d.desde?`Desde el ${fmtFechaDMY(d.desde)}`:'A la fecha'}</div><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',background:bg,color:col}}>{lbl}</span></div>
+            <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{D?`A ${(d.to||[]).join(' y ')}${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`:`A la notaría${(d.cc||[]).length?` · copia ${nomCc(d.cc)}`:''}`}</div>
             <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:4}}>
               {x.eventos.map(e=><div key={e.id} style={{display:'flex',gap:8,alignItems:'baseline',fontSize:12,color:C.text,minWidth:0}}>
                 <span style={{color:C.muted,width:D?128:78,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{hm(e.created_at)}</span>
-                <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{etiqueta(e)}</span></div>)}
+                <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{etiqueta(e)}</span></div>)}
               {x.estado==='rev'&&<div style={{display:'flex',gap:8,fontSize:12}}><span style={{width:D?128:78,flexShrink:0}}/><span onClick={()=>revisar(x)} style={{fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Revisar liquidación ›</span></div>}
             </div>
           </div>
@@ -840,7 +840,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
               <div key={e.id} onClick={()=>setMovSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
                 <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
                 {e.ot_number&&<span style={{color:C.azulInfo,fontWeight:600,flexShrink:0}}>{fmtOt(e.ot_number)}</span>}
-                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:on?C.text:C.muted}}>{e.concept||'—'}</span>
                 <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
               </div>) })}
           </div>
@@ -1120,10 +1120,10 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
     <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.selBg:'transparent',opacity:bloqueado?.6:1}}>
       <span style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:8,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
       {D ? <>
-        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)',textUnderlineOffset:2}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
+        <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{hl(e.concept||'—')}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)',textUnderlineOffset:2}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
       </> : <>
-        <span style={{gridColumn:2,gridRow:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hl(e.concept||'—')}</span>
-        <span style={{gridColumn:2,gridRow:2,fontSize:11,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</span>
+        <span style={{gridColumn:2,gridRow:1,fontSize:12,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{hl(e.concept||'—')}</span>
+        <span style={{gridColumn:2,gridRow:2,fontSize:11,color:C.muted,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.azulInfo,fontWeight:700}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</span>
       </>}
       <span style={{...(D?{}:{gridColumn:3,gridRow:'1 / 3'}),fontSize:13,fontWeight:600,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span>
       {!D&&<button onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{gridColumn:4,gridRow:'1 / 3',width:32,height:32,border:'none',background:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0}}><SIcon n='chevron' s={14} c={C.done}/></button>}
@@ -1433,7 +1433,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
                 : <span style={{fontSize:11,color:C.textSoft,fontWeight:400,whiteSpace:'nowrap'}}>Incobrable · a cargo de la oficina</span>)}
               {e.personal_de&&!opts.sinPersonal&&(()=>{const pc=personChip(e.personal_de);return <span style={{fontSize:11,fontWeight:700,color:C.muted}}>Personal · <b style={{color:pc.color,fontWeight:700}}>{e.personal_de}</b></span>})()}
             </div>
-            <div style={{fontSize:13,color:C.text,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
+            <div style={{fontSize:13,color:C.text,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
             {!isFondo&&!e.personal_de&&!esOficina(e.client_id)&&<div style={{fontSize:10,marginTop:2}}>{e.client_id?<span style={{color:C.muted,fontWeight:600}}>{rsDisplay(rsLabel(e.client_id,clients,clientEntities,e.entity_id).name)}</span>:<span style={{color:C.overdue,fontWeight:600}}>Sin cliente</span>}</div>}
             {movExp===e.id&&!isFondo&&!e.personal_de&&esOficina(e.client_id)&&(()=>{ const catOk=e.category&&!CATS_LEGALES.includes(String(e.category).trim().toLowerCase()); return (
               <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}} onClick={stop}>
@@ -1577,7 +1577,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
               {proj
                 ? <span style={{display:'inline-block',fontSize:10,fontWeight:600,color:C.accent,background:C.azulBg,borderRadius:12,padding:'1px 7px',maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',verticalAlign:'middle'}}>{proj}</span>
                 : (!showClient&&<span style={{fontSize:13,fontWeight:600,color:C.text}}>Rendición</span>)}
-              <div style={{fontSize:11,color:C.textSoft,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.sent_at&&r.correlativo?<b style={{color:C.muted}}>N° {r.correlativo} · </b>:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
+              <div style={{fontSize:11,color:C.textSoft,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.sent_at&&r.correlativo?<b style={{color:C.muted}}>N° {r.correlativo} · </b>:''}{r.user_name||''}{rs?` · ${rs}`:''} · {r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:13,fontWeight:600,color:C.overdue,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>-{fmt(r.total)}</div><div style={{marginTop:3,display:'flex',gap:4,justifyContent:'flex-end',flexWrap:'wrap'}}>{estadoBadge(r)}{r.devolucion_at&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:C.azulBg,color:C.accent,whiteSpace:'nowrap'}}>Devolución enviada</span>}</div></div>
           </div>
@@ -1590,7 +1590,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
             {gastos.length===0?<div style={{fontSize:11,color:C.muted}}>{r.anulada_at?'Rendición anulada — usa "Ver PDF" para ver el detalle congelado.':'Sin detalle de gastos.'}</div>:gastos.map((e,i)=>(
               <div key={e.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'5px 0',borderBottom:i<gastos.length-1?`1px solid ${C.border}`:'none',fontSize:12}}>
                 <div style={{minWidth:0}}>
-                  <div style={{color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
+                  <div style={{color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</div>
                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>{RENDCAT(e.category)}{e.subcategory?': '+e.subcategory:''} · {fmtFechaDMY(e.date)}</div>
                 </div>
                 <div style={{color:C.overdue,fontWeight:600,whiteSpace:'nowrap'}}>-{fmt(e.amount)}</div>
@@ -1687,7 +1687,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
                             <div key={g.cid} style={{background:'#fff',border:`0.5px solid ${open?C.done:C.border}`,borderRadius:10,padding:'10px 12px',marginBottom:6}}>
                               <div onClick={()=>setAddOpenCli(p=>{const n=new Set(p);n.has(g.cid)?n.delete(g.cid):n.add(g.cid);return n})} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                                 <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{cn}</div>
+                                  <div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cn}</div>
                                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>{ab?ab+' · ':''}{g.items.length} OT · {fmt(g.total)}</div>
                                 </div>
                                 {g.esOf
@@ -1700,7 +1700,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
                                   <div key={e.id} onClick={()=>setAddSel(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
                                     <span style={{width:16,height:16,borderRadius:4,flexShrink:0,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.5' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span>
                                     <span style={{color:C.azulInfo,fontWeight:600,width:58,flexShrink:0}}>{fmtOt(e.ot_number)}</span>
-                                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                                    <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:on?C.text:C.muted}}>{e.concept||'—'}</span>
                                     <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
                                   </div>) })}
                               </div>}
@@ -1881,8 +1881,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       : envRows.map((x,i)=>{ const sg=verBorr?(x.r.correo?.asunto?{t:'correo guardado',c:C.greenText}:{t:'sin redactar',c:C.textSoft}):segTxt(x); return (
           <div key={x.r.id} onClick={()=>setDetR(x.r.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.c.name}</div>
-              <div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(verBorr?[x.r.project||null,`armada ${fmtFechaDMY(isoLocal(x.r.created_at))}`,`${x.r.n_gastos||0} gastos`]:[x.r.correlativo?`N° ${x.r.correlativo}`:null,fmtFechaDMY(isoLocal(x.r.sent_at)),`${x.r.n_gastos||0} gastos`]).filter(Boolean).join(' · ')}</div>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.c.name}</div>
+              <div style={{fontSize:12,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{(verBorr?[x.r.project||null,`armada ${fmtFechaDMY(isoLocal(x.r.created_at))}`,`${x.r.n_gastos||0} gastos`]:[x.r.correlativo?`N° ${x.r.correlativo}`:null,fmtFechaDMY(isoLocal(x.r.sent_at)),`${x.r.n_gastos||0} gastos`]).filter(Boolean).join(' · ')}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(x.r.total||0)}</div>
@@ -1960,8 +1960,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
           <div key={'w'+x.c.id} onClick={()=>retomar(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:`1px solid ${C.track}`,cursor:'pointer'}}>
             <span style={{width:17,flexShrink:0}}/>
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.c.name}</div>
-              <div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.n} gasto{x.n!==1?'s':''} · {fmtFechaDMY(isoLocal(x.at))}</div>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.c.name}</div>
+              <div style={{fontSize:12,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.n} gasto{x.n!==1?'s':''} · {fmtFechaDMY(isoLocal(x.at))}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(x.m)}</div>
@@ -1974,8 +1974,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
           <div key={x.k} onClick={()=>x.tipo==='arm'?setDetR(x.r.id):abrirPrep(x)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
             {cajaDe(x)}
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.c.name}</div>
-              <div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.n} gasto{x.n!==1?'s':''} · {x.autor}</div>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.c.name}</div>
+              <div style={{fontSize:12,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.n} gasto{x.n!==1?'s':''} · {x.autor}</div>
             </div>
             <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(x.m)}</div>
@@ -2006,7 +2006,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
         <td style={{...cMon,fontWeight:700}}>{fmt(colaEnvio.reduce((a,gq)=>a+gq.filas.reduce((b,f)=>b+(Number(f.r.total)||0),0),0))}</td>
         <td style={{...cMon,fontWeight:700,color:C.text}}>{(()=>{ const t=sumaFalta(colaEnvio.flatMap(gq=>gq.filas.map(f=>[llaveFondo(gq.c.id,f.r),f.pide]))); return t>0?fmt(t):'—' })()}</td></tr></tfoot>
     </table>) : colaEnvio.flatMap(gq=>gq.filas.map(f=>(<div key={f.r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.track}`}}>
-        <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{gq.c.name}</div><div style={{fontSize:12,color:C.textSoft}}>N° {f.corr} · {f.r.n_gastos||0} gastos</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{gq.c.name}</div><div style={{fontSize:12,color:C.textSoft}}>N° {f.corr} · {f.r.n_gastos||0} gastos</div></div>
         <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(f.r.total||0)}</div><div style={{fontSize:12,color:C.textSoft}}>{f.pide>0?<>solicita <b style={{color:C.text,fontWeight:600}}>{fmt(f.pide)}</b></>:'sin solicitud'}</div></div></div>)))}
     <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`,flexDirection:D?'row':'column-reverse'}}>
       <button onClick={()=>setConfEnv(false)} style={{border:'none',background:'none',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',padding:'7px 12px'}}>Volver a borradores</button>
@@ -2041,7 +2041,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
         </div>
         <div style={{display:'grid',gridTemplateColumns:D?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginBottom:12}}>
           {[['Rendido',fmt(r.total||0),`${r.n_gastos||gs.length} gastos`],['Pedido',req?fmt(req.monto||0):'—',req?(st?.k==='rec'?'depósito recibido':`sin depósito · ${st?.dias||0} d`):'no se pidieron fondos'],['Período',r.periodo||'—',r.project?(r.subproject?`${r.project} · ${r.subproject}`:r.project):'sin proyecto']].map(([l,v,sub])=>(
-            <div key={l} style={{...card,padding:'10px 12px',minWidth:0,...(!D&&l==='Período'?{gridColumn:'1 / -1'}:{})}}><div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:D?18:14,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{v}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>))}
+            <div key={l} style={{...card,padding:'10px 12px',minWidth:0,...(!D&&l==='Período'?{gridColumn:'1 / -1'}:{})}}><div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:D?18:14,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>{v}</div><div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>))}
         </div>
         <div style={{display:'grid',gridTemplateColumns:D?'minmax(0,1fr) minmax(0,1.6fr)':'minmax(0,1fr)',gap:12,alignItems:'start'}}>
           <div style={{...card,padding:'10px 14px'}}>
@@ -2060,8 +2060,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
             <div style={{display:'flex',justifyContent:'space-between',padding:'9px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL}}>Gastos rendidos · {gs.length}</span>{Math.round(sumG)!==Math.round(r.total||0)&&<span style={{fontSize:11,color:C.soonText,fontWeight:600}}>suman {fmt(sumG)}</span>}</div>
             {gs.map((e,i)=>(<div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',borderTop:i?`1px solid ${C.track}`:'none'}}>
               {diaGrande(e.date)}
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-                <div style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[RENDCAT(e.category),e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null,e.project].filter(Boolean).join(' · ')}</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
+                <div style={{fontSize:12,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[RENDCAT(e.category),e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):null,e.project].filter(Boolean).join(' · ')}</div></div>
               <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>))}
             {!gs.length&&<div style={{padding:18,textAlign:'center',fontSize:13,color:C.muted}}>Sin gastos asociados (usa «Ver PDF» para el detalle guardado).</div>}
             <div style={{display:'flex',justifyContent:'space-between',padding:'9px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:13}}><span style={{color:C.textSoft}}>Total</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(r.total||0)}</b></div>
@@ -2088,9 +2088,9 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
         {pasos.map((p,i)=>(<Fragment key={p.k}>{i>0&&<div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:14,padding:'0 2px'}}>→</div>}
           <div onClick={()=>setG(p.k==='rendir'?(enRendir?g:'pedir'):p.k)} style={{flex:1,minWidth:0,textAlign:'center',cursor:'pointer',borderRadius:10,padding:D?'6px 4px':'5px 2px',background:on(p.k)?C.azulBg:'transparent'}}>
             {D&&<SIcon n={p.ic} s={19} c={p.col}/>}
-            <div style={{fontSize:D?10:10,fontWeight:700,letterSpacing:.3,textTransform:'uppercase',color:p.col,marginTop:D?4:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{D?p.t:p.tm}</div>
+            <div style={{fontSize:D?10:10,fontWeight:700,letterSpacing:.3,textTransform:'uppercase',color:p.col,marginTop:D?4:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{D?p.t:p.tm}</div>
             <div style={{fontSize:D?16:16,fontWeight:800,color:p.col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{p.v}</div>
-            {D&&<div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.sub}</div>}
+            {D&&<div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{p.sub}</div>}
           </div></Fragment>))}
       </div>
       {enRendir&&<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:D?10:6,marginBottom:12}}>
@@ -2098,8 +2098,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
           <div key={x.k} onClick={()=>setG(x.k)} style={{minWidth:0,cursor:'pointer',background:C.surface,border:`1px solid ${sel?C.accent:C.border}`,boxShadow:sel?`0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:D?'10px 11px':'9px 7px',display:'flex',alignItems:'center',gap:D?9:6}}>
             <span style={{width:D?30:24,height:D?30:24,borderRadius:D?9:7,background:x.bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={x.ic} s={D?15:13} c={x.col}/></span>
             <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:sel?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{!D&&x.k==='pedir'?'Rendir':x.t}</div>
-              <div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontVariantNumeric:'tabular-nums'}}>{D?tileSub(x.k):tileSub(x.k).replace('falta ','')}</div>
+              <div style={{fontSize:13,fontWeight:600,color:sel?C.accent:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{!D&&x.k==='pedir'?'Rendir':x.t}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>{D?tileSub(x.k):tileSub(x.k).replace('falta ','')}</div>
             </div>
           </div>)})}
       </div>}
@@ -2110,7 +2110,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       {!verTerm&&<b style={{whiteSpace:'nowrap'}}>Revisar →</b>}
     </div>}
     {sig&&ultCli&&!verLista&&<div style={{display:'flex',alignItems:'center',gap:9,background:C.greenBg,borderRadius:10,padding:'8px 12px',marginBottom:10,fontSize:13,color:C.greenText}}>
-      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Siguiente: <b>{sig.c.name}</b></span>
+      <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Siguiente: <b>{sig.c.name}</b></span>
       <button onClick={()=>accion(sig)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:8,padding:'5px 11px',background:C.accent,color:'#fff',cursor:'pointer',whiteSpace:'nowrap'}}>{D?`${btnTxt(sig)} →`:'Ir →'}</button>
       <button onClick={()=>{_rendirUlt=null;setUlt(null)}} aria-label='Cerrar' style={{display:'inline-flex',background:'none',border:'none',padding:2,cursor:'pointer'}}><SIcon n='x' s={14} c={C.textSoft}/></button>
     </div>}
@@ -2142,8 +2142,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       : rows.map((f,i)=>{ const ch=chips(f); return (
           <div key={f.c.id} onClick={()=>f.armada?setDetR(f.armada.id):accion(f)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <div style={{flex:1,minWidth:0}}>
-              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.c.id)}} style={{...NOMBRE_CLI,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{f.c.name}</div>
-              <div style={{fontSize:12,color:C.textSoft,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{subTxt(f)}</div>
+              <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.c.id)}} style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.c.name}</div>
+              <div style={{fontSize:12,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subTxt(f)}</div>
               {ch.length>0&&<div style={{display:'flex',gap:5,marginTop:4,flexWrap:'wrap'}}>{ch.map(chipEl)}</div>}
             </div>
             <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}>
@@ -2515,7 +2515,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                     <div style={{...NOMBRE_CLI}}>{c.name}</div>
                     <div style={{display:'flex',alignItems:'center',gap:6,marginTop:1,minWidth:0}}>
                       <span style={{fontSize:11,color:inact?C.overdueText:C.done,flexShrink:0}}>{ult?`Últ. movimiento ${fmtFechaDMY(ult)}`:'sin movimientos'}</span>
-                      {rs&&<span style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>· {rs}</span>}
+                      {rs&&<span style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>· {rs}</span>}
                     </div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
@@ -2530,7 +2530,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <button key={k} type='button' onClick={()=>setSaldoFilter(on?'todos':k)} aria-pressed={on} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:(k==='cero'?C.border:'transparent')}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minWidth:0,fontFamily:'inherit',display:'flex',gap:10,alignItems:'center'}}>
                   {isDesktop&&<KpiIco n={ic} c={col} soft={k==='cero'}/>}
                   <div style={{minWidth:0}}>
-                    <div style={{fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div>
+                    <div style={{fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{l}</div>
                     <div style={{fontSize:isDesktop?20:18,fontWeight:800,letterSpacing:-.4,lineHeight:1.2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{n} <span style={{fontSize:isDesktop?13:12,fontWeight:600}}>cliente{n!==1?'s':''}</span></div>
                   </div>
                 </button>) })
@@ -2542,7 +2542,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <span style={{width:30,height:30,borderRadius:10,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[o.p]||String(o.p)[0]}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{...NOMBRE_CLI}}>{o.p}</div>
-                    <div style={{fontSize:11,color:C.done,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[isDesktop?'Cuenta personal':null,o.ult?`Últ. movimiento ${fmtFechaDMY(o.ult)}`:null].filter(Boolean).join(' · ')||'Cuenta personal'}</div>
+                    <div style={{fontSize:11,color:C.done,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[isDesktop?'Cuenta personal':null,o.ult?`Últ. movimiento ${fmtFechaDMY(o.ult)}`:null].filter(Boolean).join(' · ')||'Cuenta personal'}</div>
                   </div>
                   <div style={{textAlign:'right',flexShrink:0}}>
                     <div style={{fontSize:14,fontWeight:700,color:colS,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtSaldoG(sal)}</div>
@@ -2578,8 +2578,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                       <div key={x.e.id} onClick={()=>x.e.type==='gasto'&&onEdit&&onEdit(x.e)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.track}`,cursor:x.e.type==='gasto'&&onEdit?'pointer':'default'}}>
                         {diaGrande(x.fGasto)}
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(x.e.client_id) } }}>{cn}</span></div>
-                          <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{!castSocio&&<b style={{fontWeight:700,color:personChip(x.socio).color||C.muted}}>{x.socio} · </b>}{isDesktop?<>{x.e.type==='fondo'?'Ajuste':(x.e.category||'—')} · </>:null}castigo {fmtFechaDMY(x.fecha)}{isDesktop&&x.e.type!=='fondo'&&x.e.concept?` · ${x.e.concept}`:''}</div>
+                          <div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={ev=>{ if(onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(x.e.client_id) } }}>{cn}</span></div>
+                          <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{!castSocio&&<b style={{fontWeight:700,color:personChip(x.socio).color||C.muted}}>{x.socio} · </b>}{isDesktop?<>{x.e.type==='fondo'?'Ajuste':(x.e.category||'—')} · </>:null}castigo {fmtFechaDMY(x.fecha)}{isDesktop&&x.e.type!=='fondo'&&x.e.concept?` · ${x.e.concept}`:''}</div>
                         </div>
                         <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:0,textAlign:'right'}}>{fmt(x.monto)}</span>
                       </div>) })}
@@ -2609,7 +2609,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                       <span style={{width:30,height:30,borderRadius:10,background:C.avisoMid,border:`1px dashed ${C.avisoLine}`,boxSizing:'border-box',color:C.avisoText,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>?</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:14,fontWeight:700,color:C.avisoText}}>Gastos sin cliente</div>
-                        <div style={{fontSize:11,color:C.textSoft,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{orphans.length} gasto{orphans.length!==1?'s':''}{desde?` · desde ${fmtFechaDMY(desde)}`:''}</div>
+                        <div style={{fontSize:11,color:C.textSoft,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{orphans.length} gasto{orphans.length!==1?'s':''}{desde?` · desde ${fmtFechaDMY(desde)}`:''}</div>
                       </div>
                       <div style={{textAlign:'right',flexShrink:0}}>
                         <div style={{fontSize:14,fontWeight:700,color:C.avisoText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(tot)}</div>
@@ -2723,7 +2723,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <button type='button' onClick={()=>setGastoCatF(k)} style={{textAlign:'left',background:bg,color:col,border:`1.5px solid ${on?col:'transparent'}`,borderRadius:12,padding:big?'11px 15px':'11px 14px',cursor:'pointer',fontFamily:'inherit',minWidth:0,...(big?{display:'flex',justifyContent:'space-between',alignItems:'flex-end',gap:10,...(isDesktop?{}:{gridColumn:'1 / -1'})}:{})}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.6,textTransform:'uppercase',opacity:.85}}>{lbl}</div>
-                <div style={{fontSize:big?26:(isDesktop?20:18),fontWeight:800,letterSpacing:big?-.6:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{val}</div>
+                <div style={{fontSize:big?26:(isDesktop?20:18),fontWeight:800,letterSpacing:big?-.6:-.4,lineHeight:1.15,fontVariantNumeric:'tabular-nums',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{val}</div>
               </div>
               {note&&<div style={{fontSize:11,opacity:.8,whiteSpace:'nowrap'}}>{note}</div>}
             </button>) }
@@ -2786,7 +2786,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                       {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); const sel=revSel.has(e.id); return (
                         <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px 8px 22px',borderTop:`0.5px solid ${C.track}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
                           <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
-                          <span style={{flex:1,fontSize:12,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rendido&&<span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>Rendido</span>}{e.concept||'—'}</span>
+                          <span style={{flex:1,fontSize:12,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rendido&&<span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>Rendido</span>}{e.concept||'—'}</span>
                           <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                         </label>
                       )})}
@@ -2817,7 +2817,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                         : <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{gs.map((e,i)=>{ const sel=revSel.has(e.id); return (
                             <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer',background:sel?C.azulBg:'#fff'}}>
                               <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{cursor:'pointer',flexShrink:0}}/>
-                              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.date?fmtFechaDMY(e.date):''}{e.category?` · ${e.category}`:''}</div></div>
+                              <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.date?fmtFechaDMY(e.date):''}{e.category?` · ${e.category}`:''}</div></div>
                               <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                             </label>
                           )})}</div>}
@@ -2833,7 +2833,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                     <button onClick={()=>setShowHist(s=>!s)} style={{background:'none',border:'none',color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',padding:0}}>Historial de reasignaciones ({expenseAudit.length}) {showHist?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>
                     {showHist&&<div style={{marginTop:7,maxHeight:220,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:10}}>{expenseAudit.slice(0,60).map((a,i)=>{ const fromN=clients.find(c=>String(c.id)===String(a.from_client_id))?.name; const toN=clients.find(c=>String(c.id)===String(a.to_client_id))?.name; return (
                       <div key={a.id||i} style={{padding:'7px 11px',borderTop:i?`0.5px solid ${C.border}`:'none',fontSize:11}}>
-                        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{color:C.text,fontWeight:600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'}</span><div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}><span style={{color:C.text,fontWeight:600}}>{fmt(a.amount)}</span>{a.from_client_id&&onAssignClientToExpense&&<button onClick={()=>onAssignClientToExpense(a.expense_id,a.from_client_id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:8,padding:'2px 8px',cursor:'pointer'}}>Deshacer</button>}</div></div>
+                        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><span style={{color:C.text,fontWeight:600,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.concept||'—'}</span><div style={{display:'flex',gap:7,alignItems:'center',flexShrink:0}}><span style={{color:C.text,fontWeight:600}}>{fmt(a.amount)}</span>{a.from_client_id&&onAssignClientToExpense&&<button onClick={()=>onAssignClientToExpense(a.expense_id,a.from_client_id)} style={{fontSize:10,fontWeight:600,border:`1px solid ${C.border}`,background:'#fff',color:C.azulInfo,borderRadius:8,padding:'2px 8px',cursor:'pointer'}}>Deshacer</button>}</div></div>
                         <div style={{color:C.muted,marginTop:1}}>{fromN||'sin cliente'} → <b style={{color:C.text}}>{toN||'sin cliente'}</b> · {String(a.created_at||'').slice(0,10)}{a.moved_by?` · ${a.moved_by}`:''}</div>
                       </div>
                     )})}</div>}
@@ -2913,7 +2913,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <div onClick={()=>setCargaOpen(open?null:c.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 12px',cursor:'pointer',background:open?C.bgSoft:'#fff'}}>
                   <span title={undone?'Deshecha':nErr>0?'Con errores sin resolver':'Cargada'} style={{width:9,height:9,borderRadius:'50%',background:dotCol,flexShrink:0}}/>
                   {diaGrande(isoLocal(c.created_at))}
-                  <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:11}}><div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.filename||'Carga sin nombre'}</div>
+                  <div style={{flex:1,minWidth:0,borderLeft:`1px solid ${C.border}`,paddingLeft:11}}><div style={{fontSize:14,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.filename||'Carga sin nombre'}</div>
                     <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginTop:3}}>
                       {undone?<span style={{fontSize:10,color:C.muted}}>{c.created_by?`${c.created_by} · `:''}deshecha</span>:<>
                         {c.created_by&&<span style={{fontSize:10,color:C.muted}}>{c.created_by}</span>}
@@ -2930,7 +2930,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   {nErr>0&&(c.resumen?.erroresDet?.length>0)&&<div style={{background:C.overdueBg,borderBottom:`1px solid #F3C9C4`,padding:'10px 12px'}}>
                     <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:C.overdueText,marginBottom:6}}>{nErr} con error · no se cargaron (quedan registradas)</div>
                     <div style={{border:`1px solid #F3C9C4`,borderRadius:8,overflow:'hidden',background:'#fff'}}>
-                      {c.resumen.erroresDet.slice(0,40).map((er,ei)=><div key={ei} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:ei?`0.5px solid ${C.bgSoft}`:'none'}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{er.ot&&er.ot!=='s/OT'?`${er.ot} · `:''}{er.nombre||'—'}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{er.motivo}</span></div>)}
+                      {c.resumen.erroresDet.slice(0,40).map((er,ei)=><div key={ei} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 9px',fontSize:11,borderTop:ei?`0.5px solid ${C.bgSoft}`:'none'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.text}}>{er.ot&&er.ot!=='s/OT'?`${er.ot} · `:''}{er.nombre||'—'}</span><span style={{color:C.overdueText,flexShrink:0,fontWeight:600}}>{er.motivo}</span></div>)}
                     </div>
                     <button onClick={()=>onBulk&&onBulk(true)} style={{marginTop:9,width:'100%',fontSize:12,fontWeight:700,color:'#fff',background:C.overdue,border:'none',borderRadius:8,padding:'8px 12px',cursor:'pointer'}}>Volver a subir el archivo completo · carga solo lo que falta</button>
                     <div style={{fontSize:10,color:C.overdueText,marginTop:5,lineHeight:1.5}}>La OT es la fuente de la verdad: al re-subir el archivo corregido, las OT ya cargadas se saltan solas y solo entra lo que falta.</div>
@@ -2952,7 +2952,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                       <div key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 13px',borderTop:`0.5px solid ${C.track}`,background:'#fff'}}>
                         <span style={{fontSize:10,color:C.textSoft,width:62,flexShrink:0,fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{dd}</span>
                         <span style={{fontSize:11,fontWeight:700,color:C.azulInfo,width:54,flexShrink:0}}>{fmtOt(e.ot_number)||'s/OT'}</span>
-                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}{showCli?<span style={{color:C.muted}}> · {cnOf(e)}</span>:''}</div></div>
+                        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}{showCli?<span style={{color:C.muted}}> · {cnOf(e)}</span>:''}</div></div>
                         <span style={{fontSize:10,fontWeight:700,color:col,background:bg,borderRadius:20,padding:'2px 8px',flexShrink:0,whiteSpace:'nowrap'}}>{lbl}</span>
                         <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0,minWidth:56,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
                       </div>
@@ -2968,7 +2968,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                     return <div>{entries.map((gr,gi)=>{ const tot=gr.rows.reduce((s,e)=>s+(e.amount||0),0); return (
                       <div key={gi}>
                         <div style={{display:'flex',alignItems:'center',gap:9,padding:'8px 13px',background:C.bgSoft,borderTop:gi?`1px solid ${C.border}`:'none'}}>
-                          <span onClick={gr.cid&&onOpenClientFicha?()=>onOpenClientFicha(gr.cid):undefined} style={{fontSize:13,fontWeight:700,color:C.accent,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:gr.cid&&onOpenClientFicha?'pointer':'default'}}>{gr.label}</span>
+                          <span onClick={gr.cid&&onOpenClientFicha?()=>onOpenClientFicha(gr.cid):undefined} style={{fontSize:13,fontWeight:700,color:C.accent,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:gr.cid&&onOpenClientFicha?'pointer':'default'}}>{gr.label}</span>
                           <span style={{fontSize:10,color:C.textSoft,flexShrink:0}}>{gr.rows.length} OT</span>
                           <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
                         </div>
@@ -3013,8 +3013,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <div key={r.client.id} onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(r.client)}} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
                     <SIcon n='alert' s={17} c={C.soonText}/>
                     <div style={{flex:1,minWidth:0}}>
-                      <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.client.id)}} style={{fontSize:13,fontWeight:700,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:onOpenClientFicha?'pointer':'default'}}>{r.client.name}</div>
-                      <div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.n} gasto{r.n!==1?'s':''} sin rendir · más antiguo {r.dias} d</div>
+                      <div onClick={e=>{e.stopPropagation();onOpenClientFicha&&onOpenClientFicha(r.client.id)}} style={{fontSize:13,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:onOpenClientFicha?'pointer':'default'}}>{r.client.name}</div>
+                      <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.n} gasto{r.n!==1?'s':''} sin rendir · más antiguo {r.dias} d</div>
                     </div>
                     <div style={{textAlign:'right',flexShrink:0}}>
                       <div style={{fontSize:14,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(r.monto)}</div>
@@ -3069,7 +3069,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:16}}>
               {varios.slice(0,40).map((e,i)=>(
                 <div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
-                  <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.date?fmtFechaDMY(e.date):''}{e.category?` · ${e.category}`:''}</div></div>
+                  <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.date?fmtFechaDMY(e.date):''}{e.category?` · ${e.category}`:''}</div></div>
                   <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                 </div>
               ))}
@@ -3089,7 +3089,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <div onClick={()=>setShowPersonales(op?false:persona)} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 14px',cursor:'pointer',background:op?C.bgSoft:'#fff'}}>
                     <span style={{width:26,height:26,borderRadius:8,background:pc.bg,color:pc.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[persona]||String(persona)[0]}</span>
                     <span style={{fontSize:13,fontWeight:700,color:C.text}}>{persona}</span>
-                    <span style={{fontSize:10,color:C.muted,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {fo>0?`fondo ${fmtShort(fo)} · `:''}{gs.length} gasto{gs.length!==1?'s':''}</span>
+                    <span style={{fontSize:10,color:C.muted,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>· {fo>0?`fondo ${fmtShort(fo)} · `:''}{gs.length} gasto{gs.length!==1?'s':''}</span>
                     <span style={{flex:1}}></span>
                     <span style={{textAlign:'right',flexShrink:0}}><span style={{fontSize:14,fontWeight:700,color:saldo>=0?C.greenText:C.overdueText}}>{fmt(saldo)}</span><div style={{fontSize:10,fontWeight:700,color:saldo>=0?C.greenText:C.overdueText}}>{saldo>=0?'disponible':'le debe'}</div></span>
                     <span style={{fontSize:12,color:C.textSoft,marginLeft:2}}>{op?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>
@@ -3097,13 +3097,13 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   {op&&<div style={{background:C.bgSoft}}>
                     {fs.map(e=>(
                       <div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 14px 8px 26px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
-                        <span style={{fontSize:12,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{e.concept||'Fondo por rendir'}</span>
+                        <span style={{fontSize:12,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{e.concept||'Fondo por rendir'}</span>
                         <span style={{fontSize:13,fontWeight:600,color:C.greenText,flexShrink:0}}>+{fmt(e.amount)}</span>
                       </div>
                     ))}
                     {gs.map(e=>(
                       <div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'8px 14px 8px 26px',borderTop:`1px solid ${C.track}`,cursor:'pointer'}}>
-                        <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',minWidth:0}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</span>
+                        <span style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{e.concept||'—'}{e.ot_number?<span style={{fontSize:10,color:C.azulInfo,fontWeight:700,marginLeft:5}}>{String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number}</span>:''}</span>
                         <span style={{fontSize:13,fontWeight:600,color:C.overdueText,flexShrink:0}}>−{fmt(e.amount)}</span>
                       </div>
                     ))}
@@ -3187,8 +3187,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           <div key={e.id} onClick={onEdit?()=>onEdit(e):undefined} style={{display:'flex',alignItems:'center',gap:12,padding:D?'9px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:onEdit?'pointer':'default'}}>
             {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:600,color:r.err==='sincliente'?C.overdueText:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}}>{cnOf(e)}</span>:cnOf(e)}</div>
-              <div style={{fontSize:12,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:errTxt?C.overdueText:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)||'s/OT'}</b>{errTxt?<span style={{color:C.overdueText,fontWeight:600}}> · {errTxt}</span>:(D&&e.concept)?` · ${e.concept}`:''}</div>
+              <div style={{fontSize:14,fontWeight:600,color:r.err==='sincliente'?C.overdueText:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}}>{cnOf(e)}</span>:cnOf(e)}</div>
+              <div style={{fontSize:12,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:errTxt?C.overdueText:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)||'s/OT'}</b>{errTxt?<span style={{color:C.overdueText,fontWeight:600}}> · {errTxt}</span>:(D&&e.concept)?` · ${e.concept}`:''}</div>
             </div>
             {D&&chip(r.estado)}
             <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
@@ -3201,7 +3201,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         const MESES=[['','Mes'],['01','ene'],['02','feb'],['03','mar'],['04','abr'],['05','may'],['06','jun'],['07','jul'],['08','ago'],['09','sep'],['10','oct'],['11','nov'],['12','dic']]
         const estTile=k=>{ const rs=de(k); if(!rs.length&&k!=='porpagar'&&k!=='pagada') return null; const on=cobEst===k; const [l,col,bg]=EST[k]; return (
           <div key={k} onClick={()=>setCobEst(on?'':k)} style={{flex:1,minWidth:0,background:bg,borderRadius:10,padding:'8px 11px',cursor:'pointer',boxShadow:on?`0 0 0 1.5px ${col}`:'none'}}>
-            <div style={{fontSize:10,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l} · {rs.length}</div>
+            <div style={{fontSize:10,fontWeight:700,color:col,textTransform:'uppercase',letterSpacing:.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{l} · {rs.length}</div>
             <div style={{fontSize:14,fontWeight:700,color:col,marginTop:1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtShort(sum(rs))}</div>
           </div>) }
         return (
@@ -3302,8 +3302,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <span style={{minWidth:0}}><span style={{display:'block',fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.materia||x.concepto||'—'}</span>{x.requirente&&<span style={{display:'block',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.requirente}</span>}</span>
                 <span style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.monto)}</span>{estPill(x)}</span>
               </> : <>
-                <span style={{gridColumn:2,gridRow:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.materia||x.concepto||'—'}</span>
-                <span style={{gridColumn:2,gridRow:2,fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:C.azulInfo,fontWeight:700}}>{x.ot}</b>{x.fecha?` · ${fmtFechaDMY(String(x.fecha).slice(0,10))}`:''}</span>
+                <span style={{gridColumn:2,gridRow:1,fontSize:13,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.materia||x.concepto||'—'}</span>
+                <span style={{gridColumn:2,gridRow:2,fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.azulInfo,fontWeight:700}}>{x.ot}</b>{x.fecha?` · ${fmtFechaDMY(String(x.fecha).slice(0,10))}`:''}</span>
                 <span style={{gridColumn:3,gridRow:1,fontSize:13,fontWeight:700,color:C.text,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(x.monto)}</span>
                 <span style={{gridColumn:3,gridRow:2,justifySelf:'end'}}>{estPill(x)}</span>
               </>}
@@ -3341,7 +3341,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               <div onClick={()=>setNoNResOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 13px',background:C.bgSoft,cursor:'pointer'}}>
                 <span style={{display:'inline-flex',transform:(noNResOpen||qq)?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={13} c={C.muted}/></span>
                 <span style={{fontSize:13,fontWeight:700,color:C.text}}>Resueltas · {resueltas.length}</span>
-                <span style={{fontSize:11,color:C.muted,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>quedan con su resolución</span>
+                <span style={{fontSize:11,color:C.muted,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>quedan con su resolución</span>
                 <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(resueltas.reduce((a,x)=>a+(x.monto||0),0))}</span>
               </div>
               {(noNResOpen||qq)&&resueltas.map(fila)}
@@ -3381,7 +3381,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div onClick={()=>setNotaLiqOpen(open?null:r.id)} style={{display:'flex',alignItems:'center',gap:12,padding:D?'10px 14px':'10px 12px',cursor:'pointer'}}>
               {diaGrande(isoLocal(r.created_at))}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{BRAND.notaria}</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{BRAND.notaria}</div>
                 <div style={{fontSize:12,color:C.muted,marginTop:1,whiteSpace:'nowrap'}}>{r.n_gastos||gs.length} OT{r.user_name?` · ${r.user_name}`:''}</div>
               </div>
               {D&&chip(r)}
@@ -3399,7 +3399,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               {gs.map(e=>{ const cn=cliN(e.client_id)||(e.personal_de?`Personal · ${e.personal_de}`:'Sin cliente'); return (
                 <div key={e.id} onClick={onEdit?()=>onEdit(e):undefined} style={{display:'flex',alignItems:'baseline',gap:8,padding:'5px 0',fontSize:12,cursor:onEdit?'pointer':'default'}}>
                   <span style={{fontSize:11,color:C.azulInfo,fontWeight:700,width:66,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtOt(e.ot_number)}</span>
-                  <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer',fontWeight:600}}>{cn}</span>:<b style={{fontWeight:600}}>{cn}</b>}<span style={{color:C.muted}}> · {e.concept||'—'}</span></span>
+                  <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.text}}>{e.client_id&&onOpenClientFicha?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha(e.client_id)}} style={{cursor:'pointer',fontWeight:600}}>{cn}</span>:<b style={{fontWeight:600}}>{cn}</b>}<span style={{color:C.muted}}> · {e.concept||'—'}</span></span>
                   <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:C.text}}>{fmt(e.amount)}</span>
                 </div>) })}
               <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
@@ -3501,7 +3501,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               ? <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:10}}>{partes.map(([k,l,v,col,sub])=>{ const on=deudaEstF===k; return (
                   <div key={k} onClick={()=>setDeudaEstF(f=>f===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,border:`1px solid ${on?C.accent:C.tileLine}`,background:on?C.selBg:C.tileBg,borderRadius:10,padding:'7px 10px',cursor:'pointer'}}>
                     <span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:col===C.muted?C.text:col}}>{l}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:col===C.muted?C.text:col}}>{l}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>
                     <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:col===C.muted?C.text:col,fontVariantNumeric:'tabular-nums'}}>{fmt(v)}</div><div style={{fontSize:10,color:C.muted}}>{pctP(v)}</div></div>
                   </div>) })}</div>
               : <div style={{borderTop:`1px solid ${C.track}`,paddingTop:6,marginTop:8}}>{partes.map(([k,l,v,col])=>{ const on=deudaEstF===k; return (
@@ -3564,11 +3564,11 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         const filaCab=(open,onClick,nombre,sub,cols,derecha)=> D
           ? <div onClick={onClick} style={{display:'grid',gridTemplateColumns:NOTA_GC,columnGap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={13} c={C.muted}/></span>
-              <div style={{minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>{derecha}
+              <div style={{minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>{derecha}
             </div>
           : <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
-              <div style={{flex:1,minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+              <div style={{flex:1,minWidth:0}}>{nombre}<div style={{fontSize:11,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>
               {derecha}
             </div>
         const clientCard=(cid,gsAll)=>{
@@ -3631,7 +3631,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               <div key={gk} style={{marginBottom:8}}>
                 <div onClick={()=>setDeudaGrpOpen(p=>{const n=new Set(p);n.has(gk)?n.delete(gk):n.add(gk);return n})} style={{display:'flex',alignItems:'center',gap:9,padding:'9px 13px',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:open?'12px 12px 0 0':12,cursor:'pointer'}}>
                   <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={12} c={C.accent}/></span>
-                  <span style={{...SEC_LBL,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
+                  <span style={{...SEC_LBL,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</span>
                   <span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>{arr.length} cliente{arr.length!==1?'s':''} · {nOT} OT</span>
                   <span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
                 </div>
@@ -3669,7 +3669,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             {open&&<div>{sinGs.map(e=>(
               <div key={e.id} style={{padding:'10px 12px',borderTop:`0.5px solid ${C.border}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
-                  <div style={{minWidth:0,fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)}</b> · {e.concept||'—'} <span style={{color:C.muted,fontSize:11}}>· {e.date?fmtFechaDMY(e.date):'sin fecha'}</span></div>
+                  <div style={{minWidth:0,fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)}</b> · {e.concept||'—'} <span style={{color:C.muted,fontSize:11}}>· {e.date?fmtFechaDMY(e.date):'sin fecha'}</span></div>
                   <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(e.amount)}</span>
                 </div>
                 <div style={{marginTop:7,display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
@@ -3688,7 +3688,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             </div>
             {notaAnulOpen&&notariaAnulados.map(e=>{ const cn=clients.find(c=>c.id===e.client_id)?.name||(e.personal_de?`Personal · ${e.personal_de}`:'Sin asignar'); return (
               <div key={e.id} style={{padding:'9px 13px',display:'flex',alignItems:'center',gap:10,borderTop:`0.5px solid ${C.border}`}}>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}><b style={{color:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)}</b> · {e.concept||'—'}</div><div style={{fontSize:11,color:C.textSoft}}>{cn} · {e.date?fmtFechaDMY(e.date):'sin fecha'}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.azulInfo,fontWeight:700}}>{fmtOt(e.ot_number)}</b> · {e.concept||'—'}</div><div style={{fontSize:11,color:C.textSoft}}>{cn} · {e.date?fmtFechaDMY(e.date):'sin fecha'}</div></div>
                 <span style={{fontSize:12,color:C.textSoft,fontVariantNumeric:'tabular-nums'}}>{fmt(e.amount)}</span>
                 <button onClick={()=>eliminarGastoNota(e)} style={{fontSize:11,color:C.overdueText,background:C.overdueBg,border:'none',borderRadius:8,minHeight:30,padding:'0 10px',fontWeight:600,cursor:'pointer'}}>Eliminar</button>
               </div>
@@ -3745,7 +3745,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
 
           <label style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:'uppercase',letterSpacing:.5,display:'block',marginBottom:5}}>Comprobante de transferencia</label>
           {compFile
-            ? <div style={{display:'flex',alignItems:'center',gap:9,border:'1px solid #9FE1CB',background:C.greenBg,borderRadius:10,padding:'9px 11px',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><polyline points='9 15 11 17 15 13'/></svg><span style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{compFile.name}</span><button onClick={()=>setCompFile(null)} style={{background:'none',border:'none',color:C.textSoft,fontSize:14,cursor:'pointer',lineHeight:1}}><Gl n='x'/></button></div>
+            ? <div style={{display:'flex',alignItems:'center',gap:9,border:'1px solid #9FE1CB',background:C.greenBg,borderRadius:10,padding:'9px 11px',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><polyline points='9 15 11 17 15 13'/></svg><span style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{compFile.name}</span><button onClick={()=>setCompFile(null)} style={{background:'none',border:'none',color:C.textSoft,fontSize:14,cursor:'pointer',lineHeight:1}}><Gl n='x'/></button></div>
             : <label style={{border:`1.5px dashed ${C.muted}`,borderRadius:10,background:C.bgPanel,padding:14,textAlign:'center',color:C.muted,fontSize:11,display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',marginBottom:14}}>
                 <svg width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/></svg>
                 <span>Toca para subir el comprobante del banco (imagen o PDF)</span>
@@ -3802,7 +3802,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               {s&&orfPickFor!==e.id?(
                 <div style={{display:'flex',alignItems:'center',gap:8,background:alta?C.greenBg:C.bgSoft,borderRadius:8,padding:'6px 8px 6px 10px'}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:alta?C.greenText:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:alta?C.greenText:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.name}</div>
                     <div style={{fontSize:10,color:alta?'#3E7A66':C.muted,marginTop:1}}>{s.via} · {s.conf} %</div>
                   </div>
                   <button onClick={()=>aplicarOrf(e,s.client_id)} title='Asignar' style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:30,height:24,background:alta?C.greenText:C.accent,border:'none',borderRadius:8,cursor:'pointer',flexShrink:0}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg></button>
@@ -3840,7 +3840,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               </div>
               {orfAutoOpen&&<div style={{padding:'0 13px 8px'}}>{autoArr.map(([id,a])=>(
                 <div key={id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #C7E7D8'}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.greenText,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div><div style={{fontSize:10,color:'#3E7A66',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.concept||'—'} · {fmt(a.amount)} · {a.via}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.name}</div><div style={{fontSize:10,color:'#3E7A66',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.concept||'—'} · {fmt(a.amount)} · {a.via}</div></div>
                   <button onClick={()=>deshacerOrf({id})} style={{fontSize:11,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'3px 9px',cursor:'pointer',flexShrink:0}}>Deshacer</button>
                 </div>
               ))}</div>}
@@ -4036,7 +4036,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
                   <button onClick={()=>setSelClasif(p=>{const n=new Set(p);g.items.forEach(e=>allSel?n.delete(e.id):n.add(e.id));return n})} title={allSel?'Quitar todos':'Seleccionar todos'} style={{background:'none',border:'none',padding:0,cursor:'pointer',display:'inline-flex'}}>{chk(allSel||someSel,20)}</button>
                   <div onClick={()=>toggleGrp(g)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.name}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.name}</div>
                     <div style={{fontSize:10,color:C.muted,marginTop:1}}>{g.items.length} gasto{g.items.length!==1?'s':''} · {fmt(g.total)}</div>
                   </div>
                   <svg onClick={()=>toggleGrp(g)} width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .15s',cursor:'pointer'}}><polyline points='6 9 12 15 18 9'/></svg>
@@ -4045,7 +4045,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   {g.items.map(e=>{ const on=selClasif.has(e.id); return (
                     <div key={e.id} onClick={()=>setSelClasif(p=>{const n=new Set(p);n.has(e.id)?n.delete(e.id):n.add(e.id);return n})} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',fontSize:11}}>
                       {chk(on)}
-                      <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{e.concept||'—'}</span>
+                      <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:on?C.text:C.muted}}>{e.concept||'—'}</span>
                       <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:on?C.text:C.muted}}>{fmt(e.amount)}</span>
                     </div>) })}
                 </div>}
@@ -4092,7 +4092,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
     const saldoHoy=r.user_name?saldoCajaChica(pettyCash,expenses,r.user_name):null
     const anx=anexoCajaChica(expenses,clients,r.user_name,gs,isoLocal(r.created_at)||null)
     const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}
-    const fila=(e)=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div><div style={{fontSize:11,color:C.muted}}>{RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>)
+    const fila=(e)=>(<div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div><div style={{fontSize:11,color:C.muted}}>{RENDCAT(e.category)} · {fmtFechaDMY(e.date)}</div></div><span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(e.amount)}</span></div>)
     const page=<FlujoPagina origen='Gastos' titulo='Liquidación de caja chica' ctx={r.user_name||null} onBack={()=>setLiqDetail(null)} maxW={1120}>
       <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
         <div style={{flex:1,minWidth:0,width:'100%',display:'flex',flexDirection:'column',gap:12}}>
@@ -4116,12 +4116,12 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           </div>
           {gs.length>0&&<div style={{...card,marginTop:12}}><div style={{...SEC_LBL,paddingBottom:4}}>Anexo · {r.user_name}</div>
             <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'8px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`}}>Por categoría</div>
-            {anx.categorias.map(x=><div key={x.cat} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.cat} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}
+            {anx.categorias.map(x=><div key={x.cat} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12}}><span style={{color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.cat} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}
             <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'10px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`,marginTop:6}}>Caja chica por mes</div>
             {anx.porMes.map(x=><div key={x.mes} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12}}><span style={{color:x.n?C.text:C.muted}}>{x.etiqueta} <span style={{color:C.muted}}>· {x.n} gasto{x.n!==1?'s':''}</span></span><span style={{fontWeight:600,color:x.n?C.text:C.muted,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}
             <div style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 0 2px',fontSize:12,borderTop:`0.5px solid ${C.bgSoft}`,marginTop:2}}><span style={{fontWeight:700,color:C.text}}>Promedio mensual</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(anx.promedio)}</span></div>
             {anx.clientes.length>0&&<><div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5,padding:'10px 0 2px',borderTop:`0.5px solid ${C.bgSoft}`,marginTop:6}}>Clientes con más gasto · 6 meses</div>
-            {anx.clientes.map(x=><div key={x.id||'sin'} onClick={()=>x.id&&onOpenClientFicha&&onOpenClientFicha(x.id)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12,cursor:x.id?'pointer':'default'}}><span style={{color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.name} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}</>}
+            {anx.clientes.map(x=><div key={x.id||'sin'} onClick={()=>x.id&&onOpenClientFicha&&onOpenClientFicha(x.id)} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'4px 0',fontSize:12,cursor:x.id?'pointer':'default'}}><span style={{color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.name} <span style={{color:C.muted}}>· {x.n}</span></span><span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.total)}</span></div>)}</>}
           </div>}
         </div>
       </div>
@@ -4157,7 +4157,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         <div key={x.persona} onClick={()=>onEntregarCaja&&onEntregarCaja(x.persona,neg?-x.saldo:null)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:700,color:personChip(x.persona).color,whiteSpace:'nowrap'}}>{x.persona}</div>
-            <div style={{fontSize:12,color:x.sin?C.soonText:C.muted,fontWeight:x.sin?600:400,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.sin?`${x.sin} sin transferencia`:'conciliada'}</div>
+            <div style={{fontSize:12,color:x.sin?C.soonText:C.muted,fontWeight:x.sin?600:400,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.sin?`${x.sin} sin transferencia`:'conciliada'}</div>
           </div>
           <span style={{fontSize:12,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'3px 10px',whiteSpace:'nowrap'}}>Entregar</span>
           <span style={{fontSize:14,fontWeight:700,color:neg?C.overdueText:baja?C.soonText:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:84,textAlign:'right'}}>{fmtSaldoG(x.saldo)}</span>
@@ -4191,14 +4191,14 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <option value=''>Proyecto: sin proyecto</option>{[...new Set([...(p.proyecto?[p.proyecto]:[]),...ops])].map(o=><option key={o} value={o}>Proyecto: {o}</option>)}</select>
           const btnG={fontSize:13,fontWeight:600,borderRadius:10,padding:'7px 12px',border:`1px solid ${C.border}`,background:C.surface,color:C.accent,cursor:busy?'default':'pointer',whiteSpace:'nowrap',opacity:busy?.6:1}
           const btnP={fontSize:13,fontWeight:700,borderRadius:10,padding:'8px 14px',border:'none',background:C.accent,color:'#fff',cursor:busy?'default':'pointer',whiteSpace:'nowrap',opacity:busy?.6:1}
-          const fuente=<span style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{ev.fuente&&ev.fuente!=='cartola'?`Aviso de ${ev.fuente}`:'Cartola del banco'}</span>
+          const fuente=<span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{ev.fuente&&ev.fuente!=='cartola'?`Aviso de ${ev.fuente}`:'Cartola del banco'}</span>
           const acc=<><button disabled={busy} onClick={e=>{e.stopPropagation();resolverFondo(r,false)}} style={btnG}>No corresponde</button><button disabled={busy} onClick={e=>{e.stopPropagation();resolverFondo(r,true)}} style={btnP}>{busy?'Registrando…':isDesktop?'Registrar fondo':'Registrar'}</button></>
           return <div key={r.id} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
             <div onClick={()=>setFondoAb(ab?null:r.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
               {diaGrande(p.fecha||String(r.recibido_at||'').slice(0,10))}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(r.cliente_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(r.cliente_id) } }}>{cn}</span></div>
-                <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={ev=>{ if(r.cliente_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(r.cliente_id) } }}>{cn}</span></div>
+                <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>
               </div>
               <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:0,textAlign:'right',flexShrink:0}}>{fmt(p.monto)}</span>
             </div>
@@ -4218,8 +4218,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:onEdit?'pointer':'default'}}>
               {diaGrande(e.date)}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(e.client_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(e.client_id) } }}>{cn}</span></div>
-                <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.category} · {e.concept||'sin glosa'}{isAdmin&&e.created_by?` · ${e.created_by}`:''}</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={ev=>{ if(e.client_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(e.client_id) } }}>{cn}</span></div>
+                <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.category} · {e.concept||'sin glosa'}{isAdmin&&e.created_by?` · ${e.created_by}`:''}</div>
               </div>
               <span style={{fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?96:0,textAlign:'right',flexShrink:0}}>{fmt(e.amount)}</span>
             </div>) })}
@@ -4232,8 +4232,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           <div key={e.id} onClick={()=>onEdit&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:onEdit?'pointer':'default'}}>
             {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:14,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><span onClick={ev=>{ if(e.client_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(e.client_id) } }}>{cn}</span></div>
-              <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}><b style={{color:pc.color,fontWeight:700}}>{e.revisado_por||'Equipo'}</b> · {e.concept||e.category||'—'}</div>
+              <div style={{fontSize:14,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={ev=>{ if(e.client_id&&onOpenClientFicha){ ev.stopPropagation(); onOpenClientFicha(e.client_id) } }}>{cn}</span></div>
+              <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:pc.color,fontWeight:700}}>{e.revisado_por||'Equipo'}</b> · {e.concept||e.category||'—'}</div>
             </div>
             {isDesktop&&isAdmin&&<button onClick={ev=>{ev.stopPropagation();marcarConsulta(e,null)}} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.azulBg,borderRadius:20,padding:'3px 10px',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Resuelta</button>}
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,flexShrink:0}}>
@@ -4296,11 +4296,11 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         {fondosP.map(f=>{ const c=cubre(f), usado=sum(c), queda=(Number(f.amount)||0)-usado; return (
           <div key={f.id} style={{padding:'9px 14px',borderTop:`1px solid ${C.track}`}}>
             <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'baseline'}}>
-              <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nomFondo(f)}</span>
+              <span style={{fontSize:13,fontWeight:700,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nomFondo(f)}</span>
               <span style={{fontSize:13,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(f.amount)}</span>
             </div>
             <div style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12,color:C.muted,marginTop:2}}>
-              <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.length?`cubre ${c.length} gasto${c.length!==1?'s':''} · ${fmt(usado)}`:'uso general'}</span>
+              <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.length?`cubre ${c.length} gasto${c.length!==1?'s':''} · ${fmt(usado)}`:'uso general'}</span>
               {c.length>0&&<span style={{fontWeight:600,color:queda<0?C.overdueText:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>queda {fmtSaldoG(queda)}</span>}
             </div>
           </div>) })}
@@ -4361,7 +4361,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <span style={{width:8,height:8,borderRadius:'50%',background:saldo<0?C.overdue:(saldo<=(BRAND.cajaChicaUmbral||0)?C.soon:C.normal),flexShrink:0}}/>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:600,color:C.text}}>Mi caja chica</div>
-              <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{saldo<0?`la oficina te debe ${fmtN(-saldo)}`:`disponible ${fmtN(saldo)}`}{pend.length?` · ${pend.length} sin liquidar`:''}</div>
+              <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{saldo<0?`la oficina te debe ${fmtN(-saldo)}`:`disponible ${fmtN(saldo)}`}{pend.length?` · ${pend.length} sin liquidar`:''}</div>
             </div>
             <span style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>Ver <Gl n='chevron'/></span>
           </div>) })()}
@@ -4438,8 +4438,8 @@ export function RevisionOficinaPage({items,setExpenses,clients,sales,clientEntit
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         {diaGrande(e.date)}
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
-          <div style={{fontSize:12,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{[e.created_by,e.category,e.revision_estado==='nose'&&e.revisado_por?`${e.revisado_por} no supo`:null].filter(Boolean).join(' · ')}</div>
+          <div style={{fontSize:14,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
+          <div style={{fontSize:12,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[e.created_by,e.category,e.revision_estado==='nose'&&e.revisado_por?`${e.revisado_por} no supo`:null].filter(Boolean).join(' · ')}</div>
         </div>
         {isDesktop&&acciones(e)}
         <span style={{fontWeight:700,fontSize:14,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',minWidth:isDesktop?90:0,textAlign:'right'}}>{fmt(e.amount)}</span>
@@ -4465,7 +4465,7 @@ export function RevisionOficinaPage({items,setExpenses,clients,sales,clientEntit
         <div style={{...SEC_LBL,margin:'4px 2px 8px'}}>Revisados ahora</div>
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
           {hechos.map((h,i)=><div key={h.e.id+i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',fontSize:13}}>
-            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{h.e.concept||'—'}</span>
+            <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.text}}>{h.e.concept||'—'}</span>
             <span style={{color:C.muted,whiteSpace:'nowrap'}}>{h.accion==='cliente'?`→ ${h.cli?.name}`:h.accion==='oficina'?'Oficina':'No sé'}</span>
             <button type='button' onClick={()=>deshacer(h)} style={{border:'none',background:'none',color:C.accent,fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:'inherit',padding:0}}>Deshacer</button>
           </div>)}

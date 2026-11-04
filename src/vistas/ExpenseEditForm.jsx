@@ -83,7 +83,7 @@ export function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[
             <button type='button' onClick={()=>setCambiarCli(false)} style={{marginTop:5,fontSize:11,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0}}>Cancelar</button>
           </div>
         : <div onClick={()=>{ if(f.client_render_id||f.render_id||f.notaria_render_id){ appAlert('Este gasto está en una rendición/liquidación. Reábrela antes de moverlo a otro cliente.'); return } setCambiarCli(true) }} title='Tocar para cambiar de cliente' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8,padding:'8px 11px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer'}}>
-            <div style={{minWidth:0}}><div style={{...SEC_LBL}}>Cliente</div><div style={{fontSize:13,color:client?.name?C.accent:C.overdue,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?.name||'Sin cliente'}</div></div>
+            <div style={{minWidth:0}}><div style={{...SEC_LBL}}>Cliente</div><div style={{fontSize:13,color:client?.name?C.accent:C.overdue,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{client?.name||'Sin cliente'}</div></div>
             <span style={{fontSize:11,color:C.azulInfo,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>Cambiar <Gl n='chevD'/></span>
           </div>
       )}

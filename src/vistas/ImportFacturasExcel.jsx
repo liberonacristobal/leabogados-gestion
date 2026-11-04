@@ -216,8 +216,8 @@ ${muestra}`
           <div key={r.id} style={{border:`0.5px solid ${C.border}`,borderRadius:10,padding:'9px 11px',opacity:(r._skip||r.error||r.dup)?.6:1}}>
             <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'flex-start'}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.clientName||r.nombre||'(sin cliente)'}{r.fuzzy&&<span style={{color:C.soon,fontWeight:500}}> ·aprox</span>}</div>
-                <div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.factura?`Factura N° ${r.factura} · `:''}{r.concepto} · {fmtD(r.emision)}{r.pago?` · pagada ${fmtD(r.pago)}${r.pagoEstimado?' (estimada)':''}`:''}</div>
+                <div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.clientName||r.nombre||'(sin cliente)'}{r.fuzzy&&<span style={{color:C.soon,fontWeight:500}}> ·aprox</span>}</div>
+                <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.factura?`Factura N° ${r.factura} · `:''}{r.concepto} · {fmtD(r.emision)}{r.pago?` · pagada ${fmtD(r.pago)}${r.pagoEstimado?' (estimada)':''}`:''}</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.text}}>{fmt0(r.monto)}</div>

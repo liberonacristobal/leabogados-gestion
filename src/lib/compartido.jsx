@@ -458,7 +458,7 @@ export function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite
       {rows===null?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Cargando…</div>
        :rows.length===0?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>{vacio}</div>
        :rows.map((r,i)=><div key={r.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{etiquetas[r.action]||r.action}</div>{det(r.detail)&&<div style={{fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{det(r.detail)}</div>}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{etiquetas[r.action]||r.action}</div>{det(r.detail)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{det(r.detail)}</div>}</div>
           <div style={{textAlign:'right',flexShrink:0}}>{(()=>{ try{ const o=JSON.parse(r.detail); const m=o&&!Array.isArray(o)&&typeof o==='object'?(o.monto??o.amount):(Array.isArray(o)?o.reduce((a,x)=>a+(Number(x?.monto??x?.amount)||0),0)||null:null); return m!=null?<div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</div>:null }catch(_){ return null } })()}<div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{fmtFechaHora(r.created_at)}</div><div style={{fontSize:11,color:C.textSoft}}>{quien(r.user_email)}</div></div>
         </div>)}
     </div>)
@@ -498,7 +498,7 @@ export const Modal = ({title,onClose,children,closeOnBackdrop=true,titleRight,hi
       {!hideHeader&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:fs?'calc(env(safe-area-inset-top,0px) + 16px) 18px 14px':'18px 20px 14px',borderBottom:`1px solid ${C.border}`,position:flex?'static':'sticky',top:0,background:C.surface,zIndex:1,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           {fs&&<button onClick={onClose} aria-label='Volver' style={{display:'inline-flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'6px 8px 6px 0',marginLeft:-2,flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>}
-          <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</span>
+          <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{title}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
           {titleRight}
@@ -1762,14 +1762,14 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movilización'); XLSX.writeFile(wb,`Movilizacion ${anio}${per?` ${per}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const fila=e=>(<div key={e.id} onClick={()=>editable(e)&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:editable(e)?'pointer':'default'}}>
     {diaGrande(e.date)}
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.concept||'—'}</div>
-      <div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{[!per&&e._p, e.subcategory, e._cargo==='cli'?cliN(e.client_id):(e._cargo==='per'?'Personal':'Oficina')].filter(Boolean).join(' · ')}{e._sin&&<b style={{color:C.soonText}}> · falta el motivo</b>}</div></div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
+      <div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[!per&&e._p, e.subcategory, e._cargo==='cli'?cliN(e.client_id):(e._cargo==='per'?'Personal':'Oficina')].filter(Boolean).join(' · ')}{e._sin&&<b style={{color:C.soonText}}> · falta el motivo</b>}</div></div>
     <span style={{...num,fontSize:14,fontWeight:700,color:C.text}}>{fmt(e.amount)}</span></div>)
   const desglose=x=>[`Oficina ${fmt(x.ofi)}`,`Clientes ${fmt(x.cli)}`,x.per?`Personal ${fmt(x.per)}`:null].filter(Boolean).join(' · ')
   const prom=x=>x.n?fmt(Math.round(x.tot/x.n)):'—'
   const alerta=(k,t,sub,lista)=>(<div style={{...card,minWidth:0,overflow:'hidden'}}><div onClick={()=>setAbierto(abierto===k?null:k)} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',cursor:'pointer'}}>
     <span style={{width:30,height:30,borderRadius:8,background:C.soonBg,display:'grid',placeItems:'center',color:C.soonText,fontWeight:700,flexShrink:0}}>!</span>
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t}</div><div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>
     <span style={{color:C.textSoft}}><Gl n={abierto===k?'chevU':'chevD'}/></span></div>
     {abierto===k&&lista.map(fila)}</div>)
   return (<FlujoPagina origen={origen} titulo='Movilización' ctx={per||(isAdmin?'todo el equipo':null)} onBack={onBack} maxW={1100}>
@@ -1793,12 +1793,12 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
     <div style={{display:'grid',gridTemplateColumns:isDesktop&&!per?'minmax(0,1.3fr) minmax(0,1fr)':'minmax(0,1fr)',gap:14,marginTop:14,alignItems:'start'}}>
       <div style={{minWidth:0}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>Por mes</div><div style={{...card,overflow:'hidden'}}>{d.meses.map((m,i)=>(<div key={m.k} style={{borderTop:i?`1px solid ${C.track}`:'none'}}>
         <div onClick={()=>setAbierto(abierto===m.k?null:m.k)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',cursor:'pointer'}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{m.k==='sin fecha'?'Sin fecha':mesTitulo(m.k+'-15')}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.n} viaje{m.n!==1?'s':''} · prom. {prom(m)}{m.sin?<b style={{color:C.soonText}}> · {m.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{desglose(m)}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{m.k==='sin fecha'?'Sin fecha':mesTitulo(m.k+'-15')}</div><div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{m.n} viaje{m.n!==1?'s':''} · prom. {prom(m)}{m.sin?<b style={{color:C.soonText}}> · {m.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{desglose(m)}</div></div>
           <span style={{...num,fontSize:14,fontWeight:700,color:C.text}}>{fmt(m.tot)}</span><span style={{color:C.textSoft}}><Gl n={abierto===m.k?'chevU':'chevD'}/></span></div>
         {abierto===m.k&&m.movs.map(fila)}</div>))}{!d.meses.length&&<div style={{padding:22,textAlign:'center',fontSize:13,color:C.muted}}>Sin movilización registrada en {anio}.</div>}</div></div>
       {!per&&d.personas.length>0&&<div style={{minWidth:0}}><div style={{...SEC_LBL,margin:'0 2px 6px'}}>Por persona</div><div style={{...card,overflow:'hidden'}}>{d.personas.map((x,i)=>(
         <div key={x.k} onClick={()=>todos.length>1&&setPer(x.k)} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:todos.length>1?'pointer':'default'}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{x.k}</div><div style={{fontSize:12,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.n} viaje{x.n!==1?'s':''} · prom. {prom(x)}{x.sin?<b style={{color:C.soonText}}> · {x.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{desglose(x)}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{x.k}</div><div style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{x.n} viaje{x.n!==1?'s':''} · prom. {prom(x)}{x.sin?<b style={{color:C.soonText}}> · {x.sin} sin motivo</b>:''}</div><div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{desglose(x)}</div></div>
           <span style={{...num,fontSize:14,fontWeight:700,color:C.text}}>{fmt(x.tot)}</span><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>))}</div></div>}
     </div>
   </FlujoPagina>)
@@ -2202,7 +2202,7 @@ export function AsignarVentaFactura({factura, sales=[], billing=[], onHecho}){
   // Ventas cerradas del cliente: solo a pedido (una factura tardía de un trabajo ya terminado). Mismo cálculo de cuotas.
   const cerradas=useMemo(()=>{ const cs=(sales||[]).filter(x=>x&&!x.deleted_at&&String(x.client_id)===String(factura.client_id)&&x.status!=='Activo'); return cs.length?sugerirVentas({factura:{...factura,amount:monto},sales:cs.map(x=>({...x,status:'Activo'})),billing}).map(g=>({...g,sale:{...g.sale,status:cs.find(x=>x.id===g.sale.id)?.status},motivo:null})):[] },[factura,sales,billing,monto])
   const filaVenta=g=><div key={g.sale.id} onClick={()=>elegir(g)} style={{display:'flex',alignItems:'center',gap:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',cursor:'pointer'}}>
-    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{g.sale.title}{g.sale.status&&g.sale.status!=='Activo'?<span style={{fontWeight:400,color:C.textSoft}}> · cerrada</span>:null}</div><div style={{fontSize:11,color:C.textSoft,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{contexto(g)}</div></div>
+    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.sale.title}{g.sale.status&&g.sale.status!=='Activo'?<span style={{fontWeight:400,color:C.textSoft}}> · cerrada</span>:null}</div><div style={{fontSize:11,color:C.textSoft,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{contexto(g)}</div></div>
     <span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>Elegir</span></div>
   const linkCerr=cerradas.length>0&&!verCerr&&<span onClick={()=>setVerCerr(true)} style={{fontSize:11,color:C.azulInfo,fontWeight:600,cursor:'pointer',padding:'2px 0'}}>Ver también cerradas ({cerradas.length})</span>
   if(!sugs.length&&!verCerr) return <div onClick={e=>e.stopPropagation()} style={{fontSize:12,color:C.muted,marginTop:10,display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><span>Este cliente no tiene ventas activas. Abre su ficha para crear una.</span>{linkCerr}</div>
@@ -2222,11 +2222,11 @@ export function AsignarVentaFactura({factura, sales=[], billing=[], onHecho}){
     </div>}
     {elegida&&(()=>{ const ids=[...sel], suma=elegida.progs.filter(c=>sel.has(String(c.id))).reduce((a,c)=>a+(Number(c.amount)||0),0)
       return <div style={{marginTop:10,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,minWidth:0,fontSize:14,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{elegida.sale.title}</div><span onClick={()=>{setElegida(null);setConf(null)}} style={{fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Cambiar</span></div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,minWidth:0,fontSize:14,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{elegida.sale.title}</div><span onClick={()=>{setElegida(null);setConf(null)}} style={{fontSize:12,color:C.accent,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Cambiar</span></div>
         {elegida.progs.length?<div style={{marginTop:6}}>{[...elegida.progs].sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))).map((c,i)=>{ const on=sel.has(String(c.id))
           return <div key={c.id} onClick={()=>setSel(p=>{ const n=new Set(p); on?n.delete(String(c.id)):n.add(String(c.id)); return n })} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 2px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <span style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.accent:C.muted}`,background:on?C.accent:'#fff',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,flexShrink:0}}>{on?'✓':''}</span>
-            <span style={{flex:1,minWidth:0,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{etq(c)}</span><span style={{fontVariantNumeric:'tabular-nums',color:C.text,fontWeight:600}}>{fmt(c.amount)}</span></div> })}
+            <span style={{flex:1,minWidth:0,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{etq(c)}</span><span style={{fontVariantNumeric:'tabular-nums',color:C.text,fontWeight:600}}>{fmt(c.amount)}</span></div> })}
           <div style={{...lnS,borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:4}}><span style={lnL}>Cuotas marcadas</span><b style={lnV}>{fmt(suma)}</b></div>
           {ids.length>0&&<div style={{fontSize:11,color:C.textSoft,marginTop:5}}>{difTxt(Math.round(suma-monto))}</div>}
         </div>:<div style={{fontSize:12,color:C.textSoft,marginTop:5}}>{contexto(elegida)}</div>}
@@ -2342,7 +2342,7 @@ export function CubrirCuotasModal({anticipo,sales=[],billing=[],clients=[],onCon
                   <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:on?`1.5px solid ${C.accent}`:`1.5px solid ${C.border}`,background:on?C.accent:'#fff'}}>
                     {on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                   </span>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:400,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.concept||'Cuota'}</div><div style={{fontSize:11,color:C.textSoft}}>Vence {fmtDMY(c.due)}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:400,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.concept||'Cuota'}</div><div style={{fontSize:11,color:C.textSoft}}>Vence {fmtDMY(c.due)}</div></div>
                   <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(c.amount)}</span>
                 </div>
               )})}
@@ -2749,7 +2749,7 @@ export const IconSection = ({icon, iconColor, title, summary, summaryColor, open
   <div style={{borderBottom:last?'none':`0.5px solid ${C.bgWarm}`, background:open?C.bgPanel:'transparent'}}>
     <div onClick={onToggle} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
       <SIcon n={icon} s={17} c={iconColor||C.muted}/>
-      <span style={{fontSize:12,fontWeight:600,color:C.text,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</span>
+      <span style={{fontSize:12,fontWeight:600,color:C.text,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{title}</span>
       {summary!=null&&<span style={{fontSize:11,color:summaryColor||C.muted,fontWeight:summaryColor&&summaryColor!==C.muted?600:400,whiteSpace:'nowrap',flexShrink:0}}>{summary}</span>}
       <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0,transform:open?'rotate(180deg)':'none',transition:'transform .12s'}}><path d='M6 9l6 6 6-6'/></svg>
     </div>
@@ -3614,7 +3614,7 @@ export function Attachments({table, idField, entityId, ensureEntityId, folderKin
     <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
       <span style={{flexShrink:0}}>Adjunto</span>
       {a.storage_path   // respaldo que adjuntó el agente desde el correo (bucket privado, no Drive)
-        ?<><span onClick={()=>abrirDocumento(a.storage_path)} style={{flex:1,fontSize:12,color:C.accent,cursor:'pointer',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</span>
+        ?<><span onClick={()=>abrirDocumento(a.storage_path)} style={{flex:1,fontSize:12,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a.name||'archivo'}</span>
           <span onClick={()=>abrirDocumento(a.storage_path)} style={{fontSize:10,color:C.muted,cursor:'pointer',flexShrink:0}}>Abrir</span></>
         :<><a href={a.url||'#'} target='_blank' rel='noreferrer' style={{flex:1,fontSize:12,color:C.accent,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||'archivo'}</a>
           <a href={a.url||'#'} target='_blank' rel='noreferrer' style={{fontSize:10,color:C.muted,textDecoration:'none',flexShrink:0}}>Abrir</a></>}

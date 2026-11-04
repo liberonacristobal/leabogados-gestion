@@ -329,7 +329,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
             <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:170,overflowY:'auto',marginTop:7}}>
               {precFiles.map(f=>{ const sel=precSel&&precSel.id===f.id; return (
                 <button key={f.id} type='button' onClick={()=>elegirPrec(f)} disabled={precReading} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:8,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer',textAlign:'left'}}>
-                  <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?C.accent:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sel?<><Gl n='tick'/>{" "}</>:''}{f.name}</span>
+                  <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?C.accent:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sel?<><Gl n='tick'/>{" "}</>:''}{f.name}</span>
                   <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(isoLocal(f.modifiedTime))}</span>
                 </button>
               )})}
@@ -354,7 +354,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
                 <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:200,overflowY:'auto'}}>{f.slice(0,40).map(c=>{ const sel=precSel&&precSel.name===c.titulo; return (
                   <button key={c.id} type='button' onClick={()=>usarClausula(c)} style={{textAlign:'left',padding:'6px 9px',borderRadius:8,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer'}}>
                     <div style={{fontSize:12,fontWeight:600,color:sel?C.accent:C.text}}>{sel?<><Gl n='tick'/>{" "}</>:''}{c.titulo} <span style={{fontSize:9,fontWeight:600,color:C.muted}}>· {c.categoria}</span></div>
-                    <div style={{fontSize:10,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.texto}</div>
+                    <div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.texto}</div>
                   </button>)})}</div>
               ):<div style={{fontSize:11,color:C.muted}}>Sin cláusulas guardadas{clauCat?` en ${clauCat}`:''}. Usa "Extraer de un documento".</div> })()}
             </>
@@ -366,7 +366,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
               </div>
               {clauDocs&&clauDocs.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:170,overflowY:'auto',marginTop:7}}>{clauDocs.map(f=>(
                 <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:8,border:`1px solid ${C.border}`}}>
-                  <span style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name}</span>
+                  <span style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{f.name}</span>
                   <button type='button' onClick={()=>extraerClausulas(f)} disabled={!!extrBusy} style={{fontSize:10,fontWeight:700,color:C.accent,background:'none',border:`1px solid ${C.accent}`,borderRadius:6,padding:'3px 8px',cursor:'pointer',whiteSpace:'nowrap'}}>{extrBusy===f.id?'Extrayendo…':'Extraer'}</button>
                 </div>))}</div>}
               {clauDocs&&clauDocs.length===0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Sin resultados.</div>}

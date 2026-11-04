@@ -131,7 +131,7 @@ export function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDeleg
       <div className='qt-head' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,background:C.surface,zIndex:2}}>
         <div style={{display:'flex',alignItems:'center',gap:9,minWidth:0}}>
           <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
-          <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+          <span style={{fontSize:16,fontWeight:600,color:C.accent,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>
             {task?'Editar tarea':'Nueva tarea'}
             {selectedClient&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span onClick={()=>{setSelectedClient(null);setQ('')}} title='Cambiar cliente' style={{color:C.muted,fontWeight:600,cursor:'pointer',textDecoration:'underline',textDecorationColor:C.done,textUnderlineOffset:3}}>{selectedClient.name}</span></>}
           </span>
