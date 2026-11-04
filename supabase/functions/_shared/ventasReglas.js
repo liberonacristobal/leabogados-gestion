@@ -118,11 +118,34 @@ export function cuotasSinPrimeraFactura({ billing = [], sales = [], uf = {}, noE
   return _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, ventasEnMarcha(billing, anticipos), false)
 }
 
+// N° de cuota de una fila del concepto «… — Cuota 3/10» (null si no es una cuota numerada).
+const _cuotaNum = b => { const m = String((b && b.concept) || '').match(/cuota\s*(\d+)\s*\/\s*\d+/i); return m ? +m[1] : null }
+
+/** Por venta, el N° de cuota más alto ya emitido (con folio). Sirve para detectar cuotas saltadas. @param {any[]} billing @returns {Map<string, number>} */
+export function mayorCuotaEmitida(billing) {
+  const out = new Map()
+  ;(billing || []).forEach(x => { if (!x || x.deleted_at || !x.sale_id || x.status === 'Programada' || x.status === 'Anulada' || !(x.invoice_no || x.folio)) return
+    const k = _cuotaNum(x); if (k != null && k > (out.get(String(x.sale_id)) || 0)) out.set(String(x.sale_id), k) })
+  return out
+}
+
+// Cuota «saltada»: sigue Programada aunque una cuota de número MAYOR de su misma venta ya se emitió (caso real: cuota 2/10 sin emitir en
+// agosto, con las cuotas 3 y 4 ya facturadas; su vencimiento había quedado en mayo 2027 y el radar no la veía). No depende del vencimiento.
+const _saltada = (b, mayor) => { const n = _cuotaNum(b), m = mayor.get(String(b.sale_id)); return n != null && m != null && n < m }
 function _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, enMarcha, deLosQueParten) {
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
   const cub = cuotasCubiertasVenta(billing, sales, uf)
+  const mayor = mayorCuotaEmitida(billing)
   return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.sale_id && venta.get(String(b.sale_id))?.status === 'Activo'
-    && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && b.due >= appDesde && b.due < hasta && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total)
+    && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && b.due >= appDesde && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total
+    && (b.due < hasta || _saltada(b, mayor)))
+}
+
+/** N° de la cuota más alta ya emitida si esta Programada quedó saltada; si no, null. @param {any} b @param {any[]} billing @returns {number|null} */
+export function cuotaSaltada(b, billing) {
+  if (!b || b.status !== 'Programada' || !b.sale_id) return null
+  const n = _cuotaNum(b), m = mayorCuotaEmitida(billing).get(String(b.sale_id))
+  return n != null && m != null && n < m ? m : null
 }
 
 // Factura emitida (con folio) y con respaldo XML que aún no se manda al cliente: impaga y sin envío registrado. Fuente única de la
