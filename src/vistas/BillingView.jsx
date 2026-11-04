@@ -3342,14 +3342,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
       </div>
 
       {payingId&&(()=>{ const pb=billing.find(b=>String(b.id)===String(payingId))||{}; const _cl=clients.find(c=>String(c.id)===String(pb.client_id)); return (
-        <div style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div style={{background:C.surface,borderRadius:12,width:'min(90vw, 340px)',overflow:'hidden'}}>
-            <div style={{padding:'18px 20px 0',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <span style={{fontSize:14,fontWeight:600}}><span style={{color:C.accent}}>Registrar pago</span>{_cl&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted}}>{_cl.name}</span></>}{(()=>{ const rs=rsLabel(pb.client_id,clients,clientEntities,pb.entity_id); return (rs.name&&rs.name!==_cl?.name)||rs.rut ? <span style={{color:C.muted,fontWeight:400,fontSize:11}}> · {rsDisplay(rs.name)}{rs.rut?` · ${fmtRutCL(rs.rut)}`:''}</span> : null })()}</span>
-              <button onClick={()=>setPayingId(null)} style={{width:28,height:24,borderRadius:8,border:`0.5px solid ${C.border}`,background:C.surface,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-                <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-              </button>
-            </div>
+<PaginaSobre origen='Facturación' titulo='Registrar pago' ctx={(()=>{ const rs=rsLabel(pb.client_id,clients,clientEntities,pb.entity_id); return [_cl?.name,(rs.name&&rs.name!==_cl?.name)?rsDisplay(rs.name):null,rs.rut?fmtRutCL(rs.rut):null].filter(Boolean).join(' · ')||null })()} onBack={()=>setPayingId(null)} maxW={520}>
+            
             <div style={{padding:'12px 20px 16px',borderBottom:`0.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
               <div style={{minWidth:0}}>
                 <div style={{fontSize:11,color:C.textSoft}}>Saldo{pb.invoice_no?<> · <Copyable text={String(folioN(pb.invoice_no)||pb.invoice_no)} title='Copiar folio' style={{color:C.textSoft,fontWeight:600}}>Factura N° {folioN(pb.invoice_no)||pb.invoice_no}</Copyable></>:''}</div>
@@ -3390,8 +3384,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               <button onClick={()=>setPayingId(null)} style={{flex:1,height:44,borderRadius:8,border:`0.5px solid ${C.border}`,background:C.surface,color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
               <button onClick={confirmPago} disabled={pagando} style={{flex:2,height:44,borderRadius:8,border:'none',background:C.greenText,color:'#fff',fontSize:13,fontWeight:600,cursor:pagando?'default':'pointer',opacity:pagando?.6:1}}>{pagando?'Guardando…':(()=>{ const total=pb.amount||0, ya=pb.paid_amount||0; const monto=parseInt(String(payMonto).replace(/[^\d]/g,''))||0; return (monto>0&&ya+monto<total)?'Confirmar abono':'Confirmar pago' })()}</button>
             </div>
-          </div>
-        </div>
+          </PaginaSobre>
       )})()}
 
       <div style={{padding:'10px 20px 100px'}}>
@@ -4238,12 +4231,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
       </div>
       {/* FAB "Nueva factura" retirado a pedido del usuario (alta manual de cobros queda en la ficha del cliente → Financiero) */}
       {siiPanel&&(
-        <div onClick={()=>setSiiPanel(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:12,padding:16,maxWidth:540,width:'100%',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-              <div style={{fontSize:16,fontWeight:600,color:C.text}}>{siiPanel==='set'?'Set de pruebas · SII':siiPanel==='libro'?'Libro de ventas':'Historial de emisión'}</div>
-              <button onClick={()=>setSiiPanel(null)} style={{background:'none',border:'none',color:C.muted,fontSize:20,lineHeight:1,cursor:'pointer'}}><Gl n='x'/></button>
-            </div>
+<PaginaSobre origen='Facturación' titulo={siiPanel==='set'?'Set de pruebas · SII':siiPanel==='libro'?'Libro de ventas':'Historial de emisión'} onBack={()=>setSiiPanel(null)} maxW={720}>
+            
             <div style={{fontSize:11,color:C.muted,marginBottom:13}}>{siiPanel==='log'?'Cada emisión registrada — folio, estado y errores (incluye folios perdidos)':'Ambiente certificación · prueba con vista previa antes de enviar'}</div>
             {siiPanel==='log'?(
               siiLog===null?<div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'22px 0'}}>Cargando…</div>
@@ -4279,8 +4268,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 </>)}
               </div>
             )}
-          </div>
-        </div>
+          </PaginaSobre>
       )}
       </div>
     </div>
