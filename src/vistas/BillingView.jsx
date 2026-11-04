@@ -3415,28 +3415,6 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             <div style={{display:'flex',justifyContent:'flex-end',gap:4,marginBottom:8}}>
               {[['','Total'],...resYears.slice(0,3).map(y=>[y,y])].map(([v,l])=><span key={v||'t'} onClick={()=>setFYear(v)} style={{fontSize:10,fontWeight:600,borderRadius:20,padding:'3px 10px',cursor:'pointer',border:`1px solid ${fYear===v?C.accent:C.border}`,background:fYear===v?C.azulBg:'#fff',color:fYear===v?C.accent:C.muted}}>{l}</span>)}
             </div>
-            <div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'14px 15px',marginBottom:7}}>
-              <div style={{...SEC_LBL,marginBottom:12}}>Ciclo de la factura</div>
-              <div style={{display:'flex',alignItems:'stretch'}}>
-                <div onClick={()=>irAEstado('programadas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
-                  <SIcon n='clock' s={19} c={C.muted}/>
-                  <div style={{...SEC_LBL,marginTop:4}}>Por facturar</div>
-                  <div style={{fontSize:16,fontWeight:800,color:C.muted,marginTop:1}}>{fmtShort(porFacturarRealTot)}</div>
-                </div>
-                <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
-                <div onClick={()=>irAEstado('emitidas')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
-                  <SIcon n='file' s={19} c={C.accent}/>
-                  <div style={{fontSize:9,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Por cobrar</div>
-                  <div style={{fontSize:16,fontWeight:800,color:C.accent,marginTop:1}}>{fmtShort(porCobrar)}</div>
-                </div>
-                <div style={{display:'flex',alignItems:'center',color:'#C7D2D7',fontSize:15,paddingTop:14}}>→</div>
-                <div onClick={()=>irAEstado('pagado')} style={{flex:1,textAlign:'center',cursor:'pointer'}}>
-                  <SIcon n='check' s={19} c={C.normal}/>
-                  <div style={{fontSize:9,color:C.greenText,textTransform:'uppercase',letterSpacing:.3,marginTop:4,fontWeight:600}}>Pagado</div>
-                  <div style={{fontSize:16,fontWeight:800,color:C.greenText,marginTop:1}}>{fmtShort(cobAll)}</div>
-                </div>
-              </div>
-            </div>
             {/* Bloque del mes (rediseño 2026-08-04, pedido del usuario). Fila 1 = 2 tiles con TONO propio y mes como KICKER (cabe en meses largos): Cierre AZUL (reporte del mes anterior) + Facturas por emitir VERDE (pendiente del mes actual), $ como cifra. Fila(s) 2+ = tiles chicos uniformes: Anticipos disponibles + Ver cobranza fijos; higiene condicional (Ya emitidas·vincular, Pagadas sin marcar, Sin año). Reemplaza Cierre/Facturas-del-mes/duplicados/cobradas-sin-marcar/chips (Proveedores fuera). */}
             {(()=>{
               const MN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -3474,18 +3452,6 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               const mesTop={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
               const mesN={fontSize:12,fontWeight:500,letterSpacing:.4,textTransform:'uppercase',marginTop:1}
               const money={fontSize:23,fontWeight:800,letterSpacing:-.6,marginTop:6,fontVariantNumeric:'tabular-nums',lineHeight:1}
-              // Tarjeta de acceso uniforme: icono + titular MAYÚSCULAS + sub, y valor/badge/chevron a la derecha.
-              const accCard=(sqbg,stroke,pathEl,titulo,sub,onClick,opts={})=>(
-                <div onClick={onClick} style={{background:opts.cardBg||'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',minHeight:66,height:'100%',boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'center',gap:5}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:28,height:28,borderRadius:8,background:sqbg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={stroke} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{pathEl}</svg></span>
-                    {opts.value?<span style={{marginLeft:'auto',fontSize:14,fontWeight:800,color:opts.valCol||C.text,fontVariantNumeric:'tabular-nums',display:'flex',alignItems:'center',gap:5}}>{opts.dot&&<span style={{width:6,height:6,borderRadius:'50%',background:opts.dot}}/>}{opts.value}</span>
-                      :opts.badge!=null?<span style={{marginLeft:'auto',fontSize:15,fontWeight:800,color:opts.badgeCol||C.overdueText}}>{opts.badge}</span>
-                      :<span style={{marginLeft:'auto',color:C.textSoft,fontSize:12}}><Gl n='chevron'/></span>}
-                  </div>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:opts.titCol||C.text,lineHeight:1.3}}>{titulo}</div>
-                  <div style={{fontSize:10,color:opts.subCol||C.done,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
-                </div>)
               // Ciclo del mes (5 pasos, render aprobado 2026-11-02): cada cifra sale de la misma fuente que su pantalla de destino.
               const mesPrev=MN[_pm.getMonth()].slice(0,3)
               const pasos=[
@@ -3515,35 +3481,38 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               const P=d=><path d={d}/>
               return (
               <div style={{display:'flex',flexDirection:'column',gap:9,marginBottom:8}}>
-                {cicloMes}
-                {/* EL MES */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div onClick={()=>setCierreOpen(true)} style={{background:C.azulBg,border:'1px solid #D3E3F3',borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minHeight:96}}>
-                    <span style={{position:'absolute',top:9,right:11,color:'#7FA6BE',fontSize:13}}><Gl n='chevron'/></span>
-                    <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M9 16l2 2 4-4'/></svg></span>
-                    <div style={{...mesTop,color:C.accent}}>Cierre de mes</div>
-                    <div style={{...mesN,color:C.accent}}>{MN[_pm.getMonth()].toUpperCase()}</div>
-                    {emi.length>0?<><div style={{...money,color:C.accent}}>{fmtShort(tCob)}</div><div style={{fontSize:10,color:'#3E6472',marginTop:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>pagado de {fmtShort(tEmi)} facturado · {tasa}%</div></>:<div style={{fontSize:11,color:'#3E6472',marginTop:6}}>Quién pagó y quién no</div>}
-                  </div>
-                  <div onClick={()=>{setFilter('checklist');clearSel&&clearSel()}} style={{background:C.greenBg,border:'1px solid #C4E7D9',borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minHeight:96}}>
-                    <span style={{position:'absolute',top:9,right:11,color:'#7FC4A9',fontSize:13}}><Gl n='chevron'/></span>
-                    <span style={{width:26,height:26,borderRadius:8,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:7}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg></span>
-                    <div style={{...mesTop,color:C.greenText}}>Facturación del mes</div>
-                    <div style={{...mesN,color:C.greenText}}>{MN[_now.getMonth()].toUpperCase()}</div>
-                    <div style={{...money,color:C.greenText}}>{fmtShort(pemTot)}</div>
-                    <div style={{fontSize:10,color:'#3E7360',marginTop:4}}>{pemN} factura{pemN!==1?'s':''} por emitir</div>
-                  </div>
+                {/* AÑO: tres tarjetas KPI (más altas que los tiles), con el tono de la app; cada una abre su lista. */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:isDesktop?12:8}}>
+                  {[
+                    {k:'Por facturar', v:porFacturarRealTot, ic:'clock', col:C.muted, bg:C.surface, bd:C.border, sq:C.bgSoft, on:()=>irAEstado('programadas')},
+                    {k:'Por cobrar', v:porCobrar, ic:'file', col:C.accent, bg:C.azulBg, bd:'#D3E3F3', sq:'#fff', on:()=>irAEstado('emitidas')},
+                    {k:'Pagado', v:cobAll, ic:'check', col:C.greenText, bg:C.greenBg, bd:'#C4E7D9', sq:'#fff', on:()=>irAEstado('pagado')},
+                  ].map(t=><div key={t.k} onClick={t.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t.on()}}} style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:12,padding:isDesktop?'14px 16px':'11px 11px',cursor:'pointer',minHeight:isDesktop?112:98,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{width:isDesktop?30:26,height:isDesktop?30:26,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={t.ic} s={isDesktop?17:15} c={t.col}/></span>
+                      <span style={{color:t.col,opacity:.55,fontSize:13}}><Gl n='chevron'/></span>
+                    </div>
+                    <div>
+                      <div style={{fontSize:isDesktop?11:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.k}</div>
+                      <div style={{fontSize:isDesktop?26:19,fontWeight:800,letterSpacing:-.6,color:t.col,marginTop:3,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtShort(t.v)}</div>
+                    </div>
+                  </div>)}
                 </div>
-                {/* ACCESOS: tarjetas iguales. Orden pedido 2026-10-02: la tarjeta roja "Facturas sin cliente / venta" ocupa el lugar de "Por socio" (arriba-izq, lo más visible); Por socio baja al espacio libre (abajo-der). */}
-                {/* POR REVISAR = una tarjeta del grid (mismo formato que las demás); al tocarla, sus acciones se despliegan bajo las tarjetas. */}
-                {(()=>{ const tarjetas=[
-                  revisar.length>0&&accCard('#fff',C.overdueText,P('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01'),'Por revisar',`${revisar.length} ${revisar.length===1?'acción':'acciones'} · ${porRevOpen?'ocultar':'ver'}`,()=>setPorRevOpen(o=>!o),{badge:revTotal,badgeCol:C.soonText,titCol:C.text}),
-                  porCompletarN>0&&accCard('#fff',C.overdueText,P('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01'),'Por clasificar','Sin cliente, sin venta o sin tipo',()=>go('porcompletar'),{badge:porCompletarN,badgeCol:C.overdueText,cardBg:C.overdueBg,titCol:C.overdueText,subCol:C.overdueText}),
-                  accCard(C.soonBg,C.soonText,P('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01'),'Anticipos disponibles','a favor de clientes',()=>go('anticipos'),{value:antDisp>0?fmtShort(antDisp):'—',valCol:antDisp>0?C.soonText:C.done,dot:antDisp>0?'#EF9F27':null}),
-                  onIrCobranza&&accCard(C.greenBg,C.greenText,P('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0'),'Cobranza','Por cobrar · recordatorios de pago',()=>onIrCobranza()),
-                  onOpenPorSocio&&accCard(C.azulBg,C.accent,P('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7'),'Por socio','Facturado y caja · mes/año',onOpenPorSocio),
-                  ].filter(Boolean); const nCol=isDesktop?tarjetas.length:2
-                  return <div style={{display:'grid',gridTemplateColumns:`repeat(${nCol},minmax(0,1fr))`,gap:8}}>{tarjetas.map((t,i)=><div key={i} style={{minWidth:0,gridColumn:(!isDesktop&&i===tarjetas.length-1&&tarjetas.length%2)?'1 / -1':undefined}}>{t}</div>)}</div> })()}
+                {cicloMes}
+                {/* ACCESOS: tiles uniformes (HubTile: icono a la izquierda). Por revisar abre sus acciones bajo la grilla. */}
+                {(()=>{
+                  const ico=(d,stroke)=><svg width={isDesktop?17:15} height={isDesktop?17:15} viewBox='0 0 24 24' fill='none' stroke={stroke} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'>{P(d)}</svg>
+                  const nombreCierre=cap(MN[_pm.getMonth()])
+                  const tiles=[
+                    <HubTile key='ci' icNode={ico('M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 2v4M8 2v4M3 10h18M9 16l2 2 4-4',C.accent)} bg={C.azulBg} t='Cierre de mes' s={emi.length>0?`${nombreCierre} · ${fmtShort(tCob)} de ${fmtShort(tEmi)} · ${tasa}%`:'Quién pagó y quién no'} sM={emi.length>0?`${fmtShort(tCob)} · ${tasa}%`:'Quién pagó'} onClick={()=>setCierreOpen(true)}/>,
+                    revisar.length>0&&<HubTile key='rv' icNode={ico('M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',C.soonText)} bg={C.soonBg} t='Por revisar' s={`${revTotal} pendientes · ${revisar.length} ${revisar.length===1?'acción':'acciones'}`} sM={`${revTotal} · ${revisar.length} ${revisar.length===1?'acción':'acciones'}`} sCol={C.soonText} onClick={()=>setPorRevOpen(o=>!o)}/>,
+                    porCompletarN>0&&<HubTile key='pc' icNode={ico('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v4M12 18h.01',C.overdueText)} bg='#fff' t='Por clasificar' s={`${porCompletarN} sin cliente, venta o tipo`} sM={`${porCompletarN} sin cliente`} sCol={C.overdueText} tCol={C.overdueText} cardBg={C.overdueBg} cardBd={C.overdueBd} onClick={()=>go('porcompletar')}/>,
+                    <HubTile key='an' icNode={ico('M3 6h17a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h13M17 13h.01',C.soonText)} bg={C.soonBg} t='Anticipos' s={antDisp>0?`${fmtShort(antDisp)} a favor de clientes`:'Sin anticipos disponibles'} sM={antDisp>0?fmtShort(antDisp):'Sin anticipos'} sCol={antDisp>0?C.soonText:undefined} onClick={()=>go('anticipos')}/>,
+                    onIrCobranza&&<HubTile key='cb' icNode={ico('M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',C.greenText)} bg={C.greenBg} t='Cobranza' s='Por cobrar · recordatorios de pago' sM='Recordatorios' onClick={()=>onIrCobranza()}/>,
+                    onOpenPorSocio&&<HubTile key='ps' icNode={ico('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.1a4 4 0 0 1 0 7.7',C.accent)} bg={C.azulBg} t='Por socio' s='Facturado y caja · mes y año' sM='Mes y año' onClick={onOpenPorSocio}/>,
+                  ].filter(Boolean)
+                  const nCol=isDesktop?(tiles.length===4?2:3):2
+                  return <div style={{display:'grid',gridTemplateColumns:`repeat(${nCol},minmax(0,1fr))`,gap:isDesktop?12:8}}>{tiles.map((t,i)=><div key={i} style={{minWidth:0,display:'flex',flexDirection:'column',gridColumn:(!isDesktop&&i===tiles.length-1&&tiles.length%2)?'1 / -1':undefined}}>{t}</div>)}</div> })()}
                 {porRevOpen&&revisar.length>0&&<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {revisar.map((r,i)=><div key={i} onClick={r.on} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'10px 13px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
