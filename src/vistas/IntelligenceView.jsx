@@ -260,7 +260,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
       </div>
       <div style={{padding:'10px 20px 100px'}}>
         {/* HÉROE — Radar tributario · SII (varios focos + clientes a conversar) */}
-        <div style={{background:C.accent,borderRadius:14,padding:'13px 14px 7px',marginBottom:openFoco?9:13}}>
+        <div style={{background:C.accent,borderRadius:12,padding:'13px 14px 7px',marginBottom:openFoco?9:13}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
             <div onClick={()=>radar.length&&setRadarOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:11,minWidth:0,cursor:radar.length?'pointer':'default'}}>
               <span style={{width:38,height:38,borderRadius:12,background:'rgba(159,196,222,.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -289,8 +289,8 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
                   {(n.tipo||n.numero)&&<div style={{fontSize:10,color:'#88A6B6',marginTop:1}}>{((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim()}</div>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:15,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
-                  <div style={{fontSize:8,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>clientes</div>
+                  <div style={{fontSize:16,fontWeight:700,color:'#fff',lineHeight:1}}>{n.expuestos.length}</div>
+                  <div style={{fontSize:10,color:'#88A6B6',textTransform:'uppercase',letterSpacing:'.04em'}}>clientes</div>
                 </div>
                 <span style={{fontSize:13,color:'#6E93A6',flexShrink:0}}>{op?'⌃':<Gl n='chevron'/>}</span>
               </div>
@@ -298,7 +298,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
         </div>
         {openFoco&&(()=>{ const n=radar.find(x=>String(x.id)===String(openFoco)); if(!n) return null; const pr=n.prioridad==='alta'?C.overdue:n.prioridad==='media'?C.soon:C.azulInfo; const tag=((n.numero||'').toUpperCase().includes((n.tipo||'').toUpperCase())?(n.numero||''):`${n.tipo||''} ${n.numero||''}`).toUpperCase().trim(); return (
           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:13}}>
-            <div style={{fontSize:9,fontWeight:700,color:pr,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{tag||'SII'}{n.prioridad?` · prioridad ${n.prioridad}`:''}</div>
+            <div style={{fontSize:10,fontWeight:700,color:pr,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>{tag||'SII'}{n.prioridad?` · prioridad ${n.prioridad}`:''}</div>
             <div style={{fontSize:14,fontWeight:600,color:C.text,lineHeight:1.3,marginBottom:6}}>{n.titulo}</div>
             {(n.brief||n.resumen)&&<div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:10}}>{n.brief||n.resumen}</div>}
             {n.expuestos.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:11}}>
@@ -346,7 +346,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
           {OPPS.map(o=>{ const open=openOpp===o.k; const n=o.rows.length; return (
             <div key={o.k} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
               <div onClick={()=>n&&setOpenOpp(open?null:o.k)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 11px',cursor:n?'pointer':'default'}}>
-                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{o.t}</div><div style={{fontSize:10,color:C.muted}}>{o.sub}</div></div>
+                <div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:400,color:C.text}}>{o.t}</div><div style={{fontSize:10,color:C.muted}}>{o.sub}</div></div>
                 <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}><span style={{fontSize:14,fontWeight:600,color:n?o.col:C.done}}>{n}</span>{n>0&&<span style={{fontSize:12,color:C.textSoft}}>{open?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</div>
               </div>
               {open&&<div>
@@ -398,10 +398,10 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
         {biSec==='cartera'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
-            <div><div style={{...SEC_LBL}}>Clientes activos</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
+            <div><div style={{...SEC_LBL}}>Clientes activos</div><div style={{fontSize:20,fontWeight:600,color:C.accent}}>{carteraTot.activos}</div></div>
             <div style={{textAlign:'right'}}><div style={{...SEC_LBL}}>Valor proyectos · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(carteraTot.ufTotal)}</div></div>
           </div>
-          {carteraTot.ufTotal>0&&<div style={{display:'flex',height:8.5,borderRadius:6,overflow:'hidden',background:C.bgWarm,marginBottom:12}}>
+          {carteraTot.ufTotal>0&&<div style={{display:'flex',height:8.5,borderRadius:8,overflow:'hidden',background:C.bgWarm,marginBottom:12}}>
             {[['sano','#1D9E75'],['riesgo','#C77F18'],['dormido','#E24B4A'],['ocasional','#99ABB4']].map(([k,c])=>{ const w=carteraTot.ufSeg[k]/carteraTot.ufTotal*100; return w>0?<div key={k} style={{width:`${w}%`,background:c}}/>:null })}
           </div>}
           {[
@@ -436,7 +436,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
         {biSec==='servicios'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:9}}>
-            <div><div style={{...SEC_LBL}}>Áreas</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{serviciosTot.areas}</div></div>
+            <div><div style={{...SEC_LBL}}>Áreas</div><div style={{fontSize:20,fontWeight:600,color:C.accent}}>{serviciosTot.areas}</div></div>
             <div style={{textAlign:'right'}}><div style={{...SEC_LBL}}>Vendido · histórico</div><div style={{fontSize:17,fontWeight:600,color:C.accent}}>{fmtUFk(serviciosTot.uf)}</div></div>
           </div>
           {servicios.map(s=>{ const open=openArea===s.area; const w=serviciosTot.uf>0?s.uf/serviciosTot.uf*100:0; return (
@@ -444,7 +444,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
               <div onClick={()=>setOpenArea(open?null:s.area)} style={{cursor:'pointer'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8}}>
                   <span style={{fontSize:13,fontWeight:600,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.area}</span>
-                  <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)}% del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.bgSoft,color:C.muted,whiteSpace:'nowrap'}}>{Math.round(w)}% del total</span><span style={{fontSize:13,fontWeight:600,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(s.uf)}</span></span>
                 </div>
                                 <div style={{fontSize:11,color:C.muted}}>{s.n} venta{s.n!==1?'s':''} · ticket {fmtUFk(s.ticket)} · <span style={{color:s.recPct>0?C.greenText:C.coralText}}>{s.recPct}% recurrente</span>{s.min>0&&s.max>s.min?` · rango ${fmtUFk(s.min)}–${fmtUFk(s.max)}`:''}</div>
               </div>
@@ -460,19 +460,19 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
           {(()=>{ const cov=serviciosTot.nTotal>0?serviciosTot.conCosto/serviciosTot.nTotal*100:0; const repr=cov>=60; const areasCon=servicios.filter(s=>s.conCosto>0); return (
           <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:11}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
-              <span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Rentabilidad · margen de contribución</span>
+              <span style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.4,textTransform:'uppercase'}}>Rentabilidad · margen de contribución</span>
               <span style={{fontSize:10,fontWeight:700,color:repr?C.greenText:C.soonText}}>{serviciosTot.conCosto}/{serviciosTot.nTotal} con costo</span>
             </div>
             <div style={{display:'flex',gap:7,marginBottom:repr?10:8}}>
-              <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Honorarios</div><div style={{fontSize:15,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.uf)}</div></div>
-              <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Costo terceros</div><div style={{fontSize:15,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.costo)}</div></div>
-              <div style={{flex:1,background:repr?C.greenBg:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:9,color:C.muted}}>Margen</div><div style={{fontSize:15,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{serviciosTot.uf>0?Math.round(serviciosTot.margen/serviciosTot.uf*100)+'%':'—'}</div></div>
+              <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:10,color:C.muted}}>Honorarios</div><div style={{fontSize:16,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.uf)}</div></div>
+              <div style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:10,color:C.muted}}>Costo terceros</div><div style={{fontSize:16,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(serviciosTot.costo)}</div></div>
+              <div style={{flex:1,background:repr?C.greenBg:C.bgSoft,borderRadius:10,padding:'7px 9px'}}><div style={{fontSize:10,color:C.muted}}>Margen</div><div style={{fontSize:16,fontWeight:700,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{serviciosTot.uf>0?Math.round(serviciosTot.margen/serviciosTot.uf*100)+'%':'—'}</div></div>
             </div>
             {!repr&&<div style={{background:C.ambarBg,borderRadius:10,padding:'8px 11px',marginBottom:10}}><div style={{fontSize:11,color:C.soonText,lineHeight:1.4}}>El margen aún no es representativo: falta cargar el costo de terceros en <b>{serviciosTot.nTotal-serviciosTot.conCosto} ventas</b>. Cárgalo abajo y se enciende con cifras reales.</div></div>}
             {areasCon.map(s=>{ const mp=Math.round(s.margenPct); const cp=Math.max(0,100-mp); return (
               <div key={s.area} style={{marginBottom:9}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.textSoft,fontWeight:500}}>· {s.conCosto}/{s.n} con costo</span></span></div>
-                <div style={{display:'flex',gap:6}}><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>{mp}% margen</span><span style={{fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{cp}% terceros</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:12,marginBottom:4}}><span style={{fontWeight:600,color:C.text}}>{s.area} <span style={{fontSize:10,color:C.textSoft,fontWeight:400}}>· {s.conCosto}/{s.n} con costo</span></span></div>
+                <div style={{display:'flex',gap:6}}><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>{mp}% margen</span><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:C.soonBg,color:C.soonText,whiteSpace:'nowrap'}}>{cp}% terceros</span></div>
               </div>
             )})}
             {areasCon.length===0&&<div style={{fontSize:11,color:C.grisText,marginBottom:8}}>Aún ninguna área con costo cargado.</div>}
@@ -493,15 +493,15 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
         {biSec==='tendencias'&&(<div style={{marginTop:12}}>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:11}}>
-            <div><div style={{...SEC_LBL}}>Vendido {yr}</div><div style={{fontSize:22,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
-            {tendencias.pctTot!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:14,fontWeight:700,color:tendencias.pctTot>=0?C.greenText:C.overdueText}}>{tendencias.pctTot>=0?'+':''}{tendencias.pctTot}%</div><div style={{fontSize:9,color:C.muted}}>vs {tendencias.prevYr} · {fmtUFk(tendencias.totPrv)}</div></div>}
+            <div><div style={{...SEC_LBL}}>Vendido {yr}</div><div style={{fontSize:20,fontWeight:600,color:C.accent}}>{fmtUFk(tendencias.totCur)}</div></div>
+            {tendencias.pctTot!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:14,fontWeight:700,color:tendencias.pctTot>=0?C.greenText:C.overdueText}}>{tendencias.pctTot>=0?'+':''}{tendencias.pctTot}%</div><div style={{fontSize:10,color:C.muted}}>vs {tendencias.prevYr} · {fmtUFk(tendencias.totPrv)}</div></div>}
           </div>
           <div style={{...SEC_LBL,marginBottom:4}}>Por abogado · vs {tendencias.prevYr}</div>
           {tendencias.abogados.map(a=>{ const pc=personChip(a.k); return (
             <div key={a.k} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderTop:`0.5px solid ${C.track}`}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:pc.color||C.muted,flexShrink:0}}/>
               <span style={{flex:1,fontSize:13,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.k}</span>
-              <span style={{fontSize:13,fontWeight:500,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(a.cur)}</span>
+              <span style={{fontSize:13,fontWeight:400,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtUFk(a.cur)}</span>
               <span style={{width:50,textAlign:'right',fontSize:11,fontWeight:600,color:a.pct==null?C.muted:(a.pct>=0?C.greenText:C.overdueText),flexShrink:0}}>{a.pct==null?'nuevo':`${a.pct>=0?'+':''}${a.pct}%`}</span>
             </div>
           )})}

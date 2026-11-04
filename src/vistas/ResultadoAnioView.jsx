@@ -83,14 +83,14 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
     setEditM(null); setReloadN(n=>n+1)
   }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } setBusy(false) }
 
-  const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:16,marginBottom:9,overflow:'hidden'}
+  const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,marginBottom:9,overflow:'hidden'}
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
   const chev=o=><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round' style={{transform:o?'rotate(90deg)':'none',transition:'.2s'}}><path d='m9 18 6-6-6-6'/></svg>
-  const row=(l,v,s,col)=><div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12.5}}><span style={{color:C.text,fontWeight:600}}>{l}{s?<span style={{color:C.textSoft,fontSize:10.5,fontWeight:500,marginLeft:6}}>{s}</span>:null}</span><span style={{marginLeft:'auto',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:col||C.accent}}>{v}</span></div>
+  const row=(l,v,s,col)=><div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderTop:`1px solid ${C.bgSoft}`,fontSize:13}}><span style={{color:C.text,fontWeight:600}}>{l}{s?<span style={{color:C.textSoft,fontSize:11,fontWeight:400,marginLeft:6}}>{s}</span>:null}</span><span style={{marginLeft:'auto',fontWeight:700,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:col||C.accent}}>{v}</span></div>
   const sec=(id,icBg,icCol,icPath,ti,sub,amt,amtCol,body)=><div style={card}>
     <div onClick={()=>setOpen(open===id?null:id)} style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
-      <span style={{width:36,height:36,borderRadius:11,background:icBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={icCol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{icPath}</svg></span>
-      <span style={{minWidth:0}}><span style={{fontSize:13.5,fontWeight:800,color:C.accent,display:'block'}}>{ti}</span><span style={{fontSize:11,color:C.textSoft}}>{sub}</span></span>
+      <span style={{width:36,height:36,borderRadius:10,background:icBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={icCol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{icPath}</svg></span>
+      <span style={{minWidth:0}}><span style={{fontSize:14,fontWeight:800,color:C.accent,display:'block'}}>{ti}</span><span style={{fontSize:11,color:C.textSoft}}>{sub}</span></span>
       <span style={{marginLeft:'auto',fontSize:17,fontWeight:800,letterSpacing:-.3,fontVariantNumeric:'tabular-nums',color:amtCol}}>{amt}</span>
       <span style={{flexShrink:0}}>{chev(open===id)}</span>
     </div>
@@ -102,17 +102,17 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
   <div style={{maxWidth:isDesktop?720:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 16px',flexWrap:'wrap'}}>
       <button onClick={()=>!busy&&setEditM(null)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Resultado del año</button>
-      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Costos de {MESES[editM-1]} {yr}</h1>
-      {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
+      <h1 style={{fontSize:isDesktop?20:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Costos de {MESES[editM-1]} {yr}</h1>
+      {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
     </div>
     <div style={card}>
       <div style={{fontSize:11,color:C.textSoft,padding:'14px 16px 2px'}}>Montos en pesos. El subarriendo es ingreso (baja el costo neto).</div>
       <div style={{padding:'4px 16px 10px'}}>
         {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
           <span style={{fontSize:13,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
-          <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:isDesktop?180:140,fontSize:13.5,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.accent}}/>
+          <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:isDesktop?180:140,fontSize:14,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.accent}}/>
         </div>)}
-        <div style={{padding:'11px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:12.5,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
+        <div style={{padding:'11px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,fontWeight:600,padding:'8px 0 2px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
       </div>
     </div>
@@ -126,7 +126,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
   <div style={{maxWidth:isDesktop?1120:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 14px',flexWrap:'wrap'}}>
       <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Oficina</button>
-      <h1 style={{fontSize:isDesktop?21:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Resultado del año</h1>
+      <h1 style={{fontSize:isDesktop?20:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Resultado del año</h1>
       <span style={{flex:1}}/>
       <select value={yr} onChange={e=>setYr(parseInt(e.target.value,10))} style={{fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 10px',background:C.azulBg,color:C.accent,cursor:'pointer'}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
       {seg(scope,setScope,[['ytd','Año'],['mes','Por mes']])}
@@ -152,11 +152,11 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const tRes=resultado>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
       const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0,marginTop:8}
       // Fila de cascada (mismo patrón que el Estado de resultados): signo · etiqueta · cifra; tot = fila «=» gris azulada.
-      const ln=({k,sg='',l,v,tot,on,open:op,est})=><div key={k} onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:7,padding:'8px 14px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,background:tot?'#EDF1F4':undefined,fontSize:12.5,cursor:on?'pointer':'default'}}>
+      const ln=({k,sg='',l,v,tot,on,open:op,est})=><div key={k} onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:7,padding:'8px 14px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,background:tot?'#EDF1F4':undefined,fontSize:13,cursor:on?'pointer':'default'}}>
         <span style={{width:12,flexShrink:0,textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
-        <span style={{flex:1,minWidth:0,fontWeight:tot?800:600,color:(on||tot)?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}{est&&<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px',marginLeft:6}}>est.</span>}{op!==undefined&&<span style={{color:C.textSoft,marginLeft:5}}>{op?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</span>
+        <span style={{flex:1,minWidth:0,fontWeight:tot?800:600,color:(on||tot)?C.accent:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}{est&&<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px',marginLeft:6}}>est.</span>}{op!==undefined&&<span style={{color:C.textSoft,marginLeft:5}}>{op?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</span>
         <span style={{fontWeight:tot?800:700,minWidth:72,textAlign:'right',whiteSpace:'nowrap',color:tot?C.accent:C.text,...num}}>{v}</span></div>
-      const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:11.5}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
+      const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
       const cab=t=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{t} · {per}</span></div>
       // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Subarriendo + Comisión de externos = Ingresos
       const [vFac,vSub,vRex]=redondearPartes([facturacion,subarr,rex],1e5,[0])
@@ -176,7 +176,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const detCos=<div style={card}>{cab('Costos de operación')}
         {cosK.map((k,i)=>ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
         {ln({k:'cosT',sg:'=',l:'Costos de operación',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
-        {ppm>0&&<div style={{fontSize:11.5,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>PPM {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
+        {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>PPM {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
       // Comisiones pagadas: por colaborador (comList de cada mes).
       const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
       const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearPartes(comL.map(x=>x.m),1e5)
@@ -194,7 +194,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const col=ms=>{ const ing=ms.reduce((a,m)=>a+R(m,'ing'),0), cos=ms.reduce((a,m)=>a+R(m,'cos'),0), com=ms.reduce((a,m)=>a+R(m,'com'),0), res=ms.reduce((a,m)=>a+R(m,'res'),0); const [r,c,k]=redondearPartes([res,cos,com],1e5,[0]); return {ing:r+c+k,cos:c,com:k,res:r,margen:margenPct(res,ing)} }
       const cols=allM.map(m=>({m,...col([m])})), tot=col(allM)
       const pctM=v=>v==null?'—':`${v.toLocaleString('es-CL',{maximumFractionDigits:1})} %`
-      const th={fontSize:9.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft,padding:'7px 8px',textAlign:'right',whiteSpace:'nowrap'}
+      const th={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft,padding:'7px 8px',textAlign:'right',whiteSpace:'nowrap'}
       const td={padding:'7px 8px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontSize:12,...num}
       const dot=m=><span title={mesEstado(m)} style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:EST_COL[mesEstado(m)],marginRight:4,verticalAlign:'middle'}}/>
       const filaT=(lab,get,neg)=><tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:600}}>{lab}</td>,...cols.map(c=>{ const v=get(c); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,cursor:'pointer',color:v?C.text:C.done}}>{v?(neg?'−':'')+fmtMillLR(v):'—'}</td> }),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{(neg&&get(tot)?'−':'')+fmtMillLR(get(tot))}</td>]}</tr>
@@ -203,16 +203,16 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
         <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{cols.map(c=><th key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...th,cursor:'pointer'}}>{dot(c.m)}{MES_C[c.m-1]}</th>)}<th style={th}>{yr}</th></tr></thead>
         <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos de operación',c=>c.cos,true)}{filaT('− Comisiones pagadas',c=>c.com,true)}
           <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`}}>= Resultado</td>,...cols.map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1.5px solid ${C.accent}`}}>{sgnLR(c.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:tot.res>=0?C.greenText:C.overdueText,borderTop:`1.5px solid ${C.accent}`,borderLeft:`1px solid ${C.border}`}}>{sgnLR(tot.res)}</td>]}</tr>
-          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:11.5,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
+          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:12,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
         </tbody></table></div></div>
       // Celular (como el Estado de resultados): un mes por línea, del más nuevo al más antiguo; tocar abre su planilla.
       const lista=<div style={{...card,marginTop:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Mes a mes · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>toca para editar</span></div>
         {[...cols].reverse().map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <div key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-          <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{dot(c.m)}{MESES[c.m-1]}</span>
+          <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{dot(c.m)}{MESES[c.m-1]}</span>
           <span style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 8px',background:bg,color:fg,minWidth:58,textAlign:'center',whiteSpace:'nowrap',...num}}>{pctM(c.margen)}</span>
-          <span style={{fontSize:12.5,fontWeight:800,minWidth:70,textAlign:'right',whiteSpace:'nowrap',color:c.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(c.res)}</span></div> })}
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{flex:1,fontSize:12.5,fontWeight:800,color:C.accent}}>{yr}</span><span style={{fontSize:11,fontWeight:700,color:C.accent,...num}}>{pctM(tot.margen)}</span><span style={{fontSize:12.5,fontWeight:800,minWidth:70,textAlign:'right',color:tot.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(tot.res)}</span></div></div>
+          <span style={{fontSize:13,fontWeight:800,minWidth:70,textAlign:'right',whiteSpace:'nowrap',color:c.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(c.res)}</span></div> })}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{flex:1,fontSize:13,fontWeight:800,color:C.accent}}>{yr}</span><span style={{fontSize:11,fontWeight:700,color:C.accent,...num}}>{pctM(tot.margen)}</span><span style={{fontSize:13,fontWeight:800,minWidth:70,textAlign:'right',color:tot.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(tot.res)}</span></div></div>
       return <>
         <div style={grid4}>
           {kt('res','chart',tRes,'Resultado',sgn(resultado),`${per} · ${estadoP}${estim?' · incl. estimados':''}`)}
@@ -253,9 +253,9 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const kLb={fontSize:isDesktop?10:9.5,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
       const kt=(k,ic,bg,fg,lab,val,sub)=>{ const blanco=bg===C.card; return <div key={k} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'13px 13px':'11px 10px',display:'flex',gap:isDesktop?11:8,alignItems:'center',minWidth:0}}>
         <KpiIco n={ic} c={fg} soft={blanco}/>
-        <div style={{minWidth:0,flex:1}}><div style={{...kLb,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?22:18,fontWeight:800,color:fg,letterSpacing:-.5,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
+        <div style={{minWidth:0,flex:1}}><div style={{...kLb,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?20:18,fontWeight:800,color:fg,letterSpacing:-.5,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div></div></div> }
       const sobre=dv>0
-      const estChip=<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 6px',marginLeft:5}}>est.</span>
+      const estChip=<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'1px 6px',marginLeft:5}}>est.</span>
       // Fila única para ambos formatos: escritorio = 4 columnas; celular = nombre con «ppto.» debajo, desvío y real a la derecha.
       const fila=(key,lab,b,r,{est,sub,open,on,tot:esTot,ppto}={})=>{ const d=r==null?null:r-b
         const nameCol=sub?C.muted:C.accent
@@ -266,11 +266,11 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
           <span style={{textAlign:'right',fontWeight:sub?600:700,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
         </div>
         return <div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto',gap:10,alignItems:'center',padding:sub?'6px 12px 6px 24px':'9px 12px',borderTop:sub?'none':`1px solid ${esTot?C.border:C.bgSoft}`,background:sub||open?C.bgSoft:'transparent',cursor:on?'pointer':'default',fontSize:sub?11.5:12.5,fontVariantNumeric:'tabular-nums'}}>
-          <span style={{minWidth:0}}><span style={{display:'block',fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}</span><span style={{display:'block',fontSize:10.5,color:C.done,whiteSpace:'nowrap'}}>ppto. {fmtMill(b)}</span></span>
-          <span style={{fontSize:11.5,fontWeight:700,textAlign:'right',minWidth:54,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
-          <span style={{fontWeight:esTot?800:700,textAlign:'right',minWidth:58,color:sub?C.muted:C.text}}>{r==null?<span style={{color:C.done,fontWeight:500}}>{ppto||'—'}</span>:fmtMill(r)}</span>
+          <span style={{minWidth:0}}><span style={{display:'block',fontWeight:esTot?800:sub?600:700,color:nameCol,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lab}{est?estChip:null}</span><span style={{display:'block',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>ppto. {fmtMill(b)}</span></span>
+          <span style={{fontSize:12,fontWeight:700,textAlign:'right',minWidth:54,color:d==null?C.done:dCol(d)}}>{d==null?'—':dTxt(d)}</span>
+          <span style={{fontWeight:esTot?800:700,textAlign:'right',minWidth:58,color:sub?C.muted:C.text}}>{r==null?<span style={{color:C.done,fontWeight:400}}>{ppto||'—'}</span>:fmtMill(r)}</span>
         </div> }
-      const head=(t)=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,padding:'8px 14px',background:C.bgSoft}}>{[t,'Presupuesto','Real','Desvío'].map((h,i)=><span key={h} style={{fontSize:9.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.accent,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</span>)}</div>:null
+      const head=(t)=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 110px 110px 100px',gap:10,padding:'8px 14px',background:C.bgSoft}}>{[t,'Presupuesto','Real','Desvío'].map((h,i)=><span key={h} style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.accent,textAlign:i?'right':'left',whiteSpace:'nowrap'}}>{h}</span>)}</div>:null
       const pvOpen=open&&String(open).startsWith('pv')?open:(scope==='mes'?'pvm'+selM:null)
       const tg=id=>setOpen(o=>(o===id||(!o&&pvOpen===id))?'pvx':id)
       const mesFilas=f=>{ const id='pvm'+f.m, o=pvOpen===id; return [fila(id,isDesktop?MESES[f.m-1]:MES_C[f.m-1],f.bt,f.rt,{est:f.est,open:o,on:()=>tg(id)}),
@@ -294,7 +294,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
         {secT(`Por categoría · ${per}`)}
         <div style={card2}>{head('Categoría')}
           {CATS.flatMap(([k,l])=>{ const t=catTot(k), id='pvc'+k, o=pvOpen===id, dr=k==='gv'&&gvGrupos.length>0
-            return [fila(id,l,t.b,t.r,dr?{open:o,on:()=>tg(id)}:{}), ...(dr&&o?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:11.5,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[])] })}
+            return [fila(id,l,t.b,t.r,dr?{open:o,on:()=>tg(id)}:{}), ...(dr&&o?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[])] })}
           {fila('pvctot','Total',bud,real,{tot:true})}
         </div>
       </>
@@ -320,10 +320,10 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
             <span style={{width:28,height:28,borderRadius:'50%',background:ok?C.greenBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ok
               ?<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
               :<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.soonText} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 9v4M12 17h.01'/><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/></svg>}</span>
-            <span style={{minWidth:0,flex:1}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent,display:'block'}}>{t}</span><span style={{fontSize:11,color:ok?C.done:C.soonText}}>{d}</span></span>
+            <span style={{minWidth:0,flex:1}}><span style={{fontSize:13,fontWeight:700,color:C.accent,display:'block'}}>{t}</span><span style={{fontSize:11,color:ok?C.done:C.soonText}}>{d}</span></span>
             {act&&<span style={{flexShrink:0,fontSize:11,fontWeight:800,color:C.soonText,whiteSpace:'nowrap'}}>{act.label} <Gl n='chevron'/></span>}
           </div>)
-          if(i===0&&sinEnlOpen&&sinEnl.length>0) out.push(<div key='sinenl' style={{padding:'0 16px 12px'}}><div style={{background:C.overdueBg,borderRadius:10,overflow:'hidden'}}>{sinEnl.slice().sort((a,b)=>String(a.fecha_emision||'').localeCompare(String(b.fecha_emision||''))).map((d,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px',fontSize:11.5,color:C.overdueText,fontWeight:600,borderTop:j?'1px solid rgba(163,45,45,.14)':'none'}}><span>{Number(d.tipo_dte)===61?'NC · ':''}N° {d.folio} · {d.receptor_name||'—'}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Number(d.monto)||0)}</span></div>)}</div></div>)
+          if(i===0&&sinEnlOpen&&sinEnl.length>0) out.push(<div key='sinenl' style={{padding:'0 16px 12px'}}><div style={{background:C.overdueBg,borderRadius:10,overflow:'hidden'}}>{sinEnl.slice().sort((a,b)=>String(a.fecha_emision||'').localeCompare(String(b.fecha_emision||''))).map((d,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px',fontSize:12,color:C.overdueText,fontWeight:600,borderTop:j?'1px solid rgba(163,45,45,.14)':'none'}}><span>{Number(d.tipo_dte)===61?'NC · ':''}N° {d.folio} · {d.receptor_name||'—'}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Number(d.monto)||0)}</span></div>)}</div></div>)
         }); return out })()}</div></>
     })()}
   </div>)

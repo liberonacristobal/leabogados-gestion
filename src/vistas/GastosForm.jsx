@@ -215,7 +215,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     setSaving(false)
   }
 
-  const inS = {height:34,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13.5,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none',width:'100%',fontFamily:'inherit'}
+  const inS = {height:34,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:14,background:C.bgSoft,color:C.text,boxSizing:'border-box',outline:'none',width:'100%',fontFamily:'inherit'}
   const chip = (tone) => ({display:'inline-flex',alignItems:'center',height:24,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:700,whiteSpace:'nowrap',boxSizing:'border-box',cursor:'pointer',fontFamily:'inherit',
     ...(tone==='aviso1'?{background:C.avisoMid,color:C.avisoText,border:`1px solid ${C.avisoLine}`}:tone==='aviso2'?{background:'transparent',color:C.avisoText,border:'1px solid transparent'}:{background:C.azulTenue,color:C.accent,border:'1px solid transparent'})})
   const spark = <svg width='11' height='11' viewBox='0 0 24 24' fill={C.done} style={{flexShrink:0}} aria-label='Sugerido'><path d='M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9z'/></svg>
@@ -253,7 +253,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   // Sub-línea de la fila: categoría · cliente/proyecto si se movió · eliminar
   const selTxt = (value,label,opts,onChange,col,fw) => (
     <label style={{position:'relative',display:'inline-flex',alignItems:'center',gap:3,color:col||C.muted,fontWeight:fw||400,cursor:'pointer',whiteSpace:'nowrap',maxWidth:200,overflow:'hidden'}}>
-      <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span><span style={{fontSize:9,opacity:.7}}><Gl n='chevD'/></span>
+      <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span><span style={{fontSize:10,opacity:.7}}><Gl n='chevD'/></span>
       <select value={value} onChange={e=>onChange(e.target.value)} style={{position:'absolute',inset:0,opacity:0,width:'100%',cursor:'pointer',fontSize:16}}>{opts}</select>
     </label>)
   const subLinea = (r,ultima) => {
@@ -276,9 +276,9 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   const montoInput = (r,w) => <input inputMode='numeric' value={r.amount?Number(r.amount).toLocaleString('es-CL'):''} onChange={e=>updateRow(r.id,{amount:e.target.value.replace(/\D/g,'')})} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); focusSig(r.id) } }} placeholder='$0' style={{...inS,width:w,flexShrink:0,textAlign:'right',fontWeight:700,fontVariantNumeric:'tabular-nums'}}/>
   // Movilización: medio + desde + hasta + motivo (obligatorios). Lo que falta se marca en rojo suave.
   const lineaMov = r => { const fi=(k,ph,w)=>{ const v=r[k]||'', bad=!v.trim()||(k==='mvMotivo'&&v.trim().length<4)
-      return <input value={v} onChange={e=>updateRow(r.id,{[k]:e.target.value})} placeholder={ph} style={{...inS,height:30,fontSize:12.5,flex:w,minWidth:0,borderColor:bad?C.overdueText:C.border}}/> }
+      return <input value={v} onChange={e=>updateRow(r.id,{[k]:e.target.value})} placeholder={ph} style={{...inS,height:30,fontSize:13,flex:w,minWidth:0,borderColor:bad?C.overdueText:C.border}}/> }
     const md=movMedio(r)
-    return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:12.5}}>
+    return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:13}}>
       {selTxt(md,md||'Elegir medio',[<option key='' value=''>Elegir medio</option>,...MEDIOS_MOV.map(m=><option key={m} value={m}>{m}</option>)],v=>updateRow(r.id,{mvMedio:v}),md?C.accent:C.overdueText,600)}
       {MEDIO_CON_DETALLE.has(md)&&<><div style={{display:'flex',gap:6,flex:'1 1 220px',minWidth:0}}>{fi('mvDesde','Desde',1)}{fi('mvHasta','Hasta',1)}</div>
       <div style={{display:'flex',flex:'2 1 220px',minWidth:0}}>{fi('mvMotivo','Motivo (para qué fue)',1)}</div></>}
@@ -296,7 +296,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     return (<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,marginTop:6,fontSize:12}}>
       <span style={{fontWeight:700,color:falta?C.overdueText:C.accent,whiteSpace:'nowrap'}}>¿De qué?</span>
       {op.map(o=>{ const on=_normTxt(v)===_normTxt(o); return <button key={o} type='button' onClick={()=>updateRow(r.id,{deQue:on?'':o})} style={{...chip(),height:26,fontWeight:on?700:500,background:on?C.azulTenueOn:C.azulTenue,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis'}}>{o}</button> })}
-      <input value={op.some(o=>_normTxt(o)===_normTxt(v))?'':v} onChange={e=>updateRow(r.id,{deQue:e.target.value})} placeholder={isDesktop?'Inmueble, sociedad o fs/N°/año':'o escribe…'} style={{...inS,height:28,fontSize:12.5,flex:'1 1 180px',minWidth:0,borderColor:falta?C.overdueText:C.border}}/>
+      <input value={op.some(o=>_normTxt(o)===_normTxt(v))?'':v} onChange={e=>updateRow(r.id,{deQue:e.target.value})} placeholder={isDesktop?'Inmueble, sociedad o fs/N°/año':'o escribe…'} style={{...inS,height:28,fontSize:13,flex:'1 1 180px',minWidth:0,borderColor:falta?C.overdueText:C.border}}/>
     </div>) }
   const glosaInput = r => <input data-gconcept='1' value={r.concept} onChange={e=>updateRow(r.id,{concept:e.target.value})} placeholder='Descripción' style={{...inS,flex:1,minWidth:0}}/>
 
@@ -364,24 +364,24 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   const listaCli = (lista) => (
     <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginTop:8}}>
       {lista.map((c,i)=><button key={c.id} type='button' onClick={()=>elegirCliente(c,tipo?{cat:tipo}:{})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none',minHeight:48}}>
-        {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(c)}</span>
-        {ultFecha[c.id]&&<span style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
+        {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:400,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(c)}</span>
+        {ultFecha[c.id]&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
       </button>)}
     </div>)
   const buscador = (
     <>
       <div style={{display:'flex',alignItems:'center',gap:8,height:44,borderRadius:12,background:C.bgSoft,border:`1px solid ${C.border}`,padding:'0 14px',boxSizing:'border-box'}}>
         <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.2' style={{flexShrink:0}}><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>
-        <input ref={buscRef} value={q} onChange={e=>setQ(e.target.value)} placeholder='¿Para qué cliente?' style={{...fInp,fontSize:15,height:40}}/>
-        {isDesktop&&!q&&<span style={{fontSize:11,color:C.textSoft,border:`1px solid ${C.border}`,borderRadius:6,padding:'1px 6px',background:C.surface}}>/</span>}
+        <input ref={buscRef} value={q} onChange={e=>setQ(e.target.value)} placeholder='¿Para qué cliente?' style={{...fInp,fontSize:16,height:40}}/>
+        {isDesktop&&!q&&<span style={{fontSize:11,color:C.textSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'1px 6px',background:C.surface}}>/</span>}
       </div>
-      {q.trim()&&(matches.length?listaCli(matches):<div style={{fontSize:12.5,color:C.textSoft,padding:'10px 4px'}}>Sin coincidencias</div>)}
+      {q.trim()&&(matches.length?listaCli(matches):<div style={{fontSize:13,color:C.textSoft,padding:'10px 4px'}}>Sin coincidencias</div>)}
     </>)
   const tipoVista = tipo&&(
     <>
       <div style={{display:'flex',alignItems:'center',gap:8,marginTop:14}}>
         <span style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 10px',borderRadius:8,background:C.azulTenue,color:C.accent,fontSize:13,fontWeight:700}}>{icoCat(tipo,15)}{catLbl(tipo)}</span>
-        <button type='button' onClick={()=>setTipo(null)} style={{...btnReset,background:'none',color:C.muted,fontSize:12.5,padding:'4px 6px'}}>Quitar</button>
+        <button type='button' onClick={()=>setTipo(null)} style={{...btnReset,background:'none',color:C.muted,fontSize:13,padding:'4px 6px'}}>Quitar</button>
       </div>
       {secT(`Clientes con ${catLbl(tipo)}`)}
       {listaCli((tipos.clientesDe(tipo).length?tipos.clientesDe(tipo):recientes).slice(0,8))}
@@ -389,7 +389,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   const totSP = sinProyecto.reduce((a,x)=>a+x.n,0)
   const avisoSinProy = totSP>0&&onIrCliente&&(
     <div style={{marginTop:14}}>
-      <button type='button' onClick={()=>setVerSinProy(v=>!v)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:8,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,color:C.avisoText,borderRadius:10,padding:'9px 12px',fontSize:12.5,minHeight:40}}>
+      <button type='button' onClick={()=>setVerSinProy(v=>!v)} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:8,background:C.avisoBg,border:`1px solid ${C.avisoLine}`,color:C.avisoText,borderRadius:10,padding:'9px 12px',fontSize:13,minHeight:40}}>
         <span>{totSP} gasto{totSP!==1?'s':''} tuyo{totSP!==1?'s':''} sin proyecto</span><b style={{marginLeft:'auto',whiteSpace:'nowrap'}}>{verSinProy?'Ocultar':<>Completar{" "}<Gl n='chevron'/></>}</b>
       </button>
       {verSinProy&&<div style={{border:`1px solid ${C.border}`,borderRadius:10,marginTop:6,overflow:'hidden'}}>
@@ -409,7 +409,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
       </div>
     </>)
   const tarjetaRep = x => (
-    <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} style={{...btnReset,background:C.azulTenue,borderRadius:14,padding:12,minHeight:86,display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
+    <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} style={{...btnReset,background:C.azulTenue,borderRadius:12,padding:12,minHeight:86,display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
       <div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</div><div style={{fontSize:12,color:C.muted,marginTop:2}}>{catLbl(x.cat)}</div></div>
       <div style={{marginTop:6,minWidth:0}}>
         <div style={{fontSize:11,color:C.textSoft,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}</div>
@@ -418,8 +418,8 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     </button>)
   const filaRep = (x,i) => (
     <button key={x.c.id+x.cat} type='button' onClick={()=>elegirCliente(x.c,{cat:x.cat,concept:x.ult.concept||'',proj:x.ult.project||null})} {...hov(C.bgSoft,C.surface)} style={{...btnReset,width:'100%',display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.5fr) 84px',gap:12,alignItems:'center',padding:'10px 14px',background:C.surface,borderTop:i?`1px solid ${C.track}`:'none'}}>
-      <span style={{fontWeight:600,color:C.accent,fontSize:13.5,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</span>
-      <span style={{fontSize:12.5,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}<span style={{color:C.textSoft}}> · {catLbl(x.cat)}</span></span>
+      <span style={{fontWeight:600,color:C.accent,fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nombreCli(x.c)}</span>
+      <span style={{fontSize:13,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.ult.concept}<span style={{color:C.textSoft}}> · {catLbl(x.cat)}</span></span>
       <span style={{textAlign:'right',fontWeight:700,fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(x.med)}</span>
     </button>)
   const landing = isDesktop ? (
@@ -431,7 +431,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
             {repetir.length>0&&<>{secT('Repetir un gasto')}<div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{repetir.map(filaRep)}</div></>}
             {secT('Por tipo')}
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {tipos.orden.map(k=>{ const tc=tipos.clientesDe(k)[0]; return <button key={k} type='button' onClick={()=>setTipo(k)} {...hov(C.azulTenueOn,C.azulTenue)} style={{...btnReset,display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:8,background:C.azulTenue,color:C.accent,fontSize:12.5,fontWeight:700}}>{icoCat(k,14)}{catLbl(k)}{tc&&<span style={{fontWeight:500,color:C.muted}}>{nombreCli(tc)}</span>}</button> })}
+              {tipos.orden.map(k=>{ const tc=tipos.clientesDe(k)[0]; return <button key={k} type='button' onClick={()=>setTipo(k)} {...hov(C.azulTenueOn,C.azulTenue)} style={{...btnReset,display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 12px',borderRadius:8,background:C.azulTenue,color:C.accent,fontSize:13,fontWeight:700}}>{icoCat(k,14)}{catLbl(k)}{tc&&<span style={{fontWeight:600,color:C.muted}}>{nombreCli(tc)}</span>}</button> })}
             </div>
           </div>
           <div style={{minWidth:0}}>
@@ -450,7 +450,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
           {recientes.length>0&&<>{secT('Clientes recientes')}
             <div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:4,scrollbarWidth:'none',margin:'0 -4px'}}>
               {recientes.map(c=><button key={c.id} type='button' onClick={()=>elegirCliente(c)} style={{...btnReset,background:'none',flex:'0 0 auto',width:70,display:'flex',flexDirection:'column',alignItems:'center',gap:5,padding:0}}>
-                {avatar(c)}<span style={{fontSize:11.5,color:C.text,textAlign:'center',lineHeight:1.2,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{nombreCli(c)}</span>
+                {avatar(c)}<span style={{fontSize:12,color:C.text,textAlign:'center',lineHeight:1.2,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{nombreCli(c)}</span>
               </button>)}
             </div></>}
           {secT('Por tipo')}
@@ -478,7 +478,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
           <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',columnGap:10}}>
             <FloatFld label='Personal de'>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,height:24}}>
-                <span style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:14,color:C.text,minWidth:0}}>{(()=>{ const pc=personChip(personal); return <span style={{width:22,height:22,borderRadius:7,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9.5,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[personal]||personal.slice(0,2).toUpperCase()}</span> })()}{personal}</span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:14,color:C.text,minWidth:0}}>{(()=>{ const pc=personChip(personal); return <span style={{width:22,height:22,borderRadius:8,background:pc.bg,color:pc.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{INICIALES_RESP[personal]||personal.slice(0,2).toUpperCase()}</span> })()}{personal}</span>
                 <button type='button' onClick={()=>setPersonal(null)} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Cambiar</button>
               </div>
             </FloatFld>
