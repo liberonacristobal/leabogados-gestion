@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion, umbralHoras } from '../supabase/functions/_shared/gmailLectura.js'
+import { correoDeMensaje, debeLeerAhora, estadoConexion, planAtribucion, saludoDeCorreo, umbralHoras } from '../supabase/functions/_shared/gmailLectura.js'
 
 // Horas de Chile: en noviembre rige UTC-3, en junio UTC-4. Se prueba con instantes en UTC.
 const utc = s => new Date(s)
@@ -64,4 +64,14 @@ test('atribución: completa quién, a quién y la fecha real solo en facturas si
   assert.equal(r[0].sent_to, 'pagos@c.cl, cl@leabogados.cl')
   assert.equal(r[0].sent_by, 'Erasmo')
   assert.equal(r[1].email_sent_at, '2026-11-02T15:00:00.000Z')   // mismo día: se conserva
+})
+
+test('saludo de un correo enviado: solo singular con nombre y una dirección de afuera', () => {
+  const c = (fragmento, para) => ({ fragmento, para })
+  assert.deepEqual(saludoDeCorreo(c('Estimada Carolina, Espero que estés muy bien. Adjuntamos la factura N° 480', ['pagos@cliente.cl']), 'leabogados.cl'), { email: 'pagos@cliente.cl', saludo: 'Estimada Carolina,' })
+  assert.deepEqual(saludoDeCorreo(c('Estimado Agustín, Espero que estés', ['amolinari@tarragona.cl', 'amolinari@tarragona.cl']), ''), { email: 'amolinari@tarragona.cl', saludo: 'Estimado Agustín,' })
+  assert.equal(saludoDeCorreo(c('Estimados, Espero que estén muy bien', ['pagos@cliente.cl'])), null)
+  assert.equal(saludoDeCorreo(c('Estimado Agustín, Espero', ['a@x.cl', 'b@x.cl'])), null)               // dos destinatarios
+  assert.equal(saludoDeCorreo(c('Estimado Agustín, Espero', ['socio@leabogados.cl']), 'leabogados.cl'), null)   // solo interno
+  assert.equal(saludoDeCorreo(c('Hola, adjunto la factura', ['pagos@cliente.cl'])), null)
 })

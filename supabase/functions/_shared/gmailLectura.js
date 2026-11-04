@@ -93,3 +93,18 @@ export function planAtribucion({ facturas, hallazgos, correos, quien }) {
   }
   return out
 }
+
+/**
+ * Saludo con que empieza un correo enviado («Estimada Carolina,»), para aprender el trato de esa persona. Solo si el correo va a UNA dirección
+ * de afuera (sin contar la copia) y el saludo es singular con un nombre: «Estimados,» o dos destinatarios no enseñan nada. Toma el comienzo del
+ * texto (snippet de Gmail); nunca el cuerpo.
+ * @param {{para?:any, fragmento?:string}} correo @param {string} [dominio]
+ * @returns {{email:string, saludo:string}|null}
+ */
+export function saludoDeCorreo(correo, dominio = '') {
+  const m = String(correo?.fragmento || '').match(/^\s*(Estimad[oa])\s+([A-ZÁÉÍÓÚÑ][\p{L}'-]+)\s*[,:]/u)
+  if (!m) return null
+  const dom = String(dominio || '').toLowerCase().replace(/^@/, '')
+  const dest = [...new Set(emailsDe(correo?.para))].filter(e => !dom || !e.endsWith('@' + dom))
+  return dest.length === 1 ? { email: dest[0], saludo: `${m[1]} ${m[2]},` } : null
+}
