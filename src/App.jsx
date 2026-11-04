@@ -483,7 +483,7 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
     {diaGrande(n.fecha)}
     <div style={{flex:1,minWidth:0}}>
       <div style={{fontSize:compact?13:14,fontWeight:600,color:C.text,lineHeight:1.3}}>{n.titulo}</div>
-      <div style={{fontSize:12,color:C.muted,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{[n.area,equipo?'también al equipo':null].filter(Boolean).join(' · ')}</div>
+      <div style={{fontSize:12,color:C.muted,marginTop:1,lineHeight:1.25,overflowWrap:'anywhere'}}>{[n.area,equipo?'también al equipo':null].filter(Boolean).join(' · ')}</div>
     </div>
     {acciones||(onOpen&&<span style={{color:C.done,display:'flex',flexShrink:0}}><Gl n='chevron'/></span>)}
   </div>)
@@ -1816,7 +1816,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
     </div>
 
     {/* KPIs (preponderantes): Resultado = Ingresos − Egresos, y su margen. Composición = las partes, en tarjetas chicas que SUMAN los KPIs. */}
-    {(()=>{ const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+    {(()=>{ const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
       const per = scope==='mes' ? `${MESNOM[selMR-1]} ${year}` : `ene–${MES_C[_curM-1]} ${year}`
       const estado = scope==='mes' ? (rMesSel?.cerrado?'cerrado':'provisorio') : 'al día'
       const egr = R.cos+R.com
@@ -1829,7 +1829,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       // Tarjeta chica (composición / gestión): ícono + etiqueta + cifra; misma forma para todas las hermanas.
       const st=(k,path,ibg,icol,lab,val,vcol,on)=><div key={k} onClick={on} className='pv-c' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:on?'pointer':'default'}}>
         <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
-        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
       const abrirRes=()=>scope==='mes'?(onOpenEstadoResultados&&onOpenEstadoResultados()):(onOpenResultadoAnio&&onOpenResultadoAnio())
       return <>
@@ -1858,7 +1858,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       const ivaPeriodo = comprasRows.filter(d=>enPer(d.fecha_emision)&&d.sii_estado!=='PENDIENTE').reduce((a,d)=>a+(Number(d.tipo_dte)===61?-1:1)*(Number(d.iva)||0),0)
       const st=(k,path,ibg,icol,lab,val,vcol,on,bg)=><div key={k} onClick={on} className='pv-c' style={{background:bg||C.card,border:`1px solid ${bg?'transparent':C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:on?'pointer':'default'}}>
         <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:bg?C.card:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={icol} strokeWidth='2.1' strokeLinecap='round' strokeLinejoin='round'>{path}</svg></span>
-        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
+        <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:vcol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div>
       const fin=flujo.fin, finCol=fin>=0?C.greenText:C.overdueText
       return <>
         {L('Caja')}
@@ -1876,7 +1876,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
             procsN!=null&&st('pro',IC.gear,C.azulBg,C.accent,isDesktop?'Procesos automáticos':'Procesos',procsN.falla?`${procsN.falla} con falla`:`${procsN.total} procesos`,procsN.falla?C.overdueText:C.accent,()=>onOpenProcesos&&onOpenProcesos()),
             bandN!=null&&st('ban',IC.inbox,C.azulBg,C.accent,isDesktop?'Bandeja del agente':'Bandeja',bandN?`${bandN} pendiente${bandN===1?'':'s'}`:'al día',bandN?C.soonText:C.greenText,()=>onOpenBandeja&&onOpenBandeja())].filter(Boolean)
           // Celular: 2 por fila; si quedan impares, la última ocupa la fila entera.
-          return <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${g.length},minmax(0,1fr))`:'repeat(2,minmax(0,1fr))',gap:8}}>
+          return <div className={isDesktop&&g.length>=5?'of-g5':undefined} style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${g.length},minmax(0,1fr))`:'repeat(2,minmax(0,1fr))',gap:8}}>
             {g.map((x,i)=><div key={i} style={{minWidth:0,...(!isDesktop&&g.length%2&&i===g.length-1?{gridColumn:'1 / -1'}:{})}}>{x}</div>)}</div> })()}
       </> })()}
 
@@ -1906,7 +1906,7 @@ function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expe
   const togBloque = k => { setAbierto(a=>a===k?null:k); setSub2(null) }
   const num={fontVariantNumeric:'tabular-nums'}
   const Sec = ({t,extra}) => <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 2px -4px'}}><span style={{...SEC_LBL,flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t}</span>{extra}</div>
-  const kLbl={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+  const kLbl={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
   // Tarjeta del canon (estilo Inicio/Proveedores): ícono + etiqueta + cifra + 1 línea. Toda tarjeta es tocable.
   const kt = ({k,ic,tone,lab,val,sub,on,sel,chev,big}) => { const [bg,fg]=tone; const blanco=bg===C.card; return <div key={k} onClick={on} className='er-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:big?12:10,padding:big?(isDesktop?'14px':'11px 10px'):(isDesktop?'11px 12px':'10px'),display:'flex',gap:big?12:10,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
@@ -2025,14 +2025,14 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   // Molde Oficina (2026-10-17): 4 tarjetas de color (resultado) + «Composición» en tarjetas chicas (sus partes), cada una abre su lista.
   const sfTot=F.duda.monto+F.sinEmitir.monto
   const [morV,pfV]=redondearPartes([F.duda.monto,F.sinEmitir.monto],sfTot>=1e6?1e5:1e4,[0])   // las dos partes suman la tarjeta Trabajo impago; la morosa redondea normal, el ajuste va a Por facturar
-  const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+  const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
   const tog=f=>()=>{ setFil(v=>v===f?'todos':f); irA(cliRef) }
   const kt=(key,ic,[bg,fg],lab,val,sub,f)=>{ const blanco=bg===C.card, on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'flex-start',minWidth:0,cursor:go?'pointer':'default',outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
       <KpiIco n={ic} c={fg} soft={blanco}/>
       <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div></div> }
   const st=(key,ic,ibg,icol,lab,val,f)=>{ const on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:C.card,border:`1px solid ${on?icol:C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:go?'pointer':'default'}}>
       <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={15} c={icol}/></span>
-      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,...(isDesktop?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:icol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div> }
+      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:icol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div> }
   const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
   const secL=t=><div style={{...kLbl,color:C.accent,margin:'14px 2px 7px'}}>{t}</div>
   const nF=F.duda.n, nC=F.sinEmitir.n
@@ -8518,7 +8518,7 @@ export default function App() {
              Zoom a nivel body (como el zoom del navegador: usa el viewport de referencia -> sin desborde horizontal ni romper alturas vh).
              Sube TODO ~8% de forma consistente (sidebar, contenido, modales) SIN tocar el movil (<1024) ni retocar px inline. */
           body{zoom:1.18}
-          @media (max-width:1279px){ body{zoom:1.06} }   /* pantallas de 1024–1279 px: con la barra lateral queda poco ancho útil; zoom menor para que las tarjetas y tablas no corten textos ni cifras */
+          @media (max-width:1279px){ body{zoom:1.06} .of-g5{grid-template-columns:repeat(3,minmax(0,1fr))!important} .ps-g4{grid-template-columns:repeat(2,minmax(0,1fr))!important} }   /* pantallas de 1024–1279 px: con la barra lateral queda poco ancho útil; zoom menor para que las tarjetas y tablas no corten textos ni cifras */
           .bottomnav{display:none!important}
           /* Parte B: afordancia de hover (no existe en tactil). Wash translucido en filas + lift en tarjetas clickeables.
              box-shadow inset no pelea con el background inline (que a veces marca seleccion) -> seguro y universal. */

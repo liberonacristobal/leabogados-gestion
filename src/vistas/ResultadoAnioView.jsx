@@ -139,7 +139,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
         Ingresos − Costos − Comisiones = Resultado). Misma fuente: resultadoMes por mes. */}
     {(()=>{
       const num={fontVariantNumeric:'tabular-nums'}
-      const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
       const kt=(k,ic,[bg,fg],lab,val,sub,on,{sel,chev,big=true}={})=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
         {(isDesktop||big)&&<KpiIco n={ic} c={fg} soft={blanco}/>}
         <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?(big?26:22):(big?20:18),fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}</div>
@@ -250,7 +250,7 @@ export function ResultadoAnioView({ billing=[], terceros=[], costosOfiRows=[], i
       const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))
       const pct=bud>0?Math.abs(dv)/bud*100:0
       const per=maxM===12?String(yr):`ene–${MES_C[maxM-1]}`
-      const kLb={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
+      const kLb={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
       const kt=(k,ic,bg,fg,lab,val,sub)=>{ const blanco=bg===C.card; return <div key={k} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'13px 13px':'11px 10px',display:'flex',gap:isDesktop?11:8,alignItems:'center',minWidth:0}}>
         <KpiIco n={ic} c={fg} soft={blanco}/>
         <div style={{minWidth:0,flex:1}}><div style={{...kLb,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?20:18,fontWeight:800,color:fg,letterSpacing:-.5,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div></div> }

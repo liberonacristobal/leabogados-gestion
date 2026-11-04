@@ -2513,7 +2513,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <span style={{width:30,height:30,borderRadius:10,background:sal<0?C.overdueBg:(sal>0?C.azulBg:C.bgSoft),display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={sal<0?'arrowDown':'arrowUp'} s={15} c={colS}/></span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{...NOMBRE_CLI}}>{c.name}</div>
-                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',columnGap:6,marginTop:1,minWidth:0}}>
                       <span style={{fontSize:11,color:inact?C.overdueText:C.done,flexShrink:0}}>{ult?`Últ. movimiento ${fmtFechaDMY(ult)}`:'sin movimientos'}</span>
                       {rs&&<span style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>· {rs}</span>}
                     </div>
@@ -4338,7 +4338,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
     if(solRes&&(solRes.reg+solRes.esp+solRes.rec)>0){ const sr=solRes, pend=sr.reg>0; cards.push({t:'Solicitudes de fondos', tM:'Solicitudes', ic:'mail', s:pend?`${sr.reg} por registrar · ${sr.esp} en curso`:`${sr.esp} en curso · ${sr.rec} recibidas`, sM:pend?`${sr.reg} por registrar`:`${sr.esp} en curso`, sCol:pend?C.soonText:undefined, col:pend?C.soonText:C.accent, bg:pend?C.soonBg:C.azulBg, go:()=>setShowSolicitudes(true)}) }
-    if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
+    if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sM:(revisarRes.resumen||'al día').split(' · ').slice(0,2).join(' · '), sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',padding:D?'14px 2px 12px':'16px 8px 10px'}}>

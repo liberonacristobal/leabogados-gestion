@@ -150,7 +150,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
   G.sin=lista.filter(r=>!G.pend.includes(r)&&!G.hech.includes(r)&&!G.sosp.includes(r))
   const partes=[['Pendientes',G.pend.length,C.soonText,C.soonBg],['Ya registrados',G.hech.length,C.greenText,C.greenBg],['Sospechosos',G.sosp.length,G.sosp.length?C.overdueText:C.textSoft,G.sosp.length?C.overdueBg:C.bgSoft],['Sin acción',G.sin.length,C.textSoft,C.bgSoft]]
   const chipAbg=n=>n?<span style={{...pillPersonaSty(personChip(n),false),cursor:'default',fontSize:10.5,padding:'2px 9px'}}>{n}</span>:null
-  const linkCli=r=>{ const nm=nombreCli(r); return r.cliente_id&&onOpenClientFicha?<b onClick={e=>{e.stopPropagation();onOpenClientFicha(r.cliente_id)}} style={{fontSize:14,color:C.accent,cursor:'pointer',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{nm}</b>:<b style={{fontSize:14,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{nm}</b> }
+  const linkCli=r=>{ const nm=nombreCli(r); return r.cliente_id&&onOpenClientFicha?<b onClick={e=>{e.stopPropagation();onOpenClientFicha(r.cliente_id)}} style={{fontSize:14,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{nm}</b>:<b style={{fontSize:14,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{nm}</b> }
   const tituloProp=r=>{ const p=r.propuesta||{}
     if(isDesktop) return p.titulo||'Revisar el correo'
     if(p.accion==='crear_tarea') return `Tarea a ${p.asignado||r.abogado||yo}: ${String(p.tarea||'').charAt(0).toLowerCase()}${String(p.tarea||'').slice(1)}`

@@ -1810,8 +1810,8 @@ export function HubTile({ic,icNode,t,tM,s,sM,sCol,col,bg,cardBg,cardBd,tCol,onCl
     <div onClick={onClick} style={{cursor:onClick?'pointer':'default',background:cardBg||C.surface,border:`1px solid ${cardBd||C.border}`,borderRadius:12,padding:D?'12px 14px':'10px 11px',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0,boxSizing:'border-box',height:'100%'}}>
       <span style={{width:D?34:30,height:D?34:30,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{icNode||<SIcon n={ic} s={D?17:15} c={col}/>}</span>
       <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:D?14:13,fontWeight:600,color:tCol||C.text,lineHeight:1.25,...(D?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{D?t:(tM||t)}</div>
-        <div style={{fontSize:D?12:11,color:sCol||C.muted,fontWeight:sCol?600:400,marginTop:1,lineHeight:1.25,...(D?{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'})}}>{D?s:((fig!=null&&fig!==''?fig+' · ':'')+(sM||s))}</div>
+        <div style={{fontSize:D?14:13,fontWeight:600,color:tCol||C.text,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{D?t:(tM||t)}</div>
+        <div style={{fontSize:D?12:11,color:sCol||C.muted,fontWeight:sCol?600:400,marginTop:1,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{D?s:((fig!=null&&fig!==''?fig+' · ':'')+(sM||s))}</div>
       </div>
       {D&&fig!=null&&fig!==''&&<span style={{fontSize:20,fontWeight:800,color:figCol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',flexShrink:0}}>{fig}</span>}
       {D&&chev&&(fig==null||fig==='')&&<span style={{flexShrink:0,display:'inline-flex'}}><SIcon n='chevron' s={15} c={C.textSoft}/></span>}

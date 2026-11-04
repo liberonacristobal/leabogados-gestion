@@ -472,7 +472,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
           const viejo = diasAntiguo!=null && diasAntiguo>30
           const colHd = t => <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>{t}</div>
           const tile = (lbl,val,sub,col,onClick) => (
-            <div onClick={onClick} style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'9px 11px',minWidth:0,height:66,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'center',cursor:onClick?'pointer':'default'}}>
+            <div onClick={onClick} style={{background:C.card,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'9px 11px',minWidth:0,minHeight:66,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'center',cursor:onClick?'pointer':'default'}}>
               <div style={{...SEC_LBL,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{lbl}{onClick?<>{" "}<Gl n='chevron'/></>:''}</div>
               <div style={{fontSize:13,fontWeight:600,color:col||C.text,marginTop:3,fontVariantNumeric:'tabular-nums'}}>{val}</div>
               <div style={{fontSize:10,color:col||C.muted,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>

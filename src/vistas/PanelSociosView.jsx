@@ -220,7 +220,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         {ano}
         {isDesktop ? (<>
           <Sec t={bloques.mes.titulo} link={bloques.mes.link} onLink={()=>go(bloques.mes.dest)}/>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:12}}>
+          <div className='of-g5' style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:12}}>
             <KpiMes ic='tEntra' label='Ingresos' value={fmtShort(rm.ing)} sub='del mes' onClick={()=>go('estadoResultados')}/>
             <KpiMes ic='building' label='Costos' value={fmtShort(rm.cos)} sub='de oficina' onClick={()=>go('estadoResultados')}/>
             <KpiMes ic='tPct' label='Comisiones' value={fmtShort(rm.com)} sub='pagadas' onClick={()=>go('estadoResultados')}/>
@@ -228,7 +228,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
             <KpiMes ic='file' label='Facturas' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.emi.length} · ${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>
           </div>
           <Sec t='Detalle'/>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12}}>{['ret','fac','cob','cos','com','deb','caj','rev'].map(id=>tarjeta(id,true))}</div>
+          <div className='ps-g4' style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12}}>{['ret','fac','cob','cos','com','deb','caj','rev'].map(id=>tarjeta(id,true))}</div>
           {['ret','fac','cob','cos','com','deb','caj','rev'].filter(id=>lista.includes(id)).map(cuerpo)}
           <Sec t={bloques.soc.titulo} link={bloques.soc.link} onLink={()=>go(bloques.soc.dest)}/>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{tablaSocios}</div>
