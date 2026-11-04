@@ -3516,10 +3516,10 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   ].filter(Boolean)
                   const nCol=isDesktop?(tiles.length===4?2:3):2
                   return <div style={{display:'grid',gridTemplateColumns:`repeat(${nCol},minmax(0,1fr))`,gap:isDesktop?12:8}}>{tiles.map((t,i)=><div key={i} style={{minWidth:0,display:'flex',flexDirection:'column',gridColumn:(!isDesktop&&i===tiles.length-1&&tiles.length%2)?'1 / -1':undefined}}>{t}</div>)}</div> })()}
-                {porRevOpen&&revisar.length>0&&<div style={{background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+                {porRevOpen&&revisar.length>0&&<div style={{background:C.surface,border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {revisar.map((r,i)=><div key={i} onClick={r.on} className='lf-row' style={{display:'flex',alignItems:'center',gap:11,padding:'10px 13px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:'pointer'}}>
-                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:10.5,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
-                    <span style={{fontSize:15,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
+                    <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.k}</div><div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.s}</div></div>
+                    <span style={{fontSize:16,fontWeight:800,color:r.col,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{r.n}</span>
                     <SIcon n='chevron' s={13} c={C.done}/>
                   </div>)}
                 </div>}
@@ -3800,8 +3800,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
         : filter==='checklist' ? (
           <ChecklistFacturacion onVerPorEnviar={abrirBandeja} sinRegN={sinRegN} billing={billing} fantasmaIds={fantasmaIds} clients={clients} clientEntities={clientEntities} sales={sales} anticipos={anticipos} onFacturarAdelantos={onFacturarAdelantos} onEmitir={onEmitir} onStatusChange={onStatusChange} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} onOpenClientFicha={onOpenClientFicha} onConciliar={onConciliar} onEdit={onEdit} onEnviar={b=>setFacturaEmail(b)} onEnviarVarias={arr=>setFacturasEmail(arr)} onUnsend={onUnsendFactura} onAssignSeries={onAssignSeries} onCotejar={()=>setSiiOpen(true)} onCargarXML={()=>{contarSinRegistrar();setXmlHub(true)}} onReplaceProgramada={onReplaceProgramada}/>
         ) : filter==='sinanio' ? (() => {
-          const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:'#fff',color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
-          return (<>
+          const cs = (primary)=>({height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${primary?C.muted:C.border}`,background:C.surface,color:primary?C.accent:C.muted,fontSize:11,fontWeight:primary?600:500,cursor:'pointer',whiteSpace:'nowrap'})
+          return (<div style={{maxWidth:isDesktop?720:undefined,width:'100%',margin:'0 auto'}}>
             <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.5}}>Facturas pagadas sin enlazar a su venta — asigna la venta o el año (se aprende por cliente).</div>
             {sinAnio.length===0&&<div style={{color:C.muted,textAlign:'center',padding:40}}>Todas las facturas pagadas tienen su año de venta.</div>}
             {sinAnio.map(b=>{
@@ -3846,7 +3846,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 </div>
               )
             })}
-          </>)
+          </div>)
         })() : filter==='sinemitir' ? (()=>{
           // Radar "Cuotas vencidas sin facturar": programadas de meses cerrados, venta Activa, dentro de la app, no silenciadas. Candidatas por revisar (no fuga confirmada). Compuerta: Emitir (abre la factura → emite) · No corresponde (aprende y silencia).
           const now=new Date(); const m1=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
@@ -3864,8 +3864,8 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           // "Buscar en SII": sincroniza el mes de la cuota (reusa onBuscarSII/handleBuscarSII, que auto-enlaza los calces únicos). Si la factura ya existía, queda enlazada y sale del radar; si aparece como emitida sin cargar, el usuario la carga.
           const buscarSII=async(b)=>{ if(!onBuscarSII||siiBuscaFor) return; const mes=String(b.due).slice(0,7); setSiiBuscaFor({id:b.id}); try{ const r=await onBuscarSII([mes],(h,t)=>setSiiBuscaFor({id:b.id,hechos:h,total:t})); onRefresh&&onRefresh(); const ap=r?.aplicadas||0, hu=r?.huerfanas||0; appAlert(ap>0?`SII sincronizado (${mes}): ${ap} factura${ap!==1?'s':''} quedó enlazada y salió del radar.`:(hu>0?`SII sincronizado (${mes}): hay ${hu} emitida${hu!==1?'s':''} en el SII sin cargar. Ábrela en "SII sin cargar" para registrarla.`:`SII sincronizado (${mes}): no apareció un DTE que calce — probablemente falta emitirla.`)) }catch(e){ appAlert('No se pudo buscar en el SII: '+(e?.message||e)) } setSiiBuscaFor(null) }
           return (
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'0 2px'}}>Cuotas de meses ya cerrados que la app tiene como <b style={{color:C.text}}>Programadas</b> (no emitidas). <b style={{color:C.text}}>Por revisar</b> — no todas son un error: algunas pueden ser intencionales o ya emitidas en un período sin sincronizar. Usa <b style={{color:C.text}}>“Buscar en SII”</b> para confirmar si ya existe.</div>
+          <div style={{maxWidth:isDesktop?720:undefined,width:'100%',margin:'0 auto',display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5,margin:'0 2px'}}>Cuotas de meses ya cerrados que la app tiene como <b style={{color:C.text}}>Programadas</b> (no emitidas). <b style={{color:C.text}}>Por revisar</b> — no todas son un error: algunas pueden ser intencionales o ya emitidas en un período sin sincronizar. Usa <b style={{color:C.text}}>“Buscar en SII”</b> para confirmar si ya existe.</div>
             {cands.length===0&&sinPrim.length===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Nada por revisar — las cuotas de meses cerrados están emitidas o resueltas.</div>}
             {keys.map(k=>{ const gi=byCli[k]; const cli=(clients||[]).find(c=>String(c.id)===k); const tot=gi.reduce((a,b)=>a+(b.amount||0),0); const open=openClients.has(k); const nMeses=new Set(gi.map(b=>String(b.due).slice(0,7))).size; return (
               <div key={k}>
@@ -3873,23 +3873,23 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   <span style={{fontSize:10,color:C.textSoft,transform:open?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}><Gl n='chevron'/></span>
                   <span style={{...NOMBRE_CLI,minWidth:0}}>{cli?.name||gi[0].receptor_name||'Sin cliente'}</span>
                   <span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>· {gi.length}</span>
-                  {nMeses>1&&<span style={{fontSize:9,fontWeight:700,background:C.overdueBg,color:C.overdueText,borderRadius:20,padding:'2px 8px',textTransform:'uppercase',letterSpacing:.2,flexShrink:0}}>{nMeses} meses</span>}
+                  {nMeses>1&&<span style={{fontSize:10,fontWeight:700,background:C.overdueBg,color:C.overdueText,borderRadius:20,padding:'2px 8px',textTransform:'uppercase',letterSpacing:.2,flexShrink:0}}>{nMeses} meses</span>}
                   <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
                 </div>
-                {open&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
+                {open&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
                   {gi.map((b,i)=>{ const s=saleById[String(b.sale_id)]; return (
                     <div key={b.id} style={{borderTop:i>0?`0.5px solid ${C.border}`:'none',padding:'10px 12px'}}>
                       <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12.5,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s?.title||b.concept||'Cuota'}</div>
-                          <div style={{fontSize:10.5,color:C.overdueText,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vencía {mesLbl(b.due)} · sin emitir{recib.get(String(b.id))?<span style={{color:C.muted}}> · {fmt(recib.get(String(b.id)))} ya recibido</span>:null}</div>
+                          <div style={{fontSize:13,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s?.title||b.concept||'Cuota'}</div>
+                          <div style={{fontSize:11,color:C.overdueText,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Vencía {mesLbl(b.due)} · sin emitir{recib.get(String(b.id))?<span style={{color:C.muted}}> · {fmt(recib.get(String(b.id)))} ya recibido</span>:null}</div>
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(b.amount||0)}</div>
                       </div>
                       <div style={{display:'flex',gap:7,marginTop:8,flexWrap:'wrap'}}>
-                        <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
-                        {onBuscarSII&&<button disabled={!!siiBuscaFor} onClick={()=>buscarSII(b)} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.azulInfo}`,background:'#fff',color:C.azulInfo,cursor:siiBuscaFor?'default':'pointer',opacity:siiBuscaFor&&siiBuscaFor.id!==b.id?.5:1}}>{siiBuscaFor&&siiBuscaFor.id===b.id?(siiBuscaFor.total?`Buscando ${siiBuscaFor.hechos||0}/${siiBuscaFor.total}…`:'Buscando…'):'Buscar en SII'}</button>}
-                        <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}}>No corresponde</button>
+                        <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
+                        {onBuscarSII&&<button disabled={!!siiBuscaFor} onClick={()=>buscarSII(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.azulInfo}`,background:C.surface,color:C.azulInfo,cursor:siiBuscaFor?'default':'pointer',opacity:siiBuscaFor&&siiBuscaFor.id!==b.id?.5:1}}>{siiBuscaFor&&siiBuscaFor.id===b.id?(siiBuscaFor.total?`Buscando ${siiBuscaFor.hechos||0}/${siiBuscaFor.total}…`:'Buscando…'):'Buscar en SII'}</button>}
+                        <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer'}}>No corresponde</button>
                       </div>
                     </div>) })}
                 </div>}
@@ -3897,23 +3897,23 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             {sinPrim.length>0&&<div style={{marginTop:cands.length?6:0,border:`0.5px dashed ${C.border}`,borderRadius:12,background:C.bgSoft,overflow:'hidden'}}>
               <div onClick={()=>toggleClient('__sinprimera')} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'10px 12px'}}>
                 <span style={{fontSize:10,color:C.textSoft,transform:sinPrimOpen?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}><Gl n='chevron'/></span>
-                <span style={{fontSize:12.5,fontWeight:700,color:C.muted}}>Sin primera factura</span>
+                <span style={{fontSize:13,fontWeight:700,color:C.muted}}>Sin primera factura</span>
                 <span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>· {sinPrimCli.length} cliente{sinPrimCli.length!==1?'s':''} · {sinPrim.length} cuota{sinPrim.length!==1?'s':''}</span>
                 <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(sinPrimTot)}</span>
               </div>
               {sinPrimOpen&&sinPrim.map(b=>{ const s=saleById[String(b.sale_id)]; const cli=(clients||[]).find(c=>String(c.id)===String(b.client_id)); return (
-                <div key={b.id} style={{borderTop:`0.5px solid ${C.border}`,padding:'10px 12px',background:'#fff'}}>
+                <div key={b.id} style={{borderTop:`0.5px solid ${C.border}`,padding:'10px 12px',background:C.surface}}>
                   <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{...NOMBRE_CLI,cursor:onOpenClientFicha?'pointer':'default'}}>{cli?.name||b.receptor_name||'Sin cliente'}</div>
                       <div style={{fontSize:12,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s?.title||b.concept||'Cuota'}</div>
-                      <div style={{fontSize:10.5,color:C.textSoft,marginTop:1}}>Vencía {mesLbl(b.due)} · sin pago ni factura</div>
+                      <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>Vencía {mesLbl(b.due)} · sin pago ni factura</div>
                     </div>
                     <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(b.amount||0)}</div>
                   </div>
                   <div style={{display:'flex',gap:7,marginTop:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
-                    <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}}>No corresponde</button>
+                    <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
+                    <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer'}}>No corresponde</button>
                   </div>
                 </div>) })}
             </div>}
@@ -3924,9 +3924,9 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           const fDMY=d=>fmtFechaDMY(String(d||'').slice(0,10))
           const byCli={}; trabajosSF.forEach(x=>{ const k=String(x.s.client_id||'—'); (byCli[k]=byCli[k]||[]).push(x) })
           const keys=Object.keys(byCli).sort((a,b)=>{ const na=(clients||[]).find(c=>String(c.id)===a)?.name||''; const nb=(clients||[]).find(c=>String(c.id)===b)?.name||''; return na.localeCompare(nb,'es') })
-          const btn={fontSize:11,fontWeight:600,borderRadius:7,padding:'5px 11px',border:`1px solid ${C.border}`,background:'#fff',color:C.muted,cursor:'pointer'}
+          const btn={fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer'}
           return (
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{maxWidth:isDesktop?720:undefined,width:'100%',margin:'0 auto',display:'flex',flexDirection:'column',gap:10}}>
             {trabajosSF.length===0&&<div style={{textAlign:'center',padding:40,color:C.muted,fontSize:13}}>Sin trabajos por facturar.</div>}
             {keys.map(k=>{ const gi=byCli[k]; const cli=(clients||[]).find(c=>String(c.id)===k); const tot=gi.reduce((a,x)=>a+x.monto,0); const open=openClients.has(k); return (
               <div key={k}>
@@ -3936,19 +3936,19 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                   <span style={{fontSize:11,color:C.textSoft,flexShrink:0}}>· {gi.length}</span>
                   <span style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(tot)}</span>
                 </div>
-                {open&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
+                {open&&<div style={{border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
                   {gi.map((x,i)=>{ const v0=x.viejas[0]; const det=x.viejas.length?`${x.viejas.length===1?'Cuota programada':`${x.viejas.length} cuotas programadas`} al ${fDMY(v0.due)}, sin emitir`:`Saldo ${x.enUF?`${x.sinCuota.toFixed(2).replace('.',',')} UF`:fmt(x.sinCuota)} sin cuota`; return (
                     <div key={x.s.id} style={{borderTop:i>0?`0.5px solid ${C.border}`:'none',padding:'10px 12px'}}>
                       <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12.5,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.s.title||'Trabajo'}</div>
-                          <div style={{fontSize:10.5,color:C.soonText,marginTop:1}}>Última factura {fDMY(x.ult)} · {x.dias} días</div>
-                          <div style={{fontSize:10.5,color:C.textSoft,marginTop:1}}>{det}</div>
+                          <div style={{fontSize:13,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.s.title||'Trabajo'}</div>
+                          <div style={{fontSize:11,color:C.soonText,marginTop:1}}>Última factura {fDMY(x.ult)} · {x.dias} días</div>
+                          <div style={{fontSize:11,color:C.textSoft,marginTop:1}}>{det}</div>
                         </div>
                         <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(x.monto)}</div>
                       </div>
                       <div style={{display:'flex',gap:7,marginTop:8,flexWrap:'wrap'}}>
-                        {v0&&<button onClick={()=>onEdit&&onEdit(v0)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:7,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>}
+                        {v0&&<button onClick={()=>onEdit&&onEdit(v0)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>}
                         {onOpenClientFicha&&<button onClick={()=>onOpenClientFicha(x.s.client_id)} style={{...btn,borderColor:C.azulInfo,color:C.azulInfo}}>Ver ficha</button>}
                         <button onClick={()=>decidirTrabajo(x.s,'al_finalizar','Se factura al finalizar')} style={btn}>Se factura al finalizar</button>
                         <button onClick={()=>decidirTrabajo(x.s,'no_corresponde','No corresponde')} style={btn}>No corresponde</button>
@@ -4009,15 +4009,15 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             <div style={{marginTop:10,background:C.tealBg,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
               <div style={{fontSize:10,fontWeight:700,color:C.tealText,textTransform:'uppercase',letterSpacing:.3,marginBottom:5}}>De un externo · la cobras tú, la plata es de otro</div>
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7,flexWrap:'wrap'}}>
-                <span style={{fontSize:9,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Externo</span>
-                {provs.length>0&&<select value={tvProv} onChange={e=>elegirTercero(e.target.value)} style={{flex:'1 1 150px',minWidth:0,fontSize:12,color:C.text,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}><option value=''>Elegir…</option>{provs.map(p=><option key={p.id} value={p.id}>{p.razon_social||p.nombre}</option>)}</select>}
+                <span style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Externo</span>
+                {provs.length>0&&<select value={tvProv} onChange={e=>elegirTercero(e.target.value)} style={{flex:'1 1 150px',minWidth:0,fontSize:12,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}><option value=''>Elegir…</option>{provs.map(p=><option key={p.id} value={p.id}>{p.razon_social||p.nombre}</option>)}</select>}
               </div>
-              {!tvProv&&<div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:9,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>{provs.length>0?'o nuevo':'Nombre'}</span><input value={tvNuevo} onChange={e=>setTvNuevo(e.target.value)} placeholder='Nombre del externo (ej. Rodrigo Díaz)' style={{flex:1,fontSize:12,color:C.text,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}/></div>}
+              {!tvProv&&<div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>{provs.length>0?'o nuevo':'Nombre'}</span><input value={tvNuevo} onChange={e=>setTvNuevo(e.target.value)} placeholder='Nombre del externo (ej. Rodrigo Díaz)' style={{flex:1,fontSize:12,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}/></div>}
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8,flexWrap:'wrap'}}>
-                <span style={{fontSize:9,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Retienes</span>
-                <input value={tvPct} onChange={e=>setTvPct(e.target.value.replace(/[^\d.,]/g,''))} inputMode='decimal' placeholder='0' style={{width:58,textAlign:'right',fontSize:12,fontWeight:700,color:C.text,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}/>
+                <span style={{fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.3,width:56,flexShrink:0}}>Retienes</span>
+                <input value={tvPct} onChange={e=>setTvPct(e.target.value.replace(/[^\d.,]/g,''))} inputMode='decimal' placeholder='0' style={{width:58,textAlign:'right',fontSize:12,fontWeight:700,color:C.text,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 9px'}}/>
                 <span style={{fontSize:13,fontWeight:700,color:C.tealText}}>%</span>
-                {aprendido&&<span style={{fontSize:9.5,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}><Gl n='tick'/> aprendido</span>}
+                {aprendido&&<span style={{fontSize:10,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}><Gl n='tick'/> aprendido</span>}
               </div>
               {pct>0&&<div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.4}}>Tu comisión <b style={{color:C.greenText}}>{fmt(comision)}</b> · para {nombreDest} <b style={{color:C.tealText}}>{fmt(payable)}</b> (de {fmt(total)})</div>}
               <button disabled={!tvProv&&!tvNuevo.trim()} onClick={doExt} style={{width:'100%',background:C.tealText,color:'#fff',border:'none',borderRadius:8,padding:'9px 0',fontSize:12,fontWeight:700,cursor:'pointer',opacity:(!tvProv&&!tvNuevo.trim())?.6:1}}>{pct>0?`Registrar · retienes ${fmt(comision)}`:`Pasar todo a ${nombreDest}`}</button>
@@ -4036,7 +4036,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           // Sugerencia aprendida por cliente: el tipo de sus facturas anteriores (BDA → Comisión, Geslog → Por externo).
           const tipoPrevio=cid=>{ const ts=(billing||[]).filter(x=>!x.deleted_at&&x.status!=='Anulada'&&String(x.client_id)===String(cid)&&['comision','externo'].includes(x.billing_type)); if(!ts.length) return null; const c={}; ts.forEach(x=>{ c[x.billing_type]=(c[x.billing_type]||0)+1 }); return Object.keys(c).sort((a,z)=>c[z]-c[a])[0] }
           const tipoChips=(e,b,{ventaOpen,extOpen})=>{ const comOpen=anioPickFor===('com:'+b.id), sug=tipoPrevio(b.client_id)
-            const ch=(k,lbl,on,fn,col)=><span key={k} onClick={fn} style={{fontSize:11.5,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:on?'#fff':col}}/>{lbl}</span>
+            const ch=(k,lbl,on,fn,col)=><span key={k} onClick={fn} style={{fontSize:12,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:on?'#fff':col}}/>{lbl}</span>
             return <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:10}}>
               {ch('g','Es de gastos',false,()=>doReembolso(e),C.azulInfo)}
               {ch('c','Es comisión',comOpen,()=>{ if(comOpen){ setAnioPickFor(null); return } setComSoc(''); setComOrig(''); setAnioPickFor('com:'+b.id) },C.tealText)}
@@ -4051,11 +4051,11 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
                 setBilling&&setBilling(p=>p.map(x=>x.id===b.id?{...x,billing_type:'comision',comision_origen:comOrig.trim()||null}:x))
                 logActividad('facturacion.tipo_comision',{tabla:'billing',id:b.id,detalle:{invoice_no:b.invoice_no,amount:b.amount,socio:comSoc,origen:comOrig.trim()||null,antes:b.billing_type}})
                 limpiar(); onRefresh&&onRefresh() }catch(err){ appAlert('No se pudo marcar como comisión: '+(err.message||err)) } })
-            const fl={fontSize:9,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.textSoft}
+            const fl={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.textSoft}
             return <div style={{marginTop:10,display:'flex',gap:8,flexWrap:'wrap',alignItems:'flex-end'}}>
               <label style={{display:'flex',flexDirection:'column',gap:3,flex:'1 1 160px',minWidth:0}}><span style={fl}>Quién la generó</span><input value={comOrig} onChange={ev=>setComOrig(ev.target.value)} placeholder='Cliente derivado o asunto' style={{fontSize:12,padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,outline:'none',minWidth:0}}/></label>
               <label style={{display:'flex',flexDirection:'column',gap:3}}><span style={fl}>Socio</span><select value={comSoc} onChange={ev=>setComSoc(ev.target.value)} style={{fontSize:12,padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text}}><option value=''>Elegir</option>{ADMIN_NAMES.map(n=><option key={n} value={n}>{n}</option>)}</select></label>
-              <button disabled={!ok} onClick={doCom} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:ok?C.accent:C.done,border:'none',borderRadius:8,padding:'8px 14px',cursor:ok?'pointer':'not-allowed',whiteSpace:'nowrap'}}>Marcar comisión</button>
+              <button disabled={!ok} onClick={doCom} style={{fontSize:12,fontWeight:700,color:'#fff',background:ok?C.accent:C.done,border:'none',borderRadius:8,padding:'8px 14px',cursor:ok?'pointer':'not-allowed',whiteSpace:'nowrap'}}>Marcar comisión</button>
             </div> }
           const entryCard=(e)=>{ const t=TINT[e.cat]; const b=e.b; const cid=b?b.client_id:null
             const assignOpen=anioPickFor===('cli:'+e.id); const ventaOpen=b&&anioPickFor===b.id; const extOpen=b&&anioPickFor===('ext:'+b.id); const rsOpen=anioPickFor===('rs:'+e.id)
@@ -4066,20 +4066,20 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             if(e.cat==='cli'){ primLabel='Asignar cliente'; primAction=()=>setAnioPickFor(assignOpen?null:('cli:'+e.id)); if(e.src==='sii') subEl=<span onClick={()=>doSinCli(e)} style={sub}>o sin cliente</span> }
             else if(e.cat==='vta'){ primLabel=null; primAction=null; subEl=null }   // el primer paso es el tipo (chips abajo)
             else { if(faltaXml(b)){ primLabel='Adjuntar XML'; primAction=()=>doXml(e) } else { primLabel='Asignar RS'; primAction=()=>setAnioPickFor(rsOpen?null:('rs:'+e.id)) } }
-            return <div key={e.id} style={{background:t.bg,border:`1px solid ${C.border}`,borderRadius:13,padding:'12px 13px',marginBottom:9}}>
+            return <div key={e.id} style={{background:t.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 13px',marginBottom:9}}>
               <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{fontSize:13.5,fontWeight:700,color:C.accent,lineHeight:1.25,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:cid?'pointer':'default'}}>{e.nm||'Sin razón social'}</div>
-                  {e.rut&&<div style={{fontSize:10.5,color:C.muted,marginTop:3}}><b style={{color:C.textSoft,fontWeight:700}}>RUT</b> {fmtRut(e.rut)}</div>}
-                  <div style={{fontSize:10.5,color:C.muted,marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
+                  <div onClick={()=>cid&&onOpenClientFicha&&onOpenClientFicha(cid)} style={{fontSize:14,fontWeight:700,color:C.accent,lineHeight:1.25,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:cid?'pointer':'default'}}>{e.nm||'Sin razón social'}</div>
+                  {e.rut&&<div style={{fontSize:11,color:C.muted,marginTop:3}}><b style={{color:C.textSoft,fontWeight:700}}>RUT</b> {fmtRut(e.rut)}</div>}
+                  <div style={{fontSize:11,color:C.muted,marginTop:7,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontVariantNumeric:'tabular-nums'}}>N° {e.folio}{e.fecha?` · ${fDMY(e.fecha)}`:''}</span>
-                    {e.chips.map((ch,ci)=><span key={ci} style={{fontSize:8.5,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',borderRadius:5,padding:'2px 6px',background:'#fff',color:C.muted}}>{ch}</span>)}
+                    {e.chips.map((ch,ci)=><span key={ci} style={{fontSize:10,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',borderRadius:8,padding:'2px 6px',background:C.surface,color:C.muted}}>{ch}</span>)}
                   </div>
-                  {e.glosa&&<div onClick={()=>b&&onEdit&&onEdit(b)} style={{fontSize:11.5,color:C.text,marginTop:4,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b?'pointer':'default'}}>{e.glosa}</div>}
+                  {e.glosa&&<div onClick={()=>b&&onEdit&&onEdit(b)} style={{fontSize:12,color:C.text,marginTop:4,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:b?'pointer':'default'}}>{e.glosa}</div>}
                 </div>
                 <div style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:9,minWidth:84}}>
-                  <div style={{fontSize:13.5,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(e.monto)}</div>
-                  {primLabel&&<button onClick={primAction} style={{fontSize:10.5,fontWeight:700,border:`1px solid ${C.accent}`,color:C.accent,background:'transparent',borderRadius:8,padding:'6px 11px',whiteSpace:'nowrap',cursor:'pointer'}}>{primLabel}</button>}
+                  <div style={{fontSize:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(e.monto)}</div>
+                  {primLabel&&<button onClick={primAction} style={{fontSize:11,fontWeight:700,border:`1px solid ${C.accent}`,color:C.accent,background:'transparent',borderRadius:8,padding:'6px 11px',whiteSpace:'nowrap',cursor:'pointer'}}>{primLabel}</button>}
                   {subEl}
                 </div>
               </div>
@@ -4089,12 +4089,12 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
               {e.cat==='vta'&&b&&tipoChips(e,b,{ventaOpen,extOpen})}
               {extOpen&&extPanel(b)}
               {b&&anioPickFor===('com:'+b.id)&&comPanel(e,b)}
-              {rsOpen&&<div style={{marginTop:10}}>{ents.length?<select defaultValue='' onChange={ev=>{ if(ev.target.value) doRS(e,ev.target.value) }} style={{width:'100%',fontSize:11.5,padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.text}}><option value=''>Asignar razón social…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${fmtRut(en.rut)}`:''}</option>)}</select>:<div style={{fontSize:10.5,color:C.muted}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(b)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>}</div>}
-              {confirming&&<div style={{marginTop:11,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+              {rsOpen&&<div style={{marginTop:10}}>{ents.length?<select defaultValue='' onChange={ev=>{ if(ev.target.value) doRS(e,ev.target.value) }} style={{width:'100%',fontSize:12,padding:'8px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text}}><option value=''>Asignar razón social…</option>{ents.map(en=><option key={en.id} value={en.id}>{en.name}{en.rut?` · ${fmtRut(en.rut)}`:''}</option>)}</select>:<div style={{fontSize:11,color:C.muted}}>Sin razones sociales en la ficha · <span onClick={()=>onEdit&&onEdit(b)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>abrir factura</span></div>}</div>}
+              {confirming&&<div style={{marginTop:11,background:C.surface,border:`1px solid ${C.accent}`,borderRadius:10,padding:'11px 13px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
                 <div style={{flex:'1 1 150px',minWidth:0,fontSize:12,color:C.text,lineHeight:1.4}}>{pcConfirm.label}</div>
                 <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0,marginLeft:'auto'}}>
-                  <button onClick={()=>setPcConfirm(null)} style={{fontSize:11.5,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
-                  <button onClick={()=>{ const r=pcConfirm.run; r&&r() }} style={{fontSize:11.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Confirmar</button>
+                  <button onClick={()=>setPcConfirm(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>Cancelar</button>
+                  <button onClick={()=>{ const r=pcConfirm.run; r&&r() }} style={{fontSize:12,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Confirmar</button>
                 </div>
               </div>}
             </div>
@@ -4103,7 +4103,7 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
             <div style={{marginTop:6}}>
               <div style={{display:'flex',alignItems:'center',gap:7,margin:'0 2px 9px'}}>
                 <span style={{width:6,height:6,borderRadius:'50%',background:t.dot,flexShrink:0}}/>
-                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted}}>{label}</span>
+                <span style={{fontSize:11,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted}}>{label}</span>
                 <span style={{marginLeft:'auto',fontSize:11,fontWeight:600,color:C.textSoft}}>{arr.length} · {fmtMon(tot)}</span>
               </div>
               {arr.map(entryCard)}
@@ -4111,20 +4111,20 @@ export function BillingView({billing,fantasmaIds=new Set(),clients,sales,clientE
           return (
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <div style={{flex:1,display:'flex',alignItems:'center',gap:8,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 11px',background:C.bgSoft,minWidth:0}}>
+              <div style={{flex:1,display:'flex',alignItems:'center',gap:8,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 11px',background:C.bgSoft,minWidth:0}}>
                 <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg>
-                <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura, RUT…' style={{border:'none',background:'transparent',outline:'none',fontSize:12.5,color:C.text,width:'100%'}}/>
+                <input value={q} onChange={e=>setQ(e.target.value)} placeholder='Buscar cliente, N° factura, RUT…' style={{border:'none',background:'transparent',outline:'none',fontSize:13,color:C.text,width:'100%'}}/>
               </div>
-              <select value={pcOrden} onChange={e=>setPcOrden(e.target.value)} style={{fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:11,padding:'8px 10px',background:C.bgSoft,color:C.accent,cursor:'pointer',flexShrink:0}}>
+              <select value={pcOrden} onChange={e=>setPcOrden(e.target.value)} style={{fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',background:C.bgSoft,color:C.accent,cursor:'pointer',flexShrink:0}}>
                 <option value='cliente'>Cliente (A–Z)</option>
                 <option value='fecha'>Fecha · nuevas</option>
                 <option value='foliodesc'>Folio ↓</option>
                 <option value='folioasc'>Folio ↑</option>
               </select>
             </div>
-            <div style={{fontSize:11.5,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} por clasificar · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5,margin:'-4px 2px 0'}}>{entries.length} factura{entries.length!==1?'s':''} por clasificar · <b style={{color:C.accent}}>{fmtMon(totMonto)}</b></div>
             {sinRegN>0&&<div onClick={()=>cargarSinRegistrar()} style={{display:'flex',alignItems:'center',gap:10,background:C.azulBg,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'12px 14px',cursor:'pointer'}}>
-              <span style={{width:30,height:30,borderRadius:9,background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg></span>
+              <span style={{width:30,height:30,borderRadius:10,background:C.surface,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{sinRegN} emitida{sinRegN!==1?'s':''} en el SII sin cargar</div><div style={{fontSize:11,color:C.muted}}>Cárgalas para registrarlas en el sistema</div></div>
               <span style={{color:C.accent,fontSize:16,flexShrink:0}}><Gl n='chevron'/></span>
             </div>}
