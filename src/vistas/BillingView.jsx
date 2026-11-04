@@ -14,7 +14,7 @@ import { descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo,
 import { BRAND, C, CUENTA_HONORARIOS, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
-import { driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { PaginaSobre, driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Facturas ya registradas con XML guardado y sin ningún PDF adjunto (ni oficial ni copia): lo que falta respaldar en Drive. Fuente única de la tarjeta de la entrada, la página de pendientes y el respaldo masivo.
 export const facturasSinRespaldo = (billing, attIds) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.dte_xml&&b.status!=='Anulada'&&!(attIds&&attIds.has(String(b.id))))
@@ -4311,7 +4311,7 @@ export function FusionAnticiposModal({bank, manual, clients=[], sales=[], client
     </div>
   )
   return (
-    <Modal title={<><span style={{color:C.accent}}>Fusionar anticipos</span><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false}>
+    <PaginaSobre origen='Facturación' titulo='Fusionar anticipos' ctx={cliName} onBack={onClose} maxW={760}>
       <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'stretch'}}>{card(bank,true)}{card(manual,false)}</div>
       <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:14}}>
         <div style={{...SEC_LBL,marginBottom:6}}>Queda un solo anticipo</div>
@@ -4322,7 +4322,7 @@ export function FusionAnticiposModal({bank, manual, clients=[], sales=[], client
         <button onClick={onClose} style={{flex:1,height:44,borderRadius:10,border:`0.5px solid ${C.border}`,background:C.surface,color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
         <button onClick={()=>{onConfirm();onClose()}} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>Fusionar</button>
       </div>
-    </Modal>
+    </PaginaSobre>
   )
 }
 
