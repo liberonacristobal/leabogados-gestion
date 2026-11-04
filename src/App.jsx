@@ -2197,7 +2197,7 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
   const byMes={}; orphans.forEach(b=>{ const mk=String(b.issued_at||b.sii_synced_at||'').slice(0,7); (byMes[mk]=byMes[mk]||[]).push(b) })
   const meses=Object.keys(byMes).sort().reverse()
   return (
-    <Modal fullscreenOnMobile title='Cobertura SII' onClose={onClose}>
+    <FlujoPagina origen='Facturación' titulo='Cobertura SII' onBack={onClose} maxW={900}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:11,flexWrap:'wrap'}}>
         <select value={yr} onChange={e=>setYr(e.target.value)} style={{fontSize:13,fontWeight:600,padding:'5px 9px',borderRadius:8,border:`1px solid ${C.border}`,color:C.accent}}>{(years.length?years:[yr]).map(y=><option key={y} value={y}>{y}</option>)}</select>
         <span style={{fontSize:11,color:C.muted}}>Facturas emitidas del año que están en el sistema</span>
@@ -2241,13 +2241,13 @@ function CoberturaSIIModal({billing=[],clients=[],clientEntities=[],onAssign,onC
       <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end'}}>
         <button onClick={onCotejar} title='Trae del portal del SII, mes a mes, las facturas que no están en el sistema' style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',flexShrink:0}}>Cuadrar con SII</button>
       </div>
-    </Modal>
+    </FlujoPagina>
   )
 }
 
 function PorSocioModal({onClose,...props}){
   const isDesk=useIsDesktop()
-  return <Modal fullscreen fsMaxWidth={isDesk?1180:760} title='Por socio' onClose={onClose}><PorSocioVista {...props}/></Modal>
+  return <FlujoPagina origen='Oficina' titulo='Por socio' onBack={onClose} maxW={isDesk?1180:760}><PorSocioVista {...props}/></FlujoPagina>
 }
 
 // ─── ANTICIPO FORM (modal Nuevo anticipo, PP-15) ──────────────────────────────
@@ -5984,7 +5984,7 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={pdfupload:'flujo',drive:'flujo',importExcel:'flujo',gmailContactos:'flujo',gmailTareas:'flujo',rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
+    const PAGE_OF={users:'flujo',roles:'flujo',modulos:'flujo',papelera:'flujo',aprendizaje:'flujo',redProfesional:'flujo',coberturaSII:'flujo',porSocio:'flujo',pdfupload:'flujo',drive:'flujo',importExcel:'flujo',gmailContactos:'flujo',gmailTareas:'flujo',rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
       if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
@@ -6004,7 +6004,7 @@ export default function App() {
       if(tipo==='cliente') handleOpenClientFicha(x.id); else setModal({type:{venta:'sale',factura:'billing',gasto:'expenseEdit',tarea:'task',rechazo:'rechazoMotivo',primeras:'primerasTareas'}[tipo],data:x}); return true }
     window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth,abrir,deshacer:msg=>setUndoToast({msg,onUndo:()=>{}})} },[navTo,setModal,goBack,clients,sales,billing,expenses,tasks,proyectosCartera,handleOpenClientFicha])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
-  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',pdfupload:'Subir facturas PDF',drive:'Importar desde Drive',importExcel:'Importar Excel',gmailContactos:'Revisar Gmail',gmailTareas:'Revisar Gmail',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
+  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',users:'Gestión de usuarios',roles:'Roles y permisos',modulos:'Módulos de la oficina',papelera:'Papelera',aprendizaje:'Lo que aprendí',redProfesional:'Red profesional',coberturaSII:'Cobertura SII',porSocio:'Por socio',pdfupload:'Subir facturas PDF',drive:'Importar desde Drive',importExcel:'Importar Excel',gmailContactos:'Revisar Gmail',gmailTareas:'Revisar Gmail',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
   const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='factura') return 'Factura'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Página abierta desde la ficha de un cliente → '‹ cliente'; si no, el origen de siempre.
@@ -8649,6 +8649,20 @@ export default function App() {
         {tab==='flujo'&&pagina?.type==='importExcel'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Importar facturas (Excel)' onBack={()=>setModal(null)} maxW={1000}><ImportFacturasExcel clients={clients} clientEntities={clientEntities} billing={billing} onImported={async()=>{const antes=billing.length; const nb=await getBilling().catch(()=>null); if(nb){ setBilling(nb); logCargaSII({tipo:'excel', n:Math.max(0,nb.length-antes), user}) }}} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='gmailContactos'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisar Gmail — contactos' onBack={()=>setModal(null)} maxW={900}><GmailContactosModal clients={clients} clientEntities={clientEntities} onClose={()=>setModal(null)} onIrContactos={()=>{ setModal(null); if(tab==='contactos') setContactosKey(k=>k+1); else navTo({tab:'contactos'}) }}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='gmailTareas'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Revisar Gmail — tareas' onBack={()=>setModal(null)} maxW={900}><GmailTareasModal clients={clients} onCrear={handleCrearTareaGmail} onEditar={(t)=>setModal({type:'task',data:{title:t.title,client_id:t.client_id,due:t.due,note:t.note}})} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='users'&&<FlujoPagina origen={origenNav('Oficina')} titulo='Gestión de usuarios' onBack={()=>setModal(null)} maxW={900}><UsersView onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='roles'&&<FlujoPagina origen={origenNav('Oficina')} titulo='Roles y permisos' onBack={()=>setModal(null)} maxW={720}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='modulos'&&<FlujoPagina origen={origenNav('Oficina')} titulo='Módulos de la oficina' onBack={()=>setModal(null)} maxW={720}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='papelera'&&<FlujoPagina origen={origenNav('Oficina')} titulo='Papelera' onBack={()=>setModal(null)} maxW={900}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
+          const [s,b,e]=await Promise.all([
+            supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
+            getBilling(),
+            selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id')).then(r=>r.data||[]),
+          ]); setSales(s); if(b)setBilling(b); setExpenses(e)
+        }}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='aprendizaje'&&<FlujoPagina origen={origenNav('Oficina')} titulo='Lo que aprendí' onBack={()=>setModal(null)} maxW={900}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='redProfesional'&&<FlujoPagina origen={origenNav('Clientes')} titulo='Red profesional' onBack={()=>setModal(null)} maxW={900}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></FlujoPagina>}
+        {tab==='flujo'&&pagina?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
+        {tab==='flujo'&&pagina?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} expenses={expenses} fantasmaIds={fantasmaAltaIds} onClose={()=>setModal(null)} onOpenClientFicha={id=>{setModal(null);handleOpenClientFicha(id)}} onIrBanco={mid=>{setModal(null);navTo({tab:'conciliacion',conc:mid})}} onIrBilling={()=>{setModal(null);navTo({tab:'billing'})}} onIrCobranza={()=>{setModal(null);navTo({tab:'cobranza'})}} onIrProveedores={()=>{setModal(null);navTo({tab:'proveedores'})}} onIrSubarriendo={()=>{setModal(null);navTo({tab:'subarriendo'})}}/>}
         {tab==='flujo'&&pagina?.type==='ajuste'&&<FlujoPagina origen={origenCli(pagina.data?.name)} titulo='Ajustar saldo' ctx={origenCli(pagina.data?.name)!==pagina.data?.name?(pagina.data?.name||null):null} onBack={()=>setModal(null)} maxW={980}><AjusteModal asPage expenses={expenses} client={pagina.data} user={user} saving={saving} onSave={async(f)=>{await handleSaveExpense(f);logActividad('clientes.ajuste_saldo',{tabla:'clients',id:f.client_id,detalle:{monto:f.amount,motivo:f.concept}});setModal(null)}} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='conciliar'&&<FlujoPagina origen={origenCli(pagina.data?.client?.name)} titulo='Duplicados' ctx={origenCli(pagina.data?.client?.name)!==pagina.data?.client?.name?(pagina.data?.client?.name||null):null} onBack={()=>setModal(null)} maxW={1180}><ConciliarFacturasModal asPage scope={pagina.data?.client?billing.filter(b=>String(b.client_id)===String(pagina.data.client.id)):billing} clientId={pagina.data?.client?.id||null} sales={sales} clients={clients} clientEntities={clientEntities} respaldoMap={respaldoMap} cartolaHasta={cartolaHasta} anticipos={anticipos} conciliacion={conciliacion} onResolverDupAnticipo={handleResolverDupAnticipo} onResolveDup={handleResolveDup} onAssignSeries={handleAssignSeries} onReplaceProgramada={handleDeleteBilling} onReplaceMatch={handleReplaceProgramada} onEditBilling={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onClose={()=>setModal(null)}/></FlujoPagina>}
         {tab==='flujo'&&pagina?.type==='clienteDrive'&&<FlujoPagina origen={origenNav('Clientes')} titulo='Sincronización con Drive' onBack={()=>setModal(null)} maxW={980}><ClienteDriveImporter clients={clients} onImported={async()=>{const c=await getClients();setClients(c);setModal(null)}} onChanged={async()=>{const c=await getClients();setClients(c)}} onClose={()=>setModal(null)}/></FlujoPagina>}
@@ -8758,7 +8772,7 @@ export default function App() {
             </div>
           </Modal>
         })()}
-        {modal?.type==='coberturaSII'&&<CoberturaSIIModal billing={billing} clients={clients} clientEntities={clientEntities} onAssign={handleAssignClient} onCotejar={()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})}} onClose={()=>setModal(null)}/>}
+        {/* 'coberturaSII' ya NO es modal: página 'flujo'. */}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
         {copilotoOpen&&tab!=='dashboard'&&userRole==='admin'&&<div style={{display:'none'}} aria-hidden='true'>{dashboardEl}</div>}
         {copilotoOpen&&<CopilotoModal role={userRole} anticipos={anticipos} clients={clients} clientEntities={clientEntities} rendiciones={rendiciones} terceros={terceros} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
@@ -8794,24 +8808,18 @@ export default function App() {
         {/* 'pdfupload' ya NO es modal: página 'flujo'. */}
         {/* 'drive' ya NO es modal: página 'flujo'. */}
         {/* 'importExcel' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='users'&&<Modal fullscreenOnMobile title='Gestión de usuarios' onClose={()=>setModal(null)}><UsersView onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='aprendizaje'&&<Modal fullscreenOnMobile title='Lo que aprendí' onClose={()=>setModal(null)}><LearningCenter clients={clients} onClose={()=>setModal(null)}/></Modal>}
+        {/* 'users' ya NO es modal: página 'flujo'. */}
+        {/* 'aprendizaje' ya NO es modal: página 'flujo'. */}
         {/* 'redaccion' ya NO es modal: página 'flujo'. */}
         {/* 'plazos' ya NO es modal: página 'flujo'. */}
         {/* 'gmailContactos' ya NO es modal: página 'flujo'. */}
         {/* 'gmailTareas' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='redProfesional'&&<Modal fullscreenOnMobile title='Red profesional' onClose={()=>setModal(null)} closeOnBackdrop={false}><RedProfesionalModal preset={modal.data||null} onClose={()=>setModal(null)}/></Modal>}
-        {modal?.type==='papelera'&&<Modal fullscreenOnMobile title='Papelera' onClose={()=>setModal(null)}><PapeleraModal clients={clients} onClose={()=>setModal(null)} onChanged={async()=>{
-          const [s,b,e]=await Promise.all([
-            supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).then(r=>r.data||[]),
-            getBilling(),
-            selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id')).then(r=>r.data||[]),
-          ]); setSales(s); if(b)setBilling(b); setExpenses(e)
-        }}/></Modal>}
+        {/* 'redProfesional' ya NO es modal: página 'flujo'. */}
+        {/* 'papelera' ya NO es modal: página 'flujo'. */}
         {/* 'revisionDatos' ya NO es modal: página 'flujo'. */}
-        {modal?.type==='modulos'&&<Modal fullscreenOnMobile title='Módulos de la oficina' maxWidth={460} onClose={()=>setModal(null)}><ModulosModal onChange={()=>setModVer(v=>v+1)}/></Modal>}
-        {modal?.type==='roles'&&<Modal fullscreenOnMobile title='Roles y permisos' maxWidth={480} onClose={()=>setModal(null)}><RolesModal onOpenUsers={()=>setModal({type:'users'})}/></Modal>}
-        {modal?.type==='porSocio'&&<PorSocioModal billing={billing} sales={sales} clients={clients} anticipos={anticipos} terceros={terceros} expenses={expenses} fantasmaIds={fantasmaAltaIds} onClose={()=>setModal(null)} onOpenClientFicha={id=>{setModal(null);handleOpenClientFicha(id)}} onIrBanco={mid=>{setModal(null);navTo({tab:'conciliacion',conc:mid})}} onIrBilling={()=>{setModal(null);navTo({tab:'billing'})}} onIrCobranza={()=>{setModal(null);navTo({tab:'cobranza'})}} onIrProveedores={()=>{setModal(null);navTo({tab:'proveedores'})}} onIrSubarriendo={()=>{setModal(null);navTo({tab:'subarriendo'})}}/>}
+        {/* 'modulos' ya NO es modal: página 'flujo'. */}
+        {/* 'roles' ya NO es modal: página 'flujo'. */}
+        {/* 'porSocio' ya NO es modal: página 'flujo'. */}
         {/* 'report' ya NO es modal: página 'flujo'. */}
         {/* 'task' / 'taskPreview' / 'cierreTarea' ya NO son modales: viven en la página navegable 'tarea' (TareaPage, ver render de tabs). setModal los redirige. */}
         {/* "Editar/Nuevo cliente" ya NO es modal: es la página navegable editCliente (ver render arriba). */}
