@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
+import { PaginaSobre, ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
 import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
@@ -801,14 +801,8 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
         const lbl = {fontSize:10,fontWeight:600,color:C.textSoft,letterSpacing:'.05em',textTransform:'uppercase',marginBottom:7}
         const fpill = on => ({fontSize:12,padding:'6px 12px',borderRadius:20,cursor:'pointer',border:on?'0.5px solid #003C50':'0.5px solid #E4E8EB',background:on?C.azulBg:'#fff',color:on?C.accent:C.muted,fontWeight:on?600:400})
         return (
-          <div onClick={()=>!saving&&setShowNuevaCaja(false)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px 16px'}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:18,width:'100%',maxWidth:360,padding:'18px 20px 20px',maxHeight:'85vh',overflowY:'auto'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                <span style={{fontSize:16,fontWeight:600,color:C.accent}}>{editCajaId?'Editar caja chica':'Nueva caja chica'} <span style={{color:C.textSoft,fontWeight:400,margin:'0 6px'}}>|</span><span style={{color:C.muted,fontWeight:600}}>{me}</span></span>
-                <button onClick={()=>!saving&&setShowNuevaCaja(false)} style={{background:'none',border:'none',cursor:'pointer',padding:0,lineHeight:0}}>
-                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#537281' strokeWidth='2.5' strokeLinecap='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
-                </button>
-              </div>
+<PaginaSobre origen='Caja chica' titulo={editCajaId?'Editar caja chica':'Nueva caja chica'} ctx={me} onBack={()=>!saving&&setShowNuevaCaja(false)} maxW={520}>
+              
 
               <div style={{marginBottom:16}}>
                 <div style={lbl}>Monto</div>
@@ -853,8 +847,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                 <button onClick={handleNuevaCaja} disabled={saving||!newMonto} style={{flex:2,height:44,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:newMonto?'pointer':'not-allowed',opacity:(saving||!newMonto)?.6:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>{saving?<Spin/>:null}{saving?'Guardando...':(editCajaId?'Guardar cambios':'Registrar caja')}</button>
               </div>
               {editCajaId&&<button onClick={handleBorrarCaja} disabled={saving} style={{width:'100%',marginTop:10,height:44,borderRadius:10,border:'none',background:'none',color:C.overdue,fontSize:12,fontWeight:600,cursor:'pointer'}}>Eliminar esta caja</button>}
-            </div>
-          </div>
+            </PaginaSobre>
         )
       })()}
     </div>

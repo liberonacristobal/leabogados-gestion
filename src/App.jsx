@@ -8782,9 +8782,8 @@ export default function App() {
         {emitirPreview&&(()=>{ const ep=emitirPreview
           const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ appAlert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
-            <div onClick={()=>!emitirBusy&&setEmitirPreview(null)} style={{position:'fixed',inset:0,background:'rgba(20,30,35,.45)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-              <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:12,padding:16,maxWidth:440,width:'100%',boxShadow:'0 8px 40px rgba(0,0,0,.18)'}}>
-                <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:2}}>Vista previa — Factura exenta</div>
+<PaginaSobre origen='Facturación' titulo='Vista previa — Factura exenta' onBack={()=>!emitirBusy&&setEmitirPreview(null)} maxW={560}>
+                
                 <div style={{fontSize:11,color:C.muted,marginBottom:13}}>DTE 34 · no se envía nada todavía ({ep.prev.ambiente})</div>
                 <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px',marginBottom:13}}>
                   <div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:12}}><span style={{color:C.muted}}>Folio asignado</span><span style={{fontWeight:600}}>{ep.prev.folio}</span></div>
@@ -8797,8 +8796,7 @@ export default function App() {
                   <button disabled={emitirBusy} onClick={()=>setEmitirPreview(null)} style={{fontSize:12,fontWeight:600,color:C.muted,background:'#fff',border:`0.5px solid ${C.border}`,borderRadius:8,padding:'8px 11px',cursor:'pointer',marginLeft:'auto'}}>Cancelar</button>
                   <button disabled={emitirBusy} onClick={confirmEmitirDTE} style={{fontSize:12,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',opacity:emitirBusy?.6:1}}>{emitirBusy?'Emitiendo…':'Emitir'}</button>
                 </div>
-              </div>
-            </div>
+              </PaginaSobre>
           )
         })()}
         {/* 'gastos' / 'fondo' / 'expenseEdit' ya NO son modales: viven en la página navegable 'gasto' (GastoPage, ver render de tabs). setModal los redirige. */}
