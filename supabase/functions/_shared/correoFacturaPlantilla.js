@@ -15,6 +15,9 @@ export function quitarDespedida(texto) {
   return l.join('\n').replace(/\s+$/, '')
 }
 
+/** Espacios dobles dentro de una línea («oct  26» viene así de la glosa del SII); no toca los saltos de línea. @param {any} t @returns {string} */
+export function limpiarEspacios(t) { return String(t == null ? '' : t).replace(/[ \t]{2,}/g, ' ') }
+
 /** «Cuota 3/10», «Pago 3 de 10», «3 de 10» → {n:3, tot:10}; sin cuota → null. @param {any} t */
 export function cuotaDe(t) {
   const m = String(t || '').match(/(?:cuota|pago)?\s*(\d+)\s*(?:\/|de)\s*(\d+)/i)
