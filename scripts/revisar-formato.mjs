@@ -23,6 +23,8 @@ const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', '
 const MODALES = ['revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional']
 // Detalles con datos: los tres primeros de cada tipo (ficha del cliente, venta, factura, gasto, tarea).
 const DETALLES = ['cliente', 'venta', 'factura', 'gasto', 'tarea']
+const INTERNAS_CONC = ['Abonos', 'Cargos', 'Por resolver', 'Conciliados', 'Sin respaldo', 'Cargar cartola']
+const INTERNAS_FICHA = ['Resumen', 'Contacto', 'Ventas', 'Cartola']
 const VISTAS = [['escritorio', 1280, 900], ['celular', 375, 812]]
 const BLINDAJE = /Esta vista tuvo un problema|La app tuvo un problema/
 // Ruido conocido de la demo (sin red real) que no es un error de la app.
@@ -35,6 +37,7 @@ const server = await preview({ preview: { port: 4180, strictPort: false }, logLe
 const base = server.resolvedUrls.local[0]
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] })
 const informe = []
+const tocadas = {}
 
 // Mide lo que el ojo ve mal: texto cortado con «…», desborde horizontal de la página, textos de menos de 10 px.
 const medir = () => {
@@ -73,6 +76,10 @@ try {
       await ver(`detalle ${d} ${i + 1}`, ([d, i]) => { window.__demo.setModal(null); window.__demo.setTab('dashboard'); setTimeout(() => window.__demo.abrir(d, i), 50) }, [d, i])
       await page.evaluate(() => { window.__demo.setModal(null); window.__demo.setTab('dashboard') })
     }
+    // Pestañas internas: se abre la vista y se toca cada rótulo (si no existe en esa vista, se omite).
+    const tocar = async (etq, texto) => { const ok = await page.evaluate(t => { const e = [...document.querySelectorAll('button,div,span')].filter(x => !x.closest('nav,.sidenav,.bottomnav') && x.getBoundingClientRect().width && [...x.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim().toLowerCase() === t.toLowerCase())[0]; if (!e) return false; e.click(); return true }, texto).catch(() => false); tocadas[`${nombre} ${etq}`] = ok; if (ok) { await sleep(700); const m = await page.evaluate(medir); if (m.desborde || m.nCortados) informe.push({ vista: nombre, donde: etq, ...m }) } return ok }
+    for (const t of INTERNAS_CONC) { await page.evaluate(() => { window.__demo.setModal(null); window.__demo.setTab('dashboard') }).catch(() => {}); await sleep(400); await page.evaluate(() => window.__demo.navTo({ tab: 'conciliacion' })).catch(() => {}); await sleep(900); await tocar(`conciliación › ${t}`, t) }
+    for (const i of [0, 1]) for (const t of INTERNAS_FICHA) { await page.evaluate(i => { window.__demo.setModal(null); window.__demo.setTab('dashboard'); setTimeout(() => window.__demo.abrir('cliente', i), 50) }, i).catch(() => {}); await sleep(900); await tocar(`ficha cliente ${i + 1} › ${t}`, t) }
     for (const m of MODALES) { await ver(`página ${m}`, m => { window.__demo.setTab('dashboard'); window.__demo.setModal({ type: m }) }, m); await page.evaluate(() => window.__demo.setModal(null)) }
     await page.close()
   }
@@ -86,4 +93,5 @@ for (const [donde, arr] of Object.entries(porVista)) {
   console.log(`\n${donde}`)
   arr.forEach(i => console.log(`  [${i.vista}]${i.desborde ? ' DESBORDE HORIZONTAL' : ''} ${i.nCortados ? `cortados(${i.nCortados}): ` + i.cortados.map(c => `«${c}»`).join(' ') : ''}`))
 }
+console.log('\nPestañas internas tocadas: ' + Object.entries(tocadas).filter(([, v]) => v).map(([k]) => k).join(' | ') + '\nNo encontradas: ' + Object.entries(tocadas).filter(([, v]) => !v).map(([k]) => k).join(' | '))
 console.log(`\n${informe.length} combinaciones vista × formato con algo por revisar`)
