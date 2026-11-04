@@ -3027,7 +3027,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         return wrap(
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
             <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s={txtBorr||'rendir, pedir y enviar'} sM={misBorr.arm>0?`${misBorr.arm} borrador${misBorr.arm!==1?'es':''}`:(txtBorr||'rendir y pedir')} onClick={()=>{setQ('');const hay=misBorr.arm>0||rendicionesEnCurso(clients,expenses).length>0;setRendGrupo(hay?'env':null);setRendAbg(null);setRendSub('rendir')}}/>
-            <HubTile ic='tEspera' bg={C.soonBg} col={C.soonText} t='Esperando pago' s='fondos pedidos y su seguimiento' sM='fondos pedidos' onClick={()=>{setQ('');setRendGrupo('dep');setRendSub('rendir')}}/>
+            <HubTile ic='tEspera' bg={C.soonBg} col={C.soonText} t='Esperando depósito' tM='Esperando' s='rendido y en contra' sM='en contra' onClick={()=>{setQ('');setRendGrupo('dep');setRendSub('rendir')}}/>
             <HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/>
             <HubTile ic='mail' bg={C.soonBg} col={C.soonText} t='Solicitar fondos' s='pedir provisión' onClick={()=>onSolicitarFondos&&onSolicitarFondos()}/>
           </div>
@@ -4337,7 +4337,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
-    if(solRes&&(solRes.reg+solRes.esp+solRes.rec)>0){ const sr=solRes, pend=sr.reg>0; cards.push({t:'Solicitudes de fondos', tM:'Solicitudes', ic:'mail', s:pend?`${sr.reg} por registrar · ${sr.esp} esperando`:`${sr.esp} esperando · ${sr.rec} recibidas`, sM:pend?`${sr.reg} por registrar`:`${sr.esp} esperando`, sCol:pend?C.soonText:undefined, col:pend?C.soonText:C.accent, bg:pend?C.soonBg:C.azulBg, go:()=>setShowSolicitudes(true)}) }
+    if(solRes&&(solRes.reg+solRes.esp+solRes.rec)>0){ const sr=solRes, pend=sr.reg>0; cards.push({t:'Solicitudes de fondos', tM:'Solicitudes', ic:'mail', s:pend?`${sr.reg} por registrar · ${sr.esp} en curso`:`${sr.esp} en curso · ${sr.rec} recibidas`, sM:pend?`${sr.reg} por registrar`:`${sr.esp} en curso`, sCol:pend?C.soonText:undefined, col:pend?C.soonText:C.accent, bg:pend?C.soonBg:C.azulBg, go:()=>setShowSolicitudes(true)}) }
     if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
