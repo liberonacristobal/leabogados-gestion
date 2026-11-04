@@ -355,7 +355,7 @@ export function SolicitudesFondos({ clients = [], expenses = [], user, onOpenCli
     } catch (e) { registrarError({ origen: 'accion', vista: CLAVE, err: e }) }
     quita(it.id); setBusy(null)
   }
-  const selCli = f => <select value='' onChange={e => e.target.value && setEleg(p => ({ ...p, [f.it.id]: e.target.value }))} style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 6px', background: C.card, color: C.accent, maxWidth: 170 }}>
+  const selCli = f => <select value='' onChange={e => e.target.value && setEleg(p => ({ ...p, [f.it.id]: e.target.value }))} style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius:8, padding: '2px 6px', background: C.card, color: C.accent, maxWidth: 170 }}>
                   <option value=''>¿Qué cliente?</option>
                   {(clients || []).filter(c => !c.is_internal && c.status !== 'Terminado').sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
                 </select>

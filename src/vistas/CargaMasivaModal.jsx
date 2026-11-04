@@ -1139,10 +1139,10 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           <div onClick={()=>toggleCat(k)} style={{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',cursor:'pointer'}}>
             {isDeskCM&&<span style={{color:C.textSoft,fontSize:13,width:10,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span>}
             {iconSq(k,meta.col,meta.bg)}
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:C.text,letterSpacing:-.1}}>{meta.t}</div><div style={{fontSize:12,color:C.muted,marginTop:1}}>{meta.s}</div></div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,color:C.text,letterSpacing:-.1}}>{meta.t}</div><div style={{fontSize:12,color:C.muted,marginTop:1}}>{meta.s}</div></div>
             {isDeskCM
               ? <div style={{textAlign:'right',flexShrink:0,width:92}}><div style={{fontSize:14,fontWeight:800,color:info?C.muted:C.text,fontVariantNumeric:'tabular-nums',lineHeight:1.1}}>{k==='cambios'&&tot>0?'+':''}{fmt(tot)}</div><div style={{fontSize:10.5,color:meta.col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{rws.length} OT</div></div>
-              : <><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:15,fontWeight:800,color:meta.col,fontVariantNumeric:'tabular-nums',lineHeight:1}}>{rws.length}</div>{!info&&<div style={{fontSize:10,color:meta.col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>}</div>
+              : <><div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:meta.col,fontVariantNumeric:'tabular-nums',lineHeight:1}}>{rws.length}</div>{!info&&<div style={{fontSize:10,color:meta.col,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>}</div>
             <span style={{color:C.textSoft,fontSize:13,marginLeft:2,transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><Gl n='chevron'/></span></>}
           </div>
           {open&&<div style={{borderTop:`1px solid ${C.track}`,padding:'8px 14px 4px'}}>
@@ -1167,7 +1167,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   {isDeskCM ? (()=>{ const selR=g.rs.filter(notaSelOn).length; const allR=g.rs.filter(r=>(r.client_id||r.personal_de)&&!r.error&&!dupInfo[r.id]?.otState); const all=selR>0&&selR===allR.length; return (
                     <div style={{display:'grid',gridTemplateColumns:'16px 76px minmax(0,1fr) 92px',columnGap:10,alignItems:'center',padding:'8px 0',borderTop:`1px solid ${C.border}`,marginTop:4}}>
                       <span onClick={()=>setDeselNota(p=>{ const n=new Set(p); allR.forEach(r=>{ all?n.add(r.id):n.delete(r.id) }); return n })} title={all?'Desmarcar todo el cliente':'Marcar todo el cliente'} style={{cursor:'pointer',width:16,height:16,borderRadius:5,border:`1.5px solid ${selR?C.accent:C.done}`,background:all?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{all?<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:selR?<span style={{width:8,height:2,background:C.accent}}/>:null}</span>
-                      <span style={{gridColumn:'2 / 4',minWidth:0,fontSize:13,fontWeight:800,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}<span style={{fontSize:11,fontWeight:500,color:C.muted}}> · {g.rs.length} OT{selR!==g.rs.length?` · ${selR} de ${g.rs.length} marcadas`:''}</span></span>
+                      <span style={{gridColumn:'2 / 4',minWidth:0,fontSize:13,fontWeight:800,color:C.accent,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.name}<span style={{fontSize:11,fontWeight:400,color:C.muted}}> · {g.rs.length} OT{selR!==g.rs.length?` · ${selR} de ${g.rs.length} marcadas`:''}</span></span>
                       <span style={{textAlign:'right',fontSize:13,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(g.tt)}</span>
                     </div>) })() : (
                   <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 11px',background:C.accent,borderRadius:10,margin:'6px 0 8px'}}>
@@ -1444,8 +1444,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
         {resultado.otDupOmit>0&&<span style={{fontSize:11,color:'#8A5A12',background:C.soonBg,borderRadius:20,padding:'4px 11px'}}><b>{resultado.otDupOmit}</b> con OT ya cargada</span>}
       </div>
       {notaria&&resultado.nota&&<div style={{display:'flex',gap:8,marginBottom:14}}>
-        <div style={{flex:1,background:C.ambarBg,borderRadius:10,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por pagar a notaría</div><div style={{fontSize:15,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(resultado.nota.porPagar)}</div></div>
-        <div style={{flex:1,background:C.azulBg,borderRadius:10,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por rendir</div><div style={{fontSize:15,fontWeight:800,color:C.azulInfo}}>{resultado.nota.clientes} cliente{resultado.nota.clientes!==1?'s':''}</div></div>
+        <div style={{flex:1,background:C.ambarBg,borderRadius:10,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.soonText,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por pagar a notaría</div><div style={{fontSize:14,fontWeight:800,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(resultado.nota.porPagar)}</div></div>
+        <div style={{flex:1,background:C.azulBg,borderRadius:10,padding:'9px 10px',textAlign:'left'}}><div style={{fontSize:9,color:C.azulInfo,textTransform:'uppercase',letterSpacing:.3,fontWeight:600}}>Por rendir</div><div style={{fontSize:14,fontWeight:800,color:C.azulInfo}}>{resultado.nota.clientes} cliente{resultado.nota.clientes!==1?'s':''}</div></div>
       </div>}
       {resultado.sinCliente>0&&<div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.45}}>{notaria?<>Las <strong style={{color:C.text}}>{resultado.sinCliente} sin cliente</strong> quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong>. Resuélvelas ahí con el Asistente IA — la app aprende y no te las vuelve a preguntar.</>:<>Los gastos sin cliente quedaron en <strong style={{color:C.text}}>Gastos → "Sin cliente · por asignar"</strong> para que les asignes cliente cuando puedas.</>}</div>}
       {notaria&&resultado.imported>0&&onNavigate&&<div style={{textAlign:'left',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
@@ -1483,9 +1483,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               <div style={{fontSize:27,fontWeight:800,color:C.accent,letterSpacing:-.6,margin:'3px 0 8px',fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</div>
               {reconSolas>0&&<div style={{display:'inline-flex',alignItems:'center',gap:6,background:C.greenBg,borderRadius:20,padding:'4px 11px',marginBottom:9}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.4'><path d='M5 13l4 4L19 7'/></svg><span style={{fontSize:11,fontWeight:700,color:C.greenText}}>{reconSolas} de {val.length} reconocidas solas</span>{aprHoy>0&&<span style={{fontSize:11,color:C.greenText}}>· {aprHoy} aprendida{aprHoy!==1?'s':''} hoy</span>}</div>}
               <div style={{display:'flex',gap:10,borderTop:`1px solid ${C.track}`,paddingTop:9}}>
-                <div style={{flex:1}}><div style={{...SEC_LBL}}>A clientes</div><div style={{fontSize:15,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(rend)}</div></div>
-                <div style={{flex:1,borderLeft:`1px solid ${C.track}`,paddingLeft:10}}><div style={{...SEC_LBL}}>Sin asignar aún</div><div style={{fontSize:15,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(sinAsig)}</div></div>
-                {interno>0&&<div style={{flex:1,borderLeft:`1px solid ${C.track}`,paddingLeft:10}}><div style={{...SEC_LBL}}>Interno</div><div style={{fontSize:15,fontWeight:800,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{fmt(interno)}</div></div>}
+                <div style={{flex:1}}><div style={{...SEC_LBL}}>A clientes</div><div style={{fontSize:14,fontWeight:800,color:C.greenText,fontVariantNumeric:'tabular-nums'}}>{fmt(rend)}</div></div>
+                <div style={{flex:1,borderLeft:`1px solid ${C.track}`,paddingLeft:10}}><div style={{...SEC_LBL}}>Sin asignar aún</div><div style={{fontSize:14,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums'}}>{fmt(sinAsig)}</div></div>
+                {interno>0&&<div style={{flex:1,borderLeft:`1px solid ${C.track}`,paddingLeft:10}}><div style={{...SEC_LBL}}>Interno</div><div style={{fontSize:14,fontWeight:800,color:C.tealText,fontVariantNumeric:'tabular-nums'}}>{fmt(interno)}</div></div>}
               </div>
             </div>
           )})()}</> : null
@@ -1586,23 +1586,23 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>
                   {(r.requirente||r.materia)&&<div style={{fontSize:10,color:C.muted,marginBottom:6,lineHeight:1.4}}>{r.materia?<>Materia: <b style={{color:C.text}}>{r.materia}</b></>:''}{r.materia&&r.requirente?' · ':''}{r.requirente?<>Requirente: <b style={{color:C.text}}>{r.requirente}</b></>:''}</div>}
                   {dupInfo[r.id]?.otDup&&(()=>{ const e=dupInfo[r.id].otDup, st=dupInfo[r.id].otState; const otL=String(r.ot).toUpperCase().startsWith('OT')?String(r.ot).toUpperCase():'OT-'+r.ot; const cn=e.client_id?(clients.find(c=>String(c.id)===String(e.client_id))?.name||'el cliente'):'el cliente'
-                    if(st==='pagada') return <div style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la pagaste a la notaría{e.notaria_liquidado_at?` (liquidación del ${fmtFDMY(e.notaria_liquidado_at)})`:''}. Si te la re-cobran, no la pagues de nuevo.</div>
-                    if(st==='rendida') return <div style={{fontSize:11,fontWeight:700,color:C.coralText,background:'#FAECE7',border:'1px solid #E3C4B8',borderRadius:6,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la rendiste a {cn}{(e.client_rendered_at||e.rendered_at)?` (${fmtFDMY(e.client_rendered_at||e.rendered_at)})`:''}. Ya se cobró — revísala antes de cargar.</div>
-                    return <div style={{fontSize:11,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:6,padding:'5px 8px',marginBottom:6}}>{otL} ya cargada — se omite al importar (no se duplica).</div>
+                    if(st==='pagada') return <div style={{fontSize:11,fontWeight:700,color:C.overdueText,background:C.overdueBg,border:`1px solid ${C.overdue}`,borderRadius:8,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la pagaste a la notaría{e.notaria_liquidado_at?` (liquidación del ${fmtFDMY(e.notaria_liquidado_at)})`:''}. Si te la re-cobran, no la pagues de nuevo.</div>
+                    if(st==='rendida') return <div style={{fontSize:11,fontWeight:700,color:C.coralText,background:'#FAECE7',border:'1px solid #E3C4B8',borderRadius:8,padding:'6px 9px',marginBottom:6}}>Alarma · {otL} ya la rendiste a {cn}{(e.client_rendered_at||e.rendered_at)?` (${fmtFDMY(e.client_rendered_at||e.rendered_at)})`:''}. Ya se cobró — revísala antes de cargar.</div>
+                    return <div style={{fontSize:11,fontWeight:600,color:C.muted,background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',marginBottom:6}}>{otL} ya cargada — se omite al importar (no se duplica).</div>
                   })()}
-                  {dupInfo[r.id]?.manualDup&&!dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:6,padding:'5px 8px',marginBottom:6}}>¿Duplica un gasto cargado a mano? «{(dupInfo[r.id].manualDup.concept||'').slice(0,40)}» · {fmt(dupInfo[r.id].manualDup.amount)}. Revísalo antes de importar.</div>}
+                  {dupInfo[r.id]?.manualDup&&!dupInfo[r.id]?.otDup&&<div style={{fontSize:11,fontWeight:600,color:C.soonText,background:'#FEF6EE',border:'1px solid #F5E2CC',borderRadius:8,padding:'5px 8px',marginBottom:6}}>¿Duplica un gasto cargado a mano? «{(dupInfo[r.id].manualDup.concept||'').slice(0,40)}» · {fmt(dupInfo[r.id].manualDup.amount)}. Revísalo antes de importar.</div>}
                   <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={r.concepto} onChange={e=>editarCampo(r.id,'concepto',e.target.value)} placeholder='Concepto'
-                      style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
+                      style={{flex:'1 1 140px',minWidth:120,padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}/>
                     {tipo==='gasto'&&(
                       <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:'Otro'} onChange={e=>editarCampo(r.id,'categoria',e.target.value)}
-                        style={{flex:'0 0 auto',padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}>
+                        style={{flex:'0 0 auto',padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.text,outline:'none'}}>
                         {CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}
                       </select>
                     )}
                   </div>
                   {tipo==='gasto'&&proyCampo(r)&&<div style={{marginTop:6}}>{proyCampo(r)}</div>}
-                  {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
+                  {r.subconcepto&&<input value={r.subconcepto} onChange={e=>editarCampo(r.id,'subconcepto',e.target.value)} placeholder='Subconcepto' style={{width:'100%',marginTop:6,padding:'6px 8px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:12,background:'#fff',color:C.muted,outline:'none',boxSizing:'border-box'}}/>}
                   {/* ¿De quién es? — solo cuando no calzó un cliente externo (sin cliente u oficina): a un miembro (personal) o se deja para la oficina */}
                   {tipo==='gasto'&&!r.personal_de&&(!r.client_id||esOficinaCli(r.client_id))&&(
                     <div style={{marginTop:7}}>
@@ -1632,7 +1632,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                       <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',flexWrap:'wrap'}}>
                         <span style={{fontSize:12,color:C.normal,fontWeight:600,marginRight:'auto',display:'inline-flex',alignItems:'center',gap:6}}>{r.clientName}{(()=>{ const resp=clients.find(c=>c.id===r.client_id)?.abogado_responsable; if(!resp) return null; const pc=personChip(resp); return <span style={{fontSize:11,color:pc.color,fontWeight:700}}>{resp}</span> })()}</span>
                         {ents.length>1&&(
-                          <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)} style={{padding:'5px 7px',borderRadius:6,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
+                          <select value={r.entity_id||''} onChange={e=>editarCampo(r.id,'entity_id',e.target.value||null)} style={{padding:'5px 7px',borderRadius:8,border:`1px solid ${r.entity_id?C.border:C.soon}`,fontSize:11,background:'#fff',color:C.text,outline:'none',maxWidth:170}}>
                             <option value=''>Elegir razón social…</option>
                             {ents.map(en=><option key={en.id} value={en.id}>{en.name}</option>)}
                           </select>
@@ -1682,7 +1682,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
             }) })()}
           </div>
           </>)}</> : null
-  const cmSel = (rows&&notaria&&isDeskCM) ? (()=>{ const sel=(rows||[]).filter(notaSelOn); const t=sel.reduce((a,r)=>a+(r.monto||0),0); return <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,background:C.azulBg,borderRadius:10,padding:'9px 12px'}}><span style={{fontSize:11.5,fontWeight:600,color:C.azulInfo}}>Seleccionadas · {sel.length} OT</span><b style={{fontSize:15,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(t)}</b></div> })() : null
+  const cmSel = (rows&&notaria&&isDeskCM) ? (()=>{ const sel=(rows||[]).filter(notaSelOn); const t=sel.reduce((a,r)=>a+(r.monto||0),0); return <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,background:C.azulBg,borderRadius:10,padding:'9px 12px'}}><span style={{fontSize:11.5,fontWeight:600,color:C.azulInfo}}>Seleccionadas · {sel.length} OT</span><b style={{fontSize:14,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmt(t)}</b></div> })() : null
   // Modo conciliar (volver a cargar): 'resto' = info + pestañas Corregir/Nuevos con su lista + posibles + avisos; 'acc' = resumen y botones. Escritorio: acc al lateral.
   const concilUI = (part) => { if(!(modo==='conciliar'&&concil)) return null
 
@@ -1710,13 +1710,13 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   {kind==='act'&&it.via&&(()=>{ const c=it.via==='ot'?{l:'OT exacta',bg:C.greenBg,fg:C.greenText}:it.via==='fecha'?{l:'fecha + monto',bg:C.azulBg,fg:C.azulInfo}:((it.score||0)>=2?{l:'cliente + monto + glosa',bg:C.azulBg,fg:C.azulInfo}:{l:`glosa parcial · ${it.score||0} palabra${(it.score||0)!==1?'s':''}`,bg:C.ambarBg,fg:C.soonText}); return <div><span style={{display:'inline-block',marginTop:3,fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:c.bg,color:c.fg,whiteSpace:'nowrap'}}>calzó: {c.l}</span></div> })()}
                   {kind==='new'&&<div style={{marginTop:3,fontSize:10,color:C.greenText,fontWeight:600}}>Nuevo{r.categoria?` · ${r.categoria}`:''}{r.paid_by_client!==undefined?<span style={{color:r.paid_by_client?C.soonText:C.accent}}> · {r.paid_by_client?'pagó cliente':'caja chica'}</span>:''}</div>}
                   {(kind==='act'||kind==='new')&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:10,alignItems:'center',marginTop:5,flexWrap:'wrap'}}>
-                    <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:''} onChange={e=>editarCampo(r.id,'categoria',e.target.value)} style={{fontSize:10,padding:'3px 6px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,outline:'none'}}><option value=''>Categoría…</option>{CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                    <select value={CAT_OPCIONES.includes(r.categoria)?r.categoria:''} onChange={e=>editarCampo(r.id,'categoria',e.target.value)} style={{fontSize:10,padding:'3px 6px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.muted,outline:'none'}}><option value=''>Categoría…</option>{CAT_OPCIONES.map(c=><option key={c} value={c}>{c}</option>)}</select>
                     {kind==='act'&&candidatosDe(r).length>1&&<button onClick={()=>setMatchPick(matchPick===r.id?null:r.id)} style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>otro calce ({candidatosDe(r).length})</button>}
                     {kind==='act'&&<button onClick={()=>toggleForzar(r.id)} style={{fontSize:10,fontWeight:600,color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}>tratar como nuevo →</button>}
                     {kind==='new'&&forzarNuevo.has(r.id)&&<button onClick={()=>toggleForzar(r.id)} style={{fontSize:10,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline'}}><Gl n='chevL'/> volver a calzar</button>}
                   </div>}
                   {kind==='act'&&matchPick===r.id&&<div onClick={ev=>ev.stopPropagation()} style={{marginTop:5,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px',maxHeight:140,overflowY:'auto'}}>
-                    {candidatosDe(r).map(c=>{ const sel=String(c.id)===String(e.id); return <div key={c.id} onClick={()=>{ setConcilMatch(p=>({...p,[r.id]:c.id})); setMatchPick(null) }} style={{padding:'5px 7px',borderRadius:6,cursor:'pointer',background:sel?C.azulBg:'transparent',fontSize:10,color:C.text,lineHeight:1.35}}><b style={{color:C.text}}>{c.concept||'—'}</b><span style={{color:C.muted}}> · {c.category||'—'}{c.date?' · '+String(c.date).slice(0,10):''}{sel?' · actual':''}</span></div> })}
+                    {candidatosDe(r).map(c=>{ const sel=String(c.id)===String(e.id); return <div key={c.id} onClick={()=>{ setConcilMatch(p=>({...p,[r.id]:c.id})); setMatchPick(null) }} style={{padding:'5px 7px',borderRadius:8,cursor:'pointer',background:sel?C.azulBg:'transparent',fontSize:10,color:C.text,lineHeight:1.35}}><b style={{color:C.text}}>{c.concept||'—'}</b><span style={{color:C.muted}}> · {c.category||'—'}{c.date?' · '+String(c.date).slice(0,10):''}{sel?' · actual':''}</span></div> })}
                   </div>}
                   {kind==='sin'&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:7}}>
                     <div style={{flex:'1 1 150px',minWidth:0}}><AsignarClienteInline bill={{id:r.id}} clients={clients} onAssign={(_,cid)=>asignar(r.id,cid)} label='Asignar cliente'/></div>
@@ -1847,12 +1847,12 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
           {notaria&&archivoCorreo&&!cargando&&!rows&&<AutoClick sel="[data-analizar-correo='1']" clave={`analizar:${archivoCorreo.path||archivoCorreo.nombre||''}`}/>}
           {notaria&&archivoCorreo&&!cargando&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:12,border:`1px solid ${C.border}`,background:C.card,marginBottom:10}}>
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>Liquidación recibida por correo</div><div style={{fontSize:11.5,color:C.textSoft,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{archivoCorreo.nombre}</div></div>
-            <button data-analizar-correo='1' onClick={async()=>{ try{ const {data,error}=await supabase.storage.from('documentos').download(archivoCorreo.path); if(error||!data) throw (error||new Error('sin archivo')); await onFile({target:{files:[new File([data],archivoCorreo.nombre,{type:data.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}}) }catch(e){ appAlert('No se pudo abrir el archivo del correo: '+(e.message||e)) } }} style={{fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Analizar</button>
+            <button data-analizar-correo='1' onClick={async()=>{ try{ const {data,error}=await supabase.storage.from('documentos').download(archivoCorreo.path); if(error||!data) throw (error||new Error('sin archivo')); await onFile({target:{files:[new File([data],archivoCorreo.nombre,{type:data.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})]}}) }catch(e){ appAlert('No se pudo abrir el archivo del correo: '+(e.message||e)) } }} style={{fontSize:13,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}}>Analizar</button>
           </div>}
           {notaria
             ? <label style={{display:'block',padding:'26px 24px',borderRadius:12,border:`2px dashed ${C.border}`,textAlign:'center',cursor:'pointer',background:C.bgPanel,marginBottom:12}}>
                 <input type='file' accept='.xlsx,.xls' onChange={onFile} style={{display:'none'}}/>
-                <div style={{fontSize:15,color:C.accent,fontWeight:700}}>{cargando?'Leyendo…':'Cargar Excel de notaría'}</div>
+                <div style={{fontSize:14,color:C.accent,fontWeight:700}}>{cargando?'Leyendo…':'Cargar Excel de notaría'}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:3}}>.xlsx · categoría Notaría automática</div>
               </label>
             : <div style={{display:'flex',gap:9,marginBottom:12}}>
