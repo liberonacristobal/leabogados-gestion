@@ -426,14 +426,14 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
       <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <div style={{...SEC_LBL,padding:'10px 14px 6px'}}>Gastos a liquidar · período {periodoDeGastos(gastosSel)}</div>
         {grupos.map(([cn,gs])=>(<div key={cn}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'8px 14px 4px',borderTop:`1px solid ${C.track}`}}><span style={{fontSize:12.5,fontWeight:700,color:C.accent}}>{cn}</span><span style={{fontSize:12,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(gs.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'8px 14px 4px',borderTop:`1px solid ${C.track}`}}><span style={{fontSize:13,fontWeight:700,color:C.accent}}>{cn}</span><span style={{fontSize:12,fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(gs.reduce((a,e)=>a+(e.amount||0),0))}</span></div>
           {gs.map(e=>(<div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 22px',fontSize:12}}>
             <span style={{width:74,flexShrink:0,color:C.muted,fontSize:11}}>{fmtFechaDMY(e.date)}</span>
             <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:C.text}}>{e.concept||'—'}<span style={{color:C.muted}}> · {catLabel(e.category)}</span></span>
             <span style={{fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmtCLP(e.amount)}</span>
           </div>))}
         </div>))}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.bgSoft,padding:'10px 14px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Total · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span><span style={{fontSize:15,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(totalLiq)}</span></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:C.bgSoft,padding:'10px 14px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,fontWeight:700,color:C.text}}>Total · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span><span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(totalLiq)}</span></div>
       </div>)
     const panel = (
       <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -472,7 +472,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
       )}
       {/* ── Asistente IA de liquidación (modal centrado; no cierra al tocar fuera) ── */}
       {asistOpen&&(
-        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:44,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:500,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
+        <Modal title='Asistente de liquidación' fullscreenOnMobile closeOnBackdrop={false} onClose={()=>setAsistOpen(false)} footer={<button onClick={()=>seleccionarListos(true)} disabled={!asistFindings||!asistFindings.listos.length} style={{width:'100%',height:44,background:(!asistFindings||!asistFindings.listos.length)?C.done:C.accent,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,cursor:(!asistFindings||!asistFindings.listos.length)?'default':'pointer'}}>Confirmar los listos</button>}>
             <div style={{margin:'-14px -16px'}}>
               {asistBusy&&(
                 <div style={{padding:'40px 20px',textAlign:'center',color:C.muted,fontSize:13}}>Revisando tus gastos pendientes…</div>
@@ -491,7 +491,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                     <div style={{padding:'13px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,background:C.greenBg,borderBottom:`1px solid ${C.border}`}}>
                       <div>
                         <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:.4,color:C.greenText,fontWeight:600}}>Listos para liquidar</div>
-                        <div style={{fontSize:16,fontWeight:500,color:C.greenText,marginTop:2}}>{listos.length} gasto{listos.length!==1?'s':''} · {fmtCLP(totListos)}</div>
+                        <div style={{fontSize:16,fontWeight:600,color:C.greenText,marginTop:2}}>{listos.length} gasto{listos.length!==1?'s':''} · {fmtCLP(totListos)}</div>
                       </div>
                       <button onClick={()=>seleccionarListos(false)} style={{height:24,padding:'0 14px',background:C.greenText,color:'#fff',border:'none',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Seleccionar</button>
                     </div>
@@ -599,12 +599,12 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
           {pendientes.length===0&&<div style={{color:C.textSoft,textAlign:'center',padding:36,fontSize:13}}>{pettyQ?'Sin resultados para la búsqueda':'No tienes gastos pendientes de liquidar'}</div>}
           {isDesktop && pendientes.length>0 ? (
             /* Escritorio: tabla (misma fuente `pendientes`, misma selección). Móvil: filas de abajo, intactas. */
-            <div style={{padding:'0 14px'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,tableLayout:'fixed'}}>
+            <div style={{padding:'0 14px'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed'}}>
               <colgroup><col style={{width:30}}/><col style={{width:88}}/><col/><col style={{width:66}}/><col style={{width:84}}/></colgroup>
               <thead><tr>{['','Fecha','Concepto · cliente','Categoría','Monto'].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i===4?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
               <tbody>{pendientes.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
                 <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
-                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:6,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
+                  <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:8,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={e.concept||''}>{e.concept||'—'}</div><div style={{fontSize:11.5,marginTop:1,display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</span>{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</div></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`}}>{e.category?<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,fontWeight:700,background:bdg.bg,color:bdg.color,whiteSpace:'nowrap'}}>{catLabel(e.category)}</span>:<span style={{fontSize:10,color:C.soon,fontWeight:600}}>sin categoría</span>}</td>
@@ -617,7 +617,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
             const bdg=catBadge(e.category)
             return (
               <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
-                <div style={{width:17,height:17,borderRadius:6,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
+                <div style={{width:17,height:17,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
                 {bigDate(e.date)}
@@ -713,7 +713,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
             {cajasOrd.map((p,i)=>{ const activa=i===0&&!p.rendered_at; const editable=!p.rendered_at&&(isAdmin||(!p.movimiento_id&&!_ccEsAjuste(p))); return (
               <div key={p.id} onClick={editable?()=>{ setEditCajaId(p.id); setNewMonto(String(p.amount||'')); setNewNota(p.notes||''); setNewFecha((p.delivered_at||new Date().toISOString()).slice(0,10)); setCajaOtra(true); setNewDeliveredBy(p.delivered_by||adminNombres[0]||''); setShowNuevaCaja(true) }:undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 0',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:editable?'pointer':'default'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{diaGrande(p.delivered_at)}<div style={{minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:500,color:C.text}}>{p.delivered_by?`De ${p.delivered_by}`:'Caja recibida'}{p.notes&&!String(p.notes).startsWith('Abono caja chica')&&!String(p.notes).startsWith('Registrada desde')?<span style={{color:C.muted}}> · {_ccNotaVisible(p.notes)}</span>:null}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.text}}>{p.delivered_by?`De ${p.delivered_by}`:'Caja recibida'}{p.notes&&!String(p.notes).startsWith('Abono caja chica')&&!String(p.notes).startsWith('Registrada desde')?<span style={{color:C.muted}}> · {_ccNotaVisible(p.notes)}</span>:null}{editable&&<span style={{fontSize:10,color:C.accent,fontWeight:600,marginLeft:7}}>Editar</span>}</div>
                   {(()=>{ const d=p.delivered_at?_ccDias(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),p.delivered_at):0; const ajuste=_ccEsAjuste(p); const sinBanco=!ajuste&&!p.movimiento_id&&!p.rendered_at&&d>=5
                     const tm=p.movimiento_id&&misTransf.find(m=>m.id===p.movimiento_id); const tf=tm?(_glosaTransf(tm.descripcion).fecha||tm.fecha):null
                     return <div style={{fontSize:10,fontWeight:600,marginTop:1,color:p.movimiento_id?C.greenText:ajuste?C.muted:sinBanco?C.overdueText:C.soonText}}>{ajuste&&!p.movimiento_id?'ajuste de caja · sin transferencia':p.movimiento_id?(tf?`transferencia del ${fmtFechaDMY(tf)} conciliada ✓`:<>transferencia conciliada{" "}<Gl n='tick'/></>):sinBanco?`sin transferencia en el banco · ${nDias(d)}`:'transferencia por conciliar'}</div> })()}
@@ -737,9 +737,9 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
               return (
               <div key={r.id} style={{borderBottom:`0.5px solid ${C.bgSoft}`}}>
                 <div onClick={()=>setOpenRendicion(isOpen?null:r.id)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',cursor:'pointer'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{bigDate(r.created_at)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.textSoft,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
+                  <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>{bigDate(r.created_at)}<div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>{r.periodo}</div><div style={{fontSize:10,color:C.textSoft,marginTop:1}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}</div></div></div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:12,fontWeight:500,color:C.muted}}>{fmtCLP(r.total)}</span>
+                    <span style={{fontSize:12,fontWeight:400,color:C.muted}}>{fmtCLP(r.total)}</span>
                     <span style={{fontSize:11,color:C.textSoft,transform:isOpen?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}><Gl n='chevD'/></span>
                   </div>
                 </div>
@@ -752,7 +752,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                           <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.concept||'—'}</div>
                           <div style={{fontSize:10,color:C.textSoft,marginTop:1}}>{cl?cl.name+' · ':''}{e.date?fmtD(e.date):''}{e.category?' · '+catLabel(e.category):''}</div>
                         </div>
-                        <div style={{fontSize:12,fontWeight:500,color:C.overdue,flexShrink:0}}>{fmtCLP(e.amount)}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:C.overdue,flexShrink:0}}>{fmtCLP(e.amount)}</div>
                       </div>
                     )})}
                     <div style={{display:'flex',gap:8,marginTop:10}}>
@@ -765,12 +765,12 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                         Object.entries(porCliente).forEach(([cn,gs])=>{ const tot=gs.reduce((a,e)=>a+(e.amount||0),0); html+=`<div class='section-title'>${cn} — ${fmtN(tot)}</div><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th style='text-align:right'>Monto</th></tr></thead><tbody>`; gs.forEach(e=>{ html+=`<tr><td>${e.date||'—'}</td><td>${e.category||'Otro'}</td><td>${e.concept||'—'}</td><td style='text-align:right;font-weight:600;color:#E24B4A'>-${fmtN(e.amount)}</td></tr>` }); html+=`</tbody><tfoot><tr><td colspan='3'>TOTAL ${cn.toUpperCase()}</td><td style='text-align:right;color:#E24B4A'>-${fmtN(tot)}</td></tr></tfoot></table>` })
                         html+=`<div class='footer'><span>${BRAND.nombre}</span><span>${r.user_name} · ${r.periodo}</span><span>CONFIDENCIAL</span></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / PDF</button></body></html>`
                         const w=window.open('','_blank'); w.document.write(html); w.document.close()
-                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.accent,fontSize:11,fontWeight:500,cursor:'pointer'}}>PDF</button>
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer'}}>PDF</button>
                       <button onClick={()=>{
                         const a2=encodeURIComponent('Liquidación caja chica — '+r.user_name+' — '+r.periodo)
                         const b2=encodeURIComponent('Estimados,\n\nEspero que estén muy bien. Adjunto la liquidación de caja chica.\n\nResponsable: '+r.user_name+'\nPeríodo: '+r.periodo+'\nGastos: '+gastosR.length+'\nTotal: $'+r.total.toLocaleString('es-CL'))
                         const mailLink=document.createElement('a'); mailLink.href='mailto:'+adminEmails.join(',')+'?subject='+a2+'&body='+b2; mailLink.click()
-                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.muted,fontSize:11,fontWeight:500,cursor:'pointer'}}>Correo</button>
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E4E8EB',background:C.bgSoft,color:C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>Correo</button>
                       <button onClick={async()=>{
                         if(!await appConfirm('¿Reabrir esta liquidación? Los gastos vuelven a pendientes para que puedas editarla y rehacerla, o dejarla anulada.')) return
                         try {
@@ -781,7 +781,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                           if(setExpenses) setExpenses(p=>p.map(e=>e.render_id===r.id?{...e,rendered_at:null,render_id:null,rendered_by:null}:e))
                           setOpenRendicion(null)
                         } catch(err) { appAlert('Error: '+err.message) }
-                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:C.overdue,fontSize:11,fontWeight:500,cursor:'pointer'}}>Reabrir</button>
+                      }} style={{flex:1,height:34,borderRadius:8,border:'0.5px solid #E24B4A',background:'transparent',color:C.overdue,fontSize:11,fontWeight:600,cursor:'pointer'}}>Reabrir</button>
                     </div>
                   </div>
                 )}
@@ -815,7 +815,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
               <div style={{marginBottom:16}}>
                 <div style={lbl}>Monto</div>
                 <div style={{display:'flex',alignItems:'center',gap:6,background:C.bgSoft,border:'0.5px solid #E4E8EB',borderRadius:10,padding:'12px 14px'}}>
-                  <span style={{fontSize:20,fontWeight:500,color:C.textSoft}}>$</span>
+                  <span style={{fontSize:20,fontWeight:400,color:C.textSoft}}>$</span>
                   <input value={newMonto} onChange={e=>setNewMonto(e.target.value.replace(/\D/g,''))} inputMode='numeric' placeholder='0' style={{flex:1,border:'none',background:'none',fontSize:22,fontWeight:600,color:C.text,outline:'none',width:'100%'}}/>
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>
