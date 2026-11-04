@@ -173,6 +173,48 @@ async function avisar(dryRun: boolean) {
   return { malas: malas.length, avisados: tocan.length, enviado: true };
 }
 
+// Vigilancia de la conexión de la OFICINA (drive_auth: fila 1 = el correo y Drive que leen boletas, notaría y contadora; fila 2 = calendario).
+// Avisa a los socios, por correo y teléfono, cuando (a) el dueño de una fila no es el registrado (alguien la escribió por otra vía), (b) el
+// dueño cambió a propósito en las últimas 24 h, o (c) Google rechaza el permiso de la fila. Se repite cada ~20 h hasta que se arregle.
+async function vigilarOficina(dryRun: boolean) {
+  const filas = await sbJson("drive_auth?select=id,email,refresh_token&order=id.asc") as Fila[];
+  const regRow = (await sbJson("learnings?select=id,value&kind=eq.config&key=eq.drive_auth_duenos").catch(() => []))?.[0];
+  let reg: Record<string, string> = {}; try { reg = JSON.parse(String(regRow?.value || "{}")); } catch { reg = {}; }
+  const problemas: { clave: string; texto: string }[] = [];
+  for (const f of filas) {
+    const dueno = String(f.email || "").toLowerCase(), esperado = String(reg[String(f.id)] || "").toLowerCase();
+    if (esperado && dueno !== esperado) problemas.push({ clave: `dueno-${f.id}`, texto: `La conexión ${f.id === 1 ? "del correo y Drive de la oficina" : "del calendario"} es de ${dueno} y debía ser de ${esperado}.` });
+    try { await accessToken(String(f.refresh_token)); }
+    catch (e) { if (e instanceof ErrorGoogle && e.permiso) problemas.push({ clave: `permiso-${f.id}`, texto: `Google rechazó el permiso de la conexión ${f.id === 1 ? "del correo y Drive de la oficina" : "del calendario"} (${dueno}).` }); }
+  }
+  const desde = new Date(Date.now() - 24 * 3600000).toISOString();
+  const cambios = await sbJson(`activity_log?action=eq.drive.conexion_cambiada&created_at=gte.${desde}&select=detail,created_at`).catch(() => []);
+  for (const c of cambios) { let d: Fila = {}; try { d = JSON.parse(String(c.detail || "{}")); } catch { d = {}; } problemas.push({ clave: `cambio-${String(c.created_at).slice(0, 13)}`, texto: `La conexión ${d.fila === 1 ? "del correo y Drive de la oficina" : "del calendario"} pasó de ${d.de} a ${d.a}.` }); }
+  const blq = await sbJson(`activity_log?action=eq.drive.conexion_bloqueada&created_at=gte.${desde}&select=detail`).catch(() => []);
+  if (blq.length) problemas.push({ clave: "bloqueos", texto: `Se rechazaron ${blq.length} intento(s) de reemplazar la conexión del correo de la oficina por otra cuenta (protección activa).` });
+  if (!problemas.length) return { problemas: 0, enviado: false };
+  const cfgAv = (await sbJson("learnings?select=id,value&kind=eq.config&key=eq.drive_auth_avisos").catch(() => []))?.[0];
+  let av: Record<string, string> = {}; try { av = JSON.parse(String(cfgAv?.value || "{}")); } catch { av = {}; }
+  const ahora = Date.now();
+  const tocan = problemas.filter((p) => !av[p.clave] || ahora - +new Date(av[p.clave]) > 20 * 3600000);
+  if (!tocan.length) return { problemas: problemas.length, enviado: false, motivo: "ya avisado" };
+  const on = String((await sbJson("learnings?select=value&kind=eq.config&key=eq.gmail_lectura_avisos").catch(() => []))?.[0]?.value || "off").trim().toLowerCase() === "on";
+  if (!on || dryRun) return { problemas: problemas.length, enviado: false, motivo: dryRun ? "dry-run pedido" : "interruptor apagado", detalle: tocan.map((p) => p.texto) };
+  const eq = await cargarEquipo(SB_URL, SB_KEY);
+  const socios: string[] = eq.socios.map((m: { email: string }) => m.email);
+  const miembros = await sbJson("miembros?select=email,nombre");
+  const lista = tocan.map((p) => `<li style="margin:0 0 4px;">${p.texto}</li>`).join("");
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#ECEFF1;margin:0;padding:22px 12px;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;"><div style="background:#003C50;padding:20px 28px;text-align:center;color:#fff;font-size:15px;font-weight:700;">${ESTUDIO}</div><div style="padding:26px;font-size:14px;color:#3D3D3D;line-height:1.6;"><p style="margin:0 0 12px;">${holaEquipo(socios, miembros)}</p><p style="margin:0 0 8px;">Hay que revisar la conexión del correo de la oficina:</p><ul style="margin:0 0 12px;padding-left:18px;">${lista}</ul></div></div></body></html>`;
+  const smtp = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
+  try { await smtp.send({ from: `${ESTUDIO} <${GMAIL_USER}>`, to: socios, subject: "Revisar la conexion del correo de la oficina", content: "Ver el contenido en formato HTML.", html: qpSafe(html) }); } finally { await smtp.close().catch(() => null); }
+  await enviarPush(SB_URL, SB_KEY, socios, { titulo: "Revisar la conexión del correo de la oficina", cuerpo: tocan[0].texto.slice(0, 140), etiqueta: "drive-auth" }, "sistema").catch(() => null);
+  for (const p of tocan) av[p.clave] = new Date().toISOString();
+  const val = JSON.stringify(av);
+  if (cfgAv?.id) await sb(`learnings?id=eq.${cfgAv.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ value: val }) });
+  else await sb("learnings", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ kind: "config", key: "drive_auth_avisos", value: val, estudio_id: "lea" }) });
+  return { problemas: problemas.length, enviado: true };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const body = await req.json().catch(() => ({}));
@@ -185,7 +227,8 @@ Deno.serve(async (req) => {
       const res: Record<string, string> = {};
       for (const c of cons) { const r = await leerBuzon(c, datos, !!body.dryRun); res[c.email] = r.ok ? "ok" : (r.revocada ? "revocada" : "error: " + r.error); }
       const av = await avisar(!!body.dryRun);
-      return json({ ok: true, buzones: cons.length, res, avisos: av });
+      const ofi = await vigilarOficina(!!body.dryRun).catch((e) => ({ error: String((e as Error).message || e) }));   // si la vigilancia falla, se ve en la respuesta de la corrida
+      return json({ ok: true, buzones: cons.length, res, avisos: av, oficina: ofi }, (ofi as Fila).error ? 500 : 200);   // 500 = la vigilancia de la oficina falló: Procesos lo ve (no queda en silencio)
     }
     // ── Persona con sesión ──
     const email = await usuario(req);

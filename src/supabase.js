@@ -65,8 +65,12 @@ export const signInWithMagicLink = (email) =>
 // Conexión PERMANENTE de Drive: prompt:consent fuerza a Google a emitir un refresh_token,
 // que capturamos en onAuthChange y guardamos en drive_auth. Desde ahí la edge function `drive`
 // renueva el acceso sola, sin reconectar nunca.
-export const connectDrivePermanente = () =>
-  supabase.auth.signInWithOAuth({
+// cambiarDueno: SOLO desde «Conectar Drive» del menú (decisión a propósito de quién es el dueño de la conexión de la oficina). Sin eso, el servidor
+// solo acepta el permiso de quien ya es el dueño (calendario-conectar): un permiso de otra persona no reemplaza la conexión del correo de la oficina.
+export const connectDrivePermanente = async (cambiarDueno = false) => {
+  let quien = ''; try { quien = (await supabase.auth.getSession())?.data?.session?.user?.email || '' } catch (_) {}
+  try { if (cambiarDueno) localStorage.setItem('conectar_drive', Date.now() + '|' + quien.toLowerCase()); else localStorage.removeItem('conectar_drive') } catch (_) {}
+  return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       queryParams: { hd: BRAND.emailDominio, access_type: 'offline', prompt: 'consent' },
@@ -74,6 +78,7 @@ export const connectDrivePermanente = () =>
       redirectTo: window.location.origin,
     },
   })
+}
 
 // Calendario del estudio: conexión APARTE de la de Drive/Gmail (no toca la fila id=1). Se entra con la cuenta dueña del calendario
 // (contacto@) y el refresh token queda en la fila id=2, que usa la sincronización con Google Calendar.
@@ -96,10 +101,11 @@ export const saveCalendarioRefresh = async (refresh_token, email) => {
   try { const { data, error } = await supabase.functions.invoke('calendario-conectar', { body: { refresh_token } }); return !error && !!data?.ok } catch (_) { return false }
 }
 
-export const saveDriveRefresh = async (refresh_token, email) => {
+// Devuelve true si se guardó; {protegida, dueno} si el servidor la rechazó porque la conexión es de otra persona; false si falló.
+export const saveDriveRefresh = async (refresh_token, email, explicito = false) => {
   if (!refresh_token) return false
   // drive_auth solo admite escritura del servidor: se guarda por la función calendario-conectar (destino drive = fila 1).
-  try { const { data, error } = await supabase.functions.invoke('calendario-conectar', { body: { refresh_token, destino: 'drive' } }); return !error && !!data?.ok } catch (_) { return false }
+  try { const { data, error } = await supabase.functions.invoke('calendario-conectar', { body: { refresh_token, destino: 'drive', explicito } }); if (data?.protegida) return { protegida: true, dueno: data.dueno }; return !error && !!data?.ok } catch (_) { return false }
 }
 
 // «Mi Gmail»: conexión de lectura de los correos ENVIADOS de cada persona. prompt:consent fuerza a Google a emitir un refresh token, que al volver se
