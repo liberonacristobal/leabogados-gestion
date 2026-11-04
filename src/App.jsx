@@ -1809,8 +1809,8 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
             {g.map((x,i)=><div key={i} style={{minWidth:0,...(!isDesktop&&g.length%2&&i===g.length-1?{gridColumn:'1 / -1'}:{})}}>{x}</div>)}</div> })()}
       </> })()}
 
-    {sub==='costos' && <Modal fullscreenOnMobile title='Costos de Oficina' maxWidth={760} onClose={()=>setSub(null)}><CostosOficinaModal expenses={expenses} clients={clients}/></Modal>}
-    {sub==='compras' && <Modal fullscreenOnMobile title='Compras · IVA' maxWidth={620} onClose={()=>setSub(null)}><ComprasModal compras={comprasRows} proveedores={proveedores} onSaveProveedor={onSaveProveedor} isDesktop={isDesktop}/></Modal>}
+    {sub==='costos' && <PaginaSobre origen='Oficina' titulo='Costos de Oficina' onBack={()=>setSub(null)} maxW={900}><CostosOficinaModal expenses={expenses} clients={clients}/></PaginaSobre>}
+    {sub==='compras' && <PaginaSobre origen='Oficina' titulo='Compras · IVA' onBack={()=>setSub(null)} maxW={900}><ComprasModal compras={comprasRows} proveedores={proveedores} onSaveProveedor={onSaveProveedor} isDesktop={isDesktop}/></PaginaSobre>}
   </div>)
 }
 function EstadoResultadosModal({ billing=[], costosOfiRows=[], terceros=[], expenses=[], clients=[], isDesktop=false, onOpenProveedor, onOpenFactura, onOpenResultadoAnio, onOpenSubarriendo }){
@@ -2348,7 +2348,7 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
   const fl={fontSize:10,fontWeight:600,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:5,display:'block'}
   const confirmar=async()=>{ if(!sel.size) return; setBusy(true); await onConfirm({cuotaIds:[...sel],invoice_no:invoiceNo.trim()||null,issued_at:issued}); setBusy(false); onClose() }
   return (
-    <Modal title={<><span style={{color:C.accent}}>Asignar a 1 factura</span><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false}>
+    <PaginaSobre origen='Anticipo' titulo='Asignar a 1 factura' ctx={cliName} onBack={onClose} maxW={640}>
       {programadas.length===0?(
         <div style={{fontSize:12,color:C.muted,textAlign:'center',padding:'18px 0'}}>Este cliente no tiene cuotas programadas para consolidar.</div>
       ):(<>
@@ -2373,7 +2373,7 @@ function AsignarConsolidadoModal({anticipo,billing=[],sales=[],clients=[],onConf
           <button disabled={busy||!sel.size} onClick={confirmar} style={{flex:2,height:44,borderRadius:10,border:'none',background:(sel.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(sel.size&&!busy)?'pointer':'default'}}>{busy?'Asignando…':'Asignar y anular programadas'}</button>
         </div>
       </>)}
-    </Modal>
+    </PaginaSobre>
   )
 }
 
@@ -2411,7 +2411,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
   const lbl={fontSize:11,color:C.muted,width:62,flexShrink:0}
   const papelera=(dispo&&onLiberar)?<button title='Eliminar anticipo' onClick={async()=>{ if(await appConfirm(esBanco?'¿Eliminar este anticipo? El movimiento bancario vuelve a "por conciliar".':'¿Eliminar este anticipo? Se borra del registro.')){ onLiberar(a); onClose() } }} style={{background:'none',border:'none',cursor:'pointer',color:C.overdue,display:'inline-flex',alignItems:'center',padding:2}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'/></svg></button>:null
   return (
-    <Modal title={<><span style={{color:C.accent}}>Anticipo</span><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{cliName}</span></>} onClose={onClose} closeOnBackdrop={false} titleRight={papelera}>
+    <PaginaSobre origen='Facturación' titulo='Anticipo' ctx={cliName} onBack={onClose} maxW={760}><div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>{papelera}</div>
       <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
         {bigDate(a.fecha)}
         <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',minWidth:0}}>
@@ -2471,7 +2471,7 @@ function AnticipoPanel({anticipo,clients=[],clientEntities=[],sales=[],billing=[
         {facturasAbiertas.length>0&&<button disabled={!selFacs.size||busy} onClick={asignar} style={{width:'100%',height:44,borderRadius:10,border:'none',background:(selFacs.size&&!busy)?C.accent:C.done,color:'#fff',fontSize:13,fontWeight:600,cursor:(selFacs.size&&!busy)?'pointer':'default',marginTop:10}}>{busy?'Asignando…':(selFacs.size>1?`Guardar · ${selFacs.size} facturas`:'Guardar asignación')}</button>}
         {onReclasificar&&<div style={{marginTop:12,paddingTop:9,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>¿Era un gasto? <span onClick={()=>onReclasificar(a)} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>Reclasificar a Fondo por rendir</span></div>}
       </>}
-    </Modal>
+    </PaginaSobre>
   )
 }
 
@@ -5984,7 +5984,7 @@ export default function App() {
   // salten a la página sin tocarlos: misma página → cambia de estado (ver→editar→terminar, con `prev` para volver); otra → navTo apila y salta.
   // setModal(null) estando en la página = volver al estado anterior o al lugar exacto (goBack). Guard contra doble cierre (pageClosingRef).
   const setModal=useCallback((m)=>{
-    const PAGE_OF={users:'flujo',roles:'flujo',modulos:'flujo',papelera:'flujo',aprendizaje:'flujo',redProfesional:'flujo',coberturaSII:'flujo',porSocio:'flujo',pdfupload:'flujo',drive:'flujo',importExcel:'flujo',gmailContactos:'flujo',gmailTareas:'flujo',rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
+    const PAGE_OF={conciliaHub:'flujo',users:'flujo',roles:'flujo',modulos:'flujo',papelera:'flujo',aprendizaje:'flujo',redProfesional:'flujo',coberturaSII:'flujo',porSocio:'flujo',pdfupload:'flujo',drive:'flujo',importExcel:'flujo',gmailContactos:'flujo',gmailTareas:'flujo',rechazoMotivo:'flujo',primerasTareas:'flujo',task:'tarea',taskPreview:'tarea',cierreTarea:'tarea',gastos:'gasto',fondo:'gasto',expenseEdit:'gasto',entregarCaja:'gasto',cargaMasiva:'flujo',report:'flujo',redaccion:'flujo',plazos:'flujo',revisionDatos:'flujo',notificaciones:'flujo',solicitarFondos:'flujo',sale:'flujo',ajuste:'flujo',conciliar:'flujo',clienteDrive:'flujo',fusionarClientes:'flujo',billing:'factura'}
     const pg=m&&m.type?PAGE_OF[m.type]:null
     if(pg){ _setModal(null); pageClosingRef.current=false
       if(tab===pg&&pg!=='flujo'&&pg!=='factura'){ setPagina(p=>({...m,prev:(p&&p.type!==m.type)?{...p,prev:null}:null})); setTimeout(()=>restoreScroll({w:0,d:0}),0) }
@@ -6004,7 +6004,7 @@ export default function App() {
       if(tipo==='cliente') handleOpenClientFicha(x.id); else setModal({type:{venta:'sale',factura:'billing',gasto:'expenseEdit',tarea:'task',rechazo:'rechazoMotivo',primeras:'primerasTareas'}[tipo],data:x}); return true }
     window.__demo={navTo,setModal,setTab,goBack,cargarPdfjs,cargarMammoth,abrir,deshacer:msg=>setUndoToast({msg,onUndo:()=>{}})} },[navTo,setModal,goBack,clients,sales,billing,expenses,tasks,proyectosCartera,handleOpenClientFicha])
   useEffect(()=>{ pageClosingRef.current=false },[tab,pagina])
-  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',users:'Gestión de usuarios',roles:'Roles y permisos',modulos:'Módulos de la oficina',papelera:'Papelera',aprendizaje:'Lo que aprendí',redProfesional:'Red profesional',coberturaSII:'Cobertura SII',porSocio:'Por socio',pdfupload:'Subir facturas PDF',drive:'Importar desde Drive',importExcel:'Importar Excel',gmailContactos:'Revisar Gmail',gmailTareas:'Revisar Gmail',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
+  const FLUJO_TIT={cargaMasiva:'Carga masiva',report:'Generar reporte',redaccion:'Redactar con IA',plazos:'Plazos y obligaciones',revisionDatos:'Revisión de datos',solicitarFondos:'Solicitar fondos',sale:'Venta',ajuste:'Ajustar saldo',conciliar:'Duplicados',clienteDrive:'Sincronización con Drive',fusionarClientes:'Fusionar clientes',conciliaHub:'Conciliación',users:'Gestión de usuarios',roles:'Roles y permisos',modulos:'Módulos de la oficina',papelera:'Papelera',aprendizaje:'Lo que aprendí',redProfesional:'Red profesional',coberturaSII:'Cobertura SII',porSocio:'Por socio',pdfupload:'Subir facturas PDF',drive:'Importar desde Drive',importExcel:'Importar Excel',gmailContactos:'Revisar Gmail',gmailTareas:'Revisar Gmail',rechazoMotivo:'Rechazar propuesta',primerasTareas:'Primeras tareas'}
   const origenLim = navStack[navStack.length-1]?.tab==='cartera' ? 'Mi cartera' : null   // en el limitado la pestaña se llama «Mi cartera»
   const origenNav=(fb)=>{ const t=navStack[navStack.length-1]; if(!t) return fb; if(t.tab==='flujo') return FLUJO_TIT[t.pagina?.type]||fb; if(t.tab==='tarea') return 'Tarea'; if(t.tab==='factura') return 'Factura'; if(t.tab==='gasto') return 'Gastos'; return TAB_LABELS[t.tab]||fb }
   // Página abierta desde la ficha de un cliente → '‹ cliente'; si no, el origen de siempre.
@@ -8742,7 +8742,7 @@ export default function App() {
         <BottomNav tab={tab} setTab={irRaiz} overdueN={overdueN} userRole={userRole}/>
 
         {/* 'rechazoMotivo' / 'primerasTareas' ya NO son modales: páginas 'flujo'. */}
-        {modal?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
+        {tab==='flujo'&&pagina?.type==='conciliaHub'&&(()=>{ const mesA=new Date().toISOString().slice(0,7)
           // Contador de Duplicados = facturas (programadas emitidas + copias/folios repetidos) + anticipos a mano que calzan con el banco.
           const _bankAnt=new Set((conciliacion||[]).filter(c=>c.tipo_destino==='anticipo'&&c.anticipo_id).map(c=>String(c.anticipo_id)))
           const _banksByCli={}; (anticipos||[]).filter(a=>_bankAnt.has(String(a.id))).forEach(a=>{const k=String(a.client_id);(_banksByCli[k]=_banksByCli[k]||[]).push(a)})
@@ -8763,14 +8763,14 @@ export default function App() {
               <span style={{color:C.muted,fontSize:18,flexShrink:0}}><Gl n='chevron'/></span>
             </button>
           )
-          return <Modal title='Conciliación' onClose={()=>setModal(null)}>
+          return <FlujoPagina origen={origenNav('Inicio')} titulo='Conciliación' onBack={()=>setModal(null)} maxW={640}>
             <div style={{display:'flex',flexDirection:'column',gap:9}}>
               {row(ic(<><line x1='3' y1='21' x2='21' y2='21'/><polyline points='5 6 12 3 19 6'/><line x1='4' y1='10' x2='4' y2='21'/><line x1='20' y1='10' x2='20' y2='21'/><line x1='8' y1='14' x2='8' y2='17'/><line x1='16' y1='14' x2='16' y2='17'/></>,C.greenText),C.greenBg,'Bancaria','Cartola del banco ↔ facturas y fondos',0,()=>{setModal(null);navTo({tab:'conciliacion'})})}
               {row(ic(<><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/><path d='m9 15 2 2 4-4'/></>,C.soonText),C.ambarBg,'Cotejar con el SII','Folios emitidos ↔ programadas del mes',siiN,()=>{setModal(null);navTo({tab:'billing',billingIntent:'cotejo'})})}
               {row(ic(<><path d='M8 3H5a2 2 0 0 0-2 2v3'/><path d='M21 8V5a2 2 0 0 0-2-2h-3'/><path d='M3 16v3a2 2 0 0 0 2 2h3'/><path d='M16 21h3a2 2 0 0 0 2-2v-3'/></>,C.accent),C.azulBg,'Duplicados','Copias, folios repetidos, programadas y anticipos',dupN,()=>{setModal({type:'conciliar',data:null})})}
               {row(ic(<><path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></>,C.soonText),C.ambarBg,'Cobertura SII','Facturas del año sin cliente asignado',cobN,()=>{setModal({type:'coberturaSII'})})}
             </div>
-          </Modal>
+          </FlujoPagina>
         })()}
         {/* 'coberturaSII' ya NO es modal: página 'flujo'. */}
         <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
@@ -8779,7 +8779,6 @@ export default function App() {
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}
         {cubrirAntApp&&<PaginaSobre origen='Anticipo' titulo='Cubrir cuotas con anticipo' ctx={clients.find(c=>String(c.id)===String(cubrirAntApp.client_id))?.name||null} onBack={()=>setCubrirAntApp(null)}><CubrirCuotasModal asPage anticipo={cubrirAntApp} sales={sales} billing={billing} clients={clients} onConfirm={cuotaIds=>{handleCubrirCuotas(cubrirAntApp.id,cuotaIds);setCubrirAntApp(null)}} onClose={()=>setCubrirAntApp(null)}/></PaginaSobre>}
         {consolidarAnt&&<AsignarConsolidadoModal anticipo={consolidarAnt} billing={billing} sales={sales} clients={clients} onConfirm={data=>handleAsignarConsolidado(consolidarAnt,data)} onClose={()=>setConsolidarAnt(null)}/>}
-        {modal?.type==='billing'&&<Modal hideHeader fullscreenOnMobile onClose={()=>setModal(null)} closeOnBackdrop={false}><BillingForm bill={modal.data} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onAssignSeries={handleAssignSeries} proveedores={proveedores} terceros={terceros} anticipos={anticipos} onConsume={handleConsumeAnticipos} onSave={handleSaveBilling} onClose={()=>setModal(null)} onDelete={handleDeleteBilling} onAnular={handleAnularFactura} onEmitirDTE={handleEmitirDTE} onActualizarEstado={handleActualizarEstadoDTE} saving={saving} user={user} onAttachChange={(delta,item)=>setBillingAttachments(p=>delta>0?[...p,{id:item.id,billing_id:item.billing_id}]:p.filter(x=>x.id!==item.id))}/></Modal>}
         {emitirPreview&&(()=>{ const ep=emitirPreview
           const verPdf=async()=>{ try{ const doc=splitSetDTE(ep.prev.envioXml)[0]; if(!doc){ appAlert('La vista previa no trae el documento.'); return } const r=await facturaDtePdfBase64(doc); const bin=atob(r.base64); const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([u8],{type:'application/pdf'})); window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000) }catch(e){ appAlert('No se pudo generar el PDF: '+(e.message||e)) } }
           return (
@@ -8804,7 +8803,7 @@ export default function App() {
         })()}
         {/* 'gastos' / 'fondo' / 'expenseEdit' ya NO son modales: viven en la página navegable 'gasto' (GastoPage, ver render de tabs). setModal los redirige. */}
         {/* 'cargaMasiva' ya NO es modal: página 'flujo' (ver render de tabs). */}
-        {devEmail&&<DevolucionEmailModal client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/>}
+        {devEmail&&<PaginaSobre origen='Gastos' titulo='Enviar devolución' ctx={devEmail.client?.name||null} onBack={()=>setDevEmail(null)} maxW={1180}><DevolucionEmailModal asPage client={devEmail.client} rend={devEmail.rend} rendN={devEmail.rendN} amount={devEmail.amount} fecha={devEmail.fecha} user={user} setRendiciones={setRendiciones} onClose={()=>setDevEmail(null)}/></PaginaSobre>}
         {/* 'pdfupload' ya NO es modal: página 'flujo'. */}
         {/* 'drive' ya NO es modal: página 'flujo'. */}
         {/* 'importExcel' ya NO es modal: página 'flujo'. */}

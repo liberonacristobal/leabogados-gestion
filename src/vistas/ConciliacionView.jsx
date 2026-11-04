@@ -12,7 +12,7 @@ import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
@@ -3995,7 +3995,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
         </div>
         </>}
       </div>
-      {ccRevOpen && <Modal fullscreen fsMaxWidth={720} title={<span style={{color:C.accent}}>Revisión de caja chica</span>} onClose={()=>setCcRevOpen(false)}>
+      {ccRevOpen && <PaginaSobre origen='Banco' titulo='Revisión de caja chica' onBack={()=>setCcRevOpen(false)} maxW={800}>
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
             <div><div style={{fontSize:12,fontWeight:700,color:C.text}}>Barrido automático diario</div><div style={{fontSize:10,color:C.muted}}>enlaza solo: mismo monto, transferencia el mismo día de la caja o el anterior</div></div>
@@ -4036,7 +4036,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
           </div>}
           {revisionCC.listas.length===0&&revisionCC.porRevisar.length===0&&revisionCC.cajasSinTransf.length===0&&revisionCC.transfSinCaja.length===0&&<div style={{fontSize:13,color:C.textSoft,textAlign:'center',padding:16}}>Todo enlazado. No hay caja chica pendiente de cruzar con el banco.</div>}
         </div>
-      </Modal>}
+      </PaginaSobre>}
     </div>
   )
   if(!isDesktop) return interiorEl

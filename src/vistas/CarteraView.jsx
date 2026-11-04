@@ -4,7 +4,7 @@ import { supabase, getDriveToken, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, promptConCache, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
+import { PaginaSobre, CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, promptConCache, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
 import { DocumentosDrive } from '../lib/fichaCliente.jsx'
 
 export async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el ArrayBuffer (para leer el contenido del archivo)
@@ -1807,7 +1807,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
   const box = { fontSize:13, color:C.text, lineHeight:1.5, background:C.bgSoft||'#F5F7F9', border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 10px', width:'100%', boxSizing:'border-box' }
   const lbl = { fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:.3, margin:'0 0 6px' }
   return (
-    <Modal fullscreenOnMobile title={<><span style={{color:C.accent}}>Alcance del proyecto</span>{client?.name&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>
+    <PaginaSobre origen='Cartera' titulo='Alcance del proyecto' ctx={client?.name||null} onBack={onClose} maxW={900}>
       <div style={{ padding:'4px 2px' }}>
         {err&&<div style={{ fontSize:12, color:C.overdue, background:C.overdueBg||'#FCEBEB', borderRadius:8, padding:'8px 10px', marginBottom:10 }}>{err}</div>}
         {step==='picker'&&(
@@ -1873,7 +1873,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
           </>
         )}
       </div>
-    </Modal>
+    </PaginaSobre>
   )
 }
 
