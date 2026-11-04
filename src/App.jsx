@@ -204,6 +204,9 @@ function DialogHost(){
 
 // Marca de «Conectar mi Gmail» (vence a los 10 min): quién la inició. Se lee UNA vez al cargar la página, como la del calendario.
 const _gmailPend = (()=>{ try{ const [t,q]=String(localStorage.getItem('conectar_gmail')||'').split('|'); return Date.now()-Number(t||0)<10*60*1000 ? {email:(q||'').toLowerCase(),hecho:false} : null }catch(_){ return null } })()
+// Marca de «Conectar Drive» del menú (cambio de dueño a propósito; vence a los 10 min). Sin ella, el servidor no deja que un permiso de otra persona
+// reemplace la conexión del correo de la oficina.
+const _drivePend = (()=>{ try{ const [t,q]=String(localStorage.getItem('conectar_drive')||'').split('|'); return Date.now()-Number(t||0)<10*60*1000 ? (q||'').toLowerCase() : null }catch(_){ return null } })()
 // Marca del ingreso «Conectar calendario» (vence a los 10 min): esa cuenta no es miembro, así que no se le evalúa el rol por ninguna vía.
 const _marcaCalendario=()=>{ try{ const [t,q]=String(localStorage.getItem('conectar_calendario')||'').split('|'); return Date.now()-Number(t||0)<10*60*1000 ? (q||'*') : null }catch(_){ return null } }
 // Se lee UNA vez al cargar la página: al volver de Google supabase-js dispara varios eventos de sesión seguidos y el primero borraba la marca,
@@ -6304,7 +6307,8 @@ export default function App() {
           else if(prt&&_gmailPend&&!_gmailPend.hecho&&_gmailPend.email===String(email).toLowerCase()){   // «Mi Gmail»: el permiso es de esta persona; NO se guarda como el de la oficina
             _gmailPend.hecho=true; try{ localStorage.removeItem('conectar_gmail') }catch(_){}
             gmailLlamar('guardar',{refresh_token:prt}).then(r=>{ if(r?.ok){ setGmailEst(r.estado?{estado:r.estado,ultimo_ok:r.ultimo_ok,error:r.error}:null); setGmailMsg(r.lectura?'':'Quedó conectado, pero la primera lectura falló: '+String(r.error||'sin detalle').slice(0,160)) } else setGmailMsg('No se pudo guardar la conexión. Vuelve a intentarlo.'); setTab('migmail') }) }
-          else saveDriveRefresh(prt, email) }   // conexión permanente de Drive (plan B)
+          else{ const explicito=!!_drivePend&&_drivePend===String(email).toLowerCase(); if(explicito){ try{ localStorage.removeItem('conectar_drive') }catch(_){} }
+            Promise.resolve(saveDriveRefresh(prt, email, explicito)).then(r=>{ if(r&&r.protegida) appAlert(`La conexión del correo y Drive de la oficina es de ${r.dueno}. Tu sesión no la reemplazó. Si quieres cambiarla, usa «Conectar Drive» en el menú.`) }) } }   // conexión permanente de Drive (plan B)
         if(event==='TOKEN_REFRESHED') return   // renovar el token no cambia el rol (y no debe mandar al limitado a Tareas cada hora)
         let u=null; try{ u = await loadUserRole(email) }catch(_){}
         if(u) setUser({email,name:u?.name||email.split('@')[0]})   // si el rol no resolvió, un efecto reintenta (no dejamos user con rol null)
@@ -8579,7 +8583,7 @@ export default function App() {
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M7 8V5l-4 4 4 4v-3h8M17 16v3l4-4-4-4v3H9'/></svg>
                   Fusionar clientes
                 </div>}
-                {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. ¿Continuar?')) connectDrivePermanente()}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                {actualRole==='admin'&&<div style={ddItem} onClick={async()=>{setMenuOpen(false); if(await appConfirm('Te llevo a Google para autorizar el acceso permanente a Drive (con tu cuenta, que ve las carpetas de clientes). Al volver queda conectado para siempre. Si la conexión actual es de otra persona, pasa a ser tuya. ¿Continuar?')) connectDrivePermanente(true)}} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background='none'}>
                   <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#99ABB4' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 2v8'/><path d='m8 6 4-4 4 4'/><path d='M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7'/></svg>
                   Conectar Drive
                 </div>}
