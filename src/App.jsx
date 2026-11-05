@@ -21,6 +21,7 @@ import { daysLeftB, EstadoFacturaChip, cargarFeriadosCL, cuotaOrdOf, reconcilePr
 import { logoColor, esCorreoOficina, cuentaEnRecuadro, glosaCliente, mesCorto, posiblesDuplicadosGastos, _numsGlosa, gastosParecidos, simTexto, NOTA_DIRIGIDO, titleCase, _ES_EMPRESA, esPersona, _NOMBRES_F, _NOMBRES_M, generoF, saludoCli, ChipSearch, pillPersonaSty, CAT_COLORS, CATS_OFICINA_ESTRUCTURAL, esGestionGasto, SUBCATS_OFICINA, saldoCajaChica, alertasCajaChica, corrSiguiente, depositoDeSolicitud, estadoSolicitud, CheckMini, otConSello, rendGruposProyecto, repartoFondos, rendicionFondo, fondosSinTrabajo, imputarSaldosTrabajos, gastosDeRend, fondoDeRend, rendicionesPreviasDe, anularReembolsoDeRendicion, rendicionDocHtml, firmaCorreoHtml, rendicionPdfHtml, Switch, usePersisted, aprenderRS, _DEMO_BANDEJA, registrarFondoPropuesto, _diasEntre, PasosRend, _mesLabelOf, lunesSemanaISO, _esOfiCliR, canonOtNN, _fechaISO, _GEN_DET, glosaSinDetalle, CATS_DE_CLIENTE, _NOM_MAIL, nombreCargador, MovIcon, movilizacionDatos, MovilizacionView, HubTile, FACTURACION_ROOT, ADJUNTOS_ROOT, modoEnvioLote, txtResumenEnvio, driveFindOrCreateFolder, driveAdjuntosFolders, driveUpload, ME_DOMAIN, _addrsMail, gmailParticipantesCliente, ClientePicker } from './lib/compartido.jsx'
 import { _MESMAP_G, concPeriodoOf, ADMIN_NAMES, CATS_OFICINA_CAT, CATS_OFICINA_NUEVAS, CAT_OFICINA_ALIAS, catOficinaNueva, _ccDia, _glosaTransf, _ccFechas, _ccDias, _ccEsAjuste, calceCajaChica, MESES_ABR, _rutK, proyectoSeguro, CATS_LEGALES, acusePagoEmail, glosaFactura, parseDteFactura, extraerTextoGmail } from './lib/compartido.jsx'
 import { montoFactura, dteMontoTotal, _pdfjsP, cargarPdfjs, tokenSesion, driveCall, claudeCall, promptConCache, fmtUF, fmtMill, fmtShort, UF_FALLBACK, RENDCAT, fmtFechaHora, fmtDate, nDias, TH_BAND, NOMBRE_CLI, MES_L, MES_C, mesTitulo, bigDate, _respaldoCache, setRespaldoCache, saldoBill, cobradoBill, porCobrarBills, ESTADO_COBRO, venceBill, esVencidaB, estadoCobro, KpiIco, Sparkle, RESPALDO_CUTOFF, facturaRespaldo, estadoFacturaLabel, _ACT_VARIANT, ActBtn, Buscador, daysLeft, FERIADOS_CL, _esDiaHabil, ultimoDiaHabilMesEmision, dueFromIssued, cuotaNMof, ufDeTabla, _UF_FECHA_KEY, ufFechaCache, ufDelDia, finMesOHoy, redondearPartes, fmtMillLR, nrmCliente, learnPut, okDB, setLearningKV, logEvent, rsLabel, rsDisplay, Copyable, chipBtn, currentYear, INICIALES_RESP, taskAssignees, _GV_EXCL, gastosVariosOfiItems, contadoraBancoItems, tipoFactura, esFacIngreso, _actorBitacora, setActorBitacora, resumenBitacora, logActividad, EQUIPO_RESPALDO, _equipo, cargarEquipo, equipoPorNombre, _nombresMiembrosCache, _nombresMiembrosP, nombresMiembros, BitacoraLista, saldoCliente, FIRMA_RESPALDO, firmaDefault, Inp, Lbl, Fld, Modal, BUILD_VERSION, _errVistos, _ERR_RUIDO, registrarError, esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, comisionesVenta, UF_CACHE_KEY, ufTodayISO, readUFCache, _uiStore, usePersistedState, writeUFCache, fetchUF, useUF, AsignarClienteInline, SOCIOS_CFG, EQUIPO_CFG, _norm, setSociosCfg, setEquipoCfg, esPPMcosto, remuneracionesBancoMes, resultadoMes, _fuentesResP, _fuentesRes, useFuentesResultado, _ymPrev, margenPct, resolverClienteSII, fmtSaldoG, _viewMem, marcarVolviendo, viewMemLeer, viewMemGuardar, PageHeader, BackBtn, FlujoPagina, MESES, driveGet, DriveAuthError, driveToken, _bwipP, _loadBwip, NOMBRE_DTE, NOMBRE_DTE_CORTO, facturaDtePdfBase64, _resolDoc, splitSetDTE, loadXLSXStyle, MAIL_OFICINA_CONFIRM, TXT_REINGRESO, txtEnviado, txtNoEnviado, avisoNoEnviado, incrustarLogosCorreo, enviarComoUsuario, sendMailServer, sendGmailWithPdf } from './lib/compartido.jsx'
+import { kpisPorSocio } from './lib/cifras.js'
 import { lazyVista, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import {
@@ -760,8 +761,13 @@ function UFStamp({uf,isToday,asOf,loading}){
 // PÁGINA navegable "Facturas del mes" (NO modal): segmento Pagadas / Por cobrar + lista real de facturas del mes.
 // Cada fila: cliente (protagonista → su ficha) · razón social · RUT del receptor (casi nunca = nombre del cliente) · Factura N° · vence/cobrada.
 // La fila (y la ›) abren la factura. Fuente única: mismas facturas/cifras que la foto del Inicio (emitidas del mes por DTE; pagado=cobradoBill, por cobrar=saldoBill).
-function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagadas', onOpenFactura, onOpenClientFicha, onBack}){
+function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], terceros=[], expenses=[], seg='pagadas', onOpenFactura, onOpenClientFicha, onBack}){
+  const isDesk=useIsDesktop()
   const [tab,setTab]=useState(seg==='porcobrar'?'porcobrar':'pagadas')
+  const [filtroSoc,setFiltroSoc]=useState(null)
+  const [anchoW,setAnchoW]=useState(()=>window.innerWidth)
+  useEffect(()=>{ const f=()=>setAnchoW(window.innerWidth); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f) },[])
+  const ancho=isDesk&&anchoW>=1240   // dos columnas solo si cabe la lista y la cascada lado a lado
   useEffect(()=>{ setTab(seg==='porcobrar'?'porcobrar':'pagadas') },[seg])
   const ym = new Date().toISOString().slice(0,7)
   const mesLbl = (()=>{ const m=new Date().toLocaleDateString('es-CL',{month:'long'}); return m.charAt(0).toUpperCase()+m.slice(1) })()
@@ -771,9 +777,29 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
   const emTot = emFac.reduce((a,b)=>a+montoFactura(b),0)
   const pagTot = pagadas.reduce((a,b)=>a+cobradoBill(b),0)
   const pcTot = porCobrar.reduce((a,b)=>a+saldoBill(b),0)
+  // Quién emitió y cuánto queda para la oficina: mismas partidas y dueño que «Por socio» (partidasPorSocio, plano facturado del mes).
+  const [fu]=usePorSocioFuentes()
+  const saleById=useMemo(()=>{const m={};(sales||[]).forEach(x=>{ if(x) m[String(x.id)]=x });return m},[sales])
+  const cliById=useMemo(()=>{const m={};(clients||[]).forEach(x=>{ if(x) m[String(x.id)]=x });return m},[clients])
+  const socDe=b=>socioDe(b,{saleById,cliById,ov:fu.ov})
+  const comDe=b=>(terceros||[]).filter(t=>t&&t.comision_pct==null&&String(t.billing_id||'')===String(b.id))
+  const PS=useMemo(()=>partidasPorSocio({billing,sales,clients,terceros,expenses,ic:[],ia:[],ov:fu.ov}),[billing,sales,clients,terceros,expenses,fu.ov])
+  const {sumP,KF}=useMemo(()=>kpisPorSocio({P:PS,V:[],ym}),[PS,ym])
+  const sinSocHon=emFac.some(b=>b.billing_type!=='subarriendo'&&socDe(b)===SIN_SOCIO)
+  const colsSoc=ADMIN_NAMES.concat(sinSocHon?[SIN_SOCIO]:[])
+  const subM=sumP('f','sub',null,'mes')
+  const casc=colsSoc.map(soc=>{ const f=sumP('f',KF,soc,'mes'), c=-sumP('f','com',soc,'mes'); return {soc,f,c,i:f-c} })
+  const tFac=casc.reduce((a,x)=>a+x.f,0), tCom=casc.reduce((a,x)=>a+x.c,0)
+  // Celular en $M con cada columna cuadrada (ingreso y comisión redondean juntos; el facturado es su suma; Oficina = suma de columnas).
+  const rcasc=casc.map(x=>{ const [i,c]=redondearPartes([x.i,x.c],1e5); return {...x,f:i+c,c,i} })
+  const rTot={f:rcasc.reduce((a,x)=>a+x.f,0),c:rcasc.reduce((a,x)=>a+x.c,0),i:rcasc.reduce((a,x)=>a+x.i,0)}
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Sin cliente'
   const rsDe = b => { const rl=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const name=b.receptor_name||rl.name||''; const rut=b.receptor_rut||rl.rut||''; return {name,rut} }
-  const list = tab==='pagadas'?pagadas:porCobrar, tot = tab==='pagadas'?pagTot:pcTot
+  const conSoc=l=>filtroSoc?l.filter(b=>socDe(b)===filtroSoc):l
+  const list = conSoc(tab==='pagadas'?pagadas:porCobrar), tot = list.reduce((a,b)=>a+(tab==='pagadas'?cobradoBill(b):saldoBill(b)),0)
+  const nSoc=soc=>emFac.filter(b=>socDe(b)===soc).length
+  const chipsSoc=[[null,'Todos',emFac.length]].concat(colsSoc.concat([SIN_SOCIO]).filter((x,i,a)=>a.indexOf(x)===i).map(x=>[x,x,nSoc(x)]).filter(x=>x[2]>0))
+  const FM=ancho?fmt:fmtMillLR, rows=ancho?casc:rcasc, tt=ancho?{f:tFac,c:tCom,i:tFac-tCom}:rTot
   // Pagadas + Por cobrar = Emitido (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
   const [pagV,pcV]=redondearPartes([pagTot,pcTot],emTot>=1e6?1e5:1e4,[0]), fSeg=emTot>=1e6?fmtMillLR:fmtShort
   const segBtn=(k,lbl,val,n,t)=>(
@@ -783,6 +809,22 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
       <div style={{fontSize:10,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
     </button>)
   const opS={alignSelf:'center',fontSize:16,fontWeight:800,color:C.muted,flexShrink:0}
+  const th={fontSize:10,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:'8px 7px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,color:C.muted,cursor:'pointer'}
+  const td={padding:'9px 7px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12.5:12,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
+  const sg={display:'inline-block',width:12,textAlign:'center',fontWeight:800,color:C.muted}
+  const celda=(soc,v,extra)=><td key={soc||'oficina'} onClick={()=>soc&&setFiltroSoc(f=>f===soc?null:soc)} style={{...td,cursor:soc?'pointer':'default',...extra}}>{Math.abs(v)>=1?FM(v):'—'}</td>
+  const cascadaEl=<div style={{background:C.tileBg,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    <div style={{...SEC_LBL,padding:'11px 13px 9px'}}>Ingreso de la oficina · emitido del mes</div>
+    <table style={{borderCollapse:'collapse',width:'100%'}}>
+      <thead><tr><th style={{...th,textAlign:'left',cursor:'default'}}></th>{rows.map(x=><th key={x.soc} onClick={()=>setFiltroSoc(f=>f===x.soc?null:x.soc)} style={th}>{x.soc}</th>)}<th style={{...th,cursor:'default'}}>Oficina</th></tr></thead>
+      <tbody>
+        <tr><td style={{...td,textAlign:'left',fontWeight:600}}>Facturado</td>{rows.map(x=>celda(x.soc,x.f))}{celda(null,tt.f)}</tr>
+        <tr><td style={{...td,textAlign:'left',fontWeight:600}}><span style={sg}>−</span>Comisiones</td>{rows.map(x=>celda(x.soc,x.c))}{celda(null,tt.c)}</tr>
+        <tr><td style={{...td,textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft}}><span style={sg}>=</span>Ingreso</td>{rows.map(x=>celda(x.soc,x.i,{fontWeight:800,color:C.accent,background:C.bgSoft}))}{celda(null,tt.i,{fontWeight:800,color:C.accent,background:C.bgSoft})}</tr>
+      </tbody>
+    </table>
+    {Math.abs(subM)>=1&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.muted,padding:'8px 13px',borderTop:`1px dashed ${C.border}`}}><span>Subarriendo, aparte (sin socio)</span><b style={{fontVariantNumeric:'tabular-nums'}}>{FM(subM)}</b></div>}
+  </div>
   return (
     <div>
       <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
@@ -791,7 +833,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
           <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent}}>Facturas de {mesLbl}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas este mes</span></div>
         </div>
       </div>
-      <div style={{maxWidth:760,margin:'0 auto',padding:'14px 16px 24px'}}>
+      <div style={{maxWidth:ancho?1180:760,margin:'0 auto',padding:'14px 16px 24px'}}>
         <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'stretch'}}>
           {segBtn('pagadas','Pagadas',pagV,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
           <span style={opS}>+</span>
@@ -802,6 +844,12 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
             <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(emTot)}</div>
             <div style={{fontSize:10,color:C.muted}}>{emFac.length} factura{emFac.length!==1?'s':''}</div>
           </div>
+        </div>
+        <div style={ancho?{display:'grid',gridTemplateColumns:'minmax(0,1fr) 480px',gap:18,alignItems:'start'}:undefined}>
+        <div style={{order:ancho?2:0,position:ancho?'sticky':undefined,top:ancho?70:undefined,marginBottom:ancho?0:12,overflowX:'auto'}}>{cascadaEl}</div>
+        <div style={{order:ancho?1:0,minWidth:0}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+          {chipsSoc.map(([k,l,n])=>{ const on=filtroSoc===k; return <button key={String(k)} onClick={()=>setFiltroSoc(k)} style={{fontSize:12,fontWeight:700,borderRadius:999,padding:'6px 12px',cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l} {n}</button> })}
         </div>
         <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.tileBg}}>
           {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
@@ -818,7 +866,8 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
               <div style={{flex:1,minWidth:0}}>
                 <div style={{...NOMBRE_CLI}}>{cl&&onOpenClientFicha?<span onClick={e=>{e.stopPropagation();onOpenClientFicha(cl.id)}} style={{cursor:'pointer'}}>{cn(b.client_id)}</span>:cn(b.client_id)}</div>
                 {rs.name&&<div style={{fontSize:11,color:C.text,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rs.name}{rs.rut?<span style={{color:C.muted}}> · {fmtRutCL(rs.rut)}</span>:''}</div>}
-                <div style={{fontSize:10,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)} · {fecha}</div>
+                <div style={{fontSize:10,color:C.textSoft,marginTop:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)} · {fecha} · {b.billing_type==='subarriendo'?'Subarriendo':socDe(b)}</div>
+                {comDe(b).map(t=><div key={t.id} style={{fontSize:10,color:C.textSoft,marginTop:2,fontVariantNumeric:'tabular-nums'}}>comisión {t.proveedor||'colaborador'} −{fmt(Number(t.monto)||0)}</div>)}
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 <div style={{fontSize:14,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(monto)}</div>
@@ -830,6 +879,8 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], seg='pagada
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'13px 3px 0',marginTop:10,borderTop:`1px solid ${C.border}`}}>
           <span style={{fontSize:12,color:C.muted}}>{list.length} factura{list.length!==1?'s':''} {tab==='pagadas'?'pagadas':'por cobrar'} · {mesLbl}</span>
           <span style={{fontSize:16,fontWeight:800,color:tab==='pagadas'?C.greenText:C.soonText,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span>
+        </div>
+        </div>
         </div>
       </div>
     </div>
@@ -8642,7 +8693,7 @@ export default function App() {
             </div>}
             <ViewErrorBoundary key={tab} vista={tab} onReset={()=>setTab('dashboard')}>
             {tab==='dashboard'&&userRole==='admin'&&dashboardEl}
-            {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
+            {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} terceros={terceros} expenses={expenses} seg={emitidoSeg} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} cajaPorDefecto={userRole==='limited'?(user?.name||''):''} archivoCorreo={pagina.data?.archivoCorreo||null} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
