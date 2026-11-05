@@ -762,3 +762,15 @@ test('radar: una cuota saltada (ya se emitió una de número mayor) entra aunque
   // Una serie sin cuotas numeradas, o sin cuota mayor emitida, no cambia.
   assert.equal(cuotaSaltada({ id: 'x', sale_id: 's9', status: 'Programada', concept: 'Honorarios' }, billing), null)
 })
+
+test('cuota saltada marcada «Queda para el final» no entra al radar hasta que llegue su vencimiento', async () => {
+  const { cuotasSinEmitir, noEmitirDeFilas } = await import('../supabase/functions/_shared/ventasReglas.js')
+  const venta = { id: 'v', status: 'Activo', cobro_type: 'cuotas', moneda: 'CLP', amount_clp: 3000000, deleted_at: null }
+  const b = (id, st, no, due, inv) => ({ id, sale_id: 'v', status: st, invoice_no: inv || null, issued_at: inv ? '2026-10-02' : null, due, amount: 1000000, concept: `Trabajo — Cuota ${no}/3`, billing_type: 'honorarios', deleted_at: null })
+  const billing = [b('c1', 'Pagado', 1, '2026-09-01', '10'), b('c2', 'Programada', 2, '2027-05-01'), b('c3', 'Pagado', 3, '2026-10-01', '11')]
+  assert.equal(cuotasSinEmitir({ billing, sales: [venta], hasta: '2026-11-01' }).map((x) => x.id).join(), 'c2')
+  const marcada = noEmitirDeFilas([{ kind: 'cuota_postergada', key: 'c2' }])
+  assert.equal(cuotasSinEmitir({ billing, sales: [venta], noEmitir: marcada, hasta: '2026-11-01' }).length, 0)
+  assert.equal(marcada.has('c2'), false)   // no es «No corresponde»: no se esconde de «Por emitir» cuando llegue su mes
+  assert.equal(cuotasSinEmitir({ billing, sales: [venta], noEmitir: marcada, hasta: '2027-06-01' }).map((x) => x.id).join(), 'c2')
+})

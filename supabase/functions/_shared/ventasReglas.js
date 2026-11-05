@@ -131,14 +131,22 @@ export function mayorCuotaEmitida(billing) {
 
 // Cuota «saltada»: sigue Programada aunque una cuota de número MAYOR de su misma venta ya se emitió (caso real: cuota 2/10 sin emitir en
 // agosto, con las cuotas 3 y 4 ya facturadas; su vencimiento había quedado en mayo 2027 y el radar no la veía). No depende del vencimiento.
-const _saltada = (b, mayor) => { const n = _cuotaNum(b), m = mayor.get(String(b.sale_id)); return n != null && m != null && n < m }
+// «Queda para el final» (learnings cuota_postergada): una cuota saltada que la oficina dejó a propósito con su vencimiento al final del plan
+// no se marca como olvidada; vuelve a contar sola con las reglas normales cuando llega su vencimiento. Las ids viajan en el mismo Set de
+// `noEmitir` (propiedad `postergadas`, ver conPostergadas) para que todas las vistas y correos la respeten sin cambiar sus firmas.
+/** @param {Set<string>} noEmitir @param {Iterable<string>} ids @returns {Set<string>} */
+export function conPostergadas(noEmitir, ids) { const s = noEmitir || new Set(); /** @type {any} */ (s).postergadas = new Set([...(ids || [])].map(String)); return s }
+/** Set de «No corresponde» (learnings cuota_no_emitir) con las «Queda para el final» (cuota_postergada) adjuntas. @param {{kind?:string, key:any}[]} filas */
+export function noEmitirDeFilas(filas) { const ne = [], po = []; (filas || []).forEach(r => { if (!r || r.key == null) return; (r.kind === 'cuota_postergada' ? po : ne).push(String(r.key)) }); return conPostergadas(new Set(ne), po) }
+const _postergada = (noEmitir, b) => !!(noEmitir && /** @type {any} */ (noEmitir).postergadas && /** @type {any} */ (noEmitir).postergadas.has(String(b.id)))
+const _saltada = (b, mayor, noEmitir) => { const n = _cuotaNum(b), m = mayor.get(String(b.sale_id)); return n != null && m != null && n < m && !_postergada(noEmitir, b) }
 function _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, enMarcha, deLosQueParten) {
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
   const cub = cuotasCubiertasVenta(billing, sales, uf)
   const mayor = mayorCuotaEmitida(billing)
   return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.sale_id && venta.get(String(b.sale_id))?.status === 'Activo'
     && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && b.due >= appDesde && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total
-    && (b.due < hasta || _saltada(b, mayor)))
+    && (b.due < hasta || _saltada(b, mayor, noEmitir)))
 }
 
 /** N° de la cuota más alta ya emitida si esta Programada quedó saltada; si no, null. @param {any} b @param {any[]} billing @returns {number|null} */
