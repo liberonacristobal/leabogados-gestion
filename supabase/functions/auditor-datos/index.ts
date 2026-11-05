@@ -15,6 +15,7 @@ import { sugerirVentaGasto, VENTA_REAL } from "../_shared/ventaGastoReglas.js";
 import { hallazgos, DETECTOR_LBL } from "../_shared/saludDatos.js";
 import { trabajosDetenidos } from "../_shared/ventasReglas.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
+import { siguenAbiertos, correoDelDia } from "../_shared/auditorResumen.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -87,7 +88,7 @@ Deno.serve(async (req) => {
       todas("v_ventas_salud?select=*&order=id.asc"),
       todas("clients?select=id,name"),
       todas("proveedores?select=id,nombre"),
-      todas("auditoria_hallazgos?select=id,clave,estado,avisado_at&estado=eq.abierto"),
+      todas("auditoria_hallazgos?select=id,clave,estado,avisado_at,detector,primera_vez&estado=eq.abierto"),
       todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,proveedor_id,fecha_emision,monto,sii_estado,fecha_recepcion&sii_estado=eq.PENDIENTE"),
       todas("learnings?select=id,key&kind=eq.compra_sin_reclamo"),
       todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,periodo,observado_iva,observado_sii&observado_sii=is.true"),
@@ -109,7 +110,8 @@ Deno.serve(async (req) => {
     const nomCli: Record<string, string> = Object.fromEntries(clients.map((c) => [String(c.id), c.name]));
     const nomProv: Record<string, string> = Object.fromEntries(provs.map((p) => [String(p.id), p.nombre]));
     const cuotaTramoNo = new Set(ctNoRows.filter((r: { value: string }) => String(r.value) === "distintos").map((r: { key: string }) => String(r.key).replace(/^cuotatramo:/, "")));
-    const casos = hallazgos({ gastos: gastosAct, terminadaOk: Object.fromEntries(terminadaOkRows.map((r: { key: string; value: string }) => [String(r.key), String(r.value || "")])), comprasTodas, cuotaTramoNo, permisos, compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
+    const plantillas = await todas("learnings?select=kind,key,value&kind=in.(factura_msg,factura_asunto)&order=id");   // plantillas de correo aprendidas
+    const casos = hallazgos({ plantillas, gastos: gastosAct, terminadaOk: Object.fromEntries(terminadaOkRows.map((r: { key: string; value: string }) => [String(r.key), String(r.value || "")])), comprasTodas, cuotaTramoNo, permisos, compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
     const vistos = new Set(casos.map((c) => c.clave));
     const abiertos = new Map(previos.map((p) => [p.clave, p]));
     const nuevos = casos.filter((c) => !abiertos.has(c.clave));
@@ -130,7 +132,9 @@ Deno.serve(async (req) => {
 
     // Aviso por correo: solo lo nuevo, una vez por caso.
     const porAvisar = dryRun ? [] : nuevos;
-    if (!porAvisar.length) return json({ ...resumen, enviado: false });
+    // Lo que sigue abierto de antes: va en el correo cuando sale (casos nuevos) y, sin nuevos, solo los lunes.
+    const siguen = siguenAbiertos(casos, previos, Date.now()), nSiguen = siguen.reduce((x, g) => x + g.n, 0);
+    if (dryRun || !correoDelDia(porAvisar.length, nSiguen, hoyCL)) return json({ ...resumen, siguen_abiertos: siguen, enviado: false });
     const cfg = await rest("learnings?kind=eq.config&key=in.(auditor_datos,vigilancia_avisar_a)&select=key,value");
     const encendido = String(cfg.find((c: { key: string }) => c.key === "auditor_datos")?.value || "").toLowerCase() === "on";
     const dom = String(GMAIL_USER || "").toLowerCase().split("@")[1] || "";
@@ -150,13 +154,15 @@ Deno.serve(async (req) => {
       return head + rows + mas;
     }).join("");
     const mm = await rest("miembros?select=email,nombre").catch(() => []);
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:680px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(para, mm))}:</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">La revisión de datos de anoche encontró ${porAvisar.length === 1 ? "un caso nuevo" : `${porAvisar.length} casos nuevos`} por revisar:</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="margin:18px 0 0"><a href="https://gestion.leabogados.cl/?ir=revision" style="display:inline-block;background:#003C50;color:#fff;font-size:13px;font-weight:700;text-decoration:none;border-radius:9px;padding:9px 16px">Abrir Revisión de datos</a></p></div></body></html>`;
-    const asunto = porAvisar.length === 1 ? "Revision de datos: 1 caso nuevo" : `Revision de datos: ${porAvisar.length} casos nuevos`;
+    const filasSiguen = nSiguen ? `<tr><td colspan="2" style="padding:20px 0 6px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#003C50">Siguen abiertos &middot; ${nSiguen}</td></tr>` + siguen.map((g) => `<tr><td style="padding:8px 0;border-top:1px solid #E4E8EB"><div style="font-size:13px;color:#3D3D3D;font-weight:600">${esc(DETECTOR_LBL[g.detector] || g.detector)} &middot; ${g.n}</div>${g.dias > 0 ? `<div style="font-size:12px;color:#537281;margin-top:2px">el más antiguo, hace ${g.dias} ${g.dias === 1 ? "día" : "días"}</div>` : ""}</td></tr>`).join("") : "";
+    const intro = porAvisar.length ? `La revisión de datos de anoche encontró ${porAvisar.length === 1 ? "un caso nuevo" : `${porAvisar.length} casos nuevos`} por revisar:` : `La revisión de datos de anoche mantiene ${nSiguen === 1 ? "un caso abierto" : `${nSiguen} casos abiertos`}:`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:680px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(para, mm))}:</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${intro}</p><table style="width:100%;border-collapse:collapse">${filas}${filasSiguen}</table><p style="margin:18px 0 0"><a href="https://gestion.leabogados.cl/?ir=revision" style="display:inline-block;background:#003C50;color:#fff;font-size:13px;font-weight:700;text-decoration:none;border-radius:9px;padding:9px 16px">Abrir Revisión de datos</a></p></div></body></html>`;
+    const asunto = !porAvisar.length ? `Revision de datos: ${nSiguen} ${nSiguen === 1 ? "caso abierto" : "casos abiertos"}` : porAvisar.length === 1 ? "Revision de datos: 1 caso nuevo" : `Revision de datos: ${porAvisar.length} casos nuevos`;
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
-    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: asunto, content: porAvisar.map((c) => toAscii(c.titulo)).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
+    await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: asunto, content: porAvisar.length ? porAvisar.map((c) => toAscii(c.titulo)).join("\n") : toAscii(intro), html: html.replace(/[ \t]+$/gm, "") });
     await client.close();
     // El aviso ya salió: si guardar la marca falla, se informa sin error (el caso no se vuelve a avisar porque ya no es nuevo).
-    try { await rest(`auditoria_hallazgos?estudio_id=eq.lea&clave=in.(${porAvisar.map((c) => `"${c.clave.replace(/"/g, "")}"`).join(",")})`, { method: "PATCH", body: JSON.stringify({ avisado_at: ahora }) }); } catch (e) { (resumen as Record<string, unknown>).error_guardar = String((e as Error).message || e); }
+    if (porAvisar.length) try { await rest(`auditoria_hallazgos?estudio_id=eq.lea&clave=in.(${porAvisar.map((c) => `"${c.clave.replace(/"/g, "")}"`).join(",")})`, { method: "PATCH", body: JSON.stringify({ avisado_at: ahora }) }); } catch (e) { (resumen as Record<string, unknown>).error_guardar = String((e as Error).message || e); }
     await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "auditor-datos", action: "auditoria.aviso_enviado", table_name: "auditoria_hallazgos", estudio_id: "lea", detail: { title: asunto, para, casos: porAvisar.length } }) }).catch(() => null);
     return json({ ...resumen, enviado: true, para });
   } catch (e) {

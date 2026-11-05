@@ -77,3 +77,15 @@ export function cuotaIncoherente(texto, cuota) {
   }
   return null
 }
+
+/**
+ * Números escritos a mano en una plantilla aprendida que NO se refrescan solos: un monto («$1.190.000») o un folio («factura N° 500»).
+ * El mes («octubre de 2026») y la cuota («cuota 2 de 10») no cuentan: `tokenizar` sin valores los convierte en marca al leer la plantilla.
+ * @param {any} texto @returns {string[]}
+ */
+export function numerosEscritos(texto) {
+  const t = String(texto == null ? '' : texto).replace(/\{[a-zA-Z]+\}/g, ' ')
+  const montos = t.match(/\$\s?\d[\d.]*/g) || []
+  const folios = [...t.matchAll(/\b(?:facturas?|folios?|n[°º])\s*(?:n[°º]\s*)?(\d{3,}(?:\s*(?:,|y)\s*\d{3,})*)/gi)].map(m => m[0].trim())
+  return [...montos.map(x => x.trim().replace(/\.+$/, '')), ...folios]
+}
