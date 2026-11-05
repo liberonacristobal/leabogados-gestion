@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { C, SEC_LBL, SIcon, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, PageHeader, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
-import { kpisPorSocio } from '../lib/cifras.js'
+import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
@@ -42,13 +42,32 @@ const KpiMes = ({ic,label,value,sub,vcol,onClick}) => (
       <div style={{fontSize:20,fontWeight:800,letterSpacing:-.4,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
       {sub&&<div style={{fontSize:11,color:C.muted,...DOS_LINEAS}}>{sub}</div>}</div>
   </div>)
+// Franja de cifras (mismo molde que la franja de «Cierre»): etiqueta, cifra y una línea de apoyo.
+const MiniK = ({label,value,sub}) => (
+  <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 9px',minWidth:0,background:C.surface}}>
+    <div style={{fontSize:9.5,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted,...ELIPSIS}}>{label}</div>
+    <div style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{value}</div>
+    {sub&&<div style={{fontSize:10,color:C.muted,lineHeight:1.25}}>{sub}</div>}
+  </div>)
+// Barras apiladas (Cristóbal abajo, Erasmo arriba) del ingreso emitido mes a mes; el último mes va rayado: en curso.
+const BarrasMes = ({datos,corto}) => {
+  const w=corto?340:1000, h=170, pl=30, pb=20, pt=14, iw=w-pl-6, ih=h-pb-pt, n=datos.length, g=iw/Math.max(n,1), bw=g*.62
+  const mx=Math.max(20e6, Math.ceil(Math.max(...datos.map(d=>d.a+d.b),0)/20e6)*20e6), ticks=[0,1,2,3].map(i=>mx*i/3)
+  return (<svg viewBox={`0 0 ${w} ${h}`} width='100%' role='img' aria-label='Ingreso emitido por mes y socio' style={{display:'block'}}>
+    <defs><pattern id='rayaMes' width='5' height='5' patternUnits='userSpaceOnUse' patternTransform='rotate(45)'><rect width='5' height='5' fill='#fff'/><rect width='2.2' height='5' fill={C.done}/></pattern></defs>
+    {ticks.map(t=>{ const y=pt+ih-ih*t/mx; return <g key={t}><line x1={pl} x2={w-4} y1={y} y2={y} stroke={C.border}/><text x={pl-5} y={y+3} textAnchor='end' fontSize='9' fill={C.muted}>{Math.round(t/1e6)}</text></g> })}
+    {datos.map((d,i)=>{ const x=pl+g*i+(g-bw)/2, ha=ih*d.a/mx, hb=ih*d.b/mx, yb=pt+ih, cur=i===n-1
+      return <g key={d.ym}><rect x={x} y={yb-ha} width={bw} height={ha} fill={cur?C.muted:C.accent}/><rect x={x} y={yb-ha-hb} width={bw} height={hb} fill={cur?'url(#rayaMes)':C.done} stroke={cur?C.done:'none'}/>
+        <text x={x+bw/2} y={yb-ha-hb-3} textAnchor='middle' fontSize='8.5' fontWeight='700' fill={C.accent}>{((d.a+d.b)/1e6).toFixed(1).replace('.',',')}</text>
+        <text x={x+bw/2} y={h-5} textAnchor='middle' fontSize='9' fill={C.muted}>{MESES[Number(d.ym.slice(5,7))-1].slice(0,3)}</text></g> })}
+  </svg>) }
 // Título de sección fuera de la tarjeta (como en el resto de la app): etiqueta de acento a la izquierda; extra y enlace a la derecha.
 const Sec = ({t,link,onLink,extra}) => (
   <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 2px -4px'}}>
     <span style={{...SEC_LBL,flex:1,minWidth:0,...ELIPSIS}}>{t}</span>{extra}
     {link&&<span onClick={onLink} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:onLink?'pointer':'default',whiteSpace:'nowrap'}}>{link} ›</span>}
   </div>)
-const ICO_BLQ = { mes:'chart', soc:'users', ret:'users', fac:'clock', cob:'tCobrar', cos:'building', com:'tPct', deb:'tPagar', caj:'wallet', rev:'alert' }
+const ICO_BLQ = { emi:'file', ing:'users', mm:'chart', mes:'chart', soc:'users', ret:'users', fac:'clock', cob:'tCobrar', cos:'building', com:'tPct', deb:'tPagar', caj:'wallet', rev:'alert' }
 const Sub = ({t}) => <div style={{padding:'6px 12px',background:C.bgSoft,fontSize:10,fontWeight:800,color:C.accent,textTransform:'uppercase',letterSpacing:.4}}>{t}</div>
 const Caja = ({titulo,link,onLink,extra,children}) => (
   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -88,7 +107,16 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const [fu] = usePorSocioFuentes()
   const P = useMemo(()=>partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic:fu.ic, ia:fu.ia, ov:fu.ov, fondoExtra:{} }),[billing,sales,clients,anticipos,terceros,expenses,fu])
   const V = useMemo(()=>vendidoPorSocio(sales, clients, ufRef, currentYear),[sales,clients,ufRef])
-  const { card6 } = useMemo(()=>kpisPorSocio({ P, V, ym:ymNow }),[P,V,ymNow])
+  const { card6, sumP, emitido, nEmitidas, emitidoMeses } = useMemo(()=>kpisPorSocio({ P, V, ym:ymNow }),[P,V,ymNow])
+  // Ingreso emitido (facturado − comisiones de lo facturado; helper único de cifras.js): mes en curso, acumulado del año y mes a mes.
+  const sumaN = a => a.reduce((x,y)=>x+y,0)
+  const emSocs = [...ADMIN_NAMES, SIN_SOCIO]
+  const emMes = emSocs.map(s=>({ s, ...emitido(s,'mes'), n:nEmitidas(s,'mes') })).filter(x=>x.s!==SIN_SOCIO||Math.abs(x.i)>=1||x.n>0)
+  const emIng = redondearPartes(emMes.map(x=>x.i),1e5), emCom = redondearPartes(emMes.map(x=>x.c),1e5)   // las partes suman el total que muestra la tarjeta
+  const emTot = { i:sumaN(emIng), c:sumaN(emCom) }; emTot.f = emTot.i+emTot.c
+  const emSub = sumP('f','sub',null,'mes')
+  const emAnio = emSocs.map(s=>({ s, ...emitido(s,'ytd') })).filter(x=>x.s!==SIN_SOCIO||Math.abs(x.f)>=1)
+  const emMeses = useMemo(()=>emitidoMeses(ADMIN_NAMES).map(x=>({ ym:x.ym, a:x.v[ADMIN_NAMES[0]]||0, b:x.v[ADMIN_NAMES[1]]||0 })),[emitidoMeses])
   const ret = useMemo(()=>retirosSocios({ expenses, clients, socios, yr:currentYear }),[expenses,clients,socios])
 
   // ── Cartera, fondos, comisiones, notaría, caja ──
@@ -124,7 +152,28 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           {[0,1,2,5].map(i=><td key={i} style={{padding:isDesktop?'8px 14px':'8px 10px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
         </tr>) })}</tbody>
     </table></div>)
+  const Mes1 = mesActual.charAt(0).toUpperCase()+mesActual.slice(1)
+  const celdasEm = [...emMes.map((x,i)=>({ k:x.s, v:fmtShort(emIng[i]), sub:`${x.n} factura${x.n!==1?'s':''}${emCom[i]>0?` · com. ${fmtShort(emCom[i])}`:''}` })), ...(Math.abs(emSub)>=1?[{ k:'Subarriendo', v:fmtShort(emSub), sub:'aparte, sin socio' }]:[])]
+  const tablaEm = (() => { const cols = emAnio.map(x=>{ const [i,c]=isDesktop?[x.i,x.c]:redondearPartes([x.i,x.c],1e5); return { s:x.s, f:i+c, c, i } })
+    const tot = { f:sumaN(cols.map(x=>x.f)), c:sumaN(cols.map(x=>x.c)), i:sumaN(cols.map(x=>x.i)) }
+    const F = v => Math.abs(v)>=1 ? fmtShort(v) : '—', td = {padding:isDesktop?'9px 14px':'8px 6px',borderTop:`1px solid ${C.bgSoft}`,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',fontSize:isDesktop?12.5:11.5}
+    const th = {padding:isDesktop?'8px 14px':'8px 6px',fontSize:9.5,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',color:C.muted,textAlign:'right',background:C.bgSoft,whiteSpace:'nowrap'}
+    const lbl = {...td,textAlign:'left',fontWeight:600}, pc = (c,f)=>f>0?`${(c/f*100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} %`:'—'
+    return <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+      <thead><tr><th style={{...th,textAlign:'left'}}></th>{cols.map(x=><th key={x.s} style={th}>{isDesktop||x.s!==SIN_SOCIO?x.s:'S/socio'}</th>)}<th style={th}>Oficina</th></tr></thead>
+      <tbody>
+        <tr><td style={lbl}>Facturado</td>{cols.map(x=><td key={x.s} style={td}>{F(x.f)}</td>)}<td style={td}>{F(tot.f)}</td></tr>
+        <tr><td style={lbl}>− Comisiones</td>{cols.map(x=><td key={x.s} style={td}>{F(x.c)}</td>)}<td style={td}>{F(tot.c)}</td></tr>
+        <tr style={{background:C.bgSoft}}><td style={{...lbl,fontWeight:800,color:C.accent}}>= Ingreso emitido</td>{cols.map(x=><td key={x.s} style={{...td,fontWeight:800,color:C.accent}}>{F(x.i)}</td>)}<td style={{...td,fontWeight:800,color:C.accent}}>{F(tot.i)}</td></tr>
+        <tr><td style={{...lbl,fontWeight:500,color:C.muted,fontSize:11}}>{isDesktop?'Comisiones sobre lo facturado':'% comisión'}</td>{cols.map(x=><td key={x.s} style={{...td,color:C.muted,fontSize:11}}>{pc(x.c,x.f)}</td>)}<td style={{...td,color:C.muted,fontSize:11}}>{pc(tot.c,tot.f)}</td></tr>
+      </tbody></table></div> })()
+  const emUlt = emMeses[emMeses.length-1]||{a:0,b:0}, emPrev = emMeses[emMeses.length-2]
   const bloques = {
+    emi: { titulo:`${Mes1} en curso`, hl:<>{fmtShort(emTot.f)} − {fmtShort(emTot.c)} = <b style={{color:C.greenText}}>{fmtShort(emTot.i)}</b></>, tono:'az', link:'Facturas del mes', dest:'facturasDelMes',
+      body:<div style={{display:'grid',gridTemplateColumns:`repeat(${isDesktop?Math.max(celdasEm.length,1):Math.min(Math.max(celdasEm.length,1),3)},minmax(0,1fr))`,gap:8,padding:10}}>{celdasEm.map(c=><MiniK key={c.k} label={c.k} value={c.v} sub={c.sub}/>)}</div> },
+    ing: { titulo:`Ingreso emitido · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Ingreso emitido · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((a,i)=><span key={a}>{i?' · ':''}{isDesktop?a:a.slice(0,1)} <b>{fmtShort(emitido(a,'ytd').i)}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaEm },
+    mm: { titulo:'Ingreso emitido mes a mes', hl:<>{emPrev?<>{MESES[Number(emPrev.ym.slice(5,7))-1].slice(0,3)} <b>{fmtShort(emPrev.a+emPrev.b)}</b> · </>:null}{mesActual.slice(0,3)} <b>{fmtShort(emUlt.a+emUlt.b)}</b></>, tono:'az', link:'Informe y comparación', dest:'informeMes',
+      body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}</span></div></div> },
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} onClick={()=>go('estadoResultados')}/>
@@ -187,7 +236,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label='Datos por corregir' sub='anuladas sin motivo y otros' value={String(nDatos)} onClick={()=>go('revisarCuentas')}/>
       </> },
   }
-  const CAPS = [['Resultado',['mes','soc','ret']],['Facturación y cobranza',['fac','cob']],['Costos y pagos',['cos','com','deb']],['Caja y revisión',['caj','rev']]]
+  const CAPS = [['Resultado',['mes','soc','ret','emi','ing','mm']],['Facturación y cobranza',['fac','cob']],['Costos y pagos',['cos','com','deb']],['Caja y revisión',['caj','rev']]]
   const tarjeta = (id,D) => { const b=bloques[id], [bg,fg]=TONO[b.tono], open=lista.includes(id); return (
     <div key={id} onClick={()=>tog(id)} style={{background:C.surface,border:`1px solid ${open?C.accent:C.border}`,borderRadius:12,padding:D?'12px 14px':'9px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0,boxSizing:'border-box',height:'100%'}}>
       <span style={{width:D?34:30,height:D?34:30,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ICO_BLQ[id]} s={D?17:15} c={fg}/></span>
@@ -232,6 +281,9 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           {['ret','fac','cob','cos','com','deb','caj','rev'].filter(id=>lista.includes(id)).map(cuerpo)}
           <Sec t={bloques.soc.titulo} link={bloques.soc.link} onLink={()=>go(bloques.soc.dest)}/>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{tablaSocios}</div>
+          <Sec t='Ingreso emitido'/>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{['emi','ing','mm'].map(id=>tarjeta(id,true))}</div>
+          {['emi','ing','mm'].filter(id=>lista.includes(id)).map(cuerpo)}
         </>) : CAPS.map(([cap,ids])=>(
           <div key={cap} style={{display:'flex',flexDirection:'column',gap:8}}>
             <div style={{...SEC_LBL,margin:'4px 2px 0'}}>{cap}</div>

@@ -71,5 +71,13 @@ export function kpisPorSocio({P,V,ym}){
   /** @type {(soc:any,p:string)=>number} */ const vend=(soc,p)=>V.reduce((a,x)=>a+((!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym)?x.m:0),0)
   const KF=['emit','cext','reemb','nc'], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']
   /** @type {(soc:any,p:string)=>number[]} */ const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p)] }
-  return {inPer,sumP,vend,KF,KC,KI,card6}
+  // Ingreso EMITIDO (plano facturado): facturado (KF) − comisiones de lo facturado. El subarriendo no entra (va aparte, 'sub').
+  /** @type {(soc:any,p:string)=>{f:number,c:number,i:number}} */ const emitido=(soc,p)=>{ const f=sumP('f',KF,soc,p), c=-sumP('f','com',soc,p); return {f,c,i:f-c} }
+  /** facturas emitidas del período (una por factura; la que se devuelve entera como reembolso no cuenta) */
+  /** @type {(soc:any,p:string)=>number} */ const nEmitidas=(soc,p)=>{ const rea=new Set(P.filter(r=>r.s==='f'&&r.k==='reemb'&&r.bid).map(r=>String(r.bid)+'|'+Math.round(-r.m)))
+    return new Set(P.filter(r=>r.s==='f'&&(r.k==='emit'||r.k==='cext')&&r.bid&&r.m>0&&(!soc||r.soc===soc)&&inPer(r.d,p)&&!rea.has(String(r.bid)+'|'+Math.round(r.m))).map(r=>String(r.bid))).size }
+  /** ingreso emitido por mes (enero → ym) y por socio: [{ym, v:{socio:monto}}] */
+  /** @type {(socs:string[])=>{ym:string,v:Record<string,number>}[]} */ const emitidoMeses=(socs)=>{ const out=[]; for(let m=1;m<=Number(ym.slice(5,7));m++){ const k=`${y}-${String(m).padStart(2,'0')}`, /** @type {Record<string,number>} */ v={}
+    socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KF.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
+  return {inPer,sumP,vend,KF,KC,KI,card6,emitido,nEmitidas,emitidoMeses}
 }
