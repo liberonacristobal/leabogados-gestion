@@ -29,7 +29,7 @@ import { trabajosDetenidos } from '../../supabase/functions/_shared/ventasReglas
 import { f29Estimado } from '../../supabase/functions/_shared/f29Reglas.js'
 import { CAL_CL, CONTRIB_CUOTAS, ymMas as _ymMas, finDeMes as _finDeMes, diasA as _diasA, crearCalendario, djFecha as _djFecha } from '../../supabase/functions/_shared/calendarioReglas.js'
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
-import { ventasFacturando, trabajosSinFacturar } from '../../supabase/functions/_shared/ventasReglas.js'
+import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
 import { estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes } from './cifras.js'
@@ -2252,7 +2252,7 @@ export function useCompromisosCobranza(){
 }
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set())
-  useEffect(()=>{ if(DEMO) return; if(!_noEmitirP) _noEmitirP=supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>new Set((data||[]).map(r=>String(r.key))),()=>new Set())
+  useEffect(()=>{ if(DEMO) return; if(!_noEmitirP) _noEmitirP=supabase.from('learnings').select('kind,key').in('kind',['cuota_no_emitir','cuota_postergada']).then(({data})=>noEmitirDeFilas(data),()=>new Set())
     let v=true; _noEmitirP.then(x=>{ if(v) setS(x) }); return ()=>{v=false} },[])
   return s
 }

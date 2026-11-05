@@ -7,7 +7,7 @@ import { cargarEquipo } from "../_shared/equipo.js";
 import { notariaPorLiquidar, analisisNotaria } from "../_shared/notariaReglas.js";
 import { fgCliente, gastosPorRendirCli } from "../_shared/gastosReglas.js";
 import { dteMontoTotal } from "../_shared/saludDatos.js";
-import { cuotasSinEmitir, trabajosSinFacturar } from "../_shared/ventasReglas.js";
+import { cuotasSinEmitir, trabajosSinFacturar, noEmitirDeFilas } from "../_shared/ventasReglas.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 
 // Correo semanal "Tu semana": el ÚNICO correo recurrente de la semana para cada persona (decisión del 26-10-2026), lunes 08:30.
@@ -160,7 +160,7 @@ serve(async (req) => {
       const [vs, ufs, ne, dec, det, actOk, conc, abs, movs, rutsEq, estRut, conXml, sinProyRaw] = await Promise.all([
         selectAll(()=>sb.from("sales").select("id,client_id,title,status,deleted_at,moneda,amount_uf,amount_clp,cobro_type,cobro_config,area,responsible").order("id")),
         selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo","uf").order("fecha")),
-        sb.from("learnings").select("key").eq("kind","cuota_no_emitir"),
+        sb.from("learnings").select("kind,key").in("kind",["cuota_no_emitir","cuota_postergada"]),
         sb.from("learnings").select("key").eq("kind","trabajo_sin_facturar"),
         sb.from("auditoria_hallazgos").select("detector,monto,prueba").in("detector",["trabajo_terminado","trabajo_detenido_saldo"]).is("resuelto_at",null),
         sb.from("learnings").select("key").eq("kind","trabajo_activo_ok"),
@@ -179,7 +179,7 @@ serve(async (req) => {
       // El monto de una factura emitida es el del DTE (montoFactura lee MntTotal): se pasa solo esa etiqueta del XML.
       const mnt: Record<string,string> = {}; (conXml.data||[]).forEach((r:any)=>{ const m=String(r.dte_xml||"").match(/<MntTotal>\s*(\d+(?:\.\d+)?)\s*<\/MntTotal>/); if (m) mnt[String(r.id)]=`<MntTotal>${m[1]}</MntTotal>`; });
       const billingV = (billing||[]).map((b:any)=> mnt[String(b.id)] ? { ...b, dte_xml: mnt[String(b.id)] } : b);
-      const noEmitir = new Set((ne.data||[]).map((r:any)=>String(r.key)));
+      const noEmitir = noEmitirDeFilas(ne.data||[]);
       const anticiposRaw = (await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"))).data||[];
       const sinEmitir = cuotasSinEmitir({ billing: billingV, sales: sales2, anticipos: anticiposRaw, uf, noEmitir, hasta: hoyCL.slice(0,7)+"-01" });
       const sinFact = primerLunes ? trabajosSinFacturar({ sales: sales2, billing: billingV, uf, ufHoy, hoy: hoyCL, noEmitir, decididos: new Set((dec.data||[]).map((r:any)=>String(r.key))) }) : [];

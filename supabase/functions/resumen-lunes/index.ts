@@ -14,7 +14,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { cargarEquipo, sinTildes } from "../_shared/equipo.js";
-import { cuotasSinEmitir } from "../_shared/ventasReglas.js";
+import { cuotasSinEmitir, noEmitirDeFilas } from "../_shared/ventasReglas.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
@@ -72,7 +72,7 @@ serve(async (req) => {
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
     const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,title,client_id,responsible").order("id"));
     const { data: ufRaw } = await selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo", "uf").order("fecha"));
-    const { data: noEmitirRaw } = await sb.from("learnings").select("key").eq("kind", "cuota_no_emitir");
+    const { data: noEmitirRaw } = await sb.from("learnings").select("kind,key").in("kind", ["cuota_no_emitir", "cuota_postergada"]);
     const { data: anticiposRaw } = await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"));
     // Trabajos por cerrar: lo que dejó el auditor nocturno (misma regla que Revisión de datos), sin los ya marcados «Sigue activo».
     const { data: detRaw } = await sb.from("auditoria_hallazgos").select("detector,monto,prueba").in("detector", ["trabajo_terminado", "trabajo_detenido_saldo"]).is("resuelto_at", null);
@@ -117,7 +117,7 @@ serve(async (req) => {
     // ── RADAR: cuotas vencidas sin facturar (regla única cuotasSinEmitir, la misma de Facturación y del cierre de mes). Candidatas
     // por revisar: el titular es el conteo, nunca "$ perdidos".
     const firstOfMonth = todayCL.slice(0, 7) + "-01";
-    const noEmitir = new Set((noEmitirRaw || []).map((r: Record<string, unknown>) => String(r.key)));
+    const noEmitir = noEmitirDeFilas((noEmitirRaw || []) as { kind?: string; key: unknown }[]);
     const uf = Object.fromEntries((ufRaw || []).map((r: Record<string, unknown>) => [String(r.fecha), Number(r.valor)]));
     const sinEmitirN = cuotasSinEmitir({ billing: vivos, sales: salesRaw || [], anticipos: anticiposRaw || [], uf, noEmitir, hasta: firstOfMonth }).length;
 

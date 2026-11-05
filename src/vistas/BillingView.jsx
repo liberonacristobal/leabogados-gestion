@@ -7,7 +7,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { cuotaSaltada, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
 import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
@@ -2166,8 +2166,10 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   const [pcConfirm,setPcConfirm] = useState(null)    // confirmación inline antes de aplicar una asignación (no desaparece sin OK)
   // Radar "Cuotas vencidas sin facturar": programadas de meses cerrados que no se emitieron. noEmitirSet = las que el usuario marcó "no corresponde" (aprende y deja de marcarlas).
   const [noEmitirSet,setNoEmitirSet] = useState(()=>new Set())
-  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('key').eq('kind','cuota_no_emitir').then(({data})=>{ setNoEmitirSet(new Set((data||[]).map(r=>String(r.key)))) },()=>{}) },[])
-  const marcarNoEmitir = async(bill)=>{ setNoEmitirSet(p=>new Set([...p,String(bill.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('cuota_no_emitir',String(bill.id),'1') }catch(e){registrarError({origen:'accion',vista:'cuota_no_emitir',err:e})} } }
+  useEffect(()=>{ if(typeof DEMO!=='undefined'&&DEMO) return; supabase.from('learnings').select('kind,key').in('kind',['cuota_no_emitir','cuota_postergada']).then(({data})=>{ setNoEmitirSet(noEmitirDeFilas(data)) },()=>{}) },[])
+  const marcarNoEmitir = async(bill)=>{ setNoEmitirSet(p=>conPostergadas(new Set([...p,String(bill.id)]),p.postergadas)); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('cuota_no_emitir',String(bill.id),'1') }catch(e){registrarError({origen:'accion',vista:'cuota_no_emitir',err:e})} } }
+  // «Queda para el final»: una cuota saltada que se dejó a propósito con su vencimiento al final del plan; deja de marcarse como olvidada y vuelve a contar sola al llegar su vencimiento.
+  const marcarPostergada = async(bill)=>{ setNoEmitirSet(p=>conPostergadas(new Set(p),[...(p.postergadas||[]),String(bill.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('cuota_postergada',String(bill.id),'1') }catch(e){registrarError({origen:'accion',vista:'cuota_postergada',err:e})} } }
   const [siiBuscaFor,setSiiBuscaFor] = useState(null)   // {id, hechos, total} mientras "Buscar en SII" sincroniza el período de una cuota del radar
   // Trabajos sin facturar (regla única trabajosSinFacturar, _shared/ventasReglas.js; la usa también el correo de pendientes):
   // decidirTrabajo guarda la respuesta (learnings trabajo_sin_facturar) y el trabajo deja de aparecer aquí y en el correo.
@@ -3955,6 +3957,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
                       <div style={{display:'flex',gap:7,marginTop:8,flexWrap:'wrap'}}>
                         <button onClick={()=>onEdit&&onEdit(b)} style={{fontSize:11,fontWeight:700,border:'none',borderRadius:8,padding:'5px 12px',background:C.accent,color:'#fff',cursor:'pointer'}}>Emitir →</button>
                         {onBuscarSII&&<button disabled={!!siiBuscaFor} onClick={()=>buscarSII(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.azulInfo}`,background:C.surface,color:C.azulInfo,cursor:siiBuscaFor?'default':'pointer',opacity:siiBuscaFor&&siiBuscaFor.id!==b.id?.5:1}}>{siiBuscaFor&&siiBuscaFor.id===b.id?(siiBuscaFor.total?`Buscando ${siiBuscaFor.hechos||0}/${siiBuscaFor.total}…`:'Buscando…'):'Buscar en SII'}</button>}
+                        {cuotaSaltada(b,billing)!=null&&<button onClick={()=>marcarPostergada(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer'}}>Queda para el final</button>}
                         <button onClick={()=>marcarNoEmitir(b)} style={{fontSize:11,fontWeight:600,borderRadius:8,padding:'5px 11px',border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer'}}>No corresponde</button>
                       </div>
                     </div>) })}
