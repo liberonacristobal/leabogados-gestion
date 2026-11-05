@@ -78,6 +78,13 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   // REGLA: una factura solo está EMITIDA si tiene folio/número (aparece en el SII). Sin folio NUNCA es emitida.
   const esEmitida = b => !!(b.invoice_no||b.folio)
   const mesKey = `${year}-${month}`
+  // La pantalla puede quedar abierta días (celular): si el mes del calendario cambia, el listado pasa al mes nuevo en vez de seguir en el anterior.
+  const mesActualKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+  const mesAlMontar = useRef(mesActualKey)
+  useEffect(()=>{ const sync=()=>{ const d=new Date(), k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+      if(k!==mesAlMontar.current){ mesAlMontar.current=k; setYear(String(d.getFullYear())); setMonth(String(d.getMonth()+1).padStart(2,'0')) } }
+    const t=setInterval(sync,60000); document.addEventListener('visibilitychange',sync); window.addEventListener('focus',sync)
+    return ()=>{ clearInterval(t); document.removeEventListener('visibilitychange',sync); window.removeEventListener('focus',sync) } },[])
 
   // Corrimiento: una Programada de un mes ya pasado rueda al mes en curso (fuente única rolledDueMap). Puro, no muta.
   const refMonth = new Date().toISOString().slice(0,10).slice(0,7)
@@ -112,6 +119,8 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
     return b=>(b.sale_id&&st[String(b.sale_id)]&&st[String(b.sale_id)]!=='Activo')||(noEmitirCk&&noEmitirCk.has(String(b.id)))||!!cub.get(String(b.id))?.total },[billing,sales,noEmitirCk])
   const ckAtrasadas=useMemo(()=>new Set(cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart}).map(b=>String(b.id))),[billing,sales,anticipos,noEmitirCk,refStart])
   const porEmitir = cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey,uf:ufFechaCache()||{}}).filter(matchQ)   // misma regla que la foto de Facturación (ventasReglas)
+  // Si se mira otro mes y el mes en curso tiene cuotas por emitir, se avisa (cuántas) con el salto al mes en curso.
+  const nMesActual = mesKey!==mesActualKey ? cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey:mesActualKey,uf:ufFechaCache()||{}}).length : 0
   const yaEmitidasFantasma = billing.filter(b=> !b.deleted_at && b.status==='Programada' && fantasmaIds&&fantasmaIds.has(String(b.id)) && dReal(b) && dReal(b)<=refEnd)
   const esMesB = b => dReal(b)>=refStart   // devengo del mes en curso (el <=refEnd ya está garantizado por porEmitir)
   const mmmDe = ym => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const p=String(ym||'').split('-'); return p.length>=2?`${M[+p[1]-1]} ${p[0].slice(2)}`:'' }
@@ -412,6 +421,8 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   return (
     <div>
       <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:10}}>Facturar en {MESES[parseInt(month,10)-1]} {year}</div>
+      {nMesActual>0&&<div onClick={()=>{ setYear(mesActualKey.slice(0,4)); setMonth(mesActualKey.slice(5,7)) }} style={{display:'flex',alignItems:'center',gap:8,background:C.soonBg,borderRadius:10,padding:'8px 12px',marginBottom:10,cursor:'pointer',fontSize:13,color:C.soonText}}>
+        <span style={{flex:1,minWidth:0}}>{MESES[parseInt(mesActualKey.slice(5,7),10)-1]} tiene {nMesActual} {nMesActual===1?'cuota':'cuotas'} por emitir.</span><span style={{fontWeight:700,whiteSpace:'nowrap'}}>Ver {MESES[parseInt(mesActualKey.slice(5,7),10)-1].toLowerCase()}</span></div>}
 
       {/* Filtros: mes/año + estado */}
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
