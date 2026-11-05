@@ -1,6 +1,8 @@
 // Revisión de datos: los detectores que usan la página «Revisión de datos» de la app y el auditor nocturno (edge auditor-datos).
 // Una sola fuente: funciones puras sobre las filas; ninguna escribe. Cada detector devuelve casos con las filas que lo prueban.
 
+import { numerosEscritos } from './correoFacturaPlantilla.js'
+
 const normRut = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '')
 const folioN = no => String(no || '').replace(/^factura\s*/i, '').trim()
 const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -253,6 +255,9 @@ export function honorarioDescuadrado(saludRows, billing, sales) {
 
 // Resumen para el auditor nocturno: un caso por fila de cada detector, con una clave estable (para saber si es nuevo, sigue o se
 // resolvió), el título que se muestra y las filas que lo prueban.
+/** Plantillas de correo aprendidas con un monto o folio escrito a mano (la próxima factura repetiría el número de la anterior). @param {{kind?:string,key:string,value:string}[]} rows */
+export const plantillasConNumeros = rows => (rows || []).map(r => ({ r, n: numerosEscritos(r.value) })).filter(x => x.n.length).map(x => ({ key: String(x.r.key), kind: x.r.kind || '', numeros: x.n }))
+
 export function hallazgos(d) {
   const nom = id => d.clientName?.(id) || '—'
   const out = []
@@ -289,10 +294,12 @@ export function hallazgos(d) {
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
   honorarioDescuadrado(d.saludRows, d.billing, d.sales).forEach(v => add('honorario_descuadrado', v.id, `Honorario distinto de la suma de sus cuotas · ${nom(v.client_id)} · ${v.title || ''}`.trim(), (Number(v.amount_clp) || 0) - (Number(v.suma_cuotas) || 0), { venta: v.id, honorario: v.amount_clp, cuotas: v.suma_cuotas }))
+  plantillasConNumeros(d.plantillas).forEach(x => add('plantilla_con_numeros', `${x.kind}:${x.key}`, `Plantilla de correo de ${nom(x.key.split(':')[0])} con ${x.numeros[0]} escrito a mano`, null, { clave: x.key, numeros: x.numeros }))
   return out
 }
 
 export const DETECTOR_LBL = {
+  plantilla_con_numeros: 'Plantillas de correo con números escritos a mano',
   permiso_sin_sesion: 'Permisos de la base fuera de la regla',
   gasto_rs_ajena: 'Gasto con razón social de otro cliente', terminada_con_gastos: 'Trabajo terminado que sigue recibiendo gastos',
   compra_observada_sii: 'Compras de proveedores observados por el SII',
