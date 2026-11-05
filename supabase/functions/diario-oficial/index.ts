@@ -15,11 +15,19 @@
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { enviarPush, emailsDeNombres } from "../_shared/push.ts";
 import { registrarUsoIA } from "../_shared/usoIA.ts";
+import { SMTPClient } from "../_shared/envios.ts";
+import { todasRest } from "../_shared/paginar.js";
+import { cargarEquipo } from "../_shared/equipo.js";
+import { holaEquipo } from "../_shared/correoEquipo.js";
+import { calzarPublicaciones, porDestinatario, asuntoAviso, introAviso, rutBonito, quitarRut } from "../_shared/diarioOficialAviso.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const ANTHROPIC = Deno.env.get("ANTHROPIC_API_KEY") || "";
+const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
+const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
+const APP_URL = Deno.env.get("APP_URL") || "https://gestion.leabogados.cl";
 const DO = "https://www.diariooficial.interior.gob.cl/edicionelectronica/";
 const PLAZO_DIAS = 60;
 const H = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
@@ -112,6 +120,54 @@ Copia las razones sociales tal como aparecen. Si no se lee algo, usa null. No in
   if (!m) throw new Error("IA: sin JSON"); return JSON.parse(m[0]);
 }
 
+
+const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
+
+// Aviso por correo de lo publicado por sociedades de clientes (ver _shared/diarioOficialAviso.js). Cada publicación se avisa una sola vez
+// (learnings do_cliente_avisado, clave = CVE) y solo se mira lo de los últimos 3 días. Enciende learnings config diario_oficial_aviso = on.
+// deno-lint-ignore no-explicit-any
+async function avisarClientes(hoy: string, dryRun: boolean): Promise<Record<string, any>> {
+  if (!dryRun) {
+    const cfg = await rest("learnings?kind=eq.config&key=eq.diario_oficial_aviso&select=value").catch(() => []);
+    if (String(cfg?.[0]?.value || "").toLowerCase() !== "on") return { enviado: false, motivo: "apagado" };
+    if (!GMAIL_USER || !GMAIL_PASS) return { enviado: false, motivo: "sin cuenta de correo" };
+  }
+  const pubs = await todasRest(SB_URL, H, `diario_oficial_empresas?fecha=gte.${masDias(hoy, -2)}&select=id,fecha,nombre,nombre_norm,rut,categoria,subtipo,cve,url`);
+  if (!pubs.length) return { enviado: false, motivo: "sin publicaciones", publicaciones: 0 };
+  const minCve = pubs.map((p: { cve: string }) => String(p.cve)).sort()[0];
+  const yaAvisadas = new Set((await todasRest(SB_URL, H, `learnings?kind=eq.do_cliente_avisado&key=gte.${encodeURIComponent(minCve)}&select=key`)).map((x: { key: string }) => String(x.key)));
+  const nuevas = pubs.filter((p: { cve: string }) => !yaAvisadas.has(String(p.cve)));
+  const [clientes, entidades] = await Promise.all([todasRest(SB_URL, H, "clients?select=id,name,rut,abogado_responsable,status"), todasRest(SB_URL, H, "client_entities?select=client_id,name,rut")]);
+  const eq = await cargarEquipo(SB_URL, SB_KEY);
+  const coincidencias = calzarPublicaciones(nuevas, clientes, entidades);
+  const reparto = porDestinatario(coincidencias, eq);
+  const resumen = { publicaciones: pubs.length, nuevas: nuevas.length, de_clientes: coincidencias.length, para: [...reparto.entries()].map(([e, l]) => ({ para: e, n: l.length })) };
+  if (dryRun || !coincidencias.length) return { ...resumen, enviado: false, ...(dryRun ? { detalle: coincidencias.map((c) => ({ cliente: c.cliente, abogado: c.abogado, via: c.via, nota: c.nota, pub: quitarRut(c.pub.nombre), fecha: c.pub.fecha, cve: c.pub.cve })) } : { motivo: "sin publicaciones de clientes" }) };
+  const miembros = eq.miembros.map((m: { email: string; nombre: string }) => ({ email: m.email, nombre: m.nombre }));
+  const pendientes = new Map<string, number>();   // CVE → correos que faltan por salir
+  for (const l of reparto.values()) for (const c of new Set(l.map((x) => String(x.pub.cve)))) pendientes.set(c, (pendientes.get(c) || 0) + 1);
+  const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
+  const enviados: string[] = [], fallidos: string[] = [];
+  for (const [email, lista] of reparto) {
+    const ordenadas = [...lista].sort((a, b) => String(b.pub.fecha).localeCompare(String(a.pub.fecha)) || a.cliente.localeCompare(b.cliente, "es"));
+    const asunto = asuntoAviso(ordenadas.length), intro = introAviso(ordenadas.map((c) => c.pub.fecha));
+    const tarjetas = ordenadas.map((c) => `<div style="border:1px solid #E4E8EB;border-radius:10px;padding:10px 12px;margin:0 0 10px"><div style="font-size:15px;font-weight:700;color:#003C50">${esc(c.cliente)}</div><div style="font-size:13px;color:#3D3D3D;margin-top:2px"><span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:#E6F1FB;color:#185FA5;margin-right:6px">${esc(String(c.pub.categoria || "").charAt(0) + String(c.pub.categoria || "").slice(1).toLowerCase())}</span>${esc(quitarRut(c.pub.nombre))}</div><div style="font-size:12px;color:#537281;margin-top:2px">${[c.pub.rut ? `RUT publicado ${rutBonito(c.pub.rut)}` : "", c.pub.cve ? `CVE ${c.pub.cve}` : "", c.pub.subtipo || ""].filter(Boolean).map(esc).join(" &middot; ")}${eq.socios.length > 1 && !(c.abogado && eq.correoDe(c.abogado) === email) ? ` &middot; Cliente de ${esc(c.abogado || "sin abogado asignado")}` : ""}</div>${c.nota ? `<div style="margin-top:8px;font-size:12px;color:#854F0B;background:#FFF8E1;border-radius:8px;padding:6px 9px">${esc(c.nota)}</div>` : ""}<div style="margin-top:8px;font-size:13px"><a href="${APP_URL}/?cliente=${encodeURIComponent(c.clientId)}" style="color:#003C50;font-weight:700;text-decoration:none">Ver ficha</a>${c.pub.url ? ` &nbsp;&middot;&nbsp; <a href="${esc(String(c.pub.url).replace(/^http:/, "https:"))}" style="color:#185FA5;font-weight:600;text-decoration:none">Ver PDF</a>` : ""}</div></div>`).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #E4E8EB;padding:20px"><p style="margin:0 0 12px;font-size:14px;color:#3D3D3D">${esc(holaEquipo([email], miembros))}</p><p style="margin:0 0 14px;font-size:14px;color:#3D3D3D">${esc(intro)}</p>${tarjetas}</div></body></html>`;
+    try {
+      await client.send({ from: `Oficina <${GMAIL_USER}>`, to: [email], subject: asunto, content: toAscii(ordenadas.map((c) => `${c.cliente}: ${quitarRut(c.pub.nombre)} (${c.pub.categoria})`).join("\n")), html });
+      enviados.push(email);
+      for (const cve of new Set(ordenadas.map((c) => String(c.pub.cve)))) pendientes.set(cve, (pendientes.get(cve) || 1) - 1);
+    } catch (e) { fallidos.push(`${email}: ${String((e as Error).message || e).slice(0, 120)}`); }
+  }
+  await client.close().catch(() => null);
+  // Se marca como avisada solo la publicación cuyo correo salió a todos sus destinatarios; la que falló se reintenta en la próxima lectura.
+  const hechas = [...pendientes.entries()].filter(([, n]) => n <= 0).map(([cve]) => cve);
+  if (hechas.length) await rest("learnings", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(hechas.map((cve) => ({ kind: "do_cliente_avisado", key: cve, value: new Date().toISOString() }))) }).catch(() => null);
+  await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "notaria.diario_oficial_clientes_avisado", table_name: "diario_oficial_empresas", estudio_id: "lea", detail: { title: `Aviso de publicaciones de clientes: ${coincidencias.length}`, para: enviados, fallidos } }) }).catch(() => null);
+  return { ...resumen, enviado: enviados.length > 0, enviados, fallidos };
+}
+
 Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any
   let body: any = {}; try { body = await req.json(); } catch { /* sin body */ }
@@ -140,6 +196,10 @@ Deno.serve(async (req) => {
         leidos += rows.length; await pausa(300);
       }
     }
+    // Aviso de publicaciones de clientes (lectura de las 08:30: body.avisar). body.soloIndice = no hace el cruce con la notaría.
+    let aviso: Record<string, unknown> | null = null;
+    if (body.avisar === true || body.dryRunAviso === true) aviso = await avisarClientes(hoy, body.dryRunAviso === true).catch((e) => ({ enviado: false, error: String((e as Error).message || e).slice(0, 200) }));
+    if (body.soloIndice === true) return json({ ok: true, dias, leidos, aviso });
     // 2) Cruce con los extractos de la notaría. Se revisan los sin publicación y los que calzaron solo por cercanía de fechas.
     const docs = await rest("documentos_notaria?and=(or(tipo_documento.ilike.*extracto*,archivo_nombre.ilike.*extracto*),or(do_estado.is.null,do_estado.neq.publicado,do_publicacion->>criterio.eq.cercania))&lectura=not.is.null&select=id,estudio_id,cliente_id,tipo_documento,repertorio,fecha_documento,recibido_at,lectura,do_estado&limit=500");
     const res = { publicados: 0, pendientes: 0, vencidos: 0, sinRazonSocial: 0, lecturas: 0 };
@@ -215,7 +275,7 @@ Deno.serve(async (req) => {
       }
       if (pub && antes !== "publicado") await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "agente", action: "notaria.diario_oficial_publicado", table_name: "documentos_notaria", record_id: d.id, estudio_id: d.estudio_id, detail: { title: `Publicado en el Diario Oficial: ${pub.nombre} · ${dmy(pub.fecha)} · CVE ${pub.cve}`, url: pub.url, criterio } }) }).catch(() => null);
     }
-    return json({ ok: true, dias, leidos, revisados: docs.length, ...res });
+    return json({ ok: true, dias, leidos, revisados: docs.length, ...res, aviso });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
