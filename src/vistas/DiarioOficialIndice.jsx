@@ -3,6 +3,7 @@
 // y se pagina de a 50. El chip «Cliente» sale solo del RUT publicado contra las fichas y razones sociales de la oficina.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, DEMO } from '../supabase'
+import { calzarPublicaciones } from '../../supabase/functions/_shared/diarioOficialAviso.js'
 import { C, SEC_LBL, SIcon, _normTxt, diaGrande, isoLocal } from '../lib/base.jsx'
 
 const PAGINA = 50
@@ -38,6 +39,8 @@ export function DiarioOficialIndice({ isDesktop, clients = [], clientEntities = 
     const m = {}; [...clients.map(c => [c.rut, c.id]), ...clientEntities.map(e => [e.rut, e.client_id])].forEach(([r, id]) => { const k = rutDO(r); if (k && id) m[k] = String(id) })
     return m
   }, [clients, clientEntities])
+  // Misma regla del correo diario: por RUT; si no, por el mismo nombre (con nota para verificar).
+  const calces = useMemo(() => { const m = new Map(); (filas ? calzarPublicaciones(filas, clients, clientEntities) : []).forEach(c => { if (!m.has(c.pub.id)) m.set(c.pub.id, c) }); return m }, [filas, clients, clientEntities])
   const nombreCli = id => clients.find(c => String(c.id) === String(id))?.name || ''
 
   useEffect(() => { const t = setTimeout(() => setQq(q.trim()), 300); return () => clearTimeout(t) }, [q])
@@ -59,7 +62,7 @@ export function DiarioOficialIndice({ isDesktop, clients = [], clientEntities = 
     return () => { vivo = false } }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const consulta = (desde, hasta) => {
-    let s = supabase.from('diario_oficial_empresas').select('id,fecha,nombre,rut,categoria,subtipo,cve,url', { count: desde === 0 ? 'exact' : undefined })
+    let s = supabase.from('diario_oficial_empresas').select('id,fecha,nombre,nombre_norm,rut,categoria,subtipo,cve,url', { count: desde === 0 ? 'exact' : undefined })
     if (cat) s = s.eq('categoria', cat)
     if (periodo === 'ed' && kpi?.ult) s = s.eq('fecha', kpi.ult); else if (desdeDe(periodo)) s = s.gte('fecha', desdeDe(periodo))
     if (soloCli) { const ruts = Object.keys(porRut); s = s.in('rut', ruts.length ? ruts : ['-']) }
@@ -91,7 +94,7 @@ export function DiarioOficialIndice({ isDesktop, clients = [], clientEntities = 
     </div> }
   const chip = (on, l, fn, k) => <button key={k || l} onClick={fn} style={{ fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 999, border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.surface, color: on ? '#fff' : C.muted, cursor: 'pointer', whiteSpace: 'nowrap' }}>{l}</button>
 
-  const fila = (f, i) => { const rk = f.rut || '', cid = porRut[rk], ct = CAT_CHIP[f.categoria]
+  const fila = (f, i) => { const cz = calces.get(f.id), cid = cz?.clientId, ct = CAT_CHIP[f.categoria]
     const abrir = () => { if (f.url) window.open(urlPdf(f.url), '_blank', 'noopener') }
     return <div key={f.id} onClick={abrir} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: D ? '9px 14px' : '9px 12px', borderTop: i ? `1px solid ${C.track}` : 'none', cursor: f.url ? 'pointer' : 'default' }}>
       {diaGrande(f.fecha)}
@@ -99,7 +102,7 @@ export function DiarioOficialIndice({ isDesktop, clients = [], clientEntities = 
         <div style={{ fontSize: 14, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombreDO(f.nombre)}</div>
         <div style={{ fontSize: 12, color: C.textSoft, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{[f.rut ? f.rut.replace(/\B(?=(\d{3})+(?!\d)(?=-))/g, '.') : 'Sin RUT', D ? f.subtipo : null, D && f.cve ? `CVE ${f.cve}` : null].filter(Boolean).join(' · ')}</div>
       </div>
-      {cid && <span onClick={ev => { ev.stopPropagation(); onOpenClientFicha && onOpenClientFicha(cid) }} title={nombreCli(cid)} style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: C.soonBg, color: C.soonText, whiteSpace: 'nowrap', cursor: onOpenClientFicha ? 'pointer' : 'default', flexShrink: 0 }}>Cliente</span>}
+      {cid && <span onClick={ev => { ev.stopPropagation(); onOpenClientFicha && onOpenClientFicha(cid) }} title={[nombreCli(cid), cz?.nota].filter(Boolean).join(' · ')} style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: C.soonBg, color: C.soonText, whiteSpace: 'nowrap', cursor: onOpenClientFicha ? 'pointer' : 'default', flexShrink: 0 }}>Cliente</span>}
       {ct && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: ct[2], color: ct[3], whiteSpace: 'nowrap', flexShrink: 0 }}>{D ? ct[0] : ct[1]}</span>}
       {D && f.url && <span style={{ fontSize: 13, fontWeight: 600, color: C.azulInfo, whiteSpace: 'nowrap', flexShrink: 0 }}>Ver PDF</span>}
     </div> }
