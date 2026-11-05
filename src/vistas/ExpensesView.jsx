@@ -13,6 +13,7 @@ import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, app
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
+import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -359,7 +360,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder={sub?(D?'Buscar cliente, razón social, tipo, repertorio u OT':'Buscar cliente, repertorio u OT'):(D?'Buscar en todos los documentos: cliente, razón social, repertorio u OT':'Buscar en todos los documentos')} style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%',minWidth:0}}/>
     </div>
   const mesSel=<select value={mes} onChange={e=>setMes(e.target.value)} style={selSty}><option value=''>Todos los meses</option>{meses.map(m=><option key={m} value={m}>{mesTitulo(m+'-15T12:00')}</option>)}</select>
-  const conRegistro=['esc','ext','com','otr'].includes(sub)&&!(sub==='ext'&&extVista==='do')
+  const conRegistro=['esc','ext','com','otr'].includes(sub)&&!(sub==='ext'&&extVista!=='docs')
   const filtros=<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
       {buscador}{mesSel}
       {conRegistro&&abogados.length>1&&<select value={abog} onChange={e=>setAbog(e.target.value)} style={selSty}><option value=''>Todos los abogados</option>{abogados.map(a=><option key={a} value={a}>{a}</option>)}</select>}
@@ -426,13 +427,14 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
     </div>
   const nExt=vivos.filter(d=>pasaBase(d)&&_conceptoDoc(d)==='ext').length
   return (<div style={{display:'flex',flexDirection:'column',gap:12}}>
-    {filtros}
+    {!(sub==='ext'&&extVista==='indice')&&filtros}
     {sub==='ext'&&<div style={{display:'inline-flex',alignSelf:'flex-start',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
-      {[['docs',`Documentos ${nExt}`],['do',`Diario Oficial ${tram.length}`]].map(([k,l])=><button key={k} onClick={()=>setExtVista(k)} style={{fontSize:12,fontWeight:600,padding:'6px 12px',border:'none',cursor:'pointer',background:extVista===k?C.accent:'transparent',color:extVista===k?'#fff':C.muted}}>{l}</button>)}
+      {[['docs',`Documentos ${nExt}`],['do',`Diario Oficial ${tram.length}`],['indice','Índice']].map(([k,l])=><button key={k} onClick={()=>setExtVista(k)} style={{fontSize:12,fontWeight:600,padding:'6px 12px',border:'none',cursor:'pointer',background:extVista===k?C.accent:'transparent',color:extVista===k?'#fff':C.muted}}>{l}</button>)}
     </div>}
     {sub==='ult'&&secUltimos}
     {sub==='por'&&(secPorAsig||<div style={{...card,padding:20,textAlign:'center',fontSize:13,color:C.muted}}>{hayFiltro?'Ningún documento por asignar con esos filtros.':'Todos los documentos de la notaría están en la carpeta de su cliente.'}</div>)}
     {sub==='ext'&&extVista==='do'&&secDO}
+    {sub==='ext'&&extVista==='indice'&&<DiarioOficialIndice isDesktop={D} clients={clients} clientEntities={clientEntities} onOpenClientFicha={onOpenClientFicha}/>}
     {conRegistro&&secPorAsig}
     {conRegistro&&secRegistro}
   </div>)
