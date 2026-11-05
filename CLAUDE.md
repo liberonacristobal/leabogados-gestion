@@ -36,7 +36,7 @@ Nace del 2026-11-04: el correo de la factura 500 salió con «Pago 2 de 10» sie
 
 Nada de ventanas flotantes para trabajar (2026-11-04: se convirtieron ~50 modales a página). Un `Modal` solo se usa para una **pregunta breve que bloquea una acción** y donde no hay nada que mirar al lado: avisos y confirmaciones del sistema (`DialogHost`: `appAlert`/`appConfirm`), «Dar de baja factura» (un motivo), «Deshacer importación», elegir el mes de la tanda (`MesTandaModal`) y el panel de Counsel AI (excepción pedida por el usuario: no se toca).
 - **Todo lo que tenga más de 2–3 campos, listas, previsualizaciones o se use para trabajar es PÁGINA con «← origen»:** si se abre por navegación, tipo `flujo` en `PAGE_OF` de `App.jsx` (`FlujoPagina`); si se abre desde un estado dentro de una vista, `PaginaSobre` (compartido.jsx). Nunca `position:'fixed'` + fondo oscuro a mano.
-- El aviso de novedades al entrar es una banda arriba que no bloquea (`NovedadesAviso`), no una ventana.
+- **Excepción pedida por el usuario (2026-11-04): los avisos al entrar son ventana al centro** (`NovedadesAviso` y `AvisoPdfSii`, con «Ver todas»/«Ver facturas» y «Entendido»), no banda arriba. Salen uno tras otro (novedades primero); en demo, el del SII solo con `?pdffallos=1`.
 - Al convertir, revisar que el contenido no lea `modal.data` (en página es `pagina.data`) y verificar en 1280 y 375 px.
 
 ## REGLA DE ORO: doble formato — todo nace en móvil Y escritorio

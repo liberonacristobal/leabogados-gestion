@@ -429,32 +429,42 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
     {acciones||(onOpen&&<span style={{color:C.done,display:'flex',flexShrink:0}}><Gl n='chevron'/></span>)}
   </div>)
 }
-// Aviso al entrar: banda arriba que no bloquea la pantalla, solo con el número de novedades no vistas. «Ver novedades» abre la página
-// Novedades y «Continuar» lo cierra; en ambos casos quedan vistas.
-function NovedadesAviso({items, isDesktop, onClose, onVerTodas}){
-  const n=items.length
-  return createPortal(<div style={{position:'fixed',top:'calc(env(safe-area-inset-top,0px) + 10px)',left:isDesktop?212:0,right:0,zIndex:300,padding:'0 16px',display:'flex',justifyContent:'center',pointerEvents:'none'}}>
-    <div role='status' aria-label='Novedades' style={{pointerEvents:'auto',width:'100%',maxWidth:isDesktop?560:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:'0 8px 28px rgba(0,30,40,.16)',padding:'10px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-      <span style={{width:30,height:30,borderRadius:8,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
-      <div style={{flex:'1 1 160px',minWidth:0,fontSize:13,color:C.text,lineHeight:1.25}}><b style={{color:C.accent}}>Novedades</b> · {`${n} desde tu última visita`}</div>
-      <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
-        <button onClick={onVerTodas} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Ver novedades</button>
-        <button onClick={onClose} style={{fontSize:12,fontWeight:700,color:C.surface,background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Continuar</button>
-      </div>
+// Aviso al entrar: ventana al centro con las novedades no vistas (lo que más sirve a cada rol). «Ver todas» abre la página Novedades;
+// «Entendido» lo cierra; en ambos casos quedan vistas.
+function NovedadesAviso({items, isDesktop, isAdmin, onOpen, onClose, onVerTodas}){
+  const sty = {position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:16}
+  const panel = (<div onClick={e=>e.stopPropagation()} style={{width:isDesktop?600:'100%',maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 80px)',background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+    <div style={{display:'flex',alignItems:'center',gap:11,padding:isDesktop?'16px 18px 12px':'14px 14px 12px',borderBottom:`1px solid ${C.border}`}}>
+      <span style={{width:34,height:34,borderRadius:10,background:C.greenBg,color:C.greenText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='sparkle'/></span>
+      <div style={{flex:1,minWidth:0}}><div style={{fontSize:17,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:12,color:C.muted}}>desde tu última visita · {items.length}</div></div>
+      <button onClick={onClose} aria-label='Cerrar' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}><Gl n='x'/></button>
     </div>
-  </div>, document.body)
+    <div style={{flex:1,overflowY:'auto',minHeight:0}}>{items.map((n,i)=><NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}/>)}</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+      <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver todas</button>
+      <button onClick={onClose} style={{background:C.accent,color:'#fff',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 22px',border:'none',cursor:'pointer'}}>Entendido</button>
+    </div>
+  </div>)
+  return createPortal(<div style={sty} onClick={onClose}>{panel}</div>, document.body)
 }
-// Aviso al entrar, junto al de novedades: facturas cuyo PDF oficial el proceso automático no logró guardar tras varios intentos.
-// Se limpia solo cuando se guardan. «Ver» abre la lista con el motivo y «Reintentar ahora»; «Cerrar» lo oculta en esta sesión.
-function AvisoPdfSii({filas, isDesktop, apilado, onClose, onVer}){
-  const n=filas.length, folios=filas.slice(0,3).map(f=>f.folio).join(', ')+(n>3?'…':'')
-  return createPortal(<div style={{position:'fixed',top:`calc(env(safe-area-inset-top,0px) + ${apilado?68:10}px)`,left:isDesktop?212:0,right:0,zIndex:299,padding:'0 16px',display:'flex',justifyContent:'center',pointerEvents:'none'}}>
-    <div role='status' aria-label='Facturas sin PDF oficial' style={{pointerEvents:'auto',width:'100%',maxWidth:isDesktop?560:'100%',background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,boxShadow:'0 8px 28px rgba(0,30,40,.16)',padding:'10px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-      <span style={{width:30,height:30,borderRadius:8,background:C.ambarBg,color:C.coralText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='alert'/></span>
-      <div style={{flex:'1 1 160px',minWidth:0,fontSize:13,color:C.text,lineHeight:1.25}}><b style={{color:C.accent}}>{n===1?'1 factura sin PDF oficial':`${n} facturas sin PDF oficial`}</b> · N° {folios}</div>
-      <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
-        <button onClick={onVer} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Ver</button>
-        <button onClick={onClose} style={{fontSize:12,fontWeight:700,color:C.surface,background:C.accent,border:'none',borderRadius:8,padding:'7px 12px',cursor:'pointer',minHeight:34}}>Cerrar</button>
+// Aviso al entrar, después del de novedades: facturas cuyo PDF oficial el proceso automático no logró guardar tras varios intentos.
+// Mismo formato que Novedades (ventana al centro). Se limpia solo cuando se guardan; «Ver facturas» abre la lista con «Reintentar ahora».
+function AvisoPdfSii({filas, clients, isDesktop, onClose, onVer}){
+  const n=filas.length, nombre=id=>(clients||[]).find(c=>String(c.id)===String(id))?.name||''
+  return createPortal(<div style={{position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:16}} onClick={onClose}>
+    <div role='dialog' aria-label='Facturas sin PDF oficial' onClick={e=>e.stopPropagation()} style={{width:isDesktop?600:'100%',maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 80px)',background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',alignItems:'center',gap:11,padding:isDesktop?'16px 18px 12px':'14px 14px 12px',borderBottom:`1px solid ${C.border}`}}>
+        <span style={{width:34,height:34,borderRadius:10,background:C.ambarBg,color:C.coralText,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Gl n='alert'/></span>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:17,fontWeight:700,color:C.accent}}>{n===1?'1 factura sin PDF oficial':`${n} facturas sin PDF oficial`}</div><div style={{fontSize:12,color:C.muted}}>no se pudo guardar tras varios intentos</div></div>
+        <button onClick={onClose} aria-label='Cerrar' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}><Gl n='x'/></button>
+      </div>
+      <div style={{flex:1,overflowY:'auto',minHeight:0}}>{filas.map((f,i)=><div key={f.id} style={{padding:isDesktop?'11px 18px':'11px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none'}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.accent}}>N° {f.folio} <span style={{fontWeight:500,color:C.text}}>· {nombre(f.client_id)||'Sin cliente'}</span></div>
+        <div style={{fontSize:12,color:C.muted,marginTop:2}}>{f.n} intentos{f.ultimo?` · ${f.ultimo}`:''}</div>
+      </div>)}</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+        <button onClick={onClose} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Entendido</button>
+        <button onClick={onVer} style={{background:C.accent,color:'#fff',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 22px',border:'none',cursor:'pointer'}}>Ver facturas</button>
       </div>
     </div>
   </div>, document.body)
@@ -5848,7 +5858,7 @@ export default function App() {
   // Facturas sin PDF oficial tras varios intentos (solo socios): se leen de los intentos del proceso automático y salen solas al guardarse.
   const [pdfFallos,setPdfFallos]=useState([]), [pdfAvisoCerrado,setPdfAvisoCerrado]=useState(false)
   const cargarPdfFallos=useCallback(async()=>{
-    if(DEMO){ setPdfFallos(PDF_FALLOS_DEMO); return }
+    if(DEMO){ setPdfFallos(/pdffallos/.test(window.location.search)?PDF_FALLOS_DEMO:[]); return }
     const {data}=await supabase.from('learnings').select('key,value,hits,meta').eq('kind','pdf_oficial_intentos').gte('hits',3)
     const ids=(data||[]).map(r=>r.key); if(!ids.length){ setPdfFallos([]); return }
     const {data:fs}=await supabase.from('billing').select('id,client_id,invoice_no').in('id',ids).is('deleted_at',null)
@@ -8758,8 +8768,8 @@ export default function App() {
             {tab==='procesos'&&userRole==='admin'&&<ProcesosView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} onOpenBandeja={()=>navTo({tab:'bandeja'})} onOpenRevision={()=>setModal({type:'revisionDatos'})} onOpenCartera={()=>navTo({tab:'cartera'})} onOpenTareas={()=>navTo({tab:'tasks'})} onOpenClientFicha={handleOpenClientFicha}/>}
             {tab==='migmail'&&<FlujoPagina origen={origenNav('Inicio')} titulo='Mi Gmail' onBack={goBack} maxW={760}><MiGmailView est={gmailEst} onConectar={conectarGmail} onLeer={leerGmail} onDesconectar={desconectarGmail} esAdmin={userRole==='admin'} mensaje={gmailMsg} isDesktop={isDesktop}/></FlujoPagina>}
             {tab==='novedades'&&<NovedadesView items={novMias} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onBack={goBack} origen={origenNav('Inicio')} onEditar={editarNovedad} onQuitar={quitarNovedad}/>}
-            {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
-            {userRole==='admin'&&pdfFallos.length>0&&!pdfAvisoCerrado&&tab!=='pdfSinOficial'&&<AvisoPdfSii filas={pdfFallos} isDesktop={isDesktop} apilado={novAviso&&novNuevas.length>0} onClose={()=>setPdfAvisoCerrado(true)} onVer={()=>{ setPdfAvisoCerrado(true); navTo({tab:'pdfSinOficial'}) }}/>}
+            {novAviso&&novNuevas.length>0&&<NovedadesAviso items={novNuevas} isDesktop={isDesktop} isAdmin={userRole==='admin'} onOpen={abrirNovedad} onClose={marcarNovVistas} onVerTodas={verNovedades}/>}
+            {userRole==='admin'&&pdfFallos.length>0&&!pdfAvisoCerrado&&tab!=='pdfSinOficial'&&!(novAviso&&novNuevas.length>0)&&<AvisoPdfSii filas={pdfFallos} clients={clients} isDesktop={isDesktop} onClose={()=>setPdfAvisoCerrado(true)} onVer={()=>{ setPdfAvisoCerrado(true); navTo({tab:'pdfSinOficial'}) }}/>}
             {tab==='pdfSinOficial'&&userRole==='admin'&&<FlujoPagina origen={origenNav('Facturación')} titulo='Facturas sin PDF oficial' onBack={goBack} maxW={820}><PdfSinOficialView filas={pdfFallos} clients={clients} isDesktop={isDesktop} onResuelta={id=>setPdfFallos(p=>p.filter(f=>f.id!==id))} onAbrirCliente={handleOpenClientFicha}/></FlujoPagina>}
             {tab==='bandeja'&&userRole==='admin'&&<BandejaView isDesktop={isDesktop} onBack={goBack} origen={origenNav('Oficina')} clients={clients} sales={sales} expenses={expenses} onFondoRegistrado={d=>d&&setExpenses(p=>[d,...p])} onIrFacturasSII={()=>navTo({tab:'billing',billingIntent:'sinregistrar'})} onIrSinVenta={()=>navTo({tab:'billing',billingIntent:'porcompletar'})} user={user} onOpenClientFicha={handleOpenClientFicha} onIrBanco={id=>navTo({tab:'conciliacion',conc:id||null})} onCargarNotaria={arch=>setModal({type:'cargaMasiva',data:{notaria:true,archivoCorreo:arch}})} onTareaCreada={t=>t&&setTasks(p=>[t,...p])}/>}
             {tab==='causas'&&<CausasEstudio isDesktop={isDesktop} clients={clients} user={user} onBack={goBack} origen={origenNav('Clientes')} onOpenClientFicha={handleOpenClientFicha}/>}
