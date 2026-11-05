@@ -784,11 +784,11 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
   const socDe=b=>socioDe(b,{saleById,cliById,ov:fu.ov})
   const comDe=b=>(terceros||[]).filter(t=>t&&t.comision_pct==null&&String(t.billing_id||'')===String(b.id))
   const PS=useMemo(()=>partidasPorSocio({billing,sales,clients,terceros,expenses,ic:[],ia:[],ov:fu.ov}),[billing,sales,clients,terceros,expenses,fu.ov])
-  const {sumP,KF}=useMemo(()=>kpisPorSocio({P:PS,V:[],ym}),[PS,ym])
+  const {sumP,emitido}=useMemo(()=>kpisPorSocio({P:PS,V:[],ym}),[PS,ym])
   const sinSocHon=emFac.some(b=>b.billing_type!=='subarriendo'&&socDe(b)===SIN_SOCIO)
   const colsSoc=ADMIN_NAMES.concat(sinSocHon?[SIN_SOCIO]:[])
   const subM=sumP('f','sub',null,'mes')
-  const casc=colsSoc.map(soc=>{ const f=sumP('f',KF,soc,'mes'), c=-sumP('f','com',soc,'mes'); return {soc,f,c,i:f-c} })
+  const casc=colsSoc.map(soc=>({soc,...emitido(soc,'mes')}))
   const tFac=casc.reduce((a,x)=>a+x.f,0), tCom=casc.reduce((a,x)=>a+x.c,0)
   // Celular en $M con cada columna cuadrada (ingreso y comisión redondean juntos; el facturado es su suma; Oficina = suma de columnas).
   const rcasc=casc.map(x=>{ const [i,c]=redondearPartes([x.i,x.c],1e5); return {...x,f:i+c,c,i} })
