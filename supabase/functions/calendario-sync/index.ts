@@ -67,8 +67,13 @@ async function sincronizar(token: string, eventos: Awaited<ReturnType<typeof lee
     calId = c.id; await rest('learnings', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ kind: 'calendario_estudio', key: llave, value: calId }) })
   }
   // Quién lo ve (solo lectura): miembros del mismo dominio, según el público del calendario.
+  // Solo se agrega a quien aún no lo ve: volver a insertar una regla existente hace que Google avise «actualizó tu acceso» cada día.
+  const yaVen = new Set<string>()
+  const lista = await g(token, `calendars/${encodeURIComponent(calId)}/acl?maxResults=250`)
+  for (const r of lista?.items || []) if (r.scope?.type === 'user' && r.scope.value) yaVen.add(String(r.scope.value).toLowerCase())
   const acl: string[] = []
   for (const email of destinatariosCalendario(miembros, dominio, cal.publico, excluir)) {
+    if (yaVen.has(String(email).toLowerCase())) { acl.push(email); continue }
     try { await g(token, `calendars/${encodeURIComponent(calId)}/acl`, { method: 'POST', body: JSON.stringify({ role: 'reader', scope: { type: 'user', value: email } }) }); acl.push(email) } catch (e) { if ((e as { status?: number }).status !== 409) throw e } }
   // Lo que ya hay (solo eventos con nuestra marca).
   // La ventana cubre todo el horizonte (no solo hasta el último evento deseado): así también se quita lo que dejó de corresponder.
