@@ -16,6 +16,8 @@ import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExpos
 import { estadoConexion } from '../../supabase/functions/_shared/gmailLectura.js'
 import { horaUltima } from './MiGmailView.jsx'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
+import { ThOrden } from '../lib/orden.jsx'
+import { ordenarFilas } from '../lib/ordenar.js'
 import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
@@ -2717,6 +2719,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
   const volverOrigen=(k,fn)=>()=>{ if(desdeFueraRef.current===k&&onVolver){ desdeFueraRef.current=null; onVolver() } else fn() }
   const origenDe=(k,fb)=>desdeFueraRef.current===k&&origenVolver?origenVolver:fb
   // Envíos de facturas hechos fuera de la app: se detectan en los enviados de quien abre «Facturas por enviar» (regla estricta en _shared) y se marcan con un toque.
+  const [ordenEnvTabla,setOrdenEnvTabla] = useState(null)   // orden de la tabla «Por enviar» (columna y sentido)
   const [envDet,setEnvDet] = useState([])
   const [envDetOpen,setEnvDetOpen] = useState(false)
   useEffect(()=>{ if(!bandejaEnvio) return; let vivo=true
@@ -2804,6 +2807,8 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
     const cliN=b=>clients.find(c=>String(c.id)===String(b.client_id))?.name||'—'
     const gruposEnv=(()=>{ const m=new Map(); porEnviar.forEach(b=>{ const k=b.client_id?String(b.client_id):'sin-'+b.id; if(!m.has(k)) m.set(k,[]); m.get(k).push(b) }); return [...m.values()] })()   // un cliente con 2+ por enviar: «Enviar juntas»
     const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 14px 8px'}
+    // Cada grupo es un cliente con sus facturas por enviar: el orden mueve el grupo entero (folio menor, cliente, correo y monto total).
+    const ACC_ENV={ Factura:g=>{ const m=Math.min(...g.map(b=>Number(folioN(b.invoice_no))||Infinity)); return Number.isFinite(m)?m:null }, Cliente:g=>cliN(g[0]), Para:g=>contactoDe(g[0])||'', Monto:g=>g.reduce((a,b)=>a+(montoFactura(b)||0),0) }
     const bSm={height:28,minWidth:84,padding:'0 12px',fontSize:11,fontWeight:600,borderRadius:8,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',justifyContent:'center',boxSizing:'border-box',border:'1px solid',fontFamily:'inherit'}   // Enviar y Ya enviada: misma caja
     const yaBtn=b=><button onClick={()=>marcarYaEnviada(b)} title='Se envió por otro camino' style={{...bSm,color:C.accent,background:yaEnv?.id===b.id?C.azulBg:C.surface,borderColor:yaEnv?.id===b.id?C.accent:C.border}}>Ya enviada</button>
     const enviarBtn=b=><button onClick={()=>setFacturaEmail(b)} style={{...bSm,color:C.surface,background:C.accent,borderColor:C.accent}}>Enviar</button>
@@ -2854,8 +2859,8 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
           
           {porEnviar.length>0&&<div style={card}>
             {isDesktop
-              ? <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Factura','Cliente','Para','Monto',''].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i>=3?'right':'left',padding:'8px 8px 6px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
-                  <tbody>{gruposEnv.map(g=>{ const filas=g.map(b=>{ const dest=contactoDe(b); return <Fragment key={b.id}><tr>
+              ? <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}><thead><tr>{['Factura','Cliente','Para','Monto',''].map((h,i)=>{ const st={...TH_BAND,textAlign:i>=3?'right':'left',padding:'8px 8px 6px',borderBottom:`1px solid ${C.border}`}; return ACC_ENV[h]?<ThOrden key={i} etiqueta={h} orden={ordenEnvTabla} setOrden={setOrdenEnvTabla} estilo={st}/>:<th key={i} style={st}>{h}</th> })}</tr></thead>
+                  <tbody>{ordenarFilas(gruposEnv,ordenEnvTabla,ACC_ENV).map(g=>{ const filas=g.map(b=>{ const dest=contactoDe(b); return <Fragment key={b.id}><tr>
                     <td onClick={()=>onEdit&&onEdit(b)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,fontWeight:600,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>N° {folioN(b.invoice_no)||b.invoice_no||'—'}</td>
                     <td onClick={()=>onOpenClientFicha&&onOpenClientFicha(b.client_id)} style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,cursor:'pointer'}}>{cliN(b)}</td>
                     <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,color:dest?C.muted:C.overdueText,fontSize:12}}>{dest||'sin correo — lo eliges al enviar'}</td>

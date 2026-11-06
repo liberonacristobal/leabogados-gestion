@@ -1853,6 +1853,9 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
     for(let r=1;r<=data.length;r++){ [5,6].forEach(cc=>{ const cell=ws[XLSX.utils.encode_cell({r,c:cc})]; if(cell&&cell.t==='n') cell.z='#,##0' }) }
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Rendir a cliente'); XLSX.writeFile(wb,`Rendir_a_cliente_${isoLocal(Date.now())}.xlsx`)
   }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+  // Tabla de escritorio de Por rendir: orden por columna (la lista y «Siguiente» siguen el orden de siempre).
+  const { filas:rowsOrd, th:thRows } = useOrden(rows, {
+    Cliente:f=>f.c.name, Abogado:f=>f.abg, Gastos:f=>f.n, Desde:f=>f.desde, 'Por rendir':f=>f.n?f.m:(f.armada?f.armada.total:null), Saldo:f=>f.s })
   const sig = ult && !verTerm ? rows.find(f=>String(f.c.id)!==String(ult.id)) : null
   const ultCli = ult ? (clients||[]).find(c=>String(c.id)===String(ult.id)) : null
   const aldia=vivos.filter(f=>f.grp==='aldia').length
@@ -1868,6 +1871,9 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   const { filas:envOrd, th:thEnv, orden:ordenEnv } = useOrden(envRows, {
     Cliente:x=>x.c.name, Abogado:x=>x.abg, Trabajo:x=>x.r.project, 'N°':x=>x.r.correlativo?`N° ${x.r.correlativo}`:'',
     Armada:x=>x.r.created_at, Enviada:x=>x.r.sent_at, Gastos:x=>x.r.n_gastos, Total:x=>x.r.total })
+  // Tabla de borradores (las «en curso» van siempre arriba; se ordenan los borradores).
+  const { filas:borrOrd, th:thBorr } = useOrden(envRows, {
+    Cliente:x=>x.c.name, Abogado:x=>x.abg, 'Hecho por':x=>x.autor, Armada:x=>x.at, Gastos:x=>x.n, 'Por rendir':x=>x.m })
   const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
   const envTable = verEnv && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -1937,7 +1943,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   const borrTable = verBorr && (<>
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={{...thSty(),width:22}}>{cajaTodos}</th>{['Cliente','Abogado','Hecho por','Armada','Gastos','Por rendir','Saldo',''].map((h,i)=><th key={i} style={thSty(i>=4&&i<=6)}>{h}</th>)}</tr></thead>
+        <thead><tr><th style={{...thSty(),width:22}}>{cajaTodos}</th>{['Cliente','Abogado','Hecho por','Armada','Gastos','Por rendir','Saldo',''].map((h,i)=>thBorr(h,thSty(i>=4&&i<=6)))}</tr></thead>
         <tbody>{enCurso.map((x,i)=>{ const pc=personChip(x.abg); return (
           <tr key={'w'+x.c.id} onClick={()=>retomar(x)} style={{borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <td style={{padding:'10px 12px',width:22}}/>
@@ -1950,7 +1956,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
             <td style={{...cMon,color:C.soonText,fontWeight:600}}>sin guardar</td>
             <td style={{padding:'10px 12px',textAlign:'right',color:C.textSoft}}><Gl n='chevron'/></td>
           </tr>)})}
-        {envRows.map((x,i)=>{ const pc=personChip(x.abg); return (
+        {borrOrd.map((x,i)=>{ const pc=personChip(x.abg); return (
           <tr key={x.k} onClick={()=>x.tipo==='arm'?setDetR(x.r.id):abrirPrep(x)} style={{borderTop:i||enCurso.length?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <td style={{padding:'10px 12px',width:22}}>{cajaDe(x)}</td>
             <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,cursor:'pointer'}}>{x.c.name}</span></td>
@@ -2132,8 +2138,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
     </div>
     {verBorr ? borrTable : verLista ? envTable : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><style>{`@media (max-width:1149px){.rend-abg{display:none}}`}</style><table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr>{['Cliente','Abogado','Gastos','Desde','Por rendir','Saldo',''].map((h,i)=><th key={i} className={i===1||i===3?'rend-abg':undefined} style={{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i>=4?'right':(i===2?'right':'left'),padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((f,i)=>{ const pc=personChip(f.abg); const ch=chips(f); return (
+        <thead><tr>{['Cliente','Abogado','Gastos','Desde','Por rendir','Saldo',''].map((h,i)=>thRows(h,{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i>=4?'right':(i===2?'right':'left'),padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'},{className:i===1||i===3?'rend-abg':undefined}))}</tr></thead>
+        <tbody>{rowsOrd.map((f,i)=>{ const pc=personChip(f.abg); const ch=chips(f); return (
           <tr key={f.c.id} onClick={()=>f.armada&&setDetR(f.armada.id)} style={{borderTop:i?`1px solid ${C.track}`:'none',cursor:f.armada?'pointer':'default'}}>
             <td style={{padding:'10px 12px',minWidth:170}}><span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(f.c.id)}} style={{...NOMBRE_CLI,cursor:'pointer'}}>{f.c.name}</span>{ch.length>0&&<span style={{display:'inline-flex',gap:5,marginLeft:8,verticalAlign:1,flexWrap:'wrap'}}>{ch.map(chipEl)}</span>}</td>
             <td className='rend-abg' style={{padding:'10px 12px',whiteSpace:'nowrap'}}><span style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'2px 9px',background:pc.bg,color:pc.color}}>{f.abg}</span></td>
