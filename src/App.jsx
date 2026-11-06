@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, Component } from 'react'
+import { useControlProyeccion } from './lib/controlProyeccionHook.js'
 import { createPortal } from 'react-dom'
 import { _SOCIO_RET } from './lib/compartido.jsx'
 import { tonoMargen } from './lib/compartido.jsx'
@@ -2059,6 +2060,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
 }
 function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], sales=[], isDesktop=false, onOpenClientFicha, onOpenCostos }){
   const F=useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales})
+  const control=useControlProyeccion({F,sales,billing,terceros,costosOfiRows,expenses,clients,anticipos})   // proyección guardada cada semana contra lo cobrado
   const [fil,setFil]=useState('todos')
   const semRef=useRef(null), cliRef=useRef(null)
   const irA=r=>setTimeout(()=>{ try{ r.current&&r.current.scrollIntoView({block:'start'}) }catch(_){} },30)
@@ -2095,6 +2097,16 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
   const secL=t=><div style={{...kLbl,color:C.accent,margin:'14px 2px 7px'}}>{t}</div>
   const nF=F.duda.n, nC=F.sinEmitir.n
+  const ctrl=<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
+    <div style={{padding:'9px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,color:C.accent}}>Proyección y cobrado · por semana</div>
+    {control.filas.length===0
+      ? <div style={{padding:'10px 14px',fontSize:12,color:C.muted}}>Se guarda cada semana y se compara con lo cobrado al cerrarla.</div>
+      : <div>{control.filas.map(f=><div key={f.ini} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto auto',columnGap:12,alignItems:'baseline',padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontVariantNumeric:'tabular-nums'}}>
+          <span style={{color:C.accent,fontWeight:700,whiteSpace:'nowrap'}}>{isDesktop?'Semana del ':''}{fmtFechaDMY(f.ini)}</span>
+          <span style={{color:C.muted}}>proyectado {fM(f.proyectado)}</span><span style={{color:C.text,fontWeight:600}}>cobrado {fM(f.cobrado)}</span>
+          <span style={{fontWeight:800,minWidth:44,textAlign:'right',color:f.pct==null?C.muted:f.pct>=0?C.greenText:C.overdueText}}>{f.pct==null?'—':`${f.pct>0?'+':''}${Math.round(f.pct*100)} %`}</span></div>)}
+        <div style={{padding:'8px 14px',borderTop:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>Diferencia de las últimas {control.filas.length} semanas: <b style={{color:C.accent}}>{control.error==null?'—':`${control.error>0?'+':''}${Math.round(control.error*100)} %`}</b> · cobrado por fecha del depósito</div></div>}
+  </div>
   const foto=<div>
     <div style={grid4}>
       {kt('fin','chart',F.fin>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText],'Flujo neto',`${F.fin>=0?'+':''}${fM(F.fin)}`,isDesktop?'proyectado · 8 semanas':'8 semanas',()=>irA(semRef))}
@@ -2109,6 +2121,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
       {st('mor','alert',C.overdueBg,C.overdueText,isDesktop?'Cartera morosa':'Morosa',fM(morV),'mor')}
       {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar vencido':'Por facturar',fM(pfV),'pf')}
     </div>
+    {ctrl}
     {F.sinCuota.length>0&&<div style={{marginTop:8}}>{aviso(C.soonBg,C.soonText,`Comisión sin cuota · ${F.sinCuota.length}`,[...new Set(F.sinCuota.map(x=>x.prov))].slice(0,2).join(', ')+' · asígnale la cuota para proyectarla',fM(F.sinCuotaTot))}</div>}
   </div>
   const band=(t,der)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,color:C.accent,flex:1,minWidth:0}}>{t}</span>{der}</div>
