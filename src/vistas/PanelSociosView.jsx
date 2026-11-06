@@ -1,7 +1,7 @@
 // Panel de socios — una sola página que reúne lo financiero para la reunión de socios. No calcula nada propio: cada cifra sale de la MISMA función que usa
 // su pantalla de origen (hook del resultado del año de Inicio, Por socio, ciclo de Facturación, cartera, Socios, Estado de resultados, comisiones, flujo de caja…),
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { C, SEC_LBL, SIcon, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, PageHeader, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
@@ -51,16 +51,27 @@ const MiniK = ({label,value,sub}) => (
   </div>)
 // Barras apiladas (Cristóbal abajo, Erasmo arriba) del ingreso emitido mes a mes; el último mes va rayado: en curso.
 const BarrasMes = ({datos,corto}) => {
+  const [hv,setHv]=useState(null)
   const w=corto?340:1000, h=170, pl=30, pb=20, pt=14, iw=w-pl-6, ih=h-pb-pt, n=datos.length, g=iw/Math.max(n,1), bw=g*.62
   const mx=Math.max(20e6, Math.ceil(Math.max(...datos.map(d=>d.a+d.b),0)/20e6)*20e6), ticks=[0,1,2,3].map(i=>mx*i/3)
-  return (<svg viewBox={`0 0 ${w} ${h}`} width='100%' role='img' aria-label='Ingreso emitido por mes y socio' style={{display:'block'}}>
+  const tt=hv!=null?datos[hv]:null, ttx=tt?Math.min(86,Math.max(14,(pl+g*hv+g/2)/w*100)):0
+  const fila=(c,nom,v)=><div style={{display:'flex',justifyContent:'space-between',gap:14}}><span style={{display:'inline-flex',alignItems:'center',gap:5}}><i style={{display:'inline-block',width:8,height:8,borderRadius:2,background:c}}/>{nom}</span><b style={{fontVariantNumeric:'tabular-nums'}}>{fmtShort(v)}</b></div>
+  return (<div style={{position:'relative'}} onMouseLeave={()=>setHv(null)}>
+  {tt&&<div style={{position:'absolute',left:`${ttx}%`,top:0,transform:'translate(-50%,-4px)',zIndex:2,pointerEvents:'none',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',fontSize:12,color:C.text,minWidth:150,boxShadow:'0 4px 14px rgba(0,60,80,.14)'}}>
+    <div style={{fontSize:11,fontWeight:800,color:C.accent,marginBottom:4}}>{MESES[Number(tt.ym.slice(5,7))-1]} {tt.ym.slice(0,4)}{hv===n-1?' · en curso':''}</div>
+    {fila(C.accent,ADMIN_NAMES[0],tt.a)}{fila(C.done,ADMIN_NAMES[1],tt.b)}
+    <div style={{display:'flex',justifyContent:'space-between',gap:14,borderTop:`1px solid ${C.bgSoft}`,marginTop:4,paddingTop:4,fontWeight:800,color:C.accent}}><span>Total</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmtShort(tt.a+tt.b)}</span></div>
+    {Math.abs(tt.s||0)>=1&&<div style={{display:'flex',justifyContent:'space-between',gap:14,marginTop:3,color:C.muted}}><span>{SIN_SOCIO} (aparte)</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmtShort(tt.s)}</span></div>}
+  </div>}
+  <svg viewBox={`0 0 ${w} ${h}`} width='100%' role='img' aria-label='Ingreso emitido por mes y socio' style={{display:'block'}}>
     <defs><pattern id='rayaMes' width='5' height='5' patternUnits='userSpaceOnUse' patternTransform='rotate(45)'><rect width='5' height='5' fill='#fff'/><rect width='2.2' height='5' fill={C.done}/></pattern></defs>
     {ticks.map(t=>{ const y=pt+ih-ih*t/mx; return <g key={t}><line x1={pl} x2={w-4} y1={y} y2={y} stroke={C.border}/><text x={pl-5} y={y+3} textAnchor='end' fontSize='9' fill={C.muted}>{Math.round(t/1e6)}</text></g> })}
     {datos.map((d,i)=>{ const x=pl+g*i+(g-bw)/2, ha=ih*d.a/mx, hb=ih*d.b/mx, yb=pt+ih, cur=i===n-1
       return <g key={d.ym}><rect x={x} y={yb-ha} width={bw} height={ha} fill={cur?C.muted:C.accent}/><rect x={x} y={yb-ha-hb} width={bw} height={hb} fill={cur?'url(#rayaMes)':C.done} stroke={cur?C.done:'none'}/>
         <text x={x+bw/2} y={yb-ha-hb-3} textAnchor='middle' fontSize='8.5' fontWeight='700' fill={C.accent}>{((d.a+d.b)/1e6).toFixed(1).replace('.',',')}</text>
-        <text x={x+bw/2} y={h-5} textAnchor='middle' fontSize='9' fill={C.muted}>{MESES[Number(d.ym.slice(5,7))-1].slice(0,3)}</text></g> })}
-  </svg>) }
+        <text x={x+bw/2} y={h-5} textAnchor='middle' fontSize='9' fill={C.muted}>{MESES[Number(d.ym.slice(5,7))-1].slice(0,3)}</text>
+        <rect x={pl+g*i} y={pt} width={g} height={ih+pb} fill={hv===i?C.accent:'transparent'} fillOpacity={.06} style={{cursor:'pointer'}} onMouseEnter={()=>setHv(i)} onClick={()=>setHv(hv===i?null:i)}/></g> })}
+  </svg></div>) }
 // Título de sección fuera de la tarjeta (como en el resto de la app): etiqueta de acento a la izquierda; extra y enlace a la derecha.
 const Sec = ({t,link,onLink,extra}) => (
   <div style={{display:'flex',alignItems:'center',gap:10,margin:'2px 2px -4px'}}>
@@ -116,7 +127,9 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const emTot = { i:sumaN(emIng), c:sumaN(emCom) }; emTot.f = emTot.i+emTot.c
   const emSub = sumP('f','sub',null,'mes')
   const emAnio = emSocs.map(s=>({ s, ...emitido(s,'ytd') })).filter(x=>x.s!==SIN_SOCIO||Math.abs(x.f)>=1)
-  const emMeses = useMemo(()=>emitidoMeses(ADMIN_NAMES).map(x=>({ ym:x.ym, a:x.v[ADMIN_NAMES[0]]||0, b:x.v[ADMIN_NAMES[1]]||0 })),[emitidoMeses])
+  const emMeses = useMemo(()=>emitidoMeses([...ADMIN_NAMES,SIN_SOCIO]).map(x=>({ ym:x.ym, a:x.v[ADMIN_NAMES[0]]||0, b:x.v[ADMIN_NAMES[1]]||0, s:x.v[SIN_SOCIO]||0 })),[emitidoMeses])
+  // «Sin socio» no va en las barras: se avisa cuánto es en el año y en qué meses cae.
+  const emSin = emitido(SIN_SOCIO,'ytd').i, emSinMeses = emMeses.filter(x=>Math.abs(x.s)>=1)
   const ret = useMemo(()=>retirosSocios({ expenses, clients, socios, yr:currentYear }),[expenses,clients,socios])
 
   // ── Cartera, fondos, comisiones, notaría, caja ──
@@ -173,7 +186,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       body:<div style={{display:'grid',gridTemplateColumns:`repeat(${isDesktop?Math.max(celdasEm.length,1):Math.min(Math.max(celdasEm.length,1),3)},minmax(0,1fr))`,gap:8,padding:10}}>{celdasEm.map(c=><MiniK key={c.k} label={c.k} value={c.v} sub={c.sub}/>)}</div> },
     ing: { titulo:`Ingreso emitido · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Ingreso emitido · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((a,i)=><span key={a}>{i?' · ':''}{isDesktop?a:a.slice(0,1)} <b>{fmtShort(emitido(a,'ytd').i)}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaEm },
     mm: { titulo:'Ingreso emitido mes a mes', hl:<>{emPrev?<>{MESES[Number(emPrev.ym.slice(5,7))-1].slice(0,3)} <b>{fmtShort(emPrev.a+emPrev.b)}</b> · </>:null}{mesActual.slice(0,3)} <b>{fmtShort(emUlt.a+emUlt.b)}</b></>, tono:'az', link:'Informe y comparación', dest:'informeMes',
-      body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}</span></div></div> },
+      body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}{Math.abs(emSin)>=1&&<>: <b style={{color:C.accent}}>{fmtShort(emSin)}</b> en el año ({emSinMeses.map(x=>MESES[Number(x.ym.slice(5,7))-1].slice(0,3)+' '+fmtShort(x.s)).join(' · ')})</>}</span></div></div> },
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} onClick={()=>go('estadoResultados')}/>
