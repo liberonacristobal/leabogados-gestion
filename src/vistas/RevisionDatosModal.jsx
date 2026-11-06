@@ -44,7 +44,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   // Doble conteo cuota↔tramo: venta NO recurrente donde la suma de cuotas Programadas + facturas Emitidas SUPERA la venta → al emitir el tramo la programada no se redujo, se cuenta dos veces. Excluye recurrentes (mensuales), donde prog+emit>venta es normal (meses futuros+pasados).
   const [ctNo,setCtNo]=useState(()=>new Set())   // ventas marcadas «No es doble conteo» (learnings data_health): no vuelven a aparecer
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','data_health').like('key','cuotatramo:%').then(({data})=>{ setCtNo(new Set((data||[]).filter(r=>r.value==='distintos').map(r=>String(r.key).replace(/^cuotatramo:/,'')))) },()=>{}) },[])
-  const cuotaTramo=useMemo(()=>SD.cuotaTramo(billing,sales,ctNo,(s,bs)=>{ const c=cuadreVenta(s,bs.filter(b=>b.status!=='Anulada'&&!b.deleted_at),ufFechaCache()||{}); return c?c.estado==='Sobra':null }),[billing,sales,ctNo])   // criterio único del cuadre de la venta (UF de cada fecha, más de 3 %)
+  const cuotaTramo=useMemo(()=>SD.cuotaTramo(billing,sales,ctNo,(s,bs)=>{ const c=cuadreVenta(s,bs.filter(b=>b.status!=='Anulada'&&!b.deleted_at),ufFechaCache()||{}); return c?c.estado==='Exceso':null }),[billing,sales,ctNo])   // criterio único del cuadre de la venta (UF de cada fecha, más de 3 %)
   // Glosa en conflicto: clave del diccionario costo_oficina que guardó >1 categoría (Retiro vs Sueldo) → la sugerencia sale no determinista.
   const glosaConflict=useMemo(()=>SD.glosaConflict(coRows),[coRows])
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
