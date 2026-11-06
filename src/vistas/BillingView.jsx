@@ -352,7 +352,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
     const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const open=expEnviar.has(b.id); const dest=factTo[String(b.client_id)]||''
     return (
       <div key={b.id} style={{background: sent?C.bgSoft:'#fff', borderTop: compact?`1px solid ${C.border}`:undefined}}>
-        <div onClick={()=>toggleExp(b.id)} style={{display:'flex',gap:11,alignItems:'center',padding: compact?'9px 12px 9px 14px':'10px 12px',cursor:'pointer'}}>
+        <div data-menu={'factura:'+b.id} onClick={()=>toggleExp(b.id)} style={{display:'flex',gap:11,alignItems:'center',padding: compact?'9px 12px 9px 14px':'10px 12px',cursor:'pointer'}}>
           {bigDate(b.issued_at||b.due,C.accent)}
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
@@ -3743,7 +3743,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
           if(!list.length) return <div style={{color:C.muted,textAlign:'center',padding:30}}>Sin facturas con estos filtros.</div>
           const fila=(b,conciliable,cli)=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conciliable}); const col=est.color; const ui=ufInfoDe(b); const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const rsN=(()=>{ const e=efEntity(b); if(e?.name) return rsDisplay(e.name); if(b.receptor_name) return rsDisplay(b.receptor_name); if(cli&&cli.id){ const rl=rsLabel(cli.id,clients,clientEntities); if(rl.multi) return 'Sin razón social'; if(rl.name&&rl.name!==cli.name) return rsDisplay(rl.name) } return null })(); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
-              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
+              <div data-menu={'factura:'+b.id} onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 180px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
@@ -4243,7 +4243,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
           const hCell=(col,label,align)=>{ const on=tblSort.col===col; return <span onClick={()=>setTblSort(s=>({col,dir:s.col===col?(s.dir==='asc'?'desc':'asc'):(col==='cliente'?'asc':'desc')}))} title='Ordenar' style={{display:'inline-flex',alignItems:'center',gap:3,cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:on?C.accent:C.muted,userSelect:'none'}}>{label}{on?<span style={{fontSize:10}}>{tblSort.dir==='asc'?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>:''}</span> }
           const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
             <div key={b.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
-              <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 96px 92px 150px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
+              <div data-menu={'factura:'+b.id} onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 96px 92px 150px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
                 <div style={{minWidth:0,flex:1}}>
