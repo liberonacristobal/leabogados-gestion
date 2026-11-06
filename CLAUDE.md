@@ -2,35 +2,37 @@
 
 App de gestión legal para Liberona Escala Abogados. Estas reglas son permanentes y guían toda decisión.
 
-## REGLA DE ORO: nunca de memoria — estudiar el código ANTES de proponer
+## REGLA DE ORO: verificar antes de afirmar — nada de memoria, nada sin prueba
 
-Antes de afirmar cómo funciona algo, de proponer una solución, o de construir cualquier cosa, **revisa el código real y los datos** — NUNCA respondas de memoria ni supongas. La memoria y los resúmenes son pistas, no la verdad; el código y la base de datos son la única fuente.
+Nace de errores reales (2026-10-01 y 2026-10-25): «21 series sin cuotas» era el default `nCuotas=3`; «$54M sin enviar» eran 26 de 38 ya pagadas; «15 cuotas, $16,1M» eran 7 por $10,0M con la regla completa; se propuso reclamar una factura que un correo explicaba. Antes de afirmar cómo funciona algo, proponer una solución o entregar un número, hallazgo, duplicado o diagnóstico:
+1. **Del código y los datos, nunca de memoria.** La memoria y los resúmenes son pistas. Buscar primero si ya existe (App.jsx, esquema, edge functions) y reusar. Doble mejora: a lo que plantea el usuario y al código existente, citando `archivo:línea` o tabla.
+2. **La cifra la calcula la app.** Todo número sobre un concepto de la app (radar, por cobrar, vencido, saldo, rendir, notaría, trabajos detenidos) sale de la misma función (helper de `_shared` o dryRun del servidor). Sin función: «estimación propia, sin la regla de la app», nunca un hallazgo.
+3. **Filas, no cuentas; ciclo, no foto.** Un conteo, flag, vista o resumen es una hipótesis: abrir las filas reales y mirar su ciclo completo (¿pagada, emitida, enviada fuera de la app, anulada, cubierta por anticipo, dentro de la vida de la app: billing desde 2026-06-06, XML desde 2026-06-09?). Un solo flag casi nunca dice la verdad.
+4. **Defecto no es lo mismo que esperable:** valor por defecto (`nCuotas=3`), diferencia estructural legítima (dos tramos de 50 %; devengado contra caja; emitido contra cobrado), artefacto histórico previo a la app. Si el radar los produce, se arregla el radar.
+5. **Cuestionar el propio análisis como si fuera de otro:** enumerar hipótesis alternativas y descartarlas con datos; revisar que la consulta cubra TODOS los caminos (otras tablas, otros `tipo_destino`, `prepaid_anticipo_id`, `reconciled_at`, `payment_method`: buscar respaldo solo en `conciliacion.tipo_destino='factura'` dio 21 falsos «$23M»). Si el usuario dice «puede que estés analizando mal», re-levantar todo desde cero.
+6. **Contexto del negocio antes de proponer una acción** sobre un cliente o tercero (reclamar, cobrar, cerrar): buscar acuerdos en correos (contacto@ y la casilla del socio), learnings, bitácora y notas.
+7. **Un análisis con hallazgos lo verifica un revisor aparte** que recibe los datos y la pregunta, no mi conclusión. Se entrega solo lo que sobrevive, separado en «confirmado (con su fuente)» y «por verificar».
+8. **Cada falso positivo deja su prueba** en `tests/` (anonimizada) y se corrige en la regla, no en la vista. Cada afirmación lleva su fuente; sin fuente es «por verificar». Tono calibrado: nada de alarma de $ o fraude sin agotar las explicaciones benignas. Ante la duda, verificar o callar.
 
-- **Verifica primero que no exista ya.** Antes de crear una tabla, categoría, helper, vista, panel o flujo, **busca en la app si ya está contemplado** (grep en `src/App.jsx`, esquema en Supabase, edge functions). Reusar SIEMPRE; **nunca duplicar** ni generar cosas similares a lo que ya existe. El usuario no quiere más features paralelas que hagan lo mismo.
-- **Estudia antes de opinar.** Ante cualquier planteamiento, primero recorre el código/datos relevantes; recién entonces propón. Si no lo estudiaste, dilo y estúdialo — no improvises una respuesta.
-- **Propón doble mejora.** Frente a lo que plantea el usuario, entrega (a) mejoras a su planteamiento y (b) mejoras al código existente, apoyadas en lo que efectivamente encontraste en el código. Cita `archivo:línea` / tabla real.
-- **Cifras y flujos, siempre desde la fuente** (refuerza "Rigor matemático" y "cuestionar el propio análisis"): un número o un comportamiento se afirma tras verlo en el código/consulta, no de memoria.
+Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
 
 ## REGLA DE ORO: vendible por diseño (mirada de producto)
 
-Construimos para **muchos estudios, no para el nuestro**. Cada decisión —dato, texto, color, integración, tabla, flujo— se toma como si mañana la usara **otro estudio, en otro país**. La herramienta interna de hoy no es el producto: es su **primer cliente**; se sirve impecable, pero se construye para el segundo. El norte es transformarla en un SaaS vendible en Chile y LatAm (ver artifacts "De estudio a producto" y "FirmDesk", y [[roadmap-vision-estrategica]]).
+Construimos para **muchos estudios, no para el nuestro**: cada decisión (dato, texto, color, integración, tabla, flujo) se toma como si mañana la usara otro estudio, en otro país. La herramienta de hoy es el **primer cliente** del producto, no el producto; el norte es un SaaS vendible en Chile y LatAm ([[roadmap-vision-estrategica]]).
+- **El producto es FirmDesk; Liberona Escala Abogados es el tenant #1.** Dos marcas siempre separadas: **FirmDesk** (login, «con tecnología FirmDesk», identidad índigo propia) y **el estudio** (header de trabajo, correos, PDF, portal del cliente; identidad configurable). Todo lo identitario del estudio (nombre, logos, remitentes, dominio, paleta `C`) se lee del objeto **`BRAND`**, nunca de literales; los usos sueltos se migran gradualmente sin cambiar lo que ve LEA.
+- **La pregunta de diseño:** «¿esto obliga a hardcodear algo NUESTRO (un correo `@leabogados.cl`, un color de persona, una regla del SII, el nombre del estudio)?». Si sí, está mal diseñada: buscar la forma parametrizable; al tocar código cableado, dejarlo un paso más cerca de configurable.
+- **Multi-tenant:** hoy RLS = `@leabogados.cl`; el destino es `estudio_id` + RLS por estudio. Toda tabla o feature nueva debe poder convivir con eso («¿de qué estudio es esta fila?»).
+- **Lo «Chile» (SII, UF, RUT, IVA, factura electrónica) es un módulo país** que se enchufa, no el core.
+- **Pragmatismo:** es una mirada, no un freno: entre dos soluciones equivalentes, la que escala a más estudios, y sin deuda nueva de cableado.
 
-**El producto se llama FirmDesk** (software de gestión para estudios). **Liberona Escala Abogados es el tenant #1**, no "la app". Separar SIEMPRE dos marcas: **FirmDesk** (el producto: login, "con tecnología FirmDesk", cuenta/cobro futuro — identidad índigo propia) vs **el estudio** (header de trabajo, correos, PDF/reportes, portal del cliente — identidad configurable). **Patrón BRAND (Fase 1, en marcha):** todo lo identitario del estudio (nombre, logos `le-logo*.png`, remitentes, dominio, tema=paleta `C`) se lee de un objeto **`BRAND`**, NUNCA de literales. Migrar gradualmente los ~15 usos de logo y las ~63 menciones "Liberona Escala" a `BRAND.*` (sin cambiar lo que ve LEA). El dominio/RLS `leabogados.cl` (multi-tenant, `estudio_id`) es Fase 3.
+## REGLA DE ORO: simplificar los procesos — siempre, en el código y en la memoria
 
-- **La pregunta de diseño (hazla siempre):** "¿esto obliga a hardcodear algo NUESTRO —un correo `@leabogados.cl`, un color de persona, una regla del SII, el nombre del estudio—?" Si la respuesta es sí, está mal diseñada; busca la forma parametrizable.
-- **Nada cableado a Liberona Escala:** nombre, logo, paleta, firmas, roles, áreas, correos y equipo son (o van camino a ser) **datos configurables por estudio**, no constantes en el código. Al tocar código con estas constantes cableadas, prefiere dejarlo un paso más cerca de configurable (no romper lo actual, pero no agravar la deuda).
-- **Aislamiento por estudio (multi-tenant) es el norte de datos:** hoy RLS = `@leabogados.cl` (monoinquilino); el destino es `estudio_id` + RLS por estudio. Toda tabla/feature nueva debe poder convivir con eso (pensar "¿de qué estudio es esta fila?").
-- **Lo "Chile" es un módulo país:** SII, UF, RUT, IVA, factura electrónica y formatos son de Chile; trátalos como algo que se enchufa, no como el core. Idea a futuro: moneda/impuestos/idioma (es/pt/en) parametrizables.
-- **Pragmatismo:** esto NO frena el avance ni obliga a construir el multi-tenant hoy. Es una **mirada**: entre dos soluciones equivalentes, elige la que escala a más estudios; y no agregues deuda nueva de cableado. Esta regla convive con "menos es más" y con la autonomía autorizada.
-
-## REGLA DE ORO: lo que sale al cliente toma sus números de la app, no de texto tipeado
-
-Nace del 2026-11-04: el correo de la factura 500 salió con «Pago 2 de 10» siendo la cuota 3/10 de la app, porque el texto se armaba con la glosa del DTE (escrita a mano en el SII) antes que con el concepto de la app, y lo aprendido guardaba la cuota como texto fijo. Reglas:
-- **Cuota, folio, monto y período de un correo o documento al cliente salen de la app** (`facturaGlosaPartes` toma la cuota del concepto «Cuota N/M»; la glosa del DTE solo si el concepto no trae cuota). Lo que se aprende de un correo editado guarda esos valores como **marcas** (`{folios}`, `{total}`, `{periodo}`, `{cuota}`, `{folio}`; `_shared/correoFacturaPlantilla.js`), nunca el número literal; si una marca no se puede completar, se usa el texto por defecto.
-- **Un dato tipeado a mano que contradice a la app se detecta en su origen, no al enviar:** `cuotaNeDte` (Revisión de datos y auditor) compara la cuota de la glosa del DTE con la de la app. El aviso al enviar es la última red, no la solución.
-- **Una cuota numerada no se salta:** `cuotasSinEmitir` incluye una Programada si ya se emitió una cuota de número mayor de su venta (`cuotaSaltada`), aunque su vencimiento sea futuro.
-- **El correo de varias facturas lista cada TRABAJO leído de la glosa de su factura** (`facturaGlosaPartes`: NmbItem/DscItem, con el proyecto de la venta solo si el ítem es genérico) y agrupa por esa glosa, no por la venta vinculada (una factura mal vinculada no se funde con otro trabajo); nunca omite un trabajo ni dice un total (`_shared/correoFacturaTexto.js`, probado con las facturas reales Tarragona 511+512 y Geslog 498+502). El saludo se decide por el «Para» (no por la copia) y el cuerpo sigue su trato (estés/estén, tus/sus).
-- Todo envío de factura registra quién lo hizo (`sent_by`, `sent_to`, bitácora `facturacion.correo_enviado`).
+Pedida por el usuario el 2026-11-06. En cada tarea, además de lo pedido, buscar qué del proceso se puede **simplificar, unir o eliminar** y proponerlo (o hacerlo, si es chico y seguro) con su evidencia. Vale para el código, los avisos y correos, los procesos automáticos, el flujo de trabajo de desarrollo y esta misma memoria.
+- **Un solo camino por cosa:** dos reglas, helpers, estados o procesos que hacen lo mismo se unen en uno (ejemplo del 2026-11-06: el doble conteo cuota ↔ tramo usaba 8 % y el cuadre de la venta 3 %; quedó un solo criterio).
+- **Menos pasos, menos clics, menos avisos:** si un paso lo puede deducir la app, se elimina; si dos avisos dicen lo mismo, queda uno; no se agrega un correo nuevo si cabe en uno que ya sale.
+- **Borrar es simplificar:** código muerto, vistas sin uso, procesos que nadie lee, memorias repetidas u obsoletas se proponen para borrar, con la prueba de que no se usan.
+- **La memoria y estas reglas también:** si una regla de CLAUDE.md o una memoria repite o contradice a otra, se une o se corrige; el índice se mantiene corto.
+- Cada hallazgo se afirma con su fuente (conteo, archivo:línea, consulta), nunca de memoria. Refuerza «menos es más», «reusar siempre, nunca duplicar» y «la menor cantidad de partidas».
 
 ## REGLA DE ORO: la menor cantidad de partidas — lo más minimalista posible
 
@@ -69,7 +71,7 @@ La app tiene **dos presentaciones** (móvil full-screen y escritorio a todo el a
 ## Reglas de oro (build y deploy)
 
 - ANTES de publicar SIEMPRE corre `npm run build` y verifica `✓ built in`. Si falla, arregla antes de publicar. El build roto silencioso ya causó problemas graves.
-- **`npm run verificar`** (lo corre solo el pre-push de `.githooks`): build + `npm run tipos` (revisión de tipos: `src/lib/cifras.js` estricto y todas las reglas de `supabase/functions/_shared/*.js` con chequeo de nulos y de tipos de operaciones) + `npm test` (reglas de `_shared` y cifras, `tests/*.test.mjs`) + `npm run lint` (variable sin declarar) + `npm run smoke` (recorre la demo en Chrome sin ventana, escritorio y celular, y además la app SIN demo con sesión simulada y Supabase respondido con los datos de la demo —«carga real simulada»—; falla si una vista muestra el blindaje de error o «No se pudieron cargar»). Toda pestaña o página nueva sin datos propios se agrega a `TABS`/`MODALES` de `scripts/smoke-demo.mjs`; toda regla nueva de `_shared`, con su prueba. Lectura de tablas que pueden pasar de 1.000 filas: SIEMPRE `selectAll`/`todasRest` de `_shared/paginar.js` con orden estable, nunca un `select` suelto. Saltar solo en emergencia: `SIN_VERIFICAR=1 git push`.
+- **`npm run verificar`** (lo corre solo el pre-push de `.githooks`; **no repite lo ya verificado**: si el código es idéntico al de la última verificación en verde no corre nada, y el recorrido de la demo, lo lento, solo corre si cambió la app; `-- --forzar` lo corre todo; ver `scripts/verificar.mjs`): build + `npm run tipos` (revisión de tipos: `src/lib/cifras.js` estricto y todas las reglas de `supabase/functions/_shared/*.js` con chequeo de nulos y de tipos de operaciones) + `npm test` (reglas de `_shared` y cifras, `tests/*.test.mjs`) + `npm run lint` (variable sin declarar) + `npm run smoke` (recorre la demo en Chrome sin ventana, escritorio y celular, y además la app SIN demo con sesión simulada y Supabase respondido con los datos de la demo —«carga real simulada»—; falla si una vista muestra el blindaje de error o «No se pudieron cargar»). Toda pestaña o página nueva sin datos propios se agrega a `TABS`/`MODALES` de `scripts/smoke-demo.mjs`; toda regla nueva de `_shared`, con su prueba. Lectura de tablas que pueden pasar de 1.000 filas: SIEMPRE `selectAll`/`todasRest` de `_shared/paginar.js` con orden estable, nunca un `select` suelto. Saltar solo en emergencia: `SIN_VERIFICAR=1 git push`.
 - Publicar: `git add -A && git commit -m "mensaje" && git push`
 - NUNCA romper el layout mobile. La app se usa principalmente en iPhone.
 - Tablas Supabase nuevas (estándar RLS ON): `GRANT ALL ON TABLE x TO authenticated, service_role; REVOKE ALL ON TABLE x FROM anon; ALTER TABLE x ENABLE ROW LEVEL SECURITY; CREATE POLICY team_all ON x FOR ALL TO authenticated USING ((auth.jwt() ->> 'email') LIKE '%@leabogados.cl') WITH CHECK ((auth.jwt() ->> 'email') LIKE '%@leabogados.cl'); NOTIFY pgrst, 'reload schema';`. NO volver a `DISABLE ROW LEVEL SECURITY` ni dar GRANT a `anon` (era el agujero que se cerró el 2026-06-19). El `REVOKE ... FROM anon` es OBLIGATORIO: la consola de Supabase crea las tablas como `supabase_admin`, cuyo default ACL le da a `anon` todos los permisos — RLS lo tapa, pero el grant queda (barrido 2026-09-15 revocó anon en las 25 tablas que lo tenían). Edge functions leen como `service_role`: si una función devuelve 0 filas de una tabla, revisar que tenga `GRANT SELECT ... TO service_role` (a `sales` le faltaba).
@@ -82,28 +84,6 @@ Principio rector más importante. La app debe ser muy autónoma y construir memo
 - Evitar a toda costa que el usuario repita pasos ya completados. Cada decisión se convierte en conocimiento que la app reutiliza sola.
 - La app anticipa: autocompleta, sugiere, recuerda. Si ya tiene el dato, lo usa; solo pregunta ante ambigüedad real que no puede resolver.
 - Al diseñar cualquier feature preguntarse: "¿esto obliga a repetir algo que la app ya podría saber?". Si sí, está mal diseñada.
-
-### REGLA: nunca duplicar entidades (clientes, RS, proveedores)
-
-La app **nunca** debe crear una entidad duplicada. Aplica al importar de Drive, al crear a mano, y a cualquier alta automática:
-
-- **Dedup robusto** (no `.toLowerCase().trim()` a secas): normalizar SIEMPRE con el criterio único = minúsculas + sin acentos (NFD) + **colapsar espacios** (`\s+→" "`) + trim. Un solo helper para front y edge functions (el `norm` del edge `clientes-drive-sync` es la referencia).
-- **Fuzzy match antes de crear**: si el nombre se parece mucho a una entidad existente (typos, letras cambiadas — ej. "Migdley" vs "Midgley"), **NO crear**. Proponer "¿es el mismo que X?" (compuerta humana) y, al vincular, **aprender el alias** (`learnings` kind `cliente_folder`: key = nombre normalizado del folder → value = client_id) para no volver a preguntar ni recrear. El sync/edge function DEBE consultar ese alias antes de insertar.
-- **Fusionar conservando datos**: al unir dos fichas, el **sobreviviente es SIEMPRE el que tiene información** en la app (facturas, ventas, gastos, tareas, anticipos, RS). Se le **reasignan TODOS** los registros del otro (todas las FKs `client_id`/`cliente_id`) y su nombre queda como alias, y recién ahí se elimina el vacío. Auditar/permitir deshacer.
-- Es una aplicación directa de "la herramienta APRENDE": cada vinculación/fusión es conocimiento que evita el trabajo repetido de limpiar duplicados.
-
-### REGLA DE ORO: caja chica ↔ transferencia (Revisión de caja chica)
-
-Toda transferencia de la oficina a un miembro **para gastos (caja chica)** queda trazada **1:1** contra su carga de caja chica: misma persona, monto, dentro de **±3 días** (la transferencia puede ir 3 antes, el mismo día o 3 después de la carga). La app las concilia **sola** (barrido diario, panel "Revisión de caja chica" en Banco/Conciliación, admin-only) cuando el calce es **único y exacto**; lo ambiguo (monto cercano, fuera de la ventana, varios candidatos) va a **compuerta** (un toque), nunca a ciegas sobre plata. **Nunca se registra dos veces:** el enlace es la columna `petty_cash.movimiento_id` (índice único). El **sueldo no es caja chica** y se excluye solo, porque no tiene una carga que lo espere (no reglas frágiles de "monto redondo"). Los **limited** siguen viendo solo su propia caja chica (saldo y gastos), nunca el banco ni la clasificación sueldo/fondo. Es la aplicación directa de "la herramienta APRENDE" + "compuerta → aprende → se libera" al back-office de gastos.
-
-### REGLA DE ORO: retiros de socios equitativos por período (página Socios)
-
-Los **retiros** de los socios (distribución de utilidades, categoría `Retiros` del cliente interno) **deben ser equivalentes por período**: pueden pagarse en **días distintos y en varias transferencias** (por el límite diario de transferencia del banco), pero el monto por período debe **igualarse entre socios**. Hoy LEA = Cristóbal y Erasmo, mitad y mitad (verificado: $30,5M c/u en 2026). Derivados de la regla, en la página **Socios** (tab `socios`, en Oficina):
-- **Un retiro = las transferencias de un socio dentro de una ventana de ≤3 días consecutivos** (`clusterSocio`, `GAP=3`, salvando fin de semana), NO un movimiento bancario ni "todo el mes" — en un mismo mes puede haber varios retiros (p. ej. sep-2026 tiene el del 16 y el del 25). Nunca contar por transferencia ni por `(socio, mes)`. Verificado en prod 2026: 16 movimientos = **10 retiros (5 por socio)**. Cada retiro despliega sus transferencias con link a Banco (trazable).
-- **El socio se lee de `expenses.subcategory`** (la clasificación manual puesta al conciliar "Retiros › X"), no de la glosa — `_SOCIO_RET` la prioriza. Un retiro sin glosa identificable NO es "Otro" si tiene subcategory.
-- **Una diferencia = faltó retirar** (no "se compensa" entre socios): la paridad se evalúa por **ronda** (`rondas` = clusters de ambos socios a ≤3 días), marcando a quién y cuánto ("falta Cristóbal $X"). El chip del header es el estado del **año** ("Retiros al día" si los totales igualan; "Por igualar $X" si no) — en 2026 el total iguala ($30,5M c/u) aunque hay dos rondas desfasadas (06-jul falta Cristóbal $1M, 25-sep falta Erasmo $1M); el toggle "Acumulado" de la tabla muestra ese desfase de timing.
-- **Auto-sugerencia con compuerta:** si un retiro queda sin socio, la app propone el que **cuadra la paridad** del período → confirma → escribe `subcategory` (aprende, nunca vuelve a "Otro"). Es "compuerta → aprende → se libera".
-- Sueldos de socios (categoría `Sueldos`/`Bono`, también por `subcategory`) se muestran aparte; el **equivalente mensual** = (retiros + sueldo) ÷ meses **completos** del año transcurridos (`curM-1`). Los socios y sus RUT ya se leen de `miembros` (`SOCIOS_CFG`, `setSociosCfg`, en `src/lib/compartido.jsx`); quedan cableados solo el respaldo de LEA y los colores por persona (`_SOCIO_COL`).
 
 ## REGLA DE ORO: el valor COMPOUNDING — más datos, más valor
 
@@ -129,18 +109,13 @@ La app no es estática: es capaz de **mejorarse a sí misma** en base a todo lo 
 
 ## Experiencia de uso: que no dé miedo ni sea carga
 
-- Práctica e intuitiva ante todo. Usarla debe ser un alivio, no una complejidad.
-- MENOS ES MÁS: preferir siempre la solución simple. No agregar pasos, campos ni pantallas innecesarias.
-- Si una feature se vuelve compleja o una carga, replantearla o simplificarla.
-- Flujos cortos: el menor número de clics para cualquier acción.
-- Español de Chile con forma "tú" en toda la interfaz. Nunca voseo.
-- Correos (plantillas de la app, edge functions y borradores): nunca «Junto con saludar». Abrir con «Espero que estés muy bien.» (una persona) o «Espero que estén muy bien.» (más de una / «Estimados»). **Excepción: correos internos al equipo** (avisos, recordatorios, resúmenes automáticos de la app): «Hola X» (`holaEquipo` de `_shared/correoEquipo.js`) y abajo directo lo que se informa, sin «Espero que…».
-- **Navegación lógica y user-friendly**: prioriza una estructura de navegación clara. Toda lista larga de ítems debe agruparse por la entidad natural (cliente/razón social, abogado, fecha) con la entidad de protagonista (visible, grande), nunca un muro plano de folios/OT con el dato clave truncado. Si el usuario no puede distinguir un ítem de otro de un vistazo, está mal diseñada.
-- **UX impecable**: claro, accesible, responsivo y visualmente intuitivo. Buscador en toda lista de >~10 ítems; agrupación colapsable; el dato que identifica (nombre de cliente) siempre primero y legible; targets táctiles cómodos en iPhone.
-- **Aprender del comportamiento de cada usuario (navegación)**: la app observa qué navega, abre, busca y usa CADA usuario, y lo usa para anticipar y facilitar — recientes, frecuentes, sugerencias, accesos directos a lo que más toca. Objetivo: que llegar a un dato/vista cueste el mínimo de clics. Es la contraparte de navegación de la filosofía "la herramienta APRENDE" (que cubre los datos). Guardar el uso (p. ej. learnings/usage_events) y reflejarlo en la UI (la paleta de comandos prioriza lo reciente/frecuente de ese usuario; los cross-links saltan a donde el usuario suele ir).
-- **Todo clickeable / cross-linking (nada rígido)**: cada dato visible es tocable y lleva a su CONTEXTO natural; ningún dato es callejón sin salida. En particular: el **nombre del cliente abre su ficha en TODA vista** (Gastos, Tareas, Ventas, Conciliación, Facturación, Inteligencia, Dashboard); una **factura → su venta/proyecto**; un **movimiento conciliado → su factura**; una **tarea → su cliente**; un **anticipo → las cuotas que cubre**; un **KPI → la lista que lo compone**. Se debe poder "pasar de un dato a otro tocando". Preferir la fila/tarjeta entera tappable; los saltos secundarios (ej. "Ficha →" o el nombre dentro de una fila que ya tiene onClick) van con `stopPropagation` para no chocar con el toque principal. Handler único `handleOpenClientFicha` → abre Ficha → Financiero.
-- **Ir y volver al LUGAR EXACTO (regla dura de navegación)**: la pila `navStack` + `navTo(dest)`/`goBack()` son la COLUMNA VERTEBRAL. **Todo salto "hacia adelante" a una vista que NO está en la barra** (Banco/Conciliación, Cartera, Cobranza, Repricing, Inteligencia, Presupuesto Oficina, y Tareas/Caja chica en admin) **debe usar `navTo({tab, foco})` — NUNCA `setTab` crudo**; si se usa `setTab`, la pila queda vacía y el "Volver" cae en Inicio (bug "me manda a una parte y me devuelve a otra"). `navTo` apila `{tab,fichaId,scroll}` y resuelve el foco exacto (`conc`→movimiento, `cartera`→proyecto, `billingIntent`→checklist/cierre/cotejo, `fichaId`→cliente); `goBack` desapila y restaura pestaña+scroll+ficha. Toda vista fuera de la barra debe tener su botón "← {origen}" (usar `goBack` + `TAB_LABELS[origen]`). Un cross-link "ver/buscar X" debe llevar al ítem EXACTO (pasar el foco), no al hub genérico. `setTab` crudo solo para tabs de la barra (home).
-- **Anti pantalla-negra (TDZ / variable no declarada)**: `npm run build` VERDE NO garantiza que la app monte. Dos crashes de runtime ya ocurrieron por esto (2026-06 `navOrigin`, 2026-09 `billingIntent`): (a) una variable de estado usada en el render o en un **dep array** de useCallback/useMemo/useEffect debe tener su `const [x,setX]=useState()` declarado ANTES del hook (TDZ si va después); (b) una variable usada (`intent={billingIntent}`) sin su `useState` = ReferenceError al renderizar esa vista. REGLA: tras tocar estado/hooks/props de una vista, **verificar en runtime la vista Y sus subvistas en demo (`?demo=1`)** — el preview MCP en demo caza estos crashes que el build no ve.
+- Práctica e intuitiva: usarla debe ser un alivio. **Menos es más**: la solución simple, flujos cortos (el menor número de clics); si una feature se vuelve una carga, replantearla. Español de Chile con «tú»; nunca voseo.
+- **Correos:** nunca «Junto con saludar». Abrir con «Espero que estés muy bien.» (una persona) o «Espero que estén muy bien.» (más de una / «Estimados»). Excepción: correos internos al equipo (avisos, recordatorios, resúmenes): «Hola X» (`holaEquipo`, `_shared/correoEquipo.js`) y directo lo que se informa.
+- **Listas y UX:** toda lista larga se agrupa por la entidad natural (cliente/razón social, abogado, fecha) con la entidad de protagonista, nunca un muro plano con el dato clave truncado. Buscador en toda lista de más de ~10 ítems, agrupación colapsable, el dato que identifica primero y legible, targets táctiles cómodos en iPhone.
+- **La app aprende de la navegación de cada usuario** (recientes, frecuentes, accesos directos) para que llegar a un dato cueste el mínimo de clics; se guarda en learnings/usage_events y se refleja en la UI (paleta de comandos, cross-links).
+- **Todo clickeable:** cada dato lleva a su contexto natural; ninguno es callejón sin salida. El nombre del cliente abre su ficha en TODA vista (`handleOpenClientFicha`); factura → su venta; movimiento conciliado → su factura; tarea → su cliente; anticipo → las cuotas que cubre; KPI → la lista que lo compone. Preferir la fila entera tappable; los saltos secundarios dentro de una fila con onClick van con `stopPropagation`.
+- **Ir y volver al lugar exacto:** la pila `navStack` + `navTo(dest)`/`goBack()` es la columna vertebral. Todo salto a una vista que NO está en la barra (Banco, Cartera, Cobranza, Repricing, Inteligencia, Presupuesto Oficina; Tareas y Caja chica en admin) usa `navTo({tab, foco})`, NUNCA `setTab` crudo (deja la pila vacía y «Volver» cae en Inicio). `navTo` apila `{tab,fichaId,scroll}` y resuelve el foco exacto (`conc`→movimiento, `cartera`→proyecto, `billingIntent`→checklist/cierre/cotejo, `fichaId`→cliente). Toda vista fuera de la barra lleva «← {origen}» (`goBack` + `TAB_LABELS[origen]`), y un cross-link «ver X» lleva al ítem exacto, no al hub.
+- **Anti pantalla-negra:** `npm run build` verde NO garantiza que la app monte (crashes 2026-06 `navOrigin`, 2026-09 `billingIntent`): el `useState` de una variable usada en el render o en un dep array de useCallback/useMemo/useEffect va declarado ANTES del hook (TDZ), y una variable usada sin su `useState` es un ReferenceError. Tras tocar estado, hooks o props de una vista, verificar en runtime la vista y sus subvistas en demo (`?demo=1`).
 
 ## Rigor matemático en cálculos, métricas y reportes
 
@@ -153,39 +128,6 @@ La app maneja dinero, UF, gastos, saldos y proyecciones. Cero tolerancia a error
 - Conversiones UF↔CLP con el valor UF de la fecha correcta, no congelado. Al integrar mindicador.cl, convertir con el valor del día.
 - Verificar que subtotales sumen el total general antes de mostrar agregados.
 - Cifras auditables: el usuario debe poder entender de dónde sale cada número.
-
-## REGLA DE ORO: cuestionar siempre el propio análisis
-
-Antes de entregar cualquier análisis, diagnóstico, causa-raíz o afirmación sobre cifras, **cuestiónalo como si fuera de otro** y busca activamente por qué podría estar mal. No entregues la primera lectura como si fuera la verdad.
-
-- **Enumera hipótesis alternativas, no una sola.** Ante un descuadre o un dato raro, plantea varias causas posibles y descártalas con datos, en vez de casarte con la primera explicación (que suele ser la más alarmista o la más simple).
-- **Revisa tus supuestos de consulta.** El error típico: preguntar en el plano equivocado. Ejemplo real: buscar respaldo bancario solo en `conciliacion.tipo_destino='factura'` dio 21 falsos "sin respaldo / $23M"; la plata estaba conciliada a nivel **abono/anticipo**. Antes de concluir, pregúntate: "¿mi consulta cubre TODOS los caminos por los que este dato puede existir?" (otras tablas, otros `tipo_destino`, columnas como `prepaid_anticipo_id`/`reconciled_at`/`payment_method`).
-- **Distingue "diferencia estructural" de "error".** Dos números que miden cosas distintas (planos, ejes, fechas) NO tienen por qué calzar; eso no es un bug ni fraude. No presentes una diferencia esperada como una fuga.
-- **Calibra el tono al evidencia.** Nada de "riesgo/fraude/$23M" sin haber agotado las explicaciones benignas. La conclusión alarmista es la que más hay que auditar antes de decirla.
-- **Escucha la corrección del usuario como señal.** Si el usuario dice "puede que estés analizando mal", asume que probablemente lo estás; re-levanta TODO el dato desde cero, no defiendas la lectura anterior.
-- Esto refuerza (no reemplaza) "Cifras auditables" y la pausa de seguridad en cambios de cifras: primero dudar, verificar y recién ahí afirmar.
-
-## REGLA DE ORO: ningún hallazgo sin PRUEBA POSITIVA contra la verdad completa
-
-La falla recurrente (día entero 2026-10-01): tomé un número derivado —una vista, un flag, un resumen, la memoria, UNA sola columna— y lo presenté como verdad sin abrir el dato real ni mirar su ciclo completo. Resultado: puros falsos positivos ("21 series sin cuotas" = default `nCuotas=3` en personalizadas; "$54M sin enviar" = 26 de 38 **ya pagadas**; "$154M sin XML" = histórico **previo a la app**; "duplicado Survías" = dos tramos 50% **legítimos**, uno lo borré). Antes de afirmar **cualquier** número, hallazgo, duplicado, descuadre o diagnóstico:
-
-1. **Abre filas reales, no cuentas.** Una cifra de una vista/flag/`count()`/resumen es una **hipótesis**, no un hallazgo. Baja a las filas y míralas una por una antes de decir que existe un problema.
-2. **Revisa el CICLO COMPLETO, no una foto.** El significado de una fila depende de todo su contexto, no de un campo: ¿pagada (`paid_at`/status)? ¿emitida? ¿gestionada/enviada **fuera de la app**? ¿anulada? ¿cubierta por anticipo? ¿**dentro de la vida de la app**? (conoce las fechas de inicio: billing desde **2026-06-06**, XML desde **2026-06-09**; lo anterior es histórico importado y no tiene por qué tener XML/envío). Un solo flag (`email_sent_at`, `dte_xml`, `nCuotas`) casi nunca dice la verdad solo.
-3. **Separa el DEFECTO de lo ESPERABLE.** Distingue un error real de: (a) falso positivo por valor por defecto (`nCuotas=3` en personalizada/único), (b) diferencia estructural legítima (dos tramos de 50%, planos distintos), (c) artefacto histórico (datos previos a la app/feature). Si es (a)/(b)/(c), NO es hallazgo; y si el radar los produce, el radar está mal y se arregla el radar.
-4. **Reporta solo lo que SOBREVIVE, con la prueba que lo confirma.** Si sobrevive, cita la evidencia exacta (`archivo:línea`/la consulta). Si no la puedes confirmar con una consulta o el código que dé un **resultado positivo**, es "candidato a revisar (con compuerta)", **nunca** un problema afirmado. Tono calibrado a la evidencia: cero alarma de $/riesgo hasta agotar las explicaciones benignas.
-5. **Ante la duda: verifica o calla.** No trasladar al usuario el trabajo de cacharme el falso positivo. Si no alcancé a confirmarlo en esta vuelta, lo digo como pendiente de verificar, no como hallazgo.
-
-Refuerza con dientes "cuestionar el propio análisis" y "nunca de memoria". Mnemotecnia: **filas, no cuentas · ciclo, no foto · esperable, no defecto · prueba, no corazonada.**
-
-## REGLA DE ORO: cero suposiciones — la cifra la calcula la app y la confirma otro
-
-Nace del 25-10-2026: presenté «15 cuotas sin emitir, $16,1M» con una consulta propia que no aplicaba toda la regla del radar (eran 7 por $10,0M), y propuse reclamar la Factura N° 323 de BDA sin ver el correo donde Rodrigo explicaba que eran comisiones ya registradas. La regla de prueba positiva existía y no bastó: estos pasos son **obligatorios**, no criterio.
-
-1. **La cifra sale de la función de la app, no de una consulta mía.** Todo número o pendiente sobre un concepto de la app (radar, por cobrar, vencido, saldo, rendir, notaría, trabajos detenidos) se obtiene con la MISMA función que usa la app: el helper de `_shared` o el modo prueba (dryRun) de la función del servidor. Si no existe función, se rotula «estimación propia, sin la regla de la app» y no se presenta como hallazgo.
-2. **Contexto del negocio antes de proponer una acción.** Antes de sugerir algo sobre un cliente o tercero (reclamar, cobrar, cerrar, castigar), buscar si ya hay un acuerdo o explicación: correos (contacto@ y la casilla del socio), learnings, bitácora, notas y memoria. Si no lo busqué, no propongo la acción.
-3. **Revisión independiente antes de entregar un análisis.** Un análisis con hallazgos (auditoría, diagnóstico, «qué falta») lo verifica un revisor aparte que recibe los datos y la pregunta, no mi conclusión, y baja a las filas. Se entrega solo lo que sobrevive, separado en «confirmado (con su fuente)» y «por verificar».
-4. **Cada falso positivo deja su prueba.** Todo falso positivo encontrado, en la app o en mi análisis, se corrige en la regla (no en la vista) y queda como caso en `tests/` (anonimizado), para que no vuelva.
-5. **Cada afirmación con su fuente.** Archivo:línea, función o filas consultadas. Sin fuente = «por verificar», nunca un hecho.
 
 ## REGLA DE ORO: coherencia de datos entre vistas (una cifra, una fuente, un dueño)
 
@@ -239,40 +181,10 @@ Ningún render (propuesta, antes/después, mockup) se le muestra al usuario si n
 5. **Reusar los componentes de la app** (tarjeta KPI canónica, fila de lista, PageHeader), sin inventar formas nuevas.
 6. **Mirar antes de mostrar:** abrir el render, revisar la captura a 1280 y a 375 contra los puntos 1–5 y corregir lo que falle antes de enviarlo.
 
-## Economía de espacio en formularios
+## Reglas de detalle que viven en la memoria (leerlas antes de tocar esas áreas)
 
-- Formularios y paneles deben ser densos pero legibles. Eliminar padding decorativo, márgenes inflados y secciones que obligan a scroll innecesario.
-- Antes de agregar un campo nuevo, preguntar si cabe en una línea existente (label inline, toggle + input en fila).
-- Toda decisión de layout debe pasar por la pregunta: ¿esto requiere scroll en iPhone que podría evitarse?
-
-## Patrón "Pulir" (rediseño de vistas y modales)
-
-Disparador: "pulir/pule/pulí <vista>" → correr estas reglas sobre esa vista. Retoque guiado de usabilidad (no rehacer ni tocar la lógica salvo bug); proponer en render, recomendar una opción y construir tras OK.
-
-- **Economía de espacio** (regla del proyecto): labels dentro del cuadro, campos en una línea, nada de padding/secciones que obliguen a scroll en iPhone.
-- **Menos es más / campos condicionales**: lo opcional (subproyecto, fechas) se colapsa y solo aparece si hace falta — no contaminar.
-- **Co-locación**: "Dirigido a" junto a Proyecto, y el correo elegido viaja al paso siguiente (no repetir trabajo: lo eliges una vez).
-- **La herramienta aprende / sugiere**: "Dirigido a" propone los contactos de la ficha en vez de escribir.
-- **Consistencia visual**: header igual al de Editar Cliente (un solo patrón de encabezado).
-- **Rigor en las cifras**: cuestionar de dónde sale cada dato (el período) y arreglar la fórmula si está mal.
-
-En una frase: compactar sin perder función — títulos dentro del cuadro, lo opcional colapsado, campos co-locados, sugerencias en vez de tipeo, header unificado, y los datos derivados de la fuente correcta.
-
-## Canon de la foto (landings y resúmenes de KPIs)
-
-Regla universal para CUALQUIER vista-resumen de números — "la foto" — de un landing/dashboard/ficha (Facturación, Ventas, Gastos, Dashboard). Antes de armar o tocar una, correr este checklist:
-
-1. **Jerarquía, no paralelo**: una cifra que es PARTE de otra (Vencido ⊂ Por cobrar) va ANIDADA bajo su total, NUNCA como tarjeta hermana. Cero cifras duplicadas (no repetir el hero como tile).
-2. **Un protagonista**: un solo bloque grande es la foto (ej. Por cobrar, con vencido/al-día dentro); lo accesorio (Cobrado, Por facturar, Anticipos, Proveedores) baja a segundo nivel. No 4 tiles del mismo peso compitiendo.
-3. **Una sola fuente por cifra**: cada número sale de su helper único; los subtotales SUMAN el total; nada calculado dos veces inline (ver "Rigor matemático").
-4. **Canon color + icono por estado**: cada estado con su color e icono del canon (`estadoCobro`/`ESTADO_COBRO`).
-5. **Menos es más, sin disclaimers**: nada de párrafos explicativos al pie; si una cifra depende de un filtro (año), se rotula corto (1 línea). La confianza va por diseño, no por nota.
-6. **Filtro claro**: de un vistazo se entiende qué depende del filtro (año → Cobrado/Por facturar) y qué es saldo vivo (Por cobrar/Vencido).
-7. **Todo clickeable**: cada KPI abre su lista (Por cobrar → sus facturas, Vencido → vencidas).
-8. **Alertas de acción, no KPI de plata**: lo que requiere acción ("Ya facturadas — vincular") es una alerta, no una tarjeta de monto.
-9. **Mobile iPhone**: sin romper layout, targets cómodos, pills estrechas, sin emojis, paleta `C`.
-
-En una frase: **un protagonista con sus partes anidadas, cero cifras repetidas, de fuente única, todo clickeable y sin párrafos.** Aplicado: landing Facturación "Etapas del cobro", Ventas, Gastos, Dashboard.
+- [[reglas-dominio-finanzas]]: **nunca duplicar entidades** (clientes, razones sociales, proveedores: dedup robusto, fuzzy match y fusión conservando datos); **caja chica ↔ transferencia** (conciliación 1:1 por persona, monto y ±3 días, sin registrar dos veces); **retiros de socios equitativos por período** (página Socios).
+- [[reglas-detalle-vistas-y-correos]]: **lo que sale al cliente toma sus números de la app, no de texto tipeado** (cuota, folio, monto y período; lo aprendido guarda marcas, nunca el número literal); **canon de la foto** de KPIs (un protagonista, partes anidadas, todo clickeable); patrón **«Pulir»**; **economía de espacio** en formularios.
 
 ## Flujo de trabajo
 
