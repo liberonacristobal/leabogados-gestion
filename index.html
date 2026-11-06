@@ -32,12 +32,15 @@
     .lf-kpi { cursor:pointer; transition:transform .1s; }
     .lf-kpi:active { transform:scale(.985); }
     .lf-kpi:hover .lf-chev { color:#537281; }
-    /* Resaltado de tarjetas al pasar el cursor (solo con mouse; el celular no cambia). Alcanza a toda tarjeta tocable con borde y esquinas de 10 a 16 px
-       (cursor pointer en línea); .hov-card lo fuerza en una que no calce y .sin-hover lo evita. */
+    /* Resaltado de tarjetas al pasar el cursor (solo con mouse; el celular no cambia). Alcanza a toda tarjeta tocable (cursor pointer en línea) con borde
+       de 0,5 a 1,5 px: div/a/li/label con esquinas de 8 a 16 px, y button con esquinas de 10 a 16 px y el borde neutro de la paleta (los botones de color,
+       rojos o azules, no cambian). .hov-card lo fuerza en una que no calce y .sin-hover lo evita. */
     @media (hover:hover) and (pointer:fine) {
-      :is(div,a,section,li,label)[style*="cursor: pointer"]:is([style*="border: 1px solid"],[style*="border: 1.5px solid"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover),
+      :is(div,a,li,label,section)[style*="cursor: pointer"]:is([style*="border: 1px solid"],[style*="border: 1.5px solid"],[style*="border: 0.5px solid"]):is([style*="border-radius: 8px"],[style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover),
+      button[style*="cursor: pointer"]:is([style*="border: 1px solid rgb(228, 232, 235)"],[style*="border: 1.5px solid rgb(228, 232, 235)"],[style*="border: 0.5px solid rgb(228, 232, 235)"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover),
       .hov-card { transition:border-color .12s, box-shadow .12s, transform .12s; }
-      :is(div,a,section,li,label)[style*="cursor: pointer"]:is([style*="border: 1px solid"],[style*="border: 1.5px solid"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover):hover,
+      :is(div,a,li,label,section)[style*="cursor: pointer"]:is([style*="border: 1px solid"],[style*="border: 1.5px solid"],[style*="border: 0.5px solid"]):is([style*="border-radius: 8px"],[style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover):hover,
+      button[style*="cursor: pointer"]:is([style*="border: 1px solid rgb(228, 232, 235)"],[style*="border: 1.5px solid rgb(228, 232, 235)"],[style*="border: 0.5px solid rgb(228, 232, 235)"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover):hover,
       .hov-card:hover { border-color:#003C50 !important; box-shadow:0 3px 12px rgba(0,60,80,.14); transform:translateY(-1px); }
     }
   </style>
