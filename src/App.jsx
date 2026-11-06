@@ -53,6 +53,7 @@ import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, propuestaFon
 import { pendientesPorCliente, nClientesConPendientes } from '../supabase/functions/_shared/pendientesCliente.js'   // Revisar cuentas: pendientes financieros por cliente (regla única)
 import { crearConsultas, resolverConIA } from '../supabase/functions/_shared/consultasCopiloto.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../supabase/functions/_shared/ventaGastoReglas.js'
+import { cuadreVenta } from '../supabase/functions/_shared/porFacturar.js'
 import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta, noEmitirDeFilas } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
@@ -2849,6 +2850,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
   const emit = bills.filter(b=>!!b.invoice_no), pend = bills.filter(b=>!b.invoice_no)
   const facturado = emit.reduce((a,b)=>a+montoFactura(b),0), cobrado = emit.reduce((a,b)=>a+cobradoBill(b),0), porCobrar = emit.reduce((a,b)=>a+saldoBill(b),0)
   const porFacturar = pend.reduce((a,b)=>a+(b.amount||0),0), nPaus = pend.filter(b=>b.status==='Pausada').length
+  const cuad = cuadreVenta(sale, bills, ufFechaCache()||{})   // cuadre único: plan, facturado y cuotas en UF de cada fecha
   const hUF = ventaUF(sale,ufRef), hCLP = ventaCLP(sale,ufRef)
   const hon = sale.moneda==='CLP' ? (hCLP>0?fmt(Math.round(hCLP)):null) : (hUF>0?fmtUF(hUF):null)
   const ln = (l,v,col,{sub=false,top=false,bold=false}={}) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:sub?'3px 0 3px 12px':'5px 0',borderTop:top?`1px solid ${C.track}`:'none',marginTop:top?4:0,fontSize:sub?12:13}}><span style={{color:sub?C.muted:C.text,fontWeight:bold?700:500}}>{l}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:700,color:col||C.text}}>{v}</span></div>
@@ -2894,6 +2896,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
               </div>
             </div> })())}
       {ln(`Por facturar${pend.length?` (${pend.length} cuota${pend.length!==1?'s':''}${nPaus?` · ${nPaus} pausada${nPaus!==1?'s':''}`:''})`:''}`, pend.length?fmt(Math.round(porFacturar)):'—', pend.length?C.text:C.muted, {top:true})}
+      {cuad&&cuad.estado!=='Cuadra'&&ln('Cuadre', `${cuad.estado} · ${cuad.diferencia>0?'sobra':'falta'} ${cuad.enUF?fmtUF(Math.abs(cuad.diferencia)):fmt(Math.round(Math.abs(cuad.diferencia)))}`, cuad.estado==='Sobra'?C.overdueText:C.soonText, {sub:true})}
     </div>
     {bills.length>0&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
       <div style={{...SEC_LBL}}>Cuotas y facturas</div>
