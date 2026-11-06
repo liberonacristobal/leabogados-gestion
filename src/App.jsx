@@ -24,6 +24,7 @@ import { montoFactura, dteMontoTotal, _pdfjsP, cargarPdfjs, tokenSesion, driveCa
 import { kpisPorSocio } from './lib/cifras.js'
 import { suscribirCambios } from './lib/tiempoReal.js'
 import { useOrden } from './lib/orden.jsx'
+import { ClientePreview } from './lib/clientePreview.jsx'
 import { lazyVista, EsqueletoInicio, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import {
@@ -8930,6 +8931,7 @@ export default function App() {
           </FlujoPagina>
         })()}
         {/* 'coberturaSII' ya NO es modal: página 'flujo'. */}
+        {isDesktop&&userRole==='admin'&&<ClientePreview clients={clients} billing={billing} expenses={expenses} tasks={tasks} clientEntities={clientEntities} onOpenFicha={handleOpenClientFicha}/>}
         <CommandPalette open={paletteOpen} inicial={paletteInicial} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
         {copilotoOpen&&tab!=='dashboard'&&userRole==='admin'&&<div style={{display:'none'}} aria-hidden='true'>{dashboardEl}</div>}
         {copilotoOpen&&<CopilotoModal role={userRole} anticipos={anticipos} clients={clients} clientEntities={clientEntities} rendiciones={rendiciones} terceros={terceros} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
