@@ -40,7 +40,7 @@ export function trabajosSinFacturar({ sales = [], billing = [], uf = {}, ufHoy =
     const ult = emit.map(b => String(b.issued_at || b.due || '').slice(0, 10)).filter(Boolean).sort().pop()
     if (!ult || ult > lim) continue
     const cv = coberturaVenta(s, bs, uf); if (!cv || !cv.ok) continue
-    const silenciada = x => noEmitir.has(String(x.b.id)), previa = x => String(x.b.due || '') < appDesde
+    const silenciada = x => noEmitir.has(String(x.b.id)), previa = x => !cuotaDeLaApp(x.b, appDesde)
     const explica = cv.prog.filter(x => silenciada(x) || !previa(x)).reduce((a, x) => a + x.uu, 0)
     const falta = cv.plan - cv.usado - explica
     const tol = Math.max(cv.enUF ? 1 : 10000, cv.plan * 0.03)
@@ -101,7 +101,7 @@ export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', ap
     const abiertas = cu.some(b => b.status === 'Programada')
     return { estado: cuotasAnt.length && !abiertas ? 'pagada' : 'anticipo', recibido }
   }
-  if (sale.status === 'Activo' && hoy && cu.some(b => b.status === 'Programada' && b.due && b.due >= appDesde && b.due < hoy && !noEmitir.has(String(b.id)))) return { estado: 'sinprimera', recibido: 0 }
+  if (sale.status === 'Activo' && hoy && cu.some(b => b.status === 'Programada' && b.due && cuotaDeLaApp(b, appDesde) && b.due < hoy && !noEmitir.has(String(b.id)))) return { estado: 'sinprimera', recibido: 0 }
   return null
 }
 
@@ -109,6 +109,19 @@ export function estadoPagoVenta(sale, billing = [], anticipos = [], hoy = '', ap
 // antes de `hasta` (1º del mes en curso = meses cerrados) y dentro de la vida de la app, de ventas Activas que ya facturan, que no
 // están cubiertas por lo ya facturado y que nadie marcó «No corresponde» (learnings cuota_no_emitir). Candidatas por revisar.
 export const APP_DESDE = '2026-06-06'
+export const RETROACTIVA_DIAS = 45
+/**
+ * ¿La cuota pertenece a la vida de la app? Sí si vence desde que existe la app, o si nació en ella y a tiempo: creada desde APP_DESDE y con no más
+ * de 45 días entre su vencimiento y su creación. No lo es la cuota «retroactiva» (un plan generado hacia atrás, p. ej. al importar una venta de
+ * 2025): su fecha es histórica y lo cobrado entonces no pasó por la app. Se deduce de `created_at`: no hay marca guardada ni columna nueva.
+ * @param {any} b @param {string} [appDesde]
+ */
+export function cuotaDeLaApp(b, appDesde = APP_DESDE) {
+  const due = String((b && b.due) || '').slice(0, 10); if (!due) return false
+  if (due >= appDesde) return true
+  const creada = String((b && b.created_at) || '').slice(0, 10)
+  return !!creada && creada >= appDesde && new Date(creada + 'T12:00:00').getTime() - new Date(due + 'T12:00:00').getTime() <= RETROACTIVA_DIAS * 864e5
+}
 export function cuotasSinEmitir({ billing = [], sales = [], uf = {}, noEmitir = new Set(), hasta, appDesde = APP_DESDE, anticipos = [] }) {
   return _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, ventasEnMarcha(billing, anticipos), true)
 }
@@ -146,7 +159,7 @@ function _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, enMa
   const cub = cuotasCubiertasVenta(billing, sales, uf)
   const mayor = mayorCuotaEmitida(billing)
   return (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.sale_id && venta.get(String(b.sale_id))?.status === 'Activo'
-    && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && b.due >= appDesde && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total
+    && enMarcha.has(String(b.sale_id)) === deLosQueParten && b.due && cuotaDeLaApp(b, appDesde) && !noEmitir.has(String(b.id)) && !cub.get(String(b.id))?.total
     && (b.due < hasta || _saltada(b, mayor, noEmitir)))
 }
 

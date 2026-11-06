@@ -311,6 +311,12 @@ export const okDB = (r, que) => { if(r && r.error){ registrarError({ origen:'acc
 
 // Valor SINGLETON en learnings (config, interruptores): update si existe, insert si no. NO usar upsert
 // onConflict:'kind,key' — la tabla admite (kind,key) duplicados a propósito y ese upsert falla en silencio.
+// Al emitir una cuota su vencimiento pasa a la regla de la factura y la fecha programada se pierde. Se guarda aparte (learnings fecha_programada: key = cuota,
+// value = fecha programada) para poder medir cuánto se atrasa cada emisión. Solo la primera vez; sin tabla ni columna nueva. No bloquea ni rompe la emisión.
+export function guardarFechaProgramada(bill){
+  if(DEMO||!bill||!bill.id||bill.status!=='Programada'||!bill.due) return
+  setLearningKV('fecha_programada',String(bill.id),String(bill.due).slice(0,10)).catch(e=>registrarError({origen:'accion',vista:'fecha_programada',err:e}))
+}
 export async function setLearningKV(kind,key,value){
   const v = value==null?null:String(value)
   const {data} = await supabase.from('learnings').select('id').eq('kind',kind).eq('key',String(key)).limit(1)
