@@ -728,7 +728,7 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
   const comUF=comList.reduce((a,x)=>a+x.ts.reduce((s,t)=>s+(Number(t.monto)||0)/u(t.pagado_at),0),0)
   const ing=fac+sub+rex, res=ing-cos-com, ingUF=facUF+subUF+rexUF, resUF=ingUF-cosUF-comUF
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
+  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
 }
 
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
