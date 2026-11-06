@@ -25,10 +25,11 @@ export function useVistasGuardadas(lista, email) {
 
 // Control «Vistas» junto a los filtros: aplica una vista guardada de un toque o guarda la combinación actual con un nombre.
 // actual: filtros de hoy · defecto: combinación de origen (sin filtros) · resumen: texto corto de lo que hoy está filtrado.
-export function VistasGuardadas({ vistas, guardar, actual, defecto = {}, resumen = '', onAplicar }) {
+export function VistasGuardadas({ vistas, guardar, actual, defecto = {}, resumen = '', onAplicar, estilo }) {
   const [abierto, setAbierto] = useState(false)
   const [nombre, setNombre] = useState('')
   const [error, setError] = useState(null)
+  const [desp, setDesp] = useState(0)   // desplazamiento horizontal del menú para que no se salga de la pantalla (celular)
   const caja = useRef(null)
   useEffect(() => {
     if (!abierto) return
@@ -41,11 +42,11 @@ export function VistasGuardadas({ vistas, guardar, actual, defecto = {}, resumen
   const puede = hayFiltro(actual, defecto) && !activa
   const guardarActual = () => { const r = agregarVista(vistas, nombre, actual); if (r.error) { setError(r.error); return } guardar(r.lista); setNombre(''); setError(null) }
   return (
-    <span ref={caja} style={{ position: 'relative', display: 'inline-flex', marginLeft: 'auto' }}>
-      <button type='button' onClick={() => setAbierto(o => !o)} aria-expanded={abierto} style={{ height: 26, padding: '0 11px', borderRadius: 20, border: `1px solid ${activa || abierto ? C.accent : C.border}`, background: activa ? C.azulBg : C.surface, color: C.accent, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+    <span ref={caja} style={{ position: 'relative', display: 'inline-flex', marginLeft: 'auto', ...estilo }}>
+      <button type='button' onClick={() => { if (!abierto && caja.current) { const r = caja.current.getBoundingClientRect(), w = Math.min(290, window.innerWidth - 32); setDesp(Math.max(8, Math.min(r.left, window.innerWidth - 8 - w)) - r.left) } setAbierto(o => !o) }} aria-expanded={abierto} style={{ height: 26, padding: '0 11px', borderRadius: 20, border: `1px solid ${activa || abierto ? C.accent : C.border}`, background: activa ? C.azulBg : C.surface, color: C.accent, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
         <SIcon n='star' s={12} c={C.accent} />{activa ? activa.nombre : 'Vistas'}{!activa && vistas.length > 0 && <span style={{ opacity: .7, fontVariantNumeric: 'tabular-nums' }}>{vistas.length}</span>}
       </button>
-      {abierto && <div style={{ position: 'absolute', top: 32, right: 0, width: 'min(290px, calc(100vw - 32px))', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,60,80,.18)', padding: 8, zIndex: 30, textAlign: 'left' }}>
+      {abierto && <div style={{ position: 'absolute', top: 32, left: desp, width: 'min(290px, calc(100vw - 32px))', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,60,80,.18)', padding: 8, zIndex: 30, textAlign: 'left' }}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.06em', color: C.done, textTransform: 'uppercase', margin: '4px 6px' }}>Mis vistas</div>
         {vistas.length === 0 && <div style={{ fontSize: 12, color: C.muted, padding: '6px 8px' }}>Aún no guardas ninguna.</div>}
         {vistas.map(v => { const on = activa && activa.id === v.id; return (
@@ -66,4 +67,10 @@ export function VistasGuardadas({ vistas, guardar, actual, defecto = {}, resumen
         </div>
       </div>}
     </span>)
+}
+
+// Lo mismo con su propio estado: se enchufa a una lista que no quiere llevar el hook (lista = nombre de la vista de origen).
+export function VistasLista({ lista, email, ...props }) {
+  const [vistas, guardar] = useVistasGuardadas(lista, email)
+  return <VistasGuardadas vistas={vistas} guardar={guardar} {...props} />
 }
