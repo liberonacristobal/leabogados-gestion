@@ -182,11 +182,14 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   const gruposAccion = grupos.filter(g=>g.nAccion>0)   // clientes con vencido que toca recordar hoy
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
   const gsort = useMemo(()=>{ const d=sortBy.dir==='desc'?-1:1
-    const key={facturas:g=>g.items.length,total:g=>g.total,monto:g=>g.total,vencido:g=>g.vencido,mora:g=>g.maxDias}[sortBy.col]
+    const key={facturas:g=>g.items.length,total:g=>g.total,monto:g=>g.total,vencido:g=>g.vencido,mora:g=>g.maxDias,cartera:g=>gGlobal[g.cid]?.total||0,punt:g=>{ const e=punt.get(String(g.cid)); if(!e||!e.n) return null; const rk={'Atraso habitual':0,'Se atrasa':1,'Historial corto':2,'Paga a tiempo':3}[e.etiqueta]; return (rk==null?2:rk)*1000+(e.pct30||0) }}[sortBy.col]   // por la etiqueta que muestra la columna; el % de pagos a ≤30 días solo desempata
     const qq=_normTxt(qCob.trim()), qd=qCob.replace(/[^0-9kK]/g,'').toLowerCase()
     const base = !qq ? gruposView : gruposView.filter(g=> _normTxt(cn(g.cid)).includes(qq) || g.items.some(({b})=> (qd.length>=3&&String(folioN(b.invoice_no)||'').includes(qd)) || _normTxt(b.concept).includes(qq) || (qd.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(qd)) || _normTxt(rsDeFactura(b,clientEntities)).includes(qq)))
-    return [...base].sort((a,b)=> sortBy.col==='cliente' ? (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es') : d*((key?key(a):a.total)-(key?key(b):b.total)) )
-  },[gruposView,sortBy,qCob,clientEntities])
+    return [...base].sort((a,b)=>{ if(sortBy.col==='cliente') return (sortBy.dir==='asc'?1:-1)*cn(a.cid).localeCompare(cn(b.cid),'es')
+      const ka=key?key(a):a.total, kb=key?key(b):b.total
+      if(ka==null||kb==null) return ka==null&&kb==null?0:ka==null?1:-1   // sin dato (p. ej. sin pagos para medir la puntualidad): siempre al final, en cualquier sentido
+      return d*(ka-kb) })
+  },[gruposView,sortBy,qCob,clientEntities,punt,gGlobal])
   // Contexto: "Por cobrar total" (todo lo emitido sin pagar, vencido + al día) para explicar la diferencia con Facturación. Cobranza actúa solo sobre lo vencido.
   const _cobr=b=>!b.deleted_at && b.invoice_no && !['reembolso','nota_credito'].includes(b.billing_type) && ['Pendiente','Vencido'].includes(b.status) && saldoBill(b)>0
   const nAlDia=(billing||[]).filter(b=>_cobr(b)&&!esVencidaB(b)).length   // "al día" por la FUENTE ÚNICA (emisión+30), no el due crudo → consistente con la lista
@@ -409,7 +412,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
           <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Ordenar</span>
           {SORTS.map(([col,lbl])=>{ const on=sortBy.col===col; return <button key={col} onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{fontSize:11,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted}}>{lbl}{on?(sortBy.dir==='desc'?' ↓':' ↑'):''}</button> })}
           <VistasLista lista='cobranza' email={currentUserEmail} estilo={{marginLeft:0}} actual={{sortBy,tramoF,aboFilter,q:qCob.trim()}} defecto={{sortBy:{col:'total',dir:'desc'}}}
-            resumen={[(SORTS.find(x=>x[0]===sortBy.col)||SORTS[0])[1],tramoF!=null?`Antigüedad ${tramoF==='m60'?'+60 días':tramoF}`:null,aboFilter?`Abogado ${aboFilter}`:null,qCob.trim()?`«${qCob.trim()}»`:null].filter(Boolean).join(' · ')}
+            resumen={[({punt:'Puntualidad',cartera:'% cartera'})[sortBy.col]||(SORTS.find(x=>x[0]===sortBy.col)||SORTS[0])[1],tramoF!=null?`Antigüedad ${tramoF==='m60'?'+60 días':tramoF}`:null,aboFilter?`Abogado ${aboFilter}`:null,qCob.trim()?`«${qCob.trim()}»`:null].filter(Boolean).join(' · ')}
             onAplicar={f=>{ setSortBy(f.sortBy||{col:'total',dir:'desc'}); setTramoF(f.tramoF??null); setAboFilter(f.aboFilter??null); setQCob(f.q||'') }}/>
           <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:14}}>
             {gruposAccion.length>1 && <span onClick={()=>!sending&&enviarTodos()} title="Enviar recordatorio a todos los clientes que corresponde" style={{fontSize:11,fontWeight:600,color:sending?C.done:C.azulInfo,cursor:sending?'default':'pointer'}}>{sending?'Enviando…':`Enviar a todos (${gruposAccion.filter(g=>!autoCli[g.cid]).length})`}</span>}
@@ -423,7 +426,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
         return (
           <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <table style={{borderCollapse:'collapse',width:'100%'}}>
-              <thead><tr>{th('cliente','Cliente')}{th('mora','Mora')}<th style={thS}>Puntualidad</th><th style={{...thS,textAlign:'right'}}>% cartera</th>{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
+              <thead><tr>{th('cliente','Cliente')}{th('mora','Mora')}{th('punt','Puntualidad')}{th('cartera','% cartera',true)}{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:13,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
