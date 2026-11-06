@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { useGuardarProyeccion } from '../lib/controlProyeccionHook.js'
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
@@ -767,7 +768,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     return {cob, pend, tot:it.reduce((a,x)=>a+x.com,0), tCob:cob.reduce((a,x)=>a+x.cob,0), tPend:pend.reduce((a,x)=>a+x.pend,0), nVenc:pend.filter(x=>x.b.status==='Vencido').length}
   },[resAnio,ingConc])
   // Flujo de caja NETO a 8 semanas (entra − sale) sin depender del saldo del banco: cobros esperados − costos prorrateados − comisiones por pagar.
-  const flujoCaja = useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales,fantasmaIds})   // misma fuente que la página Flujo de caja y Oficina
+  const flujoCaja = useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales,fantasmaIds})
+  useGuardarProyeccion(flujoCaja)   // guarda la proyección de la semana, una vez, para compararla con lo cobrado   // misma fuente que la página Flujo de caja y Oficina
   const flujoNeto8 = flujoCaja.fin
   const proyCobranza = useMemo(()=>proyeccionCobranza(flujoCaja).total,[flujoCaja])   // Proyección al 31-12 = el mismo cálculo del Flujo, hasta fin de año
   const vencMes = vencidoTot
