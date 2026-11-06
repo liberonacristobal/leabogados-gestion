@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { clasificarPorFacturar } from '../../supabase/functions/_shared/porFacturar.js'
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
@@ -3516,9 +3517,12 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
               const facSinXmlN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>='2026-06-09').length
               const compIncumplidos=Object.entries(compromisosCob).filter(([cid,c])=>estadoCompromiso(c,new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(cid)&&b.invoice_no&&!['reembolso','nota_credito'].includes(b.billing_type)&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)).reduce((a,b)=>a+saldoBill(b),0))==='incumplido').length
+              const _pf=clasificarPorFacturar({billing:bb,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,yaFacturadas:yaFacturadasIds,hoy,anio:fYear})   // misma regla de la página «Por facturar»
+              const porConfN=_pf.grupos.porConfirmar.n
               const revisar=[
                 facSinXmlN>0&&{k:'DTE emitidos sin XML', s:'emitidas en el SII sin el XML firmado · completar', n:facSinXmlN, col:C.soonText, on:()=>go('checklist')},
                 sinEmitirN>0&&{k:'Cuotas vencidas sin facturar', s:'programadas de meses cerrados · por revisar', n:sinEmitirN, col:C.soonText, on:()=>go('sinemitir')},
+                porConfN>0&&{k:'Cuotas por confirmar', s:'más de 90 días sin movimiento · responde el abogado', n:porConfN, col:C.soonText, on:()=>onOpenPorFacturar?onOpenPorFacturar(fYear,'porConfirmar'):go('programadas')},
                 trabajosSF.length>0&&{k:'Trabajos sin facturar', s:'sin factura hace más de 60 días · por revisar', n:trabajosSF.length, col:C.soonText, on:()=>go('sinfacturar')},
                 compIncumplidos>0&&{k:'Compromisos de pago incumplidos', s:'la fecha pasó y el cliente sigue con deuda vencida · Cobranza', n:compIncumplidos, col:C.overdueText, on:()=>onIrCobranza&&onIrCobranza()},
                 terc.total>0&&{k:'Facturas del tercero por revisar', s:'cuadres propuestos y alertas · Comisiones › Proveedores', n:terc.total, col:C.accent, on:()=>onProveedores&&onProveedores(Object.entries(terc.porProveedor).find(([,r])=>r.nRevisar>0)?.[0])},
@@ -3569,7 +3573,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
                 {/* AÑO: tres tarjetas KPI (más altas que los tiles), con el tono de la app; cada una abre su lista. */}
                 <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:isDesktop?12:8}}>
                   {[
-                    {k:'Por facturar', v:porFacturarRealTot, ic:'clock', col:C.muted, bg:C.surface, bd:C.border, sq:C.bgSoft, on:()=>onOpenPorFacturar?onOpenPorFacturar(fYear):irAEstado('programadas')},
+                    {k:'Por facturar', v:porFacturarRealTot, ic:'clock', col:C.muted, bg:C.surface, bd:C.border, sq:C.bgSoft, on:()=>onOpenPorFacturar?onOpenPorFacturar(fYear,null):irAEstado('programadas')},
                     {k:'Por cobrar', v:porCobrar, ic:'file', col:C.accent, bg:C.azulBg, bd:C.azulBd, sq:'#fff', on:()=>irAEstado('emitidas')},
                     {k:'Pagado', v:cobAll, ic:'check', col:C.greenText, bg:C.greenBg, bd:C.greenDeep, sq:'#fff', on:()=>irAEstado('pagado')},
                   ].map(t=><div key={t.k} onClick={t.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t.on()}}} style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:12,padding:isDesktop?'14px 16px':'11px 11px',cursor:'pointer',minHeight:isDesktop?112:98,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>

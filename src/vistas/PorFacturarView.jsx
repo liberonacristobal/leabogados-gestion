@@ -96,7 +96,7 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
     </PaginaSobre>)
 }
 
-export function PorFacturarView({ anio = '', billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], fantasmaIds = null, origen = 'Facturación', onBack, onOpenClientFicha, onOpenVenta, onOpenFactura, setBilling }) {
+export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelantos, billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], fantasmaIds = null, origen = 'Facturación', onBack, onOpenClientFicha, onOpenVenta, onOpenFactura, setBilling }) {
   const isDesktop = useIsDesktop()
   const noEmitir = useNoEmitirSet()
   const bb = useMemo(() => (billing || []).filter(b => !b.deleted_at && !(fantasmaIds && fantasmaIds.has(String(b.id)))), [billing, fantasmaIds])
@@ -104,8 +104,8 @@ export function PorFacturarView({ anio = '', billing = [], sales = [], clients =
   const [fuentes] = usePorSocioFuentes()
   const hoy = new Date().toISOString().slice(0, 10)
   const [socio, setSocio] = useState('Todos')
-  const [abiertos, setAbiertos] = useState(() => new Set(['vigente']))
-  const [partida, setPartida] = useState('vencida')
+  const [abiertos, setAbiertos] = useState(() => new Set(partidaInicial && GRUPOS.porConfirmar.includes(partidaInicial) ? ['vigente', 'porConfirmar'] : partidaInicial && GRUPOS.fuera.includes(partidaInicial) ? ['vigente', 'fuera'] : ['vigente']))
+  const [partida, setPartida] = useState(partidaInicial || 'vencida')
   const [detalle, setDetalle] = useState(null)
   const saleById = useMemo(() => Object.fromEntries((sales || []).map(s => [String(s.id), s])), [sales])
   const cliById = useMemo(() => Object.fromEntries((clients || []).map(c => [String(c.id), c])), [clients])
@@ -160,6 +160,7 @@ export function PorFacturarView({ anio = '', billing = [], sales = [], clients =
         </div>
         <div style={box}>
           {cap(`${ROT[partida][0]}${ROT[partida][1] ? ' · ' + ROT[partida][1] : ''} · ${cuenta([partida])} cuota${cuenta([partida]) !== 1 ? 's' : ''} · ${fmtM(suma([partida]))}`)}
+          {partida === 'cubAnticipo' && onOpenAdelantos && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}><span style={{ flex: 1, minWidth: 180 }}>La plata ya entró. Falta emitir la factura.</span><span onClick={onOpenAdelantos} style={{ fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Ir a Facturar adelantos →</span></div>}
           {lista.length === 0 && <div style={{ padding: '18px 14px', textAlign: 'center', color: C.muted, fontSize: 13, borderTop: `1px solid ${C.border}` }}>Sin cuotas en esta partida.</div>}
           {lista.map(g => g.items.map((f, i) => (
             <div key={f.id + f.k} onClick={() => setDetalle(f)} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}>
