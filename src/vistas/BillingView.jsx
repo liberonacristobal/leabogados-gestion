@@ -17,6 +17,7 @@ import { estadoConexion } from '../../supabase/functions/_shared/gmailLectura.js
 import { horaUltima } from './MiGmailView.jsx'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { ThOrden } from '../lib/orden.jsx'
+import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { ordenarFilas } from '../lib/ordenar.js'
 import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
@@ -3386,6 +3387,10 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
               {opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}
             </select>
           })()}
+          {(filter==='clientes'||filter==='all')&&<VistasLista lista='facturacion' email={user?.email} estilo={{marginLeft:0}}
+            actual={{filter,year:fYear,month:fMonth,est:[...estSel],aging:agingF,q:q.trim()}} defecto={{filter:'clientes',year:String(currentYear)}}
+            resumen={[filter==='all'?'Todas':'Por cliente',fYear||'Todos los años',[...estSel].length?([...estSel].join(' / ')):null,agingF?`Vencidas ${agingF}`:null,q.trim()?`«${q.trim()}»`:null].filter(Boolean).join(' · ')}
+            onAplicar={f=>{ setFilter(f.filter==='all'?'all':'clientes'); clearSel&&clearSel(); setSoloSinEnviar(false); setFYear(f.year||''); setFMonth(f.month||''); setEstSel(new Set(f.est||[])); setAgingF(f.aging||''); setQ(f.q||'') }}/>}
           <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:10,flexShrink:0}}>
             {filter!=='porcompletar'&&<button onClick={()=>setShowBuscar(s=>!s)} title='Buscar' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',cursor:'pointer',color:(q||showBuscar)?C.accent:C.muted,padding:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round'><circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.5' y2='16.5'/></svg></button>}
             <div style={{position:'relative'}}>

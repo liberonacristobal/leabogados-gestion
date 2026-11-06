@@ -15,6 +15,7 @@ import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionP
 import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
 import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 import { useOrden } from '../lib/orden.jsx'
+import { VistasLista } from '../lib/vistasGuardadas.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -2611,7 +2612,10 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 {!verEquipo&&castBlock}
                 <div style={{display:'flex',alignItems:'center',gap:8,margin:'0 2px -4px'}}>
                     <span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{verEquipo?'Equipo':(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1]}{!verEquipo&&(saldoFilter==='neg'?' · Por cobrar':saldoFilter==='pos'?' · A favor':saldoFilter==='cero'?' · En $0':'')} · {verEquipo?miembros.length:list.length}</span>
-                    <select value={cliOrd} onChange={e=>setCliOrd(e.target.value)} aria-label='Ordenar clientes' style={{marginLeft:'auto',minWidth:0,maxWidth:'62%',fontSize:12,color:C.muted,background:C.bgSoft,border:'none',borderRadius:20,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>{ORDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+                    <VistasLista lista='gastos' email={currentUser?.email} actual={{estado:estadoG,orden:cliOrd,saldo:saldoFilter,q:q.trim()}} defecto={{estado:'vigentes',orden:'saldo',saldo:'todos'}}
+                      resumen={[(ESTADOS_G.find(x=>x[0]===estadoG)||ESTADOS_G[0])[1],(ORDS.find(o=>o[0]===cliOrd)||ORDS[0])[1],q.trim()?`«${q.trim()}»`:null].filter(Boolean).join(' · ')}
+                      onAplicar={f=>{ setEstadoG(f.estado||'vigentes'); setCliOrd(f.orden||'saldo'); setSaldoFilter(f.saldo||'todos'); setQ(f.q||'') }}/>
+                    <select value={cliOrd} onChange={e=>setCliOrd(e.target.value)} aria-label='Ordenar clientes' style={{marginLeft:8,minWidth:0,maxWidth:'62%',fontSize:12,color:C.muted,background:C.bgSoft,border:'none',borderRadius:20,padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>{ORDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
                 </div>
                 <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                   {/* Gastos sin cliente: primera fila, en tono de aviso y borde punteado (no es un cliente). No suma en los tiles; desaparece en cero. */}
