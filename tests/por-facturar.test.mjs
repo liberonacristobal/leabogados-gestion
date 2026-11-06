@@ -19,7 +19,7 @@ test('cuota con 80 % o más facturado se da por cubierta y su saldo no se pierde
   assert.equal(cuotasCubiertasVenta(b, [s], UF).has('a2'), false)
 })
 
-test('Por facturar: cada cuota cae en una sola partida y las partidas suman el total', () => {
+test('Por facturar: cuatro partidas, cada cuota en una sola, y las partidas suman el total', () => {
   const sales = [venta('A', { moneda: 'UF', amount_uf: 75, amount_clp: null }), venta('B', { amount_clp: 1000000 }), venta('C', { amount_clp: 1000000 }),
     venta('D', { amount_clp: 3000000 }), venta('E', { cobro_type: 'mensual', amount_clp: 1000000 }), venta('F', { amount_clp: 1000000 }), venta('G', { amount_clp: 1000000 }),
     venta('H', { amount_clp: 1000000 }), venta('I', { amount_clp: 1000000 })]
@@ -34,24 +34,25 @@ test('Por facturar: cada cuota cae en una sola partida y las partidas suman el t
   const noEmitir = new Set(['h1'])
   const anticipos = [{ id: 'n1', sale_id: 'I', client_id: 'cI', estado: 'disponible', monto: 400000, fecha: '2026-11-01' }]
   const r = clasificarPorFacturar({ ...base, billing, sales, anticipos, noEmitir })
-  const porId = {}; r.filas.forEach(f => { (porId[f.id] = porId[f.id] || []).push([f.k, Math.round(f.monto)]) })
-  assert.deepEqual(porId.a1, [['cubFactura', 800000], ['saldoCuota', 200000]])
-  assert.deepEqual(porId.a2, [['vencida', 1000000]])
-  assert.deepEqual(porId.a3, [['mesActual', 1000000]])
-  assert.deepEqual(porId.b1, [['pausada', 1000000]])
-  assert.deepEqual(porId.c1, [['porConfirmar', 1000000]])
-  assert.deepEqual(porId.d1, [['vencida', 1000000]])
-  assert.deepEqual(porId.d2, [['masAdelante', 1000000]])
-  assert.deepEqual(porId.e1, [['recurrente', 1000000]])
-  assert.deepEqual(porId.f1x, [['mesSiguiente', 1000000]])
-  assert.deepEqual(porId.g1, [['masAdelante', 1000000]])
-  assert.deepEqual(porId.h1, [['noCorresponde', 1000000]])
-  assert.deepEqual(porId.i1, [['cubAnticipo', 400000], ['mesSiguiente', 600000]])
+  const porId = {}; r.filas.forEach(f => { (porId[f.id] = porId[f.id] || []).push([f.k, f.motivo, Math.round(f.monto)]) })
+  assert.deepEqual(porId.a1, [['fuera', 'cubFactura', 800000], ['porConfirmar', 'saldoCuota', 200000]])
+  assert.deepEqual(porId.a2, [['vencida', null, 1000000]])
+  assert.deepEqual(porId.a3, [['porVencer', null, 1000000]])                  // vence el 01-11, mes en curso: no es de un mes cerrado
+  assert.deepEqual(porId.b1, [['fuera', 'pausada', 1000000]])
+  assert.deepEqual(porId.c1, [['porConfirmar', 'sinMovimiento', 1000000]])
+  assert.deepEqual(porId.d1, [['vencida', null, 1000000]])
+  assert.deepEqual(porId.d2, [['porVencer', null, 1000000]])
+  assert.deepEqual(porId.e1, [['porVencer', 'recurrente', 1000000]])           // recurrente: misma regla de fechas, solo lleva su etiqueta
+  assert.deepEqual(porId.f1x, [['porVencer', null, 1000000]])
+  assert.deepEqual(porId.g1, [['porVencer', null, 1000000]])
+  assert.deepEqual(porId.h1, [['fuera', 'noCorresponde', 1000000]])
+  assert.deepEqual(porId.i1, [['fuera', 'cubAnticipo', 400000], ['porVencer', null, 600000]])
+  assert.deepEqual(Object.keys(r.partes).sort(), ['fuera', 'porConfirmar', 'porVencer', 'vencida'])   // cuatro partidas y nada más
   assert.equal(Math.round(r.total), Math.round(r.tarjeta))                                   // el total es la tarjeta, al peso
   const suma = Object.values(r.partes).reduce((a, x) => a + x.m, 0)
   assert.equal(Math.round(suma), Math.round(r.total))
   assert.equal(Math.round(r.grupos.vigente.m + r.grupos.porConfirmar.m + r.grupos.fuera.m), Math.round(r.total))
-  assert.ok(GRUPOS.porConfirmar.includes('saldoCuota'))                                      // el saldo de una cuota cubierta no cuenta como vigente
+  assert.ok(r.filas.filter(f => f.motivo === 'saldoCuota').every(f => f.k === 'porConfirmar'))   // el saldo de una cuota cubierta nunca cuenta como vigente
 })
 
 test('lo dudoso queda fuera de lo vigente: por confirmar y saldo de cuota nunca suman a vigente', () => {
@@ -80,11 +81,11 @@ test('las cuotas ya relacionadas con una factura (cruce) no son parte de Por fac
   assert.equal(r.total, 0)
 })
 
-test('cuadre de la venta: Cuadra, Tolerancia, Sobra y Falta, en UF con la UF de cada documento', () => {
+test('cuadre de la venta: Cuadra (hasta 3 %), Sobra y Falta, en UF con la UF de cada documento', () => {
   const s = venta('A', { moneda: 'UF', amount_uf: 50, amount_clp: null })
   const mk = (facturadoUF, cuotasUF) => [fact('f', 'A', '2026-10-02', facturadoUF * 40000), prog('p', 'A', '2027-01-01', cuotasUF * 40000)]
   assert.equal(cuadreVenta(s, mk(15, 35), UF)?.estado, 'Cuadra')
-  assert.equal(cuadreVenta(s, mk(15, 36), UF)?.estado, 'Tolerancia')       // +1 UF = 2 %
+  assert.equal(cuadreVenta(s, mk(15, 36), UF)?.estado, 'Cuadra')           // +1 UF = 2 %: dentro del 3 %
   assert.equal(cuadreVenta(s, mk(15, 50), UF)?.estado, 'Sobra')            // facturado + cuotas superan el plan en 15 UF
   assert.equal(cuadreVenta(s, mk(15, 20), UF)?.estado, 'Falta')
   assert.equal(Math.round(cuadreVenta(s, mk(15, 50), UF).diferencia), 15)
