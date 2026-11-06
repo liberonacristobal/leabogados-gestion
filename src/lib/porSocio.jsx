@@ -8,7 +8,7 @@ import { esRecurrente, esSubarriendo, ventaCLP, redondearPartes, kpisPorSocio } 
 import { ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, flujoCajaProyectado, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
 
 // Vista Por socio (Facturación › Por socio e Inteligencia › Socios): Resumen · Comparativo · Datos. Render aprobado 19-10-2026 (ABU5j4gotedSVCZJkE9kG2).
-export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],fantasmaIds=null,tabIni='res',onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
+export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],fantasmaIds=null,tabIni='res',datIni=null,onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
   const isDesk=useIsDesktop()
   const [fu,setFu]=usePorSocioFuentes()
   const ufState=useUF(); const ufRef=ufState.uf||UF_FALLBACK
@@ -18,9 +18,9 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const COLS=ADMIN_NAMES.concat([SIN_SOCIO])
   const tinta={[ADMIN_NAMES[0]]:C.accent,[ADMIN_NAMES[1]]:C.tealText,[SIN_SOCIO]:C.soonText,Oficina:C.greenText}
   const _now=new Date(); const curYM=`${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`
-  const [tab,setTab]=useState(tabIni)
+  const [tab,setTab]=useState(()=>datIni?(datIni.i===0?'cmp':'dat'):tabIni)   // datIni {soc,i,p}: llegar a la celda de una columna y un socio (Panel de socios)
   const [ym,setYm]=useState(curYM)
-  const [vista,setVista]=useState('ytd')
+  const [vista,setVista]=useState(datIni?.p||'ytd')
   const [ps,setPs0]=useState(()=>_lsGet('porsocio_ps',false)); const setPs=v=>{ setPs0(v); _lsSet('porsocio_ps',v) }
   const [sec,setSec]=useState({f:false,c:false})
   const [open,setOpen]=useState(null)
@@ -30,7 +30,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const [kpis,setKpis0]=useState(()=>{ const v=_lsGet('porsocio_kpis',PS_KPI_DEF); return (Array.isArray(v)?v:PS_KPI_DEF).map(k=>({fneto:'fac',ext:'cext'})[k]||k).filter((k,i,a)=>PS_KPIS.some(x=>x.k===k)&&a.indexOf(k)===i) }); const setKpis=v=>{ setKpis0(v); _lsSet('porsocio_kpis',v) }
   const [pick,setPick]=useState(false)
   const [kopen,setKopen]=useState(null)
-  const [dat,setDat]=useState({sec:'f',con:'pre',soc:null,q:'',ord:'f',lim:40})
+  const [dat,setDat]=useState(()=>datIni&&datIni.i>0?{sec:datIni.i===1?'f':'c',con:[null,'pre','cp','com','perc','pre','sub'][datIni.i],soc:datIni.soc??null,q:'',ord:'f',lim:40}:{sec:'f',con:'pre',soc:null,q:'',ord:'f',lim:40})
   const [fondoExtra,setFondoExtra]=useState({})
   const [ligando,setLigando]=useState(null)
   const shift=n=>{ const [yy,mo]=ym.split('-').map(Number); const d=new Date(yy,mo-1+n,1); const nym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; if(nym<=curYM){ setYm(nym); setOpen(null); setKopen(null) } }
@@ -222,9 +222,9 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const SECL={f:'Facturado',c:'Cobrado'}
   const Datos=()=>{ const p=vista, base=P.filter(r=>r.s===dat.sec&&inPer(r.d,p)&&(!dat.soc||r.soc===dat.soc)), presentes=[...new Set(base.map(r=>r.k))], q=_normTxt(dat.q||'')
     const grupo=dat.con==='pre'?(dat.sec==='f'?KF:KI):dat.con==='cp'?KC:[dat.con]
-    let L=base.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q)))
-    L.sort((a,b)=>dat.ord==='m'?Math.abs(b.m)-Math.abs(a.m):String(b.d).localeCompare(String(a.d)))
-    const T={}; COLS.forEach(c=>T[c]=0); L.forEach(r=>T[r.soc]+=r.m)
+    let LD=base.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q)))
+    LD.sort((a,b)=>dat.ord==='m'?Math.abs(b.m)-Math.abs(a.m):String(b.d).localeCompare(String(a.d)))
+    const T={}; COLS.forEach(c=>T[c]=0); LD.forEach(r=>T[r.soc]+=r.m)
     const chip=(on,t,f)=><button key={t} onClick={f} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:0,cursor:'pointer',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted,whiteSpace:'nowrap'}}>{t}</button>
     const tdD={padding:isDesk?'7px 10px':'7px 6px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12:11,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums',overflow:'hidden',textOverflow:'ellipsis'}
     return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -241,7 +241,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
         <colgroup>{(isDesk?['10%','22%','8%','21%','13%','13%','13%']:['66%','34%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
         <thead><tr>{(isDesk?['Fecha','Cliente','Folio','Concepto']:['Cliente']).map((h,i)=><th key={h} style={{...th,textAlign:'left',paddingLeft:i===0?(isDesk?16:10):undefined}}>{h}</th>)}{(isDesk?COLS:['Monto']).map((c,j,arr)=><th key={c} style={{...th,color:tinta[c]||C.accent,paddingRight:j===arr.length-1?(isDesk?16:10):undefined}}>{COLS.includes(c)?L(c):c}</th>)}</tr></thead>
-        <tbody>{L.slice(0,dat.lim).map((r,i)=><tr key={i} onClick={()=>irA(r)} className='er-c' style={{cursor:'pointer'}}>
+        <tbody>{LD.slice(0,dat.lim).map((r,i)=><tr key={i} onClick={()=>irA(r)} className='er-c' style={{cursor:'pointer'}}>
           {isDesk?<><td style={{...tdD,textAlign:'left',paddingLeft:16,color:C.muted}}>{fmtFechaDMY(r.d)}</td>
           <td style={{...tdD,textAlign:'left',color:C.accent,fontWeight:700}} title={nm(r.cid)}>{nm(r.cid)}</td></>
           :<td style={{...tdD,textAlign:'left',paddingLeft:10,whiteSpace:'normal'}}><div style={{color:C.accent,fontWeight:700,fontSize:11.5,lineHeight:1.25,overflowWrap:'anywhere'}}>{nm(r.cid)}</div><div style={{color:C.textSoft,fontSize:10.5,fontWeight:600,whiteSpace:'nowrap'}}>{fmtFechaDMY(r.d)}{r.doc?` · ${r.doc}`:''}</div></td>}
@@ -250,10 +250,10 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
           {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,color:c===r.soc?(r.m<0?C.overdueText:C.text):C.done,paddingRight:j===COLS.length-1?16:undefined}}>{c===r.soc?P$(r.m):'·'}</td>)
             :<td style={{...tdD,paddingRight:10,verticalAlign:'top',color:r.m<0?C.overdueText:C.text}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:tinta[r.soc],marginRight:5}}/>{P$(r.m)}</td>}
         </tr>)}
-          <tr><td colSpan={isDesk?4:1} style={{...tdD,textAlign:'left',paddingLeft:isDesk?16:10,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>Total · {L.length} partidas</td>
+          <tr><td colSpan={isDesk?4:1} style={{...tdD,textAlign:'left',paddingLeft:isDesk?16:10,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>Total · {LD.length} partidas</td>
             {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===COLS.length-1?16:undefined}}>{P$(T[c])}</td>)
               :<td style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:10}}>{P$(COLS.reduce((a,c)=>a+T[c],0))}</td>}</tr></tbody></table>
-      {L.length>dat.lim&&<div onClick={()=>setDat(d=>({...d,lim:d.lim+40}))} style={{textAlign:'center',padding:10,fontSize:12,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>Ver {Math.min(40,L.length-dat.lim)} más de {L.length}</div>}
+      {LD.length>dat.lim&&<div onClick={()=>setDat(d=>({...d,lim:d.lim+40}))} style={{textAlign:'center',padding:10,fontSize:12,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>Ver {Math.min(40,LD.length-dat.lim)} más de {LD.length}</div>}
     </div> }
 
   const exportar=()=>{ try{
