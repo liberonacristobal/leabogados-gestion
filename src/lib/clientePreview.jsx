@@ -8,11 +8,11 @@ import { porCobrarBills, esVencidaB, saldoCliente, montoFactura } from './compar
 // Solo lectura. Las cifras salen de las mismas funciones de la ficha y de la lista de Clientes.
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
 
-export function ClientePreview({ clients = [], billing = [], expenses = [], tasks = [], clientEntities = [], sales = [], onOpenFicha, onOpenSale }) {
+export function ClientePreview({ clients = [], billing = [], expenses = [], tasks = [], clientEntities = [], sales = [], onOpenFicha, onAbrir }) {
   const [vista, setVista] = useState(null)   // { tipo:'tarjeta'|'menu', c, x, y }
   const porNombre = useMemo(() => { const m = new Map(); clients.forEach(c => { const k = norm(c.name); if (k) m.set(k, m.has(k) ? null : c) }); return m }, [clients])
   const ref = useRef({ el: null, timer: null })
-  const datos = useRef({}); datos.current = { porNombre, onOpenFicha }
+  const datos = useRef({}); datos.current = { porNombre, onOpenFicha, clients }
 
   useEffect(() => {
     if (!window.matchMedia || !window.matchMedia('(hover:hover) and (pointer:fine)').matches) return
@@ -42,6 +42,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
       const fila = ev.target.closest && ev.target.closest('[data-menu]')
       if (!fila) return
       const [kind, id] = String(fila.getAttribute('data-menu')).split(':')
+      if (kind === 'cliente') { const c = datos.current.clients.find(x => String(x.id) === id); if (!c) return; ev.preventDefault(); clearTimeout(ref.current.timer); ref.current.el = null; setVista({ tipo: 'menu', c, x: ev.clientX, y: ev.clientY }); return }
       ev.preventDefault(); clearTimeout(ref.current.timer); ref.current.el = null
       setVista({ tipo: 'fila', kind, id, el: fila, x: ev.clientX, y: ev.clientY })
     }
@@ -56,7 +57,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
   }, [])
 
   if (!vista) return null
-  if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} sales={sales} onOpenFicha={onOpenFicha} onOpenSale={onOpenSale} cerrar={() => setVista(null)} />
+  if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} sales={sales} tasks={tasks} onOpenFicha={onOpenFicha} onAbrir={onAbrir} cerrar={() => setVista(null)} />
   const c = vista.c, id = String(c.id)
   const ancho = vista.tipo === 'tarjeta' ? 270 : 210
   const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 280))
@@ -98,40 +99,66 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
     </div>)
 }
 
-// Menú de una fila de factura o de gasto: solo lectura (abrir lo que abre la fila, ir a la ficha, copiar). Cada opción aparece solo si aplica.
-function MenuFila({ vista, clients, billing, expenses, sales, onOpenFicha, onOpenSale, cerrar }) {
-  const esF = vista.kind === 'factura'
-  const reg = (esF ? billing : expenses).find(r => String(r.id) === String(vista.id))
-  if (!reg) return null
-  const cli = (clients || []).find(x => String(x.id) === String(reg.client_id))
-  const folio = esF ? folioN(reg.invoice_no) : ''
-  const monto = Math.round(esF ? montoFactura(reg) : (reg.amount || 0))
-  const glosa = reg.concept || ''
-  const venta = reg.sale_id && onOpenSale ? (sales || []).find(x => String(x.id) === String(reg.sale_id)) : null
-  const ot = !esF && reg.ot_number ? String(reg.ot_number) : ''
-  const editarGlosa = !esF ? vista.el.querySelector('[title="Doble clic para editar la glosa"]') : null
+// Menú de una fila (factura, gasto, venta, tarea o cliente de Cobranza): solo lectura (abrir lo que abre la fila, ir a la ficha, copiar). Cada opción aparece solo si aplica.
+function MenuFila({ vista, clients, billing, expenses, sales, tasks, onOpenFicha, onAbrir, cerrar }) {
+  const kind = vista.kind
+  const cliDe = id => (clients || []).find(x => String(x.id) === String(id))
   const copiar = t => { try { navigator.clipboard.writeText(String(t)) } catch (_) {} cerrar() }
   const item = (t, f, sub) => <div key={t} onClick={f} data-cliente-menu style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', fontSize: 13, color: C.text, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = C.bgSoft }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>{t}{sub && <span style={{ color: C.done, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>}</div>
-  const titulo = esF ? (folio ? `Factura N° ${folio}` : (glosa || 'Factura')) : (glosa || 'Gasto')
+  const ficha = c => c && onOpenFicha && item('Ir a la ficha del cliente', () => { cerrar(); onOpenFicha(c.id) })
+  let titulo = '', g1 = [], g2 = []
+  if (kind === 'factura' || kind === 'gasto') {
+    const esF = kind === 'factura'
+    const reg = (esF ? billing : expenses).find(r => String(r.id) === String(vista.id))
+    if (!reg) return null
+    const folio = esF ? folioN(reg.invoice_no) : ''
+    const monto = Math.round(esF ? montoFactura(reg) : (reg.amount || 0))
+    const glosa = reg.concept || ''
+    const venta = reg.sale_id && onAbrir ? (sales || []).find(x => String(x.id) === String(reg.sale_id)) : null
+    const ot = !esF && reg.ot_number ? String(reg.ot_number) : ''
+    const editarGlosa = !esF ? vista.el.querySelector('[title="Doble clic para editar la glosa"]') : null
+    titulo = esF ? (folio ? `Factura N° ${folio}` : (glosa || 'Factura')) : (glosa || 'Gasto')
+    g1 = [
+      // El gasto se abre por su destino (no simulando el clic de la fila: en Caja chica ese clic marca la fila).
+      item(esF ? 'Ver detalle' : reg.type === 'fondo' ? 'Abrir fondo' : 'Abrir gasto', () => { cerrar(); if (!esF && onAbrir) onAbrir('gasto', reg.id); else vista.el.click() }),
+      ficha(cliDe(reg.client_id)),
+      venta && item('Abrir venta', () => { cerrar(); onAbrir('venta', venta.id) }),
+      editarGlosa && item('Editar glosa', () => { cerrar(); editarGlosa.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window })) }, 'doble clic'),
+    ]
+    g2 = [
+      esF && folio && item('Copiar N° de factura', () => copiar(folio), folio),
+      ot && item('Copiar OT', () => copiar(ot), ot),
+      monto !== 0 && item('Copiar monto', () => copiar(monto), fmt(monto)),
+      glosa && item('Copiar glosa', () => copiar(glosa)),
+    ]
+  } else if (kind === 'venta') {
+    const reg = (sales || []).find(r => String(r.id) === String(vista.id))
+    if (!reg) return null
+    titulo = reg.title || 'Venta'
+    g1 = [onAbrir && item('Abrir venta', () => { cerrar(); onAbrir('venta', reg.id) }), ficha(cliDe(reg.client_id))]
+    g2 = [reg.title && item('Copiar nombre de la venta', () => copiar(reg.title))]
+  } else if (kind === 'tarea') {
+    const reg = (tasks || []).find(r => String(r.id) === String(vista.id))
+    if (!reg) return null
+    titulo = reg.title || 'Tarea'
+    g1 = [item('Ver tarea', () => { cerrar(); vista.el.click() }), onAbrir && item('Editar tarea', () => { cerrar(); onAbrir('tarea', reg.id) }), ficha(cliDe(reg.client_id))]
+    g2 = [reg.title && item('Copiar título', () => copiar(reg.title))]
+  } else if (kind === 'cobranza') {
+    const c = cliDe(vista.id)
+    if (!c) return null
+    const total = Math.round(porCobrarBills((billing || []).filter(b => String(b.client_id) === String(c.id))))
+    titulo = c.name
+    g1 = [onOpenFicha && item('Abrir ficha', () => { cerrar(); onOpenFicha(c.id) }), item('Desplegar sus facturas', () => { cerrar(); vista.el.click() })]
+    g2 = [item('Copiar nombre', () => copiar(c.name)), total > 0 && item('Copiar total adeudado', () => copiar(total), fmt(total))]
+  } else return null
+  g1 = g1.filter(Boolean); g2 = g2.filter(Boolean)
   const ancho = 230
   const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 280))
-  const grupo1 = [
-    item(esF ? 'Ver detalle' : reg.type === 'fondo' ? 'Abrir fondo' : 'Abrir gasto', () => { cerrar(); vista.el.click() }),
-    cli && onOpenFicha && item('Ir a la ficha del cliente', () => { cerrar(); onOpenFicha(cli.id) }),
-    venta && item('Abrir venta', () => { cerrar(); onOpenSale(venta.id) }),
-    editarGlosa && item('Editar glosa', () => { cerrar(); editarGlosa.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window })) }, 'doble clic'),
-  ].filter(Boolean)
-  const grupo2 = [
-    esF && folio && item('Copiar N° de factura', () => copiar(folio), folio),
-    ot && item('Copiar OT', () => copiar(ot), ot),
-    monto !== 0 && item('Copiar monto', () => copiar(monto), fmt(monto)),
-    glosa && item('Copiar glosa', () => copiar(glosa)),
-  ].filter(Boolean)
   return (
     <div data-cliente-menu data-sin-preview style={{ position: 'fixed', left: x, top: y, width: ancho, zIndex: 400, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,60,80,.18)', fontFamily: 'inherit', padding: '4px 0' }}>
       <div data-cliente-menu style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: C.accent, background: C.bgSoft, borderRadius: '11px 11px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titulo}</div>
-      {grupo1}
-      {grupo1.length > 0 && grupo2.length > 0 && <div style={{ borderTop: `1px solid ${C.bgSoft}`, margin: '3px 0' }} />}
-      {grupo2}
+      {g1}
+      {g1.length > 0 && g2.length > 0 && <div style={{ borderTop: `1px solid ${C.bgSoft}`, margin: '3px 0' }} />}
+      {g2}
     </div>)
 }

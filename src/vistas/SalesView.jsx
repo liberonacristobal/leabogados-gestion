@@ -271,7 +271,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',...TH_BAND}}>{hc('venta','Venta · cliente')}{hc('monto','Monto',1)}<span style={{textAlign:'right',color:C.muted}}>Neto oficina</span><span/></div>
       {vis.map(s=>{ const cli=clients.find(c=>String(c.id)===String(s.client_id)); const rp=respVenta(s); const pc=rp&&rp!=='Sin abogado'?personChip(rp):null; const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), com=comDe(s), comUF=comUFde(s)
-        return (<div key={s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:13}}>
+        return (<div key={s.id} data-menu={'venta:'+s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:13}}>
           <div style={{minWidth:0,overflow:'hidden'}}>
             <div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title||'—'}</div>
             <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={cli&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(cli.id)}:undefined} title={cli?'Ver ficha del cliente':undefined} style={{color:C.accent,cursor:cli?'pointer':'default'}}>{cli?.name||'—'}</span>{s.year?` · ${s.month?String(s.month).padStart(2,'0')+'-':''}${s.year}`:''}</div>
@@ -297,7 +297,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     const diasPendiente = s.created_at ? Math.floor((Date.now()-new Date(s.created_at))/86400000) : 0
     const tardio = isPropuesta && diasPendiente>14
     return (
-      <div key={s.id}
+      <div key={s.id} data-menu={'venta:'+s.id}
         onClick={()=>onEdit(s)}
         style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,cursor:'pointer'}}
         onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.accent}

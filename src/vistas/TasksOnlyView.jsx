@@ -128,7 +128,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
     ] : []
     return (
       <div key={t.id} style={{marginBottom:5}}><FilaDeslizable acciones={acciones}>
-      <div onClick={()=>onPreview(t)} className='tk-card' {...(dnd?{onPointerDown:dnd.onPointerDown}:{})} style={{...(dnd?dnd.style:{}),background:C.card,borderRadius:8,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:mover&&isDesktop?'grab':'pointer'}}>
+      <div data-menu={'tarea:'+t.id} onClick={()=>onPreview(t)} className='tk-card' {...(dnd?{onPointerDown:dnd.onPointerDown}:{})} style={{...(dnd?dnd.style:{}),background:C.card,borderRadius:8,border:`0.5px solid ${C.border}`,overflow:'hidden',opacity:done?.7:1,cursor:mover&&isDesktop?'grab':'pointer'}}>
         <div style={{display:'flex',alignItems:'flex-start',padding:'9px 11px',gap:8}}>
           {bigDate(t.due,done?C.muted:urgencyColor(t.due,t.status))}
           <div style={{flex:1,minWidth:0}}>

@@ -411,7 +411,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
               <div style={{fontSize:13,fontWeight:600,textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(sinP.fact)}</div>
             </div>
             {open&&<div style={{padding:'2px 0 6px'}}>{sinP.facs.map(b=>(
-              <div key={b.id} onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0 5px 12px',fontSize:11,cursor:onEditBilling?'pointer':'default',borderBottom:`1px solid #F1F1F1`}}>
+              <div key={b.id} data-menu={'factura:'+b.id} onClick={()=>onEditBilling&&onEditBilling(b)} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0 5px 12px',fontSize:11,cursor:onEditBilling?'pointer':'default',borderBottom:`1px solid #F1F1F1`}}>
                 <span style={{flex:1,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)||'—'} <span style={{color:C.textSoft}}>· {mesAA(b.issued_at)}</span>{onEditBilling&&<span style={{color:C.azulInfo,fontWeight:600}}> · asignar venta</span>}</span>
                 <span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',textAlign:'right',minWidth:84}}>{fmt(b.amount)}</span>
               </div>))}</div>}
@@ -459,7 +459,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
       const fondosV = fgSinPR ? fondos.filter(faltaPR) : fondos, gastosV = fgSinPR ? gastos.filter(faltaPR) : gastos
       const fila=(e,signo,col)=>{ const open=detG===e.id; const v=ventaById[e.sale_id]; const isDev=signo>0&&((e.amount||0)<0||/^\s*devoluci/i.test(e.concept||'')); return (
         <div key={e.id} style={{borderBottom:`1px solid ${C.border}`}}>
-          <div onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
+          <div data-menu={'gasto:'+e.id} onClick={()=>setDetG(open?null:e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',cursor:'pointer'}}>
             {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
               {/* Fila limpia (regla sutil): tipo o categoría + OT con su sello de pagada; caja chica, banco y rendición quedan en el detalle (recorridoGasto). */}
@@ -964,7 +964,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
             const pend = ['Pendiente','Vencido'].includes(b.status)
             return (
               <div key={b.id} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',marginBottom:5}}>
-                <div onClick={()=> conciliada ? toggleDet(b.id) : (onEditBilling&&onEditBilling(b))} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
+                <div data-menu={'factura:'+b.id} onClick={()=> conciliada ? toggleDet(b.id) : (onEditBilling&&onEditBilling(b))} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={borde(b)}/>
                   <div style={{minWidth:0,flex:1}}>
@@ -1161,16 +1161,16 @@ export function FotoCliente({client, sales=[], billing=[], expenses=[], tasks=[]
                   {val!=null&&<span style={{fontSize:13,fontWeight:800,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</span>}
                   {body&&<span style={{color:C.done,fontSize:13,flexShrink:0,display:'inline-flex',transform:ab?'rotate(180deg)':'none',transition:'transform .12s'}}><Gl n='chevD'/></span>}
                 </div>{ab&&body}</div> }
-            const fila=(key,on,izq,centro,der)=><div key={key} onClick={on} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:on?'pointer':'default',fontSize:12}}>{izq}<div style={{flex:1,minWidth:0}}>{centro}</div>{der}</div>
+            const fila=(key,on,izq,centro,der)=><div key={key} data-menu={String(key).includes(':')?key:undefined} onClick={on} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:on?'pointer':'default',fontSize:12}}>{izq}<div style={{flex:1,minWidth:0}}>{centro}</div>{der}</div>
             const pie=(txt,col,on)=><div onClick={on} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:col,cursor:on?'pointer':'default'}}>{txt} <Gl n='chevron'/></div>
             const tt=(a,b)=><><div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{a}</div>{b&&<div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</div>}</>
             const sRend=porRendir.length>0&&onRendicion&&sec('rend','wallet',C.greenBg,C.greenText,'Por rendir al cliente',`${porRendir.length} gasto${porRendir.length!==1?'s':''}${porRendir[0]?.date?` · desde ${fmtFechaDMY(porRendir[0].date)}`:''}`,fmt(porRendirTot),C.greenText,<>
-              {porRendir.slice(0,3).map(e=>fila(e.id,onEditExpense?()=>onEditExpense(e):undefined,null,<div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||e.category||'Gasto'}</div>,<><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(e.date)}</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span></>))}
+              {porRendir.slice(0,3).map(e=>fila('gasto:'+e.id,onEditExpense?()=>onEditExpense(e):undefined,null,<div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||e.category||'Gasto'}</div>,<><span style={{fontSize:10,color:C.muted,flexShrink:0}}>{fmtFechaDMY(e.date)}</span><span style={{fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0,minWidth:72,textAlign:'right'}}>{fmt(e.amount)}</span></>))}
               {porRendir.length>3&&pie(`Ver los ${porRendir.length} en Cartola`,C.greenText,()=>setFtab('documentos'))}
               <div style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}><ActBtn variant='success' full onClick={()=>onRendicion(client)}>Rendir</ActBtn></div></>,C.greenText)
             const sVenc=venc.length>0
               ? sec('venc','file',C.overdueBg,C.overdueText,'Vencidas',`${venc.length} factura${venc.length!==1?'s':''} · a cobrar ya`,fmt(vencTot),C.overdueText,<>
-                  {venc.slice(0,3).map(b=>fila(b.id,onEditBilling?()=>onEditBilling(b):undefined,diaGrande(b.issued_at||b.due,C.overdueText),tt(b.concept||'Factura',`${b.invoice_no?`Factura N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}${dvenc(b)} d`),<span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(saldoBill(b))}</span>))}
+                  {venc.slice(0,3).map(b=>fila('factura:'+b.id,onEditBilling?()=>onEditBilling(b):undefined,diaGrande(b.issued_at||b.due,C.overdueText),tt(b.concept||'Factura',`${b.invoice_no?`Factura N° ${folioN(b.invoice_no)||b.invoice_no} · `:''}${dvenc(b)} d`),<span style={{fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(saldoBill(b))}</span>))}
                   {pie('Cobrar · ir a Ventas',C.overdueText,()=>setFtab('financiero'))}</>)
               : sec('venc','check',C.greenBg,C.greenText,'Vencidas','al día · sin facturas vencidas',null,null,null)
             const nTV=clientTasks.filter(t=>t.due&&String(t.due).slice(0,10)<isoLocal(Date.now())).length

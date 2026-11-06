@@ -307,7 +307,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   const pendListaD = cl.length===0 ? pendVacio : (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
     <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,padding:'8px 16px',...TH_BAND}}><span>Cliente</span><span>Tipo de pendiente</span><span style={{textAlign:'right'}}>Pendientes</span><span/></div>
     {cl.map(c=>{ const its=itemsDe(c), suma=its.reduce((a,i)=>a+(i.monto||0),0); return (
-      <div key={c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+      <div key={c.id} data-menu={'cliente:'+c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:'minmax(0,1.2fr) minmax(0,2.6fr) 90px 14px',columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
         <div style={{minWidth:0}}><div style={{...NOMBRE_CLI}}>{c.name}</div>{subDe(c)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subDe(c)}</div>}</div>
         <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{txtTipos(its,true)}{tipoSel.size>0&&suma>0?` · ${fmt(suma)}`:''}</span>
         <span style={{textAlign:'right',fontSize:13,fontWeight:700,color:C.soonText,fontVariantNumeric:'tabular-nums'}}>{its.length}</span>
@@ -363,7 +363,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
                 const L=(_normTxt(c.name||'').replace(/[^a-z0-9ñ]/gi,'')[0]||'#').toUpperCase(); const sep=ord.k==='nombre'&&L!==ultL; ultL=L
                 return (<Fragment key={c.id}>
                   {sep&&<div style={{padding:'4px 16px',background:C.bg,fontSize:11,fontWeight:800,color:C.accent,borderTop:`1px solid ${C.border}`}}>{L}</div>}
-                  <div onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',opacity:c.status==='Terminado'?.6:1}}>
+                  <div data-menu={'cliente:'+c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',opacity:c.status==='Terminado'?.6:1}}>
                     <div style={{minWidth:0}}>
                       <div style={{...NOMBRE_CLI}}>{c.name}{tagsDe(c)}</div>
                       {subDe(c)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subDe(c)}</div>}
