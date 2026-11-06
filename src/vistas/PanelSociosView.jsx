@@ -6,7 +6,7 @@ import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/b
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
-import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
+import { proyeccionCobranza, ResDrillPanel, ProyeccionDetalle } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { notariaPorLiquidar } from '../../supabase/functions/_shared/notariaReglas.js'
@@ -36,12 +36,23 @@ const KpiAnio = ({ic,tono='nt',label,value,pct,cap,onClick,D,activo}) => { const
       {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
     </div>
   </div>) }
-const Fila = ({tono='az',ic='file',label,sub,value,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
-  <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',minHeight:52,borderTop:`1px solid ${C.bgSoft}`,cursor:onClick?'pointer':'default'}}>
+const Fila = ({tono='az',ic='file',label,sub,value,vcol,onClick,det,detEl,detLink}) => { const [bg,fg]=TONO[tono]||TONO.az; const [op,setOp]=useState(false); const desp=!!(det||detEl); return (<>
+  <div onClick={desp?()=>setOp(o=>!o):onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',minHeight:52,borderTop:`1px solid ${C.bgSoft}`,cursor:(onClick||desp)?'pointer':'default'}}>
     <span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={14} c={fg}/></span>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{label}</div>{sub&&<div style={{fontSize:10.5,color:C.muted}}>{sub}</div>}</div>
     <span style={{fontSize:14,fontWeight:800,color:vcol||fg,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</span>
-  </div>) }
+    {desp&&<span style={{color:C.done,display:'flex'}}><SIcon n={op?'chevU':'chevD'} s={11} c={C.done}/></span>}
+  </div>
+  {desp&&op&&<>
+    {det&&(det.length===0?<div style={{padding:'8px 12px 8px 48px',background:C.bgSoft,borderTop:`1px solid ${C.bgSoft}`,fontSize:11.5,color:C.muted}}>Sin partidas</div>
+      :det.map((d,i)=><div key={d.k||i} onClick={d.onClick} style={{display:'grid',gridTemplateColumns:'74px minmax(0,1fr) auto 10px',columnGap:8,alignItems:'center',padding:'7px 12px 7px 24px',background:C.bgSoft,borderTop:`1px solid ${C.border}`,cursor:d.onClick?'pointer':'default',fontSize:12}}>
+        <span style={{fontWeight:700,color:C.accent,fontSize:11.5,whiteSpace:'nowrap'}}>{d.a}</span>
+        <span style={{minWidth:0,color:C.text,...DOS_LINEAS}}>{d.t}{d.tag}</span>
+        <span style={{fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',textAlign:'right'}}>{d.v}</span>
+        <span style={{color:C.done,display:'flex'}}>{d.onClick&&<SIcon n='chevron' s={10} c={C.done}/>}</span></div>))}
+    {detEl&&<div style={{background:C.bgSoft,borderTop:`1px solid ${C.border}`,padding:'8px 8px 4px'}}>{detEl}</div>}
+    {onClick&&<div onClick={onClick} style={{padding:'9px 12px',borderTop:`1px solid ${C.border}`,textAlign:'center',fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{detLink||'Ver todo'} ›</div>}</>}
+</>) }
 const KpiMes = ({ic,tono='az',label,value,sub,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
   <div onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',minHeight:80,boxSizing:'border-box',display:'flex',gap:10,alignItems:'center',cursor:onClick?'pointer':'default',minWidth:0}}>
     <span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={fg}/></span>
@@ -178,6 +189,12 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const pendDe = a => pendCli ? nClientesConPendientes(pendCli, clients, a, norm) : 0
   const nDatos = pendCli ? [...pendCli.values()].reduce((a,g)=>a+(g.items||[]).filter(i=>i.tipo==='datos').length,0) : 0
 
+  // Listas que se despliegan en la misma fila (sin salir del Panel): cada partida lleva a su ficha, venta o factura.
+  const nomCli = cid => (clients||[]).find(c=>String(c.id)===String(cid))?.name||'Sin cliente'
+  const hoyMs = Date.now()
+  const detProps = props.slice().sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0)).map(sv=>{ const d=sv.created_at?Math.floor((hoyMs-new Date(sv.created_at))/86400000):null; return { k:sv.id, a:d==null?'—':`${d} día${d!==1?'s':''}`, t:`${sv.title||'Propuesta'} · ${nomCli(sv.client_id)}`, tag:d!=null&&d>14?' · tardía':'', v:fmtUFk(Math.round(ventaUF(sv,ufRef))), onClick:()=>go('venta',sv.id) } })
+  const detAnt = (anticipos||[]).filter(x=>x&&x.estado==='disponible').sort((x,y)=>String(y.fecha||'').localeCompare(String(x.fecha||''))).map(x=>({ k:x.id, a:x.fecha?fmtFechaDMY(String(x.fecha).slice(0,10)):'—', t:nomCli(x.client_id), v:fmtShort(x.monto||0), onClick:()=>go('cliente',x.client_id) }))
+  const detDatos = pendCli ? [...pendCli.entries()].flatMap(([cid,g])=>(g.items||[]).filter(i=>i.tipo==='datos').map((i,j)=>({ k:`${cid}-${j}`, a:i.billing_id?'Factura':i.sale_id?'Venta':'Cliente', t:`${i.titulo||'Dato por corregir'} · ${nomCli(cid)}`, v:i.monto?fmtShort(i.monto):'', onClick:()=>i.billing_id?go('factura',i.billing_id):i.sale_id?go('venta',i.sale_id):go('cliente',cid) }))) : []
   // ── Bloques ──
   const sociosFilas = [...ADMIN_NAMES, SIN_SOCIO, null]
   const tonoSoc = s => s===ADMIN_NAMES[0]?'az':s===ADMIN_NAMES[1]?'am':s===SIN_SOCIO?'am':'gy'
@@ -233,13 +250,14 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label={`Por emitir en ${mesActual}`} sub={`${ciclo.pemN} cuota${ciclo.pemN!==1?'s':''}`} value={fmtShort(ciclo.pemTot)} raw={ciclo.pemTot} onClick={()=>go('facturas')}/>
         <Fila tono='ro' label='Cuotas vencidas sin facturar' sub={`${ciclo.sinEmitirN} cuota${ciclo.sinEmitirN!==1?'s':''}`} value={fmtShort(ciclo.sumM(ciclo.sinEmitirCands))} raw={ciclo.sumM(ciclo.sinEmitirCands)} onClick={()=>go('sinEmitir')}/>
         <Fila tono='az' label='Por enviar al cliente' sub={`${ciclo.porEnviar.length} factura${ciclo.porEnviar.length!==1?'s':''}`} value={fmtShort(ciclo.porEnvTot)} raw={ciclo.porEnvTot} onClick={()=>go('facturas')}/>
-        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} raw={propUF} unit='UF' onClick={()=>go('ventasPropuestas')}/>
+        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} raw={propUF} unit='UF' onClick={()=>go('ventasPropuestas')} det={detProps} detLink='Ver todas en Ventas'/>
       </> },
     cob: { cap:'Facturación y cobranza', capCorto:'Fact. y cobranza', titulo:'Por cobrar', hl:<>Vencido <b style={{color:C.overdueText}}>{fmtShort(cart.vencidoTot)}</b></>, tono:'az', link:'Cobranza', dest:'cobranza',
       body:<>
         <Fila tono='az' label='Honorarios por cobrar' value={fmtShort(porCobrar)} raw={porCobrar} onClick={()=>go('cobranza')}/>
         <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)} % de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} raw={cart.vencidoTot} onClick={()=>go('cobranzaVencido')}/>
         <Fila tono='ro' label='Más de 60 días' sub={cart.expo.pctM60!=null?`${Math.round(cart.expo.pctM60*100)} % de la cartera`:undefined} value={fmtShort(cart.expo.m60)} raw={cart.expo.m60} onClick={()=>go('cobranzaM60')}/>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`}}><span style={{fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,marginRight:4}}>Antigüedad</span>{(cart.expo.tramos||[]).map((t,i)=><span key={t.k} onClick={()=>t.n>0&&go('cobranzaTramo',i)} style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${C.border}`,background:C.surface,color:t.n>0?C.accent:C.done,cursor:t.n>0?'pointer':'default',whiteSpace:'nowrap'}}>{t.k} · {fmtShort(t.saldo||0)}</span>)}</div>
         {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} raw={cart.expo.mayor.saldo} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
         <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastosDeben')}/>
       </> },
@@ -263,19 +281,19 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} raw={nota.montoPagables} onClick={()=>go('notaria')}/>
         <Sub t='Fondos de clientes'/>
         <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastosFavor')}/>
-        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')}/>
+        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')} det={detAnt} detLink='Ver anticipos en Facturación'/>
         <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },
     caj: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Caja', hl:<>Flujo <b style={{color:flujo.fin>=0?C.greenText:C.overdueText}}>{(flujo.fin>0?'+':'')+fmtShort(flujo.fin)}</b></>, tono:'az', link:'Flujo de caja', dest:'flujoCaja',
       body:<>
         <Fila tono={flujo.fin>=0?'gr':'ro'} label='Flujo de caja' sub='neto · 8 semanas' value={(flujo.fin>0?'+':'')+fmtShort(flujo.fin)} raw={flujo.fin} onClick={()=>go('flujoCaja')}/>
-        <Fila tono='az' label='Proyección de cobranza' sub={`al ${fmtFechaDMY(`${currentYear}-12-31`)}`} value={fmtShort(proy)} raw={proy} onClick={()=>go('flujoCaja')}/>
+        <Fila tono='az' label='Proyección de cobranza' sub={`al ${fmtFechaDMY(`${currentYear}-12-31`)}`} value={fmtShort(proy)} raw={proy} onClick={()=>go('flujoCaja')} detEl={<ProyeccionDetalle F={flujo} clients={clients} sales={sales} isDesktop={isDesktop} onOpenFlujoCaja={()=>go('flujoCaja')} onOpenClientFicha={id=>go('cliente',id)}/>} detLink='Ver el flujo de caja'/>
         <Fila tono='am' label='Por identificar en el banco' sub='abonos sin conciliar del año' value={fmtShort(ing.porIdentificar||0)} raw={ing.porIdentificar||0} onClick={()=>go('conciliacion')}/>
       </> },
     rev: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Por revisar', hl:<>{abogados.map((a,i)=><span key={a}>{i?' · ':''}{a} <b style={{color:C.tealText}}>{pendDe(a)}</b></span>)}</>, tono:'te', link:'Clientes', dest:'clientes',
       body:<>
         {abogados.map(a=><Fila key={a} tono='te' label={`Pendientes financieros · ${a}`} sub='clientes con algo por resolver' value={String(pendDe(a))} raw={pendDe(a)} onClick={()=>go('revisarCuentas',a)}/>)}
-        <Fila tono='am' label='Datos por corregir' sub='anuladas sin motivo y otros' value={String(nDatos)} raw={nDatos} onClick={()=>go('revisarCuentas')}/>
+        <Fila tono='am' label='Datos por corregir' sub='anuladas sin motivo y otros' value={String(nDatos)} raw={nDatos} onClick={()=>go('revisarCuentas')} det={detDatos} detLink='Revisar en Clientes'/>
       </> },
   }
   // ── Excel: las mismas variables y filas del panel (pesos exactos); Resumen, Por socio e Ingreso emitido ──
