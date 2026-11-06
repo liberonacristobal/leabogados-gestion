@@ -7,6 +7,7 @@ import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
 import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
 import { VistasGuardadas, useVistasGuardadas } from '../lib/vistasGuardadas.jsx'
+import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
 
 // Texto de cada tipo de pendiente en la lista de escritorio («2 cuotas por emitir»).
 const TXT_PEND = {banco:['pago por imputar','pagos por imputar'], fondos:['fondos por solicitar','fondos por solicitar'], sinfactura:['pagada sin factura','pagadas sin factura'], cuotas:['cuota por emitir','cuotas por emitir'], vencidas:['factura vencida','facturas vencidas'], datos:['dato por corregir','datos por corregir']}
@@ -218,6 +219,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   const balances = useMemo(()=>saldosPorCliente(expenses),[expenses])   // fuente única (compartido.jsx), la misma del Panel de socios
 
   const isDesktop = useIsDesktop()   // Fase 2: en desktop, lista + ficha lado a lado (2-paneles)
+  const selC = useSeleccion('clientes')   // antes de cualquier return temprano (reglas de hooks)
   // Alerta proactiva de clientes duplicados/similares (evita fichas y carpetas de Drive repetidas). Abre la fusión.
   const dupGrupos = useMemo(()=>detectarClientesDuplicados(clients),[clients])
 
@@ -283,16 +285,27 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   const ORD_DEF = {nombre:1,resp:1,tareas:-1,cobrar:-1,fondos:1}   // fondos ascendente = los que más deben reponer primero
   const valOrd = (c,k) => k==='resp'?(responsableDe[c.id]||'~'):k==='tareas'?(tareasDe[c.id]||0):k==='cobrar'?(porCobrarDe[c.id]||0):k==='fondos'?(balances[c.id]||0):(c.name||'')
   const filas = ord.k==='nombre' ? (ord.dir===1?cl:[...cl].reverse()) : [...cl].sort((x,y)=>{ const va=valOrd(x,ord.k), vb=valOrd(y,ord.k); const r=typeof va==='string'?va.localeCompare(vb,'es'):(va-vb); return (r*ord.dir)||(x.name||'').localeCompare(y.name||'','es') })
-  const exportarExcel = async() => {
+  const exportarExcel = async(src) => {
+    const base=Array.isArray(src)?src:filas
     try{
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const head=['Cliente','Razones sociales','RUT','Responsable','Estado','Tareas abiertas','Por cobrar','Fondos']
-      const rows=filas.map(c=>{ const ents=entsDe[c.id]||[]; const ruts=[c.rut,...ents.map(e=>e.rut)].filter(Boolean).filter((v,i,arr)=>arr.indexOf(v)===i); return [c.name||'', ents.map(e=>e.name).filter(Boolean).join('; '), ruts.join('; '), responsableDe[c.id]||'', c.status||'Activo', tareasDe[c.id]||0, Math.round(porCobrarDe[c.id]||0), Math.round(balances[c.id]||0)] })
+      const rows=base.map(c=>{ const ents=entsDe[c.id]||[]; const ruts=[c.rut,...ents.map(e=>e.rut)].filter(Boolean).filter((v,i,arr)=>arr.indexOf(v)===i); return [c.name||'', ents.map(e=>e.name).filter(Boolean).join('; '), ruts.join('; '), responsableDe[c.id]||'', c.status||'Activo', tareasDe[c.id]||0, Math.round(porCobrarDe[c.id]||0), Math.round(balances[c.id]||0)] })
       const ws=XLSX.utils.aoa_to_sheet([head,...rows]); ws['!cols']=[{wch:34},{wch:40},{wch:26},{wch:14},{wch:11},{wch:10},{wch:14},{wch:14}]; ws['!autofilter']={ref:`A1:H${rows.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]
       for(let r=1;r<=rows.length;r++){ [6,7].forEach(cc=>{ const cell=ws[XLSX.utils.encode_cell({r,c:cc})]; if(cell&&cell.t==='n') cell.z='#,##0' }) }
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Clientes'); XLSX.writeFile(wb,`Clientes_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
+  // Selección en lote: Excel, copiar nombres y asignar abogado (única acción que escribe; confirma y deja bitácora en cada cliente).
+  const selFilas = filas.filter(c=>selC.has(c.id))
+  const quienes = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].filter((v,i,a)=>a.indexOf(v)===i)
+  const barraC = <BarraSeleccion s={selC} n={selFilas.length} unidad={['cliente seleccionado','clientes seleccionados']} total={`Por cobrar ${fmt(selFilas.reduce((x,c)=>x+(porCobrarDe[c.id]||0),0))}`} acciones={[
+    {ic:'download',label:'Descargar Excel',corto:'Excel',onClick:()=>exportarExcel(selFilas).then(()=>'Excel descargado')},
+    {ic:'file',label:'Copiar nombres',corto:'Copiar',onClick:()=>copiarTexto(selFilas.map(c=>c.name).join('\n'),'Nombres copiados')},
+    {ic:'users',label:'Asignar abogado',corto:'Abogado',opciones:[...quienes.map(q=>({label:q,value:q})),{label:'Sin abogado',value:null}],
+      confirmar:v=>({titulo:v?`Asignar a ${v} como abogado de ${selFilas.length} cliente${selFilas.length!==1?'s':''}`:`Quitar el abogado a ${selFilas.length} cliente${selFilas.length!==1?'s':''}`,detalle:`${selFilas.slice(0,3).map(c=>c.name).join(', ')}${selFilas.length>3?` y ${selFilas.length-3} más`:''}. Queda en la bitácora de cada cliente.`}),
+      onClick:async v=>{ const lote=selFilas.slice(); for(const c of lote){ const antes=responsableDe[c.id]||null; await onSaveFields(c.id,{abogado_responsable:v}); logActividad('cliente.abogado_asignado',{tabla:'clients',id:c.id,detalle:{cliente:c.name,antes,despues:v,lote:lote.length}}) } selC.limpiar(); return `${lote.length} cliente${lote.length!==1?'s actualizados':' actualizado'}` }},
+  ]}/>
   const filtrosActuales = { sFilter, resp:[...respSel], pend:pendOn, tipos:[...tipoSel], q:q.trim(), ord:(ord.k==='nombre'&&ord.dir===1)?null:ord }
   const aplicarVistaG = f => { setSFilter(f.sFilter||'Activo'); setRespSel(new Set((f.resp||[]).filter(r=>responsables.includes(r)))); setPendOn(!!f.pend); setTipoSel(new Set(f.tipos||[])); setQ(f.q||''); setOrd(f.ord||{k:'nombre',dir:1}) }
   const resumenVistaG = [({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]||sFilter,...respSel,pendOn?'Pendientes financieros':null,q.trim()?`«${q.trim()}»`:null].filter(Boolean).join(' · ')
@@ -337,7 +350,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   // ESCRITORIO: tabla ordenable (al elegir un cliente, su ficha ocupa toda la pantalla). El móvil mantiene su directorio A-Z en tarjetas.
   if(isDesktop){
     if(selected) return (<>{fichaEl}{rendModal}</>)
-    const COLS='minmax(0,2.4fr) 130px 70px 140px 140px 14px'
+    const COLS='22px minmax(0,2.4fr) 130px 70px 140px 140px 14px'
     const hcol=(k,l,right)=>{ const on=ord.k===k; return <span onClick={()=>setOrd(o=>o.k===k?{k,dir:-o.dir}:{k,dir:ORD_DEF[k]})} style={{cursor:'pointer',textAlign:right?'right':'left',color:on?C.accent:C.muted,userSelect:'none'}}>{l}{on?(ord.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
     const totCobrar=filas.reduce((x,c)=>x+(porCobrarDe[c.id]||0),0), totReponer=filas.reduce((x,c)=>x+Math.min(0,balances[c.id]||0),0), totTareas=filas.reduce((x,c)=>x+(tareasDe[c.id]||0),0)
     let ultL=null
@@ -354,16 +367,18 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
         </div>
         {tipoBtns&&<div style={{marginBottom:12,marginTop:-4}}>{tipoBtns}</div>}
         {dupAlert}
+        {!(pendOn&&pendCli)&&barraC}
         {pendOn&&pendCli ? pendListaD : filas.length===0
           ? <div style={{color:C.muted,textAlign:'center',padding:40,fontSize:13}}>{q.trim()?'Sin clientes que calcen con la búsqueda':'Sin clientes'}</div>
           : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,padding:'8px 16px',...TH_BAND}}>{hcol('nombre','Cliente')}{hcol('resp','Responsable')}{hcol('tareas','Tareas',1)}{hcol('cobrar','Por cobrar',1)}{hcol('fondos','Fondos',1)}<span/></div>
+              <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,padding:'8px 16px',...TH_BAND}}><Casilla s={selC} on={selC.todos(filas.map(c=>c.id))} onToggle={()=>selC.alternarTodos(filas.map(c=>c.id))}/>{hcol('nombre','Cliente')}{hcol('resp','Responsable')}{hcol('tareas','Tareas',1)}{hcol('cobrar','Por cobrar',1)}{hcol('fondos','Fondos',1)}<span/></div>
               {filas.map(c=>{
                 const bal=balances[c.id]||0, pcb=porCobrarDe[c.id]||0, tc=tareasDe[c.id]||0, resp=responsableDe[c.id], pc=resp?personChip(resp):null
                 const L=(_normTxt(c.name||'').replace(/[^a-z0-9ñ]/gi,'')[0]||'#').toUpperCase(); const sep=ord.k==='nombre'&&L!==ultL; ultL=L
                 return (<Fragment key={c.id}>
                   {sep&&<div style={{padding:'4px 16px',background:C.bg,fontSize:11,fontWeight:800,color:C.accent,borderTop:`1px solid ${C.border}`}}>{L}</div>}
-                  <div data-menu={'cliente:'+c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',opacity:c.status==='Terminado'?.6:1}}>
+                  <div data-menu={'cliente:'+c.id} onClick={()=>abrir(c)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',opacity:c.status==='Terminado'?.6:1,background:selC.has(c.id)?C.azulBg:undefined}}>
+                    <Casilla s={selC} id={c.id} on={selC.has(c.id)}/>
                     <div style={{minWidth:0}}>
                       <div style={{...NOMBRE_CLI}}>{c.name}{tagsDe(c)}</div>
                       {subDe(c)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{subDe(c)}</div>}
@@ -377,7 +392,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
                 </Fragment>)
               })}
               <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:14,alignItems:'center',padding:'9px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,fontWeight:700}}>
-                <span>{filas.length} cliente{filas.length!==1?'s':''}</span><span/>
+                <span/><span>{filas.length} cliente{filas.length!==1?'s':''}</span><span/>
                 <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{totTareas||'—'}</span>
                 <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmt(totCobrar)}</span>
                 <span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:totReponer<0?C.overdueText:C.done}} title='Suma de los fondos negativos (por reponer)'>{totReponer<0?fmtSaldoG(totReponer):'—'}</span><span/>
@@ -403,7 +418,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
           <Buscador value={q} onChange={setQ} placeholder='Nombre, razón social o RUT' style={{flex:'1 1 100%',minWidth:0}}/>
-          {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>{onRedProfesional&&<button onClick={onRedProfesional} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Red profesional</button>}{onOpenFusion&&<button onClick={()=>onOpenFusion()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Fusionar</button>}
+          {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>{onRedProfesional&&<button onClick={onRedProfesional} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Red profesional</button>}{onOpenFusion&&<button onClick={()=>onOpenFusion()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Fusionar</button>}<BtnSeleccionar s={selC}/>
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:4}}>{respChips}{pendChip}{vistasUI}</div>
@@ -424,7 +439,8 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
             const resp=responsableDe[c.id]; const pc=resp?personChip(resp):{bg:C.bgWarm,color:C.textSoft}
             const tareasC=tareasDe[c.id]||0, bal=balances[c.id]||0, sub=subDe(c)
             return (
-              <div key={c.id} onClick={()=>abrir(c)} style={{background:C.card,borderRadius:12,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,opacity:c.status==='Terminado'?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
+              <div key={c.id} onClick={selC.visible?(e=>selC.toggle(c.id,e)):()=>abrir(c)} style={{background:selC.has(c.id)?C.azulBg:C.card,borderRadius:12,padding:'10px 12px',marginBottom:6,border:`1px solid ${selC.has(c.id)?C.azulInfo:C.border}`,opacity:c.status==='Terminado'?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
+                {selC.visible&&<Casilla s={selC} id={c.id} on={selC.has(c.id)}/>}
                 <span style={{width:38,height:38,borderRadius:10,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresaC(c)?'building':'user'} s={18} c={pc.color}/></span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{...NOMBRE_CLI}}>{c.name}{tagsDe(c)}</div>
@@ -447,6 +463,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
               </div>
             </div>
             <div style={{marginTop:10}}><ActBtn full onClick={exportarExcel}><SIcon n='download' s={14} c={C.accent}/>Descargar Excel</ActBtn></div>
+            {barraC}
           </>)
         })()}
       </div>

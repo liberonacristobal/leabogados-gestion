@@ -5,6 +5,7 @@ import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDM
 import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
 import { TRAMOS, enFiltroMora, estadoCompromiso, exposicionCartera, puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
+import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, descargarXlsx, useSeleccion } from '../lib/seleccionLote.jsx'
 
 // Cadencia de cobranza (fuente única): ¿toca recordatorio para esta factura hoy? Escala por mora,
 // respeta un piso de días entre envíos para no spamear. lastISO = fecha del último recordatorio (factura_recordado).
@@ -99,6 +100,7 @@ export function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sendin
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
 export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, currentUserEmail, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen, filtroInicial=null, onFiltroListo }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
+  const selB = useSeleccion('cobranza')
   const LIBERAR_UMBRAL = 3
   const [recMap,setRecMap] = useState({})      // factura.id → fecha ISO último recordatorio
   const [okCount,setOkCount] = useState({})    // client_id → nº de tandas confirmadas (aprendizaje)
@@ -367,6 +369,13 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
           {linea('+','Queda en las gestiones de cobro del cliente.')}</div>
         <div style={{display:'flex',gap:8}}><button onClick={guardarCompromiso} style={{background:C.accent,color:'#fff',border:'none',borderRadius:10,padding:'10px 18px',fontSize:13,fontWeight:700,cursor:'pointer'}}>Guardar compromiso</button><button onClick={()=>setCompPage(null)} style={{background:C.surface,color:C.accent,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 16px',fontSize:13,fontWeight:700,cursor:'pointer'}}>Cancelar</button></div>
       </div></FlujoPagina> }
+  // Selección en lote (solo lectura): Excel y copiar lista de los clientes elegidos. Los totales salen de los mismos grupos de la lista.
+  const selGrupos = gsort.filter(g=>selB.has(g.cid))
+  const barraB = <BarraSeleccion s={selB} n={selGrupos.length} unidad={['cliente seleccionado','clientes seleccionados']} total={`Vencido ${f0(selGrupos.reduce((a,g)=>a+(g.vencido||0),0))} · Por cobrar ${f0(selGrupos.reduce((a,g)=>a+(g.total||0),0))}`} acciones={[
+    {ic:'download',label:'Descargar Excel',corto:'Excel',onClick:()=>descargarXlsx({nombre:'Cobranza',hoja:'Cobranza',head:['Cliente','Facturas','Mora (días)','Vencido','Por cobrar'],filas:selGrupos.map(g=>[cn(g.cid),g.items.length,g.maxDias>0?g.maxDias:0,Math.round(g.vencido||0),Math.round(g.total||0)]),anchos:[36,10,12,14,14],numCols:[3,4]})},
+    {ic:'file',label:'Copiar lista',corto:'Copiar',onClick:()=>copiarTexto(selGrupos.map(g=>`${cn(g.cid)} · ${f0(g.total)}${g.vencido>0?` (vencido ${f0(g.vencido)})`:''}`).join('\n'),'Lista copiada')},
+  ]}/>
+
   return (
     <div style={{padding:'12px 14px 40px',maxWidth:isDesktop?1040:560,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
@@ -403,7 +412,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
           </div>}
           {grupos.length>0&&(isDesktop
             ? <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:10}}><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{flex:1,minWidth:0,marginRight:4}}/>{porAbogado.map(chip)}</div>
-            : <><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{marginBottom:8}}/><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>{porAbogado.map(chip)}</div></>)}
+            : <><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{marginBottom:8}}/><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>{porAbogado.map(chip)}<span style={{marginLeft:'auto'}}><BtnSeleccionar s={selB}/></span></div></>)}
         </>)
       })()}
       {grupos.length===0 && <div style={{fontSize:13,color:C.textSoft,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
@@ -424,13 +433,14 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
         const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.muted}}> {sortBy.dir==='desc'?<Gl n='chevD'/>:<Gl n='chevU'/>}</span>:''}</th>)
         const gapDe=g=>{ const l=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; return l?`hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(l).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar' }
         return (
-          <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+          <div>{barraB}<div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
             <table style={{borderCollapse:'collapse',width:'100%'}}>
-              <thead><tr>{th('cliente','Cliente')}{th('mora','Mora')}{th('punt','Puntualidad')}{th('cartera','% cartera',true)}{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
+              <thead><tr><th style={{...thS,width:34,padding:'9px 0 9px 12px'}}><Casilla s={selB} on={selB.todos(gsort.map(g=>g.cid))} onToggle={()=>selB.alternarTodos(gsort.map(g=>g.cid))}/></th>{th('cliente','Cliente')}{th('mora','Mora')}{th('punt','Puntualidad')}{th('cartera','% cartera',true)}{th('vencido','Vencido',true)}{th('total','Total deuda',true)}</tr></thead>
               <tbody>
                 {gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const open=expCli===g.cid; const gap=gapDe(g); const conVenc=g.nAccion>0||g.vencido>0; const td={padding:'10px 12px',borderTop:`1px solid ${C.border}`,fontSize:13,verticalAlign:'middle'}; return (
                   <Fragment key={g.cid}>
-                  <tr data-menu={'cobranza:'+g.cid} onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background=C.surface} style={{cursor:'pointer',background:C.surface}}>
+                  <tr data-menu={'cobranza:'+g.cid} onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background=selB.has(g.cid)?C.azulBg:C.surface} style={{cursor:'pointer',background:selB.has(g.cid)?C.azulBg:C.surface}}>
+                    <td style={{...td,width:34,padding:'10px 0 10px 12px'}}><Casilla s={selB} id={g.cid} on={selB.has(g.cid)}/></td>
                     <td style={td}><span style={{display:'inline-flex',marginRight:7,verticalAlign:'middle',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.done}/></span><span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>{chipComp(g.cid)&&<span style={{marginLeft:8}}>{chipComp(g.cid)}</span>}<div style={{fontSize:11,color:C.muted,paddingLeft:19}}>{g.items.length} factura{g.items.length!==1?'s':''}</div></td>
                                         <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
                     <td style={td}>{chipPunt(g.cid)}</td>
@@ -438,7 +448,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:g.vencido>0?C.overdueText:C.done}}>{g.vencido>0?f0(g.vencido):'—'}</td>
                     <td style={{...td,textAlign:'right',fontWeight:800,fontVariantNumeric:'tabular-nums',color:C.accent}}>{f0(g.total)}</td>
                   </tr>
-                  {open&&<tr><td colSpan={6} style={{background:C.surface,borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
+                  {open&&<tr><td colSpan={7} style={{background:C.surface,borderTop:`1px dashed ${C.border}`,padding:'8px 14px 10px'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginBottom:4}} onClick={e=>e.stopPropagation()}>
                       <span style={{fontSize:11,color:C.muted}}>Último contacto: <b style={{color:conVenc?(gap==='sin contactar'?C.overdueText:C.muted):C.done}}>{conVenc?gap:'—'}</b>{conVenc&&nc>0?` · ${nc} envío${nc!==1?'s':''} confirmado${nc!==1?'s':''}`:''}{onOpenClientFicha?<> · <span onClick={()=>onOpenClientFicha(g.cid)} style={{color:C.azulInfo,fontWeight:700,cursor:'pointer'}}>Ver ficha <Gl n='chevron'/></span></>:''}</span>
                       {!conVenc ? <span style={{fontSize:11,fontWeight:700,color:C.greenText}}>Al día — sin vencidas</span>
@@ -452,13 +462,14 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
                 )})}
               </tbody>
             </table>
-          </div>
+          </div></div>
         )
       })() : gsort.map(g=>{ const nc=okCount[g.cid]||0; const auto=autoCli[g.cid]; const conVenc=g.nAccion>0||g.vencido>0; const last=g.items.map(({b})=>recMap[String(b.id)]).filter(Boolean).sort().slice(-1)[0]; const gapTxt=last?`último hace ${Math.round((new Date(hoy+'T00:00')-new Date(String(last).slice(0,10)+'T00:00'))/86400000)} d`:'sin contactar'; return (
-        <div key={g.cid} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
+        <div key={g.cid} style={{background:selB.has(g.cid)?C.azulBg:C.surface,border:`1px solid ${selB.has(g.cid)?C.azulInfo:C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:9}}>
           {/* Plegada: nombre + vencido (o el total si está al día). Al tocar se abre el resto: total, estado, ficha, facturas y recordatorio. */}
-          <div onClick={()=>{ setExpCli(expCli===g.cid?null:g.cid); setMovTab('fac') }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
-            <span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
+          <div onClick={e=>{ if(selB.visible){ selB.toggle(g.cid,e); return } setExpCli(expCli===g.cid?null:g.cid); setMovTab('fac') }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
+            {selB.visible&&<Casilla s={selB} id={g.cid} on={selB.has(g.cid)}/>}
+            <span onClick={onOpenClientFicha&&!selB.visible?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
               <div style={{textAlign:'right',lineHeight:1.15}}>
                 {g.vencido>0
@@ -489,6 +500,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
           </>}
         </div>
       )})}
+      {!isDesktop&&barraB}
       {reembolsos.length>0&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginTop:14}}>
         <div onClick={()=>setReembOpen(o=>!o)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,cursor:'pointer'}}>
           <span style={{...SEC_LBL,display:'inline-flex',alignItems:'center',gap:6}}><span style={{color:C.muted}}>{reembOpen?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>Reembolsos por cobrar · {reembolsos.length}</span>
