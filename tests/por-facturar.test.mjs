@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { clasificarPorFacturar, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
 import { cuotaTramo } from './../supabase/functions/_shared/saludDatos.js'
-import { cuotasCubiertasVenta, noEmitirDeFilas } from './../supabase/functions/_shared/ventasReglas.js'
+import { cuotasCubiertasVenta, noEmitirDeFilas, cuotaDeLaApp, cuotasSinEmitir } from './../supabase/functions/_shared/ventasReglas.js'
 
 const UF = { '2026-01-01': 40000 }                                     // UF constante: 1 UF = $40.000
 const venta = (id, o = {}) => ({ id, client_id: 'c' + id, status: 'Activo', cobro_type: 'cuotas', moneda: 'CLP', amount_clp: 1000000, area: 'X', ...o })
@@ -119,4 +119,22 @@ test('doble conteo cuota ↔ tramo usa el cuadre de la venta: más de 3 % en UF 
   assert.equal(cuotaTramo(filas(40), [s], new Set(['A']), sobra).length, 0)       // «No es doble conteo» guardado
   assert.equal(cuotaTramo(filas(40), [s], new Set(), () => null).length, 1)       // el cuadre no aplica (sin UF): rige el criterio antiguo, no se silencia
   assert.equal(cuotaTramo(filas(37.5), [s], new Set(), () => null).length, 0)
+})
+
+test('cuota de la app: vence desde la app, o nació en ella y a tiempo; un plan generado hacia atrás es histórico', () => {
+  const c = (due, created_at) => ({ due, created_at: created_at + 'T12:00:00Z' })
+  assert.equal(cuotaDeLaApp(c('2026-09-01', '2026-07-06')), true)         // vence dentro de la vida de la app
+  assert.equal(cuotaDeLaApp(c('2026-06-04', '2026-06-09')), true)         // venció 2 días antes del corte, pero se creó en la app a los 5 días
+  assert.equal(cuotaDeLaApp(c('2025-09-01', '2026-07-06')), false)        // importada: plan de 2025 generado en julio de 2026
+  assert.equal(cuotaDeLaApp(c('2025-11-01', '2026-10-17')), false)        // creada hace poco, pero hacia atrás
+  assert.equal(cuotaDeLaApp(c('2026-05-01', '2026-05-10')), false)        // anterior a la app
+  assert.equal(cuotaDeLaApp({ due: '', created_at: '2026-07-01' }), false); assert.equal(cuotaDeLaApp({ due: '2026-05-01' }), false)
+})
+
+test('el radar de cuotas vencidas ve la cuota creada en la app aunque venciera días antes del corte, y no ve el plan retroactivo', () => {
+  const sales = [venta('A', { amount_clp: 3000000 }), venta('B', { amount_clp: 2000000 })]
+  const billing = [fact('fA', 'A', '2026-08-01', 1000000), prog('a1', 'A', '2026-06-04', 1000000, { created_at: '2026-06-09T12:00:00Z' }), prog('a2', 'A', '2026-12-01', 1000000),
+    fact('fB', 'B', '2026-08-01', 1000000), prog('b1', 'B', '2025-09-01', 1000000, { created_at: '2026-07-06T12:00:00Z' })]
+  const ids = cuotasSinEmitir({ billing, sales, uf: UF, noEmitir: new Set(), hasta: '2026-11-01' }).map(b => b.id)
+  assert.deepEqual(ids, ['a1'])
 })
