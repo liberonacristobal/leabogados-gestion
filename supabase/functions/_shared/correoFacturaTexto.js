@@ -70,15 +70,25 @@ const enDetalle = (t, lang) => lang !== 'en' ? t : String(t).replace(/^pago\s+(\
  * trabajo dice «al siguiente trabajo». Sin cierre (lo agrega el envío).
  * @param {{items:{folio:string, relacion?:string, detalle?:string, periodo?:string, key?:string}[], lang?:'es'|'en'}} p
  */
-export function cuerpoVariasFacturas({ items, lang = 'es' }) {
+/**
+ * Las líneas «– Trabajo: cuota o período (N° folio).» de un correo de varias facturas, una por trabajo. Salen SIEMPRE de las facturas del envío:
+ * la plantilla aprendida las guarda como la marca {trabajos} y nunca como texto, porque cada línea lleva folios que cambian en cada envío.
+ * @param {{items:{folio:string, relacion?:string, detalle?:string, periodo?:string, key?:string}[], lang?:'es'|'en'}} p @returns {string[]}
+ */
+export function lineasTrabajos({ items, lang = 'es' }) {
   const y = lang === 'en' ? 'and' : 'y'
-  const folios = unir((items || []).map(i => i.folio), y)
-  const gs = agruparTrabajos(items)
-  const lineas = gs.map(g => {
+  return agruparTrabajos(items).map(g => {
     const partes = g.items.map(i => { const d = enDetalle(i.detalle || i.periodo || '', lang); const n = `${lang === 'en' ? 'No.' : 'N°'} ${i.folio}`; return d ? `${d} (${n})` : n })
     const nombre = g.relacion || (lang === 'en' ? 'Professional services' : 'Servicios profesionales')
     return `– ${nombre}: ${unir(partes, y)}.`
   })
+}
+
+export function cuerpoVariasFacturas({ items, lang = 'es' }) {
+  const y = lang === 'en' ? 'and' : 'y'
+  const folios = unir((items || []).map(i => i.folio), y)
+  const gs = agruparTrabajos(items)
+  const lineas = lineasTrabajos({ items, lang })
   if (lang === 'en') return `We attach invoices No. ${folios}, corresponding to the following ${gs.length === 1 ? 'work' : 'works'}:\n${lineas.join('\n')}`
   return `Espero que estén muy bien. Adjuntamos las facturas N° ${folios}, correspondientes ${gs.length === 1 ? 'al siguiente trabajo' : 'a los siguientes trabajos'}:\n${lineas.join('\n')}`
 }
