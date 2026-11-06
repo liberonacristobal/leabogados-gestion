@@ -187,7 +187,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       <tbody>{sociosFilas.map(s=>{ const v=card6(s,'ytd'), tot=s===null; return (
         <tr key={s||'ofi'} onClick={()=>go('porSocio')} style={{cursor:'pointer',background:tot?C.bgSoft:undefined,fontWeight:tot?800:400}}>
           <td style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,fontWeight:tot?800:600,color:tot?C.accent:C.text}}>{tot?'Oficina':s}</td>
-          {[0,1,2,5].map(i=><td key={i} style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
+          {[0,1,2,5].map(i=><td key={i} onClick={e=>{ e.stopPropagation(); go('porSocio',s,i) }} style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
         </tr>) })}</tbody>
     </table></div>)
   const Mes1 = mesActual.charAt(0).toUpperCase()+mesActual.slice(1)
@@ -238,10 +238,10 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     cob: { cap:'Facturación y cobranza', capCorto:'Fact. y cobranza', titulo:'Por cobrar', hl:<>Vencido <b style={{color:C.overdueText}}>{fmtShort(cart.vencidoTot)}</b></>, tono:'az', link:'Cobranza', dest:'cobranza',
       body:<>
         <Fila tono='az' label='Honorarios por cobrar' value={fmtShort(porCobrar)} raw={porCobrar} onClick={()=>go('cobranza')}/>
-        <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)} % de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} raw={cart.vencidoTot} onClick={()=>go('cobranza')}/>
+        <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)} % de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} raw={cart.vencidoTot} onClick={()=>go('cobranzaVencido')}/>
         <Fila tono='ro' label='Más de 60 días' sub={cart.expo.pctM60!=null?`${Math.round(cart.expo.pctM60*100)} % de la cartera`:undefined} value={fmtShort(cart.expo.m60)} raw={cart.expo.m60} onClick={()=>go('cobranzaM60')}/>
         {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} raw={cart.expo.mayor.saldo} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
-        <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastos')}/>
+        <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastosDeben')}/>
       </> },
     cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos de oficina', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
       body:<>
@@ -262,7 +262,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label='Comisiones por pagar' sub={diasCom!=null?`la más antigua, hace ${diasCom} días`:undefined} value={fmtShort(sc.porPagar)} raw={sc.porPagar} onClick={()=>go('proveedores','por_pagar')}/>
         <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} raw={nota.montoPagables} onClick={()=>go('notaria')}/>
         <Sub t='Fondos de clientes'/>
-        <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastos')}/>
+        <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastosFavor')}/>
         <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')}/>
         <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },

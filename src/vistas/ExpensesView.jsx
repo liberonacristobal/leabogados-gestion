@@ -2343,6 +2343,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
     else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
     else if(navTo==='rendirCli'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }
+    else if(navTo==='rendirFavor'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('favor'); setRendAbg('Todos'); setRendSub('rendir') }   // Panel de socios › Fondos de clientes (a favor)
     else if(navTo==='rendirPedir'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('pedir'); setRendAbg('Todos'); setRendSub('rendir') }   // correo de cierre › «Rendir y pedir»   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
     onNavDone&&onNavDone()
   },[navTo])

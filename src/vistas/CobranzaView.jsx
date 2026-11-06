@@ -114,8 +114,8 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
   useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli}) },[sortBy,expCli])   // escritorio: cliente con sus facturas desplegadas
   const [reembOpen,setReembOpen] = useState(false)   // sección Reembolsos por cobrar: plegada por defecto
-  const [tramoF,setTramoF] = useState(()=>filtroInicial??null)   // antigüedad: null (todas) | 0 a 4 (tramo) | 'm60' (más de 60 días)
-  useEffect(()=>{ if(filtroInicial!=null){ setTramoF(filtroInicial); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line
+  const [tramoF,setTramoF] = useState(()=>filtroInicial==='vencido'?null:(filtroInicial??null))   // antigüedad: null (todas) | 0 a 4 (tramo) | 'm60' (más de 60 días)
+  useEffect(()=>{ if(filtroInicial!=null){ if(filtroInicial==='vencido'){ setTramoF(null); setSortBy({col:'vencido',dir:'desc'}) } else setTramoF(filtroInicial); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line
   const [compMap,setCompMap] = useState({})    // client_id → compromiso de pago {fecha, por, monto, creado, quien} (learnings cobranza_compromiso)
   const [movTab,setMovTab] = useState('fac')   // móvil, cliente desplegado: 'fac' (facturas) | 'ges' (gestión)
   const [compPage,setCompPage] = useState(null)   // client_id con la hoja «Compromiso de pago» abierta
