@@ -32,6 +32,15 @@ Nace del 2026-11-04: el correo de la factura 500 salió con «Pago 2 de 10» sie
 - **El correo de varias facturas lista cada TRABAJO leído de la glosa de su factura** (`facturaGlosaPartes`: NmbItem/DscItem, con el proyecto de la venta solo si el ítem es genérico) y agrupa por esa glosa, no por la venta vinculada (una factura mal vinculada no se funde con otro trabajo); nunca omite un trabajo ni dice un total (`_shared/correoFacturaTexto.js`, probado con las facturas reales Tarragona 511+512 y Geslog 498+502). El saludo se decide por el «Para» (no por la copia) y el cuerpo sigue su trato (estés/estén, tus/sus).
 - Todo envío de factura registra quién lo hizo (`sent_by`, `sent_to`, bitácora `facturacion.correo_enviado`).
 
+## REGLA DE ORO: la menor cantidad de partidas — lo más minimalista posible
+
+Nace del 2026-11-06: la clasificación de «Por facturar» salió con 11 partidas y el usuario pidió simplificarla, porque con muchas categorías y subcategorías «luego es muy difícil saber cómo calificar las cosas». Vale para toda clasificación, estado, categoría, etiqueta, pestaña o paso que se agregue a la app, a una regla de `_shared`, a un detector o a un render.
+- **Pocas partidas, y se justifican una por una:** solo existe una partida nueva si lleva a una **acción distinta** del usuario. Si dos partidas piden lo mismo, son una. Antes de agregar una, intentar resolverlo con una etiqueta de la fila (un motivo en texto) o con un dato que ya existe.
+- **El motivo es etiqueta, no categoría:** «cubierta por factura», «pausada», «mensual» se muestran en la fila; no abren otra partida ni otro estado.
+- **Reutilizar lo que ya existe** (decisiones guardadas, estados, detectores, listas) en vez de crear una clase paralela.
+- **Las partidas suman el total** y deben poder explicarse en una línea cada una. Si una clasificación pasa de ~4 partidas visibles, replantearla antes de construirla.
+- Refuerza «menos es más» y «reusar siempre, nunca duplicar».
+
 ## REGLA DE ORO: modal solo para confirmaciones — todo lo demás es página
 
 Nada de ventanas flotantes para trabajar (2026-11-04: se convirtieron ~50 modales a página). Un `Modal` solo se usa para una **pregunta breve que bloquea una acción** y donde no hay nada que mirar al lado: avisos y confirmaciones del sistema (`DialogHost`: `appAlert`/`appConfirm`), «Dar de baja factura» (un motivo), «Deshacer importación», elegir el mes de la tanda (`MesTandaModal`) y el panel de Counsel AI (excepción pedida por el usuario: no se toca).

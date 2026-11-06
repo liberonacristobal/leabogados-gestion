@@ -7,17 +7,12 @@ import { PageHeader, PaginaSobre, useNoEmitirSet, useUFFechas, usePorSocioFuente
 import { clasificarPorFacturar, cuadreVenta, GRUPOS } from '../../supabase/functions/_shared/porFacturar.js'
 
 const fmtM = v => '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M'
-const ROT = {
-  vencida: ['Vencidas', 'por emitir'], mesActual: ['Mes actual', ''], mesSiguiente: ['Mes siguiente', ''], masAdelante: ['Más adelante', ''], recurrente: ['Recurrentes', 'mensuales'],
-  porConfirmar: ['Por confirmar', 'más de 90 días sin movimiento'], saldoCuota: ['Saldo de cuota', 'facturada en parte'],
-  cubFactura: ['Cubiertas', 'por factura'], cubAnticipo: ['Cubiertas', 'por anticipo'], noCorresponde: ['No corresponde', ''], pausada: ['Pausadas', ''],
-}
-const GRUPO_ROT = { vigente: 'Vigente', porConfirmar: 'Por confirmar', fuera: 'Fuera' }
-
+// Cuatro partidas, nada más; el motivo es la etiqueta de cada fila (_shared/porFacturar.js).
+const ROT = { vencida: ['Vencidas', 'por emitir'], porVencer: ['Este mes y después', ''], porConfirmar: ['Por confirmar', 'espera al abogado'], fuera: ['Fuera', 'ya explicado'] }
+const MOTIVO = { cubFactura: 'cubierta por factura', cubAnticipo: 'cubierta por anticipo', noCorresponde: 'no corresponde', pausada: 'pausada', sinMovimiento: 'más de 90 días sin movimiento', saldoCuota: 'saldo de una cuota facturada en parte', recurrente: 'mensual' }
 const PORQUE = {
-  vencida: 'Venció y aún no se emite. Su venta tuvo facturas o pagos en los últimos 90 días, así que se cuenta como por emitir.',
-  mesActual: 'Vence este mes.', mesSiguiente: 'Vence el mes siguiente.', masAdelante: 'Vence más adelante.', recurrente: 'Cuota de un cobro mensual.',
-  porConfirmar: 'Venció hace más de 90 días y su venta no tiene facturas ni pagos en ese plazo. Queda fuera del flujo hasta que el abogado responsable lo confirme.',
+  vencida: 'Venció en un mes ya cerrado y aún no se emite.', porVencer: 'Vence este mes o más adelante.',
+  sinMovimiento: 'Venció hace más de 90 días y su venta no tiene facturas ni pagos en ese plazo. Queda fuera del flujo hasta que el abogado responsable lo confirme.',
   saldoCuota: 'La cuota se dio por cubierta con una factura menor. El saldo queda fuera del flujo hasta confirmarlo.',
   cubFactura: 'La cuota está cubierta por lo ya facturado en su venta.', cubAnticipo: 'Un anticipo disponible ya cubrió la cuota: falta emitir la factura.',
   noCorresponde: 'Se marcó «No corresponde».', pausada: 'La cuota está pausada.',
@@ -34,12 +29,11 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
   const emitidas = bs.filter(x => x.invoice_no && x.status !== 'Anulada').sort((x, y) => String(y.issued_at || '').localeCompare(String(x.issued_at || '')))
   const cuadre = useMemo(() => sale ? cuadreVenta(sale, bs, ufFechas || {}) : null, [sale, bs, ufFechas])
   const propias = filas.filter(x => x.id === f.id)
-  const suma = ks => propias.filter(x => ks.includes(x.k)).reduce((a, x) => a + x.monto, 0)
-  const cubierto = suma(['cubFactura', 'cubAnticipo']), saldo = suma(['saldoCuota'])
+  const cubierto = propias.filter(x => ['cubFactura', 'cubAnticipo'].includes(x.motivo)).reduce((a, x) => a + x.monto, 0), saldo = propias.filter(x => x.motivo === 'saldoCuota').reduce((a, x) => a + x.monto, 0)
   const u = v => cuadre && cuadre.enUF ? `${v.toFixed(1).replace('.', ',')} UF` : fmt(v)
   const tono = cuadre ? ({ Cuadra: C.greenText, Tolerancia: C.soonText, Sobra: C.overdueText, Falta: C.overdueText })[cuadre.estado] : C.muted
   const concepto = String(b.concept || '').replace(/^.*? — /, '')
-  const decidible = !['cubFactura', 'cubAnticipo', 'noCorresponde', 'pausada'].includes(f.k)
+  const decidible = f.k !== 'fuera'
   const box = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }
   const cap = t => <div style={{ padding: '11px 14px 7px', fontSize: 10, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.accent }}>{t}</div>
   const kv = (l, v, s2, col) => <div style={{ minWidth: 0 }}><div style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.accent }}>{l}</div><div style={{ fontSize: 16, fontWeight: 800, color: col || C.accent, whiteSpace: 'nowrap' }}>{v}</div>{s2 ? <div style={{ fontSize: 11, color: C.muted }}>{s2}</div> : null}</div>
@@ -55,9 +49,9 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
     <PaginaSobre origen='Por facturar' titulo={nombre} ctx={concepto} onBack={onClose} maxW={720}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 60 }}>
         <div style={box}>{cap('Cuota')}{sale && sale.title ? <div style={{ padding: '0 14px 2px', fontSize: 13, fontWeight: 700, color: C.text, overflowWrap: 'anywhere' }}>{sale.title}</div> : null}<div style={grid}>
-          {kv('Monto', fmt(b.amount))}{kv('Vence', fmtFechaDMY(b.due))}{kv('Partida', ROT[f.k][0] + (ROT[f.k][1] ? ' · ' + ROT[f.k][1] : ''))}
+          {kv('Monto', fmt(b.amount))}{kv('Vence', fmtFechaDMY(b.due))}{kv('Partida', ROT[f.k][0] + (f.motivo ? ' · ' + MOTIVO[f.motivo] : ''))}
           {cubierto > 0 && kv('Cubierto', fmt(cubierto))}{saldo > 0 && kv('Saldo', fmt(saldo), 'por confirmar', C.soonText)}
-        </div><div style={{ padding: '0 14px 12px', fontSize: 12, color: C.textSoft }}>{PORQUE[f.k]}</div></div>
+        </div><div style={{ padding: '0 14px 12px', fontSize: 12, color: C.textSoft }}>{PORQUE[f.motivo] || PORQUE[f.k]}</div></div>
         {cuadre && <div style={box}>{cap('Cuadre de la venta')}<div style={grid}>
           {kv('Plan', u(cuadre.plan))}{kv('Facturado', u(cuadre.facturado))}{kv('En cuotas', u(cuadre.enCuotas))}{kv('Estado', cuadre.estado, Math.abs(cuadre.diferencia) > 0.0001 ? (cuadre.diferencia > 0 ? 'sobra ' : 'falta ') + u(Math.abs(cuadre.diferencia)) : '', tono)}
         </div></div>}
@@ -104,7 +98,6 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
   const [fuentes] = usePorSocioFuentes()
   const hoy = new Date().toISOString().slice(0, 10)
   const [socio, setSocio] = useState('Todos')
-  const [abiertos, setAbiertos] = useState(() => new Set(partidaInicial && GRUPOS.porConfirmar.includes(partidaInicial) ? ['vigente', 'porConfirmar'] : partidaInicial && GRUPOS.fuera.includes(partidaInicial) ? ['vigente', 'fuera'] : ['vigente']))
   const [partida, setPartida] = useState(partidaInicial || 'vencida')
   const [detalle, setDetalle] = useState(null)
   const saleById = useMemo(() => Object.fromEntries((sales || []).map(s => [String(s.id), s])), [sales])
@@ -118,8 +111,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
   const suma = ks => filas.filter(f => ks.includes(f.k)).reduce((a, f) => a + f.monto, 0)
   const cuenta = ks => new Set(filas.filter(f => ks.includes(f.k)).map(f => f.id)).size
   const total = filas.reduce((a, f) => a + f.monto, 0)
-  const porSocio = ['Todos', 'Cristóbal', 'Erasmo', SIN_SOCIO].map(s => [s, R.filas.filter(f => GRUPOS.vigente.includes(f.k) && (s === 'Todos' || f.socio === s)).reduce((a, f) => a + f.monto, 0)])
-  const tog = k => setAbiertos(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const porSocio = ['Todos', 'Cristóbal', 'Erasmo', SIN_SOCIO].map(s => [s, R.filas.filter(f => GRUPOS.vigente.includes(f.k) && (s === 'Todos' || f.socio === s)).reduce((a, f) => a + f.monto, 0)])   // lo vigente de cada socio
   const lista = useMemo(() => {
     const g = new Map()
     filas.filter(f => f.k === partida).sort((a, b) => String(a.b.due || '').localeCompare(String(b.b.due || ''))).forEach(f => { const k = String(f.b.client_id); if (!g.has(k)) g.set(k, { cid: k, items: [], total: 0 }); const x = g.get(k); x.items.push(f); x.total += f.monto })
@@ -135,7 +127,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
       <span style={{ fontWeight: 800, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{val}</span>
       <span style={{ color: C.done, display: 'flex' }}>{chev === 'd' ? <SIcon n='chevD' s={11} c={C.done} /> : chev === 'u' ? <SIcon n='chevU' s={11} c={C.done} /> : chev ? <SIcon n='chevron' s={10} c={C.done} /> : null}</span>
     </div>)
-  const partidaRow = k => { const [a, b] = ROT[k]; return <Fragment key={k}>{fila(a, b || `${cuenta([k])} cuota${cuenta([k]) !== 1 ? 's' : ''}`, b ? `${cuenta([k])} cuota${cuenta([k]) !== 1 ? 's' : ''}` : '', fmtM(suma([k])), { sub: true, chev: true, onClick: () => setPartida(k) })}</Fragment> }
+  const partidaRow = k => { const [a, b] = ROT[k]; const n = cuenta([k]); return <Fragment key={k}>{fila(k === 'vencida' || k === 'porVencer' ? '+' : '+', a, `${b ? b + ' · ' : ''}${n} cuota${n !== 1 ? 's' : ''}`, fmtM(suma([k])), { chev: true, onClick: () => setPartida(k) })}</Fragment> }
   return (
     <div>
       <PageHeader origen={origen} onBack={onBack} titulo='Por facturar' ctx={`al ${fmtFechaDMY(hoy)}${anio ? ' · vencen en ' + anio : ''}`} />
@@ -150,23 +142,18 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
         </div>
         <div style={box}>
           {cap('Del total a lo cobrable')}
-          {fila('+', 'Vigente', '', fmtM(suma(GRUPOS.vigente)), { chev: abiertos.has('vigente') ? 'u' : 'd', onClick: () => tog('vigente') })}
-          {abiertos.has('vigente') && GRUPOS.vigente.map(partidaRow)}
-          {fila('+', 'Por confirmar', `${cuenta(GRUPOS.porConfirmar)} cuota${cuenta(GRUPOS.porConfirmar) !== 1 ? 's' : ''}`, fmtM(suma(GRUPOS.porConfirmar)), { chev: abiertos.has('porConfirmar') ? 'u' : 'd', onClick: () => tog('porConfirmar') })}
-          {abiertos.has('porConfirmar') && GRUPOS.porConfirmar.map(partidaRow)}
-          {fila('+', 'Fuera', '', fmtM(suma(GRUPOS.fuera)), { chev: abiertos.has('fuera') ? 'u' : 'd', onClick: () => tog('fuera') })}
-          {abiertos.has('fuera') && GRUPOS.fuera.map(partidaRow)}
+          {['vencida', 'porVencer', 'porConfirmar', 'fuera'].map(k => partidaRow(k))}
           {fila('=', 'Por facturar', '', fmtM(total), { tot: true })}
         </div>
         <div style={box}>
           {cap(`${ROT[partida][0]}${ROT[partida][1] ? ' · ' + ROT[partida][1] : ''} · ${cuenta([partida])} cuota${cuenta([partida]) !== 1 ? 's' : ''} · ${fmtM(suma([partida]))}`)}
-          {partida === 'cubAnticipo' && onOpenAdelantos && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}><span style={{ flex: 1, minWidth: 180 }}>La plata ya entró. Falta emitir la factura.</span><span onClick={onOpenAdelantos} style={{ fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Ir a Facturar adelantos →</span></div>}
+          {partida === 'fuera' && onOpenAdelantos && filas.some(f => f.motivo === 'cubAnticipo') && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}><span style={{ flex: 1, minWidth: 180 }}>La plata ya entró. Falta emitir la factura.</span><span onClick={onOpenAdelantos} style={{ fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Ir a Facturar adelantos →</span></div>}
           {lista.length === 0 && <div style={{ padding: '18px 14px', textAlign: 'center', color: C.muted, fontSize: 13, borderTop: `1px solid ${C.border}` }}>Sin cuotas en esta partida.</div>}
           {lista.map(g => g.items.map((f, i) => (
             <div key={f.id + f.k} onClick={() => setDetalle(f)} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><span onClick={onOpenClientFicha ? e => { e.stopPropagation(); onOpenClientFicha(g.cid) } : undefined} style={{ cursor: onOpenClientFicha ? 'pointer' : 'default' }}>{nombre(g.cid)}</span></div>
-                <div style={{ fontSize: 11, color: C.muted, overflowWrap: 'anywhere' }}>{String(f.b.concept || '').replace(/^.*? — /, '')} · vence {fmtFechaDMY(f.b.due)}</div>
+                <div style={{ fontSize: 11, color: C.muted, overflowWrap: 'anywhere' }}>{String(f.b.concept || '').replace(/^.*? — /, '')} · vence {fmtFechaDMY(f.b.due)}{f.motivo ? ` · ${MOTIVO[f.motivo]}` : ''}</div>
               </div>
               <span style={{ fontSize: 14, fontWeight: 800, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(f.monto)}</span>
               <span style={{ color: C.done, display: 'flex' }}><SIcon n='chevron' s={10} c={C.done} /></span>
