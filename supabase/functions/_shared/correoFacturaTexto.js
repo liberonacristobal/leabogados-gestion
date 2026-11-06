@@ -65,12 +65,6 @@ const unir = (/** @type {string[]} */ a, /** @type {string} */ y) => a.length <=
 const enDetalle = (t, lang) => lang !== 'en' ? t : String(t).replace(/^pago\s+(\d+)\s+de\s+(\d+)$/i, 'Payment $1 of $2').replace(/^cuota\s+(\d+)\s*\/\s*(\d+)$/i, 'Installment $1 of $2').replace(new RegExp(`^(${MESES.join('|')})\\s+(\\d{4})$`, 'i'), (_m, mes, y) => `${MONTHS_EN[MESES.indexOf(mes.toLowerCase())]} ${y}`)
 
 /**
- * Cuerpo para VARIAS facturas (2 o más) en un correo: «Adjuntamos las facturas N° A y B, correspondientes a los siguientes trabajos:» y una línea
- * por trabajo con su cuota o período y el N° de factura. Sin total. Un trabajo con varias facturas junta las suyas en su línea. Con un solo
- * trabajo dice «al siguiente trabajo». Sin cierre (lo agrega el envío).
- * @param {{items:{folio:string, relacion?:string, detalle?:string, periodo?:string, key?:string}[], lang?:'es'|'en'}} p
- */
-/**
  * Las líneas «– Trabajo: cuota o período (N° folio).» de un correo de varias facturas, una por trabajo. Salen SIEMPRE de las facturas del envío:
  * la plantilla aprendida las guarda como la marca {trabajos} y nunca como texto, porque cada línea lleva folios que cambian en cada envío.
  * @param {{items:{folio:string, relacion?:string, detalle?:string, periodo?:string, key?:string}[], lang?:'es'|'en'}} p @returns {string[]}
@@ -84,6 +78,12 @@ export function lineasTrabajos({ items, lang = 'es' }) {
   })
 }
 
+/**
+ * Cuerpo para VARIAS facturas (2 o más) en un correo: «Adjuntamos las facturas N° A y B, correspondientes a los siguientes trabajos:» y una línea
+ * por trabajo con su cuota o período y el N° de factura. Sin total. Un trabajo con varias facturas junta las suyas en su línea. Con un solo
+ * trabajo dice «al siguiente trabajo». Sin cierre (lo agrega el envío).
+ * @param {{items:{folio:string, relacion?:string, detalle?:string, periodo?:string, key?:string}[], lang?:'es'|'en'}} p
+ */
 export function cuerpoVariasFacturas({ items, lang = 'es' }) {
   const y = lang === 'en' ? 'and' : 'y'
   const folios = unir((items || []).map(i => i.folio), y)
