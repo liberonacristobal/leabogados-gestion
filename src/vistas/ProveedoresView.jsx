@@ -246,7 +246,7 @@ export function CorreoBoletaPage({prov, bm, lineas=[], user, onBack, onSent}){
   </div>)
 }
 
-export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado,soloProvId=null}) {
+export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=[],anticipos=[],expenses=[],clients=[],sales=[],user,onSave,onRevertirPago,onAsignarFacturas,onOpenSale,onOpenFactura,onOpenClientFicha,onIrBanco,onBack,origen='Volver',saving,focoProvId=null,onFocoUsado,soloProvId=null,filtroInicial=null,onFiltroListo}) {
   const isDesktop = useIsDesktop()
   // soloProvId: «Mis comisiones» del miembro del equipo — su propia ficha, solo lectura (sin editar, enlazar, pagar ni banco).
   const ro = !!soloProvId
@@ -256,6 +256,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const [modo,setModo] = useState(mem?.modo==='cli'?'cli':'prov')   // lista: prov (por proveedor) | cli (por cliente)
   const [lf,setLf] = useState('todos'), [expP,setExpP] = useState(null), [verSinMov,setVerSinMov] = useState(false)   // landing: filtro por tarjeta · fila desplegada · proveedores sin movimiento en el año
   const [selId,setSelId] = useState(ro?String(soloProvId):(mem?.selId||null))
+  useEffect(()=>{ if(filtroInicial&&!ro){ setLf(filtroInicial); setView('list'); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line  — entrada con filtro (p. ej. «Comisiones por pagar» del Panel de socios)
   const [yr,setYr] = useState(mem?.yr||String(new Date().getFullYear()))
   const [tf,setTf] = useState(mem?.tf||'todos')        // filtro Por trabajo: todos | por_pagar | por_devengar | pagados | revisar | sincuota | porfacturar
   const [cf,setCf] = useState('todas')                 // filtro de cuotas en la ficha: todas | por_pagar | por_devengar | pagada

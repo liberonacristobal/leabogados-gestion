@@ -213,7 +213,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label={`Por emitir en ${mesActual}`} sub={`${ciclo.pemN} cuota${ciclo.pemN!==1?'s':''}`} value={fmtShort(ciclo.pemTot)} raw={ciclo.pemTot} onClick={()=>go('facturas')}/>
         <Fila tono='ro' label='Cuotas vencidas sin facturar' sub={`${ciclo.sinEmitirN} cuota${ciclo.sinEmitirN!==1?'s':''}`} value={fmtShort(ciclo.sumM(ciclo.sinEmitirCands))} raw={ciclo.sumM(ciclo.sinEmitirCands)} onClick={()=>go('sinEmitir')}/>
         <Fila tono='az' label='Por enviar al cliente' sub={`${ciclo.porEnviar.length} factura${ciclo.porEnviar.length!==1?'s':''}`} value={fmtShort(ciclo.porEnvTot)} raw={ciclo.porEnvTot} onClick={()=>go('facturas')}/>
-        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} raw={propUF} unit='UF' onClick={()=>go('ventas')}/>
+        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} raw={propUF} unit='UF' onClick={()=>go('ventasPropuestas')}/>
       </> },
     cob: { cap:'Facturación y cobranza', capCorto:'Fact. y cobranza', titulo:'Por cobrar', hl:<>Vencido <b style={{color:C.overdueText}}>{fmtShort(cart.vencidoTot)}</b></>, tono:'az', link:'Cobranza', dest:'cobranza',
       body:<>
@@ -231,19 +231,19 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       </> },
     com: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Comisiones', hl:<>Pagadas {currentYear} <b style={{color:C.greenText}}>{fmtShort(comP.total||0)}</b></>, tono:'gr', link:'Comisiones', dest:'proveedores',
       body:<>
-        <Fila tono='gr' label={`Pagadas en ${mesPasado}`} value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('proveedores')}/>
-        <Fila tono='gr' label={`Pagadas ${currentYear}`} value={fmtShort(comP.total||0)} raw={comP.total||0} onClick={()=>go('proveedores')}/>
-        <Fila tono='gr' label={`Percibidas ${currentYear}`} sub='nos pagan a nosotros' value={fmtShort(ing.percibidas||0)} raw={ing.percibidas||0} onClick={()=>go('proveedores')}/>
-        <Fila tono='az' label='Sujetas a cobro' sub='el cliente aún no paga' value={fmtShort(sc.porDevengar)} raw={sc.porDevengar} onClick={()=>go('proveedores')}/>
+        <Fila tono='gr' label={`Pagadas en ${mesPasado}`} value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('proveedores','pagada')}/>
+        <Fila tono='gr' label={`Pagadas ${currentYear}`} value={fmtShort(comP.total||0)} raw={comP.total||0} onClick={()=>go('proveedores','pagada')}/>
+        <Fila tono='gr' label={`Percibidas ${currentYear}`} sub='nos pagan a nosotros' value={fmtShort(ing.percibidas||0)} raw={ing.percibidas||0} onClick={()=>go('proveedores','cobrar')}/>
+        <Fila tono='az' label='Sujetas a cobro' sub='el cliente aún no paga' value={fmtShort(sc.porDevengar)} raw={sc.porDevengar} onClick={()=>go('proveedores','por_devengar')}/>
       </> },
     deb: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Por pagar', hl:<>Comisiones <b style={{color:C.soonText}}>{fmtShort(sc.porPagar)}</b></>, tono:'am', link:'Comisiones', dest:'proveedores',
       body:<>
         <Sub t='A terceros'/>
-        <Fila tono='am' label='Comisiones por pagar' sub={diasCom!=null?`la más antigua, hace ${diasCom} días`:undefined} value={fmtShort(sc.porPagar)} raw={sc.porPagar} onClick={()=>go('proveedores')}/>
+        <Fila tono='am' label='Comisiones por pagar' sub={diasCom!=null?`la más antigua, hace ${diasCom} días`:undefined} value={fmtShort(sc.porPagar)} raw={sc.porPagar} onClick={()=>go('proveedores','por_pagar')}/>
         <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} raw={nota.montoPagables} onClick={()=>go('notaria')}/>
         <Sub t='Fondos de clientes'/>
         <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastos')}/>
-        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('facturas')}/>
+        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')}/>
         <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },
     caj: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Caja', hl:<>Flujo <b style={{color:flujo.fin>=0?C.greenText:C.overdueText}}>{(flujo.fin>0?'+':'')+fmtShort(flujo.fin)}</b></>, tono:'az', link:'Flujo de caja', dest:'flujoCaja',

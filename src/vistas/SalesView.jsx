@@ -47,7 +47,7 @@ export const AreaChip = ({area}) => {
 
 export const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
 
-export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta,currentUserEmail}) {
+export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta,currentUserEmail,vistaInicial=null,onVistaLista}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesCerrado = hoyCL.slice(0,8)+'01'   // mismo corte que el radar de cuotas (meses cerrados: antes del 1º del mes en curso)
@@ -60,6 +60,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const [fArea,setFArea] = useState(_vmV?.fArea||'')
   const [q,setQ] = useState(_vmV?.q||'')
   const [hubView,setHubView] = useState(_vmV?.hubView??null)               // null = solo tarjetas · 'vendido' = filtros + desglose · 'propuestas' = lista de propuestas
+  useEffect(()=>{ if(vistaInicial){ setHubView(vistaInicial); onVistaLista&&onVistaLista() } },[vistaInicial])   // eslint-disable-line  — entrada desde otra vista (p. ej. «Propuestas por cerrar» del Panel de socios)
   const [estSel,setEstSel] = useState(()=>new Set(_vmV?.est||['Activo','Terminado']))   // filtro de estado MULTI-selección (afecta Vendido + desglose)
   const [abogSel,setAbogSel] = useState(()=>new Set(_vmV?.abog||[]))      // filtro de abogado multi (vacío = todos)
   const [pagoSel,setPagoSel] = useState(()=>new Set(_vmV?.pago||[]))      // filtro de estado de pago multi (vacío = todos)
