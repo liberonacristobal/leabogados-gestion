@@ -1,4 +1,4 @@
-// Plantilla aprendida del correo de una factura: se guarda con marcas ({folios}, {total}, {periodo}, {cuota}, {folio}, {mes}) en vez de
+// Plantilla aprendida del correo de una factura: se guarda con marcas ({folios}, {total}, {periodo}, {cuota}, {folio}, {mes}, {trabajos}) en vez de
 // los valores de ESA factura, para que la próxima cuota del mismo proyecto no repita el número de la anterior.
 // Pura (sin red ni base): la usa el envío de facturas (BillingView) y se prueba en tests/correo-factura-plantilla.test.mjs.
 
@@ -36,10 +36,14 @@ export function cuotaDe(t) {
 
 /**
  * Cambia los valores de la factura por marcas.
- * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, folio?:string}} v
+ * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, folio?:string, trabajos?:string}} v
  */
 export function tokenizar(texto, v = {}) {
   let s = String(texto == null ? '' : texto)
+  // Correo de varias facturas: las líneas «– Trabajo: … (N° folio).» salen de las facturas de cada envío. Se guardan como {trabajos}, esté o no a mano el valor:
+  // un bloque de líneas con «N° ###» en un texto ya guardado (p. ej. de antes de esta marca) también se convierte, para no repetir folios de otro envío.
+  if (v.trabajos) s = s.split(v.trabajos).join('{trabajos}')
+  s = s.replace(/(^|\n)((?:–[^\n]*(?:\n|$))+)/g, (m, ini, bloque) => /(?:N°|No\.)\s*\d{3,}/.test(bloque) ? `${ini}{trabajos}${/\n$/.test(bloque) ? '\n' : ''}` : m)
   if (v.folios) s = s.split(v.folios).join('{folios}')
   if (v.total) s = s.split(v.total).join('{total}')
   if (v.periodo && String(v.periodo).length >= 4) s = s.split(v.periodo).join('{periodo}')
@@ -51,7 +55,7 @@ export function tokenizar(texto, v = {}) {
 /**
  * Devuelve las marcas a su valor. Si queda una marca sin valor (p. ej. {cuota} en una factura que no es cuota), `completo` es false
  * y quien llama usa el texto por defecto: mejor un texto genérico que una cuota equivocada.
- * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, cuota?:{n:number,tot:number}|null, folio?:string, mes?:{mes:string,anio:string}|null}} v
+ * @param {any} texto @param {{folios?:string, total?:string, periodo?:string, cuota?:{n:number,tot:number}|null, folio?:string, mes?:{mes:string,anio:string}|null, trabajos?:string}} v
  * @returns {{texto:string, completo:boolean}}
  */
 export function destokenizar(texto, v = {}) {
@@ -60,9 +64,10 @@ export function destokenizar(texto, v = {}) {
   if (v.total != null) s = s.split('{total}').join(v.total)
   if (v.periodo != null && v.periodo !== '') s = s.split('{periodo}').join(v.periodo)
   if (v.folio != null && v.folio !== '') s = s.split('{folio}').join(v.folio)
+  if (v.trabajos != null && v.trabajos !== '') s = s.split('{trabajos}').join(v.trabajos)
   if (v.cuota) s = s.split('{cuota}').join(`${v.cuota.n} de ${v.cuota.tot}`)
   if (v.mes) s = s.split('{mes}').join(`${v.mes.mes} de ${v.mes.anio}`).split('{Mes}').join(`${v.mes.mes.charAt(0).toUpperCase()}${v.mes.mes.slice(1)} de ${v.mes.anio}`)
-  return { texto: s, completo: !/\{(?:folios|total|periodo|cuota|folio|mes|Mes)\}/.test(s) }
+  return { texto: s, completo: !/\{(?:folios|total|periodo|cuota|folio|mes|Mes|trabajos)\}/.test(s) }
 }
 
 /**

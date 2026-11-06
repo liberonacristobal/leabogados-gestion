@@ -9,7 +9,7 @@ import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
-import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
+import { ajustarTrato, cuerpoVariasFacturas, lineasTrabajos, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -4544,9 +4544,12 @@ export function facturaGlosa(factura, sale){
 // Cuerpo para VARIAS facturas del mismo cliente en UN correo: una línea por TRABAJO (leído de la glosa de cada factura, con el proyecto de la venta
 // como respaldo cuando el ítem es genérico), con su cuota o período y su N°. Sin total. Orden: de la más antigua a la más nueva.
 // saleOf(f) resuelve la venta de cada factura. La redacción vive en _shared/correoFacturaTexto.js (con pruebas).
-export function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false, singular=false, trato=null){
+export function itemsCorreoMulti(list, saleOf){
   const arr = [...list].sort((a,b)=> String(a.issued_at||a.due||'').localeCompare(String(b.issued_at||b.due||'')) || String(folioN(a.invoice_no||'')).localeCompare(String(folioN(b.invoice_no||'')),undefined,{numeric:true}))
-  const items = arr.map(f=>{ const sale=saleOf?saleOf(f):null; const p=facturaGlosaPartes(f, sale); return { folio: folioN(f.invoice_no||'')||f.invoice_no||'', relacion:p.relacion, detalle:p.detalle, periodo:p.periodo } })   // el trabajo se agrupa por lo que dice la GLOSA (relacion), no por la venta vinculada: una factura mal vinculada no se funde con otro trabajo
+  return arr.map(f=>{ const sale=saleOf?saleOf(f):null; const p=facturaGlosaPartes(f, sale); return { folio: folioN(f.invoice_no||'')||f.invoice_no||'', relacion:p.relacion, detalle:p.detalle, periodo:p.periodo } })   // el trabajo se agrupa por lo que dice la GLOSA (relacion), no por la venta vinculada: una factura mal vinculada no se funde con otro trabajo
+}
+export function facturaCorreoBodyMulti(list, saleOf, lang, amountOf, sinCierre=false, singular=false, trato=null){
+  const items = itemsCorreoMulti(list, saleOf)
   const cuerpo = lang==='es' ? ajustarTrato(cuerpoVariasFacturas({ items, lang }), singular, trato) : cuerpoVariasFacturas({ items, lang })
   return sinCierre ? cuerpo : `${cuerpo}\n\n${CORREO_DESPEDIDA(lang, singular&&trato!=='usted')}`
 }
@@ -4629,7 +4632,8 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const _cuotaF=_cuotaApp||_cuotaDte
   const _dteDifiere=!!(_cuotaApp&&_dteCuotas.length&&!_dteCuotas.some(x=>x.n===_cuotaApp.n&&x.tot===_cuotaApp.tot))
   const _dynMes=()=> multi ? null : partesMes((facturaGlosaPartes(factura, saleR)||{}).periodo)   // mes y año de ESTA factura mensual (de la glosa o el concepto); null si no es mensual
-  const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||''),mes:_dynMes()})
+  const _dynTrabajos=lg=> multi ? lineasTrabajos({ items:itemsCorreoMulti(listF, saleOf), lang:lg }).join('\n') : ''   // las líneas «– Trabajo: … (N° folio).» salen de las facturas de ESTE envío, nunca del texto aprendido
+  const _vals=lg=>({folios:_dynFolios(lg),total:_dynTotal(),periodo:_dynPeriodo(),folio:String(folio||''),mes:_dynMes(),trabajos:_dynTrabajos(lg)})
   const _tok=(t,lg)=>tokenizar(limpiarEspacios(quitarDespedida(t)),_vals(lg))   // la despedida la agrega cuerpoFull: no se guarda dentro del texto
   const _untok=(t,lg)=>{ const r=destokenizar(tokenizar(limpiarEspacios(quitarDespedida(t)),{}),{..._vals(lg),cuota:_cuotaF}); return r.completo?r.texto:null }   // tokenizar sin valores: convierte también las cuotas escritas a mano en textos ya guardados   // null = no se puede completar (p. ej. {cuota} en una factura sin cuota) → texto por defecto
   const applyDefaultBody=lg=>{ const tpl=learnedTpl.current[lg]; const t=(tpl&&_untok(tpl,lg))||genBody(lg); setBody(lg==='es'?ajustarTrato(t,singular,trato):t) }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, periodoDe, saludoPara } from '../supabase/functions/_shared/correoFacturaTexto.js'
+import { ajustarTrato, cuerpoVariasFacturas, esSaludoSingular, periodoDe, saludoPara, lineasTrabajos } from '../supabase/functions/_shared/correoFacturaTexto.js'
 
 // Casos REALES del 4-11-2026 (anonimizados solo en lo que no importa): el correo de varias facturas hablaba de un solo proyecto y decía el total.
 // Tarragona 511 (Simplificación de Malla Corporativa, Cuota 2/18) y 512 (Asesoría Permanente, octubre 2026) son DOS trabajos distintos.
@@ -104,4 +104,11 @@ test('nota de facturas ya pagadas: una, varias, ninguna e inglés (caso real 439
   assert.equal(notaPagadas(['439', '440']), 'Las facturas N° 439 y 440 ya se encuentran pagadas.')
   assert.equal(notaPagadas([]), '')
   assert.equal(notaPagadas(['439'], 'en'), 'Invoice No. 439 has already been paid.')
+})
+
+test('lineasTrabajos son las líneas del cuerpo de varias facturas, una por trabajo con su folio', () => {
+  const items = [{ folio: '511', relacion: 'Proyecto A', detalle: 'Pago 1 de 18', key: 'a' }, { folio: '512', relacion: 'Servicio B', detalle: 'Octubre 2026', key: 'b' }]
+  const l = lineasTrabajos({ items, lang: 'es' })
+  assert.deepEqual(l, ['– Proyecto A: Pago 1 de 18 (N° 511).', '– Servicio B: Octubre 2026 (N° 512).'])
+  assert.ok(cuerpoVariasFacturas({ items, lang: 'es' }).endsWith(l.join('\n')))
 })
