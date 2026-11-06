@@ -28,3 +28,12 @@ test('tres toques: ascendente, descendente y de vuelta al orden original', () =>
   assert.deepEqual(siguienteOrden(b, 'Cliente'), { k: 'Cliente', d: 1 })
   assert.equal(compararValores(undefined, 3), 1)
 })
+
+import { rangoIds } from '../src/lib/ordenar.js'
+test('rango con Shift: en el orden visible, en ambos sentidos, y sin extremo conocido marca solo el actual', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e']
+  assert.deepEqual(rangoIds(ids, 'b', 'd'), ['b', 'c', 'd'])
+  assert.deepEqual(rangoIds(ids, 'd', 'b'), ['b', 'c', 'd'])
+  assert.deepEqual(rangoIds(ids, 'c', 'c'), ['c'])
+  assert.deepEqual(rangoIds(ids, 'z', 'c'), ['c'])
+})

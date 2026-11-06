@@ -17,3 +17,10 @@ export const ordenarFilas = (filas, orden, accesores) => {
     return compararValores(p[2], q[2]) * orden.d || p[1] - q[1]
   }).map(p => p[0])
 }
+
+// Selección por rango (Shift): los ids entre el último marcado y el actual, en el orden en que se ven en la lista; incluye ambos extremos.
+export const rangoIds = (ids, desde, hasta) => {
+  const a = ids.indexOf(desde), b = ids.indexOf(hasta)
+  if (a < 0 || b < 0) return [hasta]
+  return ids.slice(Math.min(a, b), Math.max(a, b) + 1)
+}
