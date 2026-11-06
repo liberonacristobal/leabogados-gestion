@@ -16,7 +16,7 @@ import { estadoCompromiso } from '../../supabase/functions/_shared/cobranzaExpos
 import { estadoConexion } from '../../supabase/functions/_shared/gmailLectura.js'
 import { horaUltima } from './MiGmailView.jsx'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
-import { ThOrden } from '../lib/orden.jsx'
+import { ThOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { ordenarFilas } from '../lib/ordenar.js'
 import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
@@ -74,7 +74,8 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   const [busy,setBusy] = useState(null)
   const [desc,setDesc] = useState(false)
   const [emitSel,setEmitSel] = useState(()=>new Set())   // cuotas seleccionadas (ids) para facturar/descargar en lote
-  const toggleSel = id => setEmitSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const ultEmit = useRef(null)
+  const toggleSel = (id,ev) => alternarSel(ultEmit,'emitir',id,ev,setEmitSel)
   const ufState = useUF()
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const EMIT = ['Pendiente','Vencido','Propuesta']
@@ -131,7 +132,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   const filaEmitir = (b, kind='mes') => { const c=clients.find(x=>x.id===b.client_id); const rs=rsDe(b); const tw=onReplaceProgramada?emitidaTwin(b):null; const exp=emitExp.has(b.id); const col = kind==='atrasada'?C.overdueText:(kind==='espera'?C.tealText:C.text); const tag = kind==='atrasada'?{t:'vencida',bg:C.overdueBg,fg:C.overdueText}:(kind==='espera'?{t:'en espera · anticipo',bg:C.tealBg,fg:C.tealText}:null); return (
     <div key={b.id} style={{borderBottom:`1px solid ${C.border}`,background:C.surface}}>
       <div onClick={tw?()=>setEmitExp(s=>{ const n=new Set(s); n.has(b.id)?n.delete(b.id):n.add(b.id); return n }):(onEdit?()=>onEdit(b):undefined)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:(tw||onEdit)?'pointer':'default'}}>
-        <input type='checkbox' checked={emitSel.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{width:16,height:16,accentColor:C.accent,cursor:'pointer',flexShrink:0}} aria-label='Seleccionar cuota'/>
+        <input type='checkbox' {...selAttrs('emitir',b.id)} checked={emitSel.has(b.id)} onClick={e=>e.stopPropagation()} onChange={ev=>toggleSel(b.id,ev)} style={{width:16,height:16,accentColor:C.accent,cursor:'pointer',flexShrink:0}} aria-label='Seleccionar cuota'/>
         {bigDate(b.due||b.issued_at)}
         <div style={{flex:1,minWidth:0}}>
           <div onClick={e=>abrirCli(e,b)} style={{fontSize:13,fontWeight:600,color:onOpenClientFicha&&b.client_id?C.accent:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,cursor:onOpenClientFicha&&b.client_id?'pointer':'default'}}>{c?.name||'Sin cliente'}{rs&&rs!==c?.name?<span style={{fontWeight:400,color:C.muted}}> · {rsDisplay(rs)}</span>:''}{tag&&<span style={{fontSize:10,fontWeight:700,color:tag.fg,background:tag.bg,borderRadius:20,padding:'2px 8px',marginLeft:6,whiteSpace:'nowrap'}}>{tag.t}</span>}</div>
@@ -416,7 +417,8 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   })()
   const adelSelItems = adelFact.filter(a=>adelSel.has(a.id))
   const adelSelTotal = adelSelItems.reduce((s,a)=>s+(a.monto||0),0)
-  const toggleAdel = id => setAdelSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
+  const ultAdel = useRef(null)
+  const toggleAdel = (id,ev) => alternarSel(ultAdel,'adel',id,ev,setAdelSel)
   const toggleAdelCliente = g => setAdelSel(p=>{ const n=new Set(p); const all=g.items.every(a=>n.has(a.id)); g.items.forEach(a=>all?n.delete(a.id):n.add(a.id)); return n })
   const toggleAdelOpen = k => setAdelOpen(p=>{ const n=new Set(p); n.has(k)?n.delete(k):n.add(k); return n })
   const confirmarAdel = async () => { if(!adelSelItems.length) return; await onFacturarAdelantos?.([...adelSel]); setAdelSel(new Set()); setChecklistTab(null) }
@@ -494,7 +496,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
                 </div>
                 {open&&<div style={{paddingLeft:31,paddingBottom:6}}>
                   {g.items.map(a=>{ const on=adelSel.has(a.id); return (
-                    <div key={a.id} onClick={()=>toggleAdel(a.id)} style={{display:'flex',alignItems:'center',gap:11,padding:'7px 0',cursor:'pointer'}}>
+                    <div key={a.id} {...selAttrs('adel',a.id)} onClick={ev=>toggleAdel(a.id,ev)} style={{display:'flex',alignItems:'center',gap:11,padding:'7px 0',cursor:'pointer'}}>
                       {chkBox(on)}
                       <span style={{flex:1,minWidth:0,fontSize:13,color:on?C.text:C.muted}}>Anticipo{a.created_at?` ${fmtFechaDMY(a.created_at)}`:''} · disponible</span>
                       <span style={{fontSize:13,fontWeight:400,color:on?C.text:C.muted,whiteSpace:'nowrap'}}>{fmt(a.monto||0)}</span>
@@ -2182,7 +2184,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   const trabajosSF = useMemo(()=>trabajosSinFacturar({ sales, billing, uf: ufFechaCache()||{}, ufHoy: ufTsf, hoy: new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}), noEmitir: noEmitirSet, decididos: tsfDecididos }),[sales,billing,ufTsf,noEmitirSet,tsfDecididos])
   const decidirTrabajo = async(sale, estado, motivo)=>{ setTsfDecididos(p=>new Set([...p,String(sale.id)])); if(typeof DEMO==='undefined'||!DEMO){ try{ await setLearningKV('trabajo_sin_facturar',String(sale.id),JSON.stringify({estado,motivo,fecha:new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),quien:user?.email||null})); logActividad('facturacion.trabajo_sin_facturar',{tabla:'sales',id:sale.id,detalle:{title:`${sale.title||'Trabajo'} · ${motivo}`}}) }catch(e){registrarError({origen:'accion',vista:'trabajo_sin_facturar',err:e})} } }
   const [selected,setSelected] = useState(()=>new Set())
-  const toggleSel = id => setSelected(prev=>{const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n})
+  const ultProg = useRef(null)
+  const toggleSel = (id,ev) => alternarSel(ultProg,'prog',id,ev,setSelected)
   const clearSel = () => setSelected(new Set())
   const MONTHS = MES_C
   // Rediseño tab Emitidas: dos acordeones maestros (cerrados por defecto)
@@ -2666,7 +2669,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
               return (
               <div key={b.id} style={{background:C.card,borderRadius:10,marginBottom:6,border:`1px solid ${C.border}`,overflow:'hidden'}}>
                 <div onClick={()=>setExpandBill(exp?null:b.id)} style={{display:'flex',gap:9,alignItems:'center',padding:'10px 12px',cursor:'pointer'}}>
-                  {prog&&<input type='checkbox' checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={()=>toggleSel(b.id)} style={{flexShrink:0,cursor:'pointer'}}/>}
+                  {prog&&<input type='checkbox' {...selAttrs('prog',b.id)} checked={selected.has(b.id)} onClick={e=>e.stopPropagation()} onChange={ev=>toggleSel(b.id,ev)} style={{flexShrink:0,cursor:'pointer'}}/>}
                   {bigDate(kpiDate(b))}
                   <SIcon n={estadoCobro(b).icon} s={15} c={semCol}/>
                   <div style={{flex:1,minWidth:0}}>
