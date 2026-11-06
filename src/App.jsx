@@ -772,8 +772,12 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
   useEffect(()=>{ const f=()=>setAnchoW(window.innerWidth); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f) },[])
   const ancho=isDesk&&anchoW>=1240   // dos columnas solo si cabe la lista y la cascada lado a lado
   useEffect(()=>{ setTab(seg==='porcobrar'?'porcobrar':'pagadas') },[seg])
-  const ym = new Date().toISOString().slice(0,7)
-  const mesLbl = (()=>{ const m=new Date().toLocaleDateString('es-CL',{month:'long'}); return m.charAt(0).toUpperCase()+m.slice(1) })()
+  const ymHoy = new Date().toISOString().slice(0,7)
+  const [ym,setYm] = useState(ymHoy)   // mes que se mira; ‹ › recorren desde el primer mes con facturas hasta el actual
+  const esActual = ym===ymHoy
+  const ymMin = useMemo(()=>{ let mn=ymHoy; (billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.invoice_no&&b.issued_at){ const k=String(b.issued_at).slice(0,7); if(k<mn) mn=k } }); return mn },[billing,ymHoy])
+  const moverMes = d => { const dt=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1+d,1); const n=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; if(n>=ymMin&&n<=ymHoy) setYm(n) }
+  const mesLbl = (()=>{ const m=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1,1).toLocaleDateString('es-CL',{month:'long'}); return m.charAt(0).toUpperCase()+m.slice(1)+(ym.slice(0,4)!==ymHoy.slice(0,4)?' '+ym.slice(0,4):'') })()
   const emFac = (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.status!=='Programada' && b.billing_type!=='reembolso' && String(b.issued_at||'').startsWith(ym))
   const pagadas = emFac.filter(b=>cobradoBill(b)>0).sort((a,b)=>String(b.paid_at||b.issued_at||'').localeCompare(String(a.paid_at||a.issued_at||'')))
   const porCobrar = emFac.filter(b=>saldoBill(b)>0).sort((a,b)=>String(venceBill(a)||'').localeCompare(String(venceBill(b)||'')))
@@ -833,7 +837,11 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
       <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}><span style={{fontSize:17}}><Gl n='chevL'/></span> Volver</span>
-          <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent}}>Facturas de {mesLbl}</span><span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas este mes</span></div>
+          <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>Facturas de {mesLbl}</span>{(isDesk||esActual)&&<span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas {esActual?'este mes':'en el mes'}</span>}</div>
+          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+            {!esActual&&<span onClick={()=>setYm(ymHoy)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',marginRight:4,whiteSpace:'nowrap'}}>{isDesk?'Mes actual':'Actual'}</span>}
+            {[[-1,'chevL',ym<=ymMin],[1,'chevron',esActual]].map(([d,ic,off])=><span key={d} onClick={off?undefined:()=>moverMes(d)} title={d<0?'Mes anterior':'Mes siguiente'} style={{width:32,height:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,color:C.accent,opacity:off?.35:1,cursor:off?'default':'pointer'}}><Gl n={ic}/></span>)}
+          </div>
         </div>
       </div>
       <div style={{maxWidth:ancho?1180:760,margin:'0 auto',padding:'14px 16px 24px'}}>
@@ -855,7 +863,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
           {chipsSoc.map(([k,l,n])=>{ const on=filtroSoc===k; return <button key={String(k)} onClick={()=>setFiltroSoc(k)} style={{fontSize:12,fontWeight:700,borderRadius:999,padding:'6px 12px',cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted}}>{l} {n}</button> })}
         </div>
         <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.tileBg}}>
-          {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} este mes.</div>}
+          {list.length===0&&<div style={{textAlign:'center',color:C.muted,fontSize:13,padding:'34px 0'}}>Sin facturas {tab==='pagadas'?'pagadas':'por cobrar'} {esActual?'este mes':'en el mes'}.</div>}
           {list.map((b,i)=>{ const parcial=tab==='pagadas'&&saldoBill(b)>0; const est=estadoCobro(b)
             const monto=tab==='pagadas'?cobradoBill(b):saldoBill(b); const rs=rsDe(b); const cl=clients.find(c=>String(c.id)===String(b.client_id))
             const icon = tab==='pagadas' ? (parcial?{n:'wallet',c:C.soonText}:{n:'check',c:C.greenText}) : {n:est.icon,c:est.color}
