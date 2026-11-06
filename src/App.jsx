@@ -23,7 +23,7 @@ import { _MESMAP_G, concPeriodoOf, ADMIN_NAMES, CATS_OFICINA_CAT, CATS_OFICINA_N
 import { montoFactura, dteMontoTotal, _pdfjsP, cargarPdfjs, tokenSesion, driveCall, claudeCall, promptConCache, fmtUF, fmtMill, fmtShort, UF_FALLBACK, RENDCAT, fmtFechaHora, fmtDate, nDias, TH_BAND, NOMBRE_CLI, MES_L, MES_C, mesTitulo, bigDate, _respaldoCache, setRespaldoCache, saldoBill, cobradoBill, porCobrarBills, ESTADO_COBRO, venceBill, esVencidaB, estadoCobro, KpiIco, Sparkle, RESPALDO_CUTOFF, facturaRespaldo, estadoFacturaLabel, _ACT_VARIANT, ActBtn, Buscador, daysLeft, FERIADOS_CL, _esDiaHabil, ultimoDiaHabilMesEmision, dueFromIssued, cuotaNMof, ufDeTabla, _UF_FECHA_KEY, ufFechaCache, ufDelDia, finMesOHoy, redondearPartes, fmtMillLR, nrmCliente, learnPut, okDB, setLearningKV, logEvent, rsLabel, rsDisplay, Copyable, chipBtn, currentYear, INICIALES_RESP, taskAssignees, _GV_EXCL, gastosVariosOfiItems, contadoraBancoItems, tipoFactura, esFacIngreso, _actorBitacora, setActorBitacora, resumenBitacora, logActividad, EQUIPO_RESPALDO, _equipo, cargarEquipo, equipoPorNombre, _nombresMiembrosCache, _nombresMiembrosP, nombresMiembros, BitacoraLista, saldoCliente, FIRMA_RESPALDO, firmaDefault, Inp, Lbl, Fld, Modal, BUILD_VERSION, _errVistos, _ERR_RUIDO, registrarError, esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, comisionesVenta, UF_CACHE_KEY, ufTodayISO, readUFCache, _uiStore, usePersistedState, writeUFCache, fetchUF, useUF, AsignarClienteInline, SOCIOS_CFG, EQUIPO_CFG, _norm, setSociosCfg, setEquipoCfg, esPPMcosto, remuneracionesBancoMes, resultadoMes, _fuentesResP, _fuentesRes, useFuentesResultado, _ymPrev, margenPct, resolverClienteSII, fmtSaldoG, _viewMem, marcarVolviendo, viewMemLeer, viewMemGuardar, PageHeader, BackBtn, FlujoPagina, MESES, driveGet, DriveAuthError, driveToken, _bwipP, _loadBwip, NOMBRE_DTE, NOMBRE_DTE_CORTO, facturaDtePdfBase64, _resolDoc, splitSetDTE, loadXLSXStyle, MAIL_OFICINA_CONFIRM, TXT_REINGRESO, txtEnviado, txtNoEnviado, avisoNoEnviado, incrustarLogosCorreo, enviarComoUsuario, sendMailServer, sendGmailWithPdf } from './lib/compartido.jsx'
 import { kpisPorSocio } from './lib/cifras.js'
 import { suscribirCambios } from './lib/tiempoReal.js'
-import { lazyVista, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
+import { lazyVista, EsqueletoInicio, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
@@ -5481,6 +5481,8 @@ function AjusteModal({client, user, onSave, onClose, saving, asPage=false, expen
 
 // nombre del módulo de proyectos (rediseño PMO "Mis proyectos")
 // Paleta de comandos (⌘K / lupa): buscar o ir a cualquier vista o entidad en un gesto. Aprende del uso (recientes).
+// Atajos de teclado (escritorio): «g» y luego una letra lleva a la vista; «?» los muestra en la paleta.
+const ATAJOS_IR = { i:['dashboard','Inicio'], v:['sales','Ventas'], f:['billing','Facturación'], g:['expenses','Gastos'], c:['clients','Clientes'], t:['tasks','Tareas'], b:['conciliacion','Banco'], p:['panelSocios','Panel de socios'], o:['presupuestoOficina','Oficina'] }
 const VIEWS_PALETTE = {
   admin:[['dashboard','Inicio'],['sales','Ventas'],['billing','Facturación'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas'],['tasks','Tareas'],['cartera','Mis proyectos'],['horas','Horas'],['cobranza','Cobranza'],['repricing','Repricing'],['conciliacion','Banco'],['inteligencia','Inteligencia'],['panelSocios','Panel de socios'],['presupuestoOficina','Oficina'],['proveedores','Proveedores'],['estadoResultados','Estado de resultados'],['flujoCaja','Flujo de caja'],['procesos','Procesos automáticos'],['calendarioTrib','Calendario tributario'],['bandeja','Bandeja del agente'],['miCarga','Mi carga']],
   limited:[['tasks','Tareas'],['cartera','Mi cartera'],['horas','Horas'],['expenses','Gastos'],['cajachica','Caja chica'],['clients','Clientes'],['contactos','Contactos'],['causas','Causas']],
@@ -5669,13 +5671,13 @@ ${brief()}`
     </Modal>
   )
 }
-function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect,extraViews=[]}){
+function CommandPalette({open,onClose,inicial='',role,clients=[],billing=[],sales=[],tasks=[],expenses=[],anticipos=[],recents=[],onSelect,extraViews=[]}){
   const [q,setQ]=useState('')
   const [sel,setSel]=useState(-1)   // -1 = sin resaltar (look identico hasta usar flecha); Enter elige el primero
   const inputRef=useRef(null)
   const flatRef=useRef([])
   const selRef=useRef(-1); selRef.current=sel
-  useEffect(()=>{ if(open){ setQ(''); setSel(-1); const t=setTimeout(()=>{ try{inputRef.current&&inputRef.current.focus()}catch(_){}}, 60); return ()=>clearTimeout(t) } },[open])
+  useEffect(()=>{ if(open){ setQ(inicial); setSel(-1); const t=setTimeout(()=>{ try{inputRef.current&&inputRef.current.focus()}catch(_){}}, 60); return ()=>clearTimeout(t) } },[open])
   useEffect(()=>{ setSel(-1) },[q])
   useEffect(()=>{ if(!open) return; const h=e=>{
     const f=flatRef.current
@@ -5737,7 +5739,8 @@ function CommandPalette({open,onClose,role,clients=[],billing=[],sales=[],tasks=
           {tar.length>0&&<>{Hdr('TAREAS')}{tar.map((t,i)=><Row key={t.id} idx={oTar+i} label={t.title||'Tarea'} sub={cname(t.client_id)} onClick={()=>onSelect({type:'tarea',id:t.id,label:t.title||'Tarea'})}/>)}</>}
           {gas.length>0&&<>{Hdr('GASTOS')}{gas.map((e,i)=><Row key={e.id} idx={oGas+i} label={e.concept||'Gasto'} sub={cname(e.client_id)} right={fmt(e.amount)} onClick={()=>onSelect({type:'gasto',id:e.id,label:e.concept||'Gasto'})}/>)}</>}
           {ant.length>0&&<>{Hdr('ANTICIPOS')}{ant.map((a,i)=><Row key={a.id} idx={oAnt+i} label={a.proyecto||'Anticipo'} sub={cname(a.client_id)} right={fmt(a.monto)} onClick={()=>onSelect({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})}/>)}</>}
-          {s&&!hay&&<div style={{fontSize:12,color:C.muted,padding:'14px 10px',textAlign:'center'}}>Sin resultados para "{q}"</div>}
+          {s==='?'&&<>{Hdr('ATAJOS DE TECLADO')}{[['⌘K  ·  /','Buscar o ir a'],...Object.entries(ATAJOS_IR).map(([k,[,l]])=>['g  luego  '+k,l]),['?','Ver estos atajos'],['esc','Cerrar']].map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'7px 10px'}}><span style={{fontSize:13,color:C.text}}>{l}</span><span style={{fontSize:11,fontWeight:700,color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',whiteSpace:'nowrap'}}>{k}</span></div>)}</>}
+          {s&&s!=='?'&&!hay&&<div style={{fontSize:12,color:C.muted,padding:'14px 10px',textAlign:'center'}}>Sin resultados para "{q}"</div>}
         </div>
       </div>
     </div>
@@ -6153,11 +6156,15 @@ export default function App() {
   useEffect(()=>{ const h=e=>{
     if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); setPaletteOpen(o=>!o); return }
     // "/" abre la paleta desde cualquier lado (escritorio; solo si no estas escribiendo en un campo)
-    if(e.key==='/'&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&isDesktop){
-      const t=(e.target?.tagName||'').toLowerCase(); if(t==='input'||t==='textarea'||t==='select'||e.target?.isContentEditable) return
-      e.preventDefault(); setPaletteOpen(true)
-    }
-  }; document.addEventListener('keydown',h); return ()=>document.removeEventListener('keydown',h) },[isDesktop])
+    if(!isDesktop||e.metaKey||e.ctrlKey||e.altKey) return
+    const t=(e.target?.tagName||'').toLowerCase(); if(t==='input'||t==='textarea'||t==='select'||e.target?.isContentEditable) return
+    if(e.key==='/'){ e.preventDefault(); setPaletteInicial(''); setPaletteOpen(true); return }
+    if(e.key==='?'){ e.preventDefault(); setPaletteInicial('?'); setPaletteOpen(true); return }   // los atajos se listan dentro de la paleta
+    if(atajoG.current){ const dest=ATAJOS_IR[String(e.key).toLowerCase()]; clearTimeout(atajoG.current); atajoG.current=null
+      if(dest&&(VIEWS_PALETTE[userRole]||VIEWS_PALETTE.admin).some(([id])=>id===dest[0])||(dest&&userRole==='admin')){ e.preventDefault(); if(dest[0]==='dashboard') setTab('dashboard'); else navTo({tab:dest[0]}) }
+      return }
+    if(String(e.key).toLowerCase()==='g'&&!e.shiftKey){ atajoG.current=setTimeout(()=>{ atajoG.current=null },1200) }
+  }; document.addEventListener('keydown',h); return ()=>{ document.removeEventListener('keydown',h); clearTimeout(atajoG.current); atajoG.current=null } },[isDesktop,navTo,userRole])
   const [provFoco,setProvFoco]=useState(null)        // abrir la ficha de un proveedor puntual (navTo({tab:'proveedores',provId}))
   const [concFocus,setConcFocus]=useState(null)       // saltar a un movimiento puntual en Conciliación desde el Estado de cuenta del cliente
   const [ccRevFocus,setCcRevFocus]=useState(false)   // abrir Banco › Cargos con la Revisión de caja chica abierta (desde Gastos)
@@ -6320,6 +6327,8 @@ export default function App() {
     setLearningKV('aviso_fondos_pausa',String(c.id),hasta).then(()=>{ logActividad('fondos.aviso_pausado',{tabla:'clients',id:c.id,detalle:{cliente:c.name,hasta}}); appAlert(`Listo: los avisos de fondos de ${c.name} quedan pausados hasta el ${fmtFechaDMY(hasta)}.`) })
   }catch(e){registrarError({origen:'accion',vista:'aviso_fondos_pausa',err:e})} },[clients])
   const [paletteOpen,setPaletteOpen]=useState(false)
+  const [paletteInicial,setPaletteInicial]=useState('')   // texto con que se abre la paleta: «?» muestra los atajos
+  const atajoG=useRef(null)   // espera de la letra tras «g»
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
   const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — deshacer en línea arriba de la vista (no flotante)
@@ -8703,7 +8712,7 @@ export default function App() {
           </div>
         </div>
         {loading&&!booted?(
-          <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}><Spin/></div>
+          <EsqueletoInicio/>
         ):(
           <div id='main-scroll' style={{paddingBottom:80,overflowY:'auto'}}>
             {/* Deshacer EN LÍNEA (no flota): arriba del contenido de la vista donde quedaste, sin tapar nada. Lo usan eliminar,
@@ -8903,7 +8912,7 @@ export default function App() {
           </FlujoPagina>
         })()}
         {/* 'coberturaSII' ya NO es modal: página 'flujo'. */}
-        <CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
+        <CommandPalette open={paletteOpen} inicial={paletteInicial} onClose={()=>setPaletteOpen(false)} role={userRole} clients={clients} billing={billing} sales={sales} tasks={tasks} expenses={expenses} anticipos={anticipos} recents={navRecents} onSelect={handlePaletteSelect} extraViews={vistasExtraLimitado}/>
         {copilotoOpen&&tab!=='dashboard'&&userRole==='admin'&&<div style={{display:'none'}} aria-hidden='true'>{dashboardEl}</div>}
         {copilotoOpen&&<CopilotoModal role={userRole} anticipos={anticipos} clients={clients} clientEntities={clientEntities} rendiciones={rendiciones} terceros={terceros} onIrTab={t=>{ setCopilotoOpen(false); navTo({tab:t}) }} sales={sales} billing={billing} expenses={expenses} tasks={tasks} proyectosCartera={proyectosCartera} costosOfiRows={costosOfiRows} user={user} onSaveTask={handleSaveTask} onOpenClientFicha={handleOpenClientFicha} onNav={(vista)=>{ setCopilotoOpen(false); const map={ventas:'sales',facturacion:'billing',gastos:'expenses',clientes:'clients',tareas:'tasks',inteligencia:'inteligencia',cartera:'cartera',cajachica:'cajachica',inicio:'dashboard'}; if(vista==='conciliacion'){ if(userRole==='admin') setModal({type:'conciliaHub'}); else navTo({tab:'cajachica'}) } else if(map[vista]) navTo({tab:map[vista]}) }} onClose={()=>setCopilotoOpen(false)}/>}
         {anticipoPanel&&<AnticipoPanel anticipo={anticipoPanel} clients={clients} clientEntities={clientEntities} sales={sales} billing={billing} onSave={handleUpdateAnticipo} onLiberar={handleLiberarAnticipo} onCubrir={(a)=>{setAnticipoPanel(null);setCubrirAntApp(a)}} onAsignarFactura={(a,facId)=>handleConsumeAnticipos([a.id],facId)} onAsignarFacturas={(a,facIds)=>handleAsignarAnticipoFacturas(a.id,facIds)} onConsolidar={(a)=>{setAnticipoPanel(null);setConsolidarAnt(a)}} onReclasificar={(a)=>{setAnticipoPanel(null);handleReclasificarFondo(a)}} onClose={()=>setAnticipoPanel(null)}/>}

@@ -14,6 +14,7 @@ import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
 import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
+import { useOrden } from '../lib/orden.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -1863,11 +1864,15 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
     const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&!x.sent_at&&!x.anulada_at&&x.correo?.modo==='sep1'&&(x.correo.grupo||[]).includes(r.id))).filter(Boolean)
     onEnviarRend&&onEnviarRend(grupo.length>1?{...grupo[0],_hermanas:grupo.slice(1)}:r) }
   const envRows = verLista ? (verEnv?enviadas:borrItems).filter(x=>(abgDef==='Todos'||x.abg===abgDef)&&(!q.trim()||nrm(x.c.name).includes(nrm(q.trim())))) : []
+  // Columnas ordenables de la tabla de escritorio (un toque ordena, otro invierte, otro vuelve al orden original).
+  const { filas:envOrd, th:thEnv, orden:ordenEnv } = useOrden(envRows, {
+    Cliente:x=>x.c.name, Abogado:x=>x.abg, Trabajo:x=>x.r.project, 'N°':x=>x.r.correlativo?`N° ${x.r.correlativo}`:'',
+    Armada:x=>x.r.created_at, Enviada:x=>x.r.sent_at, Gastos:x=>x.r.n_gastos, Total:x=>x.r.total })
   const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
   const envTable = verEnv && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr>{(verBorr?['Cliente','Abogado','Trabajo','Armada','Gastos','Total','Correo','']:['Cliente','Abogado','N°','Enviada','Gastos','Total','Seguimiento','']).map((h,i)=><th key={i} style={{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i===4||i===5?'right':'left',padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
-        <tbody>{envRows.map((x,i)=>{ const pc=personChip(x.abg); const sg=verBorr?(x.r.correo?.asunto?{t:'guardado',c:C.greenText}:{t:'sin redactar',c:C.textSoft}):segTxt(x); return (
+        <thead><tr>{(verBorr?['Cliente','Abogado','Trabajo','Armada','Gastos','Total','Correo','']:['Cliente','Abogado','N°','Enviada','Gastos','Total','Seguimiento','']).map((h,i)=>thEnv(h,{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i===4||i===5?'right':'left',padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}))}</tr></thead>
+        <tbody>{envOrd.map((x,i)=>{ const pc=personChip(x.abg); const sg=verBorr?(x.r.correo?.asunto?{t:'guardado',c:C.greenText}:{t:'sin redactar',c:C.textSoft}):segTxt(x); return (
           <tr key={x.r.id} onClick={()=>setDetR(x.r.id)} style={{borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
             <td style={{padding:'10px 12px'}}><span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(x.c.id)}} style={{...NOMBRE_CLI,cursor:'pointer'}}>{x.c.name}</span></td>
             <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><span style={{fontSize:11,fontWeight:600,borderRadius:20,padding:'2px 9px',background:pc.bg,color:pc.color}}>{x.abg}</span></td>
@@ -1894,7 +1899,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       {envRows.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>{q||abgDef!=='Todos'?'Nada calza con el filtro.':(verBorr?'Sin borradores.':'Sin rendiciones enviadas.')}</div>}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'9px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,color:C.textSoft}}>
         <span><b style={{color:C.text}}>{envRows.length}</b> rendici{envRows.length!==1?'ones':'ón'} · total <b style={{color:C.text}}>{fmt(envRows.reduce((a,x)=>a+(x.r.total||0),0))}</b></span>
-        <span>más reciente primero</span>
+        <span>{ordenEnv?`ordenado por ${ordenEnv.k.toLowerCase()}`:'más reciente primero'}</span>
       </div>
     </div>)
   // ── Borradores: revisar uno a uno (anterior/siguiente), guardarlos y enviar juntos los guardados (cada correo pasa por su página, en cola).
