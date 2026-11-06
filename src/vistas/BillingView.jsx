@@ -251,7 +251,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
 
   // "Ya emitida" (programada cuyo gemelo emitido ya existe) — FUENTE ÚNICA compartida (matchProgEmitidas), misma que el
   // conteo de duplicados de Facturación y el panel Conciliar → los tres siempre coinciden.
-  const _twins = useMemo(()=>{ const m=new Map(); matchProgEmitidas(billing,clients,clientEntities).forEach(x=>m.set(String(x.prog.id),x.real)); return m }, [billing,clients,clientEntities])
+  const _twins = useMemo(()=>{ const m=new Map(); matchProgEmitidas(billing,clients,clientEntities,{sales}).forEach(x=>m.set(String(x.prog.id),x.real)); return m }, [billing,sales,clients,clientEntities])
   const emitidaTwin = p => _twins.get(String(p.id))||null
 
   const toggle = async(b) => {
@@ -2265,7 +2265,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     return { uf, clpHoy: Math.round(uf*ufHoy) }
   }
   // "Ya facturadas" (duplicados): facturas SIN folio cuya factura emitida REAL ya existe (mismo cliente, cuota N/M o período, monto ±tolerancia). Inflan el "por facturar"; se vinculan a su factura emitida.
-  const yaFacturadasIds = useMemo(()=> new Set(matchProgEmitidas(bb,clients,clientEntities).map(m=>String(m.prog.id))), [bb,clients,clientEntities])   // fuente única (detector compartido)
+  const yaFacturadasIds = useMemo(()=> new Set(matchProgEmitidas(bb,clients,clientEntities,{sales}).map(m=>String(m.prog.id))), [bb,sales,clients,clientEntities])   // fuente única (detector compartido)
   // KPIs — MISMA fuente que el landing: Por cobrar = total cuentas por cobrar (emitidas con saldo, NO depende del año); Por facturar = sin folio real (excluye las ya facturadas).
   const pending=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status)).reduce((s,b)=>s+saldoBill(b),0)
   const overdue=bb.filter(b=>b.invoice_no&&(b.status==='Vencido'||(b.status==='Pendiente'&&esVencidaB(b)))).reduce((s,b)=>s+saldoBill(b),0)   // mismo criterio que la lista (estadoReal) y Cobranza: status Vencido o emisión+30 ya pasada

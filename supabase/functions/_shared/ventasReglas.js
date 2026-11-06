@@ -70,7 +70,8 @@ export function cuotasCubiertasVenta(billing = [], sales = [], uf = {}) {
     let exceso = usado + prog.reduce((a, x) => a + x.uu, 0) - plan
     if (!(exceso > plan * 0.03)) return
     prog.sort((x, y) => String(x.b.due || '').localeCompare(String(y.b.due || ''))).forEach(({ b, uu }) => { if (exceso <= 0 || !(uu > 0)) return; const t = Math.min(exceso, uu)
-      out.set(String(b.id), t >= uu * 0.8 ? { total: true, m: Number(b.amount) || 0 } : { total: false, m: (Number(b.amount) || 0) * t / uu }); exceso -= uu }) })
+      // total = se da por cubierta (≥ 80 % facturado). `saldo` = lo que de esa cuota NO está facturado: no se cuenta como por cobrar, queda por confirmar.
+      out.set(String(b.id), t >= uu * 0.8 ? { total: true, m: Number(b.amount) || 0, saldo: t >= uu ? 0 : (Number(b.amount) || 0) * (uu - t) / uu } : { total: false, m: (Number(b.amount) || 0) * t / uu, saldo: 0 }); exceso -= uu }) })
   return out
 }
 
@@ -136,8 +137,8 @@ export function mayorCuotaEmitida(billing) {
 // `noEmitir` (propiedad `postergadas`, ver conPostergadas) para que todas las vistas y correos la respeten sin cambiar sus firmas.
 /** @param {Set<string>} noEmitir @param {Iterable<string>} ids @returns {Set<string>} */
 export function conPostergadas(noEmitir, ids) { const s = noEmitir || new Set(); /** @type {any} */ (s).postergadas = new Set([...(ids || [])].map(String)); return s }
-/** Set de «No corresponde» (learnings cuota_no_emitir) con las «Queda para el final» (cuota_postergada) adjuntas. @param {{kind?:string, key:any}[]} filas */
-export function noEmitirDeFilas(filas) { const ne = [], po = []; (filas || []).forEach(r => { if (!r || r.key == null) return; (r.kind === 'cuota_postergada' ? po : ne).push(String(r.key)) }); return conPostergadas(new Set(ne), po) }
+/** Set de «No corresponde» (learnings cuota_no_emitir) y «Ya facturada» (cuota_factura: key = cuota, value = factura; también sale del por facturar) con las «Queda para el final» (cuota_postergada) y las «Ya facturadas» (propiedad `facturadas`) adjuntas. @param {{kind?:string, key:any}[]} filas */
+export function noEmitirDeFilas(filas) { const ne = [], po = [], fa = []; (filas || []).forEach(r => { if (!r || r.key == null) return; if (r.kind === 'cuota_postergada') po.push(String(r.key)); else { ne.push(String(r.key)); if (r.kind === 'cuota_factura') fa.push(String(r.key)) } }); const s = conPostergadas(new Set(ne), po); /** @type {any} */ (s).facturadas = new Set(fa); return s }
 const _postergada = (noEmitir, b) => !!(noEmitir && /** @type {any} */ (noEmitir).postergadas && /** @type {any} */ (noEmitir).postergadas.has(String(b.id)))
 const _saltada = (b, mayor, noEmitir) => { const n = _cuotaNum(b), m = mayor.get(String(b.sale_id)); return n != null && m != null && n < m && !_postergada(noEmitir, b) }
 function _cuotasVencidas({ billing, sales, uf, noEmitir, hasta, appDesde }, enMarcha, deLosQueParten) {

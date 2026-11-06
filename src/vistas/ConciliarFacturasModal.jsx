@@ -89,7 +89,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
 
   // (3) Programada ↔ real: programada con venta, busca real del mismo cliente, mismo mes (±1) y monto con tolerancia ±15%.
   // Fuente ÚNICA: mismo detector que el conteo de duplicados y el inline "Ya emitida" — así el card, esta lista y Facturas del mes coinciden.
-  const progMatches = useMemo(()=> matchProgEmitidas(act, clients, clientEntities, {noSet:matchNo||new Set()}), [act,clients,clientEntities,matchNo])
+  const progMatches = useMemo(()=> matchProgEmitidas(act, clients, clientEntities, {noSet:matchNo||new Set(), sales}), [act,clients,clientEntities,matchNo,sales])
 
   // (4) Anticipos duplicados (espejo de antDup en RevisionDatosModal): un anticipo cargado A MANO (sin respaldo
   // bancario, sin '·revisado') cuyo monto CALZA con los depósitos reales del banco del mismo cliente (la suma, o uno exacto).

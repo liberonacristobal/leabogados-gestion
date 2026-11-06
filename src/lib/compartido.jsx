@@ -23,6 +23,9 @@ import logoBlanco from '../le-logo-blanco.png'
 import { Spin } from './base.jsx'
 import { sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
+import { anticiposSobreCuotas } from '../../supabase/functions/_shared/porFacturar.js'
+import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { trabajosDetenidos } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -1993,6 +1996,7 @@ export function rutsDeFactura(b, clients=[], clientEntities=[]){ const nr=r=>(r|
 
 export function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opts={}){
   const noSet = opts.noSet||new Set()
+  const idxVentas = opts.sales ? indexVentas(opts.sales) : undefined   // veto por glosa: solo con las ventas a mano
   const act = (billing||[]).filter(b=>!b.deleted_at && b.status!=='Anulada')
   // Nº de cuotas vivas por venta: dos cuotas DISTINTAS de la misma venta se parecen en monto (hermanas) → el match por RUT/monto
   // suelto las confunde (ej. la 2ª cuota con la factura de la 1ª). Para una venta de >1 cuota, el monto solo NO identifica cuota.
@@ -2016,6 +2020,7 @@ export function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opt
     if(esRecurrente || similar.length>1) return
     for(const e of emisAll){ if(usados.has(e.x.id)||noSet.has(`${p.id}|${e.x.id}`)) continue
       const sameCli=String(e.x.client_id)===String(p.client_id); const rutMatch=[...e.ruts].some(r=>ruts.has(r)); if(!sameCli&&!rutMatch) continue
+      if(vetoCruce(p,e.x,idxVentas)) continue   // la factura ya es de OTRA venta, o su glosa nombra otro trabajo del cliente
       const dMonto=Math.abs((e.x.amount||0)-a)/a; const sameCu=!!(cu&&e.cu&&cu.n===e.cu.n), samePer=!!(per&&e.per&&per===e.per); const dias=(pt&&e.t)?Math.abs(e.t-pt)/86400000:999
       // Solo llegan aquí las NO recurrentes y únicas: cuota N/M (mismo período o ≤75d), período exacto, o RUT/monto con ventana ≤45d.
       // Mismo-venta con plan de >1 cuota: PROHIBIR el match por RUT/monto suelto (son cuotas hermanas de monto parecido).
@@ -2028,7 +2033,7 @@ export function matchProgEmitidas(billing=[], clients=[], clientEntities=[], opt
       const rank=[okCu?0:1, okPer?0:1, dMonto, dias]
       if(!best||rank[0]<bestRank[0]||(rank[0]===bestRank[0]&&(rank[1]<bestRank[1]||(rank[1]===bestRank[1]&&(rank[2]<bestRank[2]||(rank[2]===bestRank[2]&&rank[3]<bestRank[3])))))){ best=e; bestRank=rank } }
     if(best){ usados.add(best.x.id); const dM=Math.abs((best.x.amount||0)-a)/a; const raz=[]
-      if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else if(cuotaOrdOf(p.concept)&&cuotaOrdOf(p.concept)===cuotaOrdOf(best.x.concept)) raz.push(`cuota ${cuotaOrdOf(p.concept)} de la misma venta`); else raz.push('mismo RUT/RS')
+      if(cu&&best.cu&&cu.n===best.cu.n) raz.push(`cuota ${cu.n}${cu.tot?'/'+cu.tot:''}`); else if(per&&best.per&&per===best.per) raz.push(`período ${per.slice(5)}-${per.slice(0,4)}`); else if(cuotaOrdOf(p.concept)&&cuotaOrdOf(p.concept)===cuotaOrdOf(best.x.concept)&&p.sale_id&&String(best.x.sale_id)===String(p.sale_id)) raz.push(`cuota ${cuotaOrdOf(p.concept)} de la misma venta`); else raz.push('mismo RUT/RS')
       raz.push(dM<0.01?'mismo monto':`dif ${(dM*100).toFixed(1).replace(/\.0$/,'')} % (UF)`)
       out.push({prog:p, real:best.x, razones:raz}) } })
   return out
@@ -3725,11 +3730,12 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const curYm=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}`
   const vivas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso')
   const pag=vivas.filter(b=>b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no).map(b=>({c:String(b.client_id||''),p:tD(b.paid_at),d:Math.round((tD(b.paid_at)-tD(b.issued_at))/DAY)})).filter(x=>x.p&&x.d>=0&&x.d<=365)
-  const ritmoEstudio=Math.round(med(pag.filter(x=>x.p>=hoyT-365*DAY).map(x=>x.d))??med(pag.map(x=>x.d))??30)
-  const grp={}; pag.forEach(x=>{ (grp[x.c]=grp[x.c]||[]).push(x) })
-  const ritmoDe={}, histDe={}
-  Object.entries(grp).forEach(([c,a])=>{ const u=a.sort((x,y)=>y.p-x.p).slice(0,12); histDe[c]=u.length; ritmoDe[c]=u.length>=3?Math.round(med(u.map(x=>x.d))):ritmoEstudio })
-  const ritmo=c=>ritmoDe[String(c||'')]??ritmoEstudio
+  // Conservador en el cobro (_shared/ritmoCobro.js): sin historial propio se proyecta con el percentil 75 del estudio, no la mediana;
+  // una factura que ya pasó su fecha no entra «esta semana» sino cuando históricamente se cobraba a quien ya llevaba ese tiempo.
+  const R=ritmosDePago(pag,hoyT)
+  const ritmoEstudio=Math.round(R.estudio.mediana)
+  const histDe={}; pag.forEach(x=>{ histDe[x.c]=(histDe[x.c]||0)+1 })
+  const ritmo=c=>Math.round(R.mediano(c)), ritmoCons=c=>Math.round(R.conservador(c))
   const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
   const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
   const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
@@ -3742,12 +3748,8 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const saleSt={}; (sales||[]).forEach(x=>{ if(x&&!x.deleted_at) saleSt[String(x.id)]=x.status })
   const cubV=sales?cuotasCubiertasVenta(billing,sales,ufFechas):new Map()
   const fueraProg=b=>(sales&&b.sale_id&&saleSt[String(b.sale_id)]!=='Activo')||(noEmitir&&noEmitir.has(String(b.id)))||cubV.get(String(b.id))?.total
-  ;(anticipos||[]).filter(a=>a&&a.estado==='disponible'&&!a.billing_id&&Number(a.monto)>0).sort((x,y)=>String(x.fecha||'').localeCompare(String(y.fecha||''))).forEach(a=>{
-    let r=Number(a.monto)
-    const fa=new Date(String(a.fecha||'').slice(0,10)+'T12:00:00').getTime()
-    const mesOk=b=>{ const d=new Date(String(b.due||'').slice(0,10)+'T12:00:00').getTime(); return !isNaN(fa)&&!isNaN(d)&&fa>=d-15*86400000&&fa<=d+20*86400000 }
-    vivas.filter(b=>b.status==='Programada'&&!b.invoice_no&&!fueraProg(b)&&(a.sale_id?String(b.sale_id)===String(a.sale_id):String(b.client_id)===String(a.client_id))&&(b.billing_type==='subarriendo'?mesOk(b):true))
-      .sort((x,y)=>String(x.due||'').localeCompare(String(y.due||''))).forEach(b=>{ if(r<1) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0); if(!(m>0)) return; const u=Math.min(m,r); cubierto[b.id]=(cubierto[b.id]||0)+u; r-=u; antTot+=u }) })
+  // Plata ya recibida sin factura (anticipos disponibles) sobre las cuotas más antiguas: mismo cálculo de Por facturar (_shared/porFacturar.js).
+  { const ac=anticiposSobreCuotas({cuotas:vivas,anticipos,excluir:fueraProg}); Object.assign(cubierto,ac.cubierto); antTot=ac.total }
   vivas.forEach(b=>{
     const c=C_(b.client_id)
     if(['Pendiente','Vencido'].includes(b.status)&&b.invoice_no){ const m=saldoBill(b); if(!(m>0)) return
@@ -3755,11 +3757,13 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       const base=tD(b.issued_at)??tD(b.due); if(base==null) return
       const esp=base+c.ritmo*DAY
       if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
-      const w=wIdx(Math.max(esp,hoyT)); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:Math.max(esp,hoyT),m,k:'emit'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
+      const espC=base+ritmoCons(c.cid)*DAY, vencida=hoyT>espC
+      const tC=vencida?hoyT+R.esperaRestante(c.cid,Math.round((hoyT-base)/DAY))*DAY:espC
+      const w=wIdx(tC); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
     if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
       if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
-      const tE=Math.max(tD(due)??hoyT,hoyT)+c.ritmo*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog'}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
+      const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
   })
   const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
@@ -3786,8 +3790,9 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const E=weeks.reduce((a,w)=>a+w.entra,0), Cm=weeks.reduce((a,w)=>a+w.com,0), O=weeks.reduce((a,w)=>a+w.of,0)
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
+  const partes={emitAlDia:0,emitVencida:0,cuotas:0}; cobros.forEach(x=>{ if(x.t>=monT+semanas*7*DAY) return; if(x.k==='prog') partes.cuotas+=x.m; else if(x.v) partes.emitVencida+=x.m; else partes.emitAlDia+=x.m })
   const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera).map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
-  return {weeks,cobros,fuera,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
+  return {weeks,cobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
 }
 
 // ─── POR SOCIO · motor único ────────────────────────────────────────────────

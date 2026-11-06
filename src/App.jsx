@@ -8978,7 +8978,7 @@ export default function App() {
           const _realF=x=>{const f=String(x.invoice_no||'').replace(/^factura\s*/i,'').trim();return (f&&/\d/.test(f))?f:null}
           const _folioRep=(()=>{const by={};_actB.forEach(b=>{const f=_realF(b);if(f){const k=`${b.client_id}|${f}`;(by[k]=by[k]||[]).push(b)}});return Object.values(by).filter(g=>g.length>1).reduce((s,g)=>s+(g.length-1),0)})()
           const _fantasmas=_actB.filter(b=>b.status==='Pagado'&&!b.invoice_no&&(b.billing_type||'')!=='reembolso').length
-          const dupN=matchProgEmitidas(billing,clients,clientEntities).length+_folioRep+_fantasmas+_antN
+          const dupN=matchProgEmitidas(billing,clients,clientEntities,{sales}).length+_folioRep+_fantasmas+_antN
           const siiN=(billing||[]).filter(b=>!b.deleted_at&&b.status==='Programada'&&(b.billing_type||'')!=='reembolso'&&String(b.due||'').startsWith(mesA)).length
           const cobN=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Programada'&&b.status!=='Anulada'&&/\d/.test(String(b.invoice_no||'').replace(/^factura\s*/i,''))&&!b.client_id).length
           const ic=(d,col)=><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke={col||C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>{d}</svg>
