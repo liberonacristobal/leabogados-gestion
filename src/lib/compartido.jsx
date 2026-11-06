@@ -3574,6 +3574,20 @@ export async function driveTrash(token, fileId){
 }
 
 // Bloque "Archivos" reutilizable (tareas y gastos). Sube a Drive y registra en `table`.
+// Sube un archivo a la carpeta de adjuntos de Drive y lo registra en la tabla del adjunto. Lo usan «Adjuntar» y la foto del comprobante.
+// Sin acceso a Drive lanza un error con code 401 (el llamador lleva a reconectar).
+export async function subirAdjuntoDrive({table, idField, entityId, folderKind, namePrefix, file, user}) {
+  const token = await driveToken()
+  if(!token) throw Object.assign(new Error('Tu acceso a Drive expiró'), {code:401})
+  const folders = await driveAdjuntosFolders(token)
+  const folderId = folderKind==='tareas'?folders.tareas:folders.gastos
+  const fname = `${namePrefix} · ${file.name}`.slice(0,250)
+  const up = await driveUpload(token, folderId, file, fname)
+  const {data,error} = await supabase.from(table).insert({[idField]:entityId, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
+  if(error) throw error
+  return data
+}
+
 export function Attachments({table, idField, entityId, ensureEntityId, folderKind, namePrefix, user, onChange, inline}) {
   const [items,setItems] = useState([])
   const [busy,setBusy] = useState(false)
@@ -3593,14 +3607,7 @@ export function Attachments({table, idField, entityId, ensureEntityId, folderKin
       let eid = entityId
       if(!eid && ensureEntityId) eid = await ensureEntityId()
       if(!eid) throw new Error('No se pudo preparar el registro')
-      const token = await driveToken()
-      if(!token){ reconnect(); return }
-      const folders = await driveAdjuntosFolders(token)
-      const folderId = folderKind==='tareas'?folders.tareas:folders.gastos
-      const fname = `${namePrefix} · ${file.name}`.slice(0,250)
-      const up = await driveUpload(token, folderId, file, fname)
-      const {data,error} = await supabase.from(table).insert({[idField]:eid, drive_file_id:up.id, name:up.name||fname, url:up.webViewLink||null, uploaded_by:user?.name||null}).select().single()
-      if(error) throw error
+      const data = await subirAdjuntoDrive({table, idField, entityId:eid, folderKind, namePrefix, file, user})
       setItems(p=>[...p,data]); onChange&&onChange(1, data)
     }catch(err){
       if(err instanceof DriveAuthError || err?.code===401){ reconnect() }

@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
-import { C, Gl, Spin, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
-import { CATS_DE_CLIENTE, CATS_GASTO, FloatFld, INICIALES_RESP, Inp, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, learnPut, logActividad, medioMovDe, saldoCliente, subOtro, subproyectosCliente, useDeQueAprendido } from '../lib/compartido.jsx'
+import { C, Gl, Sk, Spin, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
+import { PROMPT_COMPROBANTE, archivoABase64, extraerJSON, normalizarLectura, reducirImagen } from '../lib/comprobante.js'
+import { CATS_DE_CLIENTE, CATS_GASTO, FloatFld, claudeCall, subirAdjuntoDrive, INICIALES_RESP, Inp, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, learnPut, logActividad, medioMovDe, saldoCliente, subOtro, subproyectosCliente, useDeQueAprendido } from '../lib/compartido.jsx'
 
 export const TrashIcon = ({color}) => (
   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#537281'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
@@ -126,6 +127,29 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     return null
   }
   const catAuto = concept => { const k=glosaKey(concept||''); const l=k&&learn.cat[k]; if(l&&CATS_GASTO.includes(l)) return l; const n=_normTxt(concept); for(const [re,cat] of _CAT_KW) if(re.test(n)) return cat; return null }
+  // Foto del comprobante: la IA lee monto, fecha, tipo y glosa y los deja listos para cuando elijas el cliente; la foto se adjunta al gasto al guardar.
+  const [foto,setFoto] = useState(null)   // {file, url, estado:'leyendo'|'listo'|'vacia', lectura}
+  const fotoInput = useRef(null)
+  const quitarFoto = () => setFoto(f=>{ if(f?.url) URL.revokeObjectURL(f.url); return null })
+  const leerFoto = async file => {
+    if(file.size>15*1024*1024){ appAlert('El archivo supera 15 MB.'); return }
+    const esPdf = file.type==='application/pdf'
+    setFoto(f=>{ if(f?.url) URL.revokeObjectURL(f.url); return {file,url:esPdf?null:URL.createObjectURL(file),estado:'leyendo',lectura:null} })
+    try{
+      let raw
+      if(DEMO){ await new Promise(r=>setTimeout(r,900)); raw={monto:5696,fecha:hoy,proveedor:'Uber',glosa:'Uber a notaría',tipo:'Movilización'} }
+      else{
+        const bloque = esPdf ? {type:'document',source:{type:'base64',media_type:'application/pdf',data:await archivoABase64(file)}} : {type:'image',source:{type:'base64',...await reducirImagen(file)}}
+        const data = await claudeCall({feature:'foto-comprobante',model:'claude-sonnet-4-6',max_tokens:500,messages:[{role:'user',content:[bloque,{type:'text',text:PROMPT_COMPROBANTE}]}]})
+        raw = extraerJSON(data?.content?.[0]?.text)
+      }
+      const lectura = normalizarLectura(raw,{hoy,categorias:CATS_GASTO,catDeTexto:catAuto})
+      setFoto(f=>f&&{...f,estado:lectura.vacia?'vacia':'listo',lectura})
+    }catch(e){ setFoto(f=>f&&{...f,estado:'vacia',lectura:null}) }
+  }
+  // Pone lo leído en la primera fila (solo lo que se leyó con claridad) y la marca para adjuntar la foto al guardar.
+  const conFoto = fila => { if(!foto||!['listo','vacia'].includes(foto.estado)) return fila; const l=foto.lectura||{}
+    return {...fila,...(l.monto?{amount:String(l.monto)}:{}),...(l.fecha?{date:l.fecha}:{}),...(!fila.category&&l.tipo?{category:l.tipo}:{}),...(!fila.concept&&(l.glosa||l.proveedor)?{concept:l.glosa||l.proveedor}:{}),foto:true} }
   const catDe = r => r.category || catAuto(r.concept) || 'Otro'
   const cliDe = r => r.cli || selectedClient
   const projDe = r => r.cli ? r.proj : project
@@ -180,18 +204,24 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   const saveAll = async() => {
     if(!puedeGuardar) return
     setSaving(true)
-    let count=0; const errores=[]
+    let count=0, sinFoto=false; const errores=[]
+    // La foto del comprobante queda como respaldo del gasto (Drive + adjunto); si falla, el gasto igual se guardó.
+    const adjuntarFoto = async(g,nombre) => { if(!foto?.file||!g?.id||DEMO) return true
+      try{ await subirAdjuntoDrive({table:'expense_attachments',idField:'expense_id',entityId:g.id,folderKind:'gastos',namePrefix:String(nombre).slice(0,60),file:foto.file,user:{name:userName}}); return true }catch(_){ return false } }
     if(personal){
       // Personal: sin cliente, sin proyecto; descuenta de la caja de quien carga y queda como deuda de la persona con la oficina.
       for(const r of llenas){ const cat=catDe(r)
         try{
-          await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,...gastoDeFila(r),paid_by_client:false},{keep:true})
+          const g=await onSave({client_id:null,personal_de:personal,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:null,project:null,subproject:null,...gastoDeFila(r),paid_by_client:false},{keep:true})
           count++
+          if(r.foto&&await adjuntarFoto(g,`Personal ${personal}`)===false) sinFoto=true
           if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(`p:${personal}`,deQueTexto(r.deQue))
           logActividad('gastos.personal',{tabla:'expenses',detalle:{title:r.concept||cat,persona:personal,monto:parseInt(r.amount)}})
         }catch(e){ errores.push(r.concept||cat||'Fila') }
       }
       if(errores.length) appAlert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
+      if(sinFoto) appAlert('El gasto se guardó, pero la foto no se pudo adjuntar. Adjúntala desde el gasto.')
+      if(count) quitarFoto()
       setSaved(count); setRows([nuevaFila()]); setPersonal(null); setQ(''); setSaving(false)
       return
     }
@@ -200,14 +230,17 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
       const vta=r.cli?(sales||[]).find(s=>s.client_id===cli.id&&s.title===proj):null
       const ent=r.cli?(vta?.entity_id||(clientEntities||[]).find(e=>e.client_id===cli.id)?.id||null):(entityId||null)
       try {
-        await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,...gastoDeFila(r),paid_by_client:cat==='Notaria'},{keep:true})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
+        const g=await onSave({client_id:cli.id,type:'gasto',amount:parseInt(r.amount),category:cat,date:r.date||hoy,sale_id:null,entity_id:ent,project:proj,subproject:!r.cli&&esPermanente(ventaProj)&&subproject.trim()?subproject.trim():null,...gastoDeFila(r),paid_by_client:cat==='Notaria'},{keep:true})   // lo que carga el equipo es siempre caja chica; notaría va por su liquidación
         count++
+        if(r.foto&&await adjuntarFoto(g,cli.name||'Gasto')===false) sinFoto=true
         if(pideDeQue(r)&&String(r.deQue||'').trim()) aprenderDeQue(String(cli.id),deQueTexto(r.deQue))
         // Si se corrigió el cliente desde el aviso, la glosa queda aprendida para ese cliente.
         if(r.resp==='mov'){ const gk=glosaKey(r.concept||''); if(gk) learnPut('gasto_cliente',gk,cli.id) }
       } catch(e){ errores.push(r.concept||cat||'Fila') }
     }
     if(errores.length) appAlert(`${errores.length} gasto(s) no se guardaron: ${errores.join(', ')}`)
+    if(sinFoto) appAlert('El gasto se guardó, pero la foto no se pudo adjuntar. Adjúntala desde el gasto.')
+    if(count) quitarFoto()
     setSaved(count)
     setRows([nuevaFila()])
     // Sin cliente fijo de origen, la siguiente carga parte eligiendo cliente (no arrastrar el anterior).
@@ -335,14 +368,14 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   useEffect(()=>{ if(!isDesktop||selectedClient) return; const h=e=>{ if(e.key==='/'&&!/input|textarea|select/i.test(document.activeElement?.tagName||'')){ e.preventDefault(); buscRef.current&&buscRef.current.focus() } }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h) },[isDesktop,selectedClient])
   useEffect(()=>{ onLanding&&onLanding(!selectedClient&&!personal) },[selectedClient,personal])
   const elegirPersonal = p => {
-    setSaved(0); setQ(''); setTipo(null); setSelectedClient(null); setPersonal(p); setRows([nuevaFila()])
+    setSaved(0); setQ(''); setTipo(null); setSelectedClient(null); setPersonal(p); setRows([conFoto(nuevaFila())])
     setTimeout(()=>{ const el=document.querySelector('[data-gconcept]'); el&&el.focus() },80)
   }
   const elegirCliente = (c,extra={}) => {
     setSaved(0); setQ(''); setTipo(null); setPersonal(null)
     if(extra.proj) preProjRef.current=extra.proj
-    const fila={...nuevaFila(),...(extra.cat?{category:extra.cat}:{}),...(extra.concept?{concept:extra.concept}:{})}
-    setRows(extra.concept?[fila,nuevaFila()]:[fila]); setSelectedClient(c)
+    const fila=conFoto({...nuevaFila(),...(extra.cat?{category:extra.cat}:{}),...(extra.concept?{concept:extra.concept}:{})})
+    setRows(fila.concept?[fila,nuevaFila()]:[fila]); setSelectedClient(c)
     setTimeout(()=>{ const el=document.querySelector(extra.concept?'input[inputmode=numeric]':'[data-gconcept]'); el&&el.focus() },80)
   }
   const ICO_CAT = {
@@ -367,6 +400,27 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
         {avatar(c,32)}<span style={{flex:1,minWidth:0,fontSize:14,fontWeight:400,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{nombreCli(c)}</span>
         {ultFecha[c.id]&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
       </button>)}
+    </div>)
+  const chipLeido = (k,v) => <span key={k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',color:C.text}}><span style={{fontSize:9.5,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',color:C.greenText}}>{k}</span><b style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</b></span>
+  const fotoUI = (
+    <div style={{marginBottom:12}}>
+      <input ref={fotoInput} type='file' accept='image/*,application/pdf' style={{display:'none'}} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(f) leerFoto(f) }}/>
+      {!foto
+        ? <button type='button' onClick={()=>fotoInput.current&&fotoInput.current.click()} style={{...btnReset,width:'100%',display:'flex',alignItems:'center',gap:12,textAlign:'left',padding:'11px 12px',borderRadius:12,border:`1.5px solid ${C.accent}`,background:C.azulBg,boxSizing:'border-box'}}>
+            <span style={{width:36,height:36,borderRadius:10,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round'><path d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/><circle cx='12' cy='13' r='4'/></svg></span>
+            <span style={{minWidth:0}}><span style={{display:'block',fontSize:14,fontWeight:700,color:C.accent}}>{isDesktop?'Subir comprobante':'Foto del comprobante'}</span><span style={{display:'block',fontSize:12,color:C.muted}}>La IA lee monto, fecha y tipo</span></span>
+          </button>
+        : <div style={{border:`1px solid ${C.border}`,borderRadius:12,background:C.surface,padding:10,display:'flex',gap:12,alignItems:'flex-start'}}>
+            {foto.url?<img src={foto.url} alt='' style={{width:46,height:58,objectFit:'cover',borderRadius:6,border:`1px solid ${C.border}`,flexShrink:0}}/>:<span style={{width:46,height:58,borderRadius:6,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:C.muted,flexShrink:0}}>PDF</span>}
+            <div style={{flex:1,minWidth:0}}>
+              {foto.estado==='leyendo'&&<><Sk w='70%' h={11} style={{marginBottom:8}}/><Sk w='45%' h={11} style={{marginBottom:8}}/><div style={{fontSize:12,color:C.muted}}>Leyendo el comprobante…</div></>}
+              {foto.estado==='listo'&&<><div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:6}}>
+                {foto.lectura.monto&&chipLeido('monto',fmt(foto.lectura.monto))}{foto.lectura.fecha&&chipLeido('fecha',fmtFechaDMY(foto.lectura.fecha))}{foto.lectura.tipo&&chipLeido('tipo',foto.lectura.tipo)}{(foto.lectura.glosa||foto.lectura.proveedor)&&chipLeido('glosa',foto.lectura.glosa||foto.lectura.proveedor)}</div>
+                <div style={{fontSize:12,color:C.muted}}>Elige el cliente: lo leído pasa al formulario y la foto queda adjunta al guardar.</div></>}
+              {foto.estado==='vacia'&&<div style={{fontSize:12,color:C.muted}}>No pude leer este comprobante. Elige el cliente y completa el gasto; la foto igual queda adjunta.</div>}
+            </div>
+            <button type='button' onClick={quitarFoto} aria-label='Quitar la foto' style={{...btnReset,fontSize:12,fontWeight:700,color:C.textSoft,padding:'2px 4px',flexShrink:0}}>Quitar</button>
+          </div>}
     </div>)
   const buscador = (
     <>
@@ -424,6 +478,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     </button>)
   const landing = isDesktop ? (
     <>
+      {fotoUI}
       {buscador}
       {!q.trim()&&(tipo?tipoVista:(
         <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:24}}>
@@ -443,6 +498,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
     </>
   ) : (
     <>
+      {fotoUI}
       {buscador}
       {!q.trim()&&(tipo?tipoVista:(
         <>
@@ -474,6 +530,9 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
       {(selectedClient||personal)&&(
         <>
           {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {foto?.file&&rows.some(r=>r.foto)&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 10px',marginBottom:8,fontWeight:600}}>
+            {foto.url?<img src={foto.url} alt='' style={{width:18,height:22,objectFit:'cover',borderRadius:3}}/>:null}<span style={{flex:1,minWidth:0}}>Foto del comprobante: se adjunta al guardar</span>
+            <button type='button' onClick={quitarFoto} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Quitar</button></div>}
           {personal?(
           <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',columnGap:10}}>
             <FloatFld label='Personal de'>

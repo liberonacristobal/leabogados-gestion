@@ -7142,6 +7142,7 @@ export default function App() {
   },[expenses,clients,setRendiciones])
   const handleSaveExpense=useCallback(async(f,opts={})=>{
     setSaving(true)
+    let guardado=null   // el gasto guardado: la foto del comprobante se adjunta a este id
     try{
       const p={...f,amount:parseInt(f.amount)||0,sale_id:f.sale_id||null}
       // Si al editar cambió el proyecto o el cliente, la venta anterior ya no corresponde: se vuelve a calzar con el proyecto nuevo.
@@ -7163,6 +7164,7 @@ export default function App() {
       let{data,error}=await supabase.from('expenses').upsert(p).select().single()
       if(error)throw error
       if(DEMO&&!data) data={...p,id:p.id||('demo-e-'+Date.now()),created_at:new Date().toISOString()}   // demo: la base simulada no devuelve la fila (antes quedaba un null en la lista)
+      guardado=data
       // Aprende glosa→proyecto: la próxima vez un gasto con la misma glosa sugiere este proyecto.
       if(p.type==='gasto' && p.project && p.concept) aprenderVentaGasto(p, p.sale_id?(sales||[]).find(s=>String(s.id)===String(p.sale_id)):null)
       // Aprende glosa→categoría: el Asistente IA de caja chica y la carga masiva la reusan (no repetir la clasificación).
@@ -7181,6 +7183,7 @@ export default function App() {
       if(!opts.keep) setModal(null)   // la tanda del formulario de gastos queda abierta («N guardados») y sigue con la próxima carga
     }catch(e){ if(opts.keep){ setSaving(false); throw e } appAlert('Error: '+e.message) }   // en la tanda, el formulario junta los errores y avisa una vez
     setSaving(false)
+    return guardado
   },[user,expenses,rendiciones,sales,clients,clientEntities,setModal])
 
   // Clasificación interna de un gasto importado (no toca la rendición al cliente, que es independiente):
