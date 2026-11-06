@@ -1414,7 +1414,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
     const chipEstado={fontSize:10,padding:'2px 9px',borderRadius:4,background:C.bgWarm,color:C.grisText,fontWeight:600,cursor:'pointer',border:'none'}
     const showEstado = !isFondo && !e.personal_de && !e.created_by && e.client_id && !esOficina(e.client_id) && isImported && !e.rendered_at && !e.client_rendered_at && !e.pagado_cliente_at && isAdmin
     return (
-      <div key={e.id} onClick={()=>{ if(movExp===e.id) return; if(onEdit) onEdit(e); else setMovExp(e.id) }}
+      <div key={e.id} data-menu={'gasto:'+e.id} onClick={()=>{ if(movExp===e.id) return; if(onEdit) onEdit(e); else setMovExp(e.id) }}
         style={{background:C.card,borderRadius:10,padding:'11px 14px',marginBottom:7,border:`1px solid ${C.border}`,cursor:'pointer'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
           {bigDate(e.date)}

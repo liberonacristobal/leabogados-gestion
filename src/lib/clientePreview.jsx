@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { C, fmt } from './base.jsx'
-import { porCobrarBills, esVencidaB, saldoCliente } from './compartido.jsx'
+import { C, fmt, folioN } from './base.jsx'
+import { porCobrarBills, esVencidaB, saldoCliente, montoFactura } from './compartido.jsx'
 
 // Nombre de cliente en cualquier pantalla (escritorio): al dejar el cursor medio segundo aparece una tarjeta con su saldo, y con clic derecho un menú corto.
 // Reconoce el nombre por su texto exacto (si dos clientes se llaman igual, o el nombre va dentro de una frase, no hace nada: mejor no mostrar que mostrar el cliente equivocado).
+// Filas con data-menu="factura:<id>" o "gasto:<id>" (Facturación y gastos del cliente) tienen su propio menú: abrir, ir a la ficha y copiar. Sobre el nombre del cliente manda el menú del cliente.
 // Solo lectura. Las cifras salen de las mismas funciones de la ficha y de la lista de Clientes.
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
 
@@ -35,10 +36,14 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
       ref.current.timer = setTimeout(() => { const r = h.el.getBoundingClientRect(); setVista({ tipo: 'tarjeta', c: h.c, x: r.left, y: r.bottom + 6 }) }, 500)
     }
     const menu = ev => {
+      if (ev.target.closest && ev.target.closest('input,textarea,select,[contenteditable],[data-sin-preview]')) return
       const h = buscar(ev.target)
-      if (!h) return
+      if (h) { ev.preventDefault(); clearTimeout(ref.current.timer); ref.current.el = null; setVista({ tipo: 'menu', c: h.c, x: ev.clientX, y: ev.clientY }); return }
+      const fila = ev.target.closest && ev.target.closest('[data-menu]')
+      if (!fila) return
+      const [kind, id] = String(fila.getAttribute('data-menu')).split(':')
       ev.preventDefault(); clearTimeout(ref.current.timer); ref.current.el = null
-      setVista({ tipo: 'menu', c: h.c, x: ev.clientX, y: ev.clientY })
+      setVista({ tipo: 'fila', kind, id, el: fila, x: ev.clientX, y: ev.clientY })
     }
     const cerrarMenu = ev => { if (!(ev.target.closest && ev.target.closest('[data-cliente-menu]'))) { clearTimeout(ref.current.timer); ref.current.el = null; setVista(null) } }
     const teclas = ev => { if (ev.key === 'Escape') quitar() }
@@ -51,6 +56,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
   }, [])
 
   if (!vista) return null
+  if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} onOpenFicha={onOpenFicha} cerrar={() => setVista(null)} />
   const c = vista.c, id = String(c.id)
   const ancho = vista.tipo === 'tarjeta' ? 270 : 210
   const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 250))
@@ -85,5 +91,41 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
       {fila('Fondos', fmt(fondos), fondos < 0 ? C.overdueText : undefined)}
       {fila('Tareas abiertas', nTareas)}
       <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 700, color: C.azulInfo }}>Clic para abrir la ficha ›</div>
+    </div>)
+}
+
+// Menú de una fila de factura o de gasto: solo lectura (abrir lo que abre la fila, ir a la ficha, copiar). Cada opción aparece solo si aplica.
+function MenuFila({ vista, clients, billing, expenses, onOpenFicha, cerrar }) {
+  const esF = vista.kind === 'factura'
+  const reg = (esF ? billing : expenses).find(r => String(r.id) === String(vista.id))
+  if (!reg) return null
+  const cli = (clients || []).find(x => String(x.id) === String(reg.client_id))
+  const folio = esF ? folioN(reg.invoice_no) : ''
+  const monto = Math.round(esF ? montoFactura(reg) : (reg.amount || 0))
+  const glosa = reg.concept || ''
+  const ot = !esF && reg.ot_number ? String(reg.ot_number) : ''
+  const editarGlosa = !esF ? vista.el.querySelector('[title="Doble clic para editar la glosa"]') : null
+  const copiar = t => { try { navigator.clipboard.writeText(String(t)) } catch (_) {} cerrar() }
+  const item = (t, f, sub) => <div key={t} onClick={f} data-cliente-menu style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', fontSize: 13, color: C.text, cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = C.bgSoft }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>{t}{sub && <span style={{ color: C.done, fontVariantNumeric: 'tabular-nums' }}>{sub}</span>}</div>
+  const titulo = esF ? (folio ? `Factura N° ${folio}` : (glosa || 'Factura')) : (glosa || 'Gasto')
+  const ancho = 230
+  const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 280))
+  const grupo1 = [
+    item(esF ? 'Ver detalle' : reg.type === 'fondo' ? 'Abrir fondo' : 'Abrir gasto', () => { cerrar(); vista.el.click() }),
+    cli && onOpenFicha && item('Ir a la ficha del cliente', () => { cerrar(); onOpenFicha(cli.id) }),
+    editarGlosa && item('Editar glosa', () => { cerrar(); editarGlosa.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window })) }, 'doble clic'),
+  ].filter(Boolean)
+  const grupo2 = [
+    esF && folio && item('Copiar N° de factura', () => copiar(folio), folio),
+    ot && item('Copiar OT', () => copiar(ot), ot),
+    monto !== 0 && item('Copiar monto', () => copiar(monto), fmt(monto)),
+    glosa && item('Copiar glosa', () => copiar(glosa)),
+  ].filter(Boolean)
+  return (
+    <div data-cliente-menu data-sin-preview style={{ position: 'fixed', left: x, top: y, width: ancho, zIndex: 400, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,60,80,.18)', fontFamily: 'inherit', padding: '4px 0' }}>
+      <div data-cliente-menu style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, color: C.accent, background: C.bgSoft, borderRadius: '11px 11px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titulo}</div>
+      {grupo1}
+      {grupo1.length > 0 && grupo2.length > 0 && <div style={{ borderTop: `1px solid ${C.bgSoft}`, margin: '3px 0' }} />}
+      {grupo2}
     </div>)
 }
