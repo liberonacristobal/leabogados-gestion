@@ -8,7 +8,7 @@ import { porCobrarBills, esVencidaB, saldoCliente, montoFactura } from './compar
 // Solo lectura. Las cifras salen de las mismas funciones de la ficha y de la lista de Clientes.
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
 
-export function ClientePreview({ clients = [], billing = [], expenses = [], tasks = [], clientEntities = [], onOpenFicha }) {
+export function ClientePreview({ clients = [], billing = [], expenses = [], tasks = [], clientEntities = [], sales = [], onOpenFicha, onOpenSale }) {
   const [vista, setVista] = useState(null)   // { tipo:'tarjeta'|'menu', c, x, y }
   const porNombre = useMemo(() => { const m = new Map(); clients.forEach(c => { const k = norm(c.name); if (k) m.set(k, m.has(k) ? null : c) }); return m }, [clients])
   const ref = useRef({ el: null, timer: null })
@@ -56,7 +56,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
   }, [])
 
   if (!vista) return null
-  if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} onOpenFicha={onOpenFicha} cerrar={() => setVista(null)} />
+  if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} sales={sales} onOpenFicha={onOpenFicha} onOpenSale={onOpenSale} cerrar={() => setVista(null)} />
   const c = vista.c, id = String(c.id)
   const ancho = vista.tipo === 'tarjeta' ? 270 : 210
   const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 250))
@@ -95,7 +95,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
 }
 
 // Menú de una fila de factura o de gasto: solo lectura (abrir lo que abre la fila, ir a la ficha, copiar). Cada opción aparece solo si aplica.
-function MenuFila({ vista, clients, billing, expenses, onOpenFicha, cerrar }) {
+function MenuFila({ vista, clients, billing, expenses, sales, onOpenFicha, onOpenSale, cerrar }) {
   const esF = vista.kind === 'factura'
   const reg = (esF ? billing : expenses).find(r => String(r.id) === String(vista.id))
   if (!reg) return null
@@ -103,6 +103,7 @@ function MenuFila({ vista, clients, billing, expenses, onOpenFicha, cerrar }) {
   const folio = esF ? folioN(reg.invoice_no) : ''
   const monto = Math.round(esF ? montoFactura(reg) : (reg.amount || 0))
   const glosa = reg.concept || ''
+  const venta = reg.sale_id && onOpenSale ? (sales || []).find(x => String(x.id) === String(reg.sale_id)) : null
   const ot = !esF && reg.ot_number ? String(reg.ot_number) : ''
   const editarGlosa = !esF ? vista.el.querySelector('[title="Doble clic para editar la glosa"]') : null
   const copiar = t => { try { navigator.clipboard.writeText(String(t)) } catch (_) {} cerrar() }
@@ -113,6 +114,7 @@ function MenuFila({ vista, clients, billing, expenses, onOpenFicha, cerrar }) {
   const grupo1 = [
     item(esF ? 'Ver detalle' : reg.type === 'fondo' ? 'Abrir fondo' : 'Abrir gasto', () => { cerrar(); vista.el.click() }),
     cli && onOpenFicha && item('Ir a la ficha del cliente', () => { cerrar(); onOpenFicha(cli.id) }),
+    venta && item('Abrir venta', () => { cerrar(); onOpenSale(venta.id) }),
     editarGlosa && item('Editar glosa', () => { cerrar(); editarGlosa.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window })) }, 'doble clic'),
   ].filter(Boolean)
   const grupo2 = [
