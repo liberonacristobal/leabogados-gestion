@@ -19,29 +19,42 @@ const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/
 // Tarjeta del año (mismo molde que Resultado/Ingresos del Dashboard: ícono a la izquierda, etiqueta 10,5 px, cifra 26 px) y fila de cifra (ícono de su tono, texto, monto a la derecha).
 const ELIPSIS = {whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}
 const DOS_LINEAS = {display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}   // escritorio: el texto baja a una segunda línea en vez de cortarse con «…»
-const TONO_ANIO = { az:[C.azulBg,C.azulInfo,C.azulBd], am:[C.soonBg,C.soonText,C.avisoLine], gr:[C.greenBg,C.greenText,C.greenDeep], nt:[C.surface,C.accent,C.border] }
-const KpiAnio = ({ic,tono='nt',label,value,sub,onClick,D}) => { const [bg,fg,bd]=TONO_ANIO[tono]; return (
-  <div onClick={onClick} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:D?'14px':'11px 10px',display:'flex',alignItems:'center',gap:12,cursor:onClick?'pointer':'default',minWidth:0}}>
-    {D&&<span style={{width:34,height:34,borderRadius:8,background:tono==='nt'?C.bgSoft:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={17} c={fg}/></span>}
+const TONO_ANIO = { az:[C.azulBg,C.azulBd,'#fff',C.azulInfo], am:[C.soonBg,C.avisoLine,'#fff',C.soonText], gr:[C.greenBg,C.greenDeep,'#fff',C.greenText], nt:[C.surface,C.border,C.bgSoft,C.accent] }
+// Mismos íconos que los tiles de Inicio (DashboardView): tendencia, documento, billete y margen.
+const ICO_ANIO = {
+  chart:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>,
+  file:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  check:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>,
+  tPct:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
+}
+const KpiAnio = ({ic,tono='nt',label,value,pct,cap,onClick,D}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
+  <div onClick={onClick} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:D?'14px':'12px 10px',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
+    <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
     <div style={{minWidth:0,flex:1}}>
-      <div style={{fontSize:D?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:fg,...DOS_LINEAS}}>{label}</div>
-      <div style={{fontSize:D?26:19,fontWeight:800,letterSpacing:-.6,color:fg,marginTop:2,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
-      {sub&&<div style={{fontSize:11,color:fg,opacity:.85,...DOS_LINEAS}}>{sub}</div>}
+      <div style={{...SEC_LBL,fontSize:D?11:10,...DOS_LINEAS}}>{label}</div>
+      <div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
+      {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
     </div>
   </div>) }
-const Fila = ({tono='az',label,sub,value,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
-  <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.bgSoft}`,cursor:onClick?'pointer':'default'}}>
-    <span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='file' s={14} c={fg}/></span>
+const Fila = ({tono='az',ic='file',label,sub,value,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
+  <div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',minHeight:52,borderTop:`1px solid ${C.bgSoft}`,cursor:onClick?'pointer':'default'}}>
+    <span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={14} c={fg}/></span>
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:C.text}}>{label}</div>{sub&&<div style={{fontSize:10.5,color:C.muted}}>{sub}</div>}</div>
     <span style={{fontSize:14,fontWeight:800,color:vcol||fg,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</span>
   </div>) }
-const KpiMes = ({ic,label,value,sub,vcol,onClick}) => (
-  <div onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:12,display:'flex',gap:10,alignItems:'center',cursor:onClick?'pointer':'default',minWidth:0}}>
-    <span style={{width:30,height:30,borderRadius:8,background:C.bgSoft,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={C.muted}/></span>
-    <div style={{minWidth:0,flex:1}}><div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,...DOS_LINEAS}}>{label}</div>
+const KpiMes = ({ic,tono='az',label,value,sub,vcol,onClick}) => { const [bg,fg]=TONO[tono]||TONO.az; return (
+  <div onClick={onClick} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',minHeight:80,boxSizing:'border-box',display:'flex',gap:10,alignItems:'center',cursor:onClick?'pointer':'default',minWidth:0}}>
+    <span style={{width:30,height:30,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={fg}/></span>
+    <div style={{minWidth:0,flex:1}}><div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,...ELIPSIS}}>{label}</div>
       <div style={{fontSize:20,fontWeight:800,letterSpacing:-.4,color:vcol||C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
-      {sub&&<div style={{fontSize:11,color:C.muted,...DOS_LINEAS}}>{sub}</div>}</div>
-  </div>)
+      {sub&&<div style={{fontSize:11,color:C.muted,...ELIPSIS}}>{sub}</div>}</div>
+  </div>) }
+// Cierre del mes en tres grupos (emitido · caja · resultado devengado); 6 columnas si el ancho alcanza, si no 3, 2 o 1, sin barra horizontal.
+const CierreGrid = ({grupos}) => (<>
+  <style>{`.cm-w{container-type:inline-size}.cm-g{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}.cm-k{display:grid;gap:12px;grid-template-columns:subgrid;grid-column:span var(--n)}.cm-t{grid-column:1/-1;margin:0 2px 6px}@container (min-width:1010px){.cm-g{grid-template-columns:repeat(6,minmax(0,1fr))}}@container (max-width:600px){.cm-g{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-k{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}}@container (max-width:480px){.cm-g{grid-template-columns:minmax(0,1fr)}.cm-k{grid-template-columns:minmax(0,1fr)}}`}</style>
+  <div className='cm-w'><div className='cm-g'>{grupos.map(g=>(
+    <div key={g.t} className='cm-k' style={{'--n':g.k.length,alignContent:'start'}}>
+      <div className='cm-t' style={{...SEC_LBL,fontSize:10}}>{g.t}</div>{g.k}</div>))}</div></div></>)
 // Franja de cifras (mismo molde que la franja de «Cierre»): etiqueta, cifra y una línea de apoyo.
 const MiniK = ({label,value,sub}) => (
   <div style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 9px',minWidth:0,background:C.surface}}>
@@ -119,6 +132,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
 
   // ── Mes pasado: resultadoMes (el mismo del Estado de resultados) y el cierre de facturas de Facturación ──
   const deps = { billing, terceros, costosOfiRows, expenses, clients }
+  const cobMes = ymPrev.slice(0,4)===String(currentYear) ? (ing.byMonth?.[ymPrev]||0) : null   // caja del mes pasado (fecha del depósito); «—» si cae en el año anterior
   const rm = useMemo(()=>resultadoMes(fuRes, deps, ymPrev),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymPrev])
   const noEmitir = useNoEmitirSet()
   const ciclo = useMemo(()=>cicloFacturacionMes({ billing, sales, anticipos, fantasmaIds:fantasmaIds||new Set(), noEmitir:noEmitir||new Set(), respaldoMap, uf:ufFechaCache()||{}, now:new Date() }),[billing,sales,anticipos,fantasmaIds,noEmitir,respaldoMap])
@@ -198,11 +212,15 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}{Math.abs(emSin)>=1&&<>: <b style={{color:C.accent}}>{fmtShort(emSin)}</b> en el año ({emSinMeses.map(x=>MESES[Number(x.ym.slice(5,7))-1].slice(0,3)+' '+fmtShort(x.s)).join(' · ')})</>}</span></div></div> },
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
-        <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} raw={rm.ing} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='az' label='Costos de oficina' value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='am' label='Comisiones pagadas' value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(rm.res)} raw={rm.res} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='az' label={`Facturas de ${mesPasado}`} sub={`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
+        <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>{`Emitido en ${mesPasado}`}</div>
+        <Fila ic='file' tono='am' label='Facturado' sub={`${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
+        <Fila ic='tEntra' tono='az' label='Ingreso' sub='propio' value={fmtShort(rm.ing)} raw={rm.ing} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Entró a caja</div>
+        <Fila ic='check' tono='gr' label='Cobrado' value={cobMes==null?'—':fmtShort(cobMes)} raw={cobMes??''} onClick={()=>go('conciliacion')}/>
+        <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Resultado devengado</div>
+        <Fila ic='building' tono='gy' label='Costos' value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila ic='tPct' tono='am' label='Comisiones' value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(rm.res)} vcol={rm.res<0?C.overdueText:C.accent} raw={rm.res} onClick={()=>go('estadoResultados',ymPrev)}/>
       </> },
     soc: { cap:'Resultado', titulo:`Por socio · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Por socio · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((s,i)=><span key={s}>{i?' · ':''}{isDesktop?s:s.slice(0,1)} <b>{fmtShort(card6(s,'ytd')[5])}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaSocios },
     ret: { cap:'Resultado', titulo:'Retiros de socios', hl:<><b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.A]||0)}</b> · <b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.B]||0)}</b></>, tono:'te', link:'Socios', dest:'socios',
@@ -276,9 +294,10 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       {v:['Cobrado',metaCobranza>0?`${cobroPct} % de la meta`:'',ingYTD,ingYTDUF],z:[null,null,PESOS,UF_F]},
       {v:['Margen',resAnio.pct!=null?`${pct1(resAnio.pct)} % de ingresos`:'',resAnio.verCLP.res,resAnio.verUF.res],z:[null,null,PESOS,UF_F]},
       {v:[`Cierre de ${mesPasado}`,'','',''],s:'sec'},
-      {v:['Ingresos','del mes',rm.ing,''],z:[null,null,PESOS]}, {v:['Costos','de oficina',rm.cos,''],z:[null,null,PESOS]},
-      {v:['Comisiones','pagadas',rm.com,''],z:[null,null,PESOS]}, {v:['Resultado',rm.margen!=null?`margen ${pct1(rm.margen)} %`:'',rm.res,''],z:[null,null,PESOS]},
-      {v:[`Facturas de ${mesPasado}`,`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`,ciclo.tEmi,''],z:[null,null,PESOS]} ]
+      {v:['Facturado',`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`,ciclo.tEmi,''],z:[null,null,PESOS]},
+      {v:['Ingreso','propio',rm.ing,''],z:[null,null,PESOS]}, {v:['Cobrado en el mes','',cobMes??'',''],z:[null,null,PESOS]},
+      {v:['Costos','de oficina',rm.cos,''],z:[null,null,PESOS]}, {v:['Comisiones','pagadas',rm.com,''],z:[null,null,PESOS]},
+      {v:['Resultado',rm.margen!=null?`margen ${pct1(rm.margen)} %`:'',rm.res,''],z:[null,null,PESOS]} ]
     R.push({v:['Detalle','','',''],s:'sec'})
     for(const id of ['ret','fac','cob','cos','com','deb','caj','rev']){ const b=bloques[id]; R.push({v:[b.titulo,'','',''],s:'sec'})
       filasDe(b.body).forEach(f=>{ if(f.k==='sub') R.push({v:[f.t,'','','']}); else { const num=typeof f.raw==='number'&&isFinite(f.raw)
@@ -319,10 +338,10 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const ano = (<>
     <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
-      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' value={vMon(m.brutoUF,m.bruto)} sub={m.meta>0?`${ventaPct} % de la meta`:undefined} onClick={()=>go('ventas')}/>
-      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} sub={m.bruto>0?`${factPct} % de lo vendido`:undefined} onClick={()=>go('facturacion')}/>
-      <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} sub={metaCobranza>0?`${cobroPct} % de la meta`:undefined} onClick={()=>go('resultadoAnio')}/>
-      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} sub={resAnio.pct!=null?`${pct1(resAnio.pct)} % de ingresos`:undefined} onClick={()=>go('resultadoAnio')}/>}
+      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' value={vMon(m.brutoUF,m.bruto)} pct={m.meta>0?ventaPct:null} cap='de la meta' onClick={()=>go('ventas')}/>
+      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='de lo vendido' onClick={()=>go('facturacion')}/>
+      <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' onClick={()=>go('resultadoAnio')}/>
+      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='de ingresos' onClick={()=>go('resultadoAnio')}/>}
     </div>
   </>)
   const fecha = fmtFechaDMY(hoy)
@@ -334,13 +353,15 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         {ano}
         {isDesktop ? (<>
           <Sec t={bloques.mes.titulo} link={bloques.mes.link} onLink={()=>go(bloques.mes.dest)}/>
-          <div className='of-g5' style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:12}}>
-            <KpiMes ic='tEntra' label='Ingresos' value={fmtShort(rm.ing)} sub='del mes' onClick={()=>go('estadoResultados',ymPrev)}/>
-            <KpiMes ic='building' label='Costos' value={fmtShort(rm.cos)} sub='de oficina' onClick={()=>go('estadoResultados',ymPrev)}/>
-            <KpiMes ic='tPct' label='Comisiones' value={fmtShort(rm.com)} sub='pagadas' onClick={()=>go('estadoResultados',ymPrev)}/>
-            <KpiMes ic='chart' label='Resultado' value={(rm.res>0?'+':'')+fmtShort(rm.res)} vcol={resColor} sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} onClick={()=>go('estadoResultados',ymPrev)}/>
-            <KpiMes ic='file' label='Facturas' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.emi.length} · ${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>
-          </div>
+          <CierreGrid grupos={[
+            {t:`Emitido en ${mesPasado}`,k:[
+              <KpiMes key='f' ic='file' tono='am' label='Facturado' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>,
+              <KpiMes key='i' ic='tEntra' tono='az' label='Ingreso' value={fmtShort(rm.ing)} sub='propio' onClick={()=>go('estadoResultados',ymPrev)}/>]},
+            {t:'Entró a caja',k:[<KpiMes key='c' ic='check' tono='gr' label='Cobrado' value={cobMes==null?'—':fmtShort(cobMes)} onClick={()=>go('conciliacion')}/>]},
+            {t:'Resultado devengado',k:[
+              <KpiMes key='o' ic='building' tono='gy' label='Costos' value={fmtShort(rm.cos)} onClick={()=>go('estadoResultados',ymPrev)}/>,
+              <KpiMes key='m' ic='tPct' tono='am' label='Comisiones' value={fmtShort(rm.com)} onClick={()=>go('estadoResultados',ymPrev)}/>,
+              <KpiMes key='r' ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' value={(rm.res>0?'+':'')+fmtShort(rm.res)} vcol={rm.res<0?C.overdueText:undefined} sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} onClick={()=>go('estadoResultados',ymPrev)}/>]}]}/>
           <Sec t='Detalle' extra={btnTodos(['ret','fac','cob','cos','com','deb','caj','rev'])}/>
           <div className='ps-g4' style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12}}>{['ret','fac','cob','cos','com','deb','caj','rev'].map(id=>tarjeta(id,true))}</div>
           {['ret','fac','cob','cos','com','deb','caj','rev'].filter(id=>lista.includes(id)).map(cuerpo)}
