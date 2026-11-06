@@ -2098,7 +2098,7 @@ function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[
   const foto=<div>
     <div style={grid4}>
       {kt('fin','chart',F.fin>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText],'Flujo neto',`${F.fin>=0?'+':''}${fM(F.fin)}`,isDesktop?'proyectado · 8 semanas':'8 semanas',()=>irA(semRef))}
-      {kt('ent','tEntra',[C.azulBg,C.accent],'Cobranza',`+${fM(F.E)}`,isDesktop?'facturas emitidas':'emitidas','ent')}
+      {kt('ent','tEntra',[C.azulBg,C.accent],'Cobranza',`+${fM(F.E)}`,`emitidas ${fM(F.partes.emitAlDia+F.partes.emitVencida)} · cuotas ${fM(F.partes.cuotas)}`,'ent')}
       {kt('sal','wallet',[C.soonBg,C.soonText],'Egresos',F.O+F.C?`−${fM(F.O+F.C)}`:'$0',isDesktop?'operación + comisiones':'8 semanas',()=>irA(semRef))}
       {kt('imp','tEspera',[C.card,C.accent],'Trabajo impago',fM(morV+pfV),isDesktop?`${nF} morosa${nF!==1?'s':''} · ${nC} cuota${nC!==1?'s':''}`:`${nF} fact. · ${nC} cuota${nC!==1?'s':''}`,'imp')}
     </div>

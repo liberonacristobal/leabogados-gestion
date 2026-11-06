@@ -8,7 +8,7 @@ import { clasificarPorFacturar, cuadreVenta, GRUPOS } from '../../supabase/funct
 
 const fmtM = v => '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M'
 // Cuatro partidas, nada más; el motivo es la etiqueta de cada fila (_shared/porFacturar.js).
-const ROT = { vencida: ['Vencidas', 'por emitir'], porVencer: ['Este mes y después', ''], porConfirmar: ['Por confirmar', 'espera al abogado'], fuera: ['Fuera', 'ya explicado'] }
+const ROT = { vencida: ['Vencidas', 'por emitir'], porVencer: ['Por vencer', ''], porConfirmar: ['Por confirmar', 'espera al abogado'], fuera: ['Excluidas', 'no se facturan'] }
 const MOTIVO = { cubFactura: 'cubierta por factura', cubAnticipo: 'cubierta por anticipo', noCorresponde: 'no corresponde', pausada: 'pausada', sinMovimiento: 'más de 90 días sin movimiento', saldoCuota: 'saldo de una cuota facturada en parte', recurrente: 'mensual' }
 const PORQUE = {
   vencida: 'Venció en un mes ya cerrado y aún no se emite.', porVencer: 'Vence este mes o más adelante.',
@@ -68,7 +68,7 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
         </div>
         {decidible && <div style={box}>{cap('Decisión')}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8, padding: '4px 14px 12px' }}>
-            <div style={btn(accion === 'fecha')} onClick={() => setAccion('fecha')}>Vigente, con nueva fecha<div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>Mueve el vencimiento.</div></div>
+            <div style={btn(accion === 'fecha')} onClick={() => setAccion('fecha')}>Nueva fecha<div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>Mueve el vencimiento.</div></div>
             <div style={btn(false)} onClick={() => guardar('baja', `Marcar «No corresponde» la cuota ${concepto} de ${nombre} por ${fmt(b.amount)}. Sale de Por facturar y del flujo.`)}>Dar de baja<div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>Queda «No corresponde».</div></div>
             <div style={btn(accion === 'facturada')} onClick={() => setAccion('facturada')}>Ya facturada<div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>Elegir la factura.</div></div>
           </div>
