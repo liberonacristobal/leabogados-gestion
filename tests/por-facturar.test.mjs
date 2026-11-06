@@ -100,8 +100,8 @@ test('anticipos disponibles cubren las cuotas más antiguas, y el subarriendo so
   assert.deepEqual(anticiposSobreCuotas({ cuotas, anticipos: [{ estado: 'consumido', sale_id: 'S', monto: 900000, fecha: '2026-11-01' }] }).cubierto, {})
 })
 
-test('«Ya facturada» (cuota_factura) saca la cuota igual que «No corresponde»', () => {
-  const s = noEmitirDeFilas([{ kind: 'cuota_no_emitir', key: 'a' }, { kind: 'cuota_factura', key: 'b' }, { kind: 'cuota_postergada', key: 'c' }])
+test('«Ya facturada» (cuota_no_emitir con valor facturada:<factura>) saca la cuota igual que «No corresponde»', () => {
+  const s = noEmitirDeFilas([{ kind: 'cuota_no_emitir', key: 'a', value: '1' }, { kind: 'cuota_no_emitir', key: 'b', value: 'facturada:f9' }, { kind: 'cuota_postergada', key: 'c' }])
   assert.ok(s.has('a') && s.has('b') && !s.has('c'))
   assert.ok(s.facturadas.has('b') && !s.facturadas.has('a')); assert.ok(s.postergadas.has('c'))
 })
