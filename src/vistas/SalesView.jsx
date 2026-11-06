@@ -5,6 +5,7 @@ import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.j
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
+import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
 
 // Reconoce a qué cliente EXISTENTE apunta una propuesta (por el nombre del archivo de Drive). SOLO enlaza, NUNCA crea
 // (anti-duplicados / "no inventar datos"). Mira nombres de clientes y razones sociales (client_entities). Match conservador:
@@ -47,8 +48,9 @@ export const AreaChip = ({area}) => {
 
 export const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
 
-export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta,currentUserEmail,vistaInicial=null,onVistaLista}) {
+export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta,onCambiarResponsable,currentUserEmail,vistaInicial=null,onVistaLista}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
+  const selV = useSeleccion('ventas')
   const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesCerrado = hoyCL.slice(0,8)+'01'   // mismo corte que el radar de cuotas (meses cerrados: antes del 1º del mes en curso)
   const [decFact,setDecFact] = useState(()=>new Map())   // learnings venta_factura: 'si' | 'no' por venta
@@ -262,16 +264,26 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Ventas'); XLSX.writeFile(wb,`Ventas_${fYear||'todas'}_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
+  // Selección en lote: Excel, copiar y cambiar responsable (única que escribe; mueve el vendido entre socios en Por socio e Inteligencia).
+  const selVentas = useMemo(()=>sales.filter(s=>selV.has(s.id)),[sales,selV.sel])
+  const barraV = <BarraSeleccion s={selV} n={selVentas.length} unidad={['venta seleccionada','ventas seleccionadas']} total={(()=>{ const u=selVentas.reduce((a,s)=>a+ventaUF(s,ufRef),0), c=selVentas.reduce((a,s)=>a+ventaCLP(s,ufRef),0); return `Vendido ${fmtMonto(u,c)}` })()} acciones={[
+    {ic:'download',label:'Descargar Excel',corto:'Excel',onClick:()=>exportarVentas(ordenarVentas(selVentas)).then(()=>'Excel descargado')},
+    {ic:'file',label:'Copiar',corto:'Copiar',onClick:()=>copiarTexto(selVentas.map(s=>`${s.title||'—'} · ${clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'}`).join('\n'),'Ventas copiadas')},
+    ...(onCambiarResponsable?[{ic:'users',label:'Cambiar responsable',corto:'Responsable',opciones:['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(q=>({label:q,value:q})),
+      confirmar:v=>({titulo:`Cambiar el responsable a ${v} en ${selVentas.length} venta${selVentas.length!==1?'s':''}`,detalle:`${selVentas.slice(0,2).map(s=>s.title).join(', ')}${selVentas.length>2?` y ${selVentas.length-2} más`:''}. Su vendido pasa a ${v} en Por socio e Inteligencia.`}),
+      onClick:async v=>{ const ids=selVentas.map(s=>s.id); await onCambiarResponsable(ids,v); selV.limpiar(); return `${ids.length} venta${ids.length!==1?'s actualizadas':' actualizada'}` }}]:[]),
+  ]}/>
   // Escritorio: tabla ordenable (venta con su cliente · responsable · mes · monto) con total = suma de las filas.
   const chipPago = s => { const k=pagoDe(s); if(!k) return null; const ep=estadoPagoVenta(s,billing,anticipos,mesCerrado,undefined,noEmitirSet); const m={anticipo:['Con anticipo',C.azulBg,C.azulInfo],pagada:['Pagada sin factura',C.greenBg,C.greenText],poremitir:['Por emitir',C.soonBg,C.soonText],sinprimera:['Sin primera factura',C.soonBg,C.soonText]}[k]; return <span title={ep?.recibido>0?`Recibido ${fmt(ep.recibido)}`:undefined} style={{fontSize:10.5,fontWeight:700,background:m[1],color:m[2],borderRadius:20,padding:'2px 9px',whiteSpace:'nowrap',flexShrink:0}}>{m[0]}</span> }
-  const tablaVentas = (rows,tUF,tCLP) => { const COLS='minmax(0,1fr) 108px 112px 12px'
+  const tablaVentas = (rows,tUF,tCLP) => { const COLS='22px minmax(0,1fr) 108px 112px 12px'
     const comT=rows.reduce((a,s)=>a+comDe(s),0), comTUF=rows.reduce((a,s)=>a+comUFde(s),0)
     const hc=(k,l,right)=>{ const on=ordV.k===k; return <span onClick={()=>setOrdV(o=>o.k===k?{k,dir:-o.dir}:{k,dir:k==='monto'?-1:1})} style={{cursor:'pointer',userSelect:'none',textAlign:right?'right':'left',color:on?C.accent:C.muted}}>{l}{on?(ordV.dir===1?<>{" "}<Gl n='chevU'/></>:<>{" "}<Gl n='chevD'/></>):''}</span> }
     const vis=verTodasV?rows:rows.slice(0,25)
-    return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-      <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',...TH_BAND}}>{hc('venta','Venta · cliente')}{hc('monto','Monto',1)}<span style={{textAlign:'right',color:C.muted}}>Neto oficina</span><span/></div>
+    return (<div>{barraV}<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',...TH_BAND}}><Casilla s={selV} on={selV.todos(vis.map(x=>x.id))} onToggle={()=>selV.alternarTodos(vis.map(x=>x.id))}/>{hc('venta','Venta · cliente')}{hc('monto','Monto',1)}<span style={{textAlign:'right',color:C.muted}}>Neto oficina</span><span/></div>
       {vis.map(s=>{ const cli=clients.find(c=>String(c.id)===String(s.client_id)); const rp=respVenta(s); const pc=rp&&rp!=='Sin abogado'?personChip(rp):null; const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), com=comDe(s), comUF=comUFde(s)
-        return (<div key={s.id} data-menu={'venta:'+s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:13}}>
+        return (<div key={s.id} data-menu={'venta:'+s.id} onClick={()=>onEdit(s)} className='lf-row' style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer',fontSize:13,background:selV.has(s.id)?C.azulBg:undefined}}>
+          <Casilla s={selV} id={s.id} on={selV.has(s.id)}/>
           <div style={{minWidth:0,overflow:'hidden'}}>
             <div style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title||'—'}</div>
             <div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><span onClick={cli&&onOpenClientFicha?(ev)=>{ev.stopPropagation();onOpenClientFicha(cli.id)}:undefined} title={cli?'Ver ficha del cliente':undefined} style={{color:C.accent,cursor:cli?'pointer':'default'}}>{cli?.name||'—'}</span>{s.year?` · ${s.month?String(s.month).padStart(2,'0')+'-':''}${s.year}`:''}</div>
@@ -283,14 +295,15 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
         </div>) })}
       {rows.length>25&&<div onClick={()=>setVerTodasV(v=>!v)} style={{padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:11,fontWeight:700,color:C.accent,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-25} ventas más`}</div>}
       <div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,alignItems:'center',padding:'9px 14px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,fontWeight:700}}>
-        <span>{rows.length} venta{rows.length!==1?'s':''}</span><span style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtMonto(tUF,tCLP)}{comT>0&&<div style={{fontSize:11,fontWeight:400,color:C.muted}}>terceros −{fmtMonto(comTUF,comT)}</div>}</span><span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.accent}}>{fmtMonto(tUF-comTUF,tCLP-comT)}</span><span/>
+        <span/><span>{rows.length} venta{rows.length!==1?'s':''}</span><span style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{fmtMonto(tUF,tCLP)}{comT>0&&<div style={{fontSize:11,fontWeight:400,color:C.muted}}>terceros −{fmtMonto(comTUF,comT)}</div>}</span><span style={{textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.accent}}>{fmtMonto(tUF-comTUF,tCLP-comT)}</span><span/>
       </div>
-    </div>) }
+    </div></div>) }
   const buscando = q.trim().length>0
   // Lista plana = búsqueda (todas las coincidencias) o vista de Propuestas. El desglose (Vendido) va en 'vendido'.
   const flatView = buscando || hubView==='propuestas'
   const flatRows = buscando ? filtered : (hubView==='propuestas' ? propuestasFiltradas.slice().sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)) : [])
-  const saleRow = s => {
+  const saleRow = (s,conSel) => {
+    conSel = conSel===true
     const ufA=ventaUF(s,ufRef), clpA=ventaCLP(s,ufRef), rec=esRecurrente(s)
     const client=clients.find(c=>String(c.id)===String(s.client_id))
     const isPropuesta = s.status==='Propuesta'
@@ -298,11 +311,12 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     const tardio = isPropuesta && diasPendiente>14
     return (
       <div key={s.id} data-menu={'venta:'+s.id}
-        onClick={()=>onEdit(s)}
-        style={{background:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,cursor:'pointer'}}
+        onClick={conSel&&selV.visible&&!isDesktop?(e=>selV.toggle(s.id,e)):()=>onEdit(s)}
+        style={{background:conSel&&selV.has(s.id)?C.azulBg:C.card,borderRadius:12,padding:'12px 14px',marginBottom:8,border:`1px solid ${tardio?C.soon:C.border}`,cursor:'pointer'}}
         onMouseEnter={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.accent}
         onMouseLeave={e=>e.currentTarget.style.borderColor=tardio?C.soon:C.border}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:9,marginBottom:5}}>
+          {conSel&&selV.visible&&<Casilla s={selV} id={s.id} on={selV.has(s.id)}/>}
           <SIcon n={areaIcon(s.area)} s={18} c={C.muted}/>
           <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:2,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{s.title}</div>
@@ -352,6 +366,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
           </span>
         </div>
         <Buscador value={q} onChange={setQ} placeholder={isDesktop?'Buscar por venta, cliente, razón social o RUT':'Venta, cliente, razón social o RUT'} style={{marginTop:10,marginBottom:9}}/>
+        {!isDesktop&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><BtnSeleccionar s={selV}/></div>}
         {/* Hub en tarjetas (formato Banco): fila 1 Vendido · Propuestas · fila 2 Nueva venta · Nueva propuesta. Al tocar Vendido se despliegan los filtros. META no va acá: vive en el Dashboard "Cómo va el año" (fuente única, neto). */}
         {!buscando && <div style={{marginBottom:8}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
@@ -443,7 +458,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
           buscando ? (
             flatRows.length===0
               ? <div style={{color:C.muted,textAlign:'center',padding:40}}>Sin resultados para tu búsqueda</div>
-              : <div style={isDesktop?{maxWidth:720}:undefined}>{flatRows.map(saleRow)}</div>
+              : <div style={isDesktop?{maxWidth:720}:undefined}>{barraV}{flatRows.map(s=>saleRow(s,true))}</div>
           ) : (()=>{
             const fmtKB=n=>{ const k=Number(n)||0; return k>=1048576?(k/1048576).toFixed(1)+' MB':Math.max(1,Math.round(k/1024))+' KB' }
             const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -624,9 +639,10 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
                 </div>
               )})()}
               {isDesktop ? tablaVentas(rows,tUF,tCLP) : (<>
-                {(verTodasV?rows:rows.slice(0,8)).map(saleRow)}
+                {(verTodasV?rows:rows.slice(0,8)).map(s=>saleRow(s,true))}
                 {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
                 <div style={{marginTop:8}}><ActBtn full onClick={()=>exportarVentas(rows)}><SIcon n='download' s={14} c={C.accent}/>Descargar Excel</ActBtn></div>
+                {barraV}
               </>)}
             </div>
           )})());
