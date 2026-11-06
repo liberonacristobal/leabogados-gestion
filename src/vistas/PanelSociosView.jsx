@@ -1,9 +1,9 @@
 // Panel de socios — una sola página que reúne lo financiero para la reunión de socios. No calcula nada propio: cada cifra sale de la MISMA función que usa
 // su pantalla de origen (hook del resultado del año de Inicio, Por socio, ciclo de Facturación, cartera, Socios, Estado de resultados, comisiones, flujo de caja…),
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
-import { useMemo, useState } from 'react'
-import { C, SEC_LBL, SIcon, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, PageHeader, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
+import { Children, useMemo, useState } from 'react'
+import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
+import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza } from './DashboardView.jsx'
@@ -79,6 +79,11 @@ const Sec = ({t,link,onLink,extra}) => (
     {link&&<span onClick={onLink} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:onLink?'pointer':'default',whiteSpace:'nowrap'}}>{link} ›</span>}
   </div>)
 const ICO_BLQ = { emi:'file', ing:'users', mm:'chart', mes:'chart', soc:'users', ret:'users', fac:'clock', cob:'tCobrar', cos:'building', com:'tPct', deb:'tPagar', caj:'wallet', rev:'alert' }
+// Recorre el árbol de un bloque y devuelve sus filas (Fila con su valor exacto «raw») y subtítulos, tal como se muestran: la exportación no recalcula nada.
+const filasDe = (nodo, out=[]) => { Children.toArray(nodo).forEach(e=>{ if(!e||!e.type) return
+  if(e.type===Fila) out.push({ k:'fila', label:e.props.label, sub:e.props.sub, raw:e.props.raw, unit:e.props.unit, txt:e.props.value })
+  else if(e.type===Sub) out.push({ k:'sub', t:e.props.t })
+  else if(e.props&&e.props.children) filasDe(e.props.children,out) }); return out }
 const Sub = ({t}) => <div style={{padding:'6px 12px',background:C.bgSoft,fontSize:10,fontWeight:800,color:C.accent,textTransform:'uppercase',letterSpacing:.4}}>{t}</div>
 const Caja = ({titulo,link,onLink,extra,children}) => (
   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -161,12 +166,12 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const sociosFilas = [...ADMIN_NAMES, SIN_SOCIO, null]
   const tonoSoc = s => s===ADMIN_NAMES[0]?'az':s===ADMIN_NAMES[1]?'am':s===SIN_SOCIO?'am':'gy'
   const tablaSocios = (
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12.5,fontVariantNumeric:'tabular-nums',minWidth:330}}>
-      <thead><tr>{['Socio','Vendido','Facturado','Cobrado','Ingreso real'].map((h,i)=><th key={h} style={{padding:isDesktop?'8px 14px':'8px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,color:C.accent,background:C.bgSoft,textAlign:i?'right':'left'}}>{h}</th>)}</tr></thead>
+    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:isDesktop?12.5:12,fontVariantNumeric:'tabular-nums'}}>
+      <thead><tr>{['Socio','Vendido','Facturado','Cobrado','Ingreso real'].map((h,i)=><th key={h} style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:isDesktop?10:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:isDesktop?.5:.2,color:C.accent,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:isDesktop?'nowrap':'normal',verticalAlign:'bottom',lineHeight:1.15}}>{h}</th>)}</tr></thead>
       <tbody>{sociosFilas.map(s=>{ const v=card6(s,'ytd'), tot=s===null; return (
         <tr key={s||'ofi'} onClick={()=>go('porSocio')} style={{cursor:'pointer',background:tot?C.bgSoft:undefined,fontWeight:tot?800:400}}>
-          <td style={{padding:isDesktop?'8px 14px':'8px 10px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,fontWeight:tot?800:600,color:tot?C.accent:C.text}}>{tot?'Oficina':s}</td>
-          {[0,1,2,5].map(i=><td key={i} style={{padding:isDesktop?'8px 14px':'8px 10px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
+          <td style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,fontWeight:tot?800:600,color:tot?C.accent:C.text}}>{tot?'Oficina':s}</td>
+          {[0,1,2,5].map(i=><td key={i} style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
         </tr>) })}</tbody>
     </table></div>)
   const Mes1 = mesActual.charAt(0).toUpperCase()+mesActual.slice(1)
@@ -193,66 +198,109 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}{Math.abs(emSin)>=1&&<>: <b style={{color:C.accent}}>{fmtShort(emSin)}</b> en el año ({emSinMeses.map(x=>MESES[Number(x.ym.slice(5,7))-1].slice(0,3)+' '+fmtShort(x.s)).join(' · ')})</>}</span></div></div> },
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
-        <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='az' label='Costos de oficina' value={fmtShort(rm.cos)} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='am' label='Comisiones pagadas' value={fmtShort(rm.com)} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(rm.res)} onClick={()=>go('estadoResultados',ymPrev)}/>
-        <Fila tono='az' label={`Facturas de ${mesPasado}`} sub={`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} onClick={()=>go('cierreMes')}/>
+        <Fila tono='az' label='Ingresos del mes' sub='Estado de resultados' value={fmtShort(rm.ing)} raw={rm.ing} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila tono='az' label='Costos de oficina' value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila tono='am' label='Comisiones pagadas' value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(rm.res)} raw={rm.res} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila tono='az' label={`Facturas de ${mesPasado}`} sub={`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
       </> },
     soc: { cap:'Resultado', titulo:`Por socio · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Por socio · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((s,i)=><span key={s}>{i?' · ':''}{isDesktop?s:s.slice(0,1)} <b>{fmtShort(card6(s,'ytd')[5])}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaSocios },
     ret: { cap:'Resultado', titulo:'Retiros de socios', hl:<><b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.A]||0)}</b> · <b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.B]||0)}</b></>, tono:'te', link:'Socios', dest:'socios',
-      body:<>{ret.SOC.map(s=><Fila key={s} tono='te' label={s} sub={`${ret.retN[s]||0} retiro${(ret.retN[s]||0)!==1?'s':''}`} value={fmtShort(ret.retTot[s]||0)} onClick={()=>go('socios')}/>)}
-        <Fila tono='te' label='Diferencia' sub={ret.difAcum===0?'al día':`falta ${ret.difAcum>0?ret.B:ret.A}`} value={fmtShort(Math.abs(ret.difAcum))} onClick={()=>go('socios')}/></> },
+      body:<>{ret.SOC.map(s=><Fila key={s} tono='te' label={s} sub={`${ret.retN[s]||0} retiro${(ret.retN[s]||0)!==1?'s':''}`} value={fmtShort(ret.retTot[s]||0)} raw={ret.retTot[s]||0} onClick={()=>go('socios')}/>)}
+        <Fila tono='te' label='Diferencia' sub={ret.difAcum===0?'al día':`falta ${ret.difAcum>0?ret.B:ret.A}`} value={fmtShort(Math.abs(ret.difAcum))} raw={Math.abs(ret.difAcum)} onClick={()=>go('socios')}/></> },
     fac: { cap:'Facturación y cobranza', capCorto:'Fact. y cobranza', titulo:'Por facturar', hl:<>Por emitir <b style={{color:C.soonText}}>{fmtShort(ciclo.pemTot)}</b></>, tono:'am', link:'Facturación', dest:'facturas',
       body:<>
-        <Fila tono='am' label={`Por emitir en ${mesActual}`} sub={`${ciclo.pemN} cuota${ciclo.pemN!==1?'s':''}`} value={fmtShort(ciclo.pemTot)} onClick={()=>go('facturas')}/>
-        <Fila tono='ro' label='Cuotas vencidas sin facturar' sub={`${ciclo.sinEmitirN} cuota${ciclo.sinEmitirN!==1?'s':''}`} value={fmtShort(ciclo.sumM(ciclo.sinEmitirCands))} onClick={()=>go('sinEmitir')}/>
-        <Fila tono='az' label='Por enviar al cliente' sub={`${ciclo.porEnviar.length} factura${ciclo.porEnviar.length!==1?'s':''}`} value={fmtShort(ciclo.porEnvTot)} onClick={()=>go('facturas')}/>
-        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} onClick={()=>go('ventas')}/>
+        <Fila tono='am' label={`Por emitir en ${mesActual}`} sub={`${ciclo.pemN} cuota${ciclo.pemN!==1?'s':''}`} value={fmtShort(ciclo.pemTot)} raw={ciclo.pemTot} onClick={()=>go('facturas')}/>
+        <Fila tono='ro' label='Cuotas vencidas sin facturar' sub={`${ciclo.sinEmitirN} cuota${ciclo.sinEmitirN!==1?'s':''}`} value={fmtShort(ciclo.sumM(ciclo.sinEmitirCands))} raw={ciclo.sumM(ciclo.sinEmitirCands)} onClick={()=>go('sinEmitir')}/>
+        <Fila tono='az' label='Por enviar al cliente' sub={`${ciclo.porEnviar.length} factura${ciclo.porEnviar.length!==1?'s':''}`} value={fmtShort(ciclo.porEnvTot)} raw={ciclo.porEnvTot} onClick={()=>go('facturas')}/>
+        <Fila tono='az' label='Propuestas por cerrar' sub={`${props.length} propuesta${props.length!==1?'s':''}`} value={fmtUFk(Math.round(propUF))} raw={propUF} unit='UF' onClick={()=>go('ventas')}/>
       </> },
     cob: { cap:'Facturación y cobranza', capCorto:'Fact. y cobranza', titulo:'Por cobrar', hl:<>Vencido <b style={{color:C.overdueText}}>{fmtShort(cart.vencidoTot)}</b></>, tono:'az', link:'Cobranza', dest:'cobranza',
       body:<>
-        <Fila tono='az' label='Honorarios por cobrar' value={fmtShort(porCobrar)} onClick={()=>go('cobranza')}/>
-        <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)} % de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} onClick={()=>go('cobranza')}/>
-        <Fila tono='ro' label='Más de 60 días' sub={cart.expo.pctM60!=null?`${Math.round(cart.expo.pctM60*100)} % de la cartera`:undefined} value={fmtShort(cart.expo.m60)} onClick={()=>go('cobranzaM60')}/>
-        {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
-        <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} onClick={()=>go('gastos')}/>
+        <Fila tono='az' label='Honorarios por cobrar' value={fmtShort(porCobrar)} raw={porCobrar} onClick={()=>go('cobranza')}/>
+        <Fila tono='ro' label='Vencido' sub={porCobrar>0?`${Math.round(cart.vencidoTot/porCobrar*100)} % de lo por cobrar`:undefined} value={fmtShort(cart.vencidoTot)} raw={cart.vencidoTot} onClick={()=>go('cobranza')}/>
+        <Fila tono='ro' label='Más de 60 días' sub={cart.expo.pctM60!=null?`${Math.round(cart.expo.pctM60*100)} % de la cartera`:undefined} value={fmtShort(cart.expo.m60)} raw={cart.expo.m60} onClick={()=>go('cobranzaM60')}/>
+        {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} raw={cart.expo.mayor.saldo} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
+        <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastos')}/>
       </> },
     cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos de oficina', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
       body:<>
-        <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(rm.cos)} onClick={()=>go('estadoResultados',ymPrev)}/>
-        {(rm.cosLines||[]).map(l=><Fila key={l.k} tono='az' label={l.l} value={fmtShort(l.m)} onClick={()=>go('estadoResultados',ymPrev)}/>)}
-        {rm.ppm>0&&<Fila tono='az' label='PPM' sub='aparte de los costos' value={fmtShort(rm.ppm)} onClick={()=>go('estadoResultados',ymPrev)}/>}
+        <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev)}/>
+        {(rm.cosLines||[]).map(l=><Fila key={l.k} tono='az' label={l.l} value={fmtShort(l.m)} raw={l.m} onClick={()=>go('estadoResultados',ymPrev)}/>)}
+        {rm.ppm>0&&<Fila tono='az' label='PPM' sub='aparte de los costos' value={fmtShort(rm.ppm)} raw={rm.ppm} onClick={()=>go('estadoResultados',ymPrev)}/>}
       </> },
     com: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Comisiones', hl:<>Pagadas {currentYear} <b style={{color:C.greenText}}>{fmtShort(comP.total||0)}</b></>, tono:'gr', link:'Comisiones', dest:'proveedores',
       body:<>
-        <Fila tono='gr' label={`Pagadas en ${mesPasado}`} value={fmtShort(rm.com)} onClick={()=>go('proveedores')}/>
-        <Fila tono='gr' label={`Pagadas ${currentYear}`} value={fmtShort(comP.total||0)} onClick={()=>go('proveedores')}/>
-        <Fila tono='gr' label={`Percibidas ${currentYear}`} sub='nos pagan a nosotros' value={fmtShort(ing.percibidas||0)} onClick={()=>go('proveedores')}/>
-        <Fila tono='az' label='Sujetas a cobro' sub='el cliente aún no paga' value={fmtShort(sc.porDevengar)} onClick={()=>go('proveedores')}/>
+        <Fila tono='gr' label={`Pagadas en ${mesPasado}`} value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('proveedores')}/>
+        <Fila tono='gr' label={`Pagadas ${currentYear}`} value={fmtShort(comP.total||0)} raw={comP.total||0} onClick={()=>go('proveedores')}/>
+        <Fila tono='gr' label={`Percibidas ${currentYear}`} sub='nos pagan a nosotros' value={fmtShort(ing.percibidas||0)} raw={ing.percibidas||0} onClick={()=>go('proveedores')}/>
+        <Fila tono='az' label='Sujetas a cobro' sub='el cliente aún no paga' value={fmtShort(sc.porDevengar)} raw={sc.porDevengar} onClick={()=>go('proveedores')}/>
       </> },
     deb: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Por pagar', hl:<>Comisiones <b style={{color:C.soonText}}>{fmtShort(sc.porPagar)}</b></>, tono:'am', link:'Comisiones', dest:'proveedores',
       body:<>
         <Sub t='A terceros'/>
-        <Fila tono='am' label='Comisiones por pagar' sub={diasCom!=null?`la más antigua, hace ${diasCom} días`:undefined} value={fmtShort(sc.porPagar)} onClick={()=>go('proveedores')}/>
-        <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} onClick={()=>go('notaria')}/>
+        <Fila tono='am' label='Comisiones por pagar' sub={diasCom!=null?`la más antigua, hace ${diasCom} días`:undefined} value={fmtShort(sc.porPagar)} raw={sc.porPagar} onClick={()=>go('proveedores')}/>
+        <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} raw={nota.montoPagables} onClick={()=>go('notaria')}/>
         <Sub t='Fondos de clientes'/>
-        <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} onClick={()=>go('gastos')}/>
-        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} onClick={()=>go('facturas')}/>
+        <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastos')}/>
+        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('facturas')}/>
         <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },
     caj: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Caja', hl:<>Flujo <b style={{color:flujo.fin>=0?C.greenText:C.overdueText}}>{(flujo.fin>0?'+':'')+fmtShort(flujo.fin)}</b></>, tono:'az', link:'Flujo de caja', dest:'flujoCaja',
       body:<>
-        <Fila tono={flujo.fin>=0?'gr':'ro'} label='Flujo de caja' sub='neto · 8 semanas' value={(flujo.fin>0?'+':'')+fmtShort(flujo.fin)} onClick={()=>go('flujoCaja')}/>
-        <Fila tono='az' label='Proyección de cobranza' sub={`al ${fmtFechaDMY(`${currentYear}-12-31`)}`} value={fmtShort(proy)} onClick={()=>go('flujoCaja')}/>
-        <Fila tono='am' label='Por identificar en el banco' sub='abonos sin conciliar del año' value={fmtShort(ing.porIdentificar||0)} onClick={()=>go('conciliacion')}/>
+        <Fila tono={flujo.fin>=0?'gr':'ro'} label='Flujo de caja' sub='neto · 8 semanas' value={(flujo.fin>0?'+':'')+fmtShort(flujo.fin)} raw={flujo.fin} onClick={()=>go('flujoCaja')}/>
+        <Fila tono='az' label='Proyección de cobranza' sub={`al ${fmtFechaDMY(`${currentYear}-12-31`)}`} value={fmtShort(proy)} raw={proy} onClick={()=>go('flujoCaja')}/>
+        <Fila tono='am' label='Por identificar en el banco' sub='abonos sin conciliar del año' value={fmtShort(ing.porIdentificar||0)} raw={ing.porIdentificar||0} onClick={()=>go('conciliacion')}/>
       </> },
     rev: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Por revisar', hl:<>{abogados.map((a,i)=><span key={a}>{i?' · ':''}{a} <b style={{color:C.tealText}}>{pendDe(a)}</b></span>)}</>, tono:'te', link:'Clientes', dest:'clientes',
       body:<>
-        {abogados.map(a=><Fila key={a} tono='te' label={`Pendientes financieros · ${a}`} sub='clientes con algo por resolver' value={String(pendDe(a))} onClick={()=>go('revisarCuentas',a)}/>)}
-        <Fila tono='am' label='Datos por corregir' sub='anuladas sin motivo y otros' value={String(nDatos)} onClick={()=>go('revisarCuentas')}/>
+        {abogados.map(a=><Fila key={a} tono='te' label={`Pendientes financieros · ${a}`} sub='clientes con algo por resolver' value={String(pendDe(a))} raw={pendDe(a)} onClick={()=>go('revisarCuentas',a)}/>)}
+        <Fila tono='am' label='Datos por corregir' sub='anuladas sin motivo y otros' value={String(nDatos)} raw={nDatos} onClick={()=>go('revisarCuentas')}/>
       </> },
   }
+  // ── Excel: las mismas variables y filas del panel (pesos exactos); Resumen, Por socio e Ingreso emitido ──
+  const exportar = async () => { try {
+    const XLSX = await loadXLSXStyle()
+    const PESOS='"$"#,##0', UF_F='#,##0.00" UF"', NUM='#,##0'
+    const hdr={ font:{bold:true,color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'003C50'}} }, sec={ font:{bold:true,color:{rgb:'003C50'}}, fill:{fgColor:{rgb:'E4E8EB'}} }, tit={ font:{bold:true,sz:14,color:{rgb:'003C50'}} }
+    const hojaDe = (filas, anchos, cols) => { const ws=XLSX.utils.aoa_to_sheet(filas.map(f=>f.v.map((v,c)=>typeof v==='number'&&f.z&&f.z[c]===PESOS?Math.round(v):v))); ws['!cols']=anchos.map(w=>({wch:w}))
+      filas.forEach((f,r)=>{ f.v.forEach((v,c)=>{ const ref=XLSX.utils.encode_cell({r,c}); if(!ws[ref]) return
+        if(f.s==='hdr') ws[ref].s=hdr; else if(f.s==='sec') ws[ref].s=sec; else if(f.s==='tit') ws[ref].s=tit
+        if(typeof v==='number'&&f.z&&f.z[c]) ws[ref].z=f.z[c] }) })
+      return ws }
+    // Resumen: año (pesos y UF lado a lado), cierre del mes pasado y cada bloque del detalle con las filas que se ven
+    const R=[ {v:[`Panel de socios · datos al ${fmtFechaDMY(hoy)}`],s:'tit'}, {v:[]},
+      {v:['Concepto','Detalle','Valor ($)','Valor (UF)'],s:'hdr'}, {v:[`Año ${currentYear}`,'','',''],s:'sec'},
+      {v:['Vendido',m.meta>0?`${ventaPct} % de la meta`:'',m.bruto,m.brutoUF],z:[null,null,PESOS,UF_F]},
+      {v:['Facturado',m.bruto>0?`${factPct} % de lo vendido`:'',resAnio.verCLP.fac,resAnio.verUF.fac],z:[null,null,PESOS,UF_F]},
+      {v:['Cobrado',metaCobranza>0?`${cobroPct} % de la meta`:'',ingYTD,ingYTDUF],z:[null,null,PESOS,UF_F]},
+      {v:['Margen',resAnio.pct!=null?`${pct1(resAnio.pct)} % de ingresos`:'',resAnio.verCLP.res,resAnio.verUF.res],z:[null,null,PESOS,UF_F]},
+      {v:[`Cierre de ${mesPasado}`,'','',''],s:'sec'},
+      {v:['Ingresos','del mes',rm.ing,''],z:[null,null,PESOS]}, {v:['Costos','de oficina',rm.cos,''],z:[null,null,PESOS]},
+      {v:['Comisiones','pagadas',rm.com,''],z:[null,null,PESOS]}, {v:['Resultado',rm.margen!=null?`margen ${pct1(rm.margen)} %`:'',rm.res,''],z:[null,null,PESOS]},
+      {v:[`Facturas de ${mesPasado}`,`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`,ciclo.tEmi,''],z:[null,null,PESOS]} ]
+    R.push({v:['Detalle','','',''],s:'sec'})
+    for(const id of ['ret','fac','cob','cos','com','deb','caj','rev']){ const b=bloques[id]; R.push({v:[b.titulo,'','',''],s:'sec'})
+      filasDe(b.body).forEach(f=>{ if(f.k==='sub') R.push({v:[f.t,'','','']}); else { const num=typeof f.raw==='number'&&isFinite(f.raw)
+        const enUF=f.unit==='UF', esCuenta=/^Pendientes|^Datos por/.test(String(f.label))
+        R.push({ v:[f.label,f.sub||'', num&&!enUF?f.raw:(num?'':(f.txt==='›'?'':f.txt)), num&&enUF?f.raw:''], z:[null,null,esCuenta?NUM:PESOS,UF_F] }) } }) }
+    // Por socio (acumulado del año)
+    const S=[ {v:[`Por socio · enero–${mesActual} ${currentYear}`],s:'tit'}, {v:[]}, {v:['Socio','Vendido','Facturado','Cobrado','Ingreso real'],s:'hdr'},
+      ...sociosFilas.map(s=>{ const v=card6(s,'ytd'); return {v:[s===null?'Oficina':s,v[0],v[1],v[2],v[5]],z:[null,PESOS,PESOS,PESOS,PESOS]} }) ]
+    // Ingreso emitido: mes en curso, acumulado y mes a mes (facturado − comisiones de lo facturado)
+    const E=[ {v:[`Ingreso emitido · ${Mes1} en curso`],s:'tit'}, {v:[]}, {v:['Socio','Facturado','Comisiones','Ingreso emitido','Facturas'],s:'hdr'},
+      ...emMes.map(x=>({v:[x.s,x.i+x.c,x.c,x.i,x.n],z:[null,PESOS,PESOS,PESOS,NUM]})),
+      ...(Math.abs(emSub)>=1?[{v:['Subarriendo (aparte, sin socio)',emSub,'','',''],z:[null,PESOS]}]:[]),
+      {v:[]}, {v:[`Acumulado enero–${mesActual}`,'','','',''],s:'sec'}, {v:['Socio','Facturado','Comisiones','Ingreso emitido',''],s:'hdr'},
+      ...emAnio.map(x=>({v:[x.s,x.i+x.c,x.c,x.i,''],z:[null,PESOS,PESOS,PESOS]})),
+      {v:[]}, {v:['Mes a mes','','','',''],s:'sec'}, {v:['Mes',ADMIN_NAMES[0],ADMIN_NAMES[1],SIN_SOCIO,'Total'],s:'hdr'},
+      ...emMeses.map(x=>({v:[`${MESES[Number(x.ym.slice(5,7))-1].slice(0,3)} ${x.ym.slice(0,4)}`,x.a,x.b,x.s,x.a+x.b+x.s],z:[null,PESOS,PESOS,PESOS,PESOS]})) ]
+    const wb=XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb,hojaDe(R,[42,34,18,18]),'Resumen')
+    XLSX.utils.book_append_sheet(wb,hojaDe(S,[16,16,16,16,16]),'Por socio')
+    XLSX.utils.book_append_sheet(wb,hojaDe(E,[34,16,16,18,16]),'Ingreso emitido')
+    XLSX.writeFile(wb,`Panel de socios ${fmtFechaDMY(hoy)}.xlsx`)
+  } catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const CAPS = [['Resultado',['mes','soc','ret','emi','ing','mm']],['Facturación y cobranza',['fac','cob']],['Costos y pagos',['cos','com','deb']],['Caja y revisión',['caj','rev']]]
   const tarjeta = (id,D) => { const b=bloques[id], [bg,fg]=TONO[b.tono], open=lista.includes(id); return (
     <div key={id} onClick={()=>tog(id)} style={{background:C.surface,border:`1px solid ${open?C.accent:C.border}`,borderRadius:12,padding:D?'12px 14px':'9px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:D?12:9,minWidth:0,boxSizing:'border-box',height:'100%'}}>
@@ -281,7 +329,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const resColor = rm.res>=0?C.greenText:C.overdueText
   return (
     <div style={{maxWidth:1120,margin:'0 auto',padding:isDesktop?'0 20px 40px':'0 14px 40px'}}>
-      <PageHeader origen={backLabel} onBack={onBack} titulo='Panel de socios' ctx={isDesktop?`datos al ${fecha}`:undefined}/>
+      <PageHeader origen={backLabel} onBack={onBack} titulo='Panel de socios' ctx={isDesktop?`datos al ${fecha}`:undefined} right={<ActBtn variant='ghost' onClick={exportar} title='Descargar el panel en Excel'><SIcon n='download' s={14} c={C.accent}/>{isDesktop?'Excel':''}</ActBtn>}/>
       <div style={{display:'flex',flexDirection:'column',gap:isDesktop?12:10,marginTop:isDesktop?12:6}}>
         {ano}
         {isDesktop ? (<>
