@@ -14,7 +14,7 @@ import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
 import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
-import { useOrden } from '../lib/orden.jsx'
+import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
@@ -935,7 +935,8 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
   const [showReasignar,setShowReasignar] = useState(false) // herramienta "Reasignar gastos" (mover gastos de un cliente a otro)
   const [reasignFrom,setReasignFrom] = useState(null)      // cliente origen elegido en Reasignar gastos
   const [revSel,setRevSel] = useState(()=>new Set())       // selección múltiple en "Gastos por revisar" / "Reasignar"
-  const toggleSel = id => setRevSel(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const ultRev = useRef(null)
+  const toggleSel = (id,ev) => alternarSel(ultRev,'rev',id,ev,setRevSel)
   const [revDupConfirm,setRevDupConfirm] = useState(null)   // confirmación si al mover hay gastos iguales en el destino
   const [showHist,setShowHist] = useState(false)   // historial de reasignaciones (trazabilidad)
   const [showDescuadres,setShowDescuadres] = useState(false)   // worklist de descuadres (desde la card Saldo negativo)
@@ -1068,7 +1069,8 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
   }
   const notaPendTotal = notariaPend.reduce((a,e)=>a+(e.amount||0),0)
   const notaLiquidaciones = useMemo(()=>(rendiciones||[]).filter(r=>r.tipo==='notaria'&&!r.anulada_at).sort((a,b)=>(b.created_at||'')>(a.created_at||'')?1:-1),[rendiciones])
-  const toggleNota = id => setSelNota(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n})
+  const ultNota = useRef(null)
+  const toggleNota = (id,ev) => alternarSel(ultNota,'nota',id,ev,setSelNota)
   const [notaFondos,setNotaFondos] = useState(false)   // por defecto 'Ver todos' (render aprobado 2026-10-08): los sin fondos se ven en rojo y sus OT no se marcan sin 'Oficina cubre la diferencia'
   const [notaPersonaPick,setNotaPersonaPick] = useState(null)
   const PERSONAS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
@@ -1116,14 +1118,14 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
   const triagePersonal = async(e,persona)=>{ if(e.rendered_at||e.client_rendered_at||e.notaria_liquidado_at||e.notaria_render_id){ appAlert('Este gasto ya está en una rendición/liquidación. Desvincúlalo primero antes de marcarlo como personal (si no, el total de esa rendición queda descuadrado).'); return } const patch={personal_de:persona||null, client_id:null, entity_id:null, paid_by_client:false}; try{ const {error}=await supabase.from('expenses').update(patch).eq('id',e.id); if(error) throw error; setExpenses(p=>p.map(x=>x.id===e.id?{...x,...patch}:x)); logActividad('gastos.personal',{tabla:'expenses',id:e.id,detalle:{..._detG(e),persona:persona||null}}) }catch(err){appAlert('Error: '+err.message)} }
   // Fila de OT (Deuda notaría). Escritorio: casilla · OT · fecha · trámite · monto · ›. Móvil: trámite arriba, OT · fecha abajo, monto a la derecha.
   // Tocar la fila la marca (como siempre); › abre el gasto. hlq = texto buscado (se resalta).
-  const notaRow = (e, bloqueado=false, adelanto=false, hlq='') => { const on=selNota.has(e.id)
+  const notaRow = (e, bloqueado=false, adelanto=false, hlq='', tope=null, usadoG=0) => { const on=selNota.has(e.id)
     const _n=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
     const hl=t=>{ const q=String(hlq||'').trim(); const tt=String(t||''); if(!q) return tt; const i=_n(tt).indexOf(_n(q)); if(i<0) return tt; return <>{tt.slice(0,i)}<mark style={{background:C.soonBg,color:'inherit',borderRadius:3,padding:'0 1px'}}>{tt.slice(i,i+q.length)}</mark>{tt.slice(i+q.length)}</> }
     const ot=e.ot_number?fmtOt(e.ot_number):'—', fe=e.date?fmtFechaDMY(e.date):'sin fecha'
     const warn=bloqueado?'excede el fondo':adelanto?'adelanto':null
     const D=isDesktop
     return (
-    <div key={e.id} onClick={()=>{ if(bloqueado) return; toggleNota(e.id) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.selBg:'transparent',opacity:bloqueado?.6:1}}>
+    <div key={e.id} {...(bloqueado?{}:{...selAttrs('nota',e.id),'data-sel-monto':e.amount||0,...(tope!=null?{'data-sel-tope':tope,'data-sel-usado':usadoG}:{})})} onClick={ev=>{ if(bloqueado) return; toggleNota(e.id,ev) }} title={bloqueado?'Excede el fondo del cliente · activa "Oficina cubre la diferencia" para pagarlo igual':undefined} style={{display:'grid',gridTemplateColumns:D?NOTA_GC:'18px minmax(0,1fr) auto 32px',columnGap:10,rowGap:1,alignItems:'center',padding:D?'6px 14px':'7px 6px 7px 12px',borderTop:`0.5px solid ${C.border}`,cursor:bloqueado?'not-allowed':'pointer',background:on?C.selBg:'transparent',opacity:bloqueado?.6:1}}>
       <span style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:8,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
       {D ? <>
         <div style={{minWidth:0}}><div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{hl(e.concept||'—')}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b onClick={ev=>{ev.stopPropagation();gastosVolverGuardar({nota:'pend'});onEdit&&onEdit(e)}} title='Abrir el gasto' style={{color:C.azulInfo,fontWeight:700,cursor:'pointer',textDecoration:'underline',textDecorationColor:'rgba(47,111,134,.35)',textUnderlineOffset:2}}>{hl(ot)}</b> · {fe}{warn&&<span style={{color:C.overdueText,fontWeight:600}}> · {warn}</span>}</div></div>
@@ -2248,6 +2250,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
   const [noNQ,setNoNQ] = useState('')               // "No son nuestras": buscador
   const [noNOpen,setNoNOpen] = useState(null)        // "No son nuestras": OT con su detalle desplegado
   const [noNResOpen,setNoNResOpen] = useState(false) // "No son nuestras": sección Resueltas desplegada
+  const ultNoN = useRef(null)
   const [noNSel,setNoNSel] = useState(()=>new Set())        // "No son nuestras": OT seleccionadas para consultar a la notaría
   const [noNEstado,setNoNEstado] = useState({})             // "No son nuestras": estado por OT (learnings notaria_nonuestra) → 'consultada' | 'resuelta'
   const [noNConsult,setNoNConsult] = useState({})           // fecha de última consulta por OT (para el subtítulo)
@@ -2812,7 +2815,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                       </div>
                       {gastos.map(e=>{ const rendido=!!(e.render_id||e.client_render_id); const sel=revSel.has(e.id); return (
                         <label key={e.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 13px 8px 22px',borderTop:`0.5px solid ${C.track}`,cursor:'pointer',background:sel?C.azulBg:'transparent'}}>
-                          <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{flexShrink:0,cursor:'pointer'}}/>
+                          <input type='checkbox' {...selAttrs('rev',e.id)} checked={sel} onChange={ev=>toggleSel(e.id,ev)} style={{flexShrink:0,cursor:'pointer'}}/>
                           <span style={{flex:1,fontSize:12,color:C.text,minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{rendido&&<span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',background:C.coralText,color:'#fff',borderRadius:20,padding:'1px 5px',marginRight:5}}>Rendido</span>}{e.concept||'—'}</span>
                           <span style={{fontSize:12,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                         </label>
@@ -2843,7 +2846,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                         ? <div style={{color:C.muted,textAlign:'center',padding:18,fontSize:12,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Este cliente no tiene gastos para mover.</div>
                         : <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{gs.map((e,i)=>{ const sel=revSel.has(e.id); return (
                             <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 13px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer',background:sel?C.azulBg:'#fff'}}>
-                              <input type='checkbox' checked={sel} onChange={()=>toggleSel(e.id)} style={{cursor:'pointer',flexShrink:0}}/>
+                              <input type='checkbox' {...selAttrs('rev',e.id)} checked={sel} onChange={ev=>toggleSel(e.id,ev)} style={{cursor:'pointer',flexShrink:0}}/>
                               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div><div style={{fontSize:10,color:C.muted}}>{e.date?fmtFechaDMY(e.date):''}{e.category?` · ${e.category}`:''}</div></div>
                               <span style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0}}>{fmt(e.amount)}</span>
                             </label>
@@ -3294,7 +3297,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           const st=x.estado==='resuelta'?{bg:C.greenBg,c:C.greenText}:x.estado==='consultada'?{bg:C.soonBg,c:C.soonText}:{bg:C.overdueBg,c:C.overdueText}
           return <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:st.bg,color:st.c,whiteSpace:'nowrap'}}>{t}</span> }
         const ACC={marcada:'Marcada como no nuestra',volvio:'Volvió en otra liquidación',consultada:'Consultada a la notaría',era_nuestra:'Sí era nuestra · gasto cargado',respondida:'La notaría respondió',reabierta:'Volvió a la revisión'}
-        const toggleSel=x=>setNoNSel(p=>{ const n=new Set(p); n.has(x.id)?n.delete(x.id):n.add(x.id); return n })
+        const toggleSel=(x,ev)=>alternarSel(ultNoN,'nonuestra',x.id,ev,setNoNSel)
         const GRID=D?'18px 100px minmax(0,1fr) 150px 32px':'18px minmax(0,1fr) auto 32px'
         const detalle=x=>{ const kv=(l,v)=>v?<div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:12,padding:'4px 0',borderBottom:`0.5px solid ${C.track}`}}><span style={{color:C.muted,flexShrink:0}}>{l}</span><span style={{fontWeight:600,color:C.text,textAlign:'right',minWidth:0}}>{v}</span></div>:null
           const hist=[...(x.historial||[])].sort((a,b)=>String(a.at).localeCompare(String(b.at)))
@@ -3323,7 +3326,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           return (
           <Fragment key={x.id}>
             <div onClick={()=>setNoNOpen(open?null:x.id)} style={{display:'grid',gridTemplateColumns:GRID,columnGap:10,rowGap:2,alignItems:'center',padding:D?'8px 8px 8px 13px':'9px 6px 9px 12px',borderTop:`0.5px solid ${C.border}`,cursor:'pointer',background:on?C.azulBg:C.surface}}>
-              <span onClick={e=>{ e.stopPropagation(); if(!res) toggleSel(x) }} style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:8,border:`1.5px solid ${res?C.border:(on?C.accent:C.done)}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:res?'default':'pointer'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
+              <span {...(res?{}:selAttrs('nonuestra',x.id))} onClick={e=>{ e.stopPropagation(); if(!res) toggleSel(x,e) }} style={{...(D?{}:{gridRow:'1 / 3'}),width:18,height:18,borderRadius:8,border:`1.5px solid ${res?C.border:(on?C.accent:C.done)}`,background:on?C.accent:'transparent',display:'inline-flex',alignItems:'center',justifyContent:'center',cursor:res?'default':'pointer'}}>{on?<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>:null}</span>
               {D ? <>
                 <span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,color:C.azulInfo,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.ot}</span><span style={{display:'block',fontSize:11,color:C.muted,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.fecha?fmtFechaDMY(String(x.fecha).slice(0,10)):'sin fecha'}</span></span>
                 <span style={{minWidth:0}}><span style={{display:'block',fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.materia||x.concepto||'—'}</span>{x.requirente&&<span style={{display:'block',fontSize:11,color:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.requirente}</span>}</span>
@@ -3625,7 +3628,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               </div>}
               {ultAsigN&&String(ultAsigN.cid)===String(cid)&&<div style={{padding:'6px 13px',borderTop:`1px solid ${C.border}`,fontSize:12,color:C.muted,display:'flex',gap:10,alignItems:'center'}}>Trabajo asignado a {ultAsigN.n} OT<span onClick={async()=>{ const u=ultAsigN.undo; setUltAsigN(null); await u() }} style={{color:C.accent,fontWeight:600,cursor:'pointer'}}>Deshacer</span></div>}
               {(!cubre||exc)&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'6px 13px',borderTop:`1px solid ${C.border}`}}><span style={{fontSize:12,color:exc?C.overdueText:C.muted,fontWeight:exc?600:400}}>Oficina cubre la diferencia{exc?' · activado':''}</span><Switch on={exc} onToggle={()=>setExcepNota(p=>{const n=new Set(p);n.has(cid)?n.delete(cid):n.add(cid);return n})}/></div>}
-              {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gsAll.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede, notaQ) })}
+              {gs.map(e=>{ const on=selNota.has(e.id); const usadoOtros=gsAll.filter(x=>x.id!==e.id&&selNota.has(x.id)).reduce((a,x)=>a+(x.amount||0),0); const excede=(usadoOtros+(e.amount||0)) > disp; return notaRow(e, !on&&!exc&&excede, exc&&excede, notaQ, exc?null:disp, usadoOtros+(on?(e.amount||0):0)) })}
             </div>}
           </div>)
         }

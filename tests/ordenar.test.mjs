@@ -29,11 +29,19 @@ test('tres toques: ascendente, descendente y de vuelta al orden original', () =>
   assert.equal(compararValores(undefined, 3), 1)
 })
 
-import { rangoIds } from '../src/lib/ordenar.js'
+import { rangoIds, aplicarRango } from '../src/lib/ordenar.js'
 test('rango con Shift: en el orden visible, en ambos sentidos, y sin extremo conocido marca solo el actual', () => {
   const ids = ['a', 'b', 'c', 'd', 'e']
   assert.deepEqual(rangoIds(ids, 'b', 'd'), ['b', 'c', 'd'])
   assert.deepEqual(rangoIds(ids, 'd', 'b'), ['b', 'c', 'd'])
   assert.deepEqual(rangoIds(ids, 'c', 'c'), ['c'])
   assert.deepEqual(rangoIds(ids, 'z', 'c'), ['c'])
+})
+
+test('rango: marca todas, desmarca según la tocada y respeta el tope del grupo', () => {
+  const r = ['a', 'b', 'c', 'd']
+  assert.deepEqual([...aplicarRango(new Set(['a']), r, 'd')].sort(), ['a', 'b', 'c', 'd'])
+  assert.deepEqual([...aplicarRango(new Set(r), r, 'd')], [])
+  const info = new Map([['a', { tope: 100, usado: 0, monto: 60 }], ['b', { tope: 100, usado: 0, monto: 30 }], ['c', { tope: 100, usado: 0, monto: 30 }], ['d', { tope: 100, usado: 0, monto: 10 }]])
+  assert.deepEqual([...aplicarRango(new Set(), r, 'd', info)].sort(), ['a', 'b', 'd'])
 })

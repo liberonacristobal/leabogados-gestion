@@ -24,3 +24,23 @@ export const rangoIds = (ids, desde, hasta) => {
   if (a < 0 || b < 0) return [hasta]
   return ids.slice(Math.min(a, b), Math.max(a, b) + 1)
 }
+
+// Aplica un rango a una selección. marcar = lo contrario del estado de la fila tocada. Al marcar, las filas con tope (fondo disponible de un cliente)
+// se agregan en orden mientras el total del grupo no lo pase; info: Map id -> { tope, usado, monto } (tope y usado iguales = mismo grupo).
+export const aplicarRango = (prev, rango, id, info) => {
+  const n = new Set(prev), marcar = !prev.has(id), usado = {}
+  rango.forEach(x => {
+    if (!marcar) { n.delete(x); return }
+    if (n.has(x)) return
+    const f = info && info.get(x)
+    if (f && f.tope != null) {
+      const k = f.tope + '|' + f.usado
+      if (usado[k] == null) usado[k] = f.usado || 0
+      if (usado[k] + (f.monto || 0) > f.tope) return
+      usado[k] += f.monto || 0
+    }
+    n.add(x)
+  })
+  if (marcar) n.add(id)
+  return n
+}
