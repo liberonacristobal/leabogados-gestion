@@ -59,6 +59,20 @@ test('lo dudoso queda fuera de lo vigente: por confirmar y saldo de cuota nunca 
   assert.equal(r.grupos.vigente.m, 0); assert.equal(r.grupos.porConfirmar.m, 1000000)
 })
 
+test('el filtro de año limita la tarjeta al año de vencimiento, como el de Facturación', () => {
+  const sales = [venta('B', { amount_clp: 2000000 })]
+  const billing = [prog('b1', 'B', '2026-12-01', 1000000), prog('b2', 'B', '2027-03-01', 1000000)]
+  assert.equal(clasificarPorFacturar({ ...base, sales, billing }).total, 2000000)
+  assert.equal(clasificarPorFacturar({ ...base, sales, billing, anio: '2026' }).total, 1000000)
+  assert.equal(clasificarPorFacturar({ ...base, sales, billing, anio: '2027' }).total, 1000000)
+})
+
+test('los reembolsos de gastos no son por facturar (Facturación los excluye)', () => {
+  const sales = [venta('B', { amount_clp: 2000000 })]
+  const billing = [prog('b1', 'B', '2026-12-01', 1000000), prog('b2', 'B', '2026-12-01', 1000000, { billing_type: 'reembolso' })]
+  assert.equal(clasificarPorFacturar({ ...base, sales, billing }).total, 1000000)
+})
+
 test('las cuotas ya relacionadas con una factura (cruce) no son parte de Por facturar', () => {
   const sales = [venta('B')]
   const r = clasificarPorFacturar({ ...base, sales, billing: [prog('b1', 'B', '2026-12-01', 1000000)], yaFacturadas: new Set(['b1']) })

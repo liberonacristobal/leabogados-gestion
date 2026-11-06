@@ -61,15 +61,16 @@ export function cuadreVenta(s, bs, uf) {
  * cruce) en partidas que suman el total. Orden de prioridad, de lo más a lo menos explicado:
  *  pausada → cubierta por factura (y su saldo, que queda por confirmar) → «No corresponde» → cubierta por anticipo →
  *  por confirmar (vence hace más de `dias` y su venta no se movió en ese plazo) → recurrente → vencida → mes actual / siguiente / más adelante.
- * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string}} p
+ * `anio` limita la tarjeta al año de vencimiento, igual que el filtro de año de Facturación (la cobertura de cada venta sigue mirando todas sus facturas).
+ * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string, anio?:string}} p
  */
-export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir, yaFacturadas = new Set(), hoy, dias = POR_CONFIRMAR_DIAS, socioDe }) {
+export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir, yaFacturadas = new Set(), hoy, dias = POR_CONFIRMAR_DIAS, socioDe, anio = '' }) {
   const vivas = (billing || []).filter(b => b && !b.deleted_at)
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
   const lim = new Date(_t(hoy) - dias * 86400000).toISOString().slice(0, 10)
   const mes = hoy.slice(0, 7), sig = new Date(new Date(mes + '-01T12:00:00').setMonth(new Date(mes + '-01T12:00:00').getMonth() + 1)).toISOString().slice(0, 7)
   const cub = cuotasCubiertasVenta(vivas, sales, uf)
-  const tarjeta = vivas.filter(b => !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)))
+  const tarjeta = vivas.filter(b => (b.billing_type || '') !== 'reembolso' && !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)) && (!anio || String(b.due || '').slice(0, 4) === String(anio)))
   const { cubierto } = anticiposSobreCuotas({ cuotas: tarjeta.filter(b => b.status === 'Programada'), anticipos,
     excluir: b => !!(noEmitir && noEmitir.has(String(b.id))) || !!(cub.get(String(b.id)) || {}).total })
   /** ¿Se movió la venta (factura emitida o pagada, o anticipo) en el plazo? Si sí, una cuota vieja es un olvido por emitir, no algo por confirmar. */
