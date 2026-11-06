@@ -22,6 +22,7 @@ import { logoColor, esCorreoOficina, cuentaEnRecuadro, glosaCliente, mesCorto, p
 import { _MESMAP_G, concPeriodoOf, ADMIN_NAMES, CATS_OFICINA_CAT, CATS_OFICINA_NUEVAS, CAT_OFICINA_ALIAS, catOficinaNueva, _ccDia, _glosaTransf, _ccFechas, _ccDias, _ccEsAjuste, calceCajaChica, MESES_ABR, _rutK, proyectoSeguro, CATS_LEGALES, acusePagoEmail, glosaFactura, parseDteFactura, extraerTextoGmail } from './lib/compartido.jsx'
 import { montoFactura, dteMontoTotal, _pdfjsP, cargarPdfjs, tokenSesion, driveCall, claudeCall, promptConCache, fmtUF, fmtMill, fmtShort, UF_FALLBACK, RENDCAT, fmtFechaHora, fmtDate, nDias, TH_BAND, NOMBRE_CLI, MES_L, MES_C, mesTitulo, bigDate, _respaldoCache, setRespaldoCache, saldoBill, cobradoBill, porCobrarBills, ESTADO_COBRO, venceBill, esVencidaB, estadoCobro, KpiIco, Sparkle, RESPALDO_CUTOFF, facturaRespaldo, estadoFacturaLabel, _ACT_VARIANT, ActBtn, Buscador, daysLeft, FERIADOS_CL, _esDiaHabil, ultimoDiaHabilMesEmision, dueFromIssued, cuotaNMof, ufDeTabla, _UF_FECHA_KEY, ufFechaCache, ufDelDia, finMesOHoy, redondearPartes, fmtMillLR, nrmCliente, learnPut, okDB, setLearningKV, logEvent, rsLabel, rsDisplay, Copyable, chipBtn, currentYear, INICIALES_RESP, taskAssignees, _GV_EXCL, gastosVariosOfiItems, contadoraBancoItems, tipoFactura, esFacIngreso, _actorBitacora, setActorBitacora, resumenBitacora, logActividad, EQUIPO_RESPALDO, _equipo, cargarEquipo, equipoPorNombre, _nombresMiembrosCache, _nombresMiembrosP, nombresMiembros, BitacoraLista, saldoCliente, FIRMA_RESPALDO, firmaDefault, Inp, Lbl, Fld, Modal, BUILD_VERSION, _errVistos, _ERR_RUIDO, registrarError, esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, comisionesVenta, UF_CACHE_KEY, ufTodayISO, readUFCache, _uiStore, usePersistedState, writeUFCache, fetchUF, useUF, AsignarClienteInline, SOCIOS_CFG, EQUIPO_CFG, _norm, setSociosCfg, setEquipoCfg, esPPMcosto, remuneracionesBancoMes, resultadoMes, _fuentesResP, _fuentesRes, useFuentesResultado, _ymPrev, margenPct, resolverClienteSII, fmtSaldoG, _viewMem, marcarVolviendo, viewMemLeer, viewMemGuardar, PageHeader, BackBtn, FlujoPagina, MESES, driveGet, DriveAuthError, driveToken, _bwipP, _loadBwip, NOMBRE_DTE, NOMBRE_DTE_CORTO, facturaDtePdfBase64, _resolDoc, splitSetDTE, loadXLSXStyle, MAIL_OFICINA_CONFIRM, TXT_REINGRESO, txtEnviado, txtNoEnviado, avisoNoEnviado, incrustarLogosCorreo, enviarComoUsuario, sendMailServer, sendGmailWithPdf } from './lib/compartido.jsx'
 import { kpisPorSocio } from './lib/cifras.js'
+import { suscribirCambios } from './lib/tiempoReal.js'
 import { lazyVista, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import {
@@ -5870,6 +5871,17 @@ export function PortalApp(){
   )
 }
 
+// Consultas de la carga inicial, compartidas con el tiempo real (src/lib/tiempoReal.js): un cambio en el servidor vuelve a leer la tabla con la misma consulta.
+const CARGA_TABLA = {
+  petty_cash: () => supabase.from('petty_cash').select('*').order('created_at',{ascending:false}),
+  sales: () => supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}),
+  expenses: () => selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id')),
+  tasks: () => supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}),
+  anticipos: () => supabase.from('anticipos').select('*').order('fecha',{ascending:false}),
+  terceros_pagos: () => selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')),
+  conciliacion: () => selectAll(()=>supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id').order('id')),
+}
+
 export default function App() {
   const [brandV,setBrandV]=useState(0)   // bump al cargar la identidad del estudio desde la DB (Etapa 2 multi-tenant) → re-render de la chrome
   // Título de la pestaña/PWA: fuente ÚNICA = BRAND (no cablear el nombre del estudio en index.html).
@@ -6481,22 +6493,22 @@ export default function App() {
     const q=(label,builder)=>Promise.resolve(builder).then(({data,error})=>error?falla(label,error):(data||[]),e=>falla(label,e))
     const qp=(label,prom)=>Promise.resolve(prom).then(d=>d||[],e=>falla(label,e))
     Promise.all([
-      q('caja chica', supabase.from('petty_cash').select('*').order('created_at',{ascending:false})),
+      q('caja chica', CARGA_TABLA.petty_cash()),
       q('rendiciones', supabase.from('rendiciones').select('*').order('created_at',{ascending:false})),
       qp('clientes', getClients()),
-      q('ventas', supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false})),
+      q('ventas', CARGA_TABLA.sales()),
       qp('facturas', getBilling()),
-      q('gastos', selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id'))),
-      q('tareas', supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false})),
+      q('gastos', CARGA_TABLA.expenses()),
+      q('tareas', CARGA_TABLA.tasks()),
       q('razones sociales', supabase.from('client_entities').select('*')),
       q('adjuntos gastos', supabase.from('expense_attachments').select('id,expense_id')),
       q('adjuntos cobros', supabase.from('billing_attachments').select('id,billing_id')),
-      q('anticipos', supabase.from('anticipos').select('*').order('fecha',{ascending:false})),
+      q('anticipos', CARGA_TABLA.anticipos()),
       q('proveedores', supabase.from('proveedores').select('*').order('nombre')),
-      q('cuentas por pagar', selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id'))),
+      q('cuentas por pagar', CARGA_TABLA.terceros_pagos()),
       q('importaciones', supabase.from('bulk_imports').select('*').order('created_at',{ascending:false}).limit(10)),
       q('memoria de alias', supabase.from('import_aliases').select('*')),
-      q('conciliación', selectAll(()=>supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id').order('id'))),
+      q('conciliación', CARGA_TABLA.conciliacion()),
       q('cobertura cartola', supabase.from('cartola_movimientos').select('fecha').order('fecha',{ascending:false}).limit(1)),
     ]).then(([pc,rd,c,s,b,e,t,ce,ea,ba,an,pv,tc,bi,ia,cc,ch])=>{setPettyCash(pc);setRendiciones(rd);setClients(c);setSales(s);setBilling(b);setExpenses(e);setTasks(t);setClientEntities(ce);setExpenseAttachments(ea);setBillingAttachments(ba);setAnticipos(an);setProveedores(pv);setTerceros(tc);setBulkImports(bi);setImportAliases(ia);setConciliacion(cc);setCartolaHasta(ch&&ch[0]?String(ch[0].fecha).slice(0,10):null)
       if(loadErrs.length) appAlert('No se pudieron cargar: '+loadErrs.join(', ')+'.\nAlgunas cifras pueden verse incompletas. Recarga la página antes de ingresar datos para no duplicar.')})
@@ -6512,6 +6524,18 @@ export default function App() {
     supabase.from('pmo_sugerencias').select('*').then(({data})=>{ if(data) setPmoSug(data) },()=>{})
     supabase.from('pmo_operaciones').select('*').eq('activo',true).order('orden').then(({data})=>{ if(data) setPmoOps(data) },()=>{})
     // Depende del usuario, NO del objeto session: el refresco de token (o volver el foco a la pestaña) reusa el mismo usuario y NO debe recargar todo (te sacaba de donde estabas, p.ej. liquidando notaría).
+  },[session?.user?.id])
+
+  // Tiempo real: lo que cambia otro usuario o el servidor se ve sin recargar. Cada tabla se vuelve a leer con su consulta de la carga inicial.
+  useEffect(()=>{
+    if(DEMO||window.__pruebaCarga||!session?.user?.id) return   // la prueba automática no sale a internet
+    const dar=(set,b)=>()=>Promise.resolve(b()).then(r=>{ const d=r&&!Array.isArray(r)&&'data' in r?(r.error?null:r.data):r; if(Array.isArray(d)) set(d) })
+    return suscribirCambios(supabase,{
+      billing:dar(setBilling,()=>getBilling()), clients:dar(setClients,()=>getClients()),
+      sales:dar(setSales,CARGA_TABLA.sales), expenses:dar(setExpenses,CARGA_TABLA.expenses), tasks:dar(setTasks,CARGA_TABLA.tasks),
+      petty_cash:dar(setPettyCash,CARGA_TABLA.petty_cash), anticipos:dar(setAnticipos,CARGA_TABLA.anticipos),
+      terceros_pagos:dar(setTerceros,CARGA_TABLA.terceros_pagos), conciliacion:dar(setConciliacion,CARGA_TABLA.conciliacion),
+    })
   },[session?.user?.id])
 
   // Auto-crear proyecto de cartera cuando una venta queda Activa (idempotente: no duplica por sale_id).
