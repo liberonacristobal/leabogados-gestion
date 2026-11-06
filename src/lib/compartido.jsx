@@ -32,7 +32,7 @@ import { trabajosDetenidos } from '../../supabase/functions/_shared/ventasReglas
 import { f29Estimado } from '../../supabase/functions/_shared/f29Reglas.js'
 import { CAL_CL, CONTRIB_CUOTAS, ymMas as _ymMas, finDeMes as _finDeMes, diasA as _diasA, crearCalendario, djFecha as _djFecha } from '../../supabase/functions/_shared/calendarioReglas.js'
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
-import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas } from '../../supabase/functions/_shared/ventasReglas.js'
+import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas, conPostergadas } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
 import { estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes } from './cifras.js'
@@ -2255,11 +2255,28 @@ export function useCompromisosCobranza(){
     return ()=>{ v=false } },[])
   return m
 }
+// Decisiones guardadas sobre cuotas (learnings cuota_no_emitir: «No corresponde» y «Ya facturada»). Reactivo: al guardar una decisión las vistas abiertas
+// se actualizan sin recargar. En la demo no se escribe: la decisión vive solo en la sesión.
+const _noEmitirSubs=new Set(); const _noEmitirDemo=new Map()
 export function useNoEmitirSet(){
-  const [s,setS]=useState(()=>new Set())
-  useEffect(()=>{ if(DEMO) return; if(!_noEmitirP) _noEmitirP=supabase.from('learnings').select('kind,key').in('kind',['cuota_no_emitir','cuota_postergada']).then(({data})=>noEmitirDeFilas(data),()=>new Set())
-    let v=true; _noEmitirP.then(x=>{ if(v) setS(x) }); return ()=>{v=false} },[])
+  const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)
+  useEffect(()=>{ const f=()=>setN(x=>x+1); _noEmitirSubs.add(f); return ()=>{ _noEmitirSubs.delete(f) } },[])
+  useEffect(()=>{ let v=true
+    const base=DEMO?Promise.resolve(noEmitirDeFilas([])):(_noEmitirP||(_noEmitirP=supabase.from('learnings').select('kind,key,value').in('kind',['cuota_no_emitir','cuota_postergada']).then(({data})=>noEmitirDeFilas(data),()=>new Set())))
+    base.then(x=>{ if(!v) return
+      if(!_noEmitirDemo.size){ setS(x); return }
+      const y=conPostergadas(new Set([...x,..._noEmitirDemo.keys()]),x.postergadas); y.facturadas=new Set([...(x.facturadas||[]),...[..._noEmitirDemo].filter(([,t])=>t.startsWith('facturada:')).map(([k])=>k)]); setS(y) })
+    return ()=>{v=false} },[n])
   return s
+}
+// accion: 'baja' («No corresponde») · 'facturada' (con facturaId) · 'fecha' (nuevo vencimiento, con due). Devuelve cuando quedó guardado.
+export async function guardarDecisionCuota({cuotaId,accion,facturaId=null,due=null,titulo=''}){
+  const id=String(cuotaId)
+  if(accion==='fecha'){ if(!DEMO){ const {error}=await supabase.from('billing').update({due,updated_at:new Date().toISOString()}).eq('id',id); if(error) throw error } }
+  else { const valor=accion==='facturada'?`facturada:${facturaId}`:'1'
+    if(DEMO) _noEmitirDemo.set(id,valor); else { await setLearningKV('cuota_no_emitir',id,valor); _noEmitirP=null } }
+  if(!DEMO) logActividad('cuota.decision',{tabla:'billing',id,detalle:{title:`${accion==='fecha'?'Nueva fecha '+due:accion==='baja'?'No corresponde':'Ya facturada'} · ${titulo}`.slice(0,120)}})
+  _noEmitirSubs.forEach(f=>f())
 }
 
 // Flujo de caja proyectado, semana a semana: entra (cobros esperados + programadas) vs sale (costos de oficina + proveedores). Marca la semana apretada.
