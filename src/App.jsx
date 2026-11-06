@@ -3371,8 +3371,8 @@ function GastoPage({pagina,clients,expenses,clientEntities,tasks,sales,rendicion
   const tipo=pagina?.type
   const data=pagina?.data||null
   const expense=tipo==='expenseEdit'?data:null
-  const [ver,setVer]=useState(true)   // al entrar a un gasto: primero el detalle; "Editar" abre el formulario
-  useEffect(()=>{ setVer(true) },[expense?.id])
+  const [ver,setVer]=useState(!pagina?.editar)   // al entrar a un gasto: primero el detalle; "Editar" abre el formulario (el atajo E entra directo a editar)
+  useEffect(()=>{ setVer(!pagina?.editar) },[expense?.id,pagina?.editar])
   const esCaja=tipo==='entregarCaja'
   const preClient=(tipo==='expenseEdit'||esCaja)?null:(data||null)
   const clientId=expense?.client_id||preClient?.id||null
@@ -5742,7 +5742,7 @@ function CommandPalette({open,onClose,inicial='',role,clients=[],billing=[],sale
           {tar.length>0&&<>{Hdr('TAREAS')}{tar.map((t,i)=><Row key={t.id} idx={oTar+i} label={t.title||'Tarea'} sub={cname(t.client_id)} onClick={()=>onSelect({type:'tarea',id:t.id,label:t.title||'Tarea'})}/>)}</>}
           {gas.length>0&&<>{Hdr('GASTOS')}{gas.map((e,i)=><Row key={e.id} idx={oGas+i} label={e.concept||'Gasto'} sub={cname(e.client_id)} right={fmt(e.amount)} onClick={()=>onSelect({type:'gasto',id:e.id,label:e.concept||'Gasto'})}/>)}</>}
           {ant.length>0&&<>{Hdr('ANTICIPOS')}{ant.map((a,i)=><Row key={a.id} idx={oAnt+i} label={a.proyecto||'Anticipo'} sub={cname(a.client_id)} right={fmt(a.monto)} onClick={()=>onSelect({type:'anticipo',id:a.id,label:a.proyecto||'Anticipo'})}/>)}</>}
-          {s==='?'&&<>{Hdr('ATAJOS DE TECLADO')}{[['⌘K  ·  /','Buscar o ir a'],...Object.entries(ATAJOS_IR).map(([k,[,l]])=>['g  luego  '+k,l]),['j  ·  k','Bajar y subir por la lista'],['Enter','Abrir la fila marcada'],['?','Ver estos atajos'],['esc','Cerrar']].map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'7px 10px'}}><span style={{fontSize:13,color:C.text}}>{l}</span><span style={{fontSize:11,fontWeight:700,color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',whiteSpace:'nowrap'}}>{k}</span></div>)}</>}
+          {s==='?'&&<>{Hdr('ATAJOS DE TECLADO')}{[['⌘K  ·  /','Buscar o ir a'],...Object.entries(ATAJOS_IR).map(([k,[,l]])=>['g  luego  '+k,l]),['j  ·  k','Bajar y subir por la lista'],['Enter','Abrir la fila marcada'],['e','Editar la fila marcada (factura o gasto)'],['?','Ver estos atajos'],['esc','Cerrar']].map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'7px 10px'}}><span style={{fontSize:13,color:C.text}}>{l}</span><span style={{fontSize:11,fontWeight:700,color:C.muted,border:`1px solid ${C.border}`,borderRadius:6,padding:'2px 8px',whiteSpace:'nowrap'}}>{k}</span></div>)}</>}
           {s&&s!=='?'&&!hay&&<div style={{fontSize:12,color:C.muted,padding:'14px 10px',textAlign:'center'}}>Sin resultados para "{q}"</div>}
         </div>
       </div>
@@ -6145,15 +6145,15 @@ export default function App() {
   const [prioOpen,setPrioOpen]=useState(false)
   const abrirPrioridades=useCallback(()=>{ setTab('dashboard'); setPrioOpen(true) },[setTab])
   useEffect(()=>{ if(tab!=='dashboard'&&prioOpen) setPrioOpen(false) },[tab,prioOpen])   // salir de Inicio por la barra cierra la página (no reaparece al volver)
-  const handlePaletteSelect=(item)=>{
-    setPaletteOpen(false); recordRecent(item)
+  const handlePaletteSelect=(item)=>{ setPaletteOpen(false); recordRecent(item); abrirItem(item) }
+  const abrirItem=(item)=>{
     if(item.type==='view'){ navTo({tab:item.id}); return }
     if(item.type==='action'){ if(item.id==='conciliacion') navTo({tab:'conciliacion'}); else if(item.id==='prioridades') abrirPrioridades(); else setModal({type:item.id}); return }
     if(item.type==='cliente'){ handleOpenClientFicha(item.id); return }
     if(item.type==='factura'){ const b=billing.find(x=>String(x.id)===String(item.id)); if(b) setModal({type:'billing',data:b}); else appAlert('Esa factura ya no está disponible.'); return }
     if(item.type==='venta'){ const v=sales.find(x=>String(x.id)===String(item.id)); if(v) setModal({type:'sale',data:v}); return }
     if(item.type==='tarea'){ const t=tasks.find(x=>String(x.id)===String(item.id)); if(t) setModal({type:'task',data:t}); return }
-    if(item.type==='gasto'){ const e=expenses.find(x=>String(x.id)===String(item.id)); if(e) setModal({type:'expenseEdit',data:e}); return }
+    if(item.type==='gasto'){ const e=expenses.find(x=>String(x.id)===String(item.id)); if(e) setModal({type:'expenseEdit',data:e,...(item.editar?{editar:true}:{})}); return }
     if(item.type==='anticipo'){ const a=(anticipos||[]).find(x=>String(x.id)===String(item.id)); if(a) setAnticipoPanel(a); return }
   }
   useEffect(()=>{ const h=e=>{
@@ -6171,13 +6171,17 @@ export default function App() {
     if(document.querySelector('input[placeholder="Buscar o ir a…"]')) return
     const k=String(e.key).toLowerCase()
     if(k==='j'||k==='k'){
-      const filas=[...document.querySelectorAll('#main-scroll tbody tr[style*="cursor: pointer"], #main-scroll .lf-row, #main-scroll [data-fila]')].filter(x=>x.offsetParent!==null)
+      const filas=[...document.querySelectorAll('#main-scroll tbody tr[style*="cursor: pointer"], #main-scroll .lf-row, #main-scroll [data-fila], #main-scroll [data-menu]')].filter(x=>x.offsetParent!==null)
       if(!filas.length) return
       e.preventDefault()
       const i=filas.indexOf(filaFoco.current), n=k==='j'?Math.min(filas.length-1,i+1):Math.max(0,i<0?0:i-1)
       filaFoco.current?.classList.remove('fila-foco'); filaFoco.current=filas[n]; filaFoco.current.classList.add('fila-foco'); filaFoco.current.scrollIntoView({block:'nearest'})
       return }
     if(filaFoco.current&&e.key==='Enter'&&!e.target.closest?.('button,a,[role=button]')&&document.contains(filaFoco.current)){ e.preventDefault(); filaFoco.current.click(); return }
+    // E: abre la edición directa de la fila marcada (gasto o factura); el resto de las filas no tiene una edición distinta de Enter.
+    if(k==='e'&&filaFoco.current&&document.contains(filaFoco.current)){ const m=String(filaFoco.current.getAttribute('data-menu')||''), i=m.indexOf(':'), tipo=m.slice(0,i)
+      if(tipo==='gasto'||tipo==='factura'){ e.preventDefault(); abrirItemRef.current({type:tipo,id:m.slice(i+1),editar:true}) }
+      return }
     if(filaFoco.current&&e.key==='Escape'){ filaFoco.current.classList.remove('fila-foco'); filaFoco.current=null }
   }; document.addEventListener('keydown',h); return ()=>{ document.removeEventListener('keydown',h); clearTimeout(atajoG.current); atajoG.current=null } },[isDesktop,navTo,userRole])
   const [provFoco,setProvFoco]=useState(null)        // abrir la ficha de un proveedor puntual (navTo({tab:'proveedores',provId}))
@@ -6345,6 +6349,7 @@ export default function App() {
   const [paletteInicial,setPaletteInicial]=useState('')   // texto con que se abre la paleta: «?» muestra los atajos
   const atajoG=useRef(null)   // espera de la letra tras «g»
   const filaFoco=useRef(null)   // fila marcada con J/K en la lista abierta
+  const abrirItemRef=useRef(null); abrirItemRef.current=abrirItem   // el atajo E abre por el mismo camino que el buscador
   const [copilotoOpen,setCopilotoOpen]=useState(false)
   const [navRecents,setNavRecents]=useState(()=>{ try{return JSON.parse(localStorage.getItem('nav_recents')||'[]')}catch(_){return []} })
   const [undoToast,setUndoToast]=useState(null)   // {msg, onUndo} — deshacer en línea arriba de la vista (no flotante)
