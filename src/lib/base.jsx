@@ -165,6 +165,24 @@ export const personChip = n => PERSON_CHIP[(n||'').trim()] || {bg:C.bgWarm,color
 
 export const Spin = () => <div style={{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.accent,borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
 
+// Esqueletos de carga: la silueta de la pantalla mientras llegan los datos (en vez de un círculo solo o un vacío). Brillo suave; sin movimiento si el sistema lo pide (index.html, .sk).
+export const Sk = ({w='100%',h=14,r=8,style}) => <div className='sk' aria-hidden='true' style={{width:w,height:h,borderRadius:r,flexShrink:0,...style}}/>
+const SkTarjeta = ({h=64}) => <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:12,height:h,boxSizing:'border-box'}}><Sk w={34} h={34} r={10}/><div style={{flex:1,display:'flex',flexDirection:'column',gap:7}}><Sk w='55%' h={10}/><Sk w='35%' h={14}/></div></div>
+export const EsqueletoInicio = () => { const D = useIsDesktop(); return (
+  <div role='status' aria-label='Cargando' style={{maxWidth:D?1120:640,margin:'0 auto',padding:D?'18px 26px':'12px 14px',display:'flex',flexDirection:'column',gap:D?16:12}}>
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${D?6:3},minmax(0,1fr))`,gap:D?10:8}}>{Array.from({length:6}).map((_,i)=><div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 4px',display:'flex',flexDirection:'column',alignItems:'center',gap:8}}><Sk w={34} h={34} r={17}/><Sk w='55%' h={9}/></div>)}</div>
+    <Sk w={170} h={10}/>
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${D?4:2},minmax(0,1fr))`,gap:D?10:8}}>{Array.from({length:4}).map((_,i)=><SkTarjeta key={i} h={D?96:80}/>)}</div>
+    <Sk w={130} h={10}/>
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${D?3:2},minmax(0,1fr))`,gap:D?10:8}}>{Array.from({length:D?6:4}).map((_,i)=><SkTarjeta key={i}/>)}</div>
+  </div>) }
+export const EsqueletoPagina = () => { const D = useIsDesktop(); return (
+  <div role='status' aria-label='Cargando' style={{maxWidth:D?1120:640,margin:'0 auto',padding:D?'18px 26px':'12px 14px',display:'flex',flexDirection:'column',gap:D?14:10}}>
+    <Sk w={D?240:180} h={18}/>
+    <div style={{display:'grid',gridTemplateColumns:`repeat(${D?3:2},minmax(0,1fr))`,gap:D?10:8}}>{Array.from({length:D?3:2}).map((_,i)=><SkTarjeta key={i}/>)}</div>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{Array.from({length:6}).map((_,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderTop:i?`1px solid ${C.bgSoft}`:'none'}}><Sk w={30} h={30} r={8}/><div style={{flex:1,display:'flex',flexDirection:'column',gap:6}}><Sk w={`${55-i*4}%`} h={11}/><Sk w='30%' h={9}/></div><Sk w={64} h={13}/></div>)}</div>
+  </div>) }
+
 // ── Diálogos propios (reemplazan alert/confirm/prompt nativos, que muestran el dominio en el navegador) ──
 let _dialogHost = null
 
@@ -203,5 +221,5 @@ export const lazyVista = (cargar, nombre) => {
   if (typeof window !== 'undefined' && !(navigator.connection && navigator.connection.saveData)) {
     setTimeout(() => (window.requestIdleCallback || (f => setTimeout(f, 0)))(() => { cargar().catch(() => {}) }), 4000)
   }
-  return props => <Suspense fallback={null}><L {...props} /></Suspense>
+  return props => <Suspense fallback={<EsqueletoPagina/>}><L {...props} /></Suspense>
 }

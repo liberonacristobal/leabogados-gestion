@@ -43,6 +43,10 @@
       button[style*="cursor: pointer"]:is([style*="border: 1px solid rgb(228, 232, 235)"],[style*="border: 1.5px solid rgb(228, 232, 235)"],[style*="border: 0.5px solid rgb(228, 232, 235)"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover):hover,
       .hov-card:hover { border-color:#003C50 !important; box-shadow:0 3px 12px rgba(0,60,80,.14); transform:translateY(-1px); }
     }
+    /* Esqueletos de carga (Sk en base.jsx) */
+    @keyframes sk-brillo { 0% { background-position:200% 0 } 100% { background-position:-200% 0 } }
+    .sk { background:linear-gradient(90deg,#EEF1F3 25%,#F7F9FA 50%,#EEF1F3 75%); background-size:200% 100%; animation:sk-brillo 1.4s ease-in-out infinite; }
+    @media (prefers-reduced-motion:reduce) { .sk { animation:none } }
   </style>
 </head>
 <body>
