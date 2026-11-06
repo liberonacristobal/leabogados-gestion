@@ -43,6 +43,14 @@
       button[style*="cursor: pointer"]:is([style*="border: 1px solid rgb(228, 232, 235)"],[style*="border: 1.5px solid rgb(228, 232, 235)"],[style*="border: 0.5px solid rgb(228, 232, 235)"]):is([style*="border-radius: 10px"],[style*="border-radius: 12px"],[style*="border-radius: 14px"],[style*="border-radius: 16px"]):not(.sin-hover):hover,
       .hov-card:hover { border-color:#003C50 !important; box-shadow:0 3px 12px rgba(0,60,80,.14); transform:translateY(-1px); }
     }
+    /* Si el sistema pide menos movimiento: el resaltado queda (borde y sombra) pero sin levantar ni animar */
+    @media (prefers-reduced-motion:reduce) {
+      * { scroll-behavior:auto !important }
+      [style*="cursor: pointer"]:hover, .hov-card:hover { transform:none !important }
+      [style*="cursor: pointer"], .hov-card { transition:none !important }
+    }
+    /* Fila marcada con J/K en una lista */
+    .fila-foco { outline:2px solid #003C50; outline-offset:-2px; background:#EDF1F4 !important }
     /* Esqueletos de carga (Sk en base.jsx) */
     @keyframes sk-brillo { 0% { background-position:200% 0 } 100% { background-position:-200% 0 } }
     .sk { background:linear-gradient(90deg,#EEF1F3 25%,#F7F9FA 50%,#EEF1F3 75%); background-size:200% 100%; animation:sk-brillo 1.4s ease-in-out infinite; }

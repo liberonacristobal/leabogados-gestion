@@ -4,6 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
 import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { VistasLista } from '../lib/vistasGuardadas.jsx'
 
 // Reconoce a qué cliente EXISTENTE apunta una propuesta (por el nombre del archivo de Drive). SOLO enlaza, NUNCA crea
 // (anti-duplicados / "no inventar datos"). Mira nombres de clientes y razones sociales (client_entities). Match conservador:
@@ -46,7 +47,7 @@ export const AreaChip = ({area}) => {
 
 export const Pill = ({label,bg,color,small}) => <span style={{display:'inline-block',padding:small?'1px 7px':'2px 9px',borderRadius:20,fontSize:small?10:11,fontWeight:600,color:color||'#fff',background:bg||C.accent,whiteSpace:'nowrap'}}>{label}</span>
 
-export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta}) {
+export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=[],terceros=[],onEdit,onAdd,onAddPropuesta,onRechazar,onActivar,onOpenClientFicha,onIngestPropuesta,onAprobarPropuesta,onDevolverPropuesta,currentUserEmail}) {
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const hoyCL = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const mesCerrado = hoyCL.slice(0,8)+'01'   // mismo corte que el radar de cuotas (meses cerrados: antes del 1º del mes en curso)
@@ -417,6 +418,9 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
               <span style={chipSel}><span style={chipLbl}>Año</span><select value={fYear} onChange={e=>setFYear(e.target.value)} style={selBare}><option value=''>Todos</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></span>
               <span style={chipSel}><span style={chipLbl}>Área</span><select value={fArea} onChange={e=>setFArea(e.target.value)} style={selBare}><option value=''>Todas</option>{['Corporativo','Tributario','Laboral','Otro'].map(a=><option key={a} value={a}>{a}</option>)}</select></span>
               {chip(pagoSel.size>0, 'Pago', pagoTxt, ()=>setOpenF(o=>o==='pago'?null:'pago'), openF==='pago')}
+              <VistasLista lista='ventas' email={currentUserEmail} actual={{fYear,fArea,est:[...estSel],abog:[...abogSel],pago:[...pagoSel],q:q.trim()}} defecto={{fYear:String(currentYear),est:['Activo','Terminado']}}
+                resumen={[fYear||'Todos los años',fArea||null,estSel.size!==ESTADOS.length?[...estSel].join(' / '):null,abogSel.size?[...abogSel].join(' / '):null,pagoSel.size?[...pagoSel].join(' / '):null,q.trim()?`«${q.trim()}»`:null].filter(Boolean).join(' · ')}
+                onAplicar={f=>{ setFYear(f.fYear||''); setFArea(f.fArea||''); setEstSel(new Set(f.est||['Activo','Terminado'])); setAbogSel(new Set(f.abog||[])); setPagoSel(new Set(f.pago||[])); setQ(f.q||'') }}/>
             </div>
             {openF==='estado' && <div style={popSty}>
               <div style={popHd}>Estado · uno o varios</div>

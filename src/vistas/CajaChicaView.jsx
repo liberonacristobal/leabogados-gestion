@@ -6,6 +6,7 @@ import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesI
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, useIsDesktop } from '../lib/base.jsx'
 import { PaginaSobre, ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
 import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
+import { useOrden } from '../lib/orden.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
@@ -109,6 +110,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
   const misPendientes = gastosPorLiquidarCaja(expenses, me)
   const pendientes = misPendientes
+  const { filas:pendOrd, th:thCaja } = useOrden(pendientes, { Fecha:e=>e.date, 'Concepto · cliente':e=>e.concept, Categoría:e=>e.category, Monto:e=>e.amount })   // columnas ordenables (escritorio)
     .filter(e=>!fCat||e.category===fCat)
     .filter(e=>{ const q=pettyQ.trim().toLowerCase(); if(!q) return true; return (e.concept||'').toLowerCase().includes(q) || String(Math.round(e.amount||0)).includes(q.replace(/[.$\s]/g,'')) })
     .sort((a,b)=>{ const c=(a.date||'')<(b.date||'')?1:-1; return pettyOrd==='nuevo'?c:-c })
@@ -599,8 +601,8 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
             /* Escritorio: tabla (misma fuente `pendientes`, misma selección). Móvil: filas de abajo, intactas. */
             <div style={{padding:'0 14px'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13,tableLayout:'fixed'}}>
               <colgroup><col style={{width:30}}/><col style={{width:88}}/><col/><col style={{width:66}}/><col style={{width:84}}/></colgroup>
-              <thead><tr>{['','Fecha','Concepto · cliente','Categoría','Monto'].map((h,i)=><th key={i} style={{...TH_BAND,textAlign:i===4?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
-              <tbody>{pendientes.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
+              <thead><tr>{['','Fecha','Concepto · cliente','Categoría','Monto'].map((h,i)=>thCaja(h,{...TH_BAND,textAlign:i===4?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}))}</tr></thead>
+              <tbody>{pendOrd.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
                 <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:8,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
