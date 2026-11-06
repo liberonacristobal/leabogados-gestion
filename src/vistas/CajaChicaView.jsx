@@ -110,10 +110,10 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
   // Gastos pendientes de liquidar DEL USUARIO (tipo gasto, no rendidos, created_by = me)
   const misPendientes = gastosPorLiquidarCaja(expenses, me)
   const pendientes = misPendientes
-  const { filas:pendOrd, th:thCaja } = useOrden(pendientes, { Fecha:e=>e.date, 'Concepto · cliente':e=>e.concept, Categoría:e=>e.category, Monto:e=>e.amount })   // columnas ordenables (escritorio)
     .filter(e=>!fCat||e.category===fCat)
     .filter(e=>{ const q=pettyQ.trim().toLowerCase(); if(!q) return true; return (e.concept||'').toLowerCase().includes(q) || String(Math.round(e.amount||0)).includes(q.replace(/[.$\s]/g,'')) })
     .sort((a,b)=>{ const c=(a.date||'')<(b.date||'')?1:-1; return pettyOrd==='nuevo'?c:-c })
+  const { filas:pendOrd, th:thCaja } = useOrden(pendientes, { Fecha:e=>e.date, 'Concepto · cliente':e=>e.concept, Categoría:e=>e.category, Monto:e=>e.amount })   // columnas ordenables (escritorio)
   // "Sin liquidar": total pendiente del usuario, independiente del filtro de categoría
   const sinLiquidar = misPendientes.reduce((a,e)=>a+(e.amount||0),0)
 
