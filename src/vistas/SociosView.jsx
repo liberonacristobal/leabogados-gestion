@@ -135,7 +135,7 @@ export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
 }
 
-export function SociosView({ backLabel='Oficina', expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [eqMode,setEqMode]=useState('ambos')
@@ -149,6 +149,7 @@ export function SociosView({ backLabel='Oficina', expenses=[], clients=[], billi
   const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
   const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum } = retirosSocios({ expenses, clients, socios, yr })   // fuente única: la misma del Panel de socios
+  useEffect(()=>{ if(!focoSocio) return; const r=retSoc.filter(x=>x.socio===focoSocio).sort((a,b)=>String(b.d0).localeCompare(String(a.d0)))[0]; if(r) setExpRet(r.socio+'|'+r.d0) },[focoSocio])   // eslint-disable-line  — llegar desde el Panel con el último retiro de ese socio abierto
   const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
   const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
   const BG=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[1]]))

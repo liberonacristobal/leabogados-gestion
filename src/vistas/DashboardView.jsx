@@ -34,7 +34,7 @@ export function CxRow({sg='',label,extra,pill,val,kind,onClick,open,isDesk,tenue
 
 // Desglose de Vendido / Facturado / Cobrado / Margen del año (el que abre el tile en Inicio). Compartido con el Panel de socios: recibe el resultado de
 // useResultadoAnio (datos) y no calcula nada propio, de modo que las cifras son las mismas por cualquier entrada. go(dest) recibe un tab; setDrill cambia {tile,year}.
-export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill:setResDrill,moneda:dashMoneda,go,isDesk:isDeskRes,selYear,onOpenClientFicha,onOpenEstadoResultados}){
+export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill:setResDrill,moneda:dashMoneda,go,isDesk:isDeskRes,selYear,onOpenClientFicha,onOpenEstadoResultados,propAbiertas=null}){
   const resDrill={tile:t,year}
   const { ufRef, ufDias, ingConc, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, resAnio } = datos
   const [resOrd,setResOrd] = usePersistedState('d_resord','fecha')
@@ -134,6 +134,11 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
                       {cxR({label:'Meta del año',val:M.tot,kind:'sub',onClick:()=>go('sales')})}
                       {cxR({sg:'−',label:'Vendido bruto',val:M.s[0],kind:'sub',onClick:()=>go('sales')})}
                       {cxR({sg:'=',label:'Falta para la meta',extra:pctX(ventaPct,'cumplido'),val:M.s[1],kind:'tot',onClick:()=>go('sales')})}
+                      {propAbiertas&&propAbiertas.uf>0&&(()=>{ const faltaUF=metaUF-m.brutoUF, resto=faltaUF-propAbiertas.uf, B=cuadra([[propAbiertas.uf,propAbiertas.uf*ufRef],[resto,resto*ufRef]])
+                        return <>{capR('Si se cierran las propuestas abiertas',true)}
+                          {cxR({k:'pf',label:'Falta para la meta',val:B.tot,kind:'sub',onClick:()=>go('sales')})}
+                          {cxR({k:'pp',sg:'−',label:`Propuestas abiertas · ${propAbiertas.n}`,extra:faltaUF>0&&pctX(Math.round(propAbiertas.uf/faltaUF*100),'de lo que falta'),val:B.s[0],kind:'sub',onClick:propAbiertas.onClick})}
+                          {cxR({k:'pr',sg:'=',label:resto>=0?'Quedaría por vender':'Sobre la meta',val:B.s[1],kind:'tot',onClick:()=>go('sales')})}</> })()}
                     </>}
                   </>}
                   {verlink('Ver todo en Ventas','sales')}
