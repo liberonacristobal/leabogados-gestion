@@ -135,7 +135,7 @@ export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
 }
 
-export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+export function SociosView({ backLabel='Oficina', expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [eqMode,setEqMode]=useState('ambos')
@@ -202,7 +202,7 @@ export function SociosView({ expenses=[], clients=[], billing=[], terceros=[], c
   return (
   <div style={{maxWidth:isDesktop?1060:'100%',margin:'0 auto',padding:isDesktop?'0 20px 44px':'0 16px 44px'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,margin:'4px 0 18px',flexWrap:'wrap'}}>
-      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>Oficina</button>
+      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:13,fontWeight:700,padding:0}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M19 12H5'/><path d='m12 19-7-7 7-7'/></svg>{backLabel}</button>
       <h1 style={{fontSize:isDesktop?20:19,fontWeight:800,color:C.accent,letterSpacing:-.5}}>Socios · retiros y sueldos</h1>
       {difAcum===0
         ? <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11,fontWeight:700,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'6px 12px'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>Retiros al día</span>
