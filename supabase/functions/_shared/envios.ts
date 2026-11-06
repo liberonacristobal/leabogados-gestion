@@ -9,6 +9,13 @@ const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const lista = (v: any): string[] => (Array.isArray(v) ? v : String(v || "").split(/[,;]/)).map((x: unknown) => String(x).trim().toLowerCase()).filter(Boolean);
 
 export class SMTPClient extends SMTPBase {
+  // denomailer 1.6.0 define close() síncrono (devuelve undefined). Varias funciones lo usan como promesa (`await c.close().catch(...)`) y eso
+  // lanzaba «Cannot read properties of undefined (reading 'catch')» justo después de enviar: el correo salía pero la función no alcanzaba a
+  // marcarlo como enviado (Diario Oficial, 06-11-2026). Aquí siempre devuelve una promesa.
+  close(): Promise<void> {
+    try { super.close(); } catch (_) { /* ya cerrado */ }
+    return Promise.resolve();
+  }
   // deno-lint-ignore no-explicit-any
   async send(msg: any) {
     await super.send(msg);
