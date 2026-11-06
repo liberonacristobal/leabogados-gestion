@@ -6,7 +6,7 @@ import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/b
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
-import { proyeccionCobranza } from './DashboardView.jsx'
+import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { notariaPorLiquidar } from '../../supabase/functions/_shared/notariaReglas.js'
@@ -27,8 +27,8 @@ const ICO_ANIO = {
   check:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>,
   tPct:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
 }
-const KpiAnio = ({ic,tono='nt',label,value,pct,cap,onClick,D}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
-  <div onClick={onClick} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:D?'14px':'12px 10px',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
+const KpiAnio = ({ic,tono='nt',label,value,pct,cap,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
+  <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
     <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
     <div style={{minWidth:0,flex:1}}>
       <div style={{...SEC_LBL,fontSize:D?11:10,...DOS_LINEAS}}>{label}</div>
@@ -113,6 +113,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const hoy = new Date().toISOString().slice(0,10), ymNow = hoy.slice(0,7), ymPrev = _ymPrev(ymNow)
   const mesPasado = MESES[Number(ymPrev.slice(5,7))-1], mesActual = MESES[Number(ymNow.slice(5,7))-1]
   const [moneda,setMoneda] = usePersistedState('panel_moneda','UF')
+  const [drill,setDrill] = usePersistedState('panel_resdrill',null)   // {tile:'vend'|'fact'|'cob'|'marg', year} — desglose bajo los tiles del año, el mismo de Inicio
   const [abiertas,setAbiertas] = usePersistedState('panel_abiertas',[])
   const lista = Array.isArray(abiertas)?abiertas:[]
   const tog = id => setAbiertas(lista.includes(id)?lista.filter(x=>x!==id):[...lista,id])
@@ -338,11 +339,13 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const ano = (<>
     <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
-      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' value={vMon(m.brutoUF,m.bruto)} pct={m.meta>0?ventaPct:null} cap='de la meta' onClick={()=>go('ventas')}/>
-      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='de lo vendido' onClick={()=>go('facturacion')}/>
-      <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' onClick={()=>go('resultadoAnio')}/>
-      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='de ingresos' onClick={()=>go('resultadoAnio')}/>}
+      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' value={vMon(m.brutoUF,m.bruto)} pct={m.meta>0?ventaPct:null} cap='de la meta' activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
+      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='de lo vendido' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>
+      <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' activo={drill?.tile==='cob'} onClick={()=>setDrill(d=>d&&d.tile==='cob'?null:{tile:'cob',year:null})}/>
+      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='de ingresos' activo={drill?.tile==='marg'} onClick={()=>setDrill(d=>d&&d.tile==='marg'?null:{tile:'marg',year:null})}/>}
     </div>
+    {drill&&<ResDrillPanel datos={R} clients={clients} terceros={terceros} tile={drill.tile} year={drill.year} setDrill={setDrill} moneda={moneda} isDesk={isDesktop} selYear={currentYear}
+      go={t=>go(({sales:'ventas',billing:'facturacion',expenses:'gastos',presupuestoOficina:'oficina'})[t]||t)} onOpenClientFicha={id=>go('cliente',id)} onOpenEstadoResultados={()=>go('resultadoAnio')}/>}
   </>)
   const fecha = fmtFechaDMY(hoy)
   const resColor = rm.res>=0?C.greenText:C.overdueText
