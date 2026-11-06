@@ -39,6 +39,7 @@ Nace del 2026-11-06: la clasificación de «Por facturar» salió con 11 partida
 - **El motivo es etiqueta, no categoría:** «cubierta por factura», «pausada», «mensual» se muestran en la fila; no abren otra partida ni otro estado.
 - **Reutilizar lo que ya existe** (decisiones guardadas, estados, detectores, listas) en vez de crear una clase paralela.
 - **Las partidas suman el total** y deben poder explicarse en una línea cada una. Si una clasificación pasa de ~4 partidas visibles, replantearla antes de construirla.
+- **Nombres breves y entendibles, de su vocabulario** (el del usuario o el contable, financiero o legal): «Vencidas», «Por vencer», «Por confirmar», «Excluidas», «Dar de baja», «Prorrogar»; nunca jerga propia ni palabras que haya que explicar («Fuera», «vigente con nueva fecha»). Si el nombre necesita una frase para entenderse, es el nombre equivocado.
 - Refuerza «menos es más» y «reusar siempre, nunca duplicar».
 
 ## REGLA DE ORO: modal solo para confirmaciones — todo lo demás es página
