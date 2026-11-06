@@ -1639,7 +1639,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   // Deep-link desde los accesos directos del Inicio: abre el cotejo SII o el checklist "Facturas del mes"
   const [cotejoMes,setCotejoMes] = useState(null)   // mes con el que abrir el cotejo (para buscar facturas antiguas del mes de un pago)
   const [cierreOpen,setCierreOpen] = useState(()=>!!viewMemLeer('billing')?.cierreOpen)
-  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='sinfacturar') setFilter('sinfacturar'); else if(intent==='porcompletar') setFilter('porcompletar'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='anticipos') setFilter('anticipos'); else if(intent==='sii') setSiiPageOpen(true); else if(intent==='sinregistrar') setTimeout(()=>cargarSinRegistrar(),0); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
+  useEffect(()=>{ if(!intent) return; if(intent==='cotejo'||String(intent).startsWith('cotejo:')){ const mm=String(intent).split(':')[1]||null; setCotejoMes(/^\d{4}-\d{2}$/.test(mm||'')?mm:null); setSiiOpen(true) } else if(intent==='checklist') setFilter('checklist'); else if(intent==='sinemitir') setFilter('sinemitir'); else if(intent==='sinfacturar') setFilter('sinfacturar'); else if(intent==='porcompletar') setFilter('porcompletar'); else if(intent==='cierre') setCierreOpen(true); else if(intent==='anticipos') setFilter('anticipos'); else if(intent==='sii') setSiiPageOpen(true); else if(intent==='porenviar') abrirBandeja(); else if(intent==='sinregistrar') setTimeout(()=>cargarSinRegistrar(),0); onIntentDone&&onIntentDone() },[intent])   // eslint-disable-line
   useEffect(()=>{ contarSinRegistrar() },[])   // badge del hub: cargas sin registrar // eslint-disable-line
   const {uf:ufHoy} = useUF()
   const [estSel,setEstSel] = useState(()=>new Set())   // multi-select de estado en la vista Por cliente; vacío = todos
@@ -2720,7 +2720,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
   const desdeFueraRef=useRef(null)
   const terc=useTerceroFacturas({terceros,billing})   // facturas del tercero: cuadres propuestos y alertas (misma fuente que la ficha del proveedor)
   const compromisosCob=useCompromisosCobranza()   // compromisos de pago de cobranza: el incumplido vuelve a «Por revisar»
-  useEffect(()=>{ const k=String(intent||'').startsWith('cotejo')?'sii':({checklist:'checklist',cierre:'cierre',sinemitir:'sinemitir',sinfacturar:'sinfacturar',porcompletar:'porcompletar'})[intent]; if(k&&onVolver&&origenVolver) desdeFueraRef.current=k },[intent])   // eslint-disable-line
+  useEffect(()=>{ const k=String(intent||'').startsWith('cotejo')?'sii':({checklist:'checklist',cierre:'cierre',sinemitir:'sinemitir',sinfacturar:'sinfacturar',porcompletar:'porcompletar',porenviar:'porenviar'})[intent]; if(k&&onVolver&&origenVolver) desdeFueraRef.current=k },[intent])   // eslint-disable-line
   const volverOrigen=(k,fn)=>()=>{ if(desdeFueraRef.current===k&&onVolver){ desdeFueraRef.current=null; onVolver() } else fn() }
   const origenDe=(k,fb)=>desdeFueraRef.current===k&&origenVolver?origenVolver:fb
   // Envíos de facturas hechos fuera de la app: se detectan en los enviados de quien abre «Facturas por enviar» (regla estricta en _shared) y se marcan con un toque.
@@ -2838,7 +2838,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
           <button onClick={()=>guardarYaEnv(b)} style={{...bSm,minWidth:0,color:C.surface,background:C.accent,borderColor:C.accent}}>Guardar envío</button>
         </div>
       </div> }
-    return <FlujoPagina origen='Facturación' titulo='Facturas por enviar' onBack={()=>setBandejaEnvio(false)} maxW={1120}>
+    return <FlujoPagina origen={origenDe('porenviar','Facturación')} titulo='Facturas por enviar' onBack={volverOrigen('porenviar',()=>setBandejaEnvio(false))} maxW={1120}>
       <div style={{display:'flex',flexDirection:isDesktop?'row':'column',alignItems:'flex-start',gap:isDesktop?18:12}}>
         <div style={{flex:1,minWidth:0,width:'100%',display:'flex',flexDirection:'column',gap:12}}>
           {(()=>{ const k=estadoConexion(gmailEst).k; if(k==='sin') return null
