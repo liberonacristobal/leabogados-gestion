@@ -6,6 +6,7 @@ import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
 import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
+import { VistasGuardadas, useVistasGuardadas } from '../lib/vistasGuardadas.jsx'
 
 // Texto de cada tipo de pendiente en la lista de escritorio («2 cuotas por emitir»).
 const TXT_PEND = {banco:['pago por imputar','pagos por imputar'], fondos:['fondos por solicitar','fondos por solicitar'], sinfactura:['pagada sin factura','pagadas sin factura'], cuotas:['cuota por emitir','cuotas por emitir'], vencidas:['factura vencida','facturas vencidas'], datos:['dato por corregir','datos por corregir']}
@@ -166,6 +167,8 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   const [ord,setOrd] = useState(_vmC?.ord||{k:'nombre',dir:1})   // escritorio: columna por la que se ordena la tabla
   const [pendOn,setPendOn] = useState(!!_vmC?.pend)   // «Pendientes financieros»: solo los clientes con algo por resolver (regla única pendientesPorCliente)
   const [tipoSel,setTipoSel] = useState(()=>new Set(_vmC?.tipos||[]))
+  // Vistas guardadas: la combinación de filtros de hoy (estado, responsables, pendientes, tipos, búsqueda y orden) con nombre, por usuario.
+  const [vistasG,guardarVistasG] = useVistasGuardadas('clientes',user?.email)
   useEffect(()=>{ if(!pendIntent) return; setPendOn(true); setTipoSel(new Set()); setRespSel(new Set((pendIntent.resp||[]).filter(r=>responsables.includes(r)))); setSFilter('Activo'); setQ(''); setSelected(null); onPendIntentUsed&&onPendIntentUsed() },[pendIntent])
   const [selected,setSelected] = useState(()=>_vmC?.selId?(clients.find(c=>String(c.id)===String(_vmC.selId))||null):null)
   const [forceFtab,setForceFtab] = useState(null)
@@ -290,6 +293,10 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Clientes'); XLSX.writeFile(wb,`Clientes_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
+  const filtrosActuales = { sFilter, resp:[...respSel], pend:pendOn, tipos:[...tipoSel], q:q.trim(), ord:(ord.k==='nombre'&&ord.dir===1)?null:ord }
+  const aplicarVistaG = f => { setSFilter(f.sFilter||'Activo'); setRespSel(new Set((f.resp||[]).filter(r=>responsables.includes(r)))); setPendOn(!!f.pend); setTipoSel(new Set(f.tipos||[])); setQ(f.q||''); setOrd(f.ord||{k:'nombre',dir:1}) }
+  const resumenVistaG = [({Activo:'Activos',Prospecto:'Prospectos',Terminado:'Terminados',all:'Todos'})[sFilter]||sFilter,...respSel,pendOn?'Pendientes financieros':null,q.trim()?`«${q.trim()}»`:null].filter(Boolean).join(' · ')
+  const vistasUI = <VistasGuardadas vistas={vistasG} guardar={guardarVistasG} actual={filtrosActuales} defecto={{sFilter:'Activo'}} resumen={resumenVistaG} onAplicar={aplicarVistaG}/>
   const filtroBtns = mob => [['Activo','Activos'],['Prospecto','Prospectos'],['Terminado','Terminados'],['all','Todos']].map(([v,l])=>{ const on=sFilter===v; return (
     <button key={v} onClick={()=>setSFilter(v)} style={{...(mob?{flex:1,padding:'7px 0'}:{padding:'7px 13px'}),borderRadius:8,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{l} <span style={{opacity:.7,fontVariantNumeric:'tabular-nums'}}>{nEstado(v)}</span></button>) })
   const respChips = responsables.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>{responsables.map(r=>{ const on=respSel.has(r); return <button key={r} onClick={()=>toggleResp(r)} title={r} style={{height:26,padding:'0 11px',borderRadius:20,border:`0.5px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted,fontSize:11,fontWeight:on?600:500,cursor:'pointer',whiteSpace:'nowrap'}}>{r}</button> })}</div>
@@ -343,7 +350,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
         <Buscador value={q} onChange={setQ} placeholder='Buscar por nombre, razón social o RUT' style={{marginBottom:9}}/>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{filtroBtns(false)}</div>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>{respChips}{pendChip}</div>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>{respChips}{pendChip}{vistasUI}</div>
         </div>
         {tipoBtns&&<div style={{marginBottom:12,marginTop:-4}}>{tipoBtns}</div>}
         {dupAlert}
@@ -399,7 +406,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
           {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>{onRedProfesional&&<button onClick={onRedProfesional} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Red profesional</button>}{onOpenFusion&&<button onClick={()=>onOpenFusion()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Fusionar</button>}
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
-        {(respChips||pendChip)&&<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:4}}>{respChips}{pendChip}</div>}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:4}}>{respChips}{pendChip}{vistasUI}</div>
         {tipoBtns&&<div style={{marginBottom:4}}>{tipoBtns}</div>}
       </div>
       <div style={{padding:'10px 20px 100px'}}>

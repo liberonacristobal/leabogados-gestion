@@ -140,6 +140,7 @@ export const _ICON_PATHS = {
   chevL:'M15 6l-6 6 6 6',
   back:'M20 12H4M10.5 18.5 4 12l6.5-6.5',
   tick:'M5 12.5l4.5 4.5L19 7.5',
+  star:'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
 }
 
 // Glifo inline: mide 1em y toma el color del texto donde va (reemplaza los caracteres ›, ▾, ×, ←, ✓ para que se vean iguales en iPhone y Windows).
