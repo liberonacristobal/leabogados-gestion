@@ -238,7 +238,7 @@ export function ContactosClientes({isDesktop, clients=[], sales=[], user, onBack
         </div>)}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-        <div style={{display:'flex',gap:6,overflowX:'auto',flex:1,minWidth:0,scrollbarWidth:'none'}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',flex:1,minWidth:0}}>
           {abChips.map(([k,l,n])=>{ const on=F.ab===k; return <button key={k||'todos'} onClick={()=>{ setFil('ab',k); setSel(null) }} style={{fontSize:13,fontWeight:600,borderRadius:20,padding:'6px 13px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.card,color:on?'#fff':C.muted,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{l} <span style={{fontWeight:600,opacity:.8}}>{n}</span></button> })}
         </div>
         {D&&<span style={{fontSize:13,color:C.muted,whiteSpace:'nowrap'}}>Revisados <b style={{color:C.text}}>{revisados}</b> de <b style={{color:C.text}}>{rows.length}</b></span>}

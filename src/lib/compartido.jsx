@@ -805,9 +805,9 @@ export function PageHeader({origen,onBack,titulo,ctx,right,style}){
 // Flecha de volver: botón cuadrado con chevrón (blanco de toque cómodo) + origen. Una sola forma en toda la app.
 export function BackBtn({origen,onBack}){
   return (
-    <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:7,cursor:'pointer',flexShrink:0}}>
-      <span style={{width:30,height:30,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',color:C.accent,fontSize:16,lineHeight:1}}><Gl n='chevL'/></span>
-      {origen&&<span style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{origen}</span>}
+    <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:7,cursor:'pointer',minWidth:0}}>   {/* el origen cede (con «…») antes de empujar el título fuera del ancho del celular */}
+      <span style={{width:30,height:30,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',color:C.accent,fontSize:16,lineHeight:1,flexShrink:0}}><Gl n='chevL'/></span>
+      {origen&&<span style={{fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{origen}</span>}
     </span>)
 }
 

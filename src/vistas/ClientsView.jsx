@@ -401,8 +401,8 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
             <button onClick={()=>onAddTask(null)} style={chipBtn('primary')}>+ Tarea</button>
           </div>
         </div>
-        <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
-          <Buscador value={q} onChange={setQ} placeholder='Nombre, razón social o RUT' style={{flex:1,minWidth:0}}/>
+        <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center',flexWrap:'wrap'}}>
+          <Buscador value={q} onChange={setQ} placeholder='Nombre, razón social o RUT' style={{flex:'1 1 100%',minWidth:0}}/>
           {onContactos&&<button onClick={onContactos} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Contactos</button>}{onCausas&&<button onClick={onCausas} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Causas</button>}<button onClick={()=>onProveedores&&onProveedores()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Proveedores</button>{onRedProfesional&&<button onClick={onRedProfesional} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Red profesional</button>}{onOpenFusion&&<button onClick={()=>onOpenFusion()} style={{...chipBtn('soft'),flexShrink:0,height:34,color:C.accent}}>Fusionar</button>}
         </div>
         <div style={{display:'flex',gap:6,marginBottom:8}}>{filtroBtns(true)}</div>
