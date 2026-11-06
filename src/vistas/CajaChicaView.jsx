@@ -8,6 +8,7 @@ import { PaginaSobre, ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina
 import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { useOrden } from '../lib/orden.jsx'
 import { rangoIds } from '../lib/ordenar.js'
+import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
@@ -619,7 +620,8 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
             const isSel=selected.has(e.id)
             const bdg=catBadge(e.category)
             return (
-              <div key={e.id} onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
+              <FilaDeslizable key={e.id} radio={0} fondo={C.bg} acciones={onEditExpense?[{etiqueta:'Editar',onClick:()=>onEditExpense(e)}]:[]}>
+              <div onClick={()=>toggleSelect(e.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'0.5px solid #E4E8EB',cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                 <div style={{width:17,height:17,borderRadius:8,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>
                   {isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                 </div>
@@ -639,6 +641,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
                   {e.category&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,fontWeight:700,background:bdg.bg,color:bdg.color,whiteSpace:'nowrap'}}>{catLabel(e.category)}</span>}
                 </div>
               </div>
+              </FilaDeslizable>
             )
           })}
           {/* Barra inferior de liquidación */}

@@ -17,6 +17,7 @@ import { estadoConexion } from '../../supabase/functions/_shared/gmailLectura.js
 import { horaUltima } from './MiGmailView.jsx'
 import { atribuirEnvios, descartarEnvioCorreo, detectarEnviosFacturas, marcarEnviadaDesdeCorreo, marcarEnviadaManual } from '../lib/enviosCorreo.jsx'
 import { ThOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
+import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { ordenarFilas } from '../lib/ordenar.js'
 import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
@@ -4244,8 +4245,12 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
           const colValT=(b)=>{ const c=tblSort.col; if(c==='cliente') return ((clients.find(x=>x.id===b.client_id)?.name)||b.receptor_name||'~').toLowerCase(); if(c==='resp') return (clients.find(x=>x.id===b.client_id)?.abogado_responsable||'~~').toLowerCase(); if(c==='monto') return (['Vencido','Pendiente'].includes(estadoReal(b))?saldoBill(b):montoDe(b))||0; if(c==='vence') return venceDe(b)||''; return kpiDate(b)||'' }
           const cmpT=(a,b)=>{ const va=colValT(a),vb=colValT(b); const r=(typeof va==='number')?(va-vb):String(va).localeCompare(String(vb),'es'); return tblSort.dir==='desc'?-r:r }
           const hCell=(col,label,align)=>{ const on=tblSort.col===col; return <span onClick={()=>setTblSort(s=>({col,dir:s.col===col?(s.dir==='asc'?'desc':'asc'):(col==='cliente'?'asc':'desc')}))} title='Ordenar' style={{display:'inline-flex',alignItems:'center',gap:3,cursor:'pointer',fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:on?C.accent:C.muted,userSelect:'none'}}>{label}{on?<span style={{fontSize:10}}>{tblSort.dir==='asc'?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>:''}</span> }
-          const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id; return (
-            <div key={b.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:5,overflow:'hidden'}}>
+          const filaAll=b=>{ const er=estadoReal(b); const est=estadoCobro(b,{yaFact:conc.has(b.id)}); const col=est.color; const porConciliar=['Pendiente','Vencido'].includes(er)&&porConciliarIds.has(String(b.id)); const cl=clients.find(x=>x.id===b.client_id); const rs=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const ui=ufInfoDe(b); const dl=daysLeft(venceDe(b)||b.due); const diasMini=(er!=='Pagado'&&er!=='Anticipada'&&dl!=null)?(dl<0?`${Math.abs(dl)}d`:dl<=7?`${dl}d`:''):''; const exp=expandBill===b.id
+            // Celular: al deslizar, Recordar (abre la vista previa del correo; no envía) y Ficha. Recordar solo si está por cobrar y sin calce pendiente.
+            const accDesliz=[...(!porConciliar&&['Pendiente','Vencido'].includes(er)?[{etiqueta:'Recordar',onClick:()=>recordarCobro(b)}]:[]),...(cl&&onOpenClientFicha?[{etiqueta:'Ficha',fondo:C.muted,onClick:()=>onOpenClientFicha(cl.id)}]:[])]
+            return (
+            <div key={b.id} style={{marginBottom:5}}><FilaDeslizable activo={!isDesktop} radio={8} acciones={accDesliz}>
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
               <div data-menu={'factura:'+b.id} onClick={()=>setExpandBill(exp?null:b.id)} style={{display:isDesktop?'grid':'flex',gridTemplateColumns:isDesktop?'62px 20px minmax(0,1fr) 96px 92px 150px':undefined,justifyContent:isDesktop?undefined:'space-between',alignItems:'center',gap:isDesktop?14:8,padding:isDesktop?'9px 14px':'7px 10px',cursor:'pointer'}}>
                 {bigDate(kpiDate(b))}
                 <SIcon n={est.icon} s={15} c={col}/>
@@ -4289,6 +4294,7 @@ export function BillingView({gmailEst=null,onGmail=null,billing,fantasmaIds=new 
                 </div>)})()}
               </div>}
             </div>
+            </FilaDeslizable></div>
           )}
           return (<div>
             {tiposEn.length>1&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}><select value={tipoFL} onChange={e=>setTipoFL(e.target.value)} style={{fontSize:12,fontWeight:600,color:C.accent,border:`1px solid ${C.border}`,background:C.surface,borderRadius:10,padding:'6px 9px'}}><option value=''>Tipo: todos</option>{TIPOS_FACTURA.filter(t=>tiposEn.includes(t.k)).map(t=><option key={t.k} value={t.k}>{t.t}</option>)}</select></div>}
