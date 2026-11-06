@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { C, fmt, folioN } from './base.jsx'
+import { C, fmt, folioN, fmtFechaDMY } from './base.jsx'
 import { porCobrarBills, esVencidaB, saldoCliente, montoFactura } from './compartido.jsx'
 
 // Nombre de cliente en cualquier pantalla (escritorio): al dejar el cursor medio segundo aparece una tarjeta con su saldo, y con clic derecho un menú corto.
@@ -59,7 +59,7 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
   if (vista.tipo === 'fila') return <MenuFila vista={vista} clients={clients} billing={billing} expenses={expenses} sales={sales} onOpenFicha={onOpenFicha} onOpenSale={onOpenSale} cerrar={() => setVista(null)} />
   const c = vista.c, id = String(c.id)
   const ancho = vista.tipo === 'tarjeta' ? 270 : 210
-  const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 250))
+  const x = Math.max(8, Math.min(vista.x, window.innerWidth - ancho - 8)), y = Math.max(8, Math.min(vista.y, window.innerHeight - 280))
   const caja = { position: 'fixed', left: x, top: y, width: ancho, zIndex: 400, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,60,80,.18)', fontFamily: 'inherit' }
 
   if (vista.tipo === 'menu') {
@@ -79,6 +79,8 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
   const bills = billing.filter(b => String(b.client_id) === id)
   const porCobrar = porCobrarBills(bills), vencido = porCobrarBills(bills.filter(esVencidaB))
   const fondos = saldoCliente(expenses, c.id)
+  // Última factura emitida (con folio, sin anular): la más reciente por fecha de emisión.
+  const ultima = bills.filter(b => b.invoice_no && !b.deleted_at && b.status !== 'Programada' && b.status !== 'Anulada' && b.status !== 'Anulado' && b.issued_at).sort((a, b) => String(b.issued_at).localeCompare(String(a.issued_at)))[0]
   const nTareas = tasks.filter(t => String(t.client_id) === id && t.status !== 'Terminado').length
   const nRS = clientEntities.filter(e => String(e.client_id) === id).length
   const fila = (k, v, col) => <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '4px 0', borderTop: `1px solid ${C.bgSoft}`, fontSize: 12.5 }}><span style={{ color: C.muted }}>{k}</span><b style={{ color: col || C.text, fontVariantNumeric: 'tabular-nums' }}>{v}</b></div>
@@ -89,6 +91,8 @@ export function ClientePreview({ clients = [], billing = [], expenses = [], task
       {fila('Por cobrar', fmt(porCobrar))}
       {vencido > 0 && fila('de eso, vencido', fmt(vencido), C.overdueText)}
       {fila('Fondos', fmt(fondos), fondos < 0 ? C.overdueText : undefined)}
+      {ultima && fila(`Última factura · N° ${folioN(ultima.invoice_no)}`, `${fmt(montoFactura(ultima))}`)}
+      {ultima && <div style={{ fontSize: 11, color: C.muted, textAlign: 'right', marginTop: -2 }}>{fmtFechaDMY(ultima.issued_at)} · {ultima.status === 'Pagado' ? 'Pagada' : ultima.status === 'Vencido' ? 'Vencida' : 'Por cobrar'}</div>}
       {fila('Tareas abiertas', nTareas)}
       <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 700, color: C.azulInfo }}>Clic para abrir la ficha ›</div>
     </div>)
