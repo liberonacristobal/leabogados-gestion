@@ -70,7 +70,12 @@ export function ventasDup(sales) {
 
 // Doble conteo cuota↔tramo: venta NO recurrente donde cuotas Programadas + facturas emitidas SUPERAN la venta.
 // ignorados = ventas marcadas «No es doble conteo» (learnings data_health 'cuotatramo:<venta>'): no vuelven a aparecer.
-export function cuotaTramo(billing, sales, ignorados = new Set()) {
+/**
+ * Cuotas programadas que, con lo ya emitido, superan la venta. `esSobra(venta, filas)` = criterio único del cuadre de la venta (porFacturar.cuadreVenta: UF de cada
+ * fecha y más de 3 %); quien llama lo pasa para no importar en círculo. Sin él rige el criterio antiguo (8 % con la UF congelada de la venta).
+ * @param {any[]} billing @param {any[]} sales @param {Set<string>} [ignorados] @param {((s:any, bs:any[]) => boolean|null)|null} [esSobra] true/false según el cuadre; null si no aplica
+ */
+export function cuotaTramo(billing, sales, ignorados = new Set(), esSobra = null) {
   const bySale = {}; (billing || []).forEach(b => { if (b.deleted_at || !b.sale_id) return; (bySale[String(b.sale_id)] = bySale[String(b.sale_id)] || []).push(b) })
   const out = []
   ;(sales || []).forEach(s => { if (s.deleted_at || !['Activo', 'Terminado'].includes(s.status) || s.cobro_type === 'mensual' || ignorados.has(String(s.id))) return
@@ -80,7 +85,8 @@ export function cuotaTramo(billing, sales, ignorados = new Set()) {
     if (prog <= 0 || emit <= 0) return
     const venta = Math.round((Number(s.amount_uf) || 0) * (Number(s.uf_value) || 40000) + (Number(s.amount_clp) || 0))
     const exceso = prog + emit - venta
-    if (venta > 0 && exceso > venta * 0.08 && exceso > 100000) out.push({ s, venta, prog, emit, exceso }) })
+    const sobra = esSobra ? esSobra(s, bs) : null   // null = el cuadre no aplica (sin UF de alguna fecha): rige el criterio antiguo, nunca se silencia
+    if (sobra == null ? (venta > 0 && exceso > venta * 0.08 && exceso > 100000) : (sobra && exceso > 0)) out.push({ s, venta, prog, emit, exceso }) })
   return out.sort((a, b) => b.exceso - a.exceso)
 }
 
@@ -273,7 +279,7 @@ export function hallazgos(d) {
   montoNeDte(d.billing).forEach(x => add('monto_distinto_dte', x.b.id, `Factura N° ${folioN(x.b.invoice_no) || '—'} · monto distinto del DTE · ${nom(x.b.client_id)}`, x.dte - x.b.amount, { factura: x.b.id, monto: x.b.amount, dte: x.dte }))
   cuotaNeDte(d.billing).forEach(x => add('cuota_distinta_dte', x.b.id, `Factura N° ${folioN(x.b.invoice_no) || '—'} · el DTE dice cuota ${x.dte.n} de ${x.dte.tot} y la app ${x.app.n} de ${x.app.tot} · ${nom(x.b.client_id)}`, null, { factura: x.b.id, app: `${x.app.n}/${x.app.tot}`, dte: `${x.dte.n}/${x.dte.tot}` }))
   ventasDup(d.sales).forEach(a => add('venta_duplicada', a.map(s => s.id).sort().join('+'), `Ventas que podrían estar duplicadas · ${nom(a[0].client_id)}`, null, { ventas: a.map(s => s.id) }))
-  cuotaTramo(d.billing, d.sales, d.cuotaTramoNo || new Set()).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
+  cuotaTramo(d.billing, d.sales, d.cuotaTramoNo || new Set(), d.cuotaTramoSobra || null).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
   glosaConflict(d.coRows).forEach(x => add('glosa_conflicto', x.key, `Glosa con más de una categoría aprendida · ${x.key}`, null, { votos: x.votos }))
   huerfanas(d.billing).forEach(b => add('factura_sin_cliente', b.id, `Factura N° ${folioN(b.invoice_no)} sin cliente · ${b.receptor_name || ''}`.trim(), b.amount, { factura: b.id }))
   vencIncoh(d.billing).forEach(b => add('vencimiento_incoherente', b.id, `Factura N° ${folioN(b.invoice_no)} con vencimiento anterior a su emisión · ${nom(b.client_id)}`, b.amount, { factura: b.id, emision: b.issued_at, vence: b.due }))

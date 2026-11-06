@@ -14,6 +14,7 @@ import { todasRest } from "../_shared/paginar.js";
 import { sugerirVentaGasto, VENTA_REAL } from "../_shared/ventaGastoReglas.js";
 import { hallazgos, DETECTOR_LBL } from "../_shared/saludDatos.js";
 import { trabajosDetenidos } from "../_shared/ventasReglas.js";
+import { cuadreVenta } from "../_shared/porFacturar.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { siguenAbiertos, correoDelDia } from "../_shared/auditorResumen.js";
 
@@ -111,7 +112,7 @@ Deno.serve(async (req) => {
     const nomProv: Record<string, string> = Object.fromEntries(provs.map((p) => [String(p.id), p.nombre]));
     const cuotaTramoNo = new Set(ctNoRows.filter((r: { value: string }) => String(r.value) === "distintos").map((r: { key: string }) => String(r.key).replace(/^cuotatramo:/, "")));
     const plantillas = await todas("learnings?select=kind,key,value&kind=in.(factura_msg,factura_asunto)&order=id");   // plantillas de correo aprendidas
-    const casos = hallazgos({ plantillas, gastos: gastosAct, terminadaOk: Object.fromEntries(terminadaOkRows.map((r: { key: string; value: string }) => [String(r.key), String(r.value || "")])), comprasTodas, cuotaTramoNo, permisos, compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
+    const casos = hallazgos({ cuotaTramoSobra: (s: any, bs: any[]) => ((c) => (c ? c.estado === "Sobra" : null))(cuadreVenta(s, bs.filter((b: any) => b.status !== "Anulada" && !b.deleted_at), ufMap)), plantillas, gastos: gastosAct, terminadaOk: Object.fromEntries(terminadaOkRows.map((r: { key: string; value: string }) => [String(r.key), String(r.value || "")])), comprasTodas, cuotaTramoNo, permisos, compras, comprasVistas: new Set(comprasVistas.map((r: { key: string }) => String(r.key))), comprasObs, comprasObsVistas: new Set(comprasObsVistas.map((r: { key: string }) => String(r.key))), detenidos, hoy: new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }), billing, sales, anticipos, conciliacion, terceros: terceros.map((t) => ({ ...t, proveedor: nomProv[String(t.proveedor_id)] || null })), movs, pettyLinks, clientEntities, coRows, saludRows, clientName: (id: string) => nomCli[String(id)] || "—" });
     const vistos = new Set(casos.map((c) => c.clave));
     const abiertos = new Map(previos.map((p) => [p.clave, p]));
     const nuevos = casos.filter((c) => !abiertos.has(c.clave));

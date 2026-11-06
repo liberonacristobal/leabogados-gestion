@@ -2,6 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { clasificarPorFacturar, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
+import { cuotaTramo } from './../supabase/functions/_shared/saludDatos.js'
 import { cuotasCubiertasVenta, noEmitirDeFilas } from './../supabase/functions/_shared/ventasReglas.js'
 
 const UF = { '2026-01-01': 40000 }                                     // UF constante: 1 UF = $40.000
@@ -104,4 +105,17 @@ test('«Ya facturada» (cuota_no_emitir con valor facturada:<factura>) saca la c
   const s = noEmitirDeFilas([{ kind: 'cuota_no_emitir', key: 'a', value: '1' }, { kind: 'cuota_no_emitir', key: 'b', value: 'facturada:f9' }, { kind: 'cuota_postergada', key: 'c' }])
   assert.ok(s.has('a') && s.has('b') && !s.has('c'))
   assert.ok(s.facturadas.has('b') && !s.facturadas.has('a')); assert.ok(s.postergadas.has('c'))
+})
+
+test('doble conteo cuota ↔ tramo usa el cuadre de la venta: más de 3 % en UF de cada fecha; sin el criterio rige el antiguo', () => {
+  const s = venta('A', { moneda: 'UF', amount_uf: 50, amount_clp: null, uf_value: 40000 })
+  const sobra = (s2, bs) => cuadreVenta(s2, bs, UF)?.estado === 'Sobra'
+  const filas = (cuotasUF) => [fact('f', 'A', '2026-10-02', 15 * 40000), prog('p', 'A', '2027-01-01', cuotasUF * 40000)]
+  assert.equal(cuotaTramo(filas(36), [s], new Set(), sobra).length, 0)           // 51 UF de 50: 2 %, tolerancia
+  assert.equal(cuotaTramo(filas(40), [s], new Set(), sobra).length, 1)           // 55 UF de 50: sobran 5 UF (10 %)
+  assert.equal(cuotaTramo(filas(37.5), [s], new Set(), sobra).length, 1)         // 52,5 UF: 5 %, ya supera el 3 %; el criterio antiguo (8 %) no lo veía
+  assert.equal(cuotaTramo(filas(37.5), [s]).length, 0)
+  assert.equal(cuotaTramo(filas(40), [s], new Set(['A']), sobra).length, 0)       // «No es doble conteo» guardado
+  assert.equal(cuotaTramo(filas(40), [s], new Set(), () => null).length, 1)       // el cuadre no aplica (sin UF): rige el criterio antiguo, no se silencia
+  assert.equal(cuotaTramo(filas(37.5), [s], new Set(), () => null).length, 0)
 })
