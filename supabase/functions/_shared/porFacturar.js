@@ -1,0 +1,114 @@
+// Reglas ÚNICAS de «Por facturar»: de la cifra de la tarjeta a lo realmente cobrable, siempre del lado conservador (lo dudoso queda
+// fuera de lo vigente, nunca dentro). Las leen Facturación › Por facturar, el flujo de caja y los avisos. Funciones puras: no leen ni
+// escriben la base. Cada cuota cae en UNA sola partida y las partidas suman exactamente el total (una cuota cubierta en parte se parte).
+import { cuotasCubiertasVenta, coberturaVenta } from './ventasReglas.js'
+import { montoFactura } from './saludDatos.js'
+
+export const POR_CONFIRMAR_DIAS = 90
+
+// Partidas y su grupo. Vigente = se factura y se cobra; Por confirmar = espera una respuesta del abogado; Fuera = ya explicado.
+export const GRUPOS = /** @type {const} */ ({
+  vigente: ['vencida', 'mesActual', 'mesSiguiente', 'masAdelante', 'recurrente'],
+  porConfirmar: ['porConfirmar', 'saldoCuota'],
+  fuera: ['cubFactura', 'cubAnticipo', 'noCorresponde', 'pausada'],
+})
+
+const _t = (/** @type {any} */ s) => new Date(String(s || '').slice(0, 10) + 'T12:00:00').getTime()
+const _sinFolio = (/** @type {any} */ b) => !b.invoice_no
+
+/**
+ * Anticipos disponibles (plata ya recibida sin factura) sobre las cuotas Programadas más antiguas de su venta (o del cliente, si el
+ * anticipo no tiene venta). El subarriendo es mensual: un pago cubre solo la cuota de SU mes (entre 15 días antes y 20 después del
+ * vencimiento). `excluir` deja fuera las cuotas que no son plata por facturar (venta no activa, «No corresponde», ya cubiertas).
+ * Es el mismo cálculo del flujo de caja: ahí se llama con las mismas cuotas, así que las dos vistas coinciden.
+ * @param {{cuotas:any[], anticipos:any[], excluir?:(b:any)=>boolean}} p
+ * @returns {{cubierto:Record<string,number>, total:number}}
+ */
+export function anticiposSobreCuotas({ cuotas, anticipos, excluir = () => false }) {
+  /** @type {Record<string,number>} */ const cubierto = {}
+  let total = 0
+  ;(anticipos || []).filter(a => a && a.estado === 'disponible' && !a.billing_id && Number(a.monto) > 0)
+    .sort((x, y) => String(x.fecha || '').localeCompare(String(y.fecha || ''))).forEach(a => {
+      let r = Number(a.monto)
+      const fa = _t(a.fecha)
+      const mesOk = (/** @type {any} */ b) => { const d = _t(b.due); return !isNaN(fa) && !isNaN(d) && fa >= d - 15 * 86400000 && fa <= d + 20 * 86400000 }
+      ;(cuotas || []).filter(b => b.status === 'Programada' && _sinFolio(b) && !excluir(b)
+        && (a.sale_id ? String(b.sale_id) === String(a.sale_id) : String(b.client_id) === String(a.client_id)) && (b.billing_type === 'subarriendo' ? mesOk(b) : true))
+        .sort((x, y) => String(x.due || '').localeCompare(String(y.due || ''))).forEach(b => {
+          if (r < 1) return
+          const m = (montoFactura(b) || Number(b.amount) || 0) - (cubierto[b.id] || 0); if (!(m > 0)) return
+          const u = Math.min(m, r); cubierto[b.id] = (cubierto[b.id] || 0) + u; r -= u; total += u })
+    })
+  return { cubierto, total }
+}
+
+/**
+ * Cuadre de una venta contra su plan, en la moneda del honorario y con la UF del día de cada documento (no la congelada).
+ * Cuadra ≤ 1 % · Tolerancia ≤ 3 % · Sobra (cuotas + facturado superan el plan) · Falta (el plan no está cubierto por cuotas ni facturas).
+ * null = no aplica (recurrente o sin plan) o falta la UF de alguna fecha: no se infiere nada.
+ * @param {any} s @param {any[]} bs facturas y cuotas de la venta @param {Record<string,number>} uf
+ * @returns {{estado:'Cuadra'|'Tolerancia'|'Sobra'|'Falta', plan:number, facturado:number, enCuotas:number, diferencia:number, enUF:boolean}|null}
+ */
+export function cuadreVenta(s, bs, uf) {
+  const cv = coberturaVenta(s, bs || [], uf || {}); if (!cv || !cv.ok) return null
+  const enCuotas = cv.prog.reduce((a, x) => a + x.uu, 0), dif = cv.usado + enCuotas - cv.plan, p = Math.abs(dif) / cv.plan
+  const estado = p <= 0.01 ? 'Cuadra' : p <= 0.03 ? 'Tolerancia' : dif > 0 ? 'Sobra' : 'Falta'
+  return { estado, plan: cv.plan, facturado: cv.usado, enCuotas, diferencia: dif, enUF: cv.enUF }
+}
+
+/**
+ * Clasifica las cuotas de la tarjeta «Por facturar» (sin folio, no pagadas, anuladas ni anticipadas, y no ya facturadas según el
+ * cruce) en partidas que suman el total. Orden de prioridad, de lo más a lo menos explicado:
+ *  pausada → cubierta por factura (y su saldo, que queda por confirmar) → «No corresponde» → cubierta por anticipo →
+ *  por confirmar (vence hace más de `dias` y su venta no se movió en ese plazo) → recurrente → vencida → mes actual / siguiente / más adelante.
+ * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string}} p
+ */
+export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir, yaFacturadas = new Set(), hoy, dias = POR_CONFIRMAR_DIAS, socioDe }) {
+  const vivas = (billing || []).filter(b => b && !b.deleted_at)
+  const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
+  const lim = new Date(_t(hoy) - dias * 86400000).toISOString().slice(0, 10)
+  const mes = hoy.slice(0, 7), sig = new Date(new Date(mes + '-01T12:00:00').setMonth(new Date(mes + '-01T12:00:00').getMonth() + 1)).toISOString().slice(0, 7)
+  const cub = cuotasCubiertasVenta(vivas, sales, uf)
+  const tarjeta = vivas.filter(b => !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)))
+  const { cubierto } = anticiposSobreCuotas({ cuotas: tarjeta.filter(b => b.status === 'Programada'), anticipos,
+    excluir: b => !!(noEmitir && noEmitir.has(String(b.id))) || !!(cub.get(String(b.id)) || {}).total })
+  /** ¿Se movió la venta (factura emitida o pagada, o anticipo) en el plazo? Si sí, una cuota vieja es un olvido por emitir, no algo por confirmar. */
+  const movio = (/** @type {any} */ saleId) => !!saleId && (vivas.some(b => String(b.sale_id) === String(saleId) && b.invoice_no && ((b.issued_at || '') >= lim || (b.paid_at || '') >= lim))
+    || (anticipos || []).some(a => a && String(a.sale_id) === String(saleId) && String(a.fecha || '') >= lim))
+  const recurrente = (/** @type {any} */ b) => b.billing_type === 'subarriendo' || (venta.get(String(b.sale_id)) || {}).cobro_type === 'mensual' || /mensual|permanente/i.test(b.concept || '')
+  /** @type {Record<string,{n:number,m:number}>} */ const partes = {}
+  /** @type {{k:string, id:string, b:any, monto:number, socio:string|null}[]} */ const filas = []
+  const add = (/** @type {string} */ k, /** @type {any} */ b, /** @type {number} */ m) => { filas.push({ k, id: String(b.id), b, monto: m, socio: socioDe ? socioDe(b) : null }); const x = partes[k] || (partes[k] = { n: 0, m: 0 }); x.n++; x.m += m }
+  for (const b of tarjeta) {
+    const amt = Number(b.amount) || 0
+    if (b.status === 'Pausada') { add('pausada', b, amt); continue }
+    let resto = amt
+    const cv = cub.get(String(b.id))
+    if (cv) {
+      // Cubierta por lo facturado. Con ≥ 80 % facturado la cuota se da por cubierta, pero el saldo no se pierde ni se cuenta: queda por confirmar.
+      const saldo = Math.min(Number(cv.saldo) || 0, cv.m)
+      const m = Math.min(cv.m, resto) - saldo
+      if (m > 0) add('cubFactura', b, m)
+      if (saldo > 0) add('saldoCuota', b, saldo)
+      resto -= Math.min(cv.m, resto); if (resto < 1) continue
+    }
+    if (noEmitir && noEmitir.has(String(b.id))) { add('noCorresponde', b, resto); continue }
+    if (cubierto[b.id]) { const m = Math.min(cubierto[b.id], resto); add('cubAnticipo', b, m); resto -= m; if (resto < 1) continue }
+    const viejo = !!b.due && b.due < lim
+    if (viejo && !movio(b.sale_id)) { add('porConfirmar', b, resto); continue }
+    if (recurrente(b)) { add('recurrente', b, resto); continue }
+    const ym = String(b.due || '').slice(0, 7)
+    if (!b.due || ym < mes || viejo) add('vencida', b, resto)
+    else if (ym === mes) add('mesActual', b, resto)
+    else if (ym === sig) add('mesSiguiente', b, resto)
+    else add('masAdelante', b, resto)
+  }
+  const suma = (/** @type {readonly string[]} */ ks) => ks.reduce((a, k) => a + (partes[k] ? partes[k].m : 0), 0)
+  const cuenta = (/** @type {readonly string[]} */ ks) => ks.reduce((a, k) => a + (partes[k] ? partes[k].n : 0), 0)
+  const grupos = {
+    vigente: { n: cuenta(GRUPOS.vigente), m: suma(GRUPOS.vigente) },
+    porConfirmar: { n: cuenta(GRUPOS.porConfirmar), m: suma(GRUPOS.porConfirmar) },
+    fuera: { n: cuenta(GRUPOS.fuera), m: suma(GRUPOS.fuera) },
+  }
+  return { total: grupos.vigente.m + grupos.porConfirmar.m + grupos.fuera.m, tarjeta: tarjeta.reduce((a, b) => a + (Number(b.amount) || 0), 0), partes, grupos, filas }
+}

@@ -88,7 +88,7 @@ test('cuotas cubiertas: el exceso facturado sobre el plan cubre las programadas 
   // facturado 2.000.000 + programadas 3.000.000 − plan 3.000.000 = 2.000.000 de exceso → cubre p1 y p2 enteras, no p3
   const r = cuotasCubiertasVenta(billing, sales, {})
   assert.deepEqual([...r.keys()].sort(), ['p1', 'p2'])
-  assert.deepEqual(r.get('p1'), { total: true, m: 1000000 })
+  assert.deepEqual(r.get('p1'), { total: true, m: 1000000, saldo: 0 })
 })
 
 test('cuotas cubiertas: un exceso parcial (menos del 80% de la cuota) cubre solo esa parte; dentro del 3% del plan no cubre nada', () => {
@@ -96,8 +96,8 @@ test('cuotas cubiertas: un exceso parcial (menos del 80% de la cuota) cubre solo
   const base = [{ id: 'f1', sale_id: 's1', invoice_no: '1', amount: 2500000, issued_at: '2026-08-01', status: 'Pagado' }, prog('p1', 's1', '2026-09-01', 1000000), prog('p2', 's1', '2026-10-01', 1000000)]
   // 2.500.000 + 2.000.000 − 3.000.000 = 1.500.000: p1 entera y 500.000 de p2
   const r = cuotasCubiertasVenta(base, sales, {})
-  assert.deepEqual(r.get('p1'), { total: true, m: 1000000 })
-  assert.deepEqual(r.get('p2'), { total: false, m: 500000 })
+  assert.deepEqual(r.get('p1'), { total: true, m: 1000000, saldo: 0 })
+  assert.deepEqual(r.get('p2'), { total: false, m: 500000, saldo: 0 })
   const casi = [{ ...base[0], amount: 2000000 }, prog('p1', 's1', '2026-09-01', 1000000), prog('p2', 's1', '2026-10-01', 50000)]
   assert.equal(cuotasCubiertasVenta(casi, sales, {}).size, 0)   // exceso de 50.000 < 3% de 3.000.000
 })
