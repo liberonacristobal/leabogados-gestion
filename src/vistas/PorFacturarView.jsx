@@ -31,7 +31,7 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
   const propias = filas.filter(x => x.id === f.id)
   const cubierto = propias.filter(x => ['cubFactura', 'cubAnticipo'].includes(x.motivo)).reduce((a, x) => a + x.monto, 0), saldo = propias.filter(x => x.motivo === 'saldoCuota').reduce((a, x) => a + x.monto, 0)
   const u = v => cuadre && cuadre.enUF ? `${v.toFixed(1).replace('.', ',')} UF` : fmt(v)
-  const tono = cuadre ? ({ Cuadra: C.greenText, Tolerancia: C.soonText, Sobra: C.overdueText, Falta: C.overdueText })[cuadre.estado] : C.muted
+  const tono = cuadre ? ({ Cuadra: C.greenText, Exceso: C.overdueText, Saldo: C.soonText })[cuadre.estado] : C.muted
   const concepto = String(b.concept || '').replace(/^.*? — /, '')
   const decidible = f.k !== 'fuera'
   const box = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }
@@ -53,7 +53,7 @@ function DetalleCuota({ f, filas, sales, bb, ufFechas, nombre, hoy, onClose, onG
           {cubierto > 0 && kv('Cubierto', fmt(cubierto))}{saldo > 0 && kv('Saldo', fmt(saldo), 'por confirmar', C.soonText)}
         </div><div style={{ padding: '0 14px 12px', fontSize: 12, color: C.textSoft }}>{PORQUE[f.motivo] || PORQUE[f.k]}</div></div>
         {cuadre && <div style={box}>{cap('Cuadre de la venta')}<div style={grid}>
-          {kv('Plan', u(cuadre.plan))}{kv('Facturado', u(cuadre.facturado))}{kv('En cuotas', u(cuadre.enCuotas))}{kv('Estado', cuadre.estado, Math.abs(cuadre.diferencia) > 0.0001 ? (cuadre.diferencia > 0 ? 'sobra ' : 'falta ') + u(Math.abs(cuadre.diferencia)) : '', tono)}
+          {kv('Plan', u(cuadre.plan))}{kv('Facturado', u(cuadre.facturado))}{kv('En cuotas', u(cuadre.enCuotas))}{kv('Estado', cuadre.estado, Math.abs(cuadre.diferencia) > 0.0001 ? (cuadre.diferencia > 0 ? 'exceso ' : 'saldo ') + u(Math.abs(cuadre.diferencia)) : '', tono)}
         </div></div>}
         <div style={box}>{cap('Facturas de la venta')}
           {emitidas.length === 0 && <div style={{ padding: '12px 14px', fontSize: 12.5, color: C.muted, borderTop: `1px solid ${C.border}` }}>La venta no tiene facturas emitidas.</div>}

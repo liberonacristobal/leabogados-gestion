@@ -46,15 +46,15 @@ export function anticiposSobreCuotas({ cuotas, anticipos, excluir = () => false 
 
 /**
  * Cuadre de una venta contra su plan, en la moneda del honorario y con la UF del día de cada documento (no la congelada).
- * Cuadra hasta 3 % de diferencia · Sobra (cuotas + facturado superan el plan) · Falta (el plan no está cubierto por cuotas ni facturas).
+ * Cuadra hasta 3 % de diferencia · Exceso (cuotas + facturado superan el honorario pactado) · Saldo (el honorario no está cubierto por cuotas ni facturas).
  * null = no aplica (recurrente o sin plan) o falta la UF de alguna fecha: no se infiere nada.
  * @param {any} s @param {any[]} bs facturas y cuotas de la venta @param {Record<string,number>} uf
- * @returns {{estado:'Cuadra'|'Sobra'|'Falta', plan:number, facturado:number, enCuotas:number, diferencia:number, enUF:boolean}|null}
+ * @returns {{estado:'Cuadra'|'Exceso'|'Saldo', plan:number, facturado:number, enCuotas:number, diferencia:number, enUF:boolean}|null}
  */
 export function cuadreVenta(s, bs, uf) {
   const cv = coberturaVenta(s, bs || [], uf || {}); if (!cv || !cv.ok) return null
   const enCuotas = cv.prog.reduce((a, x) => a + x.uu, 0), dif = cv.usado + enCuotas - cv.plan, p = Math.abs(dif) / cv.plan
-  const estado = p <= 0.03 ? 'Cuadra' : dif > 0 ? 'Sobra' : 'Falta'
+  const estado = p <= 0.03 ? 'Cuadra' : dif > 0 ? 'Exceso' : 'Saldo'
   return { estado, plan: cv.plan, facturado: cv.usado, enCuotas, diferencia: dif, enUF: cv.enUF }
 }
 

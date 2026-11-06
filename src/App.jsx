@@ -2909,7 +2909,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
               </div>
             </div> })())}
       {ln(`Por facturar${pend.length?` (${pend.length} cuota${pend.length!==1?'s':''}${nPaus?` · ${nPaus} pausada${nPaus!==1?'s':''}`:''})`:''}`, pend.length?fmt(Math.round(porFacturar)):'—', pend.length?C.text:C.muted, {top:true})}
-      {cuad&&cuad.estado==='Sobra'&&ln('Cuadre', `Sobra ${cuad.enUF?fmtUF(cuad.diferencia):fmt(Math.round(cuad.diferencia))}`, C.overdueText, {sub:true})}   {/* solo «Sobra»: «Falta» ya lo cubre «Trabajos sin facturar», que respeta las decisiones guardadas */}
+      {cuad&&cuad.estado==='Exceso'&&ln('Cuadre', `Exceso ${cuad.enUF?fmtUF(cuad.diferencia):fmt(Math.round(cuad.diferencia))}`, C.overdueText, {sub:true})}   {/* solo «Exceso»: «Saldo» ya lo cubre «Trabajos sin facturar», que respeta las decisiones guardadas */}
     </div>
     {bills.length>0&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>
       <div style={{...SEC_LBL}}>Cuotas y facturas</div>

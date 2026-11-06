@@ -81,13 +81,13 @@ test('las cuotas ya relacionadas con una factura (cruce) no son parte de Por fac
   assert.equal(r.total, 0)
 })
 
-test('cuadre de la venta: Cuadra (hasta 3 %), Sobra y Falta, en UF con la UF de cada documento', () => {
+test('cuadre de la venta: Cuadra (hasta 3 %), Exceso y Saldo, en UF con la UF de cada documento', () => {
   const s = venta('A', { moneda: 'UF', amount_uf: 50, amount_clp: null })
   const mk = (facturadoUF, cuotasUF) => [fact('f', 'A', '2026-10-02', facturadoUF * 40000), prog('p', 'A', '2027-01-01', cuotasUF * 40000)]
   assert.equal(cuadreVenta(s, mk(15, 35), UF)?.estado, 'Cuadra')
   assert.equal(cuadreVenta(s, mk(15, 36), UF)?.estado, 'Cuadra')           // +1 UF = 2 %: dentro del 3 %
-  assert.equal(cuadreVenta(s, mk(15, 50), UF)?.estado, 'Sobra')            // facturado + cuotas superan el plan en 15 UF
-  assert.equal(cuadreVenta(s, mk(15, 20), UF)?.estado, 'Falta')
+  assert.equal(cuadreVenta(s, mk(15, 50), UF)?.estado, 'Exceso')           // facturado + cuotas superan el plan en 15 UF
+  assert.equal(cuadreVenta(s, mk(15, 20), UF)?.estado, 'Saldo')
   assert.equal(Math.round(cuadreVenta(s, mk(15, 50), UF).diferencia), 15)
   assert.equal(cuadreVenta(venta('R', { cobro_type: 'mensual' }), [], UF), null)   // recurrente: no aplica
 })
@@ -110,13 +110,13 @@ test('«Ya facturada» (cuota_no_emitir con valor facturada:<factura>) saca la c
 
 test('doble conteo cuota ↔ tramo usa el cuadre de la venta: más de 3 % en UF de cada fecha; sin el criterio rige el antiguo', () => {
   const s = venta('A', { moneda: 'UF', amount_uf: 50, amount_clp: null, uf_value: 40000 })
-  const sobra = (s2, bs) => cuadreVenta(s2, bs, UF)?.estado === 'Sobra'
+  const excede = (s2, bs) => cuadreVenta(s2, bs, UF)?.estado === 'Exceso'
   const filas = (cuotasUF) => [fact('f', 'A', '2026-10-02', 15 * 40000), prog('p', 'A', '2027-01-01', cuotasUF * 40000)]
-  assert.equal(cuotaTramo(filas(36), [s], new Set(), sobra).length, 0)           // 51 UF de 50: 2 %, tolerancia
-  assert.equal(cuotaTramo(filas(40), [s], new Set(), sobra).length, 1)           // 55 UF de 50: sobran 5 UF (10 %)
-  assert.equal(cuotaTramo(filas(37.5), [s], new Set(), sobra).length, 1)         // 52,5 UF: 5 %, ya supera el 3 %; el criterio antiguo (8 %) no lo veía
+  assert.equal(cuotaTramo(filas(36), [s], new Set(), excede).length, 0)           // 51 UF de 50: 2 %, tolerancia
+  assert.equal(cuotaTramo(filas(40), [s], new Set(), excede).length, 1)           // 55 UF de 50: sobran 5 UF (10 %)
+  assert.equal(cuotaTramo(filas(37.5), [s], new Set(), excede).length, 1)         // 52,5 UF: 5 %, ya supera el 3 %; el criterio antiguo (8 %) no lo veía
   assert.equal(cuotaTramo(filas(37.5), [s]).length, 0)
-  assert.equal(cuotaTramo(filas(40), [s], new Set(['A']), sobra).length, 0)       // «No es doble conteo» guardado
+  assert.equal(cuotaTramo(filas(40), [s], new Set(['A']), excede).length, 0)       // «No es doble conteo» guardado
   assert.equal(cuotaTramo(filas(40), [s], new Set(), () => null).length, 1)       // el cuadre no aplica (sin UF): rige el criterio antiguo, no se silencia
   assert.equal(cuotaTramo(filas(37.5), [s], new Set(), () => null).length, 0)
 })
