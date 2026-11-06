@@ -63,6 +63,14 @@ try {
       await sleep(700)
       const texto = await page.evaluate(() => document.body.innerText)
       revisadas++
+      // Celular: ninguna vista puede tener barra de desplazamiento horizontal (regla del 06-11-2026): la página no se pasa del ancho ni hay contenedores con overflow-x que se desplacen.
+      const ancho = w < 768 ? await page.evaluate(() => {
+        const vw = document.documentElement.clientWidth, ms = document.getElementById('main-scroll')
+        if (document.documentElement.scrollWidth > vw + 1 || (ms && ms.scrollWidth > ms.clientWidth + 1)) return 'la página se pasa del ancho (' + Math.max(document.documentElement.scrollWidth, ms ? ms.scrollWidth : 0) + ' px en ' + vw + ')'
+        const b = [...document.querySelectorAll('body *')].find(e => { const cs = getComputedStyle(e); return (cs.overflowX === 'auto' || cs.overflowX === 'scroll') && e.scrollWidth > e.clientWidth + 1 && e.clientWidth > 0 && e.offsetParent !== null })
+        return b ? 'barra horizontal en ' + b.tagName + ' «' + (b.innerText || '').replace(/\s+/g, ' ').slice(0, 40) + '» (' + b.scrollWidth + ' px en ' + b.clientWidth + ')' : null
+      }) : null
+      if (ancho) fallas.push({ vista: nombre, donde: etiqueta, error: 'scroll horizontal: ' + ancho })
       if (BLINDAJE.test(texto) || errores.length) {
         fallas.push({ vista: nombre, donde: etiqueta, error: errores[0] || (texto.match(BLINDAJE) || [''])[0] })
         // Recupera la app para seguir revisando el resto.

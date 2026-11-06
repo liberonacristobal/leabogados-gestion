@@ -173,12 +173,12 @@ export function SociosView({ backLabel='Oficina', expenses=[], clients=[], billi
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}
   const _thB=`1px solid ${C.border}`
-  const thL={...TH_BAND,textAlign:'left',padding:'8px 18px',borderBottom:_thB}
+  const thL={...TH_BAND,textAlign:'left',padding:isDesktop?'8px 18px':'8px 8px',borderBottom:_thB}
   const thR={...thL,textAlign:'right'}
-  const tdMes={fontSize:12,fontWeight:800,padding:'10px 18px',textAlign:'right',background:C.bgSoft,borderTop:_thB,color:C.accent,fontVariantNumeric:'tabular-nums'}
-  const tdMesEmpty={fontSize:11,fontWeight:600,padding:'8px 18px',textAlign:'right',color:C.textSoft,borderTop:`1px solid ${C.bgSoft}`}
-  const tdRet={fontSize:13,padding:'10px 18px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,color:C.text,fontVariantNumeric:'tabular-nums'}
-  const tdTot={fontSize:13,fontWeight:800,padding:'12px 18px',textAlign:'right',background:C.bgSoft,borderTop:`2px solid ${C.border}`,color:C.accent,fontVariantNumeric:'tabular-nums'}
+  const tdMes={fontSize:12,fontWeight:800,padding:isDesktop?'10px 18px':'10px 8px',textAlign:'right',background:C.bgSoft,borderTop:_thB,color:C.accent,fontVariantNumeric:'tabular-nums'}
+  const tdMesEmpty={fontSize:11,fontWeight:600,padding:isDesktop?'8px 18px':'8px 8px',textAlign:'right',color:C.textSoft,borderTop:`1px solid ${C.bgSoft}`}
+  const tdRet={fontSize:13,padding:isDesktop?'10px 18px':'10px 8px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,color:C.text,fontVariantNumeric:'tabular-nums'}
+  const tdTot={fontSize:13,fontWeight:800,padding:isDesktop?'12px 18px':'12px 8px',textAlign:'right',background:C.bgSoft,borderTop:`2px solid ${C.border}`,color:C.accent,fontVariantNumeric:'tabular-nums'}
   const pill={display:'inline-flex',alignItems:'center',fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:8,padding:'3px 9px',whiteSpace:'nowrap'}
   const dotEl=col=><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:col,marginRight:5,verticalAlign:'middle'}}/>
   const chTi=(t,bg,sv)=><div style={{display:'flex',alignItems:'center',gap:9}}><span style={{width:30,height:30,borderRadius:10,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{sv}</span><span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>{t}</span></div>
