@@ -7,6 +7,7 @@ import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, diaGrande, fmt, fmtF
 import { PaginaSobre, ActBtn, CAT_COLORS, ClientePicker, EQUIPO_CFG, FlujoPagina, INICIALES_RESP, MAIL_OFICINA_CONFIRM, MES_L, Modal, MovIcon, MovilizacionView, SOCIOS_CFG, Sparkle, TH_BAND, TXT_REINGRESO, _ccDia, _ccDias, _ccEsAjuste, _glosaTransf, _norm, bigDate, calceCajaChica, cargarAdminsEstudio, chipBtn, claudeCall, driveToken, fmtSaldoG, gastosPorLiquidarCaja, incrustarLogosCorreo, learnPut, logActividad, movilizacionDatos, nDias, okDB, posiblesDuplicadosGastos, restoreScroll, saldoCajaChica, sendGmailWithPdf, sendMailServer, txtEnviado, registrarError } from '../lib/compartido.jsx'
 import { liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { useOrden } from '../lib/orden.jsx'
+import { rangoIds } from '../lib/ordenar.js'
 
 export const _ccNotaVisible = n => String(n||'').replace(/\s*·\s*mov:[0-9a-f-]+/g,'').replace(/\[ajuste\]\s*/ig,'').trim()
 
@@ -129,9 +130,11 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
   const diasDe = d => d ? Math.floor((Date.now()-new Date(d+'T12:00').getTime())/86400000) : null
   const faltaDe = e => !e.category ? 'categoría' : (!e.client_id&&e.category!=='Fondo') ? 'cliente' : null
 
-  const toggleSelect = id => setSelected(prev=>{
-    const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n
-  })
+  // Con Shift se marca el rango entre el último tocado y este, en el orden que se ve (ordenar por columna incluido).
+  const ultSel = useRef(null)
+  const toggleSelect = (id,ev) => { const rango = ev?.shiftKey && ultSel.current!=null ? rangoIds(pendOrd.map(x=>x.id),ultSel.current,id) : null
+    ultSel.current = id
+    setSelected(prev=>{ const n=new Set(prev); if(rango){ const marcar=!prev.has(id); rango.forEach(x=>marcar?n.add(x):n.delete(x)) } else n.has(id)?n.delete(id):n.add(id); return n }) }
 
   // Selección estable: se arma sobre TODOS los pendientes del usuario (no se pierde al filtrar por categoría)
   const seleccionados = misPendientes.filter(e=>selected.has(e.id))
@@ -603,7 +606,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
               <colgroup><col style={{width:30}}/><col style={{width:88}}/><col/><col style={{width:66}}/><col style={{width:84}}/></colgroup>
               <thead><tr>{['','Fecha','Concepto · cliente','Categoría','Monto'].map((h,i)=>thCaja(h,{...TH_BAND,textAlign:i===4?'right':'left',padding:'6px 8px',borderBottom:`1px solid ${C.border}`}))}</tr></thead>
               <tbody>{pendOrd.map(e=>{ const client=clients.find(cl=>cl.id===e.client_id); const isSel=selected.has(e.id); const bdg=catBadge(e.category); return (
-                <tr key={e.id} onClick={()=>toggleSelect(e.id)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
+                <tr key={e.id} onClick={ev=>toggleSelect(e.id,ev)} style={{cursor:'pointer',background:isSel?C.bgSoft:'transparent'}}>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,width:28}}><span style={{display:'inline-flex',width:17,height:17,borderRadius:8,alignItems:'center',justifyContent:'center',border:`1.5px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'transparent'}}>{isSel&&<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}</span></td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,whiteSpace:'nowrap',color:C.muted}}>{fmtFechaDMY(e.date)}{(()=>{ const d=diasDe(e.date); return d!=null&&d>30?<div style={{fontSize:10,color:C.soonText,fontWeight:600}}>hace {d} días</div>:null })()}</td>
                   <td style={{padding:'9px 8px',borderBottom:`0.5px solid ${C.bgSoft}`,minWidth:0}}><div style={{fontWeight:600,color:C.text,lineHeight:1.25,overflowWrap:'anywhere'}} title={e.concept||''}>{e.concept||'—'}</div><div style={{fontSize:11.5,marginTop:1,display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{client?<span onClick={ev=>{ev.stopPropagation();onOpenClientFicha&&onOpenClientFicha(client.id)}} style={{color:C.muted,fontWeight:600,cursor:'pointer'}}>{client.name}</span>:(e.category==='Fondo'?<span style={{color:C.textSoft}}>—</span>:<span onClick={onEditExpense?(ev=>{ev.stopPropagation();onEditExpense(e)}):undefined} style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:4,padding:'1px 6px',cursor:onEditExpense?'pointer':'default',whiteSpace:'nowrap'}}>falta cliente{onEditExpense?<>{" "}· completar{" "}<Gl n='chevron'/></>:''}</span>)}</span>{onEditExpense&&<span onClick={ev=>{ev.stopPropagation();onEditExpense(e)}} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>editar</span>}</div></td>
