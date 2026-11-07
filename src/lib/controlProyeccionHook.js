@@ -13,7 +13,7 @@ export function useGuardarProyeccion(F) {
   const ref = useRef(F); ref.current = F
   const [hecho, setHecho] = useState(false)
   useEffect(() => {
-    if (DEMO || hecho || !F || !F.weeks || !F.weeks.length || !(F.cobros && F.cobros.length)) return
+    if (DEMO || hecho || (F && F.conMorosos) || !F || !F.weeks || !F.weeks.length || !(F.cobros && F.cobros.length)) return
     const t = setTimeout(async () => {
       try {
         const ini = lunesDe(hoyCL())
