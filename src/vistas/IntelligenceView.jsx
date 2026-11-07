@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { C, Gl, SEC_LBL, appAlert, fmt, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { esVencidaB, Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
 import { PorSocioVista } from '../lib/porSocio.jsx'
 
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
@@ -81,7 +81,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     const tieneRec = id => (sales||[]).some(s=>String(s.client_id)===String(id)&&esRecurrente(s))
 
     const dormidos = reales.filter(c=>(c.status||'Activo')==='Activo'&&mesesDesde(ult(c.id))>=9&&vh(c.id)>=20).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
-    const venc={}; (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&b.status==='Vencido').forEach(b=>{ venc[b.client_id]=(venc[b.client_id]||0)+saldoBill(b) })
+    const venc={}; (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&esVencidaB(b)).forEach(b=>{ venc[b.client_id]=(venc[b.client_id]||0)+saldoBill(b) })
     const cobranza = Object.entries(venc).map(([cid,monto])=>({c:(clients||[]).find(x=>String(x.id)===String(cid))||{id:cid,name:'Sin cliente'},monto})).filter(x=>x.monto>0).sort((a,b)=>b.monto-a.monto)
     const crossSell = reales.filter(c=>(c.status||'Activo')==='Activo'&&areasDe(c.id).length===1&&vh(c.id)>=30).map(c=>({c,uf:vh(c.id),area:areasDe(c.id)[0]})).sort((a,b)=>b.uf-a.uf)
     const sinRec = reales.filter(c=>(c.status||'Activo')==='Activo'&&!tieneRec(c.id)&&vh(c.id)>=50).map(c=>({c,uf:vh(c.id)})).sort((a,b)=>b.uf-a.uf)

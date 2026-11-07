@@ -18,6 +18,7 @@ import { cuotasSinEmitir, noEmitirDeFilas } from "../_shared/ventasReglas.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
+import { fotoCartera, respaldoPorFactura, saldoFactura, venceFactura } from "../_shared/fotoMes.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -73,12 +74,12 @@ serve(async (req) => {
     const { data: salesRaw } = await selectAll(()=>sb.from("sales").select("id,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,title,client_id,responsible").order("id"));
     const { data: ufRaw } = await selectAll(()=>sb.from("indicadores").select("fecha,valor").eq("codigo", "uf").order("fecha"));
     const { data: noEmitirRaw } = await sb.from("learnings").select("kind,key").in("kind", ["cuota_no_emitir", "cuota_postergada"]);
-    const { data: anticiposRaw } = await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"));
+    const { data: anticiposRaw } = await selectAll(()=>sb.from("anticipos").select("id,sale_id,billing_id,monto,estado").order("id"));
     // Trabajos por cerrar: lo que dejó el auditor nocturno (misma regla que Revisión de datos), sin los ya marcados «Sigue activo».
     const { data: detRaw } = await sb.from("auditoria_hallazgos").select("detector,monto,prueba").in("detector", ["trabajo_terminado", "trabajo_detenido_saldo"]).is("resuelto_at", null);
     const { data: activoOkRaw } = await sb.from("learnings").select("key").eq("kind", "trabajo_activo_ok");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
-    const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino").in("tipo_destino", ["factura", "anticipo"]).order("id"));
+    const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino,factura_id,anticipo_id").in("tipo_destino", ["factura", "anticipo"]).order("id"));
     const { data: abRaw } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
     const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
     // Facturas recibidas por pagar (misma regla y mismas marcas que Oficina › Compras).
@@ -103,15 +104,16 @@ serve(async (req) => {
     // ── 4) FACTURACIÓN (firm-wide, misma lógica que sii-sync resumen-semanal)
     // deno-lint-ignore no-explicit-any
     const vivos = (billsRaw || []).filter((b: any) => !b.deleted_at);
-    // deno-lint-ignore no-explicit-any
-    const saldo = (b: any) => ["Pagado", "Anulada", "Anulado"].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0));
-    // deno-lint-ignore no-explicit-any
     // Misma regla que «Por cobrar» de la app (porCobrarBills): con folio, Pendiente/Vencido, sin reembolsos ni notas de crédito.
     const porCobrarB = vivos.filter((b: any) => b.invoice_no && ["Pendiente", "Vencido"].includes(b.status) && !["reembolso", "nota_credito"].includes(b.billing_type));
     const emitidasSemanaArr = vivos.filter((b: Record<string, unknown>) => String(b.dte_emitido_at || "").slice(0, 10) >= hace7 && b.invoice_no);
     const emitidasSemana = emitidasSemanaArr.length;
-    const porCobrar = porCobrarB.reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
-    const vencido = porCobrarB.filter((b: Record<string, unknown>) => String(b.due || "") && String(b.due || "") < todayCL).reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
+    // «Por cobrar» y «Vencido»: la misma cartera que Inicio (fotoCartera = saldoBill + venceBill: total del DTE, respaldo del banco, emisión + 30 días).
+    const cartera = fotoCartera({ billing: vivos, conciliacion: concRaw || [], anticipos: anticiposRaw || [], asOf: todayCL });
+    const respaldo = respaldoPorFactura(concRaw || [], anticiposRaw || []);
+    const saldo = (b: any) => saldoFactura(b, respaldo);
+    const porCobrar = cartera.porCobrar;
+    const vencido = cartera.vencido;
     const porEnviar = vivos.filter((b: Record<string, unknown>) => b.dte_track_id && !b.email_sent_at && ["Pendiente", "Vencido"].includes(b.status as string)).length;
 
     // ── RADAR: cuotas vencidas sin facturar (regla única cuotasSinEmitir, la misma de Facturación y del cierre de mes). Candidatas
@@ -134,7 +136,7 @@ serve(async (req) => {
 
     // ── Cobros que VENCEN esta semana (próximos 7 días): emitidas Pendiente/Vencido con due en [hoy, hoy+7].
     const in7 = new Date(t0 + 7 * 86400000).toISOString().slice(0, 10);
-    const venceSemArr = porCobrarB.filter((b: Record<string, unknown>) => String(b.due || "") >= todayCL && String(b.due || "") <= in7);
+    const venceSemArr = porCobrarB.filter((b: any) => venceFactura(b) >= todayCL && venceFactura(b) <= in7);
     const venceSemN = venceSemArr.length;
     const venceSem = venceSemArr.reduce((s: number, b: Record<string, unknown>) => s + saldo(b), 0);
 

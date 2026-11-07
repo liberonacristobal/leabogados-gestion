@@ -646,7 +646,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const atenderHoy = useMemo(()=>{
     const today = new Date().toISOString().slice(0,10)
     const dlb = b => daysLeft(b.due)
-    const vencidas = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso')
+    const vencidas = bb.filter(b=>esVencidaB(b)&&b.billing_type!=='reembolso')
     const porCobrar7 = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso'&&dlb(b)!=null&&dlb(b)>=0&&dlb(b)<=7)
     const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
     const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))]

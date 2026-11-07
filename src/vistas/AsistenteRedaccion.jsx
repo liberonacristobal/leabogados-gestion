@@ -60,7 +60,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
     const areas=[...new Set(vts.map(s=>s.area).filter(Boolean))]
     const encargos=[...new Set(vts.map(s=>s.title).filter(Boolean))].slice(0,6)
     const vendidoUF=ventaHistoricaUF(cid, sales)
-    const porCobrar=porCobrarBills((billing||[]).filter(b=>String(b.client_id)===String(cid))).reduce((a,b)=>a+saldoBill(b),0)
+    const porCobrar=porCobrarBills((billing||[]).filter(b=>String(b.client_id)===String(cid)))
     const parts=[`Cliente: ${c.name}${rs&&rs!==c.name?` (RS: ${rs})`:''}.`]
     if(ruts.length) parts.push(`RUT: ${ruts.join(', ')}.`)
     if(areas.length) parts.push(`Áreas contratadas con el estudio: ${areas.join(', ')}.`)

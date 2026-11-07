@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { BRAND, C, Gl, SEC_LBL, fmt, fmtN, useIsDesktop } from '../lib/base.jsx'
 import { costoVentaUF, esRecurrente, esSubarriendo, ventaUF } from '../lib/cifras.js'
-import { BitacoraLista, Lbl, META_UF, UF_FALLBACK, comisionesVenta, currentMonth, currentYear, daysLeft, fmtUF, isAssignee, logActividad, montoFactura, saldoBill, urgency, useUF } from '../lib/compartido.jsx'
+import { BitacoraLista, Lbl, META_UF, UF_FALLBACK, comisionesVenta, currentMonth, currentYear, daysLeft, fmtUF, esVencidaB, isAssignee, logActividad, montoFactura, porCobrarBills, saldoBill, urgency, useUF, venceBill } from '../lib/compartido.jsx'
 
 // ─── REPORT BUILDER ──────────────────────────────────────────────────────────
 export function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],onClose}) {
@@ -141,8 +141,8 @@ export function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],
     // ── COBRANZA
     if(sections.cobranza){
       const bb=filterByPeriod(billing,'issued_at').filter(b=>b.billing_type!=='reembolso'&&['Pendiente','Vencido','Pagado'].includes(b.status))
-      const pending=bb.filter(b=>b.status==='Pendiente').reduce((a,b)=>a+saldoBill(b),0)   // saldo real (descuenta abonos parciales), no el monto total
-      const overdue=bb.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
+      const pending=porCobrarBills(bb)   // «Por cobrar» = el de Inicio: pendientes y vencidas con saldo (el vencido es parte del por cobrar)
+      const overdue=porCobrarBills(bb.filter(esVencidaB))
       const paid=bb.filter(b=>b.status==='Pagado').reduce((a,b)=>a+montoFactura(b),0)   // autoridad DTE
       html+=`<div class="section${sections.ventas?' page-break':''}">
         <div class="section-title">Cobranza</div>
@@ -155,7 +155,7 @@ export function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],
         html+=`<table><thead><tr><th>Cliente</th><th>Concepto</th><th>N° Factura</th><th>Emisión</th><th>Estado</th><th style="text-align:right">Monto</th><th>Antigüedad</th></tr></thead><tbody>`
         bb.sort((a,b)=>(a.status==='Vencido'?0:1)-(b.status==='Vencido'?0:1)).forEach(b=>{
           const c=clients.find(x=>x.id===b.client_id)
-          const dias=b.due?Math.round((new Date()-new Date(b.due+'T12:00'))/86400000):null
+          const vb=venceBill(b), dias=vb?Math.round((new Date()-new Date(vb+'T12:00'))/86400000):null
           const badgeClass=b.status==='Pagado'?'badge-paid':b.status==='Vencido'?'badge-overdue':'badge-pending'
           const diasStr=dias!==null&&dias>0?`${dias}d vencido`:dias!==null&&dias<0?`${Math.abs(dias)}d restantes`:'—'
           html+=`<tr><td>${c?.name||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.concept||'—'}</td><td style="font-family:monospace">${b.invoice_no||'—'}</td><td>${b.issued_at||'—'}</td><td><span class="badge ${badgeClass}">${b.status}</span></td><td style="text-align:right;font-weight:600">${fmtN(montoFactura(b))}</td><td style="color:${dias>0?C.overdue:A2}">${diasStr}</td></tr>`

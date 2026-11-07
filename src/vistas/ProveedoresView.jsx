@@ -6,7 +6,7 @@ import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll } from '../lib/compartido.jsx'
+import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll } from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
 export function _simTipo(aRaw,bRaw){
@@ -352,7 +352,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   // Cómo paga un cliente (para no mezclar la bolsa: unos pagan al día y otros no): vencidas hoy o atraso promedio de sus últimos pagos.
   const comoPaga = cid => { if(!cid) return null
     const bs=billing.filter(b=>String(b.client_id)===String(cid)&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&b.invoice_no)
-    const venc=bs.filter(b=>b.status==='Vencido'||(b.status!=='Pagado'&&b.due&&String(b.due).slice(0,10)<hoyISO)), vencM=venc.reduce((s,b)=>s+saldoBill(b),0)
+    const venc=bs.filter(esVencidaB), vencM=venc.reduce((s,b)=>s+saldoBill(b),0)
     const pag=bs.filter(b=>b.status==='Pagado'&&b.due&&b.paid_at).sort((a,b)=>String(b.paid_at).localeCompare(String(a.paid_at))).slice(0,12)
     const atraso=pag.length?Math.round(pag.reduce((s,b)=>s+Math.max(0,_diasEntre(b.due,b.paid_at)||0),0)/pag.length):null
     if(venc.length) return {tono:'rev',txt:`${venc.length===1?'1 factura vencida':`${venc.length} facturas vencidas`} · ${fmtShort(vencM)}`}
