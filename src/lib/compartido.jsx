@@ -3791,7 +3791,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   // Conservador: un cliente con una factura morosa (más de FLUJO_DUDA_DIAS tras su fecha esperada) no aporta ningún cobro al flujo; sus comisiones
   // quedan fuera con ellos (se pagan al cobrar). Con conMorosos=true se proyectan como cualquier otro.
   const exclMor={n:0,monto:0,items:[]}
-  if(!conMorosos){ const morosos=new Set(Object.values(cli).filter(c=>c.duda>0).map(c=>c.cid))
+  if(!conMorosos){ const morosos=new Set(Object.values(cli).filter(c=>c.duda>0&&c.cid!=='').map(c=>c.cid))
     for(let i=cobros.length-1;i>=0;i--){ const x=cobros[i], cid=String(x.b.client_id||''); if(!morosos.has(cid)) continue
       const w=wIdx(x.t); if(w<semanas){ weeks[w].entra-=x.m; C_(cid).entra-=x.m }
       st[x.b.id]={fuera:'moroso',m:x.m,cid}; exclMor.n++; exclMor.monto+=x.m; exclMor.items.push(x); cobros.splice(i,1) }

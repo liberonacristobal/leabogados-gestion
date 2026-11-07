@@ -22,7 +22,8 @@ export const instantanea = (hoy, entra) => ({ d: String(hoy).slice(0, 10), entra
  */
 export function controlProyeccion({ snaps, cobros, hoy, ultimas = 4 }) {
   const filas = []
-  for (const s of snaps || []) {
+  const unicos = new Map(); for (const s of snaps || []) { const k = String(s && s.key); if (!unicos.has(k)) unicos.set(k, s) }   // una instantánea por semana aunque dos sesiones la hayan guardado
+  for (const s of unicos.values()) {
     let v = s.value; if (typeof v === 'string') { try { v = JSON.parse(v) } catch (_) { v = null } }
     if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(String(s.key)) || isNaN(_d(s.key).getTime()) || !(Number(v.entra) >= 0)) continue   // clave o valor dañados: se saltan
     const fin = domingoDe(s.key)

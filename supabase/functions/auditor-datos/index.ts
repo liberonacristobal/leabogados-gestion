@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
   }
   try {
     const [billing, sales, anticipos, conciliacion, terceros, movs, pettyLinks, clientEntities, coRows, saludRows, clients, provs, previos, compras, comprasVistas, comprasObs, comprasObsVistas, gastosAct, tareasAct, horasAct, activosOk, ufRows, permisos, ctNoRows, pagosCli, comprasTodas, terminadaOkRows] = await Promise.all([
-      todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,due"),
+      todas("billing?select=id,client_id,sale_id,invoice_no,status,deleted_at,billing_type,receptor_rut,receptor_name,concept,amount,paid_amount,dte_xml,issued_at,created_at,due"),
       todas("sales?select=id,client_id,status,deleted_at,amount_uf,amount_clp,uf_value,year,month,cobro_type,cobro_config,area,title,moneda,created_at"),
       todas("anticipos?select=id,client_id,sale_id,monto,nota,estado"),
       todas("conciliacion?select=id,movimiento_id,tipo_destino,monto_aplicado,anticipo_id,factura_id"),

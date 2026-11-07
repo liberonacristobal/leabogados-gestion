@@ -3479,7 +3479,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
 
       <div style={{padding:'10px 20px 100px'}}>
         {filter==='resumen' ? (()=>{
-          const hoy=new Date().toISOString().slice(0,10)
+          const hoy=isoLocal(Date.now())
           const pend=bb.filter(b=>b.invoice_no&&['Pendiente','Vencido'].includes(b.status))
           const dias=b=>b.due?Math.round((new Date(hoy)-new Date(b.due))/86400000):0
           const porCobrar=pend.reduce((a,b)=>a+saldoBill(b),0)

@@ -34,3 +34,8 @@ test('solo muestra las últimas semanas cerradas', () => {
   assert.equal(controlProyeccion({ snaps, cobros: [], hoy: '2026-11-10' }).filas.length, 4)
   assert.equal(controlProyeccion({ snaps: [{ key: '2026-09-35', value: instantanea('2026-09-01', 1000) }], cobros: [], hoy: '2026-11-10' }).filas.length, 0)   // clave dañada: se salta
 })
+
+test('una semana guardada dos veces cuenta una sola vez', () => {
+  const s = { key: '2026-10-19', value: instantanea('2026-10-19', 1000) }
+  assert.equal(controlProyeccion({ snaps: [s, { ...s }], cobros: [], hoy: '2026-11-10' }).filas.length, 1)
+})

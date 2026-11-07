@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, Component } from 'react'
-import { useControlProyeccion } from './lib/controlProyeccionHook.js'
 import { createPortal } from 'react-dom'
 import { _SOCIO_RET } from './lib/compartido.jsx'
 import { tonoMargen } from './lib/compartido.jsx'
