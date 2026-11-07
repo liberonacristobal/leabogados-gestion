@@ -26,8 +26,8 @@ export const C = {
   // sub-paleta SOBRE NAVY (heroes con fondo accent #003C50, p.ej. Saldo del cliente / Vendido): label azul claro, botón navy profundo, divisor, verde/rojo claros legibles sobre navy
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
   // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
-  // series suaves de los gráficos de barras (ingresos en azules de la paleta; egresos en rosado y arena)
-  serie1:'#5F8799', serie2:'#99ABB4', serie3:'#CBD6DC', egrOp:'#537281', egrCom:'#99ABB4',
+  // series suaves de los gráficos de barras (ingresos y egresos en tintes de los azules de la paleta; los egresos van bajo el cero)
+  serie1:'#5F8799', serie2:'#99ABB4', serie3:'#CBD6DC', egrOp:'#3E6475', egrCom:'#8196A0',
   azulTenue:'#EFF5FA', azulTenueOn:'#E3EDF5', avisoBg:'#FFFBF0', avisoLine:'#F3E2BC', avisoMid:'#FBF1DE', avisoText:'#633806',
 }
 

@@ -8870,7 +8870,7 @@ export default function App() {
             </div>}
             {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaView billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenCostos={real=>navTo({tab:real?'estadoResultados':'presupuestoOficina'})} onOpenPorFacturar={partida=>navTo({tab:'porFacturar',partida})}/>
+              <FlujoCajaView billing={billing} fantasmaIds={fantasmaAltaIds} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenCostos={real=>navTo({tab:real?'estadoResultados':'presupuestoOficina'})} onOpenPorFacturar={partida=>navTo({tab:'porFacturar',partida})}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
