@@ -5489,12 +5489,12 @@ function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], 
       const vencidas = emit.filter(b=>!b.paid_at && b.due && String(b.due).slice(0,10)<hoy).length
       const proy = (proyectosCartera||[]).filter(p=>p.activo!==false && !p.pausado)
       s += `\nPor cobrar (facturas emitidas impagas): ${fmt(porCobrar)} · ${vencidas} vencidas.\nProyectos activos en cartera: ${proy.length}.`
-      // Contexto FINANCIERO: cobrado, costos de oficina y resultado (mismo criterio que el Inicio).
+      // Contexto FINANCIERO: facturas pagadas y costos de oficina. No arma «resultado» ni «cobrado»: esas cifras son las de Inicio y la IA no debe recalcularlas.
       const yr=new Date().getFullYear(), mNow=new Date().getMonth()+1
       const cobradoYr=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(String(yr))).reduce((a,b)=>a+cobradoBill(b),0)
       let costosYr=0; for(let i=1;i<=mNow;i++) costosYr+=costosOficinaMes(costosOfiRows,`${yr}-${String(i).padStart(2,'0')}`)
       const costosMes=costosOficinaMes(costosOfiRows)
-      if((costosOfiRows||[]).length) s += `\nCobrado a caja en el año: ${fmt(cobradoYr)}.\nCostos de oficina: ${fmt(costosMes)}/mes · ${fmt(costosYr)} en el año.\nResultado del año (cobrado − costos): ${fmt(cobradoYr-costosYr)}.`
+      if((costosOfiRows||[]).length) s += `\nFacturas pagadas en el año (por fecha de pago): ${fmt(cobradoYr)}.\nCostos de oficina: ${fmt(costosMes)}/mes · ${fmt(costosYr)} en el año.`
     }
     s += `\nResponsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
     return s
@@ -8861,7 +8861,7 @@ export default function App() {
             {tab==='subarriendo'&&userRole==='admin'&&<SubarriendoView sales={sales} billing={billing} anticipos={anticipos} clients={clients} onOpenSale={(s)=>setModal({type:'sale',data:s})} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onIrBanco={(id)=>navTo({tab:'conciliacion',conc:id})} onCargarFactura={()=>navTo({tab:'billing',billingIntent:'sii'})} onBack={goBack} origen={origenNav('Oficina')}/>}
             {tab==='panelSocios'&&userRole==='admin'&&<PanelSociosView sales={sales} billing={billing} clients={clients} terceros={terceros} expenses={expenses} anticipos={anticipos} costosOfiRows={costosOfiRows} fantasmaIds={fantasmaAltaIds} socios={socios} respaldoMap={respaldoMap} pendCli={pendCli} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Inicio'} onGo={irPanel}/>}
             {tab==='informeMes'&&userRole==='admin'&&<InformeMesView sales={sales} billing={billing} clients={clients} terceros={terceros} expenses={expenses} anticipos={anticipos} costosOfiRows={costosOfiRows} fantasmaIds={fantasmaAltaIds} socios={socios} user={user} onBack={goBack} backLabel={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]:'Panel de socios'} onGo={irPanel}/>}
-            {tab==='socios'&&userRole==='admin'&&<SociosView key={socFoco||'todos'} focoSocio={socFoco} backLabel={origenNav('Oficina')} expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
+            {tab==='socios'&&userRole==='admin'&&<SociosView key={socFoco||'todos'} focoSocio={socFoco} backLabel={origenNav('Oficina')} expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} socios={socios} isDesktop={isDesktop} onBack={goBack} onIrBanco={(q)=>navTo({tab:'conciliacion',concBuscar:q})} setExpenses={setExpenses}/>}
             {tab==='resultadoAnio'&&userRole==='admin'&&<ResultadoAnioView backLabel={origenNav('Oficina')} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} isDesktop={isDesktop} onBack={goBack} user={user} expenses={expenses} clients={clients}/>}
             {tab==='estadoResultados'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1120,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Estado de resultados' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>

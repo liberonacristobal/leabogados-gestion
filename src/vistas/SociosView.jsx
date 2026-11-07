@@ -3,10 +3,10 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { redondearPartes } from '../lib/cifras.js'
-import { MES_C, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, cobradoBill, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
+import { useResultadoAnio } from '../lib/resultadoAnio.js'
+import { MES_C, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
 
-// Cobrado del mes (fuente única, = EstadoResultadosModal): facturas con paid_at en el mes, netas de anuladas/reembolsos, vía cobradoBill. Comisión del mes = terceros_pagos pagados en el mes. Ambas reusadas por OficinaHub para no divergir.
-export const ingresosMesBill = (billing, ym) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(ym)).reduce((a,b)=>a+cobradoBill(b),0)
+// Comisión del mes = terceros_pagos pagados en el mes.
 
 export const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
 
@@ -18,10 +18,10 @@ export const _SOCIO_RUT_DISP = new Proxy({}, { get:(_,k)=>{ const s=SOCIOS_CFG.f
 // «¿Cuánto se puede retirar?» (Socios). Dos lecturas en paralelo, ambas desde la fuente:
 // · En el banco hoy (manda): saldo de la última cartola con saldo de la cuenta de honorarios + movimientos posteriores
 //   − reserva (learnings config.reserva_caja, editable) − comisiones por pagar de facturas ya pagadas por el cliente.
-// · Caja del año (control): cobrado (ingresosMesBill) − costos reales (resultadoMes.cos) − comisiones pagadas − PPM pagado − retirado.
+// · Caja del año (control): cobrado propio (ingresosPorAnioVenta.byMonth, por fecha del depósito) − costos reales (resultadoMes.cos) − comisiones pagadas − PPM pagado − retirado.
 export const RESERVA_CAJA_DEF = 30000000
 
-export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true }){
+export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [banco,setBanco]=useState(null)        // {saldo, al} | null (sin cartola con saldo)
   const [reserva,setReserva]=useState(RESERVA_CAJA_DEF)
@@ -45,13 +45,15 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], terc
   // Comisiones que ya son de otro: el cliente pagó la factura pero la comisión aún no sale del banco.
   const porPagar=useMemo(()=>(terceros||[]).filter(t=>{ if(!t||t.estado==='pagado'||!t.billing_id) return false; const b=bById[String(t.billing_id)]; return b&&!b.deleted_at&&b.status==='Pagado' }).reduce((a,t)=>a+(Number(t.monto)||0),0),[terceros,bById])
   const fu=useFuentesResultado()
+  // Cobrado del mes = «Cobrado propio» de Inicio (por fecha del depósito, sin subarriendo, reembolsos ni la parte de externos).
+  const cobMes=useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear:yr }).ingresosPorAnioVenta.byMonth
   const maxM=yr<curY?12:(yr>curY?0:curM)
   const caja=useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}; let cob=0,cos=0,com=0
-    for(let m=1;m<=maxM;m++){ const ym=`${yr}-${String(m).padStart(2,'0')}`; cob+=ingresosMesBill(billing,ym); cos+=Number(resultadoMes(fu,deps,ym).cos)||0; com+=comisionMesTerc(terceros,ym) }
+    for(let m=1;m<=maxM;m++){ const ym=`${yr}-${String(m).padStart(2,'0')}`; cob+=Number(cobMes[ym])||0; cos+=Number(resultadoMes(fu,deps,ym).cos)||0; com+=comisionMesTerc(terceros,ym) }
     const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
     const ppm=ofi?(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)&&String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))).reduce((a,e)=>a+(Number(e.amount)||0),0):0
     const gen=cob-cos-com-ppm
-    return {cob,cos,com,ppm,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet])   // eslint-disable-line react-hooks/exhaustive-deps
+    return {cob,cos,com,ppm,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet,cobMes])   // eslint-disable-line react-hooks/exhaustive-deps
   const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(Number(n)||0))
   const neg=n=>Math.abs(Number(n)||0)<1?'$0':'−'+fmtMill(Math.abs(Number(n)||0))
   const esHoy=yr===curY
@@ -135,7 +137,7 @@ export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
 }
 
-export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [eqMode,setEqMode]=useState('ambos')
@@ -233,7 +235,7 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
         </div>)}
     </div>
 
-    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop}/>
+    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop}/>
 
     <div ref={porSocioRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
