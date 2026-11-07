@@ -3972,14 +3972,25 @@ export function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
   return {mensual, peso, meses:rs.map(r=>r.ym)}
 }
 
-// Escenario del flujo (Conservador / Con morosos): una sola preferencia guardada, que leen Inicio, Oficina, Panel y la página.
-const FLUJO_MOR_KEY='flujo_con_morosos'
-export const leerFlujoConMorosos=()=>{ try{ return localStorage.getItem(FLUJO_MOR_KEY)==='1' }catch(_){ return false } }
-export const guardarFlujoConMorosos=v=>{ try{ localStorage.setItem(FLUJO_MOR_KEY,v?'1':'0') }catch(_){} }
+// Escenario del flujo (Sin morosos / Con morosos): UNA preferencia del estudio (learnings 'flujo_escenario'), la misma para todos los socios y
+// dispositivos; la leen Inicio, Oficina, Panel, Por socio y la página. Mientras carga (o en demo) rige «Sin morosos».
+let _escMor=false, _escMorCargado=false, _escMorP=null; const _escMorSubs=new Set()
+const _escMorEmitir=()=>_escMorSubs.forEach(f=>f(_escMor))
+export const leerFlujoConMorosos=()=>_escMor
+export function guardarFlujoConMorosos(v){ _escMor=!!v; _escMorEmitir()
+  if(!DEMO) setLearningKV('flujo_escenario','estudio',v?'con':'sin').catch(e=>registrarError({origen:'accion',vista:'flujo_escenario',err:e})) }
+export function useEscenarioFlujo(){
+  const [v,setV]=useState(_escMor)
+  useEffect(()=>{ _escMorSubs.add(setV); setV(_escMor)
+    if(!DEMO&&!_escMorCargado&&!_escMorP) _escMorP=supabase.from('learnings').select('value').eq('kind','flujo_escenario').eq('key','estudio').order('updated_at',{ascending:false}).limit(1)
+      .then(({data})=>{ _escMorCargado=true; _escMor=data?.[0]?.value==='con'; _escMorEmitir() },()=>{ _escMorP=null })
+    return ()=>{ _escMorSubs.delete(setV) } },[])
+  return [v,guardarFlujoConMorosos]
+}
 
 // Flujo de caja a 8 semanas: UN solo cálculo para Inicio, Oficina y la página (mismas entradas → misma cifra en todas las vistas).
 export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null, conMorosos }){
-  if(conMorosos===undefined) conMorosos=leerFlujoConMorosos()
+  const [escMor]=useEscenarioFlujo(); if(conMorosos===undefined) conMorosos=escMor
   const fu=useFuentesResultado()
   const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
   const noEmitir=useNoEmitirSet(), ufFechas=useUFFechas(bill)

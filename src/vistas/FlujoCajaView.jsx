@@ -3,7 +3,7 @@
 // clientes con facturas morosas; «Con morosos» los proyecta como a cualquier otro.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert } from '../lib/base.jsx'
-import { useFlujoCaja, leerFlujoConMorosos, guardarFlujoConMorosos, fmtMill, MES_C } from '../lib/compartido.jsx'
+import { useFlujoCaja, useEscenarioFlujo, fmtMill, MES_C } from '../lib/compartido.jsx'
 import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
 
@@ -26,7 +26,7 @@ function marcas(max, min) {
 
 export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], terceros = [], anticipos = [], expenses = [], clients = [], sales = [], fantasmaIds = null, isDesktop = false, onOpenClientFicha, onOpenFactura, onOpenCostos, onOpenPorFacturar }) {
   const billing = useMemo(() => (fantasmaIds && fantasmaIds.size) ? (billingTodo || []).filter(b => !fantasmaIds.has(String(b.id))) : billingTodo, [billingTodo, fantasmaIds])
-  const [conMor, setConMor] = useState(leerFlujoConMorosos)
+  const [conMor, setConMor] = useEscenarioFlujo()
   const [gran, setGran] = useState('sem')
   const [vista, setVistaS] = useState(() => { try { const v = localStorage.getItem('flujo_vista'); return VISTAS.some(x => x[0] === v) ? v : 'barras' } catch (_) { return 'barras' } })
   const setVista = v => { try { localStorage.setItem('flujo_vista', v) } catch (_) {} setVistaS(v) }
@@ -230,7 +230,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-      {seg(conMor ? 'todo' : 'cons', v => { guardarFlujoConMorosos(v === 'todo'); setConMor(v === 'todo') }, [['cons', 'Sin morosos'], ['todo', 'Con morosos']])}
+      {seg(conMor ? 'todo' : 'cons', v => setConMor(v === 'todo'), [['cons', 'Sin morosos'], ['todo', 'Con morosos']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
       {seg(vista, setVista, VISTAS)}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
