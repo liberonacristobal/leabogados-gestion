@@ -128,8 +128,9 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
   const kLbl = { fontSize: isDesktop ? 10.5 : 10, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.accent }
 
   // ── KPIs (cada uno abre su lista)
-  const kpi = (bg, lab, val, sub, on) => <button key={lab} onClick={on} className='pv-c' style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', border: `1px solid ${bg === C.card ? C.border : 'transparent'}`, background: bg, borderRadius: 12, padding: isDesktop ? '12px 14px' : '10px 11px', minWidth: 0, cursor: 'pointer' }}>
-    <span style={kLbl}>{lab}</span><span style={{ fontSize: isDesktop ? 24 : 20, fontWeight: 800, letterSpacing: -.6, color: C.accent, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{val}</span><span style={{ fontSize: 11.5, color: C.textSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span></button>
+  const kpi = (tint, icon, lab, val, sub, on) => <button key={lab} onClick={on} className='pv-c' style={{ display: 'flex', gap: 9, alignItems: 'flex-start', textAlign: 'left', border: `1px solid ${C.tileLine}`, background: C.tileBg, borderRadius: 12, padding: isDesktop ? '12px 14px' : '10px 11px', minWidth: 0, cursor: 'pointer' }}>
+    <span style={{ width: 26, height: 26, borderRadius: 8, background: tint.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><SIcon n={icon} s={14} c={tint.fg} /></span>
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}><span style={kLbl}>{lab}</span><span style={{ fontSize: isDesktop ? 22 : 18, fontWeight: 800, letterSpacing: -.6, color: tint.fg, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{val}</span><span style={{ fontSize: 11.5, color: C.textSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span></span></button>
   const irSemana = i => { setGran('sem'); setTimeout(() => elegir(i), 30) }
 
   // ── Detalle de la barra elegida
@@ -218,10 +219,10 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
     <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{conMor ? 'Incluye lo que se esperaba cobrar a los clientes con facturas morosas.' : `Sin los ${morosoDe.size} clientes con facturas morosas y con el plazo de pago prudente de cada cliente.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 8 }}>
-      {kpi(C.greenBg, 'Ingresos', fM(ing8), '8 semanas', () => { setTab('cli'); setFil('ent'); irA(tabsRef) })}
-      {kpi(C.overdueBg, 'Egresos', egr8 ? '−' + fM(egr8) : '$0', 'operación y comisiones', () => onOpenCostos ? onOpenCostos(F.costoReal) : (setTab('sem'), irA(tabsRef)))}
-      {kpi(C.card, 'Flujo neto', (F.fin >= 0 ? '+' : '') + fM(F.fin), '8 semanas · saldo final', () => { setTab('sem'); irA(tabsRef) })}
-      {kpi(minSaldo.s < 0 ? C.soonBg : C.greenBg, 'Saldo mínimo', fM(minSaldo.s === Infinity ? 0 : minSaldo.s), minSaldo.w ? 'semana del ' + fmtFechaDMY(minSaldo.w.ini) : '', () => { if (minSaldo.w) irSemana(F.weeks.indexOf(minSaldo.w)) })}</div>
+      {kpi({ fg: C.greenText, bg: C.greenBg }, 'tEntra', 'Ingresos', fM(ing8), '8 semanas', () => { setTab('cli'); setFil('ent'); irA(tabsRef) })}
+      {kpi({ fg: C.overdueText, bg: C.overdueBg }, 'tPagar', 'Egresos', egr8 ? '−' + fM(egr8) : '$0', '8 semanas', () => onOpenCostos ? onOpenCostos(F.costoReal) : (setTab('sem'), irA(tabsRef)))}
+      {kpi(F.fin >= 0 ? { fg: C.greenText, bg: C.greenBg } : { fg: C.overdueText, bg: C.overdueBg }, 'exchange', 'Flujo neto', (F.fin >= 0 ? '+' : '') + fM(F.fin), '8 semanas', () => { setTab('sem'); irA(tabsRef) })}
+      {kpi(minSaldo.s < 0 ? { fg: C.soonText, bg: C.soonBg } : { fg: C.accent, bg: C.azulBg }, 'wallet', 'Saldo mínimo', fM(minSaldo.s === Infinity ? 0 : minSaldo.s), minSaldo.w ? fmtFechaDMY(minSaldo.w.ini) : '', () => { if (minSaldo.w) irSemana(F.weeks.indexOf(minSaldo.w)) })}</div>
     {F.sinCuota.length > 0 && <div style={{ borderRadius: 10, padding: '9px 12px', background: C.soonBg, color: C.soonText, fontSize: 12.5, fontWeight: 700 }}>Comisión sin cuota · {F.sinCuota.length} · {[...new Set(F.sinCuota.map(x => x.prov))].slice(0, 2).join(', ')} · {fM(F.sinCuotaTot)}</div>}
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 16px 4px' }}><span style={kLbl}>{sem ? 'Ingresos y egresos por semana' : 'Ingresos esperados por mes'}</span><span style={{ flex: 1 }} />

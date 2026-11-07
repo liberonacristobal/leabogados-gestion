@@ -27,7 +27,7 @@ export const C = {
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
   // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
   // series suaves de los gráficos de barras (ingresos en azules de la paleta; egresos en rosado y arena)
-  serie1:'#5F8799', serie2:'#99ABB4', serie3:'#CBD6DC', egrOp:'#EDA9A8', egrCom:'#ECCB94',
+  serie1:'#5F8799', serie2:'#99ABB4', serie3:'#CBD6DC', egrOp:'#537281', egrCom:'#99ABB4',
   azulTenue:'#EFF5FA', azulTenueOn:'#E3EDF5', avisoBg:'#FFFBF0', avisoLine:'#F3E2BC', avisoMid:'#FBF1DE', avisoText:'#633806',
 }
 
