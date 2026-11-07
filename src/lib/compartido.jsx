@@ -3971,8 +3971,14 @@ export function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
   return {mensual, peso, meses:rs.map(r=>r.ym)}
 }
 
+// Escenario del flujo (Conservador / Con morosos): una sola preferencia guardada, que leen Inicio, Oficina, Panel y la página.
+const FLUJO_MOR_KEY='flujo_con_morosos'
+export const leerFlujoConMorosos=()=>{ try{ return localStorage.getItem(FLUJO_MOR_KEY)==='1' }catch(_){ return false } }
+export const guardarFlujoConMorosos=v=>{ try{ localStorage.setItem(FLUJO_MOR_KEY,v?'1':'0') }catch(_){} }
+
 // Flujo de caja a 8 semanas: UN solo cálculo para Inicio, Oficina y la página (mismas entradas → misma cifra en todas las vistas).
-export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null, conMorosos=false }){
+export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null, conMorosos }){
+  if(conMorosos===undefined) conMorosos=leerFlujoConMorosos()
   const fu=useFuentesResultado()
   const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
   const noEmitir=useNoEmitirSet(), ufFechas=useUFFechas(bill)

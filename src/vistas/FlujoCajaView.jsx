@@ -3,7 +3,7 @@
 // clientes con facturas morosas; «Con morosos» los proyecta como a cualquier otro.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { C, SIcon, fmtFechaDMY, folioN, appAlert } from '../lib/base.jsx'
-import { useFlujoCaja, fmtMill, MES_C } from '../lib/compartido.jsx'
+import { useFlujoCaja, leerFlujoConMorosos, guardarFlujoConMorosos, fmtMill, MES_C } from '../lib/compartido.jsx'
 import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
 
@@ -24,7 +24,7 @@ function marcas(max, min) {
 }
 
 export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [], anticipos = [], expenses = [], clients = [], sales = [], isDesktop = false, onOpenClientFicha, onOpenFactura, onOpenCostos, onOpenPorFacturar }) {
-  const [conMor, setConMor] = useState(false)
+  const [conMor, setConMor] = useState(leerFlujoConMorosos)
   const [gran, setGran] = useState('sem')
   const F = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, conMorosos: conMor })
   const control = useControlProyeccion({ F, sales, billing, terceros, costosOfiRows, expenses, clients, anticipos })
@@ -213,7 +213,7 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-      {seg(conMor ? 'todo' : 'cons', v => setConMor(v === 'todo'), [['cons', 'Conservador'], ['todo', 'Con morosos']])}
+      {seg(conMor ? 'todo' : 'cons', v => { guardarFlujoConMorosos(v === 'todo'); setConMor(v === 'todo') }, [['cons', 'Conservador'], ['todo', 'Con morosos']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
     <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{conMor ? 'Incluye lo que se esperaba cobrar a los clientes con facturas morosas.' : `Sin los ${morosoDe.size} clientes con facturas morosas y con el plazo de pago prudente de cada cliente.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
