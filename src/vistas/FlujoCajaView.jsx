@@ -8,6 +8,7 @@ import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
 
 const SER = { alDia: ['Emitidas al día', C.serie1], venc: ['Emitidas vencidas', C.serie2], cuotas: ['Cuotas por facturar', C.serie3] }
+const VISTAS = [['barras', 'Barras'], ['lineas', 'Líneas'], ['areas', 'Áreas'], ['cascada', 'Cascada']]
 const EGR = { of: ['Operación', C.egrOp], com: ['Comisiones', C.egrCom] }
 const fM = n => (n < 0 ? '−' : '') + fmtMill(Math.abs(n))
 const pesos = v => (v < 0 ? '−' : '') + '$' + Math.round(Math.abs(v)).toLocaleString('es-CL')
@@ -26,6 +27,8 @@ function marcas(max, min) {
 export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [], anticipos = [], expenses = [], clients = [], sales = [], isDesktop = false, onOpenClientFicha, onOpenFactura, onOpenCostos, onOpenPorFacturar }) {
   const [conMor, setConMor] = useState(leerFlujoConMorosos)
   const [gran, setGran] = useState('sem')
+  const [vista, setVistaS] = useState(() => { try { const v = localStorage.getItem('flujo_vista'); return VISTAS.some(x => x[0] === v) ? v : 'barras' } catch (_) { return 'barras' } })
+  const setVista = v => { try { localStorage.setItem('flujo_vista', v) } catch (_) {} setVistaS(v) }
   const F = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, conMorosos: conMor })
   const control = useControlProyeccion({ F, sales, billing, terceros, costosOfiRows, expenses, clients, anticipos })
   const [vis, setVis] = useState({ alDia: 1, venc: 1, cuotas: 1, of: 1, com: 1, saldo: 1 })
@@ -72,10 +75,11 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
     const ingMax = Math.max(...grupos.map(x => x.ing), 1), egrMax = sem ? Math.max(...grupos.map(x => x.egr), 0) : 0
     let ymax = ingMax * 1.14, ymin = -egrMax * 1.25
     if (sem && vis.saldo) { ymax = Math.max(ymax, ...grupos.map(x => x.saldo)); ymin = Math.min(ymin, ...grupos.map(x => x.saldo)) }
-    if (!sem) ymin = 0
+    if (vista === 'cascada') { const sal = sem ? grupos.map(x => x.saldo) : grupos.reduce((a, x, i) => (a.push((a[i - 1] || 0) + x.ing), a), []); ymax = (Math.max(0, ...sal) * 1.14) || 1; ymin = Math.min(0, ...sal) * 1.25 }
+    else if (!sem) ymin = 0
     const y = v => T + (ymax - v) / (ymax - ymin) * (H - T - B), bw = (W - L - R) / n, w = Math.min(bw * .64, sem ? 56 : 34)
     return { y, bw, w, tk: marcas(ymax, ymin) }
-  }, [W, n, grupos, sem, vis.saldo, H])
+  }, [W, n, grupos, sem, vis.saldo, H, vista])
 
   const barras = () => {
     if (!geo) return null
@@ -86,16 +90,30 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
       const cx = L + bw * i + bw / 2, x0 = cx - w / 2, atenuada = res && !x.items.some(c => c.cid === res)
       out.push(<rect key={'b' + i} x={L + bw * i + 2} y={T} width={bw - 4} height={H - T - B} rx='10' fill={sel === i ? C.selBg : hov === i ? C.bgSoft : 'transparent'} stroke={sel === i ? C.accent : 'none'} strokeWidth='1.4' />)
       let acc = 0; const ks = Object.keys(SER).filter(k => vis[k] && x.ser[k] > 0)
-      ks.forEach((k, j) => { const v = x.ser[k], y1 = y(acc + v), y2 = y(acc), top = j === ks.length - 1, hh = Math.max(0, y2 - y1), r = top ? Math.min(7, hh / 2, w / 2) : 0; acc += v
+      if (vista === 'barras') ks.forEach((k, j) => { const v = x.ser[k], y1 = y(acc + v), y2 = y(acc), top = j === ks.length - 1, hh = Math.max(0, y2 - y1), r = top ? Math.min(7, hh / 2, w / 2) : 0; acc += v
         out.push(<path key={'s' + i + k} opacity={atenuada ? .32 : 1} fill={SER[k][1]} d={r ? `M${x0},${y1 + r} q0,${-r} ${r},${-r} h${w - 2 * r} q${r},0 ${r},${r} V${y2} H${x0} Z` : `M${x0},${y1} h${w} V${y2} H${x0} Z`} />) })
-      if (sem) { let ac = 0; const eks = Object.keys(EGR).filter(k => vis[k] && x[k] > 0)
+      if (sem && vista === 'barras') { let ac = 0; const eks = Object.keys(EGR).filter(k => vis[k] && x[k] > 0)
         eks.forEach((k, j) => { const v = x[k], y1 = y(-ac), y2 = y(-ac - v), last = j === eks.length - 1, hh = Math.max(0, y2 - y1), r = last ? Math.min(7, hh / 2, w / 2) : 0; ac += v
           out.push(<path key={'e' + i + k} opacity={atenuada ? .32 : 1} fill={EGR[k][1]} d={r ? `M${x0},${y1} h${w} V${y2 - r} q0,${r} ${-r},${r} h${-(w - 2 * r)} q${-r},0 ${-r},${-r} Z` : `M${x0},${y1} h${w} V${y2} H${x0} Z`} />) }) }
       const tot = ks.reduce((a, k) => a + x.ser[k], 0)
-      if (tot > 0 && (sem || n <= 14)) out.push(<text key={'v' + i} x={cx} y={y(tot) - 6} textAnchor='middle' fontSize='10.5' fontWeight='700' fill={C.accent}>{fM(tot)}</text>)
+      if (vista === 'barras' && tot > 0 && (sem || n <= 14)) out.push(<text key={'v' + i} x={cx} y={y(tot) - 6} textAnchor='middle' fontSize='10.5' fontWeight='700' fill={C.accent}>{fM(tot)}</text>)
       out.push(<text key={'x' + i} x={cx} y={H - 12} textAnchor='middle' fontSize='11' fontWeight={sel === i ? 800 : 600} fill={sel === i ? C.accent : C.muted}>{!sem && n > 16 && i % 2 ? '' : x.label}</text>)
     })
-    if (sem && vis.saldo) { const pts = grupos.map((x, i) => [L + bw * i + bw / 2, y(x.saldo)])
+    const cxs = grupos.map((x, i) => L + bw * i + bw / 2), linea = (arr, col, k) => out.push(<g key={k}><path d={'M' + arr.map((v, i) => cxs[i] + ',' + y(v)).join(' L')} fill='none' stroke={col} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round' />{arr.map((v, i) => <circle key={i} cx={cxs[i]} cy={y(v)} r='4.5' fill={col} stroke={C.surface} strokeWidth='2' />)}</g>)
+    if (vista === 'lineas') { linea(grupos.map(x => x.ing), C.serie1, 'li'); if (sem) linea(grupos.map(x => -x.egr), C.egrOp, 'le') }
+    if (vista === 'areas') {
+      let ac = grupos.map(() => 0)
+      Object.keys(SER).filter(k => vis[k]).forEach(k => { const lo = ac.slice(), hi = ac.map((a, i) => a + grupos[i].ser[k]); ac = hi
+        out.push(<path key={'a' + k} fill={SER[k][1]} fillOpacity='.85' d={'M' + hi.map((v, i) => cxs[i] + ',' + y(v)).join(' L') + ' L' + lo.map((v, i) => cxs[n - 1 - i] + ',' + y(lo[n - 1 - i])).join(' L') + ' Z'} />) })
+      if (sem) { let ae = grupos.map(() => 0)
+        Object.keys(EGR).filter(k => vis[k]).forEach(k => { const lo = ae.slice(), hi = ae.map((a, i) => a + grupos[i][k]); ae = hi
+          out.push(<path key={'ae' + k} fill={EGR[k][1]} fillOpacity='.85' d={'M' + lo.map((v, i) => cxs[i] + ',' + y(-v)).join(' L') + ' L' + hi.map((v, i) => cxs[n - 1 - i] + ',' + y(-hi[n - 1 - i])).join(' L') + ' Z'} />) }) } }
+    if (vista === 'cascada') { let prev = 0
+      grupos.forEach((x, i) => { const d = sem ? x.neto : x.ing, b2 = prev + d, y1 = y(Math.max(prev, b2)), y2 = y(Math.min(prev, b2)), x0 = cxs[i] - w / 2; prev = b2
+        out.push(<g key={'c' + i}><rect x={x0} y={y1} width={w} height={Math.max(2, y2 - y1)} rx='5' fill={d >= 0 ? C.normal : C.overdue} fillOpacity='.6' />
+          {i < n - 1 && <line x1={x0 + w} x2={cxs[i + 1] - w / 2} y1={y(b2)} y2={y(b2)} stroke={C.done} strokeDasharray='3 3' />}
+          <text x={cxs[i]} y={y1 - 6} textAnchor='middle' fontSize='10.5' fontWeight='700' fill={C.accent}>{(d >= 0 ? '+' : '') + fM(d)}</text></g>) }) }
+    if (sem && vis.saldo && vista !== 'cascada') { const pts = grupos.map((x, i) => [L + bw * i + bw / 2, y(x.saldo)])
       out.push(<path key='saldo' d={'M' + pts.map(p => p.join(',')).join(' L')} fill='none' stroke={C.text} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round' />)
       pts.forEach((p, i) => out.push(<circle key={'p' + i} cx={p[0]} cy={p[1]} r='5' fill={grupos[i].saldo < 0 ? C.overdue : C.normal} stroke={C.surface} strokeWidth='2' />)) }
     grupos.forEach((x, i) => out.push(<rect key={'h' + i} x={L + bw * i} y={T} width={bw} height={H - T - B} fill='transparent' style={{ cursor: 'pointer' }} tabIndex={0} role='button'
@@ -157,7 +175,7 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
   const th = { position: 'sticky', top: 0, zIndex: 1, background: C.bgSoft, color: C.accent, fontSize: isDesktop ? 10 : 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: isDesktop ? .5 : 0, padding: isDesktop ? '9px 10px' : '9px 4px', textAlign: 'right', whiteSpace: 'nowrap' }
   const td = { padding: isDesktop ? '9px 10px' : '9px 4px', textAlign: 'right', borderTop: `1px solid ${C.bgSoft}`, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontSize: isDesktop ? 12.5 : 12 }
   const dim = <span style={{ color: C.done }}>—</span>
-  const lista = F.clientes.filter(c => fil === 'todos' || (fil === 'ent' && c.entra) || (fil === 'com' && (c.com || c.comFuera)) || (fil === 'mor' && c.duda) || (fil === 'pf' && c.sin)).filter(c => !q || nom(c.cid).toLowerCase().includes(q.toLowerCase()))
+  const lista = F.clientes.filter(c => fil === 'todos' || (fil === 'ent' && c.entra) || (fil === 'mor' && c.duda) || (fil === 'pf' && c.sin)).filter(c => !q || nom(c.cid).toLowerCase().includes(q.toLowerCase()))
   const { filas: ord, th: thO } = useOrden(lista, { Cliente: c => nom(c.cid), Cobranza: c => c.entra, Comisiones: c => c.com, Morosa: c => c.duda, 'Por facturar': c => c.sin })
   const descargar = async () => { try {
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
@@ -170,9 +188,9 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
 
   const tabla = <div>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-      {[['todos', 'Todos'], ['ent', 'Con cobros'], ['com', 'Con comisiones'], ['mor', 'Morosa'], ['pf', 'Por facturar']].map(([k, l]) => chip(fil === k, l, () => setFil(k)))}
+      {[['todos', 'Todos'], ['ent', 'Con cobros'], ['mor', 'Morosa'], ['pf', 'Por facturar']].map(([k, l]) => chip(fil === k, l, () => setFil(k)))}
       <input value={q} onChange={e => setQ(e.target.value)} placeholder='Buscar cliente…' aria-label='Buscar cliente' style={{ flex: 1, minWidth: 150, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', background: C.surface, color: C.text, font: 'inherit' }} />
-      {btn('Excel', descargar, 'download')}</div>
+      </div>
     <div style={{ overflow: 'auto', maxHeight: 340, border: `1px solid ${C.border}`, borderRadius: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead><tr>{thO('Cliente', { ...th, textAlign: 'left' })}{thO('Cobranza', th)}{thO('Comisiones', th)}{thO('Morosa', th)}{isDesktop && thO('Por facturar', th)}</tr></thead>
       <tbody>{ord.map(c => <tr key={c.cid} onClick={() => c.cid && onOpenClientFicha && onOpenClientFicha(c.cid)} onMouseEnter={() => setRes(c.cid)} onMouseLeave={() => setRes(null)} style={{ cursor: c.cid ? 'pointer' : 'default' }}>
@@ -216,6 +234,7 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
       {seg(conMor ? 'todo' : 'cons', v => { guardarFlujoConMorosos(v === 'todo'); setConMor(v === 'todo') }, [['cons', 'Conservador'], ['todo', 'Con morosos']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
+      {seg(vista, setVista, VISTAS)}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
     <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{conMor ? 'Incluye lo que se esperaba cobrar a los clientes con facturas morosas.' : `Sin los ${morosoDe.size} clientes con facturas morosas y con el plazo de pago prudente de cada cliente.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 8 }}>
@@ -225,10 +244,10 @@ export function FlujoCajaView({ billing = [], costosOfiRows = [], terceros = [],
       {kpi(minSaldo.s < 0 ? { fg: C.soonText, bg: C.soonBg } : { fg: C.accent, bg: C.azulBg }, 'wallet', 'Saldo mínimo', fM(minSaldo.s === Infinity ? 0 : minSaldo.s), minSaldo.w ? fmtFechaDMY(minSaldo.w.ini) : '', () => { if (minSaldo.w) irSemana(F.weeks.indexOf(minSaldo.w)) })}</div>
     {F.sinCuota.length > 0 && <div style={{ borderRadius: 10, padding: '9px 12px', background: C.soonBg, color: C.soonText, fontSize: 12.5, fontWeight: 700 }}>Comisión sin cuota · {F.sinCuota.length} · {[...new Set(F.sinCuota.map(x => x.prov))].slice(0, 2).join(', ')} · {fM(F.sinCuotaTot)}</div>}
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 16px 4px' }}><span style={kLbl}>{sem ? 'Ingresos y egresos por semana' : 'Ingresos esperados por mes'}</span><span style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...Object.keys(SER).map(k => [k, SER[k][0], SER[k][1]]), ...(sem ? [...Object.keys(EGR).map(k => [k, EGR[k][0], EGR[k][1]]), ['saldo', 'Saldo acumulado', C.text]] : [])].map(([k, l, c]) => chip(!!vis[k], l, () => setVis(v => ({ ...v, [k]: v[k] ? 0 : 1 })), c, !vis[k]))}</div></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 16px 4px' }}><span style={kLbl}>{vista === 'cascada' ? (sem ? 'Variación del saldo por semana' : 'Ingresos acumulados por mes') : sem ? 'Ingresos y egresos por semana' : 'Ingresos esperados por mes'}</span><span style={{ flex: 1 }} />
+        {vista !== 'cascada' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...Object.keys(SER).map(k => [k, SER[k][0], SER[k][1]]), ...(sem ? [...Object.keys(EGR).map(k => [k, EGR[k][0], EGR[k][1]]), ['saldo', 'Saldo acumulado', C.text]] : [])].map(([k, l, c]) => chip(!!vis[k], l, () => setVis(v => ({ ...v, [k]: v[k] ? 0 : 1 })), c, !vis[k]))}</div>}</div>
       <div ref={wrapRef} style={{ position: 'relative', padding: '4px 8px 6px' }}>
-        <svg viewBox={`0 0 ${W || 300} ${H}`} style={{ display: 'block', width: '100%', height: H, overflow: 'visible' }} role='img' aria-label={sem ? 'Gráfico de barras de ingresos y egresos por semana' : 'Gráfico de barras de ingresos esperados por mes'}>{barras()}</svg>
+        <svg viewBox={`0 0 ${W || 300} ${H}`} style={{ display: 'block', width: '100%', height: H, overflow: 'visible' }} role='img' aria-label={`Gráfico de ${VISTAS.find(v => v[0] === vista)[1].toLowerCase()}: ${sem ? 'ingresos y egresos por semana' : 'ingresos esperados por mes'}`}>{barras()}</svg>
         {tip()}</div></div>
     <div ref={detRef} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, scrollMarginTop: 70 }}>{detalle}</div>
     <div ref={tabsRef} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, scrollMarginTop: 70, minWidth: 0 }}>
