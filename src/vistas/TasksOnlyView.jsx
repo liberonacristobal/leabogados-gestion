@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { BRAND, C, Gl, SEC_LBL, _normTxt, fmtFechaDMY, fmtN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
-import { Buscador, MESES,   _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre } from '../lib/compartido.jsx'
+import { gastosPorLiquidarCaja, Buscador, MESES,   _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre } from '../lib/compartido.jsx'
 
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
 // hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
@@ -417,7 +417,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
         {(()=>{
           const saldo = saldoCajaChica(pettyCash, expenses, me)
           const misGastos = (expenses||[]).filter(e=>e.type==='gasto' && e.created_by===me)
-          const porLiquidar = misGastos.filter(e=>!e.rendered_at&&!e.paid_by_client)
+          const porLiquidar = gastosPorLiquidarCaja(expenses, me)   // misma regla que la caja chica
           const totalPorLiquidar = porLiquidar.reduce((a,e)=>a+(e.amount||0),0)
           const masAntiguo = porLiquidar.map(e=>e.date).filter(Boolean).sort()[0]||null
           const diasAntiguo = masAntiguo ? Math.floor((Date.now()-new Date(masAntiguo+'T12:00').getTime())/86400000) : null

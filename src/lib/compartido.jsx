@@ -2416,7 +2416,7 @@ export function recordatorioCobro(bs, nota){
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const fm=n=>'$'+Math.round(n||0).toLocaleString('es-CL')
   const items=arr.map(b=>{ const _v=venceBill(b); const dl=daysLeftB(b)
-    return { b, folio:folioN(b.invoice_no)||b.invoice_no||'—', monto:saldoBill(b)||b.amount||0, venc:_v?fmtFechaDMY(_v):'', diasVenc:(dl!=null&&dl<0)?-dl:0, concept:(b.concept||'').trim() } })
+    return { b, folio:folioN(b.invoice_no)||b.invoice_no||'—', monto:saldoBill(b), venc:_v?fmtFechaDMY(_v):'', diasVenc:(dl!=null&&dl<0)?-dl:0, concept:(b.concept||'').trim() } })
   const multi=items.length>1
   const total=items.reduce((a,x)=>a+x.monto,0)
   const maxDias=items.reduce((m,x)=>Math.max(m,x.diasVenc),0)

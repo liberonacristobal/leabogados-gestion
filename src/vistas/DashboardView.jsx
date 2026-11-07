@@ -649,7 +649,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const vencidas = bb.filter(b=>b.status==='Vencido'&&b.billing_type!=='reembolso')
     const porCobrar7 = bb.filter(b=>b.status==='Pendiente'&&b.billing_type!=='reembolso'&&dlb(b)!=null&&dlb(b)>=0&&dlb(b)<=7)
     const tareasVenc = (tasks||[]).filter(t=>t.status!=='Terminado'&&t.due&&String(t.due)<today)
-    const cajaUsers=['Martín','Martina']
+    const cajaUsers=[...new Set((pettyCash||[]).map(p=>p.user_name).filter(Boolean))]
     const cajaSinLiq = cajaUsers.flatMap(u=>gastosPorLiquidarCaja(expenses,u))   // misma regla que la caja chica de cada persona
     const _porRendir = clientesPorRendir(clients, expenses), rendCli = _porRendir.map(x=>x.c.id)   // misma cifra que la página Rendir a cliente
     const propTardias = sales.filter(s=>s.status==='Propuesta'&&s.created_at&&Math.floor((Date.now()-new Date(s.created_at))/86400000)>14)
@@ -1030,9 +1030,9 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             {kTile('resmes','Resultado del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct} % pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},`neto · 8 sem. · ${flujoCaja.conMorosos?'con morosos':'conservador'}`,onOpenFlujoCaja)}
-            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{expoCob.pctM60>0?` · ${Math.round(expoCob.pctM60*100)} % ${isDeskRes?'con más de 60 días':'sobre 60 días'}`:''}</span>:'del año',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}
+            {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{expoCob.pctM60>0?` · ${Math.round(expoCob.pctM60*100)} % ${isDeskRes?'con más de 60 días':'sobre 60 días'}`:''}</span>:'a la fecha',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}
             {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
-            {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.totalTodo, porPagar=cxpTotDash
+            {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.total, porPagar=cxpTotDash
               // La cifra grande es lo accionable (por pagar, saldo vivo), igual que «Comisiones por pagar» en Oficina; lo pagado del año va debajo.
               const val=porPagar>0?fmtShort(porPagar):'Al día'
               const col=porPagar>0?C.soonText:C.greenText
