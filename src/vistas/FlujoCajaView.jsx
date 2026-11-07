@@ -1,5 +1,5 @@
 // Flujo de caja (página autónoma): barras apiladas de ingresos y egresos por semana o mes, con el saldo acumulado.
-// No calcula nada propio: lee useFlujoCaja (flujoCajaProyectado, la misma cifra de Inicio, Oficina y Panel). El escenario Conservador deja fuera a los
+// No calcula nada propio: lee useFlujoCaja (flujoCajaProyectado, la misma cifra de Inicio, Oficina y Panel). El escenario «Sin morosos» deja fuera a los
 // clientes con facturas morosas; «Con morosos» los proyecta como a cualquier otro.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert } from '../lib/base.jsx'
@@ -8,7 +8,7 @@ import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
 
 const SER = { alDia: ['Emitidas al día', C.serie1], venc: ['Emitidas vencidas', C.serie2], cuotas: ['Cuotas por facturar', C.serie3] }
-const VISTAS = [['barras', 'Barras'], ['lineas', 'Líneas'], ['areas', 'Áreas'], ['cascada', 'Cascada']]
+const VISTAS = [['barras', 'Barras'], ['lineas', 'Líneas'], ['cascada', 'Cascada']]
 const EGR = { of: ['Operación', C.egrOp], com: ['Comisiones', C.egrCom] }
 const fM = n => (n < 0 ? '−' : '') + fmtMill(Math.abs(n))
 const pesos = v => (v < 0 ? '−' : '') + '$' + Math.round(Math.abs(v)).toLocaleString('es-CL')
@@ -106,13 +106,6 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
     })
     const cxs = grupos.map((x, i) => L + bw * i + bw / 2), linea = (arr, col, k) => out.push(<g key={k}><path d={'M' + arr.map((v, i) => cxs[i] + ',' + y(v)).join(' L')} fill='none' stroke={col} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round' />{arr.map((v, i) => <circle key={i} cx={cxs[i]} cy={y(v)} r='4.5' fill={col} stroke={C.surface} strokeWidth='2' />)}</g>)
     if (vista === 'lineas') { linea(grupos.map(x => x.ing), C.serie1, 'li'); if (sem) linea(grupos.map(x => -x.egr), C.egrOp, 'le') }
-    if (vista === 'areas') {
-      let ac = grupos.map(() => 0)
-      Object.keys(SER).filter(k => vis[k]).forEach(k => { const lo = ac.slice(), hi = ac.map((a, i) => a + grupos[i].ser[k]); ac = hi
-        out.push(<path key={'a' + k} fill={SER[k][1]} fillOpacity='.85' d={'M' + hi.map((v, i) => cxs[i] + ',' + y(v)).join(' L') + ' L' + lo.map((v, i) => cxs[n - 1 - i] + ',' + y(lo[n - 1 - i])).join(' L') + ' Z'} />) })
-      if (sem) { let ae = grupos.map(() => 0)
-        Object.keys(EGR).filter(k => vis[k]).forEach(k => { const lo = ae.slice(), hi = ae.map((a, i) => a + grupos[i][k]); ae = hi
-          out.push(<path key={'ae' + k} fill={EGR[k][1]} fillOpacity='.85' d={'M' + lo.map((v, i) => cxs[i] + ',' + y(-v)).join(' L') + ' L' + hi.map((v, i) => cxs[n - 1 - i] + ',' + y(-hi[n - 1 - i])).join(' L') + ' Z'} />) }) } }
     if (vista === 'cascada') { let prev = 0
       grupos.forEach((x, i) => { const d = sem ? x.neto : x.ing, b2 = prev + d, y1 = y(Math.max(prev, b2)), y2 = y(Math.min(prev, b2)), x0 = cxs[i] - w / 2; prev = b2
         out.push(<g key={'c' + i}><rect x={x0} y={y1} width={w} height={Math.max(2, y2 - y1)} rx='5' fill={d >= 0 ? C.normal : C.overdue} fillOpacity='.6' />
@@ -237,7 +230,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-      {seg(conMor ? 'todo' : 'cons', v => { guardarFlujoConMorosos(v === 'todo'); setConMor(v === 'todo') }, [['cons', 'Conservador'], ['todo', 'Con morosos']])}
+      {seg(conMor ? 'todo' : 'cons', v => { guardarFlujoConMorosos(v === 'todo'); setConMor(v === 'todo') }, [['cons', 'Sin morosos'], ['todo', 'Con morosos']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
       {seg(vista, setVista, VISTAS)}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
