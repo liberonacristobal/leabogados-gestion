@@ -92,6 +92,7 @@ const CajaChicaView = lazyVista(() => import('./vistas/CajaChicaView.jsx'), 'Caj
 const ProveedoresView = lazyVista(() => import('./vistas/ProveedoresView.jsx'), 'ProveedoresView')
 const TasksOnlyView = lazyVista(() => import('./vistas/TasksOnlyView.jsx'), 'TasksOnlyView')
 const CobradoMesView = lazyVista(() => import('./vistas/CobradoMesView.jsx'), 'CobradoMesView')
+const FlujoCajaView = lazyVista(() => import('./vistas/FlujoCajaView.jsx'), 'FlujoCajaView')
 const PorFacturarView = lazyVista(() => import('./vistas/PorFacturarView.jsx'), 'PorFacturarView')
 const ClientsView = lazyVista(() => import('./vistas/ClientsView.jsx'), 'ClientsView')
 const CobranzaView = lazyVista(() => import('./vistas/CobranzaView.jsx'), 'CobranzaView')
@@ -1365,7 +1366,7 @@ function retirosOficinaData(expenses, clients, year){
 }
 // Módulo Oficina — hub BENTO. Protagonista = Resultado DEVENGADO (Facturado SII − costos − comisiones);
 // Caja hoy (ancla config caja_ancla + movimientos de cartola) y Flujo del mes son contexto. Puertas: Costos, Retiros, Gastos varios.
-// Cada cifra sale de su fuente única; el detalle reusa CostosOficinaModal/EstadoResultadosModal/FlujoCajaModal/RetirosOficinaModal (nada en paralelo).
+// Cada cifra sale de su fuente única; el detalle reusa CostosOficinaModal/EstadoResultadosModal/FlujoCajaView/RetirosOficinaModal (nada en paralelo).
 // Compras (IVA crédito): usa los DTE de compra que el SII ya sincronizó (sii_compras_docs) y que no se veían en ningún lado.
 // Foto IVA crédito (afectas tipo 33; restan NC tipo 61; exentas aparte) + crear proveedor desde el emisor (aprende) + enlazar el pago (cargo del banco por RUT+monto → sii_compras_docs.movimiento_id) + export para la contadora.
 function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=true }){
@@ -2057,108 +2058,6 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
       {avisos.length>0&&<div style={{display:'grid',gridTemplateColumns:isDesktop&&avisos.length>1?'repeat(2,minmax(0,1fr))':'1fr',gap:8,alignItems:'start'}}>{avisos}</div>}
     </div>
   )
-}
-function FlujoCajaModal({ billing=[], costosOfiRows=[], terceros=[], anticipos=[], expenses=[], clients=[], sales=[], isDesktop=false, onOpenClientFicha, onOpenCostos }){
-  const F=useFlujoCaja({billing,terceros,costosOfiRows,anticipos,expenses,clients,sales})
-  const control=useControlProyeccion({F,sales,billing,terceros,costosOfiRows,expenses,clients,anticipos})   // proyección guardada cada semana contra lo cobrado
-  const [fil,setFil]=useState('todos')
-  const semRef=useRef(null), cliRef=useRef(null)
-  const irA=r=>setTimeout(()=>{ try{ r.current&&r.current.scrollIntoView({block:'start'}) }catch(_){} },30)
-  const nomDe=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c.name }); return m },[clients])
-  const nom=cid=>nomDe[cid]||'Sin cliente'
-  const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(n))
-  const aviso=(bg,fg,t,d,v,on)=><div onClick={on} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,borderRadius:10,padding:'9px 12px',background:bg,color:fg,cursor:on?'pointer':'default'}}><span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t}</span><span style={{display:'block',fontSize:11,opacity:.85,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d}</span></span><span style={{fontSize:14,fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
-  const th={...TH_BAND,fontSize:10,letterSpacing:.2,padding:'7px 5px',textAlign:'right',whiteSpace:'nowrap'}
-  const td={padding:isDesktop?'7px 5px':'7px 5px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',fontSize:12}
-  const dim=<span style={{color:C.done}}>—</span>
-  const pos=v=>v?<span style={{color:C.greenText}}>+{fM(v)}</span>:dim
-  const negv=v=>v?<span style={{color:C.overdueText}}>−{fM(v)}</span>:dim
-  const lista=F.clientes.filter(c=>fil==='todos'||(fil==='com'&&(c.com||c.comFuera))||(fil==='mor'&&c.duda)||(fil==='pf'&&c.sin)||(fil==='imp'&&(c.duda||c.sin))||(fil==='ent'&&c.entra))
-  const { filas:listaOrd, th:thLista } = useOrden(lista, { Cliente:c=>nom(c.cid), Cobranza:c=>c.entra, Comisiones:c=>c.com, Morosa:c=>c.duda, 'Por facturar':c=>c.sin })   // columnas ordenables
-  const descargar=async()=>{ try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const head=['Cliente','Plazo de pago (días)','Facturas pagadas usadas','Cobranza proyectada 8 sem.','Comisiones por pagar 8 sem.','Flujo neto','Cartera morosa','Por facturar vencido','Comisiones sujetas a ese cobro','Facturas vencidas']
-      const data=F.clientes.map(c=>[nom(c.cid),c.ritmo,c.hist,Math.round(c.entra),Math.round(c.com),Math.round(c.entra-c.com),Math.round(c.duda),Math.round(c.sin),Math.round(c.comFuera),c.nVenc])
-      const sem=[['Semana del','Cobranza','Gastos de operación','Comisiones','Saldo acumulado'],...F.weeks.map(w=>[fmtFechaDMY(w.ini),Math.round(w.entra),Math.round(w.of),Math.round(w.com),Math.round(w.run)])]
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([head,...data]),'Por cliente'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sem),'Por semana')
-      XLSX.writeFile(wb,`Flujo_de_caja_${new Date().toISOString().slice(0,10)}.xlsx`)
-    }catch(e){ appAlert('No se pudo generar el Excel: '+(e.message||e)) } }
-  // Molde Oficina (2026-10-17): 4 tarjetas de color (resultado) + «Composición» en tarjetas chicas (sus partes), cada una abre su lista.
-  const sfTot=F.duda.monto+F.sinEmitir.monto
-  const [morV,pfV]=redondearPartes([F.duda.monto,F.sinEmitir.monto],sfTot>=1e6?1e5:1e4,[0])   // las dos partes suman la tarjeta Trabajo impago; la morosa redondea normal, el ajuste va a Por facturar
-  const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
-  const tog=f=>()=>{ setFil(v=>v===f?'todos':f); irA(cliRef) }
-  const kt=(key,ic,[bg,fg],lab,val,sub,f)=>{ const blanco=bg===C.card, on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'flex-start',minWidth:0,cursor:go?'pointer':'default',outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5}}>
-      <KpiIco n={ic} c={fg} soft={blanco}/>
-      <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?26:20,fontWeight:800,color:fg,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div><div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div></div> }
-  const st=(key,ic,ibg,icol,lab,val,f)=>{ const on=typeof f==='string'&&fil===f, go=typeof f==='function'?f:(f?tog(f):undefined); return <div key={key} onClick={go} className='pv-c' style={{background:C.card,border:`1px solid ${on?icol:C.border}`,borderRadius:10,padding:'9px 11px',display:'flex',gap:10,alignItems:'center',minWidth:0,boxSizing:'border-box',height:'100%',cursor:go?'pointer':'default'}}>
-      <span style={{width:isDesktop?28:26,height:isDesktop?28:26,borderRadius:8,background:ibg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={15} c={icol}/></span>
-      <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.accent,lineHeight:1.25,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{lab}</div><div style={{fontSize:14,fontWeight:800,color:icol,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{val}</div></div></div> }
-  const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
-  const secL=t=><div style={{...kLbl,color:C.accent,margin:'14px 2px 7px'}}>{t}</div>
-  const nF=F.duda.n, nC=F.sinEmitir.n
-  const ctrl=<div style={{marginTop:10,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
-    <div style={{padding:'9px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,color:C.accent}}>Proyección y cobrado · por semana</div>
-    {control.filas.length===0
-      ? <div style={{padding:'10px 14px',fontSize:12,color:C.muted}}>Se guarda cada semana y se compara con lo cobrado al cerrarla.</div>
-      : <div>{control.filas.map(f=><div key={f.ini} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto auto auto',columnGap:12,alignItems:'baseline',padding:'8px 14px',borderTop:`1px solid ${C.bgSoft}`,fontSize:12,fontVariantNumeric:'tabular-nums'}}>
-          <span style={{color:C.accent,fontWeight:700,whiteSpace:'nowrap'}}>{isDesktop?'Semana del ':''}{fmtFechaDMY(f.ini)}</span>
-          <span style={{color:C.muted}}>proyectado {fM(f.proyectado)}</span><span style={{color:C.text,fontWeight:600}}>cobrado {fM(f.cobrado)}</span>
-          <span style={{fontWeight:800,minWidth:44,textAlign:'right',color:f.pct==null?C.muted:f.pct>=0?C.greenText:C.overdueText}}>{f.pct==null?'—':`${f.pct>0?'+':''}${Math.round(f.pct*100)} %`}</span></div>)}
-        <div style={{padding:'8px 14px',borderTop:`1px solid ${C.border}`,fontSize:12,color:C.muted}}>Diferencia de las últimas {control.filas.length} semanas: <b style={{color:C.accent}}>{control.error==null?'—':`${control.error>0?'+':''}${Math.round(control.error*100)} %`}</b> · cobrado por fecha del depósito</div></div>}
-  </div>
-  const foto=<div>
-    <div style={grid4}>
-      {kt('fin','chart',F.fin>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText],'Flujo neto',`${F.fin>=0?'+':''}${fM(F.fin)}`,isDesktop?'proyectado · 8 semanas':'8 semanas',()=>irA(semRef))}
-      {kt('ent','tEntra',[C.azulBg,C.accent],'Cobranza',`+${fM(F.E)}`,`emitidas ${fM(F.partes.emitAlDia+F.partes.emitVencida)} · cuotas ${fM(F.partes.cuotas)}`,'ent')}
-      {kt('sal','wallet',[C.soonBg,C.soonText],'Egresos',F.O+F.C?`−${fM(F.O+F.C)}`:'$0',isDesktop?'operación + comisiones':'8 semanas',()=>irA(semRef))}
-      {kt('imp','tEspera',[C.card,C.accent],'Trabajo impago',fM(morV+pfV),isDesktop?`${nF} morosa${nF!==1?'s':''} · ${nC} cuota${nC!==1?'s':''}`:`${nF} fact. · ${nC} cuota${nC!==1?'s':''}`,'imp')}
-    </div>
-    {secL('Composición')}
-    <div style={grid4}>
-      {st('op','users',C.overdueBg,C.overdueText,isDesktop?'Gastos de operación':'Operación',F.O?`−${fM(F.O)}`:'$0',onOpenCostos?()=>onOpenCostos(F.costoReal):undefined)}
-      {st('com','exchange',C.soonBg,C.soonText,isDesktop?'Comisiones por pagar':'Comisiones',F.C?`−${fM(F.C)}`:'$0','com')}
-      {st('mor','alert',C.overdueBg,C.overdueText,isDesktop?'Cartera morosa':'Morosa',fM(morV),'mor')}
-      {st('pf','tSinFac',C.azulBg,C.azulInfo,isDesktop?'Por facturar vencido':'Por facturar',fM(pfV),'pf')}
-    </div>
-    {ctrl}
-    {F.sinCuota.length>0&&<div style={{marginTop:8}}>{aviso(C.soonBg,C.soonText,`Comisión sin cuota · ${F.sinCuota.length}`,[...new Set(F.sinCuota.map(x=>x.prov))].slice(0,2).join(', ')+' · asígnale la cuota para proyectarla',fM(F.sinCuotaTot))}</div>}
-  </div>
-  const band=(t,der)=><div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}><span style={{...kLbl,color:C.accent,flex:1,minWidth:0}}>{t}</span>{der}</div>
-  const wkV=(()=>{ let prev=0; return F.weeks.map(w=>{ const run=Math.round(w.run/1e5)*1e5, d=Math.round((run-prev)/1e5); prev=run
-      const v=[w.entra,-w.of,-w.com].map(x=>(Number(x)||0)/1e5), b=v.map(Math.floor); let falta=d-b.reduce((a,x)=>a+x,0)
-      const ord=v.map((x,i)=>[x-Math.floor(x),i]).filter(([,i])=>v[i]!==0).sort((a,c)=>c[0]-a[0])
-      for(let k=0;falta!==0&&ord.length&&k<50;k++){ const i=ord[k%ord.length][1]; if(falta>0){ b[i]++; falta-- } else { b[i]--; falta++ } }
-      return {ini:w.ini, entra:b[0]*1e5, of:-b[1]*1e5, com:-b[2]*1e5, run} }) })()
-  const tSem=<div ref={semRef} style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff',scrollMarginTop:70}}>
-    {band(isDesktop?'Semana a semana · saldo anterior + cobranza − operación − comisiones':'Semana a semana')}
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
-      <thead><tr><th style={{...th,textAlign:'left'}}>Semana</th><th style={th}>+ Cobranza</th>{isDesktop?<><th style={th}>− Operación</th><th style={th}>− Comisiones</th></>:<th style={th}>− Egresos</th>}<th style={th}>= Saldo</th></tr></thead>
-      <tbody>{wkV.map((w,i)=>{ const P=v=>v?<span style={{color:C.greenText}}>{fmtMillLR(v)}</span>:dim, N=v=>v?<span style={{color:C.overdueText}}>{fmtMillLR(v)}</span>:dim; return <tr key={i}><td style={{...td,textAlign:'left',color:C.muted}}>{fmtFechaDMY(w.ini)}</td><td style={td}>{P(w.entra)}</td>{isDesktop?<><td style={td}>{N(w.of)}</td><td style={td}>{N(w.com)}</td></>:<td style={td}>{N(w.of+w.com)}</td>}<td style={{...td,fontWeight:700,color:w.run<0?C.overdueText:C.text}}>{fmtMillLR(w.run)}</td></tr> })}</tbody>
-    </table></div>
-    {F.weeks.find(w=>w.run<0)&&<div style={{margin:'8px 10px 10px',borderRadius:10,padding:'9px 12px',background:C.overdueBg,color:C.overdueText,fontSize:12,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>Saldo proyectado negativo desde el {fmtFechaDMY(F.weeks.find(w=>w.run<0).ini)}</div>}
-  </div>
-  const chip=(v,l)=><button key={v} onClick={()=>setFil(v)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:'none',cursor:'pointer',background:fil===v?C.accent:C.bgSoft,color:fil===v?'#fff':C.muted}}>{l}</button>
-  const tCli=<div ref={cliRef} style={{scrollMarginTop:70}}>
-    <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:'#fff'}}>
-    {band(({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar vencido',com:'Con comisiones',ent:'Cobranza'})[fil]?`${({imp:'Trabajo impago',mor:'Cartera morosa',pf:'Por facturar vencido',com:'Con comisiones',ent:'Cobranza'})[fil]} · por cliente`:'Por cliente',<span onClick={descargar} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>Descargar Excel</span>)}
-    <div style={{display:'flex',gap:6,flexWrap:'wrap',padding:'8px 12px 2px'}}>{chip('todos','Todos')}{chip('com','Con comisiones')}{chip('mor','Morosa')}{chip('pf','Por facturar')}</div>
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
-      <thead><tr>{thLista('Cliente',{...th,textAlign:'left'})}{thLista('Cobranza',th)}{thLista('Comisiones',th)}{thLista('Morosa',th)}{isDesktop&&thLista('Por facturar',th)}</tr></thead>
-      <tbody>{listaOrd.map(c=><tr key={c.cid} onClick={()=>c.cid&&onOpenClientFicha&&onOpenClientFicha(c.cid)} style={{cursor:c.cid?'pointer':'default'}}>
-        <td style={{...td,textAlign:'left',whiteSpace:'normal',minWidth:isDesktop?118:104}}><span style={{fontWeight:700,color:C.accent}}>{nom(c.cid)}</span><span style={{display:'block',fontSize:11,color:C.muted,marginTop:1}}>{isDesktop?(c.hist>=3?`plazo de pago ${c.ritmo} días`:`plazo de la oficina · ${c.ritmo} días`):`${c.ritmo} días${c.hist>=3?'':' (oficina)'}`}{c.nVenc>0&&<> · <span style={{color:C.overdueText,fontWeight:700,whiteSpace:'nowrap'}}>{c.nVenc} {isDesktop?`vencida${c.nVenc!==1?'s':''}`:'venc.'}</span></>}</span></td>
-        <td style={td}>{pos(c.entra)}</td>
-        <td style={td}>{negv(c.com)}{isDesktop&&c.comFuera>0&&<span style={{display:'block',fontSize:11,color:C.muted}}>−{fM(c.comFuera)} sujetas</span>}</td>
-        <td style={td}>{c.duda?<span style={{color:C.overdueText}}>{fM(c.duda)}</span>:dim}</td>
-        {isDesktop&&<td style={td}>{c.sin?fM(c.sin):dim}</td>}
-      </tr>)}
-      {isDesktop&&lista.length>0&&<tr><td style={{...td,textAlign:'left',fontWeight:800}}>Total {lista.length} cliente{lista.length!==1?'s':''}</td><td style={{...td,fontWeight:800,color:C.greenText}}>+{fM(lista.reduce((a,c)=>a+c.entra,0))}</td><td style={{...td,fontWeight:800,color:C.overdueText}}>−{fM(lista.reduce((a,c)=>a+c.com,0))}</td><td style={{...td,fontWeight:800,color:C.overdueText}}>{fM(lista.reduce((a,c)=>a+c.duda,0))}</td><td style={{...td,fontWeight:800}}>{fM(lista.reduce((a,c)=>a+c.sin,0))}</td></tr>}
-      </tbody></table></div></div>
-    <div style={{fontSize:11,color:C.textSoft,marginTop:6}}>Plazo de la oficina = menos de 3 facturas pagadas · {F.ritmoEstudio} días</div>
-  </div>
-  return isDesktop
-    ? <div style={{display:'flex',flexDirection:'column',gap:14}}>{foto}<div style={{display:'grid',gridTemplateColumns:'minmax(0,370px) minmax(0,1fr)',gap:16,alignItems:'start'}}><div style={{minWidth:0}}>{tSem}</div><div style={{minWidth:0}}>{tCli}</div></div></div>
-    : <div style={{display:'flex',flexDirection:'column',gap:12}}>{foto}{tSem}{tCli}</div>
 }
 // Fusionar clientes: une dos fichas duplicadas en una SIN perder nada. Sobreviviente = el que tiene datos.
 // Motor server-side (edge fn fusionar-clientes) reasigna todas las FKs; la app previsualiza y avisa al abogado responsable.
@@ -8971,7 +8870,7 @@ export default function App() {
             </div>}
             {tab==='flujoCaja'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:1180,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Flujo de caja' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
-              <FlujoCajaModal billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha} onOpenCostos={real=>navTo({tab:real?'estadoResultados':'presupuestoOficina'})}/>
+              <FlujoCajaView billing={fantasmaAltaIds.size?billing.filter(b=>!fantasmaAltaIds.has(String(b.id))):billing} costosOfiRows={costosOfiRows} terceros={terceros} anticipos={anticipos} expenses={expenses} clients={clients} sales={sales} isDesktop={isDesktop} onOpenClientFicha={handleOpenClientFicha} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenCostos={real=>navTo({tab:real?'estadoResultados':'presupuestoOficina'})} onOpenPorFacturar={partida=>navTo({tab:'porFacturar',partida})}/>
             </div>}
             {tab==='miCarga'&&userRole==='admin'&&<div style={isDesktop?{maxWidth:760,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>
               <PageHeader origen={origenNav('Inicio')} onBack={goBack} titulo='Mi carga' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>

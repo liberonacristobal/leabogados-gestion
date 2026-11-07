@@ -3742,7 +3742,7 @@ export function useUFFechas(billing){
 
 export const FLUJO_DUDA_DIAS = 30
 
-export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, sales=null, noEmitir=null, ufFechas=null, semanas=8, hoy=new Date() }){
+export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], costoOp=null, sales=null, noEmitir=null, ufFechas=null, semanas=8, hoy=new Date(), conMorosos=false }){
   const DAY=86400000
   const d0=new Date(hoy); d0.setHours(12,0,0,0)
   const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
@@ -3788,6 +3788,13 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
       const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
   })
+  // Conservador: un cliente con una factura morosa (más de FLUJO_DUDA_DIAS tras su fecha esperada) no aporta ningún cobro al flujo; sus comisiones
+  // quedan fuera con ellos (se pagan al cobrar). Con conMorosos=true se proyectan como cualquier otro.
+  const exclMor={n:0,monto:0,items:[]}
+  if(!conMorosos){ const morosos=new Set(Object.values(cli).filter(c=>c.duda>0).map(c=>c.cid))
+    for(let i=cobros.length-1;i>=0;i--){ const x=cobros[i], cid=String(x.b.client_id||''); if(!morosos.has(cid)) continue
+      const w=wIdx(x.t); if(w<semanas){ weeks[w].entra-=x.m; C_(cid).entra-=x.m }
+      st[x.b.id]={fuera:'moroso',m:x.m,cid}; exclMor.n++; exclMor.monto+=x.m; exclMor.items.push(x); cobros.splice(i,1) } }
   const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
   let comFuera=0; const cfB={duda:0,sin:0}; const sinCuota=[]
@@ -3814,8 +3821,8 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const sinCuotaTot=sinCuota.reduce((a,x)=>a+x.monto,0)
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
   const partes={emitAlDia:0,emitVencida:0,cuotas:0}; cobros.forEach(x=>{ if(x.t>=monT+semanas*7*DAY) return; if(x.k==='prog') partes.cuotas+=x.m; else if(x.v) partes.emitVencida+=x.m; else partes.emitAlDia+=x.m })
-  const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera).map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
-  return {weeks,cobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes}
+  const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera&&x.fuera!=='moroso').map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
+  return {weeks,cobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,sinCuota,sinCuotaTot,clientes,exclMor,conMorosos}
 }
 
 // ─── POR SOCIO · motor único ────────────────────────────────────────────────
@@ -3965,12 +3972,12 @@ export function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
 }
 
 // Flujo de caja a 8 semanas: UN solo cálculo para Inicio, Oficina y la página (mismas entradas → misma cifra en todas las vistas).
-export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null }){
+export function useFlujoCaja({ billing=[], terceros=[], costosOfiRows=[], anticipos=[], expenses=[], clients=[], sales=[], fantasmaIds=null, conMorosos=false }){
   const fu=useFuentesResultado()
   const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
   const noEmitir=useNoEmitirSet(), ufFechas=useUFFechas(bill)
   const costoOp=useMemo(()=>costoOperacionReal(fu,{billing:bill,terceros,costosOfiRows,expenses,clients}),[fu,bill,terceros,costosOfiRows,expenses,clients])
-  return useMemo(()=>flujoCajaProyectado({billing:bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas}),[bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas])
+  return useMemo(()=>flujoCajaProyectado({billing:bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas,conMorosos}),[bill,terceros,costosOfiRows,anticipos,costoOp,sales,noEmitir,ufFechas,conMorosos])
 }
 
 // Parte de las comisiones por pagar que viene de años anteriores al actual: {monto, txt:'2025' | '2024–2025'} o null.
