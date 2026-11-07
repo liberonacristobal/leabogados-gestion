@@ -1031,7 +1031,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct} % pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},`neto · 8 sem. · ${flujoCaja.conMorosos?'con morosos':'sin morosos'}`,onOpenFlujoCaja)}
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{expoCob.pctM60>0?` · ${Math.round(expoCob.pctM60*100)} % ${isDeskRes?'con más de 60 días':'sobre 60 días'}`:''}</span>:'a la fecha',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}
-            {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}`)}
+            {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)} · ${flujoCaja.conMorosos?'con morosos':'sin morosos'}`)}
             {(terceros||[]).length>0&&(()=>{ const pagado=comisPagadasAnioVenta.total, porPagar=cxpTotDash
               // La cifra grande es lo accionable (por pagar, saldo vivo), igual que «Comisiones por pagar» en Oficina; lo pagado del año va debajo.
               const val=porPagar>0?fmtShort(porPagar):'Al día'

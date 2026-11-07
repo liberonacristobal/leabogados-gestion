@@ -1,3 +1,4 @@
+- 2026-11-07 · El escenario del flujo (Sin morosos / Con morosos) es una preferencia del estudio, igual para todos los socios y dispositivos, y la tarjeta Proyección de Inicio lo rotula.
 - 2026-11-07 · Flujo de caja: el escenario se llama «Sin morosos / Con morosos» y el gráfico queda con barras, líneas y cascada (se quita áreas).
 - 2026-11-07 · Coherencia de cifras: «Vencido» es siempre el derivado (emisión + 30 días) en Por socio, ficha del cliente, atención de hoy, Facturación, Inteligencia y Proveedores; el reporte de cobranza usa el «Por cobrar» y «Vencido» de Inicio; el resumen del lunes lee la cartera con la misma regla que la app.
 - 2026-11-07 · Coherencia de cifras: Caja chica por liquidar en Tareas con la misma regla que Caja chica, personas de la caja chica leídas de los datos, «Por cobrar» del asistente de redacción solo con facturas por cobrar, comisiones pagadas del tile igual que la cascada, y rótulos «a la fecha» y «Comisiones proyectadas».

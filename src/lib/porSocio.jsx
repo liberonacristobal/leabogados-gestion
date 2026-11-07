@@ -5,7 +5,7 @@ import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop } from './base.jsx'
 import { Fragment } from 'react'
 import { esRecurrente, esSubarriendo, ventaCLP, redondearPartes, kpisPorSocio } from './cifras.js'
-import { ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, flujoCajaProyectado, leerFlujoConMorosos, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
+import { ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, flujoCajaProyectado, useEscenarioFlujo, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
 
 // Vista Por socio (Facturación › Por socio e Inteligencia › Socios): Resumen · Comparativo · Datos. Render aprobado 19-10-2026 (ABU5j4gotedSVCZJkE9kG2).
 export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],fantasmaIds=null,tabIni='res',datIni=null,onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
@@ -48,7 +48,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const sinAbos=useMemo(()=>{ const set=new Set(); P.forEach(r=>{ if(r.soc!==SIN_SOCIO||r.k==='sub'||!String(r.d).startsWith(String(y))) return; const b=r.bid&&billById[String(r.bid)], sv=b&&b.sale_id&&saleById[String(b.sale_id)], a=(sv&&sv.responsible)||cliById[String(r.cid)]?.abogado_responsable; if(a&&!ADMIN_NAMES.includes(a)) set.add(a) }); return [...set].sort() },[P,y,billById,saleById,cliById])
   const Ls=c=>c!==SIN_SOCIO?c:sinAbos.length===1?sinAbos[0]:sinAbos.length?'Otros':SIN_SOCIO   // encabezados angostos
   const L=c=>c!==SIN_SOCIO?c:!sinAbos.length?SIN_SOCIO:sinAbos.length===1?`${SIN_SOCIO} · ${sinAbos[0]}`:'Otros abogados'
-  const conMor=leerFlujoConMorosos()
+  const [conMor]=useEscenarioFlujo()
   const F=useMemo(()=>flujoCajaProyectado({billing:bill,sales,anticipos,noEmitir,ufFechas,conMorosos:conMor}),[bill,sales,anticipos,noEmitir,ufFechas,conMor])
   // [Vendido, Facturado, Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo (aparte)]
   const P$=v=>(v<0?'−':'')+fmt(Math.abs(Math.round(v)))
