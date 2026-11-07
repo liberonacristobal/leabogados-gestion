@@ -769,7 +769,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
   const cobrado = real.reduce((a,b)=>a+cobradoBill(b),0)   // incluye abonos parciales (fuente única cobradoBill)
   const porCobrar = porCobrarBills(real)
   const programado = real.filter(b=>!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)).reduce((a,b)=>a+(b.amount||0),0)
-  const overdueTot = real.filter(b=>b.invoice_no&&b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
+  const overdueTot = real.filter(b=>b.invoice_no&&esVencidaB(b)).reduce((a,b)=>a+saldoBill(b),0)
 
   const clientSales = (sales||[]).filter(s=>String(s.client_id)===String(client.id))
   const saleTitle = id => clientSales.find(s=>String(s.id)===String(id))?.title || null

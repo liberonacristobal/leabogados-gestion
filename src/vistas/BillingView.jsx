@@ -2637,7 +2637,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     const allBills = Object.values(byEntity).flat()
     const clientTotal = allBills.reduce((a,b)=>a+montoFactura(b),0)   // DTE, no amount (fuente única; subtotal = Σ filas)
     const nDocs = allBills.length
-    const vencidoMonto = allBills.filter(b=>b.status==='Vencido').reduce((a,b)=>a+saldoBill(b),0)
+    const vencidoMonto = allBills.filter(esVencidaB).reduce((a,b)=>a+saldoBill(b),0)
     const isOpen = openClients.has(client.id)
     return (
       <div key={client.id} style={{marginBottom:isOpen?16:8}}>
