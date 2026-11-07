@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { C, Gl, SEC_LBL, appAlert, fmt, personChip, useIsDesktop } from '../lib/base.jsx'
-import { esVencidaB, Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { useResultadoAnio } from '../lib/resultadoAnio.js'
+import { porCobrarBills, esVencidaB, Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
 import { PorSocioVista } from '../lib/porSocio.jsx'
 
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
@@ -22,6 +23,7 @@ export const ultimaActividad = (clientId, sales, billing, expenses) => {
 export const IA_SPK = (<svg width='10' height='10' viewBox='0 0 24 24' fill='currentColor' style={{display:'inline-block',verticalAlign:'-1px',marginRight:4}}><path d='M12 2l1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5z'/></svg>)
 
 export function IntelligenceView({sales=[], billing=[], clients=[], clientEntities=[], expenses=[], terceros=[], anticipos=[], fantasmaIds=null, setTab, onOpenClientFicha, onOpenSale, navTo, onBack, backLabel}){
+  const cobradoPropio = useResultadoAnio({ sales, billing, terceros, costosOfiRows: [], expenses, clients, anticipos, selYear: currentYear }).ingresosPorAnioVenta.total
   const go = t => navTo ? navTo({tab:t}) : (setTab&&setTab(t))   // salto que apila origen+scroll (navTo) con fallback a setTab
   const isDesktop = useIsDesktop()   // Fase 3: columna centrada más ancha en escritorio
   const [openOpp,setOpenOpp] = useState(null)
@@ -88,8 +90,8 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     const winback = reales.filter(c=>c.status==='Terminado'&&vh(c.id)>=30&&mesesDesde(ult(c.id))<=18).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
 
     const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&ventaCuentaEnAnio(s,yr)).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
-    const porCobrar = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&['Pendiente','Vencido'].includes(b.status)).reduce((a,b)=>a+saldoBill(b),0)
-    const cobradoYTD = (billing||[]).filter(b=>!b.deleted_at&&b.billing_type!=='reembolso'&&cobradoBill(b)>0&&String((b.status==='Pagado'?b.paid_at:b.issued_at)||'').slice(0,4)===String(yr)).reduce((a,b)=>a+cobradoBill(b),0)   // incluye parciales (fuente única, coincide con fichas/dashboard)
+    const porCobrar = porCobrarBills(billing)   // fuente única (con folio, sin notas de crédito)
+    const cobradoYTD = cobradoPropio   // «Cobrado propio» de Inicio: por fecha del depósito, sin subarriendo, reembolsos ni la parte de externos
     // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
     const noInt = (clients||[]).filter(c=>!c.is_internal)
     const segCli = c => {
@@ -129,7 +131,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     const dl=(cur,prv)=>[...new Set([...Object.keys(cur),...Object.keys(prv)])].map(k=>({k,cur:cur[k]||0,prv:prv[k]||0,pct:(prv[k]||0)>0?Math.round(((cur[k]||0)-(prv[k]||0))/(prv[k]||0)*100):null})).filter(x=>x.cur>0||x.prv>0).sort((a,b)=>b.cur-a.cur)
     const tendencias={prevYr,totCur,totPrv,pctTot: totPrv>0?Math.round((totCur-totPrv)/totPrv*100):null, abogados:dl(abCur,abPrv)}
     return {kpis:{vendidoYTD,porCobrar,cobradoYTD}, opp:{dormidos,cobranza,crossSell,sinRec,winback}, cartera, carteraTot, servicios, serviciosTot, ventasSinCosto, tendencias}
-  },[sales,billing,clients,expenses,ufRef,yr])
+  },[sales,billing,clients,expenses,ufRef,yr,cobradoPropio])
 
   // Radar tributario (Stage 7): cruza cada novedad del SII con los clientes cuya área coincide con la(s) área(s) de la novedad.
   const radar = useMemo(()=>{
