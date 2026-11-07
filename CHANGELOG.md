@@ -1,3 +1,4 @@
+- 2026-11-07 · Inteligencia: «Cobrado» y «Por cobrar» salen del mismo cálculo que Inicio (cobrado propio por fecha del depósito); el resumen del lunes deja fuera subarriendo y reembolsos del cobrado.
 - 2026-11-07 · El escenario del flujo (Sin morosos / Con morosos) es una preferencia del estudio, igual para todos los socios y dispositivos, y la tarjeta Proyección de Inicio lo rotula.
 - 2026-11-07 · Flujo de caja: el escenario se llama «Sin morosos / Con morosos» y el gráfico queda con barras, líneas y cascada (se quita áreas).
 - 2026-11-07 · Coherencia de cifras: «Vencido» es siempre el derivado (emisión + 30 días) en Por socio, ficha del cliente, atención de hoy, Facturación, Inteligencia y Proveedores; el reporte de cobranza usa el «Por cobrar» y «Vencido» de Inicio; el resumen del lunes lee la cartera con la misma regla que la app.

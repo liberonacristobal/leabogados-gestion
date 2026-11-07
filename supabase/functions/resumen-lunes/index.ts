@@ -80,7 +80,7 @@ serve(async (req) => {
     const { data: activoOkRaw } = await sb.from("learnings").select("key").eq("kind", "trabajo_activo_ok");
     // Cobranza a CAJA (plano abono/conciliación, igual que ingresosPorAnioVenta en la app — NO billing.paid_at): conciliación a factura/anticipo × abonos no internos, por fecha del depósito. + meta del año (annual_targets).
     const { data: concRaw } = await selectAll(()=>sb.from("conciliacion").select("movimiento_id,monto_aplicado,tipo_destino,factura_id,anticipo_id").in("tipo_destino", ["factura", "anticipo"]).order("id"));
-    const { data: abRaw } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno").eq("tipo", "abono").order("id"));
+    const { data: abRaw } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,es_interno,categoria").eq("tipo", "abono").order("id"));
     const { data: tgtRaw } = await sb.from("annual_targets").select("year,collection_target");
     // Facturas recibidas por pagar (misma regla y mismas marcas que Oficina › Compras).
     const [cpDocs, cpCargos, cpGastos, cpL, cpT] = await Promise.all([
@@ -128,8 +128,9 @@ serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const abById: Record<string, any> = {}; (abRaw || []).forEach((m: any) => { if (m.es_interno !== true) abById[String(m.id)] = m; });
     let cobradoAno = 0, cobradoSemana = 0;
+    const reembolsoPorId: Record<string, boolean> = {}; vivos.forEach((b: any) => { if (b.billing_type === "reembolso") reembolsoPorId[String(b.id)] = true; });
     // deno-lint-ignore no-explicit-any
-    (concRaw || []).forEach((c: any) => { const m = abById[String(c.movimiento_id)]; if (!m) return; const f = String(m.fecha || "").slice(0, 10); if (!f) return; const mto = Number(c.monto_aplicado) || 0; if (f.slice(0, 4) === year) cobradoAno += mto; if (f >= hace7) cobradoSemana += mto; });
+    (concRaw || []).forEach((c: any) => { const m = abById[String(c.movimiento_id)]; if (!m) return; if (m.categoria === "Subarriendo" || reembolsoPorId[String(c.factura_id)]) return;   // cobrado propio: sin subarriendo ni reembolsos (como Inicio) const f = String(m.fecha || "").slice(0, 10); if (!f) return; const mto = Number(c.monto_aplicado) || 0; if (f.slice(0, 4) === year) cobradoAno += mto; if (f >= hace7) cobradoSemana += mto; });
     // deno-lint-ignore no-explicit-any
     const metaCobranza = Number((tgtRaw || []).find((t: any) => String(t.year) === year)?.collection_target) || 0;
     const cobPct = metaCobranza > 0 ? Math.min(100, Math.round(cobradoAno / metaCobranza * 100)) : 0;
