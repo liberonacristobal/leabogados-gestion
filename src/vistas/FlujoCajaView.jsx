@@ -184,7 +184,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
   const { filas: ord, th: thO } = useOrden(lista, { Cliente: c => nom(c.cid), Cobranza: c => c.entra, Comisiones: c => c.com, Morosa: c => c.duda, 'Por facturar': c => c.sin })
   const descargar = async () => { try {
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const head = ['Cliente', 'Plazo de pago (días)', 'Facturas pagadas usadas', 'Cobranza proyectada 8 sem.', 'Comisiones por pagar 8 sem.', 'Flujo neto', 'Cartera morosa', 'Por facturar vencido', 'Comisiones sujetas a ese cobro', 'Facturas vencidas']
+      const head = ['Cliente', 'Plazo de pago (días)', 'Facturas pagadas usadas', 'Cobranza proyectada 8 sem.', 'Comisiones proyectadas 8 sem.', 'Flujo neto', 'Cartera morosa', 'Por facturar vencido', 'Comisiones sujetas a ese cobro', 'Facturas vencidas']
       const data = F.clientes.map(c => [nom(c.cid), c.ritmo, c.hist, Math.round(c.entra), Math.round(c.com), Math.round(c.entra - c.com), Math.round(c.duda), Math.round(c.sin), Math.round(c.comFuera), c.nVenc])
       const semanas = [['Semana del', 'Cobranza', 'Gastos de operación', 'Comisiones', 'Saldo acumulado'], ...F.weeks.map(w => [fmtFechaDMY(w.ini), Math.round(w.entra), Math.round(w.of), Math.round(w.com), Math.round(w.run)])]
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...data]), 'Por cliente'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(semanas), 'Por semana')
