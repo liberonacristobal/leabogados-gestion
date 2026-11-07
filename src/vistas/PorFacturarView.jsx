@@ -2,8 +2,8 @@
 // No calcula nada propio: lee clasificarPorFacturar (_shared/porFacturar.js), la misma regla que usa el flujo de caja para los anticipos y la
 // cobertura de cuotas. Del lado conservador: lo dudoso nunca queda en «Vigente».
 import { Fragment, useMemo, useState } from 'react'
-import { C, SIcon, fmt, fmtFechaDMY, folioN, appAlert, appConfirm, useIsDesktop } from '../lib/base.jsx'
-import { PageHeader, PaginaSobre, useNoEmitirSet, useUFFechas, usePorSocioFuentes, matchProgEmitidas, socioDe, SIN_SOCIO, guardarDecisionCuota } from '../lib/compartido.jsx'
+import { C, SIcon, isoLocal, fmt, fmtFechaDMY, folioN, appAlert, appConfirm, useIsDesktop } from '../lib/base.jsx'
+import { PageHeader, PaginaSobre, useNoEmitirSet, useUFFechas, usePorSocioFuentes, matchProgEmitidas, socioDe, SIN_SOCIO, SOCIOS_CFG, guardarDecisionCuota } from '../lib/compartido.jsx'
 import { clasificarPorFacturar, cuadreVenta, GRUPOS } from '../../supabase/functions/_shared/porFacturar.js'
 
 const fmtM = v => '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M'
@@ -96,7 +96,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
   const bb = useMemo(() => (billing || []).filter(b => !b.deleted_at && !(fantasmaIds && fantasmaIds.has(String(b.id)))), [billing, fantasmaIds])
   const ufFechas = useUFFechas(bb)
   const [fuentes] = usePorSocioFuentes()
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = isoLocal(Date.now())
   const [socio, setSocio] = useState('Todos')
   const [partida, setPartida] = useState(partidaInicial || 'vencida')
   const [detalle, setDetalle] = useState(null)
@@ -111,7 +111,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
   const suma = ks => filas.filter(f => ks.includes(f.k)).reduce((a, f) => a + f.monto, 0)
   const cuenta = ks => new Set(filas.filter(f => ks.includes(f.k)).map(f => f.id)).size
   const total = filas.reduce((a, f) => a + f.monto, 0)
-  const porSocio = ['Todos', 'Cristóbal', 'Erasmo', SIN_SOCIO].map(s => [s, R.filas.filter(f => GRUPOS.vigente.includes(f.k) && (s === 'Todos' || f.socio === s)).reduce((a, f) => a + f.monto, 0)])   // lo vigente de cada socio
+  const porSocio = ['Todos', ...SOCIOS_CFG.map(x => x.nombre), SIN_SOCIO].map(s => [s, R.filas.filter(f => GRUPOS.vigente.includes(f.k) && (s === 'Todos' || f.socio === s)).reduce((a, f) => a + f.monto, 0)])   // lo vigente de cada socio
   const lista = useMemo(() => {
     const g = new Map()
     filas.filter(f => f.k === partida).sort((a, b) => String(a.b.due || '').localeCompare(String(b.b.due || ''))).forEach(f => { const k = String(f.b.client_id); if (!g.has(k)) g.set(k, { cid: k, items: [], total: 0 }); const x = g.get(k); x.items.push(f); x.total += f.monto })
@@ -127,7 +127,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
       <span style={{ fontWeight: 800, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{val}</span>
       <span style={{ color: C.done, display: 'flex' }}>{chev === 'd' ? <SIcon n='chevD' s={11} c={C.done} /> : chev === 'u' ? <SIcon n='chevU' s={11} c={C.done} /> : chev ? <SIcon n='chevron' s={10} c={C.done} /> : null}</span>
     </div>)
-  const partidaRow = k => { const [a, b] = ROT[k]; const n = cuenta([k]); return <Fragment key={k}>{fila(k === 'vencida' || k === 'porVencer' ? '+' : '+', a, `${b ? b + ' · ' : ''}${n} cuota${n !== 1 ? 's' : ''}`, fmtM(suma([k])), { chev: true, onClick: () => setPartida(k) })}</Fragment> }
+  const partidaRow = k => { const [a, b] = ROT[k]; const n = cuenta([k]); return <Fragment key={k}>{fila('+', a, `${b ? b + ' · ' : ''}${n} cuota${n !== 1 ? 's' : ''}`, fmtM(suma([k])), { chev: true, onClick: () => setPartida(k) })}</Fragment> }
   return (
     <div>
       <PageHeader origen={origen} onBack={onBack} titulo='Por facturar' ctx={`al ${fmtFechaDMY(hoy)}${anio ? ' · vencen en ' + anio : ''}`} />
@@ -150,7 +150,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
           {partida === 'fuera' && onOpenAdelantos && filas.some(f => f.motivo === 'cubAnticipo') && <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}><span style={{ flex: 1, minWidth: 180 }}>La plata ya entró. Falta emitir la factura.</span><span onClick={onOpenAdelantos} style={{ fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Ir a Facturar adelantos →</span></div>}
           {lista.length === 0 && <div style={{ padding: '18px 14px', textAlign: 'center', color: C.muted, fontSize: 13, borderTop: `1px solid ${C.border}` }}>Sin cuotas en esta partida.</div>}
           {lista.map(g => g.items.map((f, i) => (
-            <div key={f.id + f.k} onClick={() => setDetalle(f)} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}>
+            <div key={f.id + f.k + (f.motivo || '')} onClick={() => setDetalle(f)} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><span onClick={onOpenClientFicha ? e => { e.stopPropagation(); onOpenClientFicha(g.cid) } : undefined} style={{ cursor: onOpenClientFicha ? 'pointer' : 'default' }}>{nombre(g.cid)}</span></div>
                 <div style={{ fontSize: 11, color: C.muted, overflowWrap: 'anywhere' }}>{String(f.b.concept || '').replace(/^.*? — /, '')} · vence {fmtFechaDMY(f.b.due)}{f.motivo ? ` · ${MOTIVO[f.motivo]}` : ''}</div>
@@ -161,7 +161,7 @@ export function PorFacturarView({ anio = '', partidaInicial = null, onOpenAdelan
         </div>
         {detalle && <DetalleCuota f={detalle} filas={R.filas} sales={sales} bb={bb} ufFechas={ufFechas} nombre={nombre(detalle.b.client_id)} hoy={hoy} onClose={() => setDetalle(null)} onOpenVenta={onOpenVenta} onOpenFactura={onOpenFactura} onOpenClientFicha={onOpenClientFicha}
           onGuardado={(a, x) => { if (a === 'fecha' && setBilling) setBilling(p => p.map(r => String(r.id) === String(detalle.b.id) ? { ...r, due: x.due } : r)); setDetalle(null) }} />}
-        <div style={{ fontSize: 12, color: C.textSoft }}>Parte de la tarjeta «Por facturar» y cada línea suma al peso. Lo dudoso queda fuera de «Vigente».</div>
+        
       </div>
     </div>)
 }
