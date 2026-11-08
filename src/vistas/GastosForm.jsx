@@ -401,7 +401,7 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
         {ultFecha[c.id]&&<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap'}}>{fechaCorta(ultFecha[c.id])}</span>}
       </button>)}
     </div>)
-  const chipLeido = (k,v) => <span key={k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',color:C.text}}><span style={{fontSize:9.5,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',color:C.greenText}}>{k}</span><b style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</b></span>
+  const chipLeido = (k,v) => <span key={k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',color:C.text}}><span style={{fontSize:10,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',color:C.greenText}}>{k}</span><b style={{fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</b></span>
   const fotoUI = (
     <div style={{marginBottom:12}}>
       <input ref={fotoInput} type='file' accept='image/*,application/pdf' style={{display:'none'}} onChange={e=>{ const f=e.target.files?.[0]; e.target.value=''; if(f) leerFoto(f) }}/>

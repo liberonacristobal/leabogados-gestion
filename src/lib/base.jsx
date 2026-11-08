@@ -96,7 +96,7 @@ export const fmtRutCL = r => { const t=String(r??'').trim(); if(!/^[0-9.\s]+-?\s
 
 export const isoLocal = ts => { const d=ts?new Date(ts):null; if(!d||isNaN(d)) return ''; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
-export const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.15,fontSize:9,color:C.textSoft,fontWeight:600}}>sin<br/>fecha</div>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
+export const diaGrande = (d,col) => { const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const s=String(d||'').slice(0,10).split('-'); if(s.length<3||!s[2]) return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.15,fontSize:10,color:C.textSoft,fontWeight:600}}>sin<br/>fecha</div>; return <div style={{width:44,flexShrink:0,textAlign:'center',lineHeight:1.05}}><div style={{fontSize:18,fontWeight:700,color:col||C.accent}}>{+s[2]}</div><div style={{fontSize:10,color:C.muted,fontWeight:600,whiteSpace:'nowrap'}}>{M[+s[1]-1]||''} {s[0].slice(2)}</div></div> }
 
 // Iconos SVG inline (la app NO tiene Tabler; iconos como SVG stroke, estilo Feather). Set mínimo para las secciones de la ficha.
 export const _ICON_PATHS = {

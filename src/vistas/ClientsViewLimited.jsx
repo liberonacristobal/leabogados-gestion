@@ -83,7 +83,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
                   <span aria-hidden="true" style={{display:'inline-block',transform:openEnt?'rotate(90deg)':'none',transition:'transform .12s',fontSize:14,lineHeight:1}}><Gl n='chevron'/></span>
                   Razones sociales facturadas
                 </div>
-                <span style={{fontSize:9,color:C.muted,fontWeight:700}}>{entities.length}</span>
+                <span style={{fontSize:10,color:C.muted,fontWeight:700}}>{entities.length}</span>
               </div>
               {openEnt&&entities.map(e=>(
                 <div key={e.id} className="lf-row" onClick={()=>setFtab('contacto')} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'6px 0',borderTop:'1px solid #E4E8EB'}}>
@@ -124,8 +124,8 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
               return (
                 <div key={e.id} className={onEditExpense?'lf-row':undefined} onClick={onEditExpense?()=>onEditExpense(e):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E4E8EB'}}>
                   <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                    {!isFondo&&e.category&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{e.category}</span>}
-                    {isFondo&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>}
+                    {!isFondo&&e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{e.category}</span>}
+                    {isFondo&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>}
                     <span style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</span>
                   </div>
                   <div style={{fontSize:12,fontWeight:600,color:isDev?C.muted:isFondo?C.normal:C.overdue,flexShrink:0,marginLeft:8}}>{isDev?'−$'+Math.abs(e.amount).toLocaleString('es-CL'):(isFondo?'+':'-')+'$'+e.amount.toLocaleString('es-CL')}</div>
@@ -165,7 +165,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
                           {det.map(e=>(
                             <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #E4E8EB'}}>
                               <div style={{minWidth:0,flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                                {e.category&&<span style={{fontSize:9.5,padding:'2px 8px',borderRadius:20,background:CATS[e.category]||CATS['Otro'],color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{e.category}</span>}
+                                {e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:CATS[e.category]||CATS['Otro'],color:C.muted,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>{e.category}</span>}
                                 <span style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</span>
                               </div>
                               <div style={{fontSize:11,color:C.muted,flexShrink:0,marginLeft:8}}>{fmtFechaDMY(e.date)}</div>
@@ -241,7 +241,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
               <div key={cl.id} onClick={()=>{setFtab('resumen');setSelected(cl)}} style={{background:'#fff',borderRadius:12,padding:'10px 12px',marginBottom:6,border:`1px solid ${C.border}`,opacity:ended?.55:1,cursor:'pointer',display:'flex',alignItems:'center',gap:11}}>
                 <span style={{width:38,height:38,borderRadius:10,background:pc.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={esEmpresa?'building':'user'} s={18} c={pc.color}/></span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{...NOMBRE_CLI}}>{cl.name}{tareasC>0&&<span style={{fontSize:9.5,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 8px',marginLeft:6,whiteSpace:'nowrap'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
+                  <div style={{...NOMBRE_CLI}}>{cl.name}{tareasC>0&&<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'2px 8px',marginLeft:6,whiteSpace:'nowrap'}}>{tareasC} {tareasC===1?'tarea':'tareas'}</span>}</div>
                   {sub&&<div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{sub}</div>}
                 </div>
                 {resp&&<span style={{flexShrink:0,fontSize:11,color:pc.color,fontWeight:700,whiteSpace:'nowrap'}}>{resp}</span>}

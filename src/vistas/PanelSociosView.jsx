@@ -70,7 +70,7 @@ const CierreGrid = ({grupos}) => (<>
 // Franja de cifras (mismo molde que la franja de «Cierre»): etiqueta, cifra y una línea de apoyo.
 const MiniK = ({label,value,sub,onClick}) => (
   <div onClick={onClick} style={{border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 9px',minWidth:0,background:C.surface,cursor:onClick?'pointer':'default'}}>
-    <div style={{fontSize:9.5,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted,...ELIPSIS}}>{label}</div>
+    <div style={{fontSize:10,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',color:C.muted,...ELIPSIS}}>{label}</div>
     <div style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{value}</div>
     {sub&&<div style={{fontSize:10,color:C.muted,lineHeight:1.25}}>{sub}</div>}
   </div>)
@@ -218,7 +218,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const tablaEm = (() => { const cols = emAnio.map(x=>{ const [i,c]=isDesktop?[x.i,x.c]:redondearPartes([x.i,x.c],1e5); return { s:x.s, f:i+c, c, i } })
     const tot = { f:sumaN(cols.map(x=>x.f)), c:sumaN(cols.map(x=>x.c)), i:sumaN(cols.map(x=>x.i)) }
     const F = v => Math.abs(v)>=1 ? fmtShort(v) : '—', td = {padding:isDesktop?'9px 14px':'8px 6px',borderTop:`1px solid ${C.bgSoft}`,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',fontSize:isDesktop?12.5:11.5}
-    const th = {padding:isDesktop?'8px 14px':'8px 6px',fontSize:9.5,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',color:C.muted,textAlign:'right',background:C.bgSoft,whiteSpace:'nowrap'}
+    const th = {padding:isDesktop?'8px 14px':'8px 6px',fontSize:10,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',color:C.muted,textAlign:'right',background:C.bgSoft,whiteSpace:'nowrap'}
     const lbl = {...td,textAlign:'left',fontWeight:600}, pc = (c,f)=>f>0?`${(c/f*100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} %`:'—'
     return <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
       <thead><tr><th style={{...th,textAlign:'left'}}></th>{cols.map(x=><th key={x.s} style={th}>{isDesktop||x.s!==SIN_SOCIO?x.s:'S/socio'}</th>)}<th style={th}>Oficina</th></tr></thead>

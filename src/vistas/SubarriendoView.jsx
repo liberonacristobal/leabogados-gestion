@@ -86,7 +86,7 @@ export function SubarriendoView({sales=[],billing=[],anticipos=[],clients=[],onO
   const tile = (k,l,v,bg,fg,ico,onTap) => { const on=lf===k, tap=onTap||(v?()=>setLf(on?null:k):null), blanco=bg===C.card
     return <div key={k} onClick={tap||undefined} className={tap?'pv-c':undefined} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:10,padding:isDesktop?'10px 12px':'10px',cursor:tap?'pointer':'default',minWidth:0,outline:on?`1.5px solid ${fg}`:'none',outlineOffset:-1.5,display:'flex',gap:10,alignItems:'center'}}>
       {isDesktop&&<KpiIco n={ico} c={fg} soft={blanco}/>}
-      <div style={{minWidth:0}}><div style={{...kLbl,color:fg,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,...(isDesktop?{}:{fontSize:9.5,letterSpacing:.3})}}>{l}</div><div style={{fontSize:isDesktop?19:17,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:1,whiteSpace:'nowrap'}}>{v?fmtMill(v):'—'}</div></div></div> }
+      <div style={{minWidth:0}}><div style={{...kLbl,color:fg,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,...(isDesktop?{}:{fontSize:10,letterSpacing:.3})}}>{l}</div><div style={{fontSize:isDesktop?19:17,fontWeight:700,color:fg,letterSpacing:-.4,...num,marginTop:1,whiteSpace:'nowrap'}}>{v?fmtMill(v):'—'}</div></div></div> }
   const nTxt = (l,xs) => xs.length?`${l} · ${xs.length}`:l
   const tiles = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
     {tile('cob',`Cobrado · ${yr}`,cobrado,C.greenBg,C.greenText,'tCheck')}
@@ -99,7 +99,7 @@ export function SubarriendoView({sales=[],billing=[],anticipos=[],clients=[],onO
   // Filtro de tarjeta → qué meses se ven (y abiertos).
   const filtroMes = x => !lf ? true : lf==='cob' ? pagadoDe(x)>0 : lf==='fac' ? !!x.fac?.invoice_no : est(x)===lf
   const qi = (l,v,on) => <div onClick={on?e=>{e.stopPropagation();on()}:undefined} className={on?'pv-c':undefined} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,padding:'2px 4px',margin:'0 -4px',borderRadius:5,cursor:on?'pointer':'default'}}><span style={{color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{l}</span><b style={{...num,color:on?C.accent:C.text,whiteSpace:'nowrap'}}>{v}</b></div>
-  const qBox = (t,h) => <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',minWidth:0}}><div style={{...kLbl,fontSize:9.5,marginBottom:3}}>{t}</div>{h}</div>
+  const qBox = (t,h) => <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',minWidth:0}}><div style={{...kLbl,fontSize:10,marginBottom:3}}>{t}</div>{h}</div>
   const detalle = x => { const e=est(x), b=x.fac, p=x.pagos[0]
     return <div onClick={ev=>ev.stopPropagation()} style={{gridColumn:'1/-1',padding:'8px 0 4px'}}>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'1fr',gap:10}}>
@@ -133,7 +133,7 @@ export function SubarriendoView({sales=[],billing=[],anticipos=[],clients=[],onO
       {open&&detalle(x)}</div> }
   const band = (k,xs) => { const fold=!lf&&plegado[k]; return <div onClick={()=>!lf&&setPlegado(p=>({...p,[k]:!p[k]}))} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',background:C.bgSoft,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,cursor:lf?'default':'pointer'}}><span style={{...kLbl,flex:1}}>{ESTL[k][0]} · {xs.length}</span>{isDesktop&&<span style={{...kLbl,...num,letterSpacing:0}}>{fmt(sumG(xs))}</span>}{!lf&&<span style={{color:C.textSoft,fontSize:11}}>{fold?<Gl n='chevD'/>:<Gl n='chevU'/>}</span>}</div> }
   const listaMes = <div style={card}>
-    {isDesktop&&<div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,fontSize:9.5}}><span>Mes</span><span style={{textAlign:'right'}}>Fecha de pago</span><span style={{textAlign:'right'}}>Factura</span><span style={{textAlign:'right'}}>Monto</span><span/></div>}
+    {isDesktop&&<div style={{display:'grid',gridTemplateColumns:COLS,columnGap:12,padding:'8px 14px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,...kLbl,fontSize:10}}><span>Mes</span><span style={{textAlign:'right'}}>Fecha de pago</span><span style={{textAlign:'right'}}>Factura</span><span style={{textAlign:'right'}}>Monto</span><span/></div>}
     {grupos.map(g=>{ const xs=g.xs.filter(filtroMes); if(!xs.length) return null; const fold=!lf&&plegado[g.k]; return <Fragment key={g.k}>{band(g.k,xs)}{!fold&&xs.map(filaMes)}</Fragment> })}
     {meses.filter(filtroMes).length===0&&<div style={{padding:'16px 14px',fontSize:12.5,color:C.muted}}>Nada en este filtro.</div>}
     <div style={{display:'flex',alignItems:'center',gap:12,padding:'9px 14px',borderTop:`1px solid ${C.border}`,fontSize:12.5,fontWeight:700}}><span style={{flex:1}}>Cobrado {yr} · {nPag} pago{nPag!==1?'s':''}</span><span style={num}>{fmt(cobrado)}</span>{isDesktop&&<span style={{width:18}}/>}</div>

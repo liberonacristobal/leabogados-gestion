@@ -139,12 +139,12 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
                 {showWho&&taskAssignees(t).map(w=>{const pc=personChip(w);return <span key={w} style={{flexShrink:0,fontSize:11,color:pc.color,fontWeight:700}}>{w}</span>})}
               </div>
             )}
-            {(t.delegated_to||[]).length>0&&<div style={{fontSize:9.5,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
-            {!done&&t.evidencia&&!t.evidencia.descartada&&<div style={{fontSize:9.5,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Cumplida según los registros</div>}
+            {(t.delegated_to||[]).length>0&&<div style={{fontSize:10,color:C.soonText,background:C.ambarBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Delegada a {(t.delegated_to||[]).join(', ')}{t.delegated_due?` · vence ${fmtVenceShort(t.delegated_due)}`:''}</div>}
+            {!done&&t.evidencia&&!t.evidencia.descartada&&<div style={{fontSize:10,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'2px 8px',marginTop:4,display:'inline-block',fontWeight:700,whiteSpace:'nowrap'}}>Cumplida según los registros</div>}
           </div>
           {!done&&(
             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
-              {!t.due&&<span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>Sin fecha</span>}
+              {!t.due&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:bs.bg,color:bs.col,whiteSpace:'nowrap'}}>Sin fecha</span>}
               <div style={{display:'flex',gap:9,alignItems:'center'}}>
                 {isDesktop&&<span className='tk-ic' style={{display:'inline-flex',gap:9,alignItems:'center'}}>
                 <button onClick={(e)=>{e.stopPropagation();agendarTarea(t)}} disabled={!t.due} title={t.due?'Agregar a Google Calendar':'Sin fecha de vencimiento'} style={{background:'none',border:'none',padding:0,cursor:t.due?'pointer':'default',color:t.due?C.muted:'#C7D0D5',display:'inline-flex',alignItems:'center'}}>
@@ -209,7 +209,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
                   <div onClick={()=>goSec(setOpenActivas,'sec-activas')} style={{background:foco.bg,borderRadius:10,padding:'10px 12px',cursor:'pointer'}}>
                     <div style={{fontSize:30,fontWeight:600,color:foco.col,lineHeight:1}}>{foco.n}</div>
                     <div style={{fontSize:10,color:foco.col,marginTop:3,fontWeight:500,lineHeight:1.3}}>{foco.lbl}</div>
-                    {kpiVencidas.length>0&&kpiSemana.length>0&&<div style={{fontSize:9,color:foco.col,marginTop:2,opacity:.85}}>+{kpiSemana.length} esta semana</div>}
+                    {kpiVencidas.length>0&&kpiSemana.length>0&&<div style={{fontSize:10,color:foco.col,marginTop:2,opacity:.85}}>+{kpiSemana.length} esta semana</div>}
                   </div>
                 )
               })()}
@@ -363,15 +363,15 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
                 <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5}}>
                   {byDay.map(({iso,dia,ts},i)=>{ const esHoy=iso===fmtISO(hoy); const sel=iso===selDay; return (
                     <div key={i} data-soltar={iso} data-soltar-grupo='tarea' onClick={()=>ts.length?setSelDay(sel?null:iso):onAddTask(iso)} title={ts.length?'Ver tareas del día':'Nueva tarea este día'} style={{height:cellH,overflow:'hidden',background:arrT.sobre===iso?C.azulBg:sel?C.azulBg:'#fff',borderRadius:8,padding:'6px 7px',border:`1px ${arrT.arrastrando&&arrT.sobre===iso?'dashed':'solid'} ${arrT.sobre===iso||sel||esHoy?C.accent:C.border}`,cursor:'pointer',display:'flex',flexDirection:'column',transition:'background .12s'}}>
-                      <div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:9,fontWeight:700,color:esHoy?C.accent:C.done,textTransform:'uppercase'}}>{DIAS[i]}</span><span style={{fontSize:13,fontWeight:800,color:esHoy?C.accent:C.text}}>{String(dia.getDate()).padStart(2,'0')}</span></div>
+                      <div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:10,fontWeight:700,color:esHoy?C.accent:C.done,textTransform:'uppercase'}}>{DIAS[i]}</span><span style={{fontSize:13,fontWeight:800,color:esHoy?C.accent:C.text}}>{String(dia.getDate()).padStart(2,'0')}</span></div>
                       <div style={{marginTop:5,display:'flex',flexDirection:'column',gap:3,minHeight:0}}>
                         {ts.slice(0,maxChips).map(t=>{ const u=_urgCal(t.due); const cl=clients.find(x=>x.id===t.client_id); const lbl=cl?cl.name:t.title
                           const dnd=onReprogramar?arrT.props(t,lbl):{onPointerDown:undefined,style:{}}
                           return isDesktop
-                            ? <div key={t.id} onPointerDown={dnd.onPointerDown} title={onReprogramar?'Arrastra a otro día para reprogramar':undefined} style={{...dnd.style,fontSize:9.5,fontWeight:700,borderRadius:20,padding:'2px 8px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5,cursor:onReprogramar?'grab':'pointer'}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
-                            : <div key={t.id} onPointerDown={dnd.onPointerDown} style={{...dnd.style,fontSize:9,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            ? <div key={t.id} onPointerDown={dnd.onPointerDown} title={onReprogramar?'Arrastra a otro día para reprogramar':undefined} style={{...dnd.style,fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:u.bg,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:5,cursor:onReprogramar?'grab':'pointer'}}><span style={{width:5,height:5,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
+                            : <div key={t.id} onPointerDown={dnd.onPointerDown} style={{...dnd.style,fontSize:10,fontWeight:700,color:u.fg,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:4}}><span style={{width:6,height:6,borderRadius:'50%',background:u.dot,flexShrink:0}}/>{lbl}</div>
                         })}
-                        {ts.length>maxChips&&<div style={{fontSize:9,color:C.textSoft,fontWeight:700}}>+{ts.length-maxChips} más</div>}
+                        {ts.length>maxChips&&<div style={{fontSize:10,color:C.textSoft,fontWeight:700}}>+{ts.length-maxChips} más</div>}
                       </div>
                     </div>
                   )})}
@@ -477,7 +477,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
                       <div style={{fontSize:12,fontWeight:500,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>
                       <div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',gap:6,alignItems:'center',minWidth:0}}>
                         <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{[cl?.name,fmtFecha(e.date)].filter(Boolean).join(' · ')}</span>
-                        {!e.paid_by_client&&<span style={{padding:'2px 8px',borderRadius:20,fontWeight:700,fontSize:9.5,background:liq?C.greenBg:C.soonBg,color:liq?C.greenText:C.soonText,flexShrink:0,whiteSpace:'nowrap'}}>{liq?'liquidado':'por liquidar'}</span>}
+                        {!e.paid_by_client&&<span style={{padding:'2px 8px',borderRadius:20,fontWeight:700,fontSize:10,background:liq?C.greenBg:C.soonBg,color:liq?C.greenText:C.soonText,flexShrink:0,whiteSpace:'nowrap'}}>{liq?'liquidado':'por liquidar'}</span>}
                       </div>
                     </div>
                     <div style={{width:92,textAlign:'right',fontSize:13,fontWeight:600,color:C.overdue,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtCLP(e.amount)}</div>

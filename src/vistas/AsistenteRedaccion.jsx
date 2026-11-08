@@ -353,7 +353,7 @@ export function AsistenteRedaccion({clients=[], sales=[], billing=[], clientEnti
               {clauLib===null?<div style={{fontSize:11,color:C.muted}}>Cargando…</div>:(()=>{ const f=(clauLib||[]).filter(c=>(!clauCat||c.categoria===clauCat)&&(!clauKw.trim()||((c.titulo||'')+' '+(c.texto||'')).toLowerCase().includes(clauKw.toLowerCase()))); return f.length?(
                 <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:200,overflowY:'auto'}}>{f.slice(0,40).map(c=>{ const sel=precSel&&precSel.name===c.titulo; return (
                   <button key={c.id} type='button' onClick={()=>usarClausula(c)} style={{textAlign:'left',padding:'6px 9px',borderRadius:8,border:`1px solid ${sel?C.accent:C.border}`,background:sel?C.azulBg:'#fff',cursor:'pointer'}}>
-                    <div style={{fontSize:12,fontWeight:600,color:sel?C.accent:C.text}}>{sel?<><Gl n='tick'/>{" "}</>:''}{c.titulo} <span style={{fontSize:9,fontWeight:600,color:C.muted}}>· {c.categoria}</span></div>
+                    <div style={{fontSize:12,fontWeight:600,color:sel?C.accent:C.text}}>{sel?<><Gl n='tick'/>{" "}</>:''}{c.titulo} <span style={{fontSize:10,fontWeight:600,color:C.muted}}>· {c.categoria}</span></div>
                     <div style={{fontSize:10,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{c.texto}</div>
                   </button>)})}</div>
               ):<div style={{fontSize:11,color:C.muted}}>Sin cláusulas guardadas{clauCat?` en ${clauCat}`:''}. Usa "Extraer de un documento".</div> })()}

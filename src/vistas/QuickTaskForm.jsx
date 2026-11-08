@@ -258,7 +258,7 @@ export function QuickTaskForm({clients,sales,tasks,clientEntities,onSave,onDeleg
                     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                       {WHO.filter(w=>w!==me).map(w=>{ const on=delegTo.includes(w); return (
                         <button key={w} onClick={()=>toggleDelegTo(w)} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:on?600:500,padding:'5px 11px 5px 5px',borderRadius:20,border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.bgSoft,color:on?C.accent:C.muted,cursor:'pointer'}}>
-                          <span style={{width:22,height:22,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
+                          <span style={{width:22,height:22,borderRadius:'50%',background:on?C.accent:C.done,color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>{INICIALES_RESP[w]||w.slice(0,2).toUpperCase()}</span>{w}
                         </button>
                       )})}
                     </div>

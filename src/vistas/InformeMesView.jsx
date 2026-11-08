@@ -148,7 +148,7 @@ export function InformeMesView({ sales=[], billing=[], clients=[], terceros=[], 
           <div style={{padding:12,display:'flex',flexDirection:'column',gap:8}}>
             {cargando ? <div style={{fontSize:12,color:C.muted}}>Cargando…</div>
             : inf ? (<>
-              <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:9.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,marginBottom:3}}>{cap(MESES[Number(ym.slice(5,7))-1])} en una frase</div><div style={{fontSize:14.5,fontWeight:700,color:C.accent,lineHeight:1.4}}>{inf.frase}</div></div>
+              <div style={{background:C.bgSoft,borderRadius:10,padding:'10px 12px'}}><div style={{fontSize:10,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,marginBottom:3}}>{cap(MESES[Number(ym.slice(5,7))-1])} en una frase</div><div style={{fontSize:14.5,fontWeight:700,color:C.accent,lineHeight:1.4}}>{inf.frase}</div></div>
               <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:8}}>{inf.puntos.map(tarjeta)}</div>
               <div style={{fontSize:10.5,color:C.muted}}>Redactado con IA el {fmtFechaDMY(String(inf.at||'').slice(0,10))} a partir de las cifras de la app; cada número se verificó contra ellas.</div>
             </>) : <div style={{fontSize:12.5,color:C.muted}}>Aún no hay informe de {etiquetaMes(ym)}. Se genera a pedido a partir de las cifras de abajo.</div>}
