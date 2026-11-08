@@ -80,20 +80,20 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       return yrDe(docFecha)
     }
     const byMonth={}
-    let total=0, totalUF=0, sinMontoUF=0, percibidasUF=0, cajaSubarrUF=0, cajaReembUF=0, cajaExtUF=0, sinMonto=0, sinN=0, percibidas=0, cajaSubarr=0, cajaReemb=0, cajaExt=0; const byYear={}, byYearUF={}; const listByYear={}; const sinList=[]; const percList=[]
+    let total=0, totalUF=0, sinMontoUF=0, percibidasUF=0, cajaSubarrUF=0, cajaReembUF=0, cajaExtUF=0, sinMonto=0, sinN=0, percibidas=0, cajaSubarr=0, cajaReemb=0, cajaExt=0; const byYear={}, byYearUF={}; const listByYear={}; const sinList=[]; const percList=[]; const cajaList=[]   // depósitos que no son cobrado propio (subarriendo, reembolsos, externos), con su fecha: el control de la proyección los suma
     ingConc.forEach(c=>{
       const m=abonoById[String(c.movimiento_id)]; if(!m) return
       if(!String(m.fecha||'').startsWith(_sySel)) return          // AÑO DE INGRESO A CAJA = fecha del depósito
       let monto=Number(c.monto_aplicado)||0; if(monto<=0) return
       // Lo que NO es cobrado propio se acumula aparte solo para cuadrar el «Total a caja» con el banco.
-      if(m.categoria==='Subarriendo'){ cajaSubarr+=monto; cajaSubarrUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); return } // subarriendo = ingreso por arriendo, NO honorarios cobrados (vive en Colaboradores)
+      if(m.categoria==='Subarriendo'){ cajaList.push({ id:'cs-'+c.movimiento_id+'-'+String(c.anticipo_id||c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaSubarr+=monto; cajaSubarrUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); return } // subarriendo = ingreso por arriendo, NO honorarios cobrados (vive en Colaboradores)
       if(c.tipo_destino==='factura'){
         const b=billById[String(c.factura_id)]
-        if(b&&b.billing_type==='reembolso'){ cajaReemb+=monto; cajaReembUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); return } // reembolso de gastos: devuelve plata, no son honorarios
+        if(b&&b.billing_type==='reembolso'){ cajaList.push({ id:'cr-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaReemb+=monto; cajaReembUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); return } // reembolso de gastos: devuelve plata, no son honorarios
         const ex=extByBill[String(c.factura_id)]
-        if(ex){ cajaExt+=monto; cajaExtUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percibidasUF+=p/ufDelDia(ufDias,m.fecha,ufRef); percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
+        if(ex){ cajaList.push({ id:'ce-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaExt+=monto; cajaExtUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percibidasUF+=p/ufDelDia(ufDias,m.fecha,ufRef); percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
         const fo=b&&fondoEnFac[String(b.id)]
-        if(fo){ const mf=montoFactura(b)||monto, r=monto*Math.min(1,fo/mf); cajaReemb+=r; cajaReembUF+=r/ufDelDia(ufDias,m.fecha,ufRef); monto-=r; if(monto<1) return }
+        if(fo){ const mf=montoFactura(b)||monto, r=monto*Math.min(1,fo/mf); cajaList.push({ id:'cr-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:r }); cajaReemb+=r; cajaReembUF+=r/ufDelDia(ufDias,m.fecha,ufRef); monto-=r; if(monto<1) return }
       }
       const ay=anioVentaDe(c)
       let item
@@ -110,7 +110,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
-    return {byMonth,total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
+    return {byMonth,total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
   },[ingConc,ingAbonos,billing,anticipos,sales,terceros,expenses,selYear,ufDias,ufRef])
   // Comisiones PAGADAS del año (base caja, por pagado_at) atribuidas al AÑO DE LA VENTA — espejo de ingresosPorAnioVenta.
   // Año de venta = terceros.sale_id → sales.year; si no, vía la factura (billing.sale_id → sales.year); si no, el año del documento. Así "sin año" no aparece cuando la factura tiene venta.
