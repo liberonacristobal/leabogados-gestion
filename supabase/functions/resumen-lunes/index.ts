@@ -130,8 +130,9 @@ serve(async (req) => {
     const abById: Record<string, any> = {}; (abRaw || []).forEach((m: any) => { if (m.es_interno !== true) abById[String(m.id)] = m; });
     let cobradoAno = 0, cobradoSemana = 0;
     const reembolsoPorId: Record<string, boolean> = {}; vivos.forEach((b: any) => { if (b.billing_type === "reembolso") reembolsoPorId[String(b.id)] = true; });
+    // cobrado propio: sin subarriendo ni reembolsos (como Inicio)
     // deno-lint-ignore no-explicit-any
-    (concRaw || []).forEach((c: any) => { const m = abById[String(c.movimiento_id)]; if (!m) return; if (m.categoria === "Subarriendo" || reembolsoPorId[String(c.factura_id)]) return;   // cobrado propio: sin subarriendo ni reembolsos (como Inicio) const f = String(m.fecha || "").slice(0, 10); if (!f) return; const mto = Number(c.monto_aplicado) || 0; if (f.slice(0, 4) === year) cobradoAno += mto; if (f >= hace7) cobradoSemana += mto; });
+    (concRaw || []).forEach((c: any) => { const m = abById[String(c.movimiento_id)]; if (!m) return; if (m.categoria === "Subarriendo" || reembolsoPorId[String(c.factura_id)]) return; const f = String(m.fecha || "").slice(0, 10); if (!f) return; const mto = Number(c.monto_aplicado) || 0; if (f.slice(0, 4) === year) cobradoAno += mto; if (f >= hace7) cobradoSemana += mto; });
     // deno-lint-ignore no-explicit-any
     const metaCobranza = Number((tgtRaw || []).find((t: any) => String(t.year) === year)?.collection_target) || 0;
     const cobPct = metaCobranza > 0 ? Math.min(100, Math.round(cobradoAno / metaCobranza * 100)) : 0;
