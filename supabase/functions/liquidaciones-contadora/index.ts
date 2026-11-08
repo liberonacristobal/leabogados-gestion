@@ -6,6 +6,7 @@
 // (texto de un PDF, para revisar el formato). body.dryRun = no guarda.
 // Auth: CRON_SECRET o usuario del dominio. verify_jwt=false.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
+import { liquidacionesVigentes } from "../_shared/liquidacionesReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -97,13 +98,12 @@ Deno.serve(async (req) => {
           try {
             const a = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${it.id}/attachments/${p.body.attachmentId}`, { headers: H }).then((r) => r.json());
             const l = leerLiquidacion(await textoPdf(b64urlBytes(a.data)));
-            if (l) filas.push({ ...l, estudio_id: "lea", fuente: `correo ${it.id} · ${p.filename}` }); else errores.push(`${p.filename}: no se reconoció como liquidación`);
+            if (l) filas.push({ ...l, estudio_id: "lea", fuente: `correo ${it.id} · ${p.filename}`, _t: Number(m.internalDate) || 0 }); else errores.push(`${p.filename}: no se reconoció como liquidación`);
           } catch (e) { errores.push(`${p.filename}: ${(e as Error).message || e}`); }
         }
       }
-      // La versión más reciente de cada (período, persona) manda: la contadora a veces reenvía corregida.
-      const unico = new Map<string, Record<string, unknown>>(); for (const f of filas) unico.set(`${f.periodo}|${f.persona}`, f);
-      const out = [...unico.values()].sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
+      // La versión más reciente de cada (período, persona) manda: la contadora a veces reenvía corregida (regla en _shared/liquidacionesReglas.js).
+      const out = liquidacionesVigentes(filas);
       if (!body.dryRun && out.length) await sb("remuneraciones_tributables?on_conflict=estudio_id,periodo,persona", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(out) });
       const porMes: Record<string, { personas: number; impuesto_unico: number }> = {};
       for (const f of out) { const k = String(f.periodo); porMes[k] = porMes[k] || { personas: 0, impuesto_unico: 0 }; porMes[k].personas++; porMes[k].impuesto_unico += Number(f.impuesto_unico) || 0; }
