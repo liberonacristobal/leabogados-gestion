@@ -10,7 +10,7 @@ Referencia de la revisión automática de coherencia (auditoría del 07-11-2026)
 | Cartera morosa | «Morosa» (atraso sobre el ritmo de pago del cliente) | `flujoCajaProyectado().duda` | Sin definición escrita en la pantalla |
 | Facturado | «Facturado propio» (SII − notas de crédito) y «Emitido bruto» | `resultadoMes().fac` / `facturadoYr` | Tres planos sin rótulo (Inicio, Oficina, Emitido del mes) |
 | Cobrado / caja | «Cobrado propio» por fecha del depósito; «Total a caja» aparte | `ingresosPorAnioVenta` | Facturación (KPI y hub «Pagado») usa `paid_at`/`issued_at` y se llama «Pagado»; Inteligencia, Socios (caja del año) y el correo del lunes ya leen el cobrado propio (el correo aún no resta la parte de externos ni los fondos); Counsel AI ya no calcula «cobrado» |
-| Pagada (estado) | «Pagada» solo para el estado de la factura | `cobradoBill` | Unificar «Pagado/Cobrado» |
+| Pagada (estado) | «Pagada» solo para el estado de la factura | `cobradoBill` | —  («Pagado» = facturas pagadas; «Cobrado» = caja) |
 | Vendido | «Vendido» (Activo + Terminado, sin subarriendo) | `metricasAnio` / `ventaCuentaEnAnio` | —  (`ventaVendidaEnAnio` en Inicio, Ventas, Por socio, Inteligencia y resultado del año) |
 | Por facturar | «Por facturar» = vigente de `clasificarPorFacturar` | `clasificarPorFacturar` | — (el KPI del hub ya lee `clasificarPorFacturar().total`) |
 | Cuotas vencidas sin facturar | «Cuotas vencidas sin facturar» | `cuotasVencidasSinFacturar` (= Vencidas de `clasificarPorFacturar`) | Los totales por monto de la cuota difieren de Inicio en lo cubierto en parte por anticipo (Inicio lo descuenta) |
@@ -23,7 +23,7 @@ Referencia de la revisión automática de coherencia (auditoría del 07-11-2026)
 | Ingreso real | «Ingreso real» (caja propia − comisiones pagadas + percibidas) | cascada de Inicio / `kpisPorSocio` | «Ingresos» del Informe del mes es el devengado del Resultado del mes (otro plano); se rotula en su grupo «Resultado» |
 | Anticipos disponibles | «Anticipos disponibles» | `anticiposDisponibles` | — |
 | Deuda de clientes por gastos | «Gastos por cobrar a clientes» | `fgCliente` / `totalesFondos` | Umbral único `UMBRAL_DEUDA` (−$1.000); «Fondos por solicitar» es la acción de pedirlos |
-| Fondos a favor (gastos) | «Fondos a favor del cliente» | `fgCliente.saldo > 0` | Misma frase que anticipos de honorarios |
+| Fondos a favor (gastos) | «Fondos a favor del cliente» | `fgCliente.saldo > 0` | —  (anticipos de honorarios: «recibidos sin factura») |
 | Caja chica por liquidar | «Caja chica por liquidar» | `gastosPorLiquidarCaja` | — |
 
 Reglas de nombre: «Saldo» siempre con su objeto («Saldo de la factura», «Saldo de gastos del cliente», «Saldo de caja chica»); «Por pagar» siempre con su objeto («Comisiones por pagar», «Compras por pagar»).
