@@ -1543,6 +1543,7 @@ function resumenCorrida(p){
     if(j==='clientes-drive-sync'&&r.addedN!=null) return `${nn(r.addedN,'cliente nuevo','clientes nuevos')} · ${r.linkedN??0} vinculados`
     if(/^bhe-correo/.test(j)&&r.revisados!=null) return `${nn(r.revisados,'correo','correos')} · ${len(r.nuevas)??0} boletas nuevas`
     if(/^auditor-datos/.test(j)&&r.por_revisar!=null) return `${r.por_revisar} por revisar · ${r.nuevos??0} nuevos`
+    if(/^oficina-liquidaciones/.test(j)&&r.liquidaciones!=null) return `${nn(r.liquidaciones,'liquidación leída','liquidaciones leídas')} · ${nn(r.correos??0,'correo','correos')}`
     if(/^vigilancia-procesos/.test(j)&&r.revisados!=null) return `${r.revisados} procesos · ${r.en_falla??0} en falla`
     if(/^titulos-cortos/.test(j)&&r.revisadas!=null) return `${r.revisadas} revisados · ${len(r.cambios)??0} cambios`
     if(/^tareas-evidencia/.test(j)&&r.revisadas!=null) return `${nn(r.revisadas,'tarea revisada','tareas revisadas')} · ${len(r.propuestas)??0} propuestas`
