@@ -89,7 +89,7 @@ export function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onA
   const lnF = (l,v,col) => <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,fontSize:12,padding:'2px 0'}}><span style={{color:C.muted}}>{l}</span><span style={{fontWeight:700,color:col||C.text,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>
   const saldoEl = bill?.id ? (
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Saldo</span>{estF&&<span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,background:estF.bg,color:estF.text,whiteSpace:'nowrap'}}>{bill.status==='Programada'?'Programada':estF.label}</span>}</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:.5}}>Saldo</span>{estF&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,background:estF.bg,color:estF.text,whiteSpace:'nowrap'}}>{bill.status==='Programada'?'Programada':estF.label}</span>}</div>
       <div style={{fontSize:24,fontWeight:800,color:saldoF>0?(estF?.text||C.text):C.greenText,textAlign:'right',fontVariantNumeric:'tabular-nums',margin:'2px 0 4px'}}>{fmt(saldoF)}</div>
       <div style={{borderTop:`1px solid ${C.track}`,paddingTop:5}}>{lnF('Monto',fmt(montoF))}{lnF('Pagado',fmt(pagadoF),pagadoF>0?C.greenText:null)}</div>
       {(concB||[]).length>0&&<div style={{marginTop:8,background:C.greenBg,borderRadius:9,padding:'8px 10px',display:'flex',alignItems:'center',gap:8,fontSize:12}}>
@@ -174,7 +174,7 @@ export function BillingForm({bill,clients,clientEntities,sales=[],billing=[],onA
                       {on&&<svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='#fff' strokeWidth='3' strokeLinecap='round' strokeLinejoin='round'><polyline points='20 6 9 17 4 12'/></svg>}
                     </div>
                     <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:C.text}}>{fmt(a.monto)}</div><div style={{fontSize:11,color:C.textSoft,lineHeight:1.25,overflowWrap:'anywhere'}}>{fmtF(a.fecha)}{a.proyecto?` · ${a.proyecto}`:''}{a.nota?` · ${a.nota}`:''}</div></div>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:'2px 8px',borderRadius:20,flexShrink:0,background:on?C.greenBg:C.bgSoft,color:on?C.normal:C.done,whiteSpace:'nowrap'}}>{on?'Seleccionado':'Disponible'}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:20,flexShrink:0,background:on?C.greenBg:C.bgSoft,color:on?C.normal:C.done,whiteSpace:'nowrap'}}>{on?'Seleccionado':'Disponible'}</span>
                   </div>
                 )})}
                 <div style={{background:C.bgSoft,padding:'9px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>

@@ -194,7 +194,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
   // Lado conserva/retira con la info completa. keep=true verde, drop=rojo con folio tachado.
   const sideFactura = (b, keep) => (
     <div onClick={()=>abrirFac(b)} style={{border:`1px solid ${keep?'#9FCFBB':'#E7B7B4'}`,borderRadius:10,padding:'9px 11px',background:keep?C.greenBg:C.overdueBg,cursor:onEditBilling?'pointer':'default',minWidth:0}}>
-      <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:6,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Se conserva':'Se retira'}</span>
+      <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:6,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Se conserva':'Se retira'}</span>
       <div style={{fontSize:13,fontWeight:700,color:keep?C.text:C.muted,textDecoration:keep?'none':'line-through',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b.invoice_no?('N° '+folioN(b.invoice_no)):'Sin folio'}</div>
       <div style={{fontSize:13,fontWeight:700,marginTop:3,color:keep?C.greenText:C.muted}}>{fmt(montoB(b))}</div>
       {kvFactura(b)}
@@ -228,7 +228,7 @@ export function ConciliarFacturasModal({asPage=false, scope=[], sales=[], client
   // Lado de un anticipo (banco = conserva, a mano = retira).
   const sideAnticipo = (a, keep) => (
     <div style={{border:`1px solid ${keep?'#9FCFBB':'#E7B7B4'}`,borderRadius:10,padding:'9px 11px',background:keep?C.greenBg:C.overdueBg,minWidth:0}}>
-      <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:6,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Del banco · con respaldo':'A mano · sin respaldo'}</span>
+      <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.4px',padding:'1px 7px',borderRadius:6,display:'inline-block',marginBottom:6,color:keep?C.greenText:C.overdueText,background:'#fff'}}>{keep?'Del banco · con respaldo':'A mano · sin respaldo'}</span>
       <div style={{fontSize:13,fontWeight:700,marginTop:1,color:keep?C.greenText:C.muted}}>{fmt(Number(a.monto)||0)}</div>
       <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`,display:'grid',gap:3}}>
         {[['Fecha',fD(a.fecha)],['Nota',a.nota||'—'],['Origen',keep?'banco (conciliado)':'a mano'],['Cargado por',a.created_by||'—']].map(([k,v],i)=>(
