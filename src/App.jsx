@@ -1495,7 +1495,6 @@ const _DEMO_PROCESOS = [
   {jobname:'bhe-correo-diario',nombre:'Boletas de honorarios del correo',schedule:'40 11 * * *',active:true,cada:'diario',ultima:'2026-10-19T11:40:00Z',estado:'error',respuesta:'{"error":"Gmail 401"}',ultima_ok:null,fallas_30d:1,corridas_30d:1,atrasado:false},
   {jobname:'oficina-costos-banco',nombre:'Costos de oficina del banco',schedule:'40 9 * * *',active:true,cada:'diario',ultima:'2026-10-19T09:40:00Z',estado:'ok',respuesta:'INSERT 0 10',ultima_ok:'2026-10-19T09:40:00Z',fallas_30d:0,corridas_30d:1,atrasado:false},
   {jobname:'cartera-semanal-lunes',nombre:'Cartera semanal',schedule:'0 12 * * 1',active:true,cada:'semanal',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
-  {jobname:'resumen-semanal-facturacion',nombre:'Resumen semanal de facturación',schedule:'0 12 * * 1',active:false,cada:'semanal',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
   {jobname:'valores-contadora-mensual',nombre:'Valores de la contadora',schedule:'0 12 10-16 * *',active:true,cada:'mensual',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
 ]
 const estadoProceso = p => !p.active ? {t:'Pausado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
@@ -1521,7 +1520,7 @@ function horarioProceso(schedule, corto=false){
 // Centro de agentes: cada proceso en su tema (por su nombre técnico), en el orden en que se muestran.
 const TEMAS_PROCESOS = [
   ['banco','Banco y conciliación',/^(agente-segunda|alerta-cartola|caja-chica|aviso-fondos-diario)/],
-  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|resumen-semanal-fact|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos|xml-emitidos)/],
+  ['fact','Facturación y SII',/^(facturas-sii|verificar-estados|cuadre-ventas|compras-sii|aviso-cuotas|bhe-correo|cierre-mes|f29-estimado|comisiones-documentos|xml-emitidos)/],
   ['trib','Tribunales, notaría y Diario Oficial',/^(causas-tablas|causas-monitor|notaria|diario-oficial|tgr-remates)/],
   ['norma','Normativa e indicadores',/^(sii-radar|normativa-sii-(manana|tarde)|vigilancia-normativa|indicadores)/],
   ['cli','Clientes, proyectos y tareas',/^(clientes-drive|agente-pmo|titulos-cortos|tareas-evidencia|task-reminders|cartera-semanal|pendientes-semanal)/],

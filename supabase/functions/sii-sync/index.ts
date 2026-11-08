@@ -118,7 +118,7 @@ serve(async (req) => {
   // xml-emitidos entra aca: solo LEE el SII (descarga el respaldo XML) y completa billing.dte_xml vacío.
   // pdf-oficial entra aca: LEE el PDF oficial del SII y lo guarda en Drive y como adjunto de la factura (nunca emite ni anula).
   // sync-compras entra aca: es un sync de solo LECTURA del RCV + escritura en sii_compras_docs (NUNCA emite/anula/libro).
-  const CRON_ACTIONS = ['verificar-estados', 'resumen-semanal', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos', 'pdf-oficial']
+  const CRON_ACTIONS = ['verificar-estados', 'sync-compras', 'cron-cuadre-ventas', 'xml-emitidos', 'pdf-oficial']
   const email = await emailDelJwt(req)
   const cronOk = !!body.cronSecret && body.cronSecret === Deno.env.get('CRON_SECRET') && CRON_ACTIONS.includes(body.action)
   if (!cronOk && (!email || !(await esAdminDelEstudio(email)))) {
@@ -302,41 +302,6 @@ serve(async (req) => {
       }
       console.log(`[sii-sync] verificar-estados: ${revisados} revisados, ${cambiados} cambiados, ${rechazadas.length} rechazadas`)
       return json({ ok: true, revisados, cambiados, rechazadas: rechazadas.length })
-    }
-
-    // REPORTE AUTOMÁTICO #2: resumen semanal de facturación → correo a los admins (los lunes, por cron).
-    // body: { action:'resumen-semanal', cronSecret? }
-    if (body.action === 'resumen-semanal') {
-      const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-      const hoy = nowChileIso().slice(0, 10)
-      const hace7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
-      const { data: bills, error: billsErr } = await sb.from('billing').select('amount,paid_amount,status,invoice_no,due,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at').limit(5000)
-      // Si la lectura falla (p. ej. permission denied), abortar: NO enviar un resumen con cifras en $0 falsas.
-      if (billsErr || !bills) return new Response(JSON.stringify({ ok:false, error:'No se pudo leer billing: '+(billsErr?.message||'sin datos') }), { status:500, headers:{ 'Content-Type':'application/json' } })
-      // deno-lint-ignore no-explicit-any
-      const vivos = (bills || []).filter((b: any) => !b.deleted_at)
-      // deno-lint-ignore no-explicit-any
-      const saldo = (b: any) => ['Pagado', 'Anulada', 'Anulado'].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0))
-      // deno-lint-ignore no-explicit-any
-      const porCobrarB = vivos.filter((b: any) => b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status))
-      const emitidasSemana = vivos.filter((b: any) => (b.dte_emitido_at || '').slice(0, 10) >= hace7).length
-      const porCobrar = porCobrarB.reduce((s: number, b: any) => s + saldo(b), 0)
-      const vencido = porCobrarB.filter((b: any) => (b.due || '') && (b.due || '') < hoy).reduce((s: number, b: any) => s + saldo(b), 0)
-      const rechazadas = vivos.filter((b: any) => (b.dte_estado || '') === 'rechazada').length
-      const porEnviar = vivos.filter((b: any) => b.dte_track_id && !b.email_sent_at && ['Pendiente', 'Vencido'].includes(b.status)).length
-      const fm = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CL')
-      const fila = (lbl: string, val: string, col?: string) => `<tr><td style="padding:7px 8px;border-bottom:1px solid #eee;color:#537281">${lbl}</td><td style="padding:7px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:${col || '#003C50'}">${val}</td></tr>`
-      const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e4e8eb;border-radius:12px;overflow:hidden"><div style="background:#003C50;padding:16px 22px;color:#fff"><b>Resumen semanal de facturación</b></div><div style="padding:18px 22px;color:#1a1a1a;font-size:14px"><table style="width:100%;border-collapse:collapse">${fila('Emitidas esta semana', String(emitidasSemana))}${fila('Por cobrar', fm(porCobrar))}${fila('De eso, vencido', fm(vencido), vencido > 0 ? '#A32D2D' : '#003C50')}${fila('Facturas por enviar', String(porEnviar), porEnviar > 0 ? '#854F0B' : '#003C50')}${fila('DTE rechazadas por el SII', String(rechazadas), rechazadas > 0 ? '#A32D2D' : '#0F6E56')}</table></div></div>`
-      try {
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-task`, {
-          // La clave de servicio, no la anónima: notify-task exige la sesión de una
-            // persona del estudio o esta clave, que nunca sale del servidor.
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') },
-          body: JSON.stringify({ mail: { to: ['cl@leabogados.cl', 'ee@leabogados.cl'], subject: 'Resumen semanal de facturación', html } }),
-        })
-      } catch (_) { /* no romper el job */ }
-      console.log(`[sii-sync] resumen-semanal enviado`)
-      return json({ ok: true, emitidasSemana, porCobrar, vencido, rechazadas, porEnviar })
     }
 
     // SYNC DE COMPRAS (DRAFT) — solo LECTURA del Registro de Compras del SII.
