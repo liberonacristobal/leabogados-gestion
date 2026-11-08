@@ -129,3 +129,20 @@ export function cuotasVencidasSinFacturar({ billing, sales, anticipos = [], uf =
   const ids = new Set(r.filas.filter(f => f.k === 'vencida').map(f => f.id))
   return (billing || []).filter(b => b && ids.has(String(b.id)))
 }
+
+/**
+ * Qué hace el flujo de caja con una cuota programada sin folio. Regla compartida (y probada) para que el flujo no re-arme «Por facturar»:
+ *  fuera (no es plata por facturar: venta no activa, «No corresponde», cubierta por lo facturado) · pagadaAnt (un anticipo la cubre entera) · nada (monto < $1) ·
+ *  sinEmitir (vencida del radar «Cuotas vencidas sin facturar»: fuera de la proyección hasta emitirla) · porConfirmar (venció pero el radar no la cuenta: fuera de la proyección) ·
+ *  proyecta (futura: entra al flujo cuando se emita y se cobre). `m` = monto por facturar, ya descontados anticipos y lo cubierto en parte.
+ * @param {{b:any, cubierto?:Record<string,number>, cubV:Map<string,any>, fuera:(b:any)=>any, radar:Set<string>|null, curYm:string}} p
+ * @returns {{tipo:'fuera'|'pagadaAnt'|'nada'|'sinEmitir'|'porConfirmar'|'proyecta', m:number, due?:string}}
+ */
+export function destinoCuotaFlujo({ b, cubierto = {}, cubV, fuera, radar, curYm }) {
+  if (fuera(b)) return { tipo: 'fuera', m: 0 }
+  const m = (montoFactura(b) || Number(b.amount) || 0) - (cubierto[b.id] || 0) - ((cubV.get(String(b.id)) || {}).m || 0)
+  if (!(m >= 1)) return { tipo: cubierto[b.id] ? 'pagadaAnt' : 'nada', m }
+  const due = b.due || b.issued_at, ym = String(due || '').slice(0, 7), enRadar = !!radar && radar.has(String(b.id))
+  if (!ym || ym < curYm || enRadar) return { tipo: radar && !enRadar ? 'porConfirmar' : 'sinEmitir', m, due }
+  return { tipo: 'proyecta', m, due }
+}

@@ -24,7 +24,7 @@ import { Spin } from './base.jsx'
 import { sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
-import { anticiposSobreCuotas, clasificarPorFacturar } from '../../supabase/functions/_shared/porFacturar.js'
+import { anticiposSobreCuotas, clasificarPorFacturar, destinoCuotaFlujo } from '../../supabase/functions/_shared/porFacturar.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -3785,13 +3785,12 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       const espC=base+ritmoCons(c.cid)*DAY, vencida=hoyT>espC
       const tC=vencida?hoyT+R.esperaRestante(c.cid,Math.round((hoyT-base)/DAY))*DAY:espC
       const w=wIdx(tC); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
-    if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
-      const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
-      if(!dYm||dYm<curYm||(radarIds&&radarIds.has(String(b.id)))){
-        if(radarIds&&!radarIds.has(String(b.id))){ st[b.id]={fuera:'porConfirmar',m,cid:c.cid}; return }   // vencida que el radar no cuenta: queda por confirmar en Por facturar, fuera del flujo
-        st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
-      const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
-  })
+    if(b.status==='Programada'&&!b.invoice_no){ const dc=destinoCuotaFlujo({b,cubierto,cubV,fuera:fueraProg,radar:radarIds,curYm}); if(dc.tipo==='fuera') return; const m=dc.m; if(cubierto[b.id]) c.antic+=cubierto[b.id]
+      if(dc.tipo==='pagadaAnt'||dc.tipo==='nada'){ if(dc.tipo==='pagadaAnt') st[b.id]={pagadaAnt:true,cid:c.cid}; return }
+      const due=dc.due, dYm=String(due||'').slice(0,7)
+      if(dc.tipo==='porConfirmar'){ st[b.id]={fuera:'porConfirmar',m,cid:c.cid}; return }   // vencida que el radar no cuenta: queda por confirmar en Por facturar, fuera del flujo
+      if(dc.tipo==='sinEmitir'){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
+      const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }  })
   // Conservador: un cliente con una factura morosa (más de FLUJO_DUDA_DIAS tras su fecha esperada) no aporta ningún cobro al flujo; sus comisiones
   // quedan fuera con ellos (se pagan al cobrar). Con conMorosos=true se proyectan como cualquier otro.
   const exclMor={n:0,monto:0,items:[]}

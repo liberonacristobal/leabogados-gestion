@@ -1,7 +1,7 @@
 // Pruebas de «Por facturar» (_shared/porFacturar.js) y de la cobertura de cuotas con saldo. Sin nombres de clientes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { clasificarPorFacturar, cuotasVencidasSinFacturar, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
+import { clasificarPorFacturar, cuotasVencidasSinFacturar, destinoCuotaFlujo, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
 import { cuotaTramo } from './../supabase/functions/_shared/saludDatos.js'
 import { cuotasCubiertasVenta, noEmitirDeFilas, cuotaDeLaApp, cuotasSinEmitir } from './../supabase/functions/_shared/ventasReglas.js'
 
@@ -164,4 +164,19 @@ test('Cuotas vencidas sin facturar: el radar entrega las mismas cuotas que Venci
   const r = clasificarPorFacturar({ ...base, hoy: '2026-11-08', billing, sales, anticipos })
   assert.deepEqual(r.filas.filter(f => f.k === 'vencida').map(f => f.id), ['a1'])
   assert.deepEqual(r.filas.filter(f => f.id === 'c1').map(f => f.k), ['porConfirmar'])
+})
+
+test('Flujo de caja: destino de cada cuota programada sin folio (vencida del radar, por confirmar, futura, cubierta)', () => {
+  const sales = [venta('A', { amount_clp: 10000000 }), venta('B', { status: 'Terminado' })]
+  const billing = [prog('v1', 'A', '2026-10-01', 1000000), prog('v2', 'A', '2026-03-01', 800000), prog('f1', 'A', '2026-12-01', 600000), prog('t1', 'B', '2026-12-01', 500000), prog('a1', 'A', '2026-12-05', 400000), fact('fa', 'A', '2026-10-15', 300000)]   // la venta A ya factura
+  const radar = new Set(cuotasVencidasSinFacturar({ billing, sales, anticipos: [], uf: UF, noEmitir: new Set(), hasta: '2026-11-01', hoy: '2026-11-08' }).map(b => String(b.id)))
+  const cubV = cuotasCubiertasVenta(billing, sales, UF)
+  const fuera = b => (b.sale_id && { A: 'Activo', B: 'Terminado' }[b.sale_id] !== 'Activo') || cubV.get(String(b.id))?.total
+  const d = (id, cubierto = {}) => destinoCuotaFlujo({ b: billing.find(x => x.id === id), cubierto, cubV, fuera, radar, curYm: '2026-11' })
+  assert.deepEqual([d('v1').tipo, d('v1').m], ['sinEmitir', 1000000])     // vencida del radar: fuera de la proyección
+  assert.equal(d('v2').tipo, 'porConfirmar')                              // anterior a la app: el radar no la cuenta
+  assert.equal(d('f1').tipo, 'proyecta')                                  // futura: entra al flujo
+  assert.equal(d('t1').tipo, 'fuera')                                     // venta no activa
+  assert.equal(d('a1', { a1: 400000 }).tipo, 'pagadaAnt')                  // anticipo la cubre entera
+  assert.deepEqual([d('a1', { a1: 100000 }).tipo, d('a1', { a1: 100000 }).m], ['proyecta', 300000])   // cubierta en parte: lo que falta
 })

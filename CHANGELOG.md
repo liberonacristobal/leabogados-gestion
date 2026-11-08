@@ -1,3 +1,4 @@
+- 2026-11-08 · Flujo de caja: el destino de cada cuota programada sin folio (vencida, por confirmar, futura, cubierta por anticipo) sale de una regla compartida con su prueba, sin cambiar ninguna cifra.
 - 2026-11-08 · Facturación: el KPI «Por facturar» y la columna por cliente leen la misma regla de la página Por facturar y del hub, con los filtros de año y mes.
 - 2026-11-08 · Radar «Cuotas vencidas sin facturar» (Facturación, cierre del mes, resumen del lunes, Tu semana, Pendientes por cliente) con la misma regla que Inicio, el flujo y Por facturar › Vencidas: las cubiertas por anticipo van a Excluidas y las de más de 90 días sin movimiento solo a Por confirmar.
 - 2026-11-08 · Un solo nombre, «Cuotas vencidas sin facturar», en Inicio, el flujo de caja (pestaña Excluidas y Excel) y el selector de indicadores.
