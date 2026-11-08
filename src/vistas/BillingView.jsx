@@ -3489,7 +3489,8 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
           // "Por facturar" = todo sin folio (no pagado/anulado). Se separa: real (falta emitir) vs ya facturadas (duplicado, su factura emitida ya existe → vincular).
           const porFactBucket=bb.filter(b=>!b.deleted_at&&!b.invoice_no&&!['Pagado','Anulada','Anticipada'].includes(b.status)&&inResYear(b.due))
           const yaFactTot=porFactBucket.filter(b=>yaFacturadasIds.has(b.id)).reduce((a,b)=>a+(b.amount||0),0)
-          const porFacturarRealTot=porFactBucket.filter(b=>!yaFacturadasIds.has(b.id)).reduce((a,b)=>a+(b.amount||0),0)
+          const _pf=clasificarPorFacturar({billing:bb,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,yaFacturadas:yaFacturadasIds,hoy,anio:fYear})   // misma regla de la página «Por facturar»
+          const porFacturarRealTot=_pf.total
           const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
           const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
@@ -3517,7 +3518,6 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
               // Alerta: DTE emitidos EN la app (issued>=2026-06-09) sin el XML firmado — para que no se acumulen sin que nadie los vea (histórico pre-app excluido).
               const facSinXmlN=(billing||[]).filter(b=>_emitBasePC(b)&&!b.dte_xml&&String(b.issued_at||'').slice(0,10)>='2026-06-09').length
               const compIncumplidos=Object.entries(compromisosCob).filter(([cid,c])=>estadoCompromiso(c,new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}),(billing||[]).filter(b=>!b.deleted_at&&String(b.client_id)===String(cid)&&b.invoice_no&&!['reembolso','nota_credito'].includes(b.billing_type)&&['Pendiente','Vencido'].includes(b.status)&&esVencidaB(b)).reduce((a,b)=>a+saldoBill(b),0))==='incumplido').length
-              const _pf=clasificarPorFacturar({billing:bb,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,yaFacturadas:yaFacturadasIds,hoy,anio:fYear})   // misma regla de la página «Por facturar»
               const porConfN=_pf.grupos.porConfirmar.n
               const revisar=[
                 facSinXmlN>0&&{k:'DTE emitidos sin XML', s:'emitidas en el SII sin el XML firmado · completar', n:facSinXmlN, col:C.soonText, on:()=>go('checklist')},

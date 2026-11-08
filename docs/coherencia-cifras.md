@@ -12,8 +12,8 @@ Referencia de la revisión automática de coherencia (auditoría del 07-11-2026)
 | Cobrado / caja | «Cobrado propio» por fecha del depósito; «Total a caja» aparte | `ingresosPorAnioVenta` | Facturación (KPI y hub «Pagado») usa `paid_at`/`issued_at` y se llama «Pagado»; Inteligencia, Socios (caja del año) y el correo del lunes ya leen el cobrado propio (el correo aún no resta la parte de externos ni los fondos); Counsel AI ya no calcula «cobrado» |
 | Pagada (estado) | «Pagada» solo para el estado de la factura | `cobradoBill` | Unificar «Pagado/Cobrado» |
 | Vendido | «Vendido» (Activo + Terminado, sin subarriendo) | `metricasAnio` / `ventaCuentaEnAnio` | Reporte y ficha cuentan ventas pausadas; copia del filtro en Inteligencia |
-| Por facturar | «Por facturar» = vigente de `clasificarPorFacturar` | `clasificarPorFacturar` | Hub y KPI de Facturación, flujo, alerta de Inicio |
-| Cuotas vencidas sin facturar | «Cuotas vencidas sin facturar» | `cuotasSinEmitir` | Flujo y página Por facturar aplican otra regla |
+| Por facturar | «Por facturar» = vigente de `clasificarPorFacturar` | `clasificarPorFacturar` | — (el KPI del hub ya lee `clasificarPorFacturar().total`) |
+| Cuotas vencidas sin facturar | «Cuotas vencidas sin facturar» | `cuotasSinEmitir` (radar) y `clasificarPorFacturar` › Vencidas | Flujo, Inicio y página Por facturar leen Vencidas (sin las cubiertas por anticipo ni las sin movimiento); el radar, el cierre y los correos cuentan además esas, por eso son algo mayores |
 | Flujo de caja neto 8 semanas | «Flujo de caja (8 semanas)» + escenario | `useFlujoCaja` | Escenario por navegador (pasar a preferencia del estudio) |
 | Proyección al 31-12 | «Cobranza proyectada al 31-12» + escenario | `proyeccionCobranza` | Sin rótulo del escenario |
 | Comisiones por pagar | «Comisiones por pagar» | `saldoComisiones.porPagar` | — |

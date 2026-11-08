@@ -27,7 +27,7 @@ test('Por facturar: cuatro partidas, cada cuota en una sola, y las partidas suma
     prog('a1', 'A', '2026-09-01', 1000000), prog('a2', 'A', '2026-10-01', 1000000), prog('a3', 'A', '2026-11-01', 1000000), fact('f1', 'A', '2026-10-02', 800000),
     prog('b1', 'B', '2026-12-01', 1000000, { status: 'Pausada' }),
     prog('c1', 'C', '2026-05-01', 1000000),                                                   // vencida hace más de 90 días y la venta no se movió
-    prog('d1', 'D', '2026-06-01', 1000000), fact('f2', 'D', '2026-10-10', 1000000), prog('d2', 'D', '2027-01-01', 1000000),   // vieja, pero su venta se movió
+    prog('d1', 'D', '2026-07-01', 1000000), fact('f2', 'D', '2026-10-10', 1000000), prog('d2', 'D', '2027-01-01', 1000000),   // vieja, pero su venta se movió
     prog('e1', 'E', '2026-12-01', 1000000, { billing_type: 'subarriendo' }),
     prog('f1x', 'F', '2026-12-15', 1000000), prog('g1', 'G', '2027-03-01', 1000000), prog('h1', 'H', '2026-12-01', 1000000),
     prog('i1', 'I', '2026-12-01', 1000000)]
@@ -137,4 +137,17 @@ test('el radar de cuotas vencidas ve la cuota creada en la app aunque venciera d
     fact('fB', 'B', '2026-08-01', 1000000), prog('b1', 'B', '2025-09-01', 1000000, { created_at: '2026-07-06T12:00:00Z' })]
   const ids = cuotasSinEmitir({ billing, sales, uf: UF, noEmitir: new Set(), hasta: '2026-11-01' }).map(b => b.id)
   assert.deepEqual(ids, ['a1'])
+})
+
+test('Por facturar › Vencida es exactamente el radar «Cuotas vencidas sin facturar»; lo vencido que el radar no cuenta queda por confirmar con su motivo', () => {
+  const sales = [venta('A'), venta('B'), venta('C', { status: 'Terminado' })]
+  const billing = [
+    prog('a1', 'A', '2026-10-01', 1000000), fact('fa', 'A', '2026-10-15', 500000),                       // en el radar
+    prog('b1', 'B', '2026-03-01', 700000), fact('fb', 'B', '2026-10-20', 500000),                         // histórica, anterior a la app
+    prog('c1', 'C', '2026-10-01', 600000)]                                                                // venta no activa
+  const r = clasificarPorFacturar({ ...base, billing, sales })
+  const radar = cuotasSinEmitir({ billing, sales, anticipos: [], uf: UF, noEmitir: new Set(), hasta: '2026-11-01' }).map(b => b.id).sort()
+  assert.deepEqual(r.filas.filter(f => f.k === 'vencida').map(f => f.id).sort(), radar)
+  assert.deepEqual(r.filas.filter(f => f.k === 'porConfirmar').map(f => [f.id, f.motivo]).sort(), [['b1', 'anteriorApp'], ['c1', 'ventaInactiva']])
+  assert.equal(r.total, r.grupos.vigente.m + r.grupos.porConfirmar.m + r.grupos.fuera.m)
 })
