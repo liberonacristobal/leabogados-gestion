@@ -96,7 +96,7 @@ export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir,
       if (saldo > 0) add('porConfirmar', 'saldoCuota', b, saldo)
       resto -= Math.min(cv.m, resto); if (resto < 1) continue
     }
-    if (noEmitir && noEmitir.has(String(b.id))) { add('fuera', 'noCorresponde', b, resto); continue }
+    if (noEmitir && noEmitir.has(String(b.id))) { add('fuera', /** @type {any} */ (noEmitir).facturadas && /** @type {any} */ (noEmitir).facturadas.has(String(b.id)) ? 'yaFacturada' : 'noCorresponde', b, resto); continue }   // «Ya facturada» se guarda como «No corresponde» con su factura: se muestra con su propio motivo
     if (cubierto[b.id]) { const m = Math.min(cubierto[b.id], resto); add('fuera', 'cubAnticipo', b, m); resto -= m; if (resto < 1) continue }
     const viejo = !!b.due && b.due < lim
     if (viejo && !movio(b.sale_id)) { add('porConfirmar', 'sinMovimiento', b, resto); continue }

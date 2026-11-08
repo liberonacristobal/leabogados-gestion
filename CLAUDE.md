@@ -181,7 +181,7 @@ Ningún render (propuesta, antes/después, mockup) se le muestra al usuario si n
 5. **Reusar los componentes de la app** (tarjeta KPI canónica, fila de lista, PageHeader), sin inventar formas nuevas.
 6. **Mirar antes de mostrar:** abrir el render, revisar la captura a 1280 y a 375 contra los puntos 1–5 y corregir lo que falle antes de enviarlo.
 
-## Reglas de detalle que viven en la memoria (leerlas antes de tocar esas áreas)
+## Reglas de detalle (leerlas antes de tocar esas áreas; copia en `docs/reglas-detalle.md`)
 
 - [[reglas-dominio-finanzas]]: **nunca duplicar entidades** (clientes, razones sociales, proveedores: dedup robusto, fuzzy match y fusión conservando datos); **caja chica ↔ transferencia** (conciliación 1:1 por persona, monto y ±3 días, sin registrar dos veces); **retiros de socios equitativos por período** (página Socios).
 - [[reglas-detalle-vistas-y-correos]]: **lo que sale al cliente toma sus números de la app, no de texto tipeado** (cuota, folio, monto y período; lo aprendido guarda marcas, nunca el número literal); **canon de la foto** de KPIs (un protagonista, partes anidadas, todo clickeable); patrón **«Pulir»**; **economía de espacio** en formularios.

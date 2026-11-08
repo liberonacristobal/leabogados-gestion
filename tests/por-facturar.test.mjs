@@ -180,3 +180,11 @@ test('Flujo de caja: destino de cada cuota programada sin folio (vencida del rad
   assert.equal(d('a1', { a1: 400000 }).tipo, 'pagadaAnt')                  // anticipo la cubre entera
   assert.deepEqual([d('a1', { a1: 100000 }).tipo, d('a1', { a1: 100000 }).m], ['proyecta', 300000])   // cubierta en parte: lo que falta
 })
+
+test('Por facturar: una cuota marcada «Ya facturada» lleva su propio motivo y no «No corresponde»', () => {
+  const sales = [venta('A', { amount_clp: 10000000 })]
+  const billing = [prog('y1', 'A', '2026-12-01', 500000), prog('y2', 'A', '2026-12-15', 500000)]
+  const noEmitir = noEmitirDeFilas([{ kind: 'cuota_no_emitir', key: 'y1', value: 'facturada:f9' }, { kind: 'cuota_no_emitir', key: 'y2', value: '' }])
+  const r = clasificarPorFacturar({ ...base, billing, sales, noEmitir })
+  assert.deepEqual(r.filas.map(f => [f.id, f.k, f.motivo]).sort(), [['y1', 'fuera', 'yaFacturada'], ['y2', 'fuera', 'noCorresponde']])
+})
