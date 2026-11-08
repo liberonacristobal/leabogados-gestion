@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { C, Gl, SEC_LBL, appAlert, fmt, personChip, useIsDesktop } from '../lib/base.jsx'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
-import { porCobrarBills, esVencidaB, Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
+import { ventaVendidaEnAnio, porCobrarBills, esVencidaB, Copyable, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, UF_FALLBACK, chipBtn, claudeCall, cobradoBill, comisionesVenta, currentYear, esRecurrente, esSubarriendo, fmtShort, fmtUFk, margenPct, readUFCache, rsDisplay, rsLabel, saldoBill, ventaCuentaEnAnio, ventaHistoricaUF, ventaUF } from '../lib/compartido.jsx'
 import { PorSocioVista } from '../lib/porSocio.jsx'
 
 // Última actividad del cliente: fecha más reciente entre ventas, facturas (no anuladas) y gastos.
@@ -89,7 +89,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     const sinRec = reales.filter(c=>(c.status||'Activo')==='Activo'&&!tieneRec(c.id)&&vh(c.id)>=50).map(c=>({c,uf:vh(c.id)})).sort((a,b)=>b.uf-a.uf)
     const winback = reales.filter(c=>c.status==='Terminado'&&vh(c.id)>=30&&mesesDesde(ult(c.id))<=18).map(c=>({c,uf:vh(c.id),meses:mesesDesde(ult(c.id))})).sort((a,b)=>b.uf-a.uf)
 
-    const vendidoYTD = (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&ventaCuentaEnAnio(s,yr)).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
+    const vendidoYTD = (sales||[]).filter(s=>ventaVendidaEnAnio(s,yr)).reduce((a,s)=>a+ventaUF(s,ufRef),0)   // fuente única con Inicio/Ventas: Activo+Terminado, sin subarriendo
     const porCobrar = porCobrarBills(billing)   // fuente única (con folio, sin notas de crédito)
     const cobradoYTD = cobradoPropio   // «Cobrado propio» de Inicio: por fecha del depósito, sin subarriendo, reembolsos ni la parte de externos
     // Cartera: TODOS los no-internos segmentados por salud (cascada, cada cliente cae en uno). Terminados fuera.
@@ -122,7 +122,7 @@ export function IntelligenceView({sales=[], billing=[], clients=[], clientEntiti
     // Tendencias: crecimiento año vs año anterior (total y por abogado). Complementa (no duplica) Ventas-por-mes ni Servicios.
     const prevYr = yr-1
     // Misma base que Vendido (Inicio/Ventas/Por socio): Activo+Terminado, sin subarriendo, ventaCuentaEnAnio; mismo dueño que Por socio.
-    const vYear = y => (sales||[]).filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&ventaCuentaEnAnio(s,y))
+    const vYear = y => (sales||[]).filter(s=>ventaVendidaEnAnio(s,y))
     const cliAbo={}; (clients||[]).forEach(c=>{ if(c) cliAbo[String(c.id)]=c.abogado_responsable })
     const sumBy = (arr,fn)=>{ const m={}; arr.forEach(s=>{ const k=fn(s)||'—'; m[k]=(m[k]||0)+ventaUF(s,ufRef) }); return m }
     const curY=vYear(yr), prvY=vYear(prevYr)

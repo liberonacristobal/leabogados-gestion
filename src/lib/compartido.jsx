@@ -24,6 +24,7 @@ import { Spin } from './base.jsx'
 import { sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
+import { UMBRAL_DEUDA } from '../../supabase/functions/_shared/fondosReglas.js'
 import { anticiposSobreCuotas, clasificarPorFacturar, destinoCuotaFlujo } from '../../supabase/functions/_shared/porFacturar.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
@@ -2935,7 +2936,7 @@ export const saldoDelta = e => !cuentaEnSaldo(e) ? 0 : e.type==='fondo' ? (e.amo
 // Negativo = el cliente debe reponer (gastos que adelantó la oficina); positivo = fondos del cliente que tiene la oficina.
 export const saldosPorCliente = expenses => { const m={}; (expenses||[]).forEach(e=>{ m[e.client_id]=(m[e.client_id]||0)+saldoDelta(e) }); return m }
 // Totales de esos saldos para un conjunto de clientes (ids): porReponer (suma de los negativos, en positivo) y aFavor (suma de los positivos), con cuántos clientes.
-export const totalesFondos = (saldos, ids) => { let porReponer=0, aFavor=0, nDeben=0, nFavor=0; (ids||Object.keys(saldos||{})).forEach(id=>{ const v=(saldos||{})[id]||0; if(v<0){ porReponer-=v; nDeben++ } else if(v>0){ aFavor+=v; nFavor++ } }); return {porReponer,aFavor,nDeben,nFavor} }
+export const totalesFondos = (saldos, ids) => { let porReponer=0, aFavor=0, nDeben=0, nFavor=0; (ids||Object.keys(saldos||{})).forEach(id=>{ const v=(saldos||{})[id]||0; if(v<=UMBRAL_DEUDA){ porReponer-=v; nDeben++ } else if(v>0){ aFavor+=v; nFavor++ } }); return {porReponer,aFavor,nDeben,nFavor} }
 
 export const DriveIcon = ({size=14}) => <svg width={size} height={size} viewBox='0 0 87.3 78' xmlns='http://www.w3.org/2000/svg'><path d='m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z' fill='#0066da'/><path d='m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z' fill='#00ac47'/><path d='m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z' fill='#ea4335'/><path d='m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z' fill='#00832d'/><path d='m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z' fill='#2684fc'/><path d='m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z' fill='#ffba00'/></svg>
 
@@ -3711,6 +3712,9 @@ export const ventaCuentaEnAnio = (s, y) => {
   return aniv<=hoyYM
 }
 
+// «Vendido» de un año: Activo + Terminado, sin subarriendo, que cuenta en el año. Fuente ÚNICA del filtro (Inicio, Ventas, Por socio, Inteligencia, resultado del año).
+export const ventaVendidaEnAnio = (s, y) => !!s && !s.deleted_at && ['Activo','Terminado'].includes(s.status) && !esSubarriendo(s) && ventaCuentaEnAnio(s, y)
+
 export async function fetchUFFechas(isos){
   let m=ufFechaCache(); const done=Array.isArray(m.__anios)?m.__anios:[]
   const anios=[...new Set((isos||[]).map(d=>String(d||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))]
@@ -3913,7 +3917,7 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
 export function vendidoPorSocio(sales=[], clients=[], ufRef=0, y=new Date().getFullYear(), ym=null){
   const cliById={}; (clients||[]).forEach(c=>{ if(c) cliById[String(c.id)]=c })
   const items=[]
-  ;(sales||[]).forEach(s=>{ if(!s||s.deleted_at||!['Activo','Terminado'].includes(s.status)||esSubarriendo(s)||!ventaCuentaEnAnio(s,y)) return
+  ;(sales||[]).forEach(s=>{ if(!ventaVendidaEnAnio(s,y)) return
     const ini=inicioVentaYM(s), mes=esRecurrente(s)&&Number(s.year)<Number(y)?`${y}-${ini.slice(5,7)}`:ini
     items.push({s, soc:socioDeVenta(s,{cliById}), m:ventaCLP(s,ufRef), ym:mes}) })
   return items
@@ -3933,7 +3937,7 @@ export const PS_KPIS=[
   {g:'Cobro · hoy',k:'venc',l:'de eso, vencido',ls:'de eso, vencido',f:'$',per:'hoy',sub:1},
   {g:'Cobro · hoy',k:'moro',l:'de eso, cartera morosa',ls:'de eso, morosa',f:'$',per:'hoy',sub:1},
   {g:'Cobro · hoy',k:'pfat',l:'Cuotas vencidas sin facturar',ls:'Por facturar',f:'$',per:'hoy'},
-  {g:'Gastos de clientes · hoy',k:'deuda',l:'Deuda de clientes por gastos',ls:'Deuda gastos',f:'$',per:'hoy'},
+  {g:'Gastos de clientes · hoy',k:'deuda',l:'Gastos por cobrar a clientes',ls:'Gastos por cobrar',f:'$',per:'hoy'},
   {g:'Gastos de clientes · hoy',k:'favor',l:'Fondos a favor de clientes',ls:'A favor',f:'$',per:'hoy',extra:1},
   {g:'Ventas',k:'nven',l:'N.º de ventas',ls:'N.º ventas',f:'n',per:'flujo',extra:1},
   {g:'Ventas',k:'tick',l:'Ticket promedio',ls:'Ticket',f:'$',per:'flujo',extra:1},

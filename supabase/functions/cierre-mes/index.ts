@@ -18,6 +18,7 @@ import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 import { recibidoACuenta, noEmitirDeFilas, cuotaSaltada } from "../_shared/ventasReglas.js";
 import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
+import { respaldoPorFactura, saldoFactura } from "../_shared/fotoMes.js";
 import { fgCliente, gastosPorRendirCli, grupoRendir } from "../_shared/gastosReglas.js";
 import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
 
@@ -74,7 +75,7 @@ Deno.serve(async (req) => {
   const [bills, sales, clients, ents, conc, movs, gastos, rends, cfg, miembros, noEmitirRows, ufRows, cobertura] = await Promise.all([
     sbAll("billing?select=id,sale_id,client_id,invoice_no,status,due,issued_at,created_at,concept,amount,paid_amount,billing_type,deleted_at,receptor_rut,entity_id,dte_xml&deleted_at=is.null"),
     sbAll("sales?select=id,title,status,deleted_at,cobro_type,moneda,amount_clp,amount_uf,area,cobro_config"), sbAll("clients?select=id,name,is_internal"), sbAll("client_entities?select=id,client_id,name,rut"),
-    sbAll("conciliacion?select=factura_id,monto_aplicado&tipo_destino=eq.factura"),
+    sbAll("conciliacion?select=factura_id,anticipo_id,tipo_destino,monto_aplicado&tipo_destino=in.(factura,anticipo)"),
     sbAll(`cartola_movimientos?select=id,tipo,monto,monto_conciliado,estado,es_interno,fecha&fecha=gte.${desde}&fecha=lt.${hasta}`),
     sbAll("expenses?select=id,client_id,type,amount,category,concept,no_descuenta_saldo,client_rendered_at,rendered_at,apertura_id,notaria_render_id,notaria_liquidado_at,ot_number,date&deleted_at=is.null"),
     sbAll("rendiciones?select=tipo,client_id,sent_at,estado_envio,anulada_at"),
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
   const nmNow = (+per.slice(0, 4)) * 12 + (+per.slice(5, 7)) + 1;
   const atrasoMeses = (due: string) => { const p = String(due || "").slice(0, 7).split("-"); if (p.length < 2 || !p[0] || !p[1]) return 0; return Math.max(0, nmNow - ((+p[0]) * 12 + (+p[1]))); };
   const uf = Object.fromEntries(ufRows.map((r) => [String(r.fecha), Number(r.valor)]));
-  const anticiposTodos = await sbAll("anticipos?select=sale_id,monto,estado");
+  const anticiposTodos = await sbAll("anticipos?select=id,sale_id,billing_id,monto,estado");
   const radar = cuotasVencidasSinFacturar({ billing: bills, sales, anticipos: anticiposTodos, uf, noEmitir: noEmitirDeFilas(noEmitirRows), hasta, hoy: hasta });
   const recib = radar.length ? recibidoACuenta(radar, await sbAll(`anticipos?select=sale_id,monto,estado&estado=eq.disponible&sale_id=in.(${[...new Set(radar.map((b) => String(b.sale_id)))].join(",")})`), sales) : new Map();
   const olv = radar.sort((a, b) => String(a.due).localeCompare(String(b.due))).map((b) => {
@@ -111,13 +112,13 @@ Deno.serve(async (req) => {
   const olvMonto = olv.reduce((a, o) => a + o.monto, 0);
 
   // 2) Facturas emitidas en el mes y su saldo (como Cierre de mes: montoFactura − máx(paid_amount, conciliado en banco)).
-  const respaldo = new Map<string, number>();
-  for (const c of conc) if (c.factura_id) respaldo.set(String(c.factura_id), (respaldo.get(String(c.factura_id)) || 0) + (Number(c.monto_aplicado) || 0));
+  // Respaldo con la regla única de la app (_shared/fotoMes): lo conciliado a la factura más los anticipos consumidos que entraron por banco.
+  const respaldoObj = respaldoPorFactura(conc, anticiposTodos);
   // El XML solo de las facturas emitidas en el mes (montoFactura = autoridad del DTE; la consulta general no lo trae por peso).
   const xmls = new Map((await sbAll(`billing?select=id,dte_xml&deleted_at=is.null&invoice_no=not.is.null&issued_at=gte.${desde}&issued_at=lt.${hasta}`)).map((x) => [String(x.id), x.dte_xml]));
   const emitMes = bills.filter((b) => b.invoice_no && b.status !== "Anulada" && b.billing_type !== "reembolso" && String(b.issued_at || "").slice(0, 7) === per).map((b) => ({ ...b, dte_xml: xmls.get(String(b.id)) || null }));
   // deno-lint-ignore no-explicit-any
-  const saldo = (b: any) => ["Pagado", "Anulada"].includes(b.status) ? 0 : Math.max(0, montoFactura(b) - Math.max(Number(b.paid_amount) || 0, respaldo.get(String(b.id)) || 0));
+  const saldo = (b: any) => saldoFactura(b, respaldoObj);
   const porCobrar = emitMes.filter((b) => saldo(b) > 0);
   const facturadoMes = emitMes.reduce((a, b) => a + montoFactura(b), 0), porCobrarMonto = porCobrar.reduce((a, b) => a + saldo(b), 0);
   // 3) Banco del mes por conciliar: pendientes y abonos conciliados solo en parte (resto > $1.000), y hasta qué día llega la

@@ -247,3 +247,12 @@ export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tas
   }
   return out.sort((a, b) => a.ult.localeCompare(b.ult))
 }
+
+/**
+ * Anticipos disponibles: plata recibida sin factura que aún no se imputa. Fuente ÚNICA de la suma (Panel de socios, Facturación, ficha del cliente).
+ * Con `clienteId` entrega solo los de ese cliente.
+ * @param {any[]} anticipos @param {string|number} [clienteId]
+ */
+export function anticiposDisponibles(anticipos, clienteId) {
+  return (anticipos || []).filter(a => a && a.estado === 'disponible' && (clienteId == null || String(a.client_id) === String(clienteId))).reduce((s, a) => s + (Number(a.monto) || 0), 0)
+}
