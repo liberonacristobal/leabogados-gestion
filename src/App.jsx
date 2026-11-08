@@ -81,6 +81,7 @@ const PanelSociosView = lazyVista(() => import('./vistas/PanelSociosView.jsx'), 
 const InformeMesView = lazyVista(() => import('./vistas/InformeMesView.jsx'), 'InformeMesView')
 const ConciliarFacturasModal = lazyVista(() => import('./vistas/ConciliarFacturasModal.jsx'), 'ConciliarFacturasModal')
 const ResultadoAnioView = lazyVista(() => import('./vistas/ResultadoAnioView.jsx'), 'ResultadoAnioView')
+import { ConsumoIA } from './lib/consumoIA.jsx'
 const RevisionDatosModal = lazyVista(() => import('./vistas/RevisionDatosModal.jsx'), 'RevisionDatosModal')
 const GastosForm = lazyVista(() => import('./vistas/GastosForm.jsx'), 'GastosForm')
 const SaleForm = lazyVista(() => import('./vistas/SaleForm.jsx'), 'SaleForm')
@@ -1673,6 +1674,7 @@ function ProcesosView({isDesktop, onBack, origen, onOpenBandeja, onOpenRevision,
         {aviso!=null&&!DEMO&&<button onClick={cambiarAviso} style={{fontSize:12,fontWeight:700,border:aviso?`1px solid ${C.border}`:'none',borderRadius:10,padding:'6px 12px',cursor:'pointer',background:aviso?C.surface:C.accent,color:aviso?C.accent:'#fff',whiteSpace:'nowrap'}}>{aviso?'Apagar':'Encender'}</button>}
       </div>
       <div style={{marginTop:6}}><BitacoraLista prefijo='procesos.' titulo='Bitácora de procesos' limite={12} vacio='Aún no hay registros.' etiquetas={{'procesos.falla_detectada':'Falla detectada','procesos.resuelto':'Resuelto','procesos.falla_avisada':'Aviso enviado','procesos.aviso_encendido':'Aviso encendido','procesos.aviso_apagado':'Aviso apagado','procesos.vigilancia_encendida':'Aviso encendido','procesos.fallas_revisadas':'Fallas revisadas'}}/></div>
+      <ConsumoIA/>
     </>}
   </>)
 }
