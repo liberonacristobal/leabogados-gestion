@@ -6,7 +6,7 @@
 // (texto de un PDF, para revisar el formato). body.dryRun = no guarda.
 // Auth: CRON_SECRET o usuario del dominio. verify_jwt=false.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
-import { liquidacionesVigentes } from "../_shared/liquidacionesReglas.js";
+import { liquidacionesVigentes, cotizacionesProvisorias } from "../_shared/liquidacionesReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -105,9 +105,27 @@ Deno.serve(async (req) => {
       // La versión más reciente de cada (período, persona) manda: la contadora a veces reenvía corregida (regla en _shared/liquidacionesReglas.js).
       const out = liquidacionesVigentes(filas);
       if (!body.dryRun && out.length) await sb("remuneraciones_tributables?on_conflict=estudio_id,periodo,persona", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(out) });
+      // Mientras la contadora no manda los valores del mes («VALORES MM-AAAA», que valores-contadora carga solo), las cotizaciones del mes se proyectan
+      // con sus liquidaciones. Solo si el mes sigue provisorio (estimado, no cerrado) y el anterior tiene valores reales; los valores reales las reemplazan.
+      const provisorias: Record<string, unknown>[] = [];
+      if (!body.dryRun) for (const per of [...new Set(out.map((f) => String(f.periodo)))]) {
+        const [Y, M] = per.split("-").map(Number), pY = M === 1 ? Y - 1 : Y, pM = M === 1 ? 12 : M - 1, prevPer = `${pY}-${String(pM).padStart(2, "0")}`;
+        const plan = await (await sb(`oficina_costos_mensual?estudio_id=eq.lea&anio=eq.${Y}&mes=eq.${M}&select=estimado,cerrado,nota`)).json();
+        if (!plan[0] || plan[0].cerrado || !plan[0].estimado) continue;
+        const prev = await (await sb(`oficina_costos_mensual?estudio_id=eq.lea&anio=eq.${pY}&mes=eq.${pM}&select=estimado,cotizaciones`)).json();
+        if (!prev[0] || prev[0].estimado) continue;
+        const liqPrev = await (await sb(`remuneraciones_tributables?estudio_id=eq.lea&periodo=eq.${prevPer}&select=imponible,cotizaciones`)).json();
+        const liqMes = out.filter((f) => f.periodo === per) as { imponible: number; cotizaciones: number }[];
+        if (liqMes.length !== liqPrev.length) continue;   // falta alguna liquidación del mes: la suma saldría corta
+        const est = cotizacionesProvisorias({ mes: liqMes, previo: liqPrev, cotizPrevReal: Number(prev[0].cotizaciones) });
+        if (!est) continue;
+        const nota0 = String(plan[0].nota || ""), nota = /liquidaciones/i.test(nota0) ? nota0 : `${nota0 ? nota0 + " · " : ""}cotizaciones estimadas con las liquidaciones leídas del correo`;
+        await sb(`oficina_costos_mensual?estudio_id=eq.lea&anio=eq.${Y}&mes=eq.${M}`, { method: "PATCH", body: JSON.stringify({ cotizaciones: est.cotizaciones, nota, updated_at: new Date().toISOString() }) });
+        provisorias.push({ periodo: per, cotizaciones: est.cotizaciones, trabajador: est.trabajador, empleador: est.empleador });
+      }
       const porMes: Record<string, { personas: number; impuesto_unico: number }> = {};
       for (const f of out) { const k = String(f.periodo); porMes[k] = porMes[k] || { personas: 0, impuesto_unico: 0 }; porMes[k].personas++; porMes[k].impuesto_unico += Number(f.impuesto_unico) || 0; }
-      return json({ ok: true, dryRun: !!body.dryRun, correos: (lista.messages || []).length, liquidaciones: out.length, porMes, errores });
+      return json({ ok: true, dryRun: !!body.dryRun, correos: (lista.messages || []).length, liquidaciones: out.length, porMes, provisorias, errores });
     }
     if (body.accion === "muestra") {
       const H = { Authorization: `Bearer ${await token()}` };

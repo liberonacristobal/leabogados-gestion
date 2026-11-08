@@ -147,12 +147,14 @@ serve(async (req) => {
         if (cotizaciones && ppm) patch.estimado = false;   // datos reales → deja de ser estimado
         if (Object.keys(patch).length > 1) {
           // La tabla no tiene columna id: la clave es (estudio_id, anio, mes). Antes se pedía "id" → error silencioso y la planilla nunca se actualizaba.
-          const { data: ex, error: exErr } = await sb.from("oficina_costos_mensual").select("anio,cerrado").eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm).limit(1);
+          const { data: ex, error: exErr } = await sb.from("oficina_costos_mensual").select("anio,cerrado,nota").eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm).limit(1);
           if (exErr) throw new Error("planilla: " + exErr.message);
           // Un mes ya cerrado no se toca (sus cifras quedaron fijas al cerrar).
           if (ex && ex.length && ex[0].cerrado) { guardados.push({ ...valor, planilla: "cerrado" }); continue; }
           // Solo se crea fila para meses del año en curso: un mes antiguo sin planilla quedaría con costos parciales (sin sueldos ni arriendo).
           if (!(ex && ex.length) && yy !== new Date().getFullYear()) { guardados.push({ ...valor, planilla: "sin planilla" }); continue; }
+          // La nota «estimados» deja de ser cierta con los valores reales (en septiembre quedó desactualizada).
+          if (cotizaciones && ppm && ex && ex.length && /estimad/i.test(String(ex[0].nota || ""))) patch.nota = "Valores de la contadora (correo VALORES)";
           const r = (ex && ex.length)
             ? await sb.from("oficina_costos_mensual").update(patch).eq("estudio_id", "lea").eq("anio", yy).eq("mes", mm)
             : await sb.from("oficina_costos_mensual").insert({ estudio_id: "lea", anio: yy, mes: mm, ...patch });
