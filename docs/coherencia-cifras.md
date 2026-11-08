@@ -4,7 +4,7 @@ Referencia de la revisión automática de coherencia (auditoría del 07-11-2026)
 
 | Concepto | Nombre | Helper único | Pendiente de alinear (07-11-2026) |
 |---|---|---|---|
-| Por cobrar | «Por cobrar» (facturas con saldo; el vencido es parte de él) | `porCobrarBills` | Correo `sii-sync` (resumen-semanal), que duplica `resumen-lunes`: proponer borrarlo |
+| Por cobrar | «Por cobrar» (facturas con saldo; el vencido es parte de él) | `porCobrarBills` | —  (el resumen semanal de `sii-sync` se eliminó) |
 | Saldo de factura | «Saldo de la factura» | `saldoBill` / `saldoFactura` | —  (`cierre-mes` y `tu-semana` leen `respaldoPorFactura`) |
 | Vencido | «Vencido» = `esVencidaB` con saldo (emisión + 30 días) | `resumenCartera` / `esVencidaB` | —  (aging «Más de 60 días»; `tu-semana` y Por cobrar esta semana usan emisión + 30) |
 | Cartera morosa | «Morosa» (atraso sobre el ritmo de pago del cliente) | `flujoCajaProyectado().duda` | Sin definición escrita en la pantalla |

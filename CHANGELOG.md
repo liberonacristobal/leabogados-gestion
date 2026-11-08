@@ -1,3 +1,4 @@
+- 2026-11-08 · Se elimina el correo «Resumen semanal de facturación» de SII (duplicaba el resumen del lunes, con cifras de vencido por vencimiento programado): acción del servidor, botón «Enviar resumen» y tarea programada.
 - 2026-11-08 · Coherencia de cifras: una sola suma de anticipos disponibles, una sola regla de «Vendido» (Inteligencia, resultado del año), umbral único de deuda por gastos ($1.000) y nombre «Gastos por cobrar a clientes», saldo de factura de cierre del mes y Tu semana con el respaldo de la app, aging «Más de 60 días».
 - 2026-11-08 · Flujo de caja: el destino de cada cuota programada sin folio (vencida, por confirmar, futura, cubierta por anticipo) sale de una regla compartida con su prueba, sin cambiar ninguna cifra.
 - 2026-11-08 · Facturación: el KPI «Por facturar» y la columna por cliente leen la misma regla de la página Por facturar y del hub, con los filtros de año y mes.

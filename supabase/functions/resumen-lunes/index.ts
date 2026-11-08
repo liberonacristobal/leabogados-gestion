@@ -3,7 +3,7 @@
 //   1) Tus tareas       — vencidas / por vencer (misma lógica que task-reminders).
 //   2) Tus proyectos     — facturas emitidas esta semana (movimientos).
 //   3) Tus clientes      — abonos por identificar (sin cliente, pendientes).
-//   4) Facturación       — emitidas semana / por cobrar / vencido (misma lógica que sii-sync resumen-semanal).
+//   4) Facturación       — emitidas semana / por cobrar / vencido.
 //   5) Facturas recibidas por pagar — regla única comprasPorPagar (_shared/comprasReglas.js), la misma de Oficina › Compras.
 // Una sección sin datos NO aparece (correo corto). task-reminders sigue mié/vie por separado.
 //
@@ -102,7 +102,7 @@ serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const respOf = (t: any): string[] => (Array.isArray(t.delegated_to) && t.delegated_to.length) ? t.delegated_to : (Array.isArray(t.assignees) && t.assignees.length ? t.assignees : (t.who ? [t.who] : []));
 
-    // ── 4) FACTURACIÓN (firm-wide, misma lógica que sii-sync resumen-semanal)
+    // ── 4) FACTURACIÓN (firm-wide)
     // deno-lint-ignore no-explicit-any
     const vivos = (billsRaw || []).filter((b: any) => !b.deleted_at);
     // Misma regla que «Por cobrar» de la app (porCobrarBills): con folio, Pendiente/Vencido, sin reembolsos ni notas de crédito.

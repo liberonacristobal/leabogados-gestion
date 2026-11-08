@@ -87,17 +87,7 @@ $$);
 ```
 (También hay un botón **"Verificar estados"** en el módulo SII para correrlo a mano.)
 
-**Resumen semanal de facturación** (lunes): correo a los admins con emitidas de la semana, por cobrar, vencido, por enviar y DTE rechazadas.
-```sql
-select cron.schedule('resumen-semanal-facturacion', '0 12 * * 1', $$
-  select net.http_post(
-    url := 'https://kibuwhtpoxrnfowfdolu.supabase.co/functions/v1/sii-sync',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY_PUBLICA"}'::jsonb,
-    body := '{"action":"resumen-semanal","cronSecret":"EL_MISMO_CRON_SECRET"}'::jsonb
-  );
-$$);
-```
-(También hay un botón **"Enviar resumen"** en el módulo SII para probarlo.)
+**Resumen semanal**: lo envía `resumen-lunes` (el antiguo `resumen-semanal` de `sii-sync` se eliminó el 08-11-2026 por duplicado).
 
 ## 3. Desplegar
 ```
