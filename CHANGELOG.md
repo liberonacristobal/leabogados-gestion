@@ -1,3 +1,4 @@
+- 2026-11-08 · Facturación: el KPI «Por facturar» y la columna por cliente leen la misma regla de la página Por facturar y del hub, con los filtros de año y mes.
 - 2026-11-08 · Radar «Cuotas vencidas sin facturar» (Facturación, cierre del mes, resumen del lunes, Tu semana, Pendientes por cliente) con la misma regla que Inicio, el flujo y Por facturar › Vencidas: las cubiertas por anticipo van a Excluidas y las de más de 90 días sin movimiento solo a Por confirmar.
 - 2026-11-08 · Un solo nombre, «Cuotas vencidas sin facturar», en Inicio, el flujo de caja (pestaña Excluidas y Excel) y el selector de indicadores.
 - 2026-11-07 · Cuotas vencidas sin facturar: Inicio y el flujo de caja leen la partida Vencidas de Por facturar (antes sumaban también cuotas anteriores a la app, trabajos sin iniciar y ventas no activas); esas pasan a Por confirmar con su motivo en la fila; el KPI del hub lee el mismo helper.
