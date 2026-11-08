@@ -31,7 +31,7 @@ async function leerDatos() {
     rest('sii_dj_vencimientos?select=anio_tributario,formulario,fecha,detalle&fecha=gte.' + hoy),
     rest('obligaciones_cumplidas?select=clave,client_id&client_id=is.null'),
     rest('causas?select=id,estado,rol,anio,caratula,corte_nombre,libro_nombre,client_id,abogado,ultima_tabla&estado=eq.activa'),
-    rest('plazos?select=id,client_id,titulo,descripcion,tipo,fecha,estado&estado=neq.cumplido'),
+    rest('plazos?select=*&estado=neq.cumplido'),   // la tabla pasó de «fecha» a «fecha_vencimiento» (06-11-2026): se acepta cualquiera
     rest('propiedades?select=client_id,rol,comuna&limit=3000'),
     rest('tgr_remates?select=sk,rol_formato,dueno,juzgado,rol_judicial,fecha_remate,tasacion&vigente=eq.true&fecha_remate=gte.' + hoy + '&limit=3000'),
     rest('clients?select=id,name&limit=2000'),
@@ -39,7 +39,8 @@ async function leerDatos() {
     rest('feriados?select=fecha'),
   ])
   const feriados = new Set((fer || []).map((f: { fecha: string }) => String(f.fecha).slice(0, 10)))
-  return armarEventos({ hoy, feriados, obl, dj, cumplidas, causas, plazos, props, remates, clientes, docs })
+  const plazosFecha = (plazos || []).map((p: { fecha?: string; fecha_vencimiento?: string }) => ({ ...p, fecha: p.fecha_vencimiento || p.fecha }))
+  return armarEventos({ hoy, feriados, obl, dj, cumplidas, causas, plazos: plazosFecha, props, remates, clientes, docs })
 }
 
 async function tokenGoogle(): Promise<string | null> {
