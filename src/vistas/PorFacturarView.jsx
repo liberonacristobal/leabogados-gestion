@@ -9,13 +9,14 @@ import { clasificarPorFacturar, cuadreVenta, GRUPOS } from '../../supabase/funct
 const fmtM = v => '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M'
 // Cuatro partidas, nada más; el motivo es la etiqueta de cada fila (_shared/porFacturar.js).
 const ROT = { vencida: ['Vencidas', 'por emitir'], porVencer: ['Por vencer', ''], porConfirmar: ['Por confirmar', 'espera al abogado'], fuera: ['Excluidas', 'no se facturan'] }
-const MOTIVO = { cubFactura: 'cubierta por factura', cubAnticipo: 'cubierta por anticipo', noCorresponde: 'no corresponde', pausada: 'pausada', sinMovimiento: 'más de 90 días sin movimiento', saldoCuota: 'saldo de una cuota facturada en parte', recurrente: 'mensual' }
+const MOTIVO = { cubFactura: 'cubierta por factura', cubAnticipo: 'cubierta por anticipo', noCorresponde: 'no corresponde', pausada: 'pausada', sinMovimiento: 'más de 90 días sin movimiento', saldoCuota: 'saldo de una cuota facturada en parte', recurrente: 'mensual', anteriorApp: 'anterior a la app', sinIniciar: 'trabajo sin iniciar', ventaInactiva: 'venta no activa' }
 const PORQUE = {
   vencida: 'Venció en un mes ya cerrado y aún no se emite.', porVencer: 'Vence este mes o más adelante.',
   sinMovimiento: 'Venció hace más de 90 días y su venta no tiene facturas ni pagos en ese plazo. Queda fuera del flujo hasta que el abogado responsable lo confirme.',
   saldoCuota: 'La cuota se dio por cubierta con una factura menor. El saldo queda fuera del flujo hasta confirmarlo.',
   cubFactura: 'La cuota está cubierta por lo ya facturado en su venta.', cubAnticipo: 'Un anticipo disponible ya cubrió la cuota: falta emitir la factura.',
   noCorresponde: 'Se marcó «No corresponde».', pausada: 'La cuota está pausada.',
+  anteriorApp: 'Cuota con fecha anterior a la app: lo cobrado entonces no pasó por ella. Confirma si falta emitirla.', sinIniciar: 'Su trabajo aún no tiene factura ni plata recibida. Confirma si ya partió.', ventaInactiva: 'Su venta no está activa. Confirma si corresponde emitirla.',
 }
 const primeroDelMesSiguiente = hoy => { const d = new Date(hoy + 'T12:00:00'); d.setMonth(d.getMonth() + 1, 1); return d.toISOString().slice(0, 10) }
 

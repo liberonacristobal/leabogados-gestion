@@ -1,7 +1,7 @@
 // Reglas ÚNICAS de «Por facturar»: de la cifra de la tarjeta a lo realmente cobrable, siempre del lado conservador (lo dudoso queda
 // fuera de lo vigente, nunca dentro). Las leen Facturación › Por facturar, el flujo de caja y los avisos. Funciones puras: no leen ni
 // escriben la base. Cada cuota cae en UNA sola partida y las partidas suman exactamente el total (una cuota cubierta en parte se parte).
-import { cuotasCubiertasVenta, coberturaVenta } from './ventasReglas.js'
+import { cuotasCubiertasVenta, coberturaVenta, cuotasSinEmitir, cuotaDeLaApp } from './ventasReglas.js'
 import { montoFactura } from './saludDatos.js'
 
 export const POR_CONFIRMAR_DIAS = 90
@@ -62,7 +62,7 @@ export function cuadreVenta(s, bs, uf) {
  * Clasifica las cuotas de la tarjeta «Por facturar» (sin folio, no pagadas, anuladas ni anticipadas, no ya facturadas según el cruce, sin
  * reembolsos de gastos) en cuatro partidas que suman el total. Orden de prioridad, de lo más a lo menos explicado:
  *  fuera (pausada · cubierta por factura · «No corresponde» · cubierta por anticipo) → por confirmar (saldo de una cuota cubierta en parte; vence hace más
- *  de `dias` y su venta no se movió en ese plazo) → vencida (venció en un mes ya cerrado, igual que «Vencidas» del ciclo del mes) → por vencer (el mes en curso y lo que viene, recurrentes incluidas).
+ *  de `dias` y su venta no se movió en ese plazo) → vencida (la del radar «Cuotas vencidas sin facturar»; si venció pero el radar no la cuenta —anterior a la app, trabajo sin iniciar, venta no activa— queda por confirmar) → por vencer (el mes en curso y lo que viene, recurrentes incluidas).
  * `anio` limita la tarjeta al año de vencimiento, igual que el filtro de año de Facturación (la cobertura de cada venta sigue mirando todas sus facturas).
  * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string, anio?:string}} p
  */
@@ -71,6 +71,8 @@ export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir,
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
   const lim = new Date(_t(hoy) - dias * 86400000).toISOString().slice(0, 10), mes = hoy.slice(0, 7)
   const cub = cuotasCubiertasVenta(vivas, sales, uf)
+  // «Vencida» = exactamente el radar «Cuotas vencidas sin facturar» (cuotasSinEmitir): una sola regla para Facturación, flujo, Inicio y correos.
+  const radar = new Set(cuotasSinEmitir({ billing: /** @type {any} */ (vivas), sales: /** @type {any} */ (sales || []), anticipos: /** @type {any} */ (anticipos || []), uf: uf || {}, noEmitir: noEmitir || new Set(), hasta: mes + '-01' }).map(b => String(b.id)))
   const tarjeta = vivas.filter(b => (b.billing_type || '') !== 'reembolso' && !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)) && (!anio || String(b.due || '').slice(0, 4) === String(anio)))
   const { cubierto } = anticiposSobreCuotas({ cuotas: tarjeta.filter(b => b.status === 'Programada'), anticipos,
     excluir: b => !!(noEmitir && noEmitir.has(String(b.id))) || !!(cub.get(String(b.id)) || {}).total })
@@ -99,8 +101,12 @@ export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir,
     const viejo = !!b.due && b.due < lim
     if (viejo && !movio(b.sale_id)) { add('porConfirmar', 'sinMovimiento', b, resto); continue }
     const motivo = recurrente(b) ? 'recurrente' : null
-    if (!b.due || String(b.due).slice(0, 7) < mes || viejo) add('vencida', motivo, b, resto)
-    else add('porVencer', motivo, b, resto)
+    if (radar.has(String(b.id))) add('vencida', motivo, b, resto)
+    else if (!b.due || String(b.due).slice(0, 7) < mes || viejo) {
+      // Vencida pero fuera del radar «Cuotas vencidas sin facturar»: no cuenta como vencida, queda por confirmar con su motivo.
+      const vt = venta.get(String(b.sale_id))
+      add('porConfirmar', !cuotaDeLaApp(b) ? 'anteriorApp' : vt && vt.status === 'Activo' ? 'sinIniciar' : 'ventaInactiva', b, resto)
+    } else add('porVencer', motivo, b, resto)
   }
   const suma = (/** @type {readonly string[]} */ ks) => ks.reduce((a, k) => a + (partes[k] ? partes[k].m : 0), 0)
   const cuenta = (/** @type {readonly string[]} */ ks) => ks.reduce((a, k) => a + (partes[k] ? partes[k].n : 0), 0)

@@ -24,7 +24,7 @@ import { Spin } from './base.jsx'
 import { sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
-import { anticiposSobreCuotas } from '../../supabase/functions/_shared/porFacturar.js'
+import { anticiposSobreCuotas, clasificarPorFacturar } from '../../supabase/functions/_shared/porFacturar.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -3770,6 +3770,8 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   // Programadas que no son plata por facturar: venta no activa, marcadas «No corresponde», o ya cubiertas por lo facturado en su venta.
   const saleSt={}; (sales||[]).forEach(x=>{ if(x&&!x.deleted_at) saleSt[String(x.id)]=x.status })
   const cubV=sales?cuotasCubiertasVenta(billing,sales,ufFechas):new Map()
+  // «Cuotas vencidas sin facturar» = la partida Vencidas de Por facturar (que es el radar de Facturación): una sola regla para la página, el flujo, Inicio y los correos.
+  const radarIds=sales?new Set(clasificarPorFacturar({billing:vivas,sales,anticipos,uf:ufFechas||{},noEmitir:noEmitir||new Set(),yaFacturadas:(noEmitir&&noEmitir.facturadas)||new Set(),hoy:isoLocal(d0.getTime())}).filas.filter(f=>f.k==='vencida').map(f=>f.id)):null
   const fueraProg=b=>(sales&&b.sale_id&&saleSt[String(b.sale_id)]!=='Activo')||(noEmitir&&noEmitir.has(String(b.id)))||cubV.get(String(b.id))?.total
   // Plata ya recibida sin factura (anticipos disponibles) sobre las cuotas más antiguas: mismo cálculo de Por facturar (_shared/porFacturar.js).
   { const ac=anticiposSobreCuotas({cuotas:vivas,anticipos,excluir:fueraProg}); Object.assign(cubierto,ac.cubierto); antTot=ac.total }
@@ -3785,7 +3787,9 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       const w=wIdx(tC); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
     if(b.status==='Programada'&&!b.invoice_no){ if(fueraProg(b)) return; const m=(montoFactura(b)||Number(b.amount)||0)-(cubierto[b.id]||0)-(cubV.get(String(b.id))?.m||0); if(cubierto[b.id]) c.antic+=cubierto[b.id]; if(!(m>=1)){ if(cubierto[b.id]) st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=b.due||b.issued_at; const dYm=String(due||'').slice(0,7)
-      if(!dYm||dYm<curYm){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
+      if(!dYm||dYm<curYm||(radarIds&&radarIds.has(String(b.id)))){
+        if(radarIds&&!radarIds.has(String(b.id))){ st[b.id]={fuera:'porConfirmar',m,cid:c.cid}; return }   // vencida que el radar no cuenta: queda por confirmar en Por facturar, fuera del flujo
+        st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
       const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }
   })
   // Conservador: un cliente con una factura morosa (más de FLUJO_DUDA_DIAS tras su fecha esperada) no aporta ningún cobro al flujo; sus comisiones

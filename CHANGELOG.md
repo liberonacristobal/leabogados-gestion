@@ -1,3 +1,4 @@
+- 2026-11-07 · Cuotas vencidas sin facturar: Inicio y el flujo de caja leen la partida Vencidas de Por facturar (antes sumaban también cuotas anteriores a la app, trabajos sin iniciar y ventas no activas); esas pasan a Por confirmar con su motivo en la fila; el KPI del hub lee el mismo helper.
 - 2026-11-07 · Socios: el «Cobrado» de la caja del año (retiro disponible) es el cobrado propio de Inicio, por fecha del depósito; Counsel AI ya no arma «cobrado» ni «resultado» propios y rotula sus facturas pagadas por fecha de pago.
 - 2026-11-07 · Inteligencia: «Cobrado» y «Por cobrar» salen del mismo cálculo que Inicio (cobrado propio por fecha del depósito); el resumen del lunes deja fuera subarriendo y reembolsos del cobrado.
 - 2026-11-07 · El escenario del flujo (Sin morosos / Con morosos) es una preferencia del estudio, igual para todos los socios y dispositivos, y la tarjeta Proyección de Inicio lo rotula.
