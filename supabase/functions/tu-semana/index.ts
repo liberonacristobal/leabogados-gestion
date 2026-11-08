@@ -10,6 +10,7 @@ import { dteMontoTotal } from "../_shared/saludDatos.js";
 import { trabajosSinFacturar, noEmitirDeFilas } from "../_shared/ventasReglas.js";
 import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
+import { respaldoPorFactura } from "../_shared/fotoMes.js";
 
 // Correo semanal "Tu semana": el ÚNICO correo recurrente de la semana para cada persona (decisión del 26-10-2026), lunes 08:30.
 // Socios: además de lo suyo, notaría, cuotas sin emitir, compras por pagar, abonos por identificar y trabajos sin movimiento
@@ -109,9 +110,12 @@ serve(async (req) => {
       const ids = cobrables.map((b:any)=>b.id);
       for (let i=0; i<ids.length; i+=200) {
         const part = ids.slice(i,i+200);
-        const [{ data: xs }, { data: cs }] = await Promise.all([ sb.from("billing").select("id,dte_xml").in("id",part), sb.from("conciliacion").select("factura_id,monto_aplicado").in("factura_id",part) ]);
+        const [{ data: xs }, { data: cs }, { data: as }] = await Promise.all([ sb.from("billing").select("id,dte_xml").in("id",part), sb.from("conciliacion").select("factura_id,anticipo_id,tipo_destino,monto_aplicado").eq("tipo_destino","factura").in("factura_id",part), sb.from("anticipos").select("id,billing_id,monto,estado").eq("estado","consumido").in("billing_id",part) ]);
         (xs||[]).forEach((x:any)=>{ const t=dteMontoTotal(x.dte_xml); if (t!=null) xmlTot[x.id]=t; });   // total del DTE con la regla única (_shared/saludDatos)
-        (cs||[]).forEach((c:any)=>{ aplic[c.factura_id]=(aplic[c.factura_id]||0)+(Number(c.monto_aplicado)||0); });
+        // Respaldo con la regla única de la app (_shared/fotoMes): lo conciliado a la factura más los anticipos consumidos que entraron por banco.
+        const antIds = (as||[]).map((a:any)=>a.id);
+        const { data: ca } = antIds.length ? await sb.from("conciliacion").select("factura_id,anticipo_id,tipo_destino,monto_aplicado").eq("tipo_destino","anticipo").in("anticipo_id",antIds) : { data: [] };
+        Object.assign(aplic, respaldoPorFactura([...(cs||[]), ...(ca||[])], as||[]));
       }
     }
     const saldoBill = (b:any)=> Math.max(0, (xmlTot[b.id] ?? (Number(b.amount)||0)) - Math.max(Number(b.paid_amount)||0, aplic[b.id]||0));

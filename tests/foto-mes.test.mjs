@@ -41,12 +41,13 @@ test('comisiones: solo por pagar; ignora las de facturas anuladas o inexistentes
 
 test('fondos: solo lo que los clientes deben reponer, sin clientes internos ni histórico saldado', () => {
   const expenses = [
-    { client_id: 'c1', type: 'gasto', amount: 300 }, { client_id: 'c1', type: 'fondo', amount: 100 },
-    { client_id: 'c2', type: 'fondo', amount: 500 }, { client_id: 'c3', type: 'gasto', amount: 900, no_descuenta_saldo: true },
-    { client_id: 'c4', type: 'gasto', amount: 50 }, { client_id: 'c1', type: 'gasto', amount: 999, apertura_id: 'x' },
+    { client_id: 'c1', type: 'gasto', amount: 300000 }, { client_id: 'c1', type: 'fondo', amount: 100000 },
+    { client_id: 'c2', type: 'fondo', amount: 500000 }, { client_id: 'c3', type: 'gasto', amount: 900000, no_descuenta_saldo: true },
+    { client_id: 'c4', type: 'gasto', amount: 50000 }, { client_id: 'c1', type: 'gasto', amount: 999000, apertura_id: 'x' },
+    { client_id: 'c5', type: 'gasto', amount: 500 },                                   // residuo bajo $1.000: no cuenta como deuda (UMBRAL_DEUDA)
   ]
-  const clients = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'c4', is_internal: true }]
-  assert.deepEqual(fotoFondos({ expenses, clients }), { porReponer: 200, nDeben: 1 })
+  const clients = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'c4', is_internal: true }, { id: 'c5' }]
+  assert.deepEqual(fotoFondos({ expenses, clients }), { porReponer: 200000, nDeben: 1 })
 })
 
 test('foto completa, lectura y comparación', () => {

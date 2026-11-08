@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { UF_FALLBACK, comisionesVenta, currentYear, esFacIngreso, esSubarriendo, margenPct, montoFactura, redondearPartes, resultadoMes, ufDelDia, useFuentesResultado, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from './compartido.jsx'
+import { UF_FALLBACK, comisionesVenta, currentYear, esFacIngreso, esSubarriendo, margenPct, montoFactura, redondearPartes, resultadoMes, ufDelDia, useFuentesResultado, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF, ventaVendidaEnAnio } from './compartido.jsx'
 
 export const META_CLP = 400000000
 
@@ -20,7 +20,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     selectAll(()=>supabase.from('conciliacion').select('movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).order('id')).then(({data})=>setIngConc(data||[]),()=>{})
     selectAll(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,monto_conciliado,cliente_id,categoria').eq('tipo','abono').neq('es_interno',true).order('id')).then(({data})=>setIngAbonos(data||[]),()=>{})
   },[])
-  const salesYr = sales.filter(s=>!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&ventaCuentaEnAnio(s,yr)&&!esSubarriendo(s))
+  const salesYr = sales.filter(s=>ventaVendidaEnAnio(s,yr))
   const ufState = useUF()
   const ufHoy = ufState.uf
 
@@ -39,7 +39,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   },[])
   // Métricas de un año desde sales (vendido), misma fórmula que el cálculo central
   const metricasAnio = (year) => {
-    const sy = sales.filter(s=>!s.deleted_at&&ventaCuentaEnAnio(s,year)&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)
+    const sy = sales.filter(s=>ventaVendidaEnAnio(s,year))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)
     const bruto = Math.round(sy.reduce((a,s)=>a+clpDeVenta(s),0))
     // Comisiones = fuente única comisionesVenta (las registradas; si una venta no tiene, su costo pactado). En UF, con la UF de la venta.
     const costo = Math.round(sy.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).anual,0))

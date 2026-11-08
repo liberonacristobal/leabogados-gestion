@@ -6,6 +6,7 @@ import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { Fragment } from 'react'
+import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuentaEnSaldo } from '../../supabase/functions/_shared/gastosReglas.js'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { diasA as _diasA } from '../../supabase/functions/_shared/calendarioReglas.js'
@@ -322,7 +323,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
   const pagadoTot=facturas.reduce((s,b)=>s+cobradoBill(b),0)   // incluye parciales (banco o paid_amount); fuente única, coincide con Financiero/Resumen
   const porCobrar=porCobrarBills(clientBilling)
   const fg=fgCliente(expenses,client.id)
-  const aFavor=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+  const aFavor=anticiposDisponibles(anticipos)
   const hoy=new Date();hoy.setHours(0,0,0,0)
   const aging=due=>{if(!due)return null;const d=Math.round((new Date(due+'T12:00')-hoy)/86400000);if(d<0)return{t:`vencida ${-d}d`,c:C.overdueText};if(d<=7)return{t:`vence ${d}d`,c:C.soon};return{t:'al día',c:C.greenText}}
   const grupos=useMemo(()=>{const g={};facturas.forEach(b=>{const rs=b.receptor_name||client.name||'—';(g[rs]=g[rs]||[]).push(b)})

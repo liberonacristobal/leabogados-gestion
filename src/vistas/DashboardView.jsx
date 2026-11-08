@@ -313,7 +313,7 @@ export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onO
 export function computeAgingCartera(billingRows, clientesMap){
   const COL = { current:C.normal, warning:C.soon, overdue:C.overdue }
   const BG  = { current:C.greenBg, warning:C.soonBg, overdue:C.overdueBg }
-  const LBL = { current:'Al día', warning:'31-60 días', overdue:'Vencido +60' }
+  const LBL = { current:'Al día', warning:'31-60 días', overdue:'Más de 60 días' }
   // Mismo universo que porCobrarBills (fuente única del "por cobrar"): emitidas con folio, no borradas.
   // Sin esto el aging contaba facturas borradas y sin folio (por facturar), inflando el total ~$40M.
   const pend = (billingRows||[]).filter(b=>(b.status==='Pendiente'||b.status==='Vencido') && b.invoice_no && !b.deleted_at)

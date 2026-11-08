@@ -5,6 +5,7 @@ import { Children, useMemo, useState } from 'react'
 import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
+import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel, ProyeccionDetalle } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
@@ -183,7 +184,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const diasCom = sc.porPagarDesde ? Math.round((Date.now()-new Date(sc.porPagarDesde+'T12:00').getTime())/86400000) : null
   const internos = useMemo(()=>new Set((clients||[]).filter(c=>c&&c.is_internal).map(c=>String(c.id))),[clients])
   const nota = useMemo(()=>notariaPorLiquidar(expenses,{ esOficina:cid=>internos.has(String(cid)) }),[expenses,internos])
-  const antDisp = (anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+  const antDisp = anticiposDisponibles(anticipos)
   const flujo = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, fantasmaIds })
   const proy = useMemo(()=>proyeccionCobranza(flujo).total,[flujo])
   const props = (sales||[]).filter(s=>s&&!s.deleted_at&&s.status==='Propuesta')

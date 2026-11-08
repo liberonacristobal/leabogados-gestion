@@ -8,7 +8,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, anticiposDisponibles, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
 import { ajustarTrato, cuerpoVariasFacturas, lineasTrabajos, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
@@ -3495,7 +3495,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
           const _pf=clasificarPorFacturar({billing:bb,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,yaFacturadas:yaFacturadasIds,hoy,anio:fYear})   // misma regla de la página «Por facturar»
           const porFacturarRealTot=_pf.total
           const resYears=[...new Set(bb.map(b=>String(b.paid_at||b.issued_at||b.due||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a))
-          const antDisp=(anticipos||[]).filter(a=>a.estado==='disponible').reduce((s,a)=>s+(a.monto||0),0)
+          const antDisp=anticiposDisponibles(anticipos)
           const provPorPagar=(terceros||[]).filter(t=>t.estado!=='pagado').reduce((s,t)=>s+(t.monto||0),0)
           const go=f=>{setFilter(f);clearSel&&clearSel()}
           return (<div>

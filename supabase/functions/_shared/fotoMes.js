@@ -5,6 +5,7 @@ import { montoFactura } from './saludDatos.js'
 import { estadoComision } from './comisionesReglas.js'
 import { exposicionCartera } from './cobranzaExposicion.js'
 import { cuentaEnSaldo } from './gastosReglas.js'
+import { UMBRAL_DEUDA } from './fondosReglas.js'
 import { variacion, textoVariacion } from './informeMes.js'
 
 /** Suma conciliada por factura: abonos del banco + anticipos consumidos con respaldo bancario (igual que el respaldoMap de la app). */
@@ -77,7 +78,7 @@ export function fotoFondos({ expenses, clients }) {
   const s = {}
   for (const e of expenses || []) { const d = !cuentaEnSaldo(e) ? 0 : e.type === 'fondo' ? (e.amount || 0) : (e.no_descuenta_saldo ? 0 : -(e.amount || 0)); s[e.client_id] = (s[e.client_id] || 0) + d }
   let porReponer = 0, nDeben = 0
-  for (const c of clients || []) { if (!c || c.is_internal) continue; const v = s[c.id] || 0; if (v < 0) { porReponer -= v; nDeben++ } }
+  for (const c of clients || []) { if (!c || c.is_internal) continue; const v = s[c.id] || 0; if (v <= UMBRAL_DEUDA) { porReponer -= v; nDeben++ } }
   return { porReponer, nDeben }
 }
 
