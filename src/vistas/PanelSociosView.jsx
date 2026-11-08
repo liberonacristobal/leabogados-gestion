@@ -287,7 +287,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         <Fila tono='am' label='Notaría por transferir' sub={nota.montoEsperan>0?`esperan fondos del cliente ${fmtShort(nota.montoEsperan)}`:undefined} value={fmtShort(nota.montoPagables)} raw={nota.montoPagables} onClick={()=>go('notaria')}/>
         <Sub t='Fondos de clientes'/>
         <Fila tono='te' label='Fondos de clientes' sub={`${fondos.nFavor} cliente${fondos.nFavor!==1?'s':''} · provisión de gastos`} value={fmtShort(fondos.aFavor)} raw={fondos.aFavor} onClick={()=>go('gastosFavor')}/>
-        <Fila tono='te' label='Anticipos disponibles' sub='a favor de clientes' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')} det={detAnt} detLink='Ver anticipos en Facturación'/>
+        <Fila tono='te' label='Anticipos disponibles' sub='recibidos sin factura' value={fmtShort(antDisp)} raw={antDisp} onClick={()=>go('anticipos')} det={detAnt} detLink='Ver anticipos en Facturación'/>
         <Fila tono='gy' label='Compras a proveedores, IVA y caja chica' sub='ver en Oficina' value='›' vcol={C.azulInfo} onClick={()=>go('oficina')}/>
       </> },
     caj: { cap:'Caja y revisión', capCorto:'Caja y revisión', titulo:'Caja', hl:<>Flujo <b style={{color:flujo.fin>=0?C.greenText:C.overdueText}}>{(flujo.fin>0?'+':'')+fmtShort(flujo.fin)}</b></>, tono:'az', link:'Flujo de caja', dest:'flujoCaja',

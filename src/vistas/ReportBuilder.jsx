@@ -149,7 +149,7 @@ export function ReportBuilder({sales,billing,clients,expenses,tasks,terceros=[],
         <div class="kpi-grid">
           <div class="kpi"><div class="kpi-label">Por cobrar</div><div class="kpi-value">${fmtN(pending)}</div></div>
           <div class="kpi"><div class="kpi-label">Vencido</div><div class="kpi-value" style="color:#E24B4A">${fmtN(overdue)}</div></div>
-          <div class="kpi"><div class="kpi-label">Cobrado</div><div class="kpi-value" style="color:#1D9E75">${fmtN(paid)}</div></div>
+          <div class="kpi"><div class="kpi-label">Pagado</div><div class="kpi-value" style="color:#1D9E75">${fmtN(paid)}</div></div>
         </div>`
       if(bb.length>0){
         html+=`<table><thead><tr><th>Cliente</th><th>Concepto</th><th>N° Factura</th><th>Emisión</th><th>Estado</th><th style="text-align:right">Monto</th><th>Antigüedad</th></tr></thead><tbody>`
