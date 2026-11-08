@@ -2,11 +2,12 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
-import { C, Gl, appAlert, fmt } from '../lib/base.jsx'
+import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
+import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
-export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[] }){
+export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[], onOpenGasto }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   // Salud de datos › Fondos de clientes: el reparto por fondo (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
   // Una sola pasada por los gastos, agrupados por cliente (ambas funciones filtran por cliente: mismo resultado); se recalcula solo si cambian.
@@ -24,9 +25,12 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const [form,setForm]=useState({})
   const [busy,setBusy]=useState(false)
   const [reloadN,setReloadN]=useState(0)
+  const [pvCat,setPvCat]=useState(null)   // categoría de un mes abierta hasta sus partidas: «<mes><cat>»
+  const [liqs,setLiqs]=useState([])   // liquidaciones de sueldo leídas del correo de la contadora (solo administradores)
   useEffect(()=>{ if(DEMO){ setVentas([]); setCm([]); return } let v=true
     selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')).then(({data})=>{ if(v&&data) setVentas(data) },()=>{})
     supabase.from('oficina_costos_mensual').select('*').eq('anio',yr).then(({data})=>{ if(v&&data) setCm(data) },()=>{})
+    supabase.from('remuneraciones_tributables').select('periodo,persona,imponible,cotizaciones,tributable,impuesto_unico,fuente').like('periodo',yr+'-%').then(({data})=>{ if(v&&data) setLiqs(data) },()=>{})
     return ()=>{v=false} },[yr,reloadN])
   const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const yrs=(()=>{ const s=new Set([curY]); (ventas||[]).forEach(d=>{ const y=parseInt(String(d.fecha_emision||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
@@ -228,7 +232,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     {(()=>{
       // Presupuesto vs real. Presupuesto = Costos de oficina por categoría (sin PPM ni subarriendo, vigente por mes con desde/monto_prev).
       // Real = las mismas líneas de costo de resultadoMes (planilla + banco + gastos varios), así el total cuadra con «Costos de operación».
-      const allM=Array.from({length:maxM},(_,i)=>i+1)
+      const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
+      const allM=Array.from({length:cerM},(_,i)=>i+1)
       const CATS=[['rem','Remuneraciones'],['cot','Leyes sociales'],['arr','Arriendo y GGCC'],['gv','Gastos varios'],['con','Contadora']]
       const budCat=r=>{ const c=String(r.categoria||''), it=String(r.item||''); if(/contador/i.test(it)) return 'con'; if(c==='Remuneraciones') return 'rem'; if(c==='Leyes sociales') return 'cot'; if(c==='Arriendo y espacio'&&!/limpieza|aseo/i.test(it)) return 'arr'; return 'gv' }
       const vacio=()=>({rem:0,cot:0,arr:0,gv:0,con:0})
@@ -240,7 +245,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const filas=allM.map(m=>{ const b=budM(m), r=realM(m); return {m,b,r,bt:tot(b),rt:tot(r),est:!!(rmes[m]&&(rmes[m].estimado||!rmes[m].conPlanilla))} })
       const bud=filas.reduce((a,f)=>a+f.bt,0), real=filas.reduce((a,f)=>a+f.rt,0), dv=real-bud
       if(!(bud>0)) return null
-      const resto=Array.from({length:12-maxM},(_,i)=>maxM+1+i), budResto=resto.reduce((a,m)=>a+tot(budM(m)),0)
+      const resto=Array.from({length:12-cerM},(_,i)=>cerM+1+i), budResto=resto.reduce((a,m)=>a+tot(budM(m)),0)
       const proy=real+budResto, budAnio=bud+budResto
       const catTot=k=>({b:filas.reduce((a,f)=>a+f.b[k],0), r:filas.reduce((a,f)=>a+f.r[k],0)})
       const gvGrupos=(()=>{ const g={}; allM.forEach(m=>(rmes[m]?.gvItems||[]).forEach(e=>{ const l=[e.category,e.subcategory].filter(Boolean).join(' › ')||'Sin categoría'; g[l]=(g[l]||0)+(Number(e.amount)||0) }))
@@ -249,7 +254,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const dCol=v=>Math.abs(v)<1?C.done:v>0?C.overdueText:C.greenText
       const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))
       const pct=bud>0?Math.abs(dv)/bud*100:0
-      const per=maxM===12?String(yr):`ene–${MES_C[maxM-1]}`
+      const per=cerM===12?String(yr):`ene–${MES_C[cerM-1]}`
       const kLb={fontSize:isDesktop?10:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
       const kt=(k,ic,bg,fg,lab,val,sub)=>{ const blanco=bg===C.card; return <div key={k} style={{background:bg,border:`1px solid ${blanco?C.border:'transparent'}`,borderRadius:12,padding:isDesktop?'13px 13px':'11px 10px',display:'flex',gap:isDesktop?11:8,alignItems:'center',minWidth:0}}>
         <KpiIco n={ic} c={fg} soft={blanco}/>
@@ -274,12 +279,37 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const pvOpen=open&&String(open).startsWith('pv')?open:(scope==='mes'?'pvm'+selM:null)
       const tg=id=>setOpen(o=>(o===id||(!o&&pvOpen===id))?'pvx':id)
       const mesFilas=f=>{ const id='pvm'+f.m, o=pvOpen===id; return [fila(id,isDesktop?MESES[f.m-1]:MES_C[f.m-1],f.bt,f.rt,{est:f.est,open:o,on:()=>tg(id)}),
-        ...(o?CATS.map(([k,l])=>fila(id+k,l,f.b[k],f.r[k],{sub:true})):[])] }
+        ...(o?CATS.flatMap(([k,l])=>{ const cid=f.m+k, oc=pvCat===cid; return [fila(id+k,l,f.b[k],f.r[k],{sub:true,open:oc,on:()=>setPvCat(x=>x===cid?null:cid)}),...(oc?[panelPartidas(f.m,k,f.b[k],f.r[k])]:[])] }):[])] }
+      // Partidas reales de una categoría de un mes: cada una con su fuente (banco, planilla o presupuesto) y, si es un gasto, el clic que lo abre.
+      const nPeso=v=>Number(v)||0
+      const partidas=(m,k,bud)=>{ const r=rmes[m], pl=cmBy[m], ym=pad(m), rows=[]; if(!r) return {rows,liqs:[]}
+        const estP=pl?(pl.cerrado?'cerrada':pl.estimado?'estimada':'abierta'):''
+        const plan=(concepto,monto)=>({fecha:'',concepto,fuente:`Planilla ${estP} de ${MESES[m-1].toLowerCase()}`,monto:nPeso(monto),planilla:m})
+        const gasto=(e,fuente)=>({fecha:String(e.date||'').slice(0,10),concepto:[e.subcategory,e.concept||e.description].filter(Boolean).join(' · ')||e.category||'Gasto',fuente,monto:nPeso(e.amount),gasto:e.id})
+        if(!r.conPlanilla&&k!=='gv') rows.push({fecha:'',concepto:'Presupuesto de oficina',fuente:'Sin planilla del mes',monto:bud})
+        else if(k==='rem'){ if(r.remEst) rows.push(plan('Sueldos y honorarios',nPeso(pl?.sueldos)+nPeso(pl?.honorarios))); else r.remItems.forEach(x=>rows.push({fecha:String(x.e.date||'').slice(0,10),concepto:x.persona||'Sueldo',fuente:x.boleta?'Banco · boleta, costo bruto':'Banco · líquido pagado',monto:x.costo,gasto:x.e.id})) }
+        else if(k==='con'){ if((r.conItems||[]).length) r.conItems.forEach(e=>rows.push(gasto(e,'Banco · gasto'))); else rows.push(plan('Contadora',pl?.contadora)) }
+        else if(k==='cot') rows.push(plan('Cotizaciones',pl?.cotizaciones))
+        else if(k==='arr'){ rows.push(plan('Arriendo',pl?.arriendo)); rows.push(plan('Gastos comunes',pl?.gastos_comunes)) }
+        else if(k==='gv'){ if(!r.conPlanilla) rows.push({fecha:'',concepto:'Presupuesto de oficina',fuente:'Sin planilla del mes',monto:bud-r.gv}); else if(nPeso(pl?.otros_costos)) rows.push(plan('Otros costos',pl.otros_costos)); (r.gvItems||[]).forEach(e=>rows.push(gasto(e,'Banco · gasto'))) }
+        return {rows:rows.filter(x=>x.monto!==0), liqs:k==='rem'?(liqs||[]).filter(x=>x.periodo===ym):[]} }
+      const panelPartidas=(m,k,bud,real)=>{ const {rows,liqs:lq}=partidas(m,k,bud), tot=rows.reduce((a,x)=>a+x.monto,0), dif=Math.round(real-tot)
+        const baja=async()=>{ await descargarXlsx({nombre:`Real_${CATS.find(c=>c[0]===k)[1].replace(/\s+/g,'_')}_${pad(m)}`,hoja:'Partidas',head:['Mes','Fecha','Concepto','Fuente','Monto'],filas:[...rows.map(x=>[pad(m),x.fecha,x.concepto,x.fuente,x.monto]),...lq.map(x=>[pad(m),'',`Liquidación ${x.persona}: imponible ${nPeso(x.imponible)}, cotizaciones ${nPeso(x.cotizaciones)}, impuesto único ${nPeso(x.impuesto_unico)}`,x.fuente,''])],anchos:[10,12,56,40,14],numCols:[4]}) }
+        const idCorreo=f=>{ const x=String(f||'').match(/correo\s+([0-9a-f]+)/i); return x?x[1]:null }
+        const pad2=isDesktop?'6px 14px 6px 44px':'6px 12px 6px 30px'
+        const lin=(key,izq,sub,der,on)=><div key={key} onClick={on} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:10,alignItems:'baseline',padding:pad2,background:C.bgSoft,cursor:on?'pointer':'default',fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0}}><span style={{display:'block',fontSize:12,fontWeight:600,color:C.text,lineHeight:1.25}}>{izq}{on?<span style={{marginLeft:6,display:'inline-block',verticalAlign:'middle'}}>{chev(false)}</span>:null}</span><span style={{display:'block',fontSize:11,color:C.muted,lineHeight:1.3}}>{sub}</span></span><span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap'}}>{der}</span></div>
+        return <div key={'pp'+m+k}>
+          {rows.map((x,i)=>lin(i,`${x.fecha?fmtFechaDMY(x.fecha)+' · ':''}${x.concepto}`,x.fuente,fmt(x.monto),x.gasto&&onOpenGasto?()=>onOpenGasto(x.gasto):x.planilla?()=>setEditM(x.planilla):null))}
+          {k==='rem'&&<div style={{padding:pad2,background:C.bgSoft,fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',color:C.accent}}>Liquidaciones leídas del correo</div>}
+          {k==='rem'&&(lq.length?lq.map((x,i)=>{ const id=idCorreo(x.fuente); return lin('l'+i,x.persona,`imponible ${fmt(nPeso(x.imponible))} · cotizaciones ${fmt(nPeso(x.cotizaciones))} · impuesto único ${fmt(nPeso(x.impuesto_unico))}${id?'':''}`,id?<a href={`https://mail.google.com/mail/u/0/#all/${id}`} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{color:C.azulInfo,fontWeight:700,textDecoration:'none'}}>Ver correo</a>:'',null) }):lin('l0','Sin liquidaciones leídas de este mes','Las del correo de la contadora no se han cargado; los sueldos de arriba salen del banco','',null))}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:pad2,background:C.bgSoft,borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:11,color:Math.abs(dif)>0?C.overdueText:C.muted}}>{Math.abs(dif)>0?`Partidas ${fmt(Math.round(tot))} · diferencia con el real ${fmt(dif)}`:`Las partidas suman el real: ${fmt(Math.round(tot))}`}</span>
+            <button onClick={e=>{e.stopPropagation();baja()}} style={{fontSize:11.5,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'3px 9px',cursor:'pointer'}}>Excel</button></div></div> }
       const ordM=isDesktop?filas:[...filas].reverse()
       const card2={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
       const secT=t=><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,margin:'16px 4px 8px'}}>{t}</div>
       return <>
-        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · {per}{maxM<12?' '+yr:''}</div>
+        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · {per}{cerM<12?' '+yr:''}</div>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
           {kt('pb','file',C.card,C.accent,'Presupuesto',fmtMill(bud),`costos ${per}`)}
           {kt('pr','wallet',C.azulBg,C.accent,'Real',fmtMill(real),'banco + planilla')}
@@ -288,20 +318,21 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         </div>
         {secT('Mes a mes')}
         <div style={card2}>{head('Mes')}{ordM.flatMap(mesFilas)}
-          {resto.length>0&&fila('pvresto',isDesktop?`${MESES[maxM]}${resto.length>1?'–'+MESES[11]:''}`:`${MES_C[maxM]}${resto.length>1?'–'+MES_C[11]:''}`,budResto,null,{ppto:'proyectado'})}
+          {resto.length>0&&fila('pvresto',isDesktop?`${MESES[cerM]}${resto.length>1?'–'+MESES[11]:''}`:`${MES_C[cerM]}${resto.length>1?'–'+MES_C[11]:''}`,budResto,null,{ppto:'proyectado'})}
           {fila('pvtot',String(yr),budAnio,proy,{tot:true})}
         </div>
         {secT(`Por categoría · ${per}`)}
         <div style={card2}>{head('Categoría')}
           {CATS.flatMap(([k,l])=>{ const t=catTot(k), id='pvc'+k, o=pvOpen===id, dr=k==='gv'&&gvGrupos.length>0
-            return [fila(id,l,t.b,t.r,dr?{open:o,on:()=>tg(id)}:{}), ...(dr&&o?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[])] })}
+            return [fila(id,l,t.b,t.r,{open:o,on:()=>tg(id)}), ...(o?[...(dr?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[]),...filas.filter(f=>f.b[k]||f.r[k]).flatMap(f=>{ const cid=f.m+k, oc=pvCat===cid; return [fila(id+'m'+f.m,isDesktop?MESES[f.m-1]:MES_C[f.m-1],f.b[k],f.r[k],{sub:true,est:f.est,open:oc,on:()=>setPvCat(x=>x===cid?null:cid)}),...(oc?[panelPartidas(f.m,k,f.b[k],f.r[k])]:[])] })]:[])] })}
           {fila('pvctot','Total',bud,real,{tot:true})}
         </div>
       </>
     })()}
 
     {(()=>{
-      const allM=Array.from({length:maxM},(_,i)=>i+1)
+      const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
+      const allM=Array.from({length:cerM},(_,i)=>i+1)
       const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
       const faltaClaudia=allM.filter(m=>{ const r=cmBy[m]; return r && (Number(r.cotizaciones)===0||Number(r.ppm)===0||r.estimado) })
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
