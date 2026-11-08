@@ -1,3 +1,4 @@
+- 2026-11-08 · Nombres de Facturado: la tarjeta de Oficina que suma la comisión de externos dice «Honorarios» y el emitido del cierre del mes en el Panel de socios dice «Emitido bruto».
 - 2026-11-08 · Nombres: la columna por cliente de Facturación y el KPI del reporte del mes dicen «Pagado» (facturas pagadas) y «Cobrado» queda para la caja; los anticipos de honorarios dicen «recibidos sin factura» en vez de «a favor de clientes».
 - 2026-11-08 · Se elimina el correo «Resumen semanal de facturación» de SII (duplicaba el resumen del lunes, con cifras de vencido por vencimiento programado): acción del servidor, botón «Enviar resumen» y tarea programada.
 - 2026-11-08 · Coherencia de cifras: una sola suma de anticipos disponibles, una sola regla de «Vendido» (Inteligencia, resultado del año), umbral único de deuda por gastos ($1.000) y nombre «Gastos por cobrar a clientes», saldo de factura de cierre del mes y Tu semana con el respaldo de la app, aging «Más de 60 días».

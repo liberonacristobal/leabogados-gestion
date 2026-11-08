@@ -238,7 +238,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>{`Emitido en ${mesPasado}`}</div>
-        <Fila ic='file' tono='am' label='Facturado' sub={`${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
+        <Fila ic='file' tono='am' label='Emitido bruto' sub={`${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
         <Fila ic='tEntra' tono='az' label='Ingreso' sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} value={fmtShort(rm.ing)} raw={rm.ing} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Entró a caja</div>
         <Fila ic='check' tono='gr' label='Cobrado' sub={cobMes!=null?dl(cobMes,cobAnt):undefined} value={cobMes==null?'—':fmtShort(cobMes)} raw={cobMes??''} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>
@@ -383,7 +383,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           <Sec t={bloques.mes.titulo} link={bloques.mes.link} onLink={()=>go(bloques.mes.dest)}/>
           <CierreGrid grupos={[
             {t:`Emitido en ${mesPasado}`,k:[
-              <KpiMes key='f' ic='file' tono='am' label='Facturado' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>,
+              <KpiMes key='f' ic='file' tono='am' label='Emitido bruto' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>,
               <KpiMes key='i' ic='tEntra' tono='az' label='Ingreso' value={fmtShort(rm.ing)} sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>]},
             {t:'Entró a caja',k:[<KpiMes key='c' ic='check' tono='gr' label='Cobrado' value={cobMes==null?'—':fmtShort(cobMes)} sub={cobMes!=null?dl(cobMes,cobAnt):undefined} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>]},
             {t:'Resultado devengado',k:[
