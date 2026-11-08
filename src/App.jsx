@@ -1889,7 +1889,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
         </div>
         {L('Composición')}
         <div style={grid4}>
-          {st('fac',IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fmtMill(R.fac+R.rex),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {st('fac',IC.fac,C.azulBg,C.azulInfo,'Honorarios',fmtMill(R.fac+R.rex),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo',R.sub?'+'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
           {st('cos',IC.peop,C.overdueBg,C.overdueText,isDesktop?'Costos de operación':'Costos',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
           {st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}
