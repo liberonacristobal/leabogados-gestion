@@ -122,11 +122,11 @@ Deno.serve(async (req) => {
     if (!dryRun) {
       // Un caso que vuelve a aparecer después de resuelto se reabre (misma clave) y cuenta como nuevo.
       for (let i = 0; i < casos.length; i += 200) {
-        const lote = casos.slice(i, i + 200).map((c) => ({ estudio_id: "lea", detector: c.detector, clave: c.clave, titulo: c.titulo, monto: c.monto, prueba: c.prueba, estado: "abierto", ultima_vez: ahora, resuelto_at: null, ...(abiertos.has(c.clave) ? {} : { primera_vez: ahora, avisado_at: null }) }));
+        const lote = casos.slice(i, i + 200).map((c) => ({ estudio_id: "lea", detector: c.detector, clave: c.clave, titulo: c.titulo, monto: c.monto, prueba: c.prueba, estado: "abierto", ultima_vez: ahora, resuelto_at: null, cierre: null, motivo: null, resuelto_por: null, ...(abiertos.has(c.clave) ? {} : { primera_vez: ahora, avisado_at: null }) }));
         const conPrimera = lote.filter((x) => "primera_vez" in x), sin = lote.filter((x) => !("primera_vez" in x));
         for (const grupo of [conPrimera, sin]) if (grupo.length) await rest("auditoria_hallazgos?on_conflict=estudio_id,clave", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(grupo) });
       }
-      for (const p of resueltos) await rest(`auditoria_hallazgos?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify({ estado: "resuelto", resuelto_at: ahora }) });
+      for (const p of resueltos) await rest(`auditoria_hallazgos?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify({ estado: "resuelto", resuelto_at: ahora, cierre: "automatico", resuelto_por: "auditor-datos" }) });   // «automatico» = el detector dejó de verlo (corregido o decidido en la app); «corregido» / «esperable» / «falso_positivo» los fija una persona
       if (nuevos.length || resueltos.length) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "auditor-datos", action: "auditoria.revision_nocturna", table_name: "auditoria_hallazgos", estudio_id: "lea", detail: { title: `Revisión de datos: ${casos.length} por revisar · ${nuevos.length} nuevo${nuevos.length !== 1 ? "s" : ""} · ${resueltos.length} resuelto${resueltos.length !== 1 ? "s" : ""}`, nuevos: nuevos.map((c) => c.clave), resueltos: resueltos.map((p) => p.clave) } }) }).catch(() => null);
     }
     const resumen = { ok: true, dryRun, por_revisar: casos.length, nuevos: nuevos.length, resueltos: resueltos.length, por_detector: porDetector, detalle_nuevos: nuevos.map((c) => ({ detector: c.detector, titulo: c.titulo, monto: c.monto })) };
