@@ -29,8 +29,8 @@ export function cotizacionesProvisorias({ mes, previo, cotizPrevReal }) {
 
 const sinTild = (/** @type {any} */ s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const tokens = (/** @type {any} */ s) => sinTild(s).split(/[^a-zñ]+/).filter(t => t.length >= 3)
-/** Líquido de una liquidación: imponible − cotizaciones del trabajador − impuesto único. @param {{imponible:number, cotizaciones:number, impuesto_unico:number}} l */
-export const liquidoDe = l => (Number(l.imponible) || 0) - (Number(l.cotizaciones) || 0) - (Number(l.impuesto_unico) || 0)
+/** Líquido de una liquidación: el «líquido a pagar» del PDF; si no se leyó, imponible − cotizaciones del trabajador − impuesto único (sin descuentos adicionales). @param {{imponible:number, cotizaciones:number, impuesto_unico:number, liquido?:number|null}} l */
+export const liquidoDe = l => Number(l.liquido) > 0 ? Number(l.liquido) : (Number(l.imponible) || 0) - (Number(l.cotizaciones) || 0) - (Number(l.impuesto_unico) || 0)
 /** ¿La persona de una liquidación («APELLIDO APELLIDO NOMBRE») es la de una línea del presupuesto o gasto («Nombre Apellido»)? Todas las palabras del nombre corto están en el largo. */
 export function mismaPersona(/** @type {string} */ corto, /** @type {string} */ largo) { const a = tokens(corto), b = new Set(tokens(largo)); return a.length > 0 && a.every(t => b.has(t)) }
 
@@ -70,9 +70,10 @@ export function presupuestoDesdeLiquidaciones({ periodo, liquidaciones, tasaEmpl
     const nuevo = f.categoria === 'Remuneraciones' ? liquidoDe(l[0]) : (tasaEmpleador == null ? NaN : (Number(l[0].cotizaciones) || 0) + tasaEmpleador * (Number(l[0].imponible) || 0))
     if (!(nuevo > 0)) continue
     const actual = Number(f.monto) || 0, n = Math.round(nuevo)
-    if (actual > 0 && Math.abs(n - actual) / actual < 0.02) continue
     const d0 = f.desde ? String(f.desde).slice(0, 10) : null
-    if (d0 && d0 !== desde) continue                     // un cambio posterior o un historial previo (la tabla guarda un solo valor anterior): no se pisa
+    if (d0 !== desde && actual > 0 && Math.abs(n - actual) / actual < 0.02) continue   // el 2 % evita ruido; una línea ya fechada en este mes sigue la liquidación exacta
+    if (n === actual) continue
+    if (d0 && d0 !== desde) continue                    // un cambio posterior o un historial previo (la tabla guarda un solo valor anterior): no se pisa
     out.push({ id: f.id, categoria: f.categoria, item: f.item, monto: n, monto_prev: d0 === desde ? (Number(f.monto_prev) || 0) : actual, desde, antes: actual })
   }
   return out

@@ -43,7 +43,9 @@ function leerLiquidacion(t: string) {
   if (!persona || imponible == null) return null;
   const iu = u.match(/IMPUESTO UNICO \(BASE IMPONIBLE \$([\d.]+)\) \| ([\d.]+)/);
   const tributable = iu ? num(iu[1]) : null, impuesto_unico = iu ? num(iu[2]) : 0;
-  return { periodo: `${mm[2]}-${MESES[mm[1]]}`, persona, imponible, tributable, cotizaciones: tributable != null ? imponible - tributable : null, impuesto_unico };
+  // «LIQUIDO A PAGAR» es lo que se transfiere; la salud adicional se descuenta aparte de las cotizaciones legales.
+  const liquido = num((u.match(/LIQUIDO A PAGAR \| \$?([\d.]+)/) || [])[1]), salud_adicional = num((u.match(/SALUD - ADICIONAL \| ([\d.]+)/) || [])[1]);
+  return { periodo: `${mm[2]}-${MESES[mm[1]]}`, persona, imponible, tributable, cotizaciones: tributable != null ? imponible - tributable : null, impuesto_unico, liquido, salud_adicional };
 }
 // Tabla mensual del SII: por cada «<Mes> <año>» los 8 tramos MENSUAL (desde, hasta, factor, cantidad a rebajar).
 function leerTabla(html: string, anio: number) {

@@ -16,6 +16,20 @@ test('líquido y nombre: el corto está dentro del largo, sin tildes', () => {
   assert.ok(!mismaPersona('Rosa Vega', 'DIAZ MORA PEDRO')); assert.ok(!mismaPersona('', 'X'))
 })
 
+test('líquido: manda el «líquido a pagar» del PDF (con salud adicional); sin él se calcula', () => {
+  assert.equal(liquidoDe({ ...LIQ[2], liquido: 1590000 }), 1590000)
+  assert.equal(liquidoDe({ ...LIQ[2], liquido: null }), 1610000)
+  assert.equal(personaDelPago({ amount: 1590000, concept: 'a Ped' }, [{ ...LIQ[2], liquido: 1590000 }], []), 'DIAZ MORA PEDRO')
+})
+
+test('presupuesto: una línea ya fechada en el mes sigue al líquido exacto aunque la diferencia sea menor a 2 %', () => {
+  const l = [{ persona: 'SOTO RIOS LUIS', imponible: 4000000, cotizaciones: 700000, impuesto_unico: 100000, liquido: 3180000 }]
+  const f = [{ id: 'a', categoria: 'Remuneraciones', item: 'Luis Soto', monto: 3200000, monto_prev: 2200000, desde: '2026-10-01' }]
+  const r = presupuestoDesdeLiquidaciones({ periodo: '2026-10', liquidaciones: l, tasaEmpleador: null, filas: f })
+  assert.equal(r[0].monto, 3180000); assert.equal(r[0].monto_prev, 2200000)
+  assert.deepEqual(presupuestoDesdeLiquidaciones({ periodo: '2026-10', liquidaciones: l, tasaEmpleador: null, filas: [{ ...f[0], monto: 3180000 }] }), [])   // ya igual: no repite
+})
+
 test('pago de sueldo: por líquido exacto único, o por sueldo presupuestado único con destino compatible; si no, no se asigna', () => {
   assert.equal(personaDelPago({ amount: 1610000, concept: 'Transferencia ... a Ped' }, LIQ, PPTO), 'DIAZ MORA PEDRO')
   assert.equal(personaDelPago({ amount: 500000, concept: 'Transferencia ... Banco X a Ros' }, LIQ, PPTO), 'Rosa Vega (procuradora)')
