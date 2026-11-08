@@ -1,7 +1,7 @@
 // Pruebas de «Por facturar» (_shared/porFacturar.js) y de la cobertura de cuotas con saldo. Sin nombres de clientes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { clasificarPorFacturar, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
+import { clasificarPorFacturar, cuotasVencidasSinFacturar, cuadreVenta, anticiposSobreCuotas, GRUPOS } from './../supabase/functions/_shared/porFacturar.js'
 import { cuotaTramo } from './../supabase/functions/_shared/saludDatos.js'
 import { cuotasCubiertasVenta, noEmitirDeFilas, cuotaDeLaApp, cuotasSinEmitir } from './../supabase/functions/_shared/ventasReglas.js'
 
@@ -150,4 +150,18 @@ test('Por facturar › Vencida es exactamente el radar «Cuotas vencidas sin fac
   assert.deepEqual(r.filas.filter(f => f.k === 'vencida').map(f => f.id).sort(), radar)
   assert.deepEqual(r.filas.filter(f => f.k === 'porConfirmar').map(f => [f.id, f.motivo]).sort(), [['b1', 'anteriorApp'], ['c1', 'ventaInactiva']])
   assert.equal(r.total, r.grupos.vigente.m + r.grupos.porConfirmar.m + r.grupos.fuera.m)
+})
+
+test('Cuotas vencidas sin facturar: el radar entrega las mismas cuotas que Vencidas; la cubierta por anticipo y la sin movimiento salen', () => {
+  const sales = [venta('A'), venta('B'), venta('C')]
+  const billing = [
+    prog('a1', 'A', '2026-10-01', 1000000), fact('fa', 'A', '2026-10-15', 500000),                       // vencida, su venta se movió
+    prog('b1', 'B', '2026-10-01', 700000),                                                                // cubierta entera por un anticipo
+    prog('c1', 'C', '2026-07-01', 900000)]                                                                // más de 90 días y su venta no se movió
+  const anticipos = [{ id: 'n1', sale_id: 'B', client_id: 'cB', estado: 'disponible', monto: 700000, fecha: '2026-10-05' }]
+  const p = { billing, sales, anticipos, uf: UF, noEmitir: new Set(), hasta: '2026-11-01', hoy: '2026-11-08' }
+  assert.deepEqual(cuotasVencidasSinFacturar(p).map(b => b.id), ['a1'])
+  const r = clasificarPorFacturar({ ...base, hoy: '2026-11-08', billing, sales, anticipos })
+  assert.deepEqual(r.filas.filter(f => f.k === 'vencida').map(f => f.id), ['a1'])
+  assert.deepEqual(r.filas.filter(f => f.id === 'c1').map(f => f.k), ['porConfirmar'])
 })

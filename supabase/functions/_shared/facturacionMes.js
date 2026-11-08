@@ -1,6 +1,7 @@
 // Ciclo del mes de Facturación — FUENTE ÚNICA de las cifras del «Cierre de mes» y de los pasos del ciclo (Vencidas, Emitir, Enviar, Cobrar) de la pantalla
 // Facturación y del Panel de socios. Extraído de BillingView SIN cambiar ninguna fórmula; usa las mismas reglas de ventasReglas.js.
-import { cuotasPorEmitirMes, cuotasSinEmitir, facturaSinEnviar } from './ventasReglas.js'
+import { cuotasPorEmitirMes, facturaSinEnviar } from './ventasReglas.js'
+import { cuotasVencidasSinFacturar } from './porFacturar.js'
 import { montoFactura } from './saludDatos.js'
 
 /**
@@ -21,7 +22,7 @@ export function cicloFacturacionMes(p) {
   const porEnviar = (billing || []).filter(b => !b.deleted_at && facturaSinEnviar(b))
   // Radar «Cuotas vencidas sin facturar»: programadas de meses cerrados (antes del actual), dentro de la vida de la app, de ventas Activas, sin «no corresponde».
   const _m1 = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const sinEmitirCands = cuotasSinEmitir({ billing, sales, anticipos, uf: uf || {}, noEmitir, hasta: _m1 })
+  const sinEmitirCands = cuotasVencidasSinFacturar({ billing, sales, anticipos, uf: uf || {}, noEmitir, hasta: _m1, hoy: `${_m1.slice(0, 8)}${String(now.getDate()).padStart(2, '0')}` })
   const sinEmitirN = sinEmitirCands.length
   const sumM = a => a.reduce((t, b) => t + (b.amount || 0), 0)
   const cobPend = emi.filter(b => sa(b) > 0), porEnvTot = porEnviar.reduce((t, b) => t + mo(b), 0)

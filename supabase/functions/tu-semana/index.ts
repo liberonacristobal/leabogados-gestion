@@ -7,7 +7,8 @@ import { cargarEquipo } from "../_shared/equipo.js";
 import { notariaPorLiquidar, analisisNotaria } from "../_shared/notariaReglas.js";
 import { fgCliente, gastosPorRendirCli } from "../_shared/gastosReglas.js";
 import { dteMontoTotal } from "../_shared/saludDatos.js";
-import { cuotasSinEmitir, trabajosSinFacturar, noEmitirDeFilas } from "../_shared/ventasReglas.js";
+import { trabajosSinFacturar, noEmitirDeFilas } from "../_shared/ventasReglas.js";
+import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 
 // Correo semanal "Tu semana": el ÚNICO correo recurrente de la semana para cada persona (decisión del 26-10-2026), lunes 08:30.
@@ -181,7 +182,7 @@ serve(async (req) => {
       const billingV = (billing||[]).map((b:any)=> mnt[String(b.id)] ? { ...b, dte_xml: mnt[String(b.id)] } : b);
       const noEmitir = noEmitirDeFilas(ne.data||[]);
       const anticiposRaw = (await selectAll(()=>sb.from("anticipos").select("sale_id,monto,estado").order("id"))).data||[];
-      const sinEmitir = cuotasSinEmitir({ billing: billingV, sales: sales2, anticipos: anticiposRaw, uf, noEmitir, hasta: hoyCL.slice(0,7)+"-01" });
+      const sinEmitir = cuotasVencidasSinFacturar({ billing: billingV, sales: sales2, anticipos: anticiposRaw, uf, noEmitir, hasta: hoyCL.slice(0,7)+"-01", hoy: hoyCL });
       const sinFact = primerLunes ? trabajosSinFacturar({ sales: sales2, billing: billingV, uf, ufHoy, hoy: hoyCL, noEmitir, decididos: new Set((dec.data||[]).map((r:any)=>String(r.key))) }) : [];
       // Cobrado la semana pasada (lunes a domingo) a caja: conciliación a factura o anticipo por fecha del depósito, sin internos (como Inicio).
       const abId: Record<string,string> = {}; (abs.data||[]).forEach((m:any)=>{ if (m.es_interno!==true) abId[String(m.id)] = String(m.fecha||"").slice(0,10) });

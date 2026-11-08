@@ -13,7 +13,7 @@ Referencia de la revisión automática de coherencia (auditoría del 07-11-2026)
 | Pagada (estado) | «Pagada» solo para el estado de la factura | `cobradoBill` | Unificar «Pagado/Cobrado» |
 | Vendido | «Vendido» (Activo + Terminado, sin subarriendo) | `metricasAnio` / `ventaCuentaEnAnio` | Reporte y ficha cuentan ventas pausadas; copia del filtro en Inteligencia |
 | Por facturar | «Por facturar» = vigente de `clasificarPorFacturar` | `clasificarPorFacturar` | — (el KPI del hub ya lee `clasificarPorFacturar().total`) |
-| Cuotas vencidas sin facturar | «Cuotas vencidas sin facturar» | `cuotasSinEmitir` (radar) y `clasificarPorFacturar` › Vencidas | Flujo, Inicio y página Por facturar leen Vencidas (sin las cubiertas por anticipo ni las sin movimiento); el radar, el cierre y los correos cuentan además esas, por eso son algo mayores |
+| Cuotas vencidas sin facturar | «Cuotas vencidas sin facturar» | `cuotasVencidasSinFacturar` (= Vencidas de `clasificarPorFacturar`) | Los totales por monto de la cuota difieren de Inicio en lo cubierto en parte por anticipo (Inicio lo descuenta) |
 | Flujo de caja neto 8 semanas | «Flujo de caja (8 semanas)» + escenario | `useFlujoCaja` | Escenario por navegador (pasar a preferencia del estudio) |
 | Proyección al 31-12 | «Cobranza proyectada al 31-12» + escenario | `proyeccionCobranza` | Sin rótulo del escenario |
 | Comisiones por pagar | «Comisiones por pagar» | `saldoComisiones.porPagar` | — |
