@@ -28,8 +28,12 @@ export function useGuardarProyeccion(F) {
 
 export function useControlProyeccion({ F, sales, billing, terceros, costosOfiRows, expenses, clients, anticipos }) {
   const hoy = hoyCL()
-  const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: Number(hoy.slice(0, 4)) })
-  const cobros = useMemo(() => { const ing = R.ingresosPorAnioVenta || {}; return [...Object.values(ing.listByYear || {}).flat(), ...(ing.sinList || [])].filter(it => it && it.paid_at).map(it => ({ fecha: String(it.paid_at).slice(0, 10), monto: Number(it._cobrado) || 0 })) }, [R])
+  const anioHoy = Number(hoy.slice(0, 4))
+  const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: anioHoy })
+  // En enero la semana cerrada puede ser de diciembre: sus cobros están en el año anterior (el cobrado se arma por año del depósito).
+  const Rant = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: Number(hoy.slice(5, 7)) === 1 ? anioHoy - 1 : anioHoy })
+  const cobros = useMemo(() => { const de = (/** @type {any} */ r) => { const ing = r.ingresosPorAnioVenta || {}; return [...Object.values(ing.listByYear || {}).flat(), ...(ing.sinList || [])].filter((/** @type {any} */ it) => it && it.paid_at).map((/** @type {any} */ it) => ({ fecha: String(it.paid_at).slice(0, 10), monto: Number(it._cobrado) || 0, id: it.id })) }
+    const vistos = new Set(); return [...de(R), ...(Rant === R ? [] : de(Rant))].filter(c => { if (vistos.has(c.id)) return false; vistos.add(c.id); return true }) }, [R, Rant])
   const [snaps, setSnaps] = useState([])
   // En la demo se siembran dos semanas de ejemplo, cerca de lo cobrado en ellas, para mostrar el control.
   const demo = useMemo(() => { if (!DEMO) return null; const out = []

@@ -3752,7 +3752,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const mon=new Date(d0); mon.setDate(d0.getDate()-((d0.getDay()+6)%7))
   const tD=s=>{ const t=new Date(String(s||'').slice(0,10)+'T12:00:00').getTime(); return isNaN(t)?null:t }
   const hoyT=d0.getTime(), monT=mon.getTime()
-  const wIdx=t=>t<monT?0:Math.floor((t-monT)/(7*DAY))
+  const wIdx=t=>t<monT?0:Math.floor((t-monT+2*3600000)/(7*DAY))   // +2 h: el cambio de hora de Chile hace que un lunes a las 12:00 quede 1 h antes de los 7 días exactos y caiga en la semana anterior
   const med=a=>{ if(!a.length) return null; const x=[...a].sort((p,q)=>p-q), m=Math.floor(x.length/2); return x.length%2?x[m]:(x[m-1]+x[m])/2 }
   const curYm=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,'0')}`
   const vivas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso')
