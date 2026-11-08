@@ -195,6 +195,18 @@ serve(async (req) => {
     const abgDe = (v: any) => v.responsible || (clients || []).find((c: any) => String(c.id) === String(v.client_id))?.abogado_responsable || "";
     const APP = "https://gestion.leabogados.cl";
 
+    // Procesos automáticos que fallaron en la semana, aunque hoy estén bien (la vigilancia solo avisa tras 6 fallos seguidos y los borra al sanar).
+    // Solo para quien recibe los avisos de la vigilancia (learnings config 'vigilancia_avisar_a').
+    const [corridasFalla, catalogo, cfgVig] = await Promise.all([
+      selectAll(() => sb.from("procesos_corridas").select("jobname,lanzado_at,estado").in("estado", ["error", "sin_respuesta"]).gte("lanzado_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("lanzado_at")),
+      sb.from("procesos_catalogo").select("jobname,nombre"),
+      sb.from("learnings").select("value").eq("kind", "config").eq("key", "vigilancia_avisar_a"),
+    ]);
+    const avisarFallas = String(cfgVig.data?.[0]?.value || "").split(/[,;\s]+/).map((x: string) => x.trim().toLowerCase()).filter(Boolean);
+    const nomProceso = new Map((catalogo.data || []).map((c: { jobname: string; nombre: string }) => [c.jobname, c.nombre]));
+    const fallasSemana = new Map<string, { n: number; ult: string }>();
+    for (const c of corridasFalla.data || []) { if (c.jobname === "vigilancia-procesos-diario") continue; const f = fallasSemana.get(c.jobname) || { n: 0, ult: "" }; f.n++; f.ult = String(c.lanzado_at); fallasSemana.set(c.jobname, f); }
+
     for (const adm of ADMINS) {
       const nombres = [adm.name, ...adm.alt];
       // Tareas del admin
@@ -274,6 +286,13 @@ serve(async (req) => {
         const filaS = (x: any) => rowT(`<b style="color:${A}">${esc(cname(x.v.client_id) || "Cliente")}</b> &mdash; ${esc(x.v.title || "Trabajo")} &middot; sin movimiento desde ${fmtFecha(x.h.prueba?.ult || "")}`, fm(Number(x.h.monto) || 0), RED);
         const chip = [term.length ? `${term.length} por cerrar` : "", saldo.length ? `${saldo.length} con saldo` : ""].filter(Boolean).join(" &middot; ");
         bloques.push(sec("#FFF8E1", svgIco(AMB, ICO_PROY), "Trabajos sin movimiento", chip, AMB, term.map(filaT).join("") + saldo.map(filaS).join("") + (saldo.length ? `<a href="${APP}/?ir=cobranza" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver en Cobranza &rsaquo;</a>` : "")));
+      }
+
+      // 7) Procesos automáticos con fallas en la semana (solo quien recibe los avisos de la vigilancia).
+      if (fallasSemana.size && avisarFallas.includes(String(adm.email || "").toLowerCase())) {
+        const lista = [...fallasSemana.entries()].sort((a, b) => b[1].n - a[1].n);
+        const filas = lista.slice(0, 6).map(([job, f]) => rowT(`<b style="color:${A}">${esc(String(nomProceso.get(job) || job))}</b>`, `${f.n} falla${f.n !== 1 ? "s" : ""} &middot; &uacute;ltima ${fmtFecha(f.ult.slice(0, 10))}`, RED)).join("");
+        bloques.push(sec("#FBEBEA", svgIco(RED, ICO_TAREAS), "Procesos autom&aacute;ticos", `${lista.length} con fallas esta semana`, RED, filas + (lista.length > 6 ? `<div style="font-size:11px;color:${MUT};padding:4px 0;">y ${lista.length - 6} m&aacute;s</div>` : "") + `<a href="${APP}/?ir=procesos" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver Procesos autom&aacute;ticos &rsaquo;</a>`));
       }
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
