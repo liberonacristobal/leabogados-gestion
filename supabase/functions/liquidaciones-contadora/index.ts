@@ -6,7 +6,7 @@
 // (texto de un PDF, para revisar el formato). body.dryRun = no guarda.
 // Auth: CRON_SECRET o usuario del dominio. verify_jwt=false.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
-import { liquidacionesVigentes, cotizacionesProvisorias } from "../_shared/liquidacionesReglas.js";
+import { liquidacionesVigentes, cotizacionesProvisorias, mismaPersona, personaDelPago, presupuestoDesdeLiquidaciones } from "../_shared/liquidacionesReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -123,9 +123,50 @@ Deno.serve(async (req) => {
         await sb(`oficina_costos_mensual?estudio_id=eq.lea&anio=eq.${Y}&mes=eq.${M}`, { method: "PATCH", body: JSON.stringify({ cotizaciones: est.cotizaciones, nota, updated_at: new Date().toISOString() }) });
         provisorias.push({ periodo: per, cotizaciones: est.cotizaciones, trabajador: est.trabajador, empleador: est.empleador });
       }
+      // Con las liquidaciones del mes: (1) cada pago de sueldo del banco queda con su persona cuando el monto lo identifica sin duda (líquido exacto de una sola
+      // liquidación, o sueldo presupuestado único con destino compatible); (2) el presupuesto de oficina por persona sigue a la última liquidación, con vigencia
+      // desde ese mes. Cada cambio queda en learnings (sueldo_persona_reasignada / presupuesto_desde_liquidacion) para poder revisarlo.
+      const reasignados: Record<string, unknown>[] = [], presupuesto: Record<string, unknown>[] = [];
+      const guardar = async (kind: string, key: string, value: unknown) => {
+        const ya = await (await sb(`learnings?kind=eq.${kind}&key=eq.${encodeURIComponent(key)}&select=id&limit=1`)).json();
+        if (ya[0]) await sb(`learnings?id=eq.${ya[0].id}`, { method: "PATCH", body: JSON.stringify({ value: JSON.stringify(value) }) });
+        else await sb("learnings", { method: "POST", body: JSON.stringify({ kind, key, value: JSON.stringify(value) }) });
+      };
+      if (!body.dryRun && out.length) {
+        const ofi = (await (await sb("clients?or=(is_internal.eq.true,name.ilike.*liberona escala*)&select=id&limit=1")).json())[0];
+        const filasPpto = ((await (await sb("costos_oficina?estudio_id=eq.lea&select=id,categoria,item,monto,monto_prev,desde,activo,es_ingreso")).json()) as { id: string; categoria: string; item: string; monto: number; monto_prev: number | null; desde: string | null; activo: boolean | null; es_ingreso: boolean }[]).filter((f) => f.activo !== false && !f.es_ingreso);
+        const etiquetas = [...new Set(((await (await sb("expenses?category=in.(Sueldos,Bono)&deleted_at=is.null&select=subcategory&limit=2000")).json()) as { subcategory: string | null }[]).map((e) => String(e.subcategory || "").trim()).filter(Boolean))];
+        const mesSig = (per: string) => { const [y, m] = per.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
+        for (const per of [[...new Set(out.map((f) => String(f.periodo)))].sort().pop() as string]) {   // solo el mes más reciente leído: lo anterior ya se revisó
+          const liqMes = out.filter((f) => f.periodo === per) as { persona: string; imponible: number; cotizaciones: number; impuesto_unico: number }[];
+          if (ofi) {   // pagos hechos entre el día 11 del mes y el 10 del siguiente corresponden a ese mes trabajado
+            const pagos = (await (await sb(`expenses?client_id=eq.${ofi.id}&type=eq.gasto&category=eq.Sueldos&deleted_at=is.null&date=gte.${per}-11&date=lte.${mesSig(per)}-10&select=id,date,amount,subcategory,concept`)).json()) as { id: string; date: string; amount: number; subcategory: string | null; concept: string | null }[];
+            for (const pago of pagos) {
+              const persona = personaDelPago({ amount: Number(pago.amount), concept: pago.concept || "" }, liqMes, filasPpto.filter((f) => f.categoria === "Remuneraciones"));
+              if (!persona) continue;
+              const cand = etiquetas.filter((l) => mismaPersona(l, persona)); if (cand.length !== 1) continue;
+              if (String(pago.subcategory || "").trim() === cand[0]) continue;
+              await sb(`expenses?id=eq.${pago.id}`, { method: "PATCH", body: JSON.stringify({ subcategory: cand[0] }) });
+              await guardar("sueldo_persona_reasignada", String(pago.id), { fecha: pago.date, monto: pago.amount, de: pago.subcategory, a: cand[0], periodo: per });
+              reasignados.push({ fecha: pago.date, monto: pago.amount, de: pago.subcategory, a: cand[0] });
+            }
+          }
+        }
+        const ultimo = [...new Set(out.map((f) => String(f.periodo)))].sort().pop() as string;
+        const [uY, uM] = ultimo.split("-").map(Number), pY = uM === 1 ? uY - 1 : uY, pM = uM === 1 ? 12 : uM - 1;
+        const liqUlt = out.filter((f) => f.periodo === ultimo) as { persona: string; imponible: number; cotizaciones: number; impuesto_unico: number }[];
+        const prevPlan = await (await sb(`oficina_costos_mensual?estudio_id=eq.lea&anio=eq.${pY}&mes=eq.${pM}&select=estimado,cotizaciones`)).json();
+        const liqPrev = await (await sb(`remuneraciones_tributables?estudio_id=eq.lea&periodo=eq.${pY}-${String(pM).padStart(2, "0")}&select=imponible,cotizaciones`)).json();
+        const tasa = prevPlan[0] && !prevPlan[0].estimado && liqPrev.length === liqUlt.length ? cotizacionesProvisorias({ mes: liqUlt, previo: liqPrev, cotizPrevReal: Number(prevPlan[0].cotizaciones) })?.tasaEmpleador ?? null : null;
+        for (const u of presupuestoDesdeLiquidaciones({ periodo: ultimo, liquidaciones: liqUlt, tasaEmpleador: tasa, filas: filasPpto })) {
+          await sb(`costos_oficina?id=eq.${u.id}`, { method: "PATCH", body: JSON.stringify({ monto: u.monto, monto_prev: u.monto_prev, desde: u.desde, updated_at: new Date().toISOString() }) });
+          await guardar("presupuesto_desde_liquidacion", `${u.id}|${ultimo}`, { categoria: u.categoria, item: u.item, antes: u.antes, ahora: u.monto, desde: u.desde });
+          presupuesto.push({ categoria: u.categoria, item: u.item, antes: u.antes, ahora: u.monto, desde: u.desde });
+        }
+      }
       const porMes: Record<string, { personas: number; impuesto_unico: number }> = {};
       for (const f of out) { const k = String(f.periodo); porMes[k] = porMes[k] || { personas: 0, impuesto_unico: 0 }; porMes[k].personas++; porMes[k].impuesto_unico += Number(f.impuesto_unico) || 0; }
-      return json({ ok: true, dryRun: !!body.dryRun, correos: (lista.messages || []).length, liquidaciones: out.length, porMes, provisorias, errores });
+      return json({ ok: true, dryRun: !!body.dryRun, correos: (lista.messages || []).length, liquidaciones: out.length, porMes, provisorias, reasignados, presupuesto, errores });
     }
     if (body.accion === "muestra") {
       const H = { Authorization: `Bearer ${await token()}` };
