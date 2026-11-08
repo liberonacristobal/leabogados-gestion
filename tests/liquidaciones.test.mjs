@@ -1,14 +1,14 @@
-// Liquidaciones de la contadora: la corregida (correo más reciente) reemplaza a la original. Casos sin nombres reales.
+// Liquidaciones de la contadora: la corregida (correo más reciente) reemplaza a la original. Casos con cifras ficticias, sin nombres ni sueldos reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { liquidacionesVigentes } from '../supabase/functions/_shared/liquidacionesReglas.js'
+import { liquidacionesVigentes, cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
 
 const L = (periodo, persona, imponible, _t) => ({ periodo, persona, imponible, _t })
 
 test('la corregida (correo posterior) reemplaza a la original, venga en el orden que venga', () => {
-  const orig = L('2026-10', 'PERSONA UNO', 2969115, 1000), corr = L('2026-10', 'PERSONA UNO', 3710375, 2000)
-  assert.equal(liquidacionesVigentes([orig, corr])[0].imponible, 3710375)
-  assert.equal(liquidacionesVigentes([corr, orig])[0].imponible, 3710375)   // Gmail entrega primero el más reciente
+  const orig = L('2026-10', 'PERSONA UNO', 3000000, 1000), corr = L('2026-10', 'PERSONA UNO', 4000000, 2000)
+  assert.equal(liquidacionesVigentes([orig, corr])[0].imponible, 4000000)
+  assert.equal(liquidacionesVigentes([corr, orig])[0].imponible, 4000000)   // Gmail entrega primero el más reciente
 })
 
 test('una por período y persona, ordenadas, y sin el campo auxiliar', () => {
@@ -21,21 +21,19 @@ test('sin filas o con basura no falla', () => {
   assert.deepEqual(liquidacionesVigentes([]), []); assert.deepEqual(liquidacionesVigentes(null), [])
 })
 
-import { cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
+const previo = [{ imponible: 3000000, cotizaciones: 540000 }, { imponible: 2000000, cotizaciones: 360000 }, { imponible: 3000000, cotizaciones: 540000 }]
 
 test('cotizaciones provisorias: trabajador del mes + parte del empleador del mes real anterior, proporcional al imponible', () => {
-  const previo = [{ imponible: 2969115, cotizaciones: 590607 }, { imponible: 2066736, cotizaciones: 383326 }, { imponible: 2969115, cotizaciones: 578290 }]
-  const mes = [{ imponible: 3931402, cotizaciones: 676208 }, { imponible: 2066736, cotizaciones: 384043 }, { imponible: 3931402, cotizaciones: 676208 }]
-  const r = cotizacionesProvisorias({ mes, previo, cotizPrevReal: 2123762 })
-  assert.equal(r.trabajador, 1736459)
-  assert.ok(Math.abs(r.cotizaciones - 2445409) <= 1)
-  assert.ok(Math.abs(r.tasaEmpleador - 0.0714) < 0.0001)
+  const mes = [{ imponible: 4000000, cotizaciones: 700000 }, { imponible: 2000000, cotizaciones: 360000 }, { imponible: 4000000, cotizaciones: 700000 }]
+  const r = cotizacionesProvisorias({ mes, previo, cotizPrevReal: 2000000 })   // empleador anterior = 2.000.000 − 1.440.000 = 560.000 sobre 8.000.000 (7 %)
+  assert.equal(r.trabajador, 1760000)
+  assert.equal(r.cotizaciones, 2460000)                                         // 1.760.000 + 7 % de 10.000.000
+  assert.ok(Math.abs(r.tasaEmpleador - 0.07) < 1e-9)
 })
 
-test('cotizaciones provisorias: mismo imponible que el mes real reproduce ese mes (agosto con septiembre, $3.568)', () => {
-  const sep = [{ imponible: 2969115, cotizaciones: 590607 }, { imponible: 2066736, cotizaciones: 383326 }, { imponible: 2969115, cotizaciones: 578290 }]
-  const ago = [{ imponible: 2969115, cotizaciones: 589452 }, { imponible: 2066736, cotizaciones: 382634 }, { imponible: 2969115, cotizaciones: 573511 }]
-  assert.equal(Math.abs(cotizacionesProvisorias({ mes: ago, previo: sep, cotizPrevReal: 2123762 }).cotizaciones - 2120704), 3568)
+test('cotizaciones provisorias: con el mismo imponible que el mes real reproduce ese mes con poca diferencia', () => {
+  const otro = [{ imponible: 3000000, cotizaciones: 535000 }, { imponible: 2000000, cotizaciones: 360000 }, { imponible: 3000000, cotizaciones: 535000 }]
+  assert.equal(Math.abs(cotizacionesProvisorias({ mes: otro, previo, cotizPrevReal: 2000000 }).cotizaciones - 1995000), 5000)
 })
 
 test('cotizaciones provisorias: sin datos del mes anterior o con una cotización real menor que la del trabajador no inventa', () => {
