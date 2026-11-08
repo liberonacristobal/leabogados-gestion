@@ -63,17 +63,17 @@ export function cuadreVenta(s, bs, uf) {
  * reembolsos de gastos) en cuatro partidas que suman el total. Orden de prioridad, de lo más a lo menos explicado:
  *  fuera (pausada · cubierta por factura · «No corresponde» · cubierta por anticipo) → por confirmar (saldo de una cuota cubierta en parte; vence hace más
  *  de `dias` y su venta no se movió en ese plazo) → vencida (la del radar «Cuotas vencidas sin facturar»; si venció pero el radar no la cuenta —anterior a la app, trabajo sin iniciar, venta no activa— queda por confirmar) → por vencer (el mes en curso y lo que viene, recurrentes incluidas).
- * `anio` limita la tarjeta al año de vencimiento, igual que el filtro de año de Facturación (la cobertura de cada venta sigue mirando todas sus facturas).
- * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string, anio?:string, hasta?:string}} p
+ * `anio` y `mesAnio` ('01'..'12') limitan la tarjeta al año y mes de vencimiento, igual que los filtros de Facturación (la cobertura de cada venta sigue mirando todas sus facturas).
+ * @param {{billing:any[], sales:any[], anticipos:any[], uf:Record<string,number>, noEmitir:Set<string>, yaFacturadas?:Set<string>, hoy:string, dias?:number, socioDe?:(b:any)=>string, anio?:string, mesAnio?:string, hasta?:string}} p
  */
-export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir, yaFacturadas = new Set(), hoy, dias = POR_CONFIRMAR_DIAS, socioDe, anio = '', hasta = '' }) {
+export function clasificarPorFacturar({ billing, sales, anticipos, uf, noEmitir, yaFacturadas = new Set(), hoy, dias = POR_CONFIRMAR_DIAS, socioDe, anio = '', mesAnio = '', hasta = '' }) {
   const vivas = (billing || []).filter(b => b && !b.deleted_at)
   const venta = new Map((sales || []).filter(s => s && !s.deleted_at).map(s => [String(s.id), s]))
   const lim = new Date(_t(hoy) - dias * 86400000).toISOString().slice(0, 10), mes = hoy.slice(0, 7)
   const cub = cuotasCubiertasVenta(vivas, sales, uf)
   // «Vencida» = exactamente el radar «Cuotas vencidas sin facturar» (cuotasSinEmitir): una sola regla para Facturación, flujo, Inicio y correos.
   const radar = new Set(cuotasSinEmitir({ billing: /** @type {any} */ (vivas), sales: /** @type {any} */ (sales || []), anticipos: /** @type {any} */ (anticipos || []), uf: uf || {}, noEmitir: noEmitir || new Set(), hasta: hasta || mes + '-01' }).map(b => String(b.id)))
-  const tarjeta = vivas.filter(b => (b.billing_type || '') !== 'reembolso' && !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)) && (!anio || String(b.due || '').slice(0, 4) === String(anio)))
+  const tarjeta = vivas.filter(b => (b.billing_type || '') !== 'reembolso' && !b.invoice_no && !['Pagado', 'Anulada', 'Anticipada'].includes(b.status) && !yaFacturadas.has(String(b.id)) && (!anio || String(b.due || '').slice(0, 4) === String(anio)) && (!mesAnio || String(b.due || '').slice(5, 7) === String(mesAnio)))
   const { cubierto } = anticiposSobreCuotas({ cuotas: tarjeta.filter(b => b.status === 'Programada'), anticipos,
     excluir: b => !!(noEmitir && noEmitir.has(String(b.id))) || !!(cub.get(String(b.id)) || {}).total })
   /** ¿Se movió la venta (factura emitida o pagada, o anticipo) en el plazo? Si sí, una cuota vieja es un olvido por emitir, no algo por confirmar. */
