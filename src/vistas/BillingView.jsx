@@ -1,5 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
-import { clasificarPorFacturar } from '../../supabase/functions/_shared/porFacturar.js'
+import { clasificarPorFacturar, cuotasVencidasSinFacturar } from '../../supabase/functions/_shared/porFacturar.js'
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
@@ -8,7 +8,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.js'
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, cuotasSinEmitir, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
 import { ajustarTrato, cuerpoVariasFacturas, lineasTrabajos, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
@@ -117,13 +117,13 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   const dReal = b => String(b.due||b.issued_at||'').slice(0,10)
   const _qMes=_normTxt(qMes.trim()), _qMesD=qMes.replace(/[^0-9kK]/g,'').toLowerCase()
   const matchQ = b => !_qMes || _normTxt(clients.find(x=>x.id===b.client_id)?.name).includes(_qMes) || _normTxt(b.concept).includes(_qMes) || _normTxt(rsDe(b)).includes(_qMes) || (_qMesD.length>=3&&String(folioN(b.invoice_no)||'').includes(_qMesD)) || (_qMesD.length>=4&&String(b.receptor_rut||'').replace(/[^0-9kK]/g,'').toLowerCase().includes(_qMesD))
-  // Misma regla que el radar «Cuotas vencidas sin facturar» (cuotasSinEmitir): lo atrasado es lo del radar (venta activa que ya
+  // Misma regla que el radar «Cuotas vencidas sin facturar» (cuotasVencidasSinFacturar): lo atrasado es lo del radar (venta activa que ya
   // factura, dentro de la vida de la app, no cubierta por lo facturado, no marcada «No corresponde»); lo del mes, sin ventas
   // terminadas, ni marcadas «No corresponde», ni cubiertas. Antes contaba todo lo programado vencido (cuotas de 2025 y silenciadas).
   const noEmitirCk=useNoEmitirSet()
   const ckFuera=useMemo(()=>{ const cub=cuotasCubiertasVenta(billing,sales), st={}; (sales||[]).forEach(s=>{ if(!s.deleted_at) st[String(s.id)]=s.status })
     return b=>(b.sale_id&&st[String(b.sale_id)]&&st[String(b.sale_id)]!=='Activo')||(noEmitirCk&&noEmitirCk.has(String(b.id)))||!!cub.get(String(b.id))?.total },[billing,sales,noEmitirCk])
-  const ckAtrasadas=useMemo(()=>new Set(cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart}).map(b=>String(b.id))),[billing,sales,anticipos,noEmitirCk,refStart])
+  const ckAtrasadas=useMemo(()=>new Set(cuotasVencidasSinFacturar({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirCk||new Set(),hasta:refStart,hoy:isoLocal(Date.now())}).map(b=>String(b.id))),[billing,sales,anticipos,noEmitirCk,refStart])
   const porEmitir = cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey,uf:ufFechaCache()||{}}).filter(matchQ)   // misma regla que la foto de Facturación (ventasReglas)
   // Si se mira otro mes y el mes en curso tiene cuotas por emitir, se avisa (cuántas) con el salto al mes en curso.
   const nMesActual = mesKey!==mesActualKey ? cuotasPorEmitirMes({billing,sales,anticipos,fantasmaIds,noEmitir:noEmitirCk||new Set(),mesKey:mesActualKey,uf:ufFechaCache()||{}}).length : 0
@@ -3939,7 +3939,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
           const saleById={}; (sales||[]).forEach(s=>{ saleById[String(s.id)]=s })
           const MN3=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
           const mesLbl=d=>{ const m=String(d||'').slice(0,7).match(/^(\d{4})-(\d\d)$/); return m?`${MN3[+m[2]-1]} ${m[1].slice(2)}`:'' }
-          const cands=cuotasSinEmitir({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1})
+          const cands=cuotasVencidasSinFacturar({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1,hoy:isoLocal(Date.now())})
           const recib=recibidoACuenta(cands,anticipos,sales)
           const sinPrim=cuotasSinPrimeraFactura({billing,sales,anticipos,uf:ufFechaCache()||{},noEmitir:noEmitirSet,hasta:m1}).sort((x,y)=>String(x.due).localeCompare(String(y.due)))
           const sinPrimOpen=openClients.has('__sinprimera'), sinPrimTot=sinPrim.reduce((a,b)=>a+(b.amount||0),0)

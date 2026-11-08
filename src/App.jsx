@@ -54,7 +54,8 @@ import { pendientesPorCliente, nClientesConPendientes } from '../supabase/functi
 import { crearConsultas, resolverConIA } from '../supabase/functions/_shared/consultasCopiloto.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../supabase/functions/_shared/ventaGastoReglas.js'
 import { cuadreVenta } from '../supabase/functions/_shared/porFacturar.js'
-import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, cuotasSinEmitir, recibidoACuenta, noEmitirDeFilas } from '../supabase/functions/_shared/ventasReglas.js'
+import { cuotasVencidasSinFacturar } from '../supabase/functions/_shared/porFacturar.js'
+import { ventasFacturando, coberturaVenta, trabajosSinFacturar, trabajosDetenidos, cuotasCubiertasVenta as _cuotasCubiertasVenta, recibidoACuenta, noEmitirDeFilas } from '../supabase/functions/_shared/ventasReglas.js'
 import { desescaparXml } from '../supabase/functions/_shared/xmlTexto.js'
 import logoBlanco from './le-logo-blanco.png'
 import { RendicionModal, DevolucionEmailModal, RendicionEmailModal, rendicionPdfBase64, liquidacionPdfBase64 } from './lib/rendiciones.jsx'
@@ -5530,7 +5531,7 @@ ${brief()}`
             return { docs:d.data||[], vistasReclamo:new Set((v1.data||[]).map(r=>String(r.key))), vistasObservadas:new Set((v2.data||[]).map(r=>String(r.key))) } },
           analisisNotaria, notariaPorLiquidar, calendarioDeCliente, causasActivas, estadoCausa:_estadoCausa,
           leerResultado: async () => { const t0=Date.now(); while(Date.now()-t0<10000){ const r=leerResultadoInicio(); if(r&&r.at>=abiertoEn) return r; await new Promise(f=>setTimeout(f,250)) } return leerResultadoInicio() },   // espera a que Inicio (visible u oculto) publique el cálculo de este momento
-          calcCuotasSinEmitir: async () => cuotasSinEmitir({ billing, sales, anticipos, uf, noEmitir:DEMO?new Set():noEmitirDeFilas((await supabase.from('learnings').select('kind,key').in('kind',['cuota_no_emitir','cuota_postergada'])).data), hasta:hoyCL.slice(0,8)+'01' }),
+          calcCuotasSinEmitir: async () => cuotasVencidasSinFacturar({ billing, sales, anticipos, uf, noEmitir:DEMO?new Set():noEmitirDeFilas((await supabase.from('learnings').select('kind,key').in('kind',['cuota_no_emitir','cuota_postergada'])).data), hasta:hoyCL.slice(0,8)+'01', hoy:hoyCL }),
           calcTrabajosSinFacturar: async () => trabajosSinFacturar({ sales, billing, uf, ufHoy, hoy:hoyCL, noEmitir:await aprendidos('cuota_no_emitir'), decididos:await aprendidos('trabajo_sin_facturar') }) })
         const reglas = `\n\nCIFRAS: para cualquier monto por cliente, por cobrar, vencido, facturas o tareas vencidas USA las herramientas; nunca escribas un monto que no venga de una herramienta, y copia los montos tal como los devuelve. Para «dónde está / cómo hago algo» usa donde_esta y nunca nombres una pantalla que la herramienta no devolvió. Si no hay herramienta para lo que piden, dilo en una frase y sugiere en qué vista mirarlo. El desglose se muestra solo en una tarjeta: no repitas la tabla, responde el resultado en 1 o 2 frases.`
         const r = await resolverConIA({ llamar:b=>claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:700,...b}), sistema:sys+reglas, mensajes:msgs, ejecutar })

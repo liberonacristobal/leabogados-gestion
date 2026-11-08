@@ -14,7 +14,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { selectAll } from "../_shared/paginar.js";
 import { cargarEquipo, sinTildes } from "../_shared/equipo.js";
-import { cuotasSinEmitir, noEmitirDeFilas } from "../_shared/ventasReglas.js";
+import { noEmitirDeFilas } from "../_shared/ventasReglas.js";
+import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
@@ -116,12 +117,12 @@ serve(async (req) => {
     const vencido = cartera.vencido;
     const porEnviar = vivos.filter((b: Record<string, unknown>) => b.dte_track_id && !b.email_sent_at && ["Pendiente", "Vencido"].includes(b.status as string)).length;
 
-    // ── RADAR: cuotas vencidas sin facturar (regla única cuotasSinEmitir, la misma de Facturación y del cierre de mes). Candidatas
+    // ── RADAR: cuotas vencidas sin facturar (regla única cuotasVencidasSinFacturar, la misma de Facturación y del cierre de mes). Candidatas
     // por revisar: el titular es el conteo, nunca "$ perdidos".
     const firstOfMonth = todayCL.slice(0, 7) + "-01";
     const noEmitir = noEmitirDeFilas((noEmitirRaw || []) as { kind?: string; key: unknown }[]);
     const uf = Object.fromEntries((ufRaw || []).map((r: Record<string, unknown>) => [String(r.fecha), Number(r.valor)]));
-    const sinEmitirN = cuotasSinEmitir({ billing: vivos, sales: salesRaw || [], anticipos: anticiposRaw || [], uf, noEmitir, hasta: firstOfMonth }).length;
+    const sinEmitirN = cuotasVencidasSinFacturar({ billing: vivos, sales: salesRaw || [], anticipos: anticiposRaw || [], uf, noEmitir, hasta: firstOfMonth, hoy: todayCL }).length;
 
     // ── COBRANZA a caja del año + semana (plano abono/conciliación) y META (annual_targets).
     const year = todayCL.slice(0, 4);

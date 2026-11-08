@@ -2,7 +2,7 @@
 // Día 6 de cada mes: un solo correo a los socios con lo que falta para CERRAR el mes anterior, con enlace a cada cosa.
 // Reemplaza el aviso «Cuotas sin facturar» del día 6 (misma regla de cuotas olvidadas: solo trabajos que ya facturan).
 // Secciones (cada una con la misma definición que ya usa la app o los correos existentes):
-//   1. Cuotas vencidas sin facturar: el radar de Facturación (regla única cuotasSinEmitir de _shared/ventasReglas.js), hasta el
+//   1. Cuotas vencidas sin facturar: el radar de Facturación (regla única cuotasVencidasSinFacturar de _shared/porFacturar.js), hasta el
 //      fin del mes que se cierra: incluye las cuotas del mes que no se emitieron y las de meses anteriores aún abiertas.
 //   2. Facturas del mes por cobrar: emitidas en el mes con saldo (montoFactura − máx(paid_amount, conciliado en banco)), como Cierre de mes.
 //   3. Banco por conciliar: abonos y cargos del mes en estado «pendiente» (Banco › Conciliación).
@@ -16,7 +16,8 @@
 import { SMTPClient } from "../_shared/envios.ts";
 import { montoFactura } from "../_shared/saludDatos.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
-import { cuotasSinEmitir, recibidoACuenta, noEmitirDeFilas, cuotaSaltada } from "../_shared/ventasReglas.js";
+import { recibidoACuenta, noEmitirDeFilas, cuotaSaltada } from "../_shared/ventasReglas.js";
+import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
 import { fgCliente, gastosPorRendirCli, grupoRendir } from "../_shared/gastosReglas.js";
 import { notariaPorLiquidar } from "../_shared/notariaReglas.js";
 
@@ -92,13 +93,13 @@ Deno.serve(async (req) => {
     return null;
   };
 
-  // 1) Cuotas vencidas sin facturar: el radar de Facturación hasta el fin del mes que se cierra (regla única cuotasSinEmitir).
+  // 1) Cuotas vencidas sin facturar: el radar de Facturación hasta el fin del mes que se cierra (regla única cuotasVencidasSinFacturar).
   // Atraso en meses contado al mes siguiente al que se cierra (el correo sale el día 6): una cuota del mes cerrado lleva 1 mes.
   const nmNow = (+per.slice(0, 4)) * 12 + (+per.slice(5, 7)) + 1;
   const atrasoMeses = (due: string) => { const p = String(due || "").slice(0, 7).split("-"); if (p.length < 2 || !p[0] || !p[1]) return 0; return Math.max(0, nmNow - ((+p[0]) * 12 + (+p[1]))); };
   const uf = Object.fromEntries(ufRows.map((r) => [String(r.fecha), Number(r.valor)]));
   const anticiposTodos = await sbAll("anticipos?select=sale_id,monto,estado");
-  const radar = cuotasSinEmitir({ billing: bills, sales, anticipos: anticiposTodos, uf, noEmitir: noEmitirDeFilas(noEmitirRows), hasta });
+  const radar = cuotasVencidasSinFacturar({ billing: bills, sales, anticipos: anticiposTodos, uf, noEmitir: noEmitirDeFilas(noEmitirRows), hasta, hoy: hasta });
   const recib = radar.length ? recibidoACuenta(radar, await sbAll(`anticipos?select=sale_id,monto,estado&estado=eq.disponible&sale_id=in.(${[...new Set(radar.map((b) => String(b.sale_id)))].join(",")})`), sales) : new Map();
   const olv = radar.sort((a, b) => String(a.due).localeCompare(String(b.due))).map((b) => {
     const x = cuotaN(b.concept); const s = saleById.get(String(b.sale_id)); const c = cliById.get(String(b.client_id)); const e = entOf(b);

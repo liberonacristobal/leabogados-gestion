@@ -2,7 +2,8 @@
 // No inventa criterios: cada tipo sale de la función que usa su propia vista. Un pendiente desaparece solo cuando su regla deja de
 // detectarlo (se emitió, se cobró, se imputó), nunca por marcarlo a mano; lo decidido («No corresponde», «No se emitirá») ya no cuenta.
 // Funciones puras. esVencida y saldoBill se inyectan porque viven en la app (dependen del respaldo bancario cargado).
-import { cuotasSinEmitir, estadoPagoVenta, APP_DESDE } from './ventasReglas.js'
+import { estadoPagoVenta, APP_DESDE } from './ventasReglas.js'
+import { cuotasVencidasSinFacturar } from './porFacturar.js'
 import { fgCliente, gastosPorRendirCli, grupoRendir } from './gastosReglas.js'
 import { montoNeDte, vencIncoh, ventasBorradorCobrado } from './saludDatos.js'
 
@@ -29,7 +30,7 @@ export function pendientesPorCliente(p) {
   const cDe = b => b.client_id || venta.get(String(b.sale_id))?.client_id
 
   // Cuotas: el mismo radar de Facturación (cuotas vencidas sin facturar, meses cerrados).
-  cuotasSinEmitir({ billing, sales, anticipos, uf, noEmitir, hasta: mesCerrado }).forEach(b => add(cDe(b), 'cuotas', b.id, { billing_id: b.id, sale_id: b.sale_id, fecha: b.due, monto: Number(b.amount) || 0, titulo: 'Cuota por emitir' }))
+  cuotasVencidasSinFacturar({ billing, sales, anticipos, uf, noEmitir, hasta: mesCerrado, hoy }).forEach(b => add(cDe(b), 'cuotas', b.id, { billing_id: b.id, sale_id: b.sale_id, fecha: b.due, monto: Number(b.amount) || 0, titulo: 'Cuota por emitir' }))
 
   // Sin factura: trabajo pagado con anticipos y sin factura (la misma etiqueta de Ventas), salvo que ya se decidió «No se emitirá».
   ;(sales || []).forEach(s => {
