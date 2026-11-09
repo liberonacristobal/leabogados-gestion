@@ -46,3 +46,14 @@ test('el libro se recalcula al cambiar un supuesto y suma por socio y por mes', 
   assert.ok(Math.abs(valor(h, 'Por socio', 'E5') - m.esc.base.retiros) < 1e-4)
   assert.ok(Math.abs(valor(h, 'Resumen 2026', 'D11') - (150 / 100 - 1)) < 1e-9)
 })
+
+test('metas por socio: partes iguales (50 % con dos socios), «Sin socio» sin meta y las partes suman la meta de la oficina', () => {
+  const est = estadoInicial({ costos, tasa: 15, ppmMes: 100_000 })
+  const m = modeloPresupuesto({ baseCLP, baseUF, ufDic }, est)
+  const h = evaluar(hojasPresupuesto(mk(est)))
+  assert.equal(valor(h, 'Por socio', 'F2'), 0.5)
+  assert.equal(valor(h, 'Por socio', 'F3'), 0.5)
+  assert.equal(valor(h, 'Por socio', 'F4'), 0)
+  assert.ok(Math.abs(valor(h, 'Por socio', 'G2') - m.esc.base.fact / 2) < 1e-4)
+  assert.ok(Math.abs(valor(h, 'Por socio', 'H5') - m.esc.base.caja) < 1e-4)
+})

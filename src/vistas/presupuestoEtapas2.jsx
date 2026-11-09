@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { modeloPresupuesto, diferenciaSupuestos } from '../../supabase/functions/_shared/presupuesto.js'
+import { modeloPresupuesto, diferenciaSupuestos, parteMeta } from '../../supabase/functions/_shared/presupuesto.js'
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
 import { nf, mm, pes, ufs, pc, sgn, MESL, MESC, fmtIn, Ic, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, Stp, Fila, Det, Lista, Grid, LBL } from '../lib/presupuestoUI.jsx'
 
@@ -59,13 +59,16 @@ function TabImp({ X }) {
   </>
 }
 
+// Metas de la oficina por escenario (las mismas de la tarjeta «Metas») y la parte de cada socio.
+const metasEsc = (X, k) => ({ ventas: X.datos.oficiales.vend.uf * (1 + X.est.p[k].g / 100) * X.M.ufMed, fact: X.M.esc[k].fact, cobro: X.M.esc[k].caja })
+
 function TabSoc({ X }) {
-  const { est, M, datos: d } = X, e = M.esc[est.esc], tot = d.socios.reduce((a, s) => a + s.facturado, 0)
+  const { est, M, datos: d } = X, e = M.esc[est.esc], tot = d.socios.reduce((a, s) => a + s.facturado, 0), mt = metasEsc(X, est.esc)
   return <>
-    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small='facturado atribuido · retiros iguales para los dos socios'>
-      {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio'
-        return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + X.fmS(e.retiros / 24) + ' por mes'}`} sub={'facturado ' + X.fmS(e.fact * sh)} valor={sin ? '—' : X.fm(e.retiros / 2)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
-      <Fila tot sin nombre='Oficina' sub={'facturado ' + X.fmS(e.fact)} valor={X.fm(e.retiros)} />
+    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={`metas en partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre) * 100, 0)} cada socio) · retiros iguales`}>
+      {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio', pm = parteMeta(d.socios, s.nombre)
+        return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + X.fmS(e.retiros / 24) + ' por mes'}`} sub={sin ? 'facturado ' + X.fmS(e.fact * sh) : `meta de ventas ${X.fmS(mt.ventas * pm)} · cobro ${X.fmS(mt.cobro * pm)}`} valor={sin ? '—' : X.fm(e.retiros / 2)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
+      <Fila tot sin nombre='Oficina' sub={`meta de ventas ${X.fmS(mt.ventas)} · cobro ${X.fmS(mt.cobro)}`} valor={X.fm(e.retiros)} />
     </Panel>
   </>
 }
@@ -354,7 +357,7 @@ export function DInd({ X, k }) {
 export function DSoc({ X, n }) {
   const { datos: d, M, est } = X, ss = d.socios, i = ss.findIndex((s) => s.nombre === n), s = ss[i]
   if (!s) return null
-  const tot = ss.reduce((a, x) => a + x.facturado, 0), sh = tot ? s.facturado / tot : 0, e = M.esc[est.esc], sin = n === 'Sin socio'
+  const tot = ss.reduce((a, x) => a + x.facturado, 0), sh = tot ? s.facturado / tot : 0, e = M.esc[est.esc], sin = n === 'Sin socio', pm = parteMeta(ss, n), mt = metasEsc(X, est.esc)
   return <>
     <Grid cols={4} colsM={2}>
       <Mini ic='ventas' label={`Facturado ${d.anioBase}`} value={mm(s.facturado)} sub='atribuido, a la fecha' />
@@ -362,6 +365,11 @@ export function DSoc({ X, n }) {
       <Mini ic='tgt' label={`Facturado ${d.anio} · ${X.nomEsc(est.esc)}`} value={mm(e.fact * sh)} sub={ufs(e.factUF * sh)} />
       <Mini ic='wal' label={`Retiros ${d.anio} · ${X.nomEsc(est.esc)}`} value={sin ? '—' : mm(e.retiros / 2)} sub={sin ? 'no retira' : 'parte igual de la oficina'} />
     </Grid>
+    {!sin && <Grid cols={3} colsM={1}>
+      <Mini ic='ventas' label={`Meta de ventas ${d.anio}`} value={mm(mt.ventas * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.ventas)}`} />
+      <Mini ic='fact' label={`Meta de facturación ${d.anio}`} value={mm(mt.fact * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.fact)}`} />
+      <Mini ic='wal' label={`Meta de cobro ${d.anio}`} value={mm(mt.cobro * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.cobro)}`} />
+    </Grid>}
     <Panel hd='Por escenario' small='toca para ver el resultado'>{X.ESC.map(([k, nn]) => <Fila key={k} nombre={nn} peq={'retiros ' + (sin ? '—' : mm(M.esc[k].retiros / 2))} valor={mm(M.esc[k].fact * sh)} onClick={() => { X.setEsc(k); X.irEscTab('soc') }} />)}</Panel>
     <Pager prev={i > 0 && { t: ss[i - 1].nombre, go: () => X.irDrill({ t: 'soc', n: ss[i - 1].nombre }) }} next={i < ss.length - 1 && { t: ss[i + 1].nombre, go: () => X.irDrill({ t: 'soc', n: ss[i + 1].nombre }) }} />
   </>
