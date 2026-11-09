@@ -226,7 +226,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
       <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>{linkCli(r)}{chipAbg(r.abogado)}</div>
       <div style={{display:'flex',gap:8,marginTop:-4,fontSize:11,color:C.textSoft}}><span style={{...una,flex:1}}>{sosp?'Datos bancarios':grupoAccionBandeja(r).t}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtFechaDMY(isoLocal(r.recibido_at))}</span></div>
       <div onClick={()=>setAbierto(ab?null:r.id)} style={{background:sosp?C.overdueBg:C.bgSoft,borderRadius:10,padding:'9px 11px',cursor:'pointer',minWidth:0}}>
-        <div style={{display:'flex',gap:8,alignItems:'baseline'}}><div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,...(ab?clamp2:una),flex:1}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>{m!=null&&<b style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</b>}</div>
+        <div style={{display:'flex',gap:8,alignItems:'baseline'}}><div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,...clamp2,flex:1}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>{m!=null&&<b style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</b>}</div>
         {!ab&&(ev[0]?.texto||r.motivo)&&<div style={{...una,fontSize:11,color:C.textSoft,marginTop:3}}>{ev[0]?.texto||r.motivo}</div>}
         {ab&&<div onClick={e=>e.stopPropagation()} style={{cursor:'default'}}>
           <div style={{fontSize:11,color:C.textSoft,marginTop:3,...clamp2}}>Recibido {fechaHoraCL(r.recibido_at)} · {r.de_nombre?r.de_nombre+' · ':''}{r.de}</div>
@@ -306,7 +306,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
   const SL=(t,n,extra)=><div style={{...SEC_LBL,margin:'2px 2px 8px',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:12,flexWrap:'wrap'}}><span>{t} · {n}</span>{extra}</div>
   const pendOrd=[...G.pend].sort((a,b)=>grupoAccionBandeja(a).orden-grupoAccionBandeja(b).orden)
   const lotes=[...new Set(pendOrd.map(r=>grupoAccionBandeja(r).t))].map(t=>[t,pendOrd.filter(r=>grupoAccionBandeja(r).t===t&&enLote(r))]).filter(([,L])=>L.length>1)
-  const cuadro=L=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12,alignItems:'start'}}>{L.map(tarjeta)}</div>:<div style={{display:'flex',flexDirection:'column',gap:8}}>{L.map(tarjeta)}</div>
+  const cuadro=L=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12,alignItems:'stretch'}}>{L.map(tarjeta)}</div>:<div style={{display:'flex',flexDirection:'column',gap:8}}>{L.map(tarjeta)}</div>
   const vista=filtro==='pend'?<>
       {SL('Pendientes',G.pend.length,lotes.length>0&&<span style={{display:'flex',gap:14,flexWrap:'wrap'}}>{lotes.map(([t,L])=><button key={t} onClick={()=>registrarLote(t,L)} style={btnLink}>{t} · Registrar los {L.length} ›</button>)}</span>)}
       {G.pend.length?cuadro(pendOrd):<div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos por confirmar.</div>}</>
