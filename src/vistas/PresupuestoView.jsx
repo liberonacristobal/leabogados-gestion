@@ -177,7 +177,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     {!drill && ui.etapa > 0 && <Grid cols={4} colsM={2}>
       <Kpi tono='g' ic='res' label='Resultado' value={fm(e.post)} sub='después de impuesto' onClick={() => ir({ etapa: 3, tab: 'res' })} />
       <Kpi tono='a' ic='ing' label='Ingresos' value={fm(e.fact)} sub={`facturado ${anio}`} onClick={() => ir({ etapa: 1 })} />
-      <Kpi tono='y' ic='egr' label='Egresos' value={fm(-e.egr)} sub='costos + terceros + impuesto' onClick={() => ir({ etapa: 2 })} />
+      <Kpi tono='y' ic='egr' label='Egresos' value={fm(-e.egr)} sub='costos + comisiones + impuesto' onClick={() => ir({ etapa: 2 })} />
       <Kpi tono='w' ic='gauge' label='Margen' value={e.caja > 0 ? pc((e.post / e.caja) * 100) : '—'} sub='sobre lo cobrado' onClick={() => ir({ etapa: 3, tab: 'imp' })} />
     </Grid>}
     {cuerpo}
