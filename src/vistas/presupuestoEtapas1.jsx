@@ -59,7 +59,6 @@ export function Mirada({ X }) {
       {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
         : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.done, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} peq={`${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado`} valor={mm(c.monto)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
     </Panel>
-    <Det t='Cómo leer estas cifras'>El Vendido, Facturado, Cobrado y Margen son los de Inicio. Las tarjetas por mes y el ranking de clientes salen del facturado propio por mes de Resultado del año y de las facturas emitidas, y el cobrado por mes, de lo conciliado con el banco por fecha del depósito. {d.base && d.sinBase ? 'Todavía no hay 12 meses cerrados de facturación: la base de la proyección queda en cero. ' : ''}El mes en curso va a la fecha, {d.hoy.split('-').reverse().join('-')}.</Det>
   </>
 }
 
@@ -93,7 +92,6 @@ export function Base({ X }) {
         <Fila nombre='Ventas mensuales activas' peq={`${rec.n} ventas · anualizadas ×12 como en Ventas`} valor={mm(recAnual)} sub={ufs(rec.anualUF)} onClick={() => ir({ drill: { t: 'ind', k: 'rec' } })} />
         <Fila tot sin nombre='Promedio mensual' valor={mm(recAnual / 12)} />
       </Panel>
-      <Panel hd='Cómo se proyecta cada mes' pad><Lista items={['Cada mes de ' + Y + ' parte del mismo mes de la base, en UF.', 'Se multiplica por 1 + el crecimiento real del escenario.', 'Se convierte a pesos con la UF de ese mes de ' + Y + '.', 'La estacionalidad sale de los datos, no de un promedio plano.']} /></Panel>
     </Grid>
   </>
 }
@@ -128,7 +126,6 @@ export function Costos({ X }) {
   }
   const lado = <>
     <Panel hd='Qué se ajusta de 2026' pad flex><Lista items={['Remuneraciones: líquido real de las liquidaciones; el bono de enero no se repite.', 'Leyes sociales: parte del empleador al último valor real (octubre sigue provisoria).', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.']} /></Panel>
-    <Panel hd='Cómo usarlo' pad flex><Lista items={[<span><b>Contratar a alguien desde julio:</b> agrega la partida con su líquido más leyes sociales por mes y 6 meses.</span>, <span><b>Un gasto único</b> (mudanza, equipamiento): 1 mes.</span>, <span><b>Quitar una partida:</b> «Quitar partida» en su editor; «Restaurar» vuelve a los valores vigentes.</span>, 'Comisiones se ajusta con los botones de la cabecera: es un porcentaje de lo cobrado.']} /></Panel>
   </>
   return <>
     <Titulo>Costos {Y} · toca una partida para editarla</Titulo>
