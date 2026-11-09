@@ -76,8 +76,8 @@ export function Base({ X }) {
     <Titulo>De dónde sale el ingreso de {Y}</Titulo>
     <Grid cols={3} colsM={1}>
       <Mini ic='cal' label='Recurrente' value={mm(recAnual)} sub={`${rec.n} ventas mensuales, anualizadas · casi seguro`} cls='pos' onClick={() => ir({ drill: { t: 'ind', k: 'rec' } })} />
-      <Mini ic='doc' label='Por facturar' value='lo calcula la app' sub='cuotas pendientes de ventas aceptadas, en Por facturar' cls='amb' onClick={X.irPorFacturar} />
-      <Mini ic='tgt' label='Ventas nuevas' value='meta − A − B' sub={`lo que realmente hay que vender en ${Y}`} />
+      <Mini ic='doc' label='Por facturar' value='ver en Por facturar' sub='cuotas pendientes de ventas aceptadas, en Por facturar' cls='amb' onClick={X.irPorFacturar} />
+      <Mini ic='tgt' label='Ventas nuevas' value='meta − recurrente − por facturar' sub={`lo que realmente hay que vender en ${Y}`} />
     </Grid>
     <Titulo right={D && <Seg options={[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']]} value={ui.vm} onChange={(v) => setUI({ vm: v })} />}>Base · últimos 12 meses cerrados · {d.cierres[0]?.ym.slice(5, 7)}-{d.cierres[0]?.ym.slice(2, 4)} a {d.cierres[11]?.ym.slice(5, 7)}-{d.cierres[11]?.ym.slice(2, 4)}</Titulo>
     {d.sinBase && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>No hay facturas emitidas en los últimos 12 meses cerrados: la base queda en cero y el presupuesto no tiene de qué partir.</div>}
@@ -136,12 +136,12 @@ export function Costos({ X }) {
     </Grid>
     <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 290px' : '1fr', gap: 14, alignItems: 'stretch' }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Panel flex hd={`Partidas · ${nomE}`} small={<span style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Terceros <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></span>}>
+        <Panel flex hd={`Partidas · ${nomE}`} small={<span style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></span>}>
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto', gap: 10, padding: '10px 16px', ...eti2 }}><span>Partida</span><span style={{ textAlign: 'right', minWidth: 150 }}>2026 /año · cambio</span><span style={{ textAlign: 'right', minWidth: 110 }}>{Y}</span></div>}
           {grupo('fijo', 'Fijos', C.accent)}{grupo('discrecional', 'Discrecionales', C.soonText)}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', background: C.bgSoft, padding: '9px 16px', borderTop: `1px solid ${C.border}`, ...eti2 }}><span><i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: C.tealText, marginRight: 8 }} />Variables</span><b>{mm(e.terc)}</b></div>
           <Fila nombre='Comisiones' peq={`${pc(p.terc)} de lo cobrado · se ajusta arriba`} valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
-          <Fila tot sin nombre='Costos de oficina + terceros' valor={mm(e.costos + e.terc)} />
+          <Fila tot sin nombre='Costos de oficina + comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>
         </Panel>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk> · 6 meses sirve para una contratación desde julio; 1 mes, para un gasto único.</div>
