@@ -4178,3 +4178,23 @@ export const _SOCIO_RET = e => {
   return e.personal_de||'Otro'
 }
 
+// ── PROCESOS AUTOMÁTICOS: estado de cada tarea programada, desde el registro permanente (procesos_corridas, RPC procesos_estado:
+// solo socios). Fuente única del estado (estadoProceso) para la tarjeta de Oficina y la página. Hora siempre de Chile (Intl, con verano/invierno).
+export const _DEMO_PROCESOS = [
+  {jobname:'clientes-drive-sync',nombre:'Clientes desde Drive',schedule:'17 */2 * * *',active:true,cada:'cada 2 horas',ultima:'2026-10-20T04:17:00Z',estado:'ok',respuesta:'{"ok":true,"nuevos":0}',ultima_ok:'2026-10-20T04:17:00Z',fallas_30d:0,corridas_30d:1,atrasado:false},
+  {jobname:'bhe-correo-diario',nombre:'Boletas de honorarios del correo',schedule:'40 11 * * *',active:true,cada:'diario',ultima:'2026-10-19T11:40:00Z',estado:'error',respuesta:'{"error":"Gmail 401"}',ultima_ok:null,fallas_30d:1,corridas_30d:1,atrasado:false},
+  {jobname:'oficina-costos-banco',nombre:'Costos de oficina del banco',schedule:'40 9 * * *',active:true,cada:'diario',ultima:'2026-10-19T09:40:00Z',estado:'ok',respuesta:'INSERT 0 10',ultima_ok:'2026-10-19T09:40:00Z',fallas_30d:0,corridas_30d:1,atrasado:false},
+  {jobname:'cartera-semanal-lunes',nombre:'Cartera semanal',schedule:'0 12 * * 1',active:true,cada:'semanal',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
+  {jobname:'valores-contadora-mensual',nombre:'Valores de la contadora',schedule:'0 12 10-16 * *',active:true,cada:'mensual',ultima:null,estado:null,respuesta:null,ultima_ok:null,fallas_30d:0,corridas_30d:0,atrasado:false},
+]
+
+export const estadoProceso = p => !p.active ? {t:'Pausado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
+  : p.atrasado ? {t:'Atrasado',bg:C.soonBg,c:C.soonText,k:'falla'}
+  : p.estado==='ok' ? {t:'Correcto',bg:C.greenBg,c:C.greenText,k:'ok'}
+  : p.estado==='apagado' ? {t:'Apagado',bg:C.bgSoft,c:C.textSoft,k:'pausa'}
+  : (p.estado==='error'||p.estado==='sin_respuesta') ? {t:'Con falla',bg:C.overdueBg,c:C.overdueText,k:'falla'}
+  : p.estado==='lanzado' ? {t:'En curso',bg:C.azulBg,c:C.accent,k:'ok'}
+  : {t:'Aún no corre',bg:C.bgSoft,c:C.textSoft,k:'sin'}
+
+export async function cargarProcesos(){ if(DEMO) return _DEMO_PROCESOS; const {data,error}=await supabase.rpc('procesos_estado'); if(error) throw error; return data||[] }
+

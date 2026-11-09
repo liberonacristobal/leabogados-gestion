@@ -1,10 +1,11 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { BRAND, C, SEC_LBL, appAlert, fmt, fmtFechaDMY, isoLocal, personChip } from '../lib/base.jsx'
-import { PageHeader, _DEMO_BANDEJA, abrirDocumento, aprenderVenta, asignarVentaFactura, correoMarcaHtml, enviarComoUsuario, fechaHoraCL, firmaDefault, logActividad, pctBHE, pillPersonaSty, registrarError, registrarFondoPropuesto, setLearningKV, txtEnviado } from '../lib/compartido.jsx'
+import { BRAND, C, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal, personChip } from '../lib/base.jsx'
+import { asuntoBase, grupoAccionBandeja, gruposBandeja } from '../../supabase/functions/_shared/bandejaReglas.js'
+import { PageHeader, _DEMO_BANDEJA, nrmCliente, abrirDocumento, aprenderVenta, asignarVentaFactura, correoMarcaHtml, enviarComoUsuario, fechaHoraCL, firmaDefault, logActividad, pctBHE, pillPersonaSty, registrarError, registrarFondoPropuesto, setLearningKV, txtEnviado } from '../lib/compartido.jsx'
 
 // Pedido de boleta a un colaborador (agente comisiones-documentos): el borrador se arma con BRAND (receptor) y los datos de la propuesta.
 export const borradorPedidoBoleta = p => { const L=p.lineas||[], uno=L.length===1, l0=L[0]||{}, tot=k=>L.reduce((a,l)=>a+(Number(l[k])||0),0), pila=String(p.nombre||'').trim().split(/\s+/)[0]
@@ -39,12 +40,20 @@ export function solicitudCitada(cuerpo){
   return {fecha:d&&!isNaN(d)?d.toISOString():null, autor:m[6].trim().split(/\s+/)[0]||null, email:m[7].toLowerCase()}
 }
 
-export const asuntoBase = s => String(s||'').replace(/^((re|rv|fw|fwd)\s*:\s*)+/i,'').trim()
+export { asuntoBase }
 
-export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII, onIrSinVenta}){
+// El filtro elegido se recuerda al ir a un cliente, a Banco o a una venta y volver (la vista se desmonta al salir).
+let _filtroBandeja = 'pend'
+const FILTROS = ['pend','hech','sosp','sin']
+
+export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], expenses=[], user, onOpenClientFicha, onIrBanco, onCargarNotaria, onTareaCreada, onFondoRegistrado, onIrFacturasSII, onIrSinVenta, foco, onFocoUsado, onAbrirVenta, onAbrirGasto}){
   const [elegido,setElegido]=useState({})   // adjuntar_respaldo: gasto elegido por tarjeta
   const [paraBoleta,setParaBoleta]=useState({})   // pedir_boleta: correo del colaborador (se aprende al enviar)
-  const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null), [verSin,setVerSin]=useState(false)
+  const [rows,setRows]=useState(null), [err,setErr]=useState(null), [busy,setBusy]=useState(null), [abierto,setAbierto]=useState(null)
+  const [filtro,setFiltroSt]=useState(()=>FILTROS.includes(foco?.f)?foco.f:_filtroBandeja)
+  const setFiltro=f=>{ _filtroBandeja=f; setFiltroSt(f) }
+  const [verTodos,setVerTodos]=useState({}), [grAb,setGrAb]=useState({}), [asoc,setAsoc]=useState(null)   // grupos: expandido / acordeón del móvil / remitente que se está asociando
+  const tipoFoco=useRef(null)
   const cliPorId=useMemo(()=>new Map((clients||[]).map(c=>[String(c.id),c])),[clients])
   const yo=user?.name||'Oficina'
   const patch=async(id,cambios)=>{ if(!DEMO){ const {error}=await supabase.from('agente_bandeja').update(cambios).eq('id',id); if(error) throw error } setRows(p=>(p||[]).map(r=>r.id===id?{...r,...cambios}:r)) }
@@ -76,14 +85,18 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
     if(a==='asignar_venta'&&!(p.cuotas||[]).length){ onIrSinVenta&&onIrSinVenta(); return }   // varias ventas, ninguna sugerida: se asigna en Facturación › Por clasificar; la propuesta se cierra sola   // la registra el motor de Facturación (Cargadas sin registrar); la propuesta se cierra sola al quedar registrada
     if(a==='cargar_notaria'){ onCargarNotaria&&onCargarNotaria(p.path?{path:p.path,nombre:p.nombre||'Liquidación notaría.xlsx'}:null); return }
     setBusy(r.id)
-    try{
+    try{ await ejecutar(r) }catch(e){ appAlert('No se pudo completar: '+(e.message||e)) }
+    setBusy(null) }
+  // Ejecuta la acción propuesta (sin navegar). Lanza si falla; devuelve false si el envío no salió. La usan «confirmar» y «Registrar los N».
+  const ejecutar=async r=>{ const p=r.propuesta||{}, a=p.accion
+    {
       if(a==='pedir_boleta'){
         const to=String(paraBoleta[r.id]??p.para??'').trim(); if(!to) throw new Error('Falta el correo del colaborador.')
         const em=String(user?.email||'').toLowerCase(); let firma=firmaDefault(em)||{nombre:user?.name||'',cargo:'',telefono:''}
         if(!DEMO&&em){ const {data:fr}=await supabase.from('learnings').select('value').eq('kind','firma_correo').eq('key',em).order('updated_at',{ascending:false}).limit(1).maybeSingle(); if(fr?.value){ try{ firma={...firma,...JSON.parse(fr.value)} }catch(_){} } }
         const text=borradorPedidoBoleta(p), subject=asuntoPedidoBoleta(p)
         const via=DEMO?'usuario':await enviarComoUsuario({to, subject, html:correoMarcaHtml(text,'Boleta de honorarios',firma,false), text, que:'El pedido de boleta'})
-        if(!via){ setBusy(null); return }
+        if(!via) return false
         if(!DEMO&&p.proveedor_id&&to!==p.para){ try{ await setLearningKV('proveedor_email',String(p.proveedor_id),to) }catch(e){registrarError({origen:'accion',vista:'proveedor_email',err:e})} }
         await hecho(r,{estado:'espera',motivo:`Pedido enviado el ${fmtFechaDMY(new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'}))} · boleta por recibir`},'boleta_pedida')
         appAlert(txtEnviado(via,{que:'Pedido de boleta',g:'o',para:to}))
@@ -97,7 +110,7 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
         if(!p.path) throw new Error('El documento no quedó guardado.')
         if(!DEMO){ const {data:ya}=await supabase.from('expense_attachments').select('id').eq('expense_id',g.id).eq('storage_path',p.path).limit(1)
           if(!ya?.length){ const {error}=await supabase.from('expense_attachments').insert({expense_id:g.id,name:p.nombre||'Respaldo.pdf',storage_path:p.path,uploaded_by:yo}); if(error) throw error } }
-        await hecho(r,{estado:'resuelto',motivo:`Respaldo adjuntado al gasto de ${g.cliente} ${fmt(g.monto)} del ${fmtFechaDMY(g.fecha)}`},'respaldo_adjuntado')
+        await hecho(r,{estado:'resuelto',motivo:`Respaldo adjuntado al gasto de ${g.cliente} ${fmt(g.monto)} del ${fmtFechaDMY(g.fecha)}`,propuesta:{...p,gasto_id:g.id}},'respaldo_adjuntado')
       } else if(a==='registrar_fondo'){
         const c=await registrarFondoPropuesto(r,{proyecto:p.proyecto||null,yo,sales,expenses,onFondo:onFondoRegistrado})
         setRows(q=>(q||[]).map(x=>x.id===r.id?{...x,...c}:x))
@@ -130,8 +143,8 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
       } else if(a==='revisar'){
         await hecho(r,{estado:'resuelto',motivo:`Revisado por ${yo}`},'revisado')
       }
-    }catch(e){ appAlert('No se pudo completar: '+(e.message||e)) }
-    setBusy(null) }
+    }
+    return true }
   // Cuenta guardada junto a la liquidación pendiente (mismo correo): se guarda sin cerrar la carga.
   const guardarCuentaAnexa=async r=>{ const gc=r.propuesta?.guardar_cuenta; if(!gc) return; setBusy(r.id)
     try{ if(!DEMO) await setLearningKV('cuenta_conocida',gc.dominio,JSON.stringify({cuenta:gc.cuenta,banco:gc.banco||null,rut:gc.rut||null}))
@@ -144,90 +157,177 @@ export function BandejaView({isDesktop, onBack, origen, clients=[], sales=[], ex
       else await hecho(r,{estado:'descartado',motivo:`${como} por ${yo}`},'descartado') }catch(e){ appAlert('No se pudo descartar: '+(e.message||e)) } setBusy(null) }
   const restaurar=async r=>{ setBusy(r.id); try{ await patch(r.id,{estado:r.propuesta?.accion?'pendiente':'sin_accion',resuelto_por:null,resuelto_at:null,motivo:null}); logActividad('agente.restaurado',{tabla:'agente_bandeja',id:r.id,detalle:{title:'Correo del agente restaurado'}}) }catch(e){ appAlert('No se pudo restaurar: '+(e.message||e)) } setBusy(null) }
   const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
-  const wrap=ch=><div style={isDesktop?{maxWidth:1120,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>{ch}</div>
+  const wrap=ch=><div style={isDesktop?{maxWidth:1240,margin:'0 auto',padding:'12px 20px 40px'}:{padding:'8px 16px 40px'}}>{ch}</div>
   const lista=rows||[]
   const G={pend:lista.filter(r=>r.estado==='pendiente'), hech:lista.filter(r=>['registrado','espera','resuelto'].includes(r.estado)), sosp:lista.filter(r=>r.estado==='sospechoso')}
   G.sin=lista.filter(r=>!G.pend.includes(r)&&!G.hech.includes(r)&&!G.sosp.includes(r))
-  const partes=[['Pendientes',G.pend.length,C.soonText,C.soonBg],['Ya registrados',G.hech.length,C.greenText,C.greenBg],['Sospechosos',G.sosp.length,G.sosp.length?C.overdueText:C.textSoft,G.sosp.length?C.overdueBg:C.bgSoft],['Sin acción',G.sin.length,C.textSoft,C.bgSoft]]
-  const chipAbg=n=>n?<span style={{...pillPersonaSty(personChip(n),false),cursor:'default',fontSize:10.5,padding:'2px 9px'}}>{n}</span>:null
-  const linkCli=r=>{ const nm=nombreCli(r); return r.cliente_id&&onOpenClientFicha?<b onClick={e=>{e.stopPropagation();onOpenClientFicha(r.cliente_id)}} style={{fontSize:14,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{nm}</b>:<b style={{fontSize:14,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{nm}</b> }
+  const partes=[['pend','Pendientes',G.pend.length,C.soonText,C.soonBg],['hech','Ya registrados',G.hech.length,C.greenText,C.greenBg],['sosp','Sospechosos',G.sosp.length,G.sosp.length?C.overdueText:C.textSoft,G.sosp.length?C.overdueBg:C.bgSoft],['sin','Sin acción',G.sin.length,C.textSoft,C.bgSoft]]
+  // Llegada desde otra vista con un filtro (navTo foco:{f,tipo}): se aplica una vez y se limpia, para que volver recuerde el último filtro elegido.
+  useEffect(()=>{ if(!foco) return
+    if(FILTROS.includes(foco.f)) setFiltro(foco.f)
+    tipoFoco.current=foco.tipo||null
+    onFocoUsado&&onFocoUsado() },[foco])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{ if(!rows||!tipoFoco.current) return
+    const t=tipoFoco.current; tipoFoco.current=null
+    setTimeout(()=>{ document.querySelector(`[data-tipos~="${String(t).replace(/"/g,'')}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}) },80) },[rows,filtro])
+  const chipAbg=n=>n?<span style={{...pillPersonaSty(personChip(n),false),cursor:'default',fontSize:10.5,padding:'2px 9px',flexShrink:0}}>{n}</span>:null
+  const clamp2={display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
+  const una={whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}
+  const linkCli=r=>{ const nm=nombreCli(r); return r.cliente_id&&onOpenClientFicha?<b onClick={e=>{e.stopPropagation();onOpenClientFicha(r.cliente_id)}} style={{fontSize:14,color:C.accent,cursor:'pointer',...clamp2,minWidth:0}}>{nm}</b>:<b style={{fontSize:14,color:C.accent,...clamp2,minWidth:0}}>{nm}</b> }
   const tituloProp=r=>{ const p=r.propuesta||{}
     if(isDesktop) return p.titulo||'Revisar el correo'
     if(p.accion==='crear_tarea') return `Tarea a ${p.asignado||r.abogado||yo}: ${String(p.tarea||'').charAt(0).toLowerCase()}${String(p.tarea||'').slice(1)}`
     if(p.accion==='guardar_cuenta') return 'Guardar cuenta como conocida'
     if(p.accion==='revisar') return 'Revisar el comprobante'
     return p.titulo||'Revisar el correo' }
-  const lineaDato=(t,v,k)=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,marginTop:4}}><span style={{color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{t}</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</b></div>
+  // Qué pasa al confirmar (lo que cada botón hace, sin abrir nada).
+  const alConfirmar=r=>{ const p=r.propuesta||{}
+    if(r.estado==='sospechoso') return 'Se archiva sin cambios.'
+    switch(p.accion){
+      case 'registrar_fondo': return 'El fondo queda registrado en la ficha del cliente.'
+      case 'asignar_venta': return (p.cuotas||[]).length?`La factura reemplaza las ${(p.cuotas||[]).length} cuotas de la venta.`:'Se abre Facturación › Por clasificar.'
+      case 'registrar_factura': return 'Se abre Facturación para registrar la factura.'
+      case 'adjuntar_respaldo': return 'El PDF queda adjunto al gasto elegido.'
+      case 'pedir_boleta': return 'Se envía el pedido al colaborador; queda como «Pedido enviado» en Ya registrados.'
+      case 'definir_documento': return 'Queda guardado el documento que emite el colaborador.'
+      case 'conciliar': return 'Se abre Banco en el movimiento.'
+      case 'cargar_notaria': return 'Se abre la carga de la liquidación.'
+      case 'registrar_solicitud': return 'La solicitud queda registrada como por recibir.'
+      case 'crear_tarea': return `Se crea la tarea a ${p.asignado||r.abogado||yo}.`
+      case 'guardar_cuenta': return 'La cuenta queda guardada como conocida.'
+      default: return 'Queda marcado como revisado.' } }
+  const montoPrincipal=r=>{ const p=r.propuesta||{}
+    if(p.accion==='pedir_boleta'){ const t=(p.lineas||[]).reduce((a,l)=>a+(Number(l.bruto)||0),0); if(t) return t }
+    if(p.accion==='registrar_fondo'&&p.monto!=null) return Number(p.monto)
+    return montoDe(r) }
+  const lineaDato=(t,v,k)=><div key={k} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:11.5,marginTop:4}}><span style={{color:C.textSoft,...clamp2,minWidth:0}}>{t}</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</b></div>
   const adjuntos=r=>(r.adjuntos||[]).length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:7}}>{r.adjuntos.map((a,i)=><span key={i} onClick={e=>{e.stopPropagation(); if(a.path&&!DEMO) abrirDocumento(a.path)}} style={{fontSize:10.5,fontWeight:600,borderRadius:20,padding:'2px 9px',background:C.bgSoft,color:a.path?C.accent:C.textSoft,cursor:a.path?'pointer':'default',maxWidth:'100%',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.nombre}</span>)}</div>
   const cuerpo=r=>abierto===r.id&&r.cuerpo&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.bgSoft,borderRadius:10,padding:'8px 10px',maxHeight:260,overflowY:'auto'}}>{r.cuerpo}</div>
   const btnSec={fontSize:12.5,fontWeight:600,color:C.accent,background:'none',border:'none',padding:'7px 10px',cursor:'pointer'}
   const btnPri={fontSize:12.5,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:9,padding:'7px 14px',cursor:'pointer',whiteSpace:'nowrap'}
-  const tarjeta=r=>{ const p=r.propuesta||{}, ev=r.evidencia||[], montos=ev.filter(x=>x.monto!=null), b=busy===r.id, sosp=r.estado==='sospechoso'
-    return <div key={r.id} onClick={()=>setAbierto(abierto===r.id?null:r.id)} style={{...card,padding:isDesktop?'12px 16px':'11px 12px',marginBottom:10,cursor:'pointer'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>{linkCli(r)}{chipAbg(r.abogado)}<span style={{flex:1}}/>{isDesktop&&<span style={{fontSize:11,color:C.textSoft,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fechaHoraCL(r.recibido_at)}</span>}</div>
-      <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre?r.de_nombre+' · ':''}${r.de}`:`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`}</div>
-      <div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{r.asunto||'(sin asunto)'}</div>
-      <div style={{background:sosp?C.overdueBg:C.bgSoft,borderRadius:10,padding:'9px 11px',marginTop:9}}>
-        <div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>
-        {ev.map((x,i)=>lineaDato(x.texto,x.monto!=null?fmt(x.monto):x.valor,i))}
-        {montos.length>1&&!['pedir_boleta','definir_documento','asignar_venta'].includes(p.accion)&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
-        {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.motivo}</div>}
-        {p.accion==='adjuntar_respaldo'&&(p.candidatos||[]).length>0&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
-          <select value={elegido[r.id]||((p.candidatos||[]).length===1?p.candidatos[0].id:'')} onChange={e=>setElegido(o=>({...o,[r.id]:e.target.value}))} style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface}}>
-            {(p.candidatos||[]).length>1&&<option value=''>Elige el gasto</option>}
-            {(p.candidatos||[]).map(g=><option key={g.id} value={g.id}>{fmtFechaDMY(g.fecha)} · {g.cliente} · {fmt(g.monto)} · {g.concepto}</option>)}
-          </select></div>}
-        {p.accion==='pedir_boleta'&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
-          <input value={paraBoleta[r.id]??p.para??''} onChange={e=>setParaBoleta(o=>({...o,[r.id]:e.target.value}))} placeholder='Correo del colaborador' style={{width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface,boxSizing:'border-box'}}/>
-          {abierto===r.id&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}><b>{asuntoPedidoBoleta(p)}</b>{'\n\n'}{borradorPedidoBoleta(p)}</div>}
+  const btnLink={fontSize:12,fontWeight:700,color:C.azulInfo,background:'none',border:'none',padding:0,cursor:'pointer',textTransform:'none',letterSpacing:0}
+  const inp={width:'100%',fontSize:12,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',color:C.text,background:C.surface,boxSizing:'border-box'}
+
+  // ── «Registrar los N»: lo que se puede registrar sin elegir nada ni enviar un correo (el pedido de boleta sale uno a uno).
+  const enLote=r=>{ const p=r.propuesta||{}, a=p.accion
+    if(a==='asignar_venta') return (p.cuotas||[]).length>0
+    if(a==='adjuntar_respaldo') return (p.candidatos||[]).length===1||!!elegido[r.id]
+    return ['registrar_fondo','registrar_solicitud','crear_tarea','guardar_cuenta','revisar'].includes(a) }
+  const registrarLote=async(t,L)=>{
+    if(!await appConfirm(`¿Registrar los ${L.length} de «${t}»?`)) return
+    let ok=0, no=0, err=null
+    for(const r of L){ setBusy(r.id); try{ if(await ejecutar(r)!==false) ok++; else no++ }catch(e){ no++; err=err||(e.message||String(e)) } }
+    setBusy(null)
+    appAlert(`${ok} registrado${ok!==1?'s':''}.${no?`\n${no} NO se registraron${err?`: ${err}`:'.'}`:''}`) }
+
+  // Tarjeta compacta de una acción pendiente (o de un aviso sospechoso): cliente, tipo y fecha, caja gris plegable con la acción y sus partidas.
+  const tarjeta=r=>{ const p=r.propuesta||{}, ev=r.evidencia||[], montos=ev.filter(x=>x.monto!=null), b=busy===r.id, sosp=r.estado==='sospechoso', ab=abierto===r.id, m=sosp?null:montoPrincipal(r)
+    return <div key={r.id} data-tipos={r.tipo||''} style={{...card,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8,minWidth:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>{linkCli(r)}{chipAbg(r.abogado)}</div>
+      <div style={{display:'flex',gap:8,marginTop:-4,fontSize:11,color:C.textSoft}}><span style={{...una,flex:1}}>{sosp?'Datos bancarios':grupoAccionBandeja(r).t}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtFechaDMY(isoLocal(r.recibido_at))}</span></div>
+      <div onClick={()=>setAbierto(ab?null:r.id)} style={{background:sosp?C.overdueBg:C.bgSoft,borderRadius:10,padding:'9px 11px',cursor:'pointer',minWidth:0}}>
+        <div style={{display:'flex',gap:8,alignItems:'baseline'}}><div style={{fontSize:12.5,fontWeight:700,color:sosp?C.overdueText:C.text,...(ab?clamp2:una),flex:1}}>{sosp?(isDesktop?'Datos bancarios distintos de los conocidos':'Datos bancarios distintos'):tituloProp(r)}</div>{m!=null&&<b style={{fontSize:12.5,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(m)}</b>}</div>
+        {!ab&&(ev[0]?.texto||r.motivo)&&<div style={{...una,fontSize:11,color:C.textSoft,marginTop:3}}>{ev[0]?.texto||r.motivo}</div>}
+        {ab&&<div onClick={e=>e.stopPropagation()} style={{cursor:'default'}}>
+          <div style={{fontSize:11,color:C.textSoft,marginTop:3,...clamp2}}>Recibido {fechaHoraCL(r.recibido_at)} · {r.de_nombre?r.de_nombre+' · ':''}{r.de}</div>
+          <div style={{fontSize:11.5,color:C.text,marginTop:2,...clamp2}}>{r.asunto||'(sin asunto)'}</div>
+          {ev.map((x,i)=>lineaDato(x.texto,x.monto!=null?fmt(x.monto):x.valor,i))}
+          {montos.length>1&&!['pedir_boleta','definir_documento','asignar_venta'].includes(p.accion)&&<div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,marginTop:5,paddingTop:5,borderTop:`1px solid ${C.border}`}}><span style={{color:C.textSoft}}>Total por recibir</span><b style={{color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmt(montos.reduce((s,x)=>s+Number(x.monto||0),0))}</b></div>}
+          {r.motivo&&<div style={{fontSize:11,color:C.textSoft,marginTop:5,...clamp2}}>{r.motivo}</div>}
+          {p.guardar_cuenta&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,...clamp2,minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
+          {p.accion==='pedir_boleta'&&<div style={{marginTop:8,fontSize:11.5,color:C.text,whiteSpace:'pre-wrap',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}><b>{asuntoPedidoBoleta(p)}</b>{'\n\n'}{borradorPedidoBoleta(p)}</div>}
+          {adjuntos(r)}{cuerpo(r)}
+          <div style={{fontSize:11.5,color:C.textSoft,marginTop:8}}>Al confirmar · <span style={{color:C.text}}>{alConfirmar(r)}</span></div>
         </div>}
-        {p.guardar_cuenta&&<div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginTop:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>Cuenta {p.guardar_cuenta.banco||''} {p.guardar_cuenta.cuenta}</span><button disabled={b} onClick={()=>guardarCuentaAnexa(r)} style={{...btnSec,padding:'3px 4px',fontSize:11.5}}>Guardar cuenta</button></div>}
       </div>
-      {adjuntos(r)}
-      {cuerpo(r)}
-      <div onClick={e=>e.stopPropagation()} style={{display:'flex',gap:6,marginTop:9,justifyContent:'flex-end'}}>
+      {p.accion==='adjuntar_respaldo'&&(p.candidatos||[]).length>0&&<select value={elegido[r.id]||((p.candidatos||[]).length===1?p.candidatos[0].id:'')} onChange={e=>setElegido(o=>({...o,[r.id]:e.target.value}))} style={inp}>
+        {(p.candidatos||[]).length>1&&<option value=''>Elige el gasto · {(p.candidatos||[]).length} con el mismo monto</option>}
+        {(p.candidatos||[]).map(g=><option key={g.id} value={g.id}>{fmtFechaDMY(g.fecha)} · {g.cliente} · {fmt(g.monto)} · {g.concepto}</option>)}
+      </select>}
+      {p.accion==='pedir_boleta'&&<input value={paraBoleta[r.id]??p.para??''} onChange={e=>setParaBoleta(o=>({...o,[r.id]:e.target.value}))} placeholder='Correo del colaborador' style={inp}/>}
+      <div style={{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap',marginTop:'auto'}}>
         {sosp?<button disabled={b} onClick={()=>descartar(r,'Archivado')} style={btnPri}>{b?'Guardando…':'Archivar'}</button>
           :p.accion==='definir_documento'?<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>Descartar</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'ninguno'})} style={btnSec}>No emite</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'factura'})} style={{...btnSec,border:`1px solid ${C.border}`,borderRadius:9}}>Factura</button><button disabled={b} onClick={()=>confirmar({...r,_doc:'boleta'})} style={{...btnPri,opacity:b?.6:1}}>{b?'Guardando…':'Boleta'}</button></>
-          :<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>{p.accion==='asignar_venta'&&(p.cuotas||[]).length?'No corresponde':'Descartar'}</button>{p.accion==='pedir_boleta'&&abierto!==r.id&&<button onClick={()=>setAbierto(r.id)} style={btnSec}>Ver el correo</button>}<button disabled={b} onClick={()=>confirmar(r)} style={{...btnPri,opacity:b?.6:1}}>{b?'Enviando…':p.accion==='asignar_venta'&&!(p.cuotas||[]).length?'Abrir en Facturación':(BANDEJA_BTN[p.accion]||'Revisado')}</button></>}
+          :<><button disabled={b} onClick={()=>descartar(r)} style={btnSec}>{p.accion==='asignar_venta'&&(p.cuotas||[]).length?'No corresponde':'Descartar'}</button>{p.accion==='pedir_boleta'&&!ab&&<button onClick={()=>setAbierto(r.id)} style={btnSec}>Ver el correo</button>}<button disabled={b} onClick={()=>confirmar(r)} style={{...btnPri,opacity:b?.6:1}}>{b?'Enviando…':p.accion==='asignar_venta'&&!(p.cuotas||[]).length?'Abrir en Facturación':(BANDEJA_BTN[p.accion]||'Revisado')}</button></>}
       </div>
     </div> }
-  const filaHecha=(r,i,conRest)=>{ const m=montoDe(r)
-    return <div key={r.id} onClick={()=>setAbierto(abierto===r.id?null:r.id)} style={{padding:isDesktop?'10px 14px':'9px 12px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
+
+  // ── Ya registrados / Sin acción: tarjetas de grupo. Cada fila lleva a lo que se registró.
+  const destino=r=>{ const p=r.propuesta||{}, mot=String(r.motivo||'')
+    if(p.accion==='conciliar'||/conciliado/i.test(mot)||(r.tipo==='comprobante'&&r.estado==='registrado')) return onIrBanco?()=>onIrBanco(p.movimiento_id||null):null
+    if(p.accion==='asignar_venta'&&p.sale_id&&onAbrirVenta) return ()=>onAbrirVenta(p.sale_id)
+    if(p.gasto_id&&onAbrirGasto) return ()=>onAbrirGasto(p.gasto_id)
+    if(['registrar_fondo','registrar_solicitud'].includes(p.accion)||/^(fondo|solicitud)/i.test(mot)) return r.cliente_id&&onOpenClientFicha?()=>onOpenClientFicha(r.cliente_id):null
+    return null }
+  const filaHecha=(r,i)=>{ const m=montoDe(r), ir=destino(r), hayCorreo=!!r.cuerpo||(r.adjuntos||[]).length>0
+    return <div key={r.id} onClick={()=>ir?ir():setAbierto(abierto===r.id?null:r.id)} style={{padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',gap:6,alignItems:'center',minWidth:0}}>{linkCli(r)}{isDesktop&&chipAbg(r.abogado)}</div>
-          <div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.motivo||r.resumen||'—'}</div>
-          <div style={{fontSize:10.5,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`:`correo ${fechaHoraCL(r.recibido_at)}`}</div>
+          <div style={{fontSize:11,color:C.textSoft,...clamp2}}>{r.motivo||r.resumen||'—'}</div>
+          <div style={{fontSize:10.5,color:C.textSoft,...clamp2,fontVariantNumeric:'tabular-nums'}}>{isDesktop?`${r.de_nombre||r.de} · ${fechaHoraCL(r.recibido_at)}`:`correo ${fechaHoraCL(r.recibido_at)}`}</div>
         </div>
         {m!=null&&<b style={{fontSize:13,color:C.text,fontVariantNumeric:'tabular-nums',flexShrink:0}}>{fmt(m)}</b>}
-        {conRest&&r.estado==='descartado'&&<button disabled={busy===r.id} onClick={e=>{e.stopPropagation();restaurar(r)}} style={{...btnSec,padding:'3px 4px',fontSize:11.5,flexShrink:0}}>Restaurar</button>}
+        {r.estado==='descartado'&&<button disabled={busy===r.id} onClick={e=>{e.stopPropagation();restaurar(r)}} style={{...btnSec,padding:'3px 4px',fontSize:11.5,flexShrink:0}}>Restaurar</button>}
       </div>
+      {ir&&hayCorreo&&<button onClick={e=>{e.stopPropagation();setAbierto(abierto===r.id?null:r.id)}} style={{...btnSec,padding:'2px 0',fontSize:11.5}}>{abierto===r.id?'Ocultar el correo':'Ver el correo'}</button>}
       {abierto===r.id&&<div onClick={e=>e.stopPropagation()}>{adjuntos(r)}{cuerpo(r)}</div>}
     </div> }
-  const SL=(t,n,mt)=><div style={{...SEC_LBL,margin:`${mt||2}px 2px 6px`}}>{t} · {n}</div>
-  const pend=<>{SL('Pendientes',G.pend.length)}{G.pend.map(tarjeta)}{!G.pend.length&&<div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft,marginBottom:10}}>Sin correos por confirmar.</div>}</>
-  const lado=<>
-    {SL('Ya registrados',G.hech.length,isDesktop?2:12)}
-    <div style={{...card,overflow:'hidden'}}>{G.hech.map((r,i)=>filaHecha(r,i))}{!G.hech.length&&<div style={{padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos registrados.</div>}</div>
-    {SL('Sospechosos',G.sosp.length,12)}
-    {G.sosp.length?G.sosp.map(tarjeta):<div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos sospechosos.</div>}
-    <div onClick={()=>setVerSin(v=>!v)} style={{...SEC_LBL,margin:'12px 2px 6px',cursor:'pointer',display:'flex',justifyContent:'space-between'}}><span>Sin acción · {G.sin.length}</span><span style={{color:C.textSoft}}>{verSin?'Ocultar':'Ver'}</span></div>
-    {verSin&&<div style={{...card,overflow:'hidden'}}>{G.sin.map((r,i)=>filaHecha(r,i,true))}{!G.sin.length&&<div style={{padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos.</div>}</div>}
-  </>
+  const asociar=async g=>{ const cid=asoc?.cid, cli=cid?cliPorId.get(String(cid)):null; if(!cli){ appAlert('Elige el cliente.'); return }
+    setBusy(g.clave)
+    try{ const email=String(g.de||'').toLowerCase().trim(); if(!email.includes('@')) throw new Error('El remitente no tiene un correo válido.')
+      // El mismo registro que ya aprende «crear tarea» (contactos del cliente): el agente de correo reconoce al remitente por esa dirección.
+      if(!DEMO){ const {data:c}=await supabase.from('contacts').select('id').eq('client_id',cid).ilike('email',email).limit(1)
+        if(!c?.length){ const {error}=await supabase.from('contacts').insert({client_id:cid,nombre:g.rows[0]?.de_nombre||email.split('@')[0],email}); if(error) throw error } }
+      for(const r of g.rows) await patch(r.id,{cliente_id:cid,motivo:`Remitente asociado a ${cli.name}`})
+      logActividad('agente.remitente_asociado',{tabla:'agente_bandeja',id:g.rows[0]?.id,detalle:{cliente:cli.name,title:`${email} asociado a ${cli.name}`}})
+      setAsoc(null); appAlert(`${email} queda asociado a ${cli.name}. Los próximos correos de ese remitente se registran con ese cliente.`)
+    }catch(e){ appAlert('No se pudo asociar: '+(e.message||e)) }
+    setBusy(null) }
+  const panelAsociar=g=>{ const q=nrmCliente(asoc?.q||''), op=(clients||[]).filter(c=>!q||nrmCliente(c.name).includes(q)).sort((a,b)=>String(a.name).localeCompare(String(b.name))).slice(0,60)
+    return <div style={{padding:'10px 14px',borderTop:`1px solid ${C.track}`,display:'flex',flexDirection:'column',gap:6}}>
+      <input autoFocus value={asoc?.q||''} onChange={e=>setAsoc(o=>({...o,q:e.target.value}))} placeholder='Buscar cliente' style={inp}/>
+      <select value={asoc?.cid||''} onChange={e=>setAsoc(o=>({...o,cid:e.target.value}))} style={inp}><option value=''>Elige el cliente</option>{op.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}><button onClick={()=>setAsoc(null)} style={btnSec}>Cancelar</button><button disabled={busy===g.clave||!asoc?.cid} onClick={()=>asociar(g)} style={{...btnPri,opacity:busy===g.clave||!asoc?.cid?.6:1}}>{busy===g.clave?'Guardando…':'Guardar'}</button></div></div> }
+  const cuerpoGrupo=g=>{ const todos=!!verTodos[g.clave], vis=g.solo?[]:(todos?g.rows:g.rows.slice(0,3)), abre=asoc?.clave===g.clave
+    return <>
+      {g.solo&&<div style={{padding:'10px 14px'}}><div style={{fontSize:12.5,fontWeight:600,...una}}>{g.rows.length} {g.rows.length===1?'correo':'correos'} · el último, {fechaHoraCL(g.ultimo)}</div><div style={{...una,fontSize:11,color:C.textSoft}}>{g.de}</div></div>}
+      {vis.map((r,i)=>filaHecha(r,i))}
+      {g.solo?(<><button onClick={()=>setAsoc(abre?null:{clave:g.clave,q:'',cid:''})} style={{...btnLink,display:'block',width:'100%',textAlign:'left',padding:'8px 14px',borderTop:`1px solid ${C.track}`}}>Asociar el remitente a un cliente ›</button>{abre&&panelAsociar(g)}</>)
+        :g.n>3&&<button onClick={()=>setVerTodos(o=>({...o,[g.clave]:!todos}))} style={{...btnLink,display:'block',width:'100%',textAlign:'left',padding:'8px 14px',borderTop:`1px solid ${C.track}`,marginTop:'auto'}}>{todos?'Ver menos ‹':`Ver los ${g.n} ›`}</button>}
+    </> }
+  const cabGrupo=g=><><div style={{flex:1,minWidth:0}}><div style={{...una,fontWeight:700,color:C.accent,fontSize:13}}>{g.t}</div>{g.sub&&<div style={{...una,fontSize:11,color:C.textSoft}}>{g.sub}</div>}</div><b style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>{g.n}</b></>
+  const grupos=(L,vacio)=>{ if(!L.length) return <div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft}}>{vacio}</div>
+    return isDesktop
+    ?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12,alignItems:'start'}}>{L.map(g=><div key={g.clave} data-tipos={[...new Set(g.rows.map(r=>r.tipo).filter(Boolean))].join(' ')} style={{...card,overflow:'hidden',minWidth:0,display:'flex',flexDirection:'column'}}><div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px'}}>{cabGrupo(g)}</div><div style={{borderTop:`1px solid ${C.track}`,display:'flex',flexDirection:'column'}}>{cuerpoGrupo(g)}</div></div>)}</div>
+    :<div style={{...card,overflow:'hidden'}}>{L.map((g,i)=>{ const ab=grAb[g.clave]===undefined?i===0&&filtro==='hech':grAb[g.clave]
+        return <div key={g.clave} data-tipos={[...new Set(g.rows.map(r=>r.tipo).filter(Boolean))].join(' ')} style={{borderTop:i?`1px solid ${C.track}`:'none'}}><div onClick={()=>setGrAb(o=>({...o,[g.clave]:!ab}))} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>{cabGrupo(g)}<span style={{color:C.muted,fontSize:14}}>{ab?'⌃':'⌄'}</span></div>{ab&&<div style={{borderTop:`1px solid ${C.track}`}}>{cuerpoGrupo(g)}</div>}</div> })}</div> }
+
+  const SL=(t,n,extra)=><div style={{...SEC_LBL,margin:'2px 2px 8px',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:12,flexWrap:'wrap'}}><span>{t} · {n}</span>{extra}</div>
+  const pendOrd=[...G.pend].sort((a,b)=>grupoAccionBandeja(a).orden-grupoAccionBandeja(b).orden)
+  const lotes=[...new Set(pendOrd.map(r=>grupoAccionBandeja(r).t))].map(t=>[t,pendOrd.filter(r=>grupoAccionBandeja(r).t===t&&enLote(r))]).filter(([,L])=>L.length>1)
+  const cuadro=L=>isDesktop?<div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12,alignItems:'start'}}>{L.map(tarjeta)}</div>:<div style={{display:'flex',flexDirection:'column',gap:8}}>{L.map(tarjeta)}</div>
+  const vista=filtro==='pend'?<>
+      {SL('Pendientes',G.pend.length,lotes.length>0&&<span style={{display:'flex',gap:14,flexWrap:'wrap'}}>{lotes.map(([t,L])=><button key={t} onClick={()=>registrarLote(t,L)} style={btnLink}>{t} · Registrar los {L.length} ›</button>)}</span>)}
+      {G.pend.length?cuadro(pendOrd):<div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos por confirmar.</div>}</>
+    :filtro==='hech'?<>{SL('Ya registrados',G.hech.length)}{grupos(gruposBandeja(G.hech),'Sin correos registrados.')}</>
+    :filtro==='sosp'?<>{SL('Sospechosos',G.sosp.length)}{G.sosp.length?cuadro(G.sosp):<div style={{...card,padding:'11px 14px',fontSize:12,color:C.textSoft}}>Sin correos sospechosos.</div>}</>
+    :<>{SL('Sin acción',G.sin.length)}{grupos(gruposBandeja(G.sin),'Sin correos.')}</>
   return wrap(<>
     <PageHeader origen={origen||'Oficina'} onBack={onBack} titulo='Bandeja del agente' style={{margin:isDesktop?'-12px -20px 12px':'-8px -16px 12px'}}/>
     {err&&<div style={{...card,padding:16,color:C.overdueText,fontSize:13,marginBottom:12}}>No se pudo leer la bandeja: {err}</div>}
     {!rows&&!err&&<div style={{padding:30,textAlign:'center',color:C.muted,fontSize:13}}>Cargando…</div>}
     {rows&&<>
-      <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',marginBottom:12}}>
-        <div style={{...SEC_LBL}}>Correos de la oficina revisados · 30 días</div>
-        <div style={{display:'flex',alignItems:'baseline',gap:8}}><span style={{fontSize:isDesktop?26:26,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span><span style={{fontSize:12,color:C.textSoft}}>cada hora</span></div>
-        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:10}}>
-          {partes.map(([t,v,c,bg])=><div key={t} style={{background:bg,borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}><span style={{fontSize:11.5,fontWeight:600,color:c,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></div>)}
+      <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',marginBottom:12,...(isDesktop?{display:'flex',alignItems:'center',gap:22}:{})}}>
+        <div style={isDesktop?{flex:'0 0 300px'}:undefined}>
+          <div style={{...SEC_LBL}}>Correos de la oficina revisados · 30 días</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8}}><span style={{fontSize:26,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{lista.length}</span><span style={{fontSize:12,color:C.textSoft}}>cada hora</span></div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginTop:isDesktop?0:10,flex:isDesktop?1:undefined}}>
+          {partes.map(([k,t,v,c,bg])=><button key={k} aria-pressed={filtro===k} onClick={()=>setFiltro(k)} style={{background:bg,border:'none',borderRadius:10,padding:'8px 11px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,cursor:'pointer',textAlign:'left',fontFamily:'inherit',minWidth:0,boxShadow:filtro===k?`0 0 0 2px ${C.accent}`:'none'}}><span style={{fontSize:11.5,fontWeight:600,color:c,...clamp2}}>{t}</span><span style={{fontSize:15,fontWeight:800,color:c,fontVariantNumeric:'tabular-nums'}}>{v}</span></button>)}
         </div>
       </div>
-      {isDesktop?<div style={{display:'grid',gridTemplateColumns:'minmax(0,1.25fr) minmax(0,1fr)',gap:16,alignItems:'start'}}><div>{pend}</div><div>{lado}</div></div>:<>{pend}{lado}</>}
+      {vista}
     </>}
   </>)
 }
-

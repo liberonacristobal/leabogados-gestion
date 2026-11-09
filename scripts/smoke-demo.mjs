@@ -94,6 +94,32 @@ try {
     }
     for (const t of TABS.filter(t => !solo.length || solo.includes(t)))
       await revisar(`pestaña ${t}`, { fn: t => { window.__demo.setModal(null); window.__demo.navTo({ tab: t }) }, arg: t })
+    // Procesos automáticos: los 4 chips filtran (aria-pressed) y tocarlos otra vez quitan el filtro; «Revisar ›» de Por aprobar está presente.
+    if (!solo.length || solo.includes('procesos')) {
+      await revisar('procesos · filtros', { fn: async () => {
+        window.__demo.setModal(null); window.__demo.navTo({ tab: 'procesos' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(600)
+        const chips = () => [...document.querySelectorAll('button[aria-pressed]')].filter(b => /^(Correctos|Con falla|Aún no corren|Apagados)/.test(b.textContent.trim()))
+        window.__procesosSmoke = chips().length === 4 && /Revisar ›/.test(document.body.innerText) ? '' : 'faltan los 4 chips o «Revisar ›»'
+        for (const t of ['Correctos', 'Con falla', 'Aún no corren', 'Apagados']) {
+          const b = chips().find(x => x.textContent.trim().startsWith(t)); b.click(); await esp(150)
+          if (chips().find(x => x.textContent.trim().startsWith(t)).getAttribute('aria-pressed') !== 'true' || chips().filter(x => x.getAttribute('aria-pressed') === 'true').length !== 1) window.__procesosSmoke += ` · «${t}» no queda activo`
+        }
+        chips().find(x => x.getAttribute('aria-pressed') === 'true').click(); await esp(150)
+        if (chips().some(x => x.getAttribute('aria-pressed') === 'true')) window.__procesosSmoke += ' · el segundo toque no quita el filtro'
+      }, arg: null })
+      const pf = await page.evaluate(() => window.__procesosSmoke)
+      if (pf) fallas.push({ vista: nombre, donde: 'procesos · filtros', error: pf })
+    }
+    // Bandeja del agente: los 4 filtros, llegando con foco desde navTo y tocando el chip (aria-pressed marca el activo).
+    if (!solo.length || solo.includes('bandeja')) {
+      for (const f of ['pend', 'hech', 'sosp', 'sin'])
+        await revisar(`bandeja filtro ${f} (foco)`, { fn: f => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'bandeja', foco: { f } }) }, arg: f })
+      for (const [f, t] of [['hech', 'Ya registrados'], ['sin', 'Sin acción'], ['sosp', 'Sospechosos'], ['pend', 'Pendientes']]) {
+        await revisar(`bandeja chip ${f}`, { fn: t => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'bandeja' }); setTimeout(() => [...document.querySelectorAll('button[aria-pressed]')].find(b => b.textContent.trim().startsWith(t))?.click(), 250) }, arg: t })
+        const activo = await page.evaluate(t => [...document.querySelectorAll('button[aria-pressed="true"]')].some(b => b.textContent.trim().startsWith(t)), t)
+        if (!activo) fallas.push({ vista: nombre, donde: `bandeja chip ${f}`, error: 'el chip no quedó activo (aria-pressed)' })
+      }
+    }
     for (const d of DETALLES.filter(d => !solo.length || solo.includes(d))) for (const i of [0, 1, 2]) {
       await revisar(`detalle ${d} ${i + 1}`, { fn: ([d, i]) => { window.__demo.setModal(null); window.__demo.setTab('dashboard'); setTimeout(() => window.__demo.abrir(d, i), 50) }, arg: [d, i] })
       await page.evaluate(() => { window.__demo.setModal(null); window.__demo.setTab('dashboard') })
