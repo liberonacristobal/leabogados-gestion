@@ -3126,7 +3126,7 @@ export function calendarioCliente({hoy, props=[], causas=[], docs=[], plazos=[],
 // Lo que el calendario de un cliente lee de la base (la ficha y Counsel AI usan la misma lectura).
 export async function cargarFuentesCalCliente(clientId){
   const [d,p,o]=await Promise.all([supabase.from('documentos_notaria').select('id,do_estado,do_publicacion').eq('cliente_id',clientId).in('do_estado',['pendiente','plazo_vencido']),
-    supabase.from('plazos').select('*').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId)])
+    supabase.from('plazos').select('*, fecha:fecha_vencimiento').neq('estado','descartado').eq('client_id',clientId), supabase.from('obligaciones_tributarias').select('*').eq('client_id',clientId)])
   return {docs:d.data||[], plazos:p.data||[], obl:o.data||[]}
 }
 // Calendario completo de un cliente para Counsel AI: mismas fuentes y misma función que la ficha (calendarioCliente).
