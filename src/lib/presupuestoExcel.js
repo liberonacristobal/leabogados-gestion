@@ -28,7 +28,7 @@ export function hojasPresupuesto(P) {
       ['UF de cierre del año base', N(P.ufDic, UF)],
       ['Reajuste anual de la UF (%)', N(est.reajusteUF, '0.0')],
       ['Tasa de primera categoría (%)', N(est.tasaIDPC, '0.0')],
-      ['PPM del año', N(est.ppmAnual)],
+      ['Tasa de PPM sobre lo facturado (%)', N(est.ppmTasa, '0.000')],
       ['Reserva de caja (%)', N(est.reserva, '0.0')],
       [],
       ['Supuesto', ...ESC.map(([, n]) => n)],
@@ -69,7 +69,7 @@ export function hojasPresupuesto(P) {
       r(10, 'Resultado después de impuesto', (c) => `${c}8-${c}9`),
       r(11, 'Reserva de caja', (c) => `MAX(0,${c}10)*Supuestos!$B$9/100`),
       r(12, 'Retiros de los socios', (c) => `MAX(0,${c}10)*(1-Supuestos!$B$9/100)`),
-      r(13, 'PPM del año', () => 'Supuestos!$B$8'),
+      r(13, 'PPM del año', (c) => `${c}3*Supuestos!$B$8/100`),
       r(14, 'Impuesto por pagar (menos PPM)', (c) => `${c}9-${c}13`),
     ],
   }

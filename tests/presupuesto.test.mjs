@@ -1,7 +1,7 @@
 // Presupuesto anual: modelo por escenario, migración, diferencias, días de cobro. Datos de ejemplo, sin cifras reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS } from './../supabase/functions/_shared/presupuesto.js'
+import { tasaIDPCLegal, tasaPPMLegal, estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS } from './../supabase/functions/_shared/presupuesto.js'
 
 const costos = [
   { id: 0, n: 'Sueldos', m: 5_000_000, meses: 12, t: 'fijo', alza: null },
@@ -26,8 +26,9 @@ test('modelo: cada mes parte de la base en UF y la cascada cierra al peso', () =
     assert.ok(Math.abs(e.base - (e.caja - e.terc - e.costos)) < 1e-6)            // resultado = cobrado − terceros − costos
     assert.ok(Math.abs(e.post - (e.base - e.idpc)) < 1e-6)                        // después de impuesto
     assert.ok(Math.abs(e.retiros + e.reserva - Math.max(0, e.post)) < 1e-6)      // retiros + reserva = resultado después de impuesto
-    assert.ok(Math.abs(e.saldo - (e.idpc - st.ppmAnual)) < 1e-6)
-    assert.equal(st.ppmAnual, 1_200_000)
+    assert.ok(Math.abs(e.ppm - e.fact * 0.00125) < 1e-6)                          // PPM = 0,125 % de lo facturado (Pro Pyme, 2027)
+    assert.ok(Math.abs(e.saldo - (e.idpc - e.ppm)) < 1e-6)
+    assert.equal(st.ppmTasa, 0.125)
   }
 })
 
@@ -73,7 +74,7 @@ test('estado inicial: terceros y días de cobro reales reemplazan los de partida
 test('migración: marcas y notas del diseño de 8 etapas pasan a las 5 actuales, sin perder ninguna', () => {
   const m = migrarEstado({ hecho: [0, 2, 4, 7], notas: { 2: 'revisar tasa', 3: 'base ok', 7: 'avisos' } })
   assert.deepEqual(m.hecho.sort(), [0, 2, 3, 4])
-  assert.equal(m.notas[3], 'revisar tasa · base ok'); assert.equal(m.notas[4], 'avisos'); assert.equal(m.v, 2)
+  assert.equal(m.notas[3], "revisar tasa · base ok"); assert.equal(m.notas[4], "avisos"); assert.equal(m.v, 3)
   assert.deepEqual(migrarEstado(m), m)   // idempotente
 })
 
@@ -113,4 +114,16 @@ test('días de cobro: promedio y mediana de facturas pagadas del año, sin reemb
 test('concentración: los k primeros sobre el total', () => {
   assert.equal(concentracion([50, 30, 10, 5, 3, 2], 100, 2), 0.8)
   assert.equal(concentracion([], 0), 0)
+})
+
+test('tasas legales Pro Pyme por año comercial (circular SII 53/2025) y migración del borrador anterior', () => {
+  assert.equal(tasaIDPCLegal(2026), 12.5); assert.equal(tasaIDPCLegal(2027), 12.5); assert.equal(tasaIDPCLegal(2028), 15); assert.equal(tasaIDPCLegal(2029), 25)
+  assert.equal(tasaPPMLegal(2027, 10_000), 0.125); assert.equal(tasaPPMLegal(2027, 60_000), 0.25)   // rebaja transitoria hasta dic-2027
+  assert.equal(tasaPPMLegal(2028, 10_000), 0.25); assert.equal(tasaPPMLegal(2028, 60_000), 0.5)     // sin rebaja en 2028
+  const viejo = { v: 2, tasaIDPC: 15, ppmAnual: 1_200_000, esc: 'base', hecho: [], notas: {} }
+  const m = migrarEstado(viejo, 2027)
+  assert.equal(m.v, 3); assert.equal(m.tasaIDPC, 12.5); assert.equal(m.ppmTasa, 0.125); assert.equal(m.ppmAnual, undefined)
+  assert.equal(migrarEstado({ v: 2, tasaIDPC: 20 }, 2027).tasaIDPC, 20)                              // una tasa editada a mano no se toca
+  assert.deepEqual(migrarEstado(m, 2027), m)                                                          // idempotente
+  assert.equal(estadoInicial({ anio: 2028 }).tasaIDPC, 15)
 })

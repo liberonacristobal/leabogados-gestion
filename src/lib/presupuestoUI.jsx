@@ -13,7 +13,7 @@ export const MESL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 export const MESC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 // Número editable con coma decimal y punto de miles: «1.000.000», «4,5».
-export const fmtIn = (v, k) => (v == null || v === '' ? '' : k === 'money' ? nf.format(Math.round(v)) : k === 'int' ? String(Math.round(v)) : Number(v).toLocaleString('es-CL', { maximumFractionDigits: 2 }))
+export const fmtIn = (v, k) => (v == null || v === '' ? '' : k === 'money' ? nf.format(Math.round(v)) : k === 'int' ? String(Math.round(v)) : Number(v).toLocaleString('es-CL', { maximumFractionDigits: 3 }))
 export const parseIn = t => { const x = parseFloat(String(t).replace(/[$\s%]/g, '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(x) ? x : NaN }
 
 const P = {
