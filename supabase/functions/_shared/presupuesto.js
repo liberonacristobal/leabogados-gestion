@@ -24,7 +24,7 @@ export const tasaIDPCLegal = (anio) => { const a = num(anio, 2027); return a <= 
  */
 export const tasaPPMLegal = (anio, ufAnterior) => { const grande = num(ufAnterior) > 50_000; return num(anio, 2027) <= 2027 ? (grande ? 0.25 : 0.125) : (grande ? 0.5 : 0.25) }
 
-/** @typedef {{ v:number, esc:string, moneda:string, reajusteUF:number, tasaIDPC:number, ppmTasa:number, reserva:number, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
+/** @typedef {{ v:number, esc:string, moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 
 export const ESCENARIOS = /** @type {[string,string][]} */ ([['prudente', 'Prudente'], ['base', 'Base'], ['meta', 'Meta']])
@@ -41,8 +41,8 @@ const num = (/** @type {any} */ x, d = 0) => { const n = Number(x); return Numbe
 
 /**
  * Estado inicial editable. `terc` y `dias` (reales del año anterior) reemplazan el valor de partida de los escenarios Base y Meta; el Prudente supone cobro más lento.
- * `anio` (año comercial del presupuesto) define las tasas legales de partida: primera categoría y PPM sobre lo facturado (`ufAnterior` = ingresos del año anterior en UF).
- * @param {{ costos?:PartidaCosto[], terc?:number|null, dias?:number|null, tasa?:number, ppmTasa?:number, anio?:number, ufAnterior?:number, reajusteUF?:number, reserva?:number }} [o]
+ * `anio` (año comercial del presupuesto) define la tasa legal de primera categoría de partida. El PPM parte de lo que se paga hoy (`ppmMes` × 12): supuesto conservador, la tasa legal (tasaPPMLegal) es menor y queda por confirmar con la contadora.
+ * @param {{ costos?:PartidaCosto[], terc?:number|null, dias?:number|null, tasa?:number, ppmMes?:number, anio?:number, reajusteUF?:number, reserva?:number }} [o]
  * @returns {EstadoPresupuesto}
  */
 export function estadoInicial(o = {}) {
@@ -50,7 +50,7 @@ export function estadoInicial(o = {}) {
   if (o.terc != null && Number.isFinite(Number(o.terc))) for (const k of Object.keys(p)) p[k].terc = Math.round(Number(o.terc) * 10) / 10
   if (o.dias != null && Number.isFinite(Number(o.dias)) && Number(o.dias) > 0) { p.base.dias = Math.round(Number(o.dias)); p.meta.dias = Math.round(Number(o.dias)); p.prudente.dias = Math.max(p.prudente.dias, Math.round(Number(o.dias)) + 10) }
   return {
-    v: 3, esc: 'base', moneda: 'clp', reajusteUF: num(o.reajusteUF, 3.5), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio)), ppmTasa: num(o.ppmTasa, tasaPPMLegal(o.anio, o.ufAnterior)), reserva: num(o.reserva, 15),
+    v: 3, esc: 'base', moneda: 'clp', reajusteUF: num(o.reajusteUF, 3.5), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, 15),
     p, costos: (o.costos || []).map((c) => ({ ...c })), hecho: [], notas: {}, basadaEn: null,
   }
 }
@@ -82,7 +82,7 @@ export function modeloPresupuesto(base, st) {
     const idpc = Math.max(0, antes) * (st.tasaIDPC / 100)
     const post = antes - idpc
     const retiros = Math.max(0, post) * (1 - st.reserva / 100)
-    const ppm = fact * (st.ppmTasa / 100)   // PPM del año: tasa sobre lo facturado (ingresos brutos del giro)
+    const ppm = num(st.ppmAnual)   // PPM del año: lo que se paga hoy por mes × 12 (conservador)
     esc[k] = { p, ing, ingUF, fact, factUF: sum(ingUF), dCob, caja, costos, terc, base: antes, idpc, ppm, saldo: idpc - ppm, post, retiros, reserva: Math.max(0, post) * (st.reserva / 100), egr: costos + terc + idpc }
   }
   return { uf27, ufMed, esc }
@@ -102,7 +102,7 @@ export function resumenModelo(m) {
 export const ETAPA_ANTIGUA = /** @type {Record<number,number>} */ ({ 0: 0, 1: 1, 2: 3, 3: 3, 4: 2, 5: 3, 6: 3, 7: 4 })
 
 /** Lleva un estado guardado con la numeración antigua de etapas a la actual (marcas «revisada» y notas); idempotente. @param {any} st */
-export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ufAnterior = /** @type {number|undefined} */ (undefined)) {
+export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0) {
   const c = JSON.parse(JSON.stringify(st || {}))
   if (c.v !== 2 && c.v !== 3) {
     const h = new Set(), n = /** @type {Record<string,string>} */ ({})
@@ -111,10 +111,13 @@ export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefin
     c.hecho = [...h]; c.notas = n; c.v = 2
   }
   if (c.v === 2) {
-    // v3: la tasa de primera categoría de partida (15 %) pasa a la legal del año comercial (circular SII 53/2025) y el PPM pasa de un monto a una tasa sobre lo facturado.
+    // v3: la tasa de primera categoría de partida (15 %) pasa a la legal del año comercial (circular SII 53/2025).
     if (anio != null && num(c.tasaIDPC, 15) === 15) c.tasaIDPC = tasaIDPCLegal(anio)
-    c.ppmTasa = tasaPPMLegal(anio, ufAnterior); delete c.ppmAnual; c.v = 3
+    c.v = 3
   }
+  // El PPM vuelve a ser un monto anual (el pagado hoy); un borrador que alcanzó a guardarse con tasa lo recupera del PPM vigente.
+  if (c.ppmAnual == null) c.ppmAnual = Math.round(num(ppmAnualRef))
+  delete c.ppmTasa
   return c
 }
 
@@ -127,7 +130,7 @@ export function diferenciaSupuestos(a, b, f) {
   /** @type {string[]} */
   const o = []
   const t = (/** @type {string} */ n, /** @type {any} */ x, /** @type {any} */ y) => { if (x !== y) o.push(`${n}: ${x} → ${y}`) }
-  t('Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('Tasa de PPM', f.pc(a.ppmTasa), f.pc(b.ppmTasa)); t('Reserva de caja', f.pc(a.reserva), f.pc(b.reserva))
+  t('Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Reserva de caja', f.pc(a.reserva), f.pc(b.reserva))
   const L = /** @type {Record<string,string>} */ ({ g: 'Crecimiento', alza: 'Alza de costos', terc: 'Comisiones', dias: 'Días de cobro' })
   for (const [k, nom] of ESCENARIOS) for (const campo of Object.keys(L)) t(nom + ' · ' + L[campo], a.p[k][/** @type {keyof Supuestos} */ (campo)], b.p[k][/** @type {keyof Supuestos} */ (campo)])
   const ma = new Map(a.costos.map((c) => [c.id, c])), mb = new Map(b.costos.map((c) => [c.id, c]))

@@ -54,7 +54,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
         if (!vivo) return
         setVers(filas.map(filaAVersion))
         // Un borrador de formato anterior se migra y queda pendiente de guardar (lastJSON conserva el original para que el autoguardado lo escriba).
-        if (borr) { const e = migrarEstado(borr.estado, anio); lastJSON.current = borr.estado?.v === 3 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
+        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12); lastJSON.current = borr.estado?.v === 3 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
         else setGuardado({ est: DEMO ? 'local' : 'ok', t: null })
         setCargado(true)
       } catch (e) { if (vivo) { setGuardado({ est: 'error', t: null }); setCargado(true) } }
@@ -65,8 +65,8 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // Sin borrador: estado inicial con los costos vigentes y los datos reales del año anterior (cuando ya cargaron, o tras una breve espera).
   useEffect(() => {
     if (!cargado || est || !(datos.terc != null || espera || DEMO)) return
-    setEst(estadoInicial({ costos: datos.costos, terc: datos.terc, dias: datos.dias.promedio, anio, ufAnterior: datos.oficiales.fact.uf }))
-  }, [cargado, est, datos.terc, espera, datos.costos, datos.dias.promedio, anio, datos.oficiales.fact.uf])
+    setEst(estadoInicial({ costos: datos.costos, terc: datos.terc, dias: datos.dias.promedio, anio, ppmMes: datos.ppmMes }))
+  }, [cargado, est, datos.terc, espera, datos.costos, datos.dias.promedio, anio, datos.ppmMes])
 
   // ── Autoguardado del borrador (1,5 s después del último cambio) ──
   const guardarBorrador = async () => {
@@ -132,7 +132,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
       setVers((v) => [filaAVersion(fila), ...v]); parche((c) => { c.basadaEn = fila.id }); setUI({ vx: fila.id, confirma: null })
     } catch (e) { setGuardado((g) => ({ ...g, est: 'error' })) }
   }
-  const abrirVersion = (v) => { setEst({ ...migrarEstado(v.estado, anio), basadaEn: v.id }); setUI({ confirma: null }) }
+  const abrirVersion = (v) => { setEst({ ...migrarEstado(v.estado, anio, datos.ppmMes * 12), basadaEn: v.id }); setUI({ confirma: null }) }
   const borrarVersion = async (v) => {
     try {
       if (DEMO) localStorage.setItem('ppto_demo_v_' + anio, JSON.stringify(vers.filter((x) => x.id !== v.id)))
