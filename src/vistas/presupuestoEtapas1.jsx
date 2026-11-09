@@ -9,7 +9,7 @@ const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 export function Mirada({ X }) {
   const { datos: d, est, D, ui, setUI, ir } = X, o = d.oficiales, uf = est.moneda === 'uf', ambos = est.moneda === 'ambos'
   const cifra = (c) => (uf || ambos ? 'UF ' + nf.format(Math.round(c.uf)) : mm(c.clp))
-  const sub = (c, txt) => <span>{c.pct != null && <b>{pc(c.pct, 0)}</b>} {txt}{ambos ? ' · ' + mm(c.clp) : ''}</span>
+  const sub = (c, txt) => <span>{c.pct != null && <b style={{ color: C.accent, fontWeight: 800 }}>{pc(c.pct, 0)}</b>} {txt}{ambos ? ' · ' + mm(c.clp) : ''}</span>
   const Y = d.anioBase, H = Number(d.hoy.slice(5, 7)) - 1
   const serie = (y, i) => d.serie[ym(y, i)]
   const meses = Array.from({ length: 12 }, (_, i) => ({ i, f: i <= H ? serie(Y, i) : null, a: serie(Y - 1, i), cob: i <= H ? d.cobMes[ym(Y, i)] ?? null : null }))

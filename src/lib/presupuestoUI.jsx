@@ -38,7 +38,7 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
   const t = TONO[tono], D = useIsDesktop()
   return <div onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '10px', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: D ? 'center' : 'flex-start', gap: D ? 12 : 8, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: 32, height: 32, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: t.fg }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: t.v, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: tono === 'w' ? C.muted : t.fg }}>{sub}</div>}</div>
+    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
   </div>
 }
 
