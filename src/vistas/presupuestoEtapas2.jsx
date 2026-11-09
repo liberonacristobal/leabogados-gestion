@@ -1,5 +1,5 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
 import { modeloPresupuesto, diferenciaSupuestos } from '../../supabase/functions/_shared/presupuesto.js'
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
@@ -43,32 +43,7 @@ function CardEsc({ X, k }) {
   </div>
 }
 
-function Simulador({ X }) {
-  const { est, M, datos: d, setPal } = X, k = est.esc, e = M.esc[k], p = est.p[k], b = M.esc.base
-  const rc = (patch) => modeloPresupuesto(d.base, { ...est, p: { ...est.p, [k]: { ...p, ...patch } } }).esc[k].retiros
-  const sg = { g: rc({ g: p.g + 1 }) - e.retiros, alza: rc({ alza: p.alza + 1 }) - e.retiros, terc: rc({ terc: p.terc + 1 }) - e.retiros, dias: rc({ dias: p.dias + 5 }) - e.retiros }
-  const rg = (t, f, mn, mx, st, suf, hint, int) => <div key={f} style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}` }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><b style={{ fontWeight: 600 }}>{t}</b><span style={{ fontWeight: 800, color: C.accent }}>{fmtIn(p[f], int ? 'int' : 'pct')}{suf}</span></div>
-    <input type='range' min={mn} max={mx} step={st} value={p[f]} onChange={(ev) => setPal(k, f, parseFloat(ev.target.value))} style={{ width: '100%', accentColor: C.accent, margin: '6px 0 2px' }} />
-    <div style={{ fontSize: 12, color: C.muted }}>{hint}: {sgn(sg[f])}{mm(Math.abs(sg[f]))} de retiros</div></div>
-  const row = (t, v, go) => <Fila key={t} nombre={t} valor={X.fm(v)} onClick={go} sin={!go} />
-  return <Grid cols={2} colsM={1} gap={14} style={{ alignItems: 'start' }}>
-    <Panel hd={`Simulador · ${X.nomEsc(k)}`} small='mueve las palancas'>
-      <div style={{ padding: '12px 16px' }}><div style={{ ...LBL, color: C.muted }}>Retiros</div><div style={{ fontSize: 34, fontWeight: 800, letterSpacing: -0.8, color: e.retiros > 0 ? C.greenText : C.overdueText }}>{X.fm(e.retiros)}</div><div style={{ fontSize: 11, color: C.muted }}>{k === 'base' ? 'escenario de referencia' : sgn(e.retiros - b.retiros) + mm(Math.abs(e.retiros - b.retiros)) + ' contra el Base'} · {X.fmS(e.retiros / 24)} por socio al mes</div></div>
-      {rg('Crecimiento de ventas', 'g', -30, 80, 1, '%', '+1 punto')}{rg('Alza de costos', 'alza', 0, 20, 0.5, '%', '+1 punto')}{rg('Comisiones', 'terc', 0, 60, 1, '%', '+1 punto')}{rg('Días de cobro', 'dias', 0, 90, 5, 'd', '+5 días', true)}
-    </Panel>
-    <Panel hd='De dónde salen' small='toca una fila'>{row('Facturado', e.fact, () => X.irBase())}{row('Cobrado', e.caja, () => X.irBase())}{row('− Comisiones', e.terc, () => X.irCostos())}{row('− Costos de oficina', e.costos, () => X.irCostos())}{row('− Impuesto', e.idpc, () => X.irEscTab('imp'))}{row('− Reserva de caja', e.reserva)}<Fila tot sin nombre='= Retiros' valor={X.fm(e.retiros)} /></Panel>
-  </Grid>
-}
 
-function Recibo({ X }) {
-  const { est, M } = X, k = est.esc, e = M.esc[k], b = M.esc.base
-  const fila = (t, v, vb, go, tot) => <Fila key={t} nombre={t} tot={tot} sin={!go} onClick={go} sub={k === 'base' || Math.abs(v - vb) < 1 ? '' : `${sgn(v - vb)}${mm(Math.abs(v - vb))} vs Base`} valor={X.fm(v)} />
-  return <Panel hd={`Recibo del escenario ${X.nomEsc(k)}`} small='cada fila muestra su diferencia contra el Base'>
-    {fila('Facturado', e.fact, b.fact, () => X.irBase())}{fila('− Aumento de lo por cobrar', e.dCob, b.dCob)}{fila('= Cobrado (caja)', e.caja, b.caja, () => X.irBase())}{fila('− Comisiones', e.terc, b.terc, () => X.irCostos())}{fila('− Costos de oficina', e.costos, b.costos, () => X.irCostos())}
-    {fila('= Resultado antes de impuesto', e.base, b.base)}{fila('− Impuesto de primera categoría', e.idpc, b.idpc, () => X.irEscTab('imp'))}{fila('= Resultado después de impuesto', e.post, b.post)}{fila('− Reserva de caja', e.reserva, b.reserva)}{fila('= Retiros de los socios', e.retiros, b.retiros, null, true)}
-  </Panel>
-}
 
 function TabImp({ X }) {
   const { est, M, setEsc } = X
@@ -92,7 +67,6 @@ function TabSoc({ X }) {
         return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + X.fmS(e.retiros / 24) + ' por mes'}`} sub={'facturado ' + X.fmS(e.fact * sh)} valor={sin ? '—' : X.fm(e.retiros / 2)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
       <Fila tot sin nombre='Oficina' sub={'facturado ' + X.fmS(e.fact)} valor={X.fm(e.retiros)} />
     </Panel>
-    <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>Pendiente de definir: si la meta de ventas se fija también por socio, con una meta propia de cada uno, o solo como reparto de la meta de la oficina.</div>
   </>
 }
 
@@ -106,7 +80,7 @@ function Metas({ X }) {
   const tono = { a: { bg: C.azulBg, fg: C.azulInfo, v: C.accent }, y: { bg: C.soonBg, fg: C.soonText, v: C.soonText }, g: { bg: C.greenBg, fg: C.greenText, v: C.greenText } }
   const fmS = (v) => (X.est.moneda === 'uf' ? ufs(v / M.ufMed) : mm(v))
   return <>
-    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>punto de partida: se mueven con las palancas de cada escenario</span>}>Metas {d.anio} · escenario {X.nomEsc(k)}</Titulo>
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>punto de partida: se mueven con las supuestos de cada escenario</span>}>Metas {d.anio} · escenario {X.nomEsc(k)}</Titulo>
     <Grid cols={3} colsM={1}>{datos.map((m) => { const t = tono[m.c], v = m.fn(k), dd = m.base ? (m.uf(k) / m.base - 1) * 100 : null
       return <div key={m.t} style={{ background: t.bg, color: t.fg, borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span style={{ width: 32, height: 32, borderRadius: 10, background: C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={m.ic} s={18} /></span><span style={{ ...LBL }}>Meta de {m.t}</span><span onClick={() => X.irMirada()} style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>Ver {d.anioBase} ›</span></div>
@@ -121,8 +95,7 @@ function Metas({ X }) {
 export function Escenarios({ X }) {
   const { est, M, D, ui, setUI, datos: d } = X
   const tabs = [['res', 'Resultado'], ['imp', 'Impuesto'], ['soc', 'Por socio']]
-  const alts = [['A', 'A · Tarjetas ★'], ['B', 'B · Simulador'], ['C', 'C · Recibo']]
-  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : ui.alt === 'B' ? <Simulador X={X} /> : ui.alt === 'C' ? <Recibo X={X} /> : <Grid cols={3} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid>
+  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <Grid cols={3} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid>
   const cascada = [['', 'Facturado', (x) => X.fm(x.fact)], ['−', 'Variación de cuentas por cobrar', (x) => X.fm(x.dCob)], ['=', 'Cobrado (caja)', (x) => X.fm(x.caja), 1], ['−', 'Comisiones', (x) => X.fm(x.terc)], ['−', 'Costos de oficina', (x) => X.fm(x.costos)], ['=', 'Resultado antes de impuesto', (x) => X.fm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => X.fm(x.idpc)], ['=', 'Resultado después de impuesto', (x) => X.fm(x.post), 1], ['−', 'Reserva de caja', (x) => X.fm(x.reserva)], ['=', 'Retiros de los socios', (x) => X.fm(x.retiros), 1]]
   const excel = () => descargarLibroPresupuesto({
     anio: d.anio, anioBase: d.anioBase, ufDic: d.ufDic, baseCLP: d.base.baseCLP, baseUF: d.base.baseUF, est, ESC: X.ESC, costos: est.costos, socios: d.socios, oficiales: d.oficiales,
@@ -134,9 +107,8 @@ export function Escenarios({ X }) {
   return <>
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
       <Seg options={tabs} value={ui.tab} onChange={(v) => setUI({ tab: v })} />
-      <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{ui.tab === 'res' && <Seg options={alts} value={ui.alt} onChange={(v) => setUI({ alt: v })} />}<Btn onClick={excel}>Descargar Excel</Btn></span>
+      <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><Btn onClick={excel}>Descargar Excel</Btn></span>
     </div>
-    {ui.tab === 'res' && <div style={{ fontSize: 12, color: C.muted, margin: '-4px 4px 0' }}>Elegida: A · Tarjetas. B · Simulador y C · Recibo siguen disponibles. Las palancas de cada escenario se editan aquí mismo.</div>}
     {ui.tab !== 'soc' && <Strip X={X} />}
     {cuerpo}
     {ui.tab === 'res' && <Metas X={X} />}
@@ -186,7 +158,6 @@ export function Seguimiento({ X }) {
       {avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}
       <div style={{ fontSize: 12, color: C.muted, marginTop: 10 }}>Se calculan con lo real del año: facturado contra presupuesto, días de cobro y concentración.</div>
     </Panel>
-    <Panel hd='Cómo funciona' pad flex><Lista items={['Los costos se comparan en «Presupuesto vs real», en Resultado del año.', 'Cada mes cerrado reemplaza el supuesto por el dato real.', `En abril, el resultado de ${Y} alimenta el presupuesto de ${Y + 1}.`, 'Exporta a Excel desde Escenarios, con versiones comparables.']} /></Panel>
   </>
   return <>
     <Titulo>Presupuesto vs real · {Y} · {X.nomEsc(k)}{of ? ' · versión oficial «' + of.nombre + '»' : ' · borrador (sin versión oficial)'}</Titulo>
@@ -276,31 +247,40 @@ export function indicadores(X) {
 // Evolución del año de Vendido o Cobrado contra su meta, y de qué trabajos y clientes salen los ingresos (estimación propia: reparte el total oficial de Inicio según las partidas).
 const dmy = (iso) => String(iso).slice(0, 10).split('-').reverse().join('-')
 function Evolucion({ X, k }) {
-  const { datos: d, est } = X, e = d.evo, o = d.oficiales, vend = k === 'vend', c = vend ? o.vend : o.cob
-  const meta = vend ? o.metaVentasCLP : o.metaCobroCLP, serie = vend ? e.vend : e.cob, uf = est.moneda === 'uf'
-  const r = c.clp > 0 ? c.uf / c.clp : 0, val = (x) => (uf ? ufs(x * r) : mm(x))
-  const H = Number(d.hoy.slice(5, 7)) - 1, top = Math.max(meta, ...serie.map((v) => v || 0), 1) * 1.08
-  const W = X.D ? 640 : 360, Ht = X.D ? 220 : 200, L = X.D ? 54 : 50, B = 26, T = 10, R = 12, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
-  const pts = serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean)
-  const cruce = vend ? e.cruceV : e.cruceC
-  const cI = vend ? e.cruceV : e.cruceC ? Number(e.cruceC.slice(5, 7)) - 1 : null
-  const falta = Math.max(0, meta - (c.clp || 0))
-  const titulo = meta <= 0 ? 'Sin meta definida' : cruce != null ? `Meta superada ${vend ? 'en ' + MESL[e.cruceV].toLowerCase() : 'el ' + dmy(e.cruceC)}` : `Falta ${val(falta)} para la meta`
-  const bw = X.D ? 120 : 62, barras = e.areas.slice(0, 6), mx = Math.max(...barras.map((a) => a.monto), 1)
+  const [modo, setModo] = useState(k === 'vend' ? 'v' : 'c')
+  const { datos: d, est } = X, e = d.evo, o = d.oficiales, uf = est.moneda === 'uf'
+  const H = Number(d.hoy.slice(5, 7)) - 1
+  const def = { v: { nom: 'Vendido', c: o.vend, meta: o.metaVentasCLP, serie: e.vend, col: C.accent, tono: 'a', ic: 'ventas', mes: e.cruceV, fecha: null }, c: { nom: 'Cobrado', c: o.cob, meta: o.metaCobroCLP, serie: e.cob, col: C.greenText, tono: 'g', ic: 'wal', mes: e.cruceC ? Number(e.cruceC.slice(5, 7)) - 1 : null, fecha: e.cruceC } }
+  const val = (x, c) => (uf ? ufs(x * (c.clp > 0 ? c.uf / c.clp : 0)) : mm(x))
+  const act = modo === 'a' ? [def.v, def.c] : [def[modo]]
+  const top = Math.max(1, ...act.map((a) => Math.max(a.meta, ...a.serie.map((v) => v || 0)))) * 1.08
+  const W = X.D ? 640 : 360, Ht = X.D ? 220 : 200, L = X.D ? 58 : 52, B = 26, T = 16, R = 22, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
+  const ref = def.v.c.clp > 0 ? def.v.c : def.c.c, vv = (v) => val(v, ref)
+  const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: faltan ${val(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} para la meta`)
+  const barras = e.areas.slice(0, 6), bw = X.D ? 120 : 62, mx = Math.max(...barras.map((a) => a.monto), 1)
+  const sobre = def.v.c.clp > 0 ? (def.c.c.clp / def.v.c.clp) * 100 : null
+  const filas = (modo === 'c' ? def.c : def.v).serie
   return <>
-    <Titulo>{vend ? 'Vendido' : 'Cobrado'} acumulado contra la meta · estimación propia</Titulo>
-    <Panel hd={titulo} small={meta > 0 ? `meta ${val(meta)} · avance ${pc(c.pct ?? 0, 0)}` : undefined}>
-      <div style={{ padding: '8px 12px 12px' }}>
-        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label={`Evolución acumulada de ${vend ? 'lo vendido' : 'lo cobrado'} en ${d.anioBase}`}>
-          {[0, 0.5, 1].map((f) => <g key={f}><line x1={L} x2={W - R} y1={y(top * f / 1.08)} y2={y(top * f / 1.08)} stroke={C.border} strokeWidth='1' /><text x={L - 6} y={y(top * f / 1.08) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{val(top * f / 1.08)}</text></g>)}
+    <Titulo right={<Seg options={[['v', 'Vendido'], ['c', 'Cobrado'], ['a', 'Ambos']]} value={modo} onChange={setModo} />}>Evolución contra la meta · estimación propia</Titulo>
+    <Grid cols={modo === 'a' ? 3 : 2} colsM={modo === 'a' ? 1 : 2}>
+      {act.map((a) => <Kpi key={a.nom} tono={a.tono} ic={a.ic} label={a.nom} value={val(a.c.clp, a.c)} sub={a.c.pct != null ? pc(a.c.pct, 0) + ' de la meta' : 'sin meta'} />)}
+      {modo === 'a' && <Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} />}
+    </Grid>
+    <Panel hd={act.map(frase).join(' · ')}>
+      <div style={{ padding: '8px 12px 4px' }}>
+        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Evolución acumulada contra la meta'>
+          {[0, 0.5, 1].map((f) => <g key={f}><line x1={L} x2={W - R} y1={y(top * f / 1.08)} y2={y(top * f / 1.08)} stroke={C.border} strokeWidth='1' /><text x={L - 6} y={y(top * f / 1.08) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{vv(top * f / 1.08)}</text></g>)}
           {MESC.map((m, i) => (X.D || i % 2 === 0) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted}>{m}</text>)}
-          {meta > 0 && <g><line x1={L} x2={W - R} y1={y(meta)} y2={y(meta)} stroke={C.soonText} strokeWidth='1.5' strokeDasharray='5 4' /><text x={W - R} y={y(meta) - 5} textAnchor='end' fontSize='11' fontWeight='700' fill={C.soonText}>Meta</text></g>}
-          {pts.length > 1 && <polyline points={pts.map((p) => p.join(',')).join(' ')} fill='none' stroke={C.accent} strokeWidth='2.5' strokeLinejoin='round' />}
-          {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r='3.5' fill={C.accent} />)}
-          {cI != null && serie[cI] != null && <circle cx={x(cI)} cy={y(serie[cI])} r='7' fill='none' stroke={C.greenText} strokeWidth='2.5' />}
+          {act.map((a) => <g key={a.nom}>
+            {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.5' strokeDasharray='5 4' opacity='.7' /><text x={L + 8} y={y(a.meta) - 6} textAnchor='start' fontSize='12' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='5' paintOrder='stroke' strokeLinejoin='round'>Meta {a.nom === 'Vendido' ? 'de ventas' : 'de cobro'}</text></>}
+            <polyline points={a.serie.map((v, i) => (v == null ? null : x(i) + ',' + y(v))).filter(Boolean).join(' ')} fill='none' stroke={a.col} strokeWidth='2.5' strokeLinejoin='round' strokeLinecap='round' />
+            {a.serie.map((v, i) => v != null && <circle key={i} cx={x(i)} cy={y(v)} r='3.2' fill={C.card} stroke={a.col} strokeWidth='2' />)}
+            {a.mes != null && a.serie[a.mes] != null && <circle cx={x(a.mes)} cy={y(a.serie[a.mes])} r='7' fill='none' stroke={C.greenText} strokeWidth='2.5' />}
+          </g>)}
         </svg>
       </div>
-      {serie.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={i > 0 && serie[i - 1] != null && v != null ? `${sgn(v - serie[i - 1])}${val(Math.abs(v - serie[i - 1]))} en el mes` : undefined} valor={v != null ? val(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '0 16px 12px', fontSize: 12, color: C.muted }}>{act.map((a) => <span key={a.nom}><b style={{ color: a.col }}>●</b> {a.nom} acumulado</span>)}<span>- - - Meta, del color de su línea</span></div>
+      {filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}
     </Panel>
     <Titulo>De qué trabajos y clientes salen los ingresos · estimación propia</Titulo>
     <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'start' }}>
@@ -308,7 +288,7 @@ function Evolucion({ X, k }) {
         {barras.length > 0 && <div style={{ padding: '10px 12px 0' }}><svg viewBox={`0 0 ${barras.length * bw} 150`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Vendido por tipo de trabajo'>
           {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw * 0.27} y={118 - h} width={bw * 0.45} height={h} rx='4' fill={C.accent} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.accent}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > (X.D ? 17 : 9) ? a.n.slice(0, X.D ? 16 : 8) + '.' : a.n}</text></g> })}
         </svg></div>}
-        {e.areas.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Sin ventas del año.</div> : e.areas.map((a) => <Fila key={a.n} nombre={a.n} peq={`${pc(a.pct)} de lo vendido`} valor={val(a.monto)} sin />)}
+        {e.areas.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Sin ventas del año.</div> : e.areas.map((a) => <Fila key={a.n} nombre={a.n} peq={`${pc(a.pct)} de lo vendido`} valor={val(a.monto, def.v.c)} sin />)}
       </Panel>
       <Panel hd='Facturado por tipo de cliente' small='según la ficha del cliente'>
         {e.tipos.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div> : e.tipos.map((t) => <Fila key={t.n} nombre={t.n} peq={`${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''} · ${pc(t.pct)} de lo facturado`} valor={mm(t.monto)} onClick={() => X.ir({ drill: { t: 'ind', k: 'conc' } })} />)}
@@ -350,7 +330,7 @@ export function DVer({ X }) {
   const sug = 'Versión ' + (vers.length + 1) + ' · ' + fechaDMY(new Date().toISOString()).slice(0, 10)
   const refN = useRef(null), refNo = useRef(null)
   return <>
-    <Panel hd='Guardar esta versión' small='el borrador se guarda solo; una versión es una foto con nombre'>
+    <Panel hd='Guardar esta versión'>
       <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: X.D ? 'minmax(0,1fr) minmax(0,1.4fr)' : '1fr', gap: 12 }}>
         <div><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Nombre</div><input ref={refN} defaultValue={sug} style={campo} /></div>
         <div><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Nota (opcional)</div><input ref={refNo} placeholder='Qué cambió o por qué' style={campo} /></div>
@@ -367,7 +347,6 @@ export function DVer({ X }) {
                 : <><span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Btn onClick={() => setUI({ confirma: { a: 'abrir', id: v.id } })}>Abrir</Btn><Btn onClick={() => X.ir({ drill: { t: 'cmp', id: v.id } })}>Comparar con el borrador</Btn><Btn onClick={() => X.marcarOficial(v)}>{v.oficial ? 'Quitar como oficial' : 'Marcar como oficial'}</Btn></span><Lnk rojo onClick={() => setUI({ confirma: { a: 'borrar', id: v.id } })}>Eliminar</Lnk></>}
           </div>}
         </Fila> })}</Panel>
-    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Las versiones quedan guardadas en la app y las ven quienes administran el estudio.</div>
   </>
 }
 const campo = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, color: C.text, outline: 'none' }
