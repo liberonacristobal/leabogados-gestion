@@ -36,9 +36,9 @@ export const LBL = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textT
 // Tarjeta de resultado (la de Inicio): ícono en caja blanca, rótulo, cifra grande y una línea.
 export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
   const t = TONO[tono], D = useIsDesktop()
-  return <div onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '10px', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: D ? 'center' : 'flex-start', gap: D ? 12 : 8, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
-    <span style={{ width: 32, height: 32, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
+  return <div onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '12px 10px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
+    <span style={{ width: D ? 32 : 30, height: D ? 32 : 30, borderRadius: D ? 10 : 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
+    <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
   </div>
 }
 
