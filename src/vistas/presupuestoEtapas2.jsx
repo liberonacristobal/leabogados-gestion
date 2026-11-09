@@ -246,6 +246,7 @@ export function indicadores(X) {
 
 // Evolución del año de Vendido o Cobrado contra su meta, y de qué trabajos y clientes salen los ingresos (estimación propia: reparte el total oficial de Inicio según las partidas).
 const dmy = (iso) => String(iso).slice(0, 10).split('-').reverse().join('-')
+const TONOS_TARJETA = [{ bg: C.azulBg, bd: C.azulBd, fg: C.azulInfo }, { bg: C.greenBg, bd: C.greenDeep, fg: C.greenText }, { bg: C.soonBg, bd: C.avisoLine, fg: C.soonText }, { bg: C.tealBg, bd: C.tealBg, fg: C.tealText }, { bg: C.ambarBg, bd: C.avisoLine, fg: C.coralText }]
 function useAncho(def) {
   const ref = useRef(null), [w, setW] = useState(def)
   useEffect(() => { const f = () => { const el = ref.current; if (el) setW((p) => { const n = Math.max(280, Math.round(el.clientWidth) - 24); return n === p ? p : n }) }; f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) })
@@ -306,17 +307,19 @@ function Evolucion({ X, k }) {
       <div style={{ margin: '-8px -14px -10px' }}>{filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
     </Det>
     <Titulo>De qué trabajos y clientes salen los ingresos · estimación propia</Titulo>
-    <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'start' }}>
-      <Panel hd='Vendido por tipo de trabajo' small='área de cada venta'>
-        {barras.length > 0 && <div ref={refA} style={{ padding: '10px 12px 0' }}><svg viewBox={`0 0 ${WA} 150`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Vendido por tipo de trabajo'>
-          {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw / 2 - Math.min(18, bw * 0.22)} y={118 - h} width={Math.min(36, bw * 0.44)} height={h} rx='4' fill={C.azulInfo} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.azulInfo}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > Math.floor(bw / 6.5) ? a.n.slice(0, Math.max(3, Math.floor(bw / 6.5) - 1)) + '.' : a.n}</text></g> })}
-        </svg></div>}
-        {e.areas.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Sin ventas del año.</div> : <details style={{ borderTop: `1px solid ${C.border}` }}><summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13, color: C.accent, padding: '12px 16px' }}>Montos por tipo de trabajo</summary>{e.areas.map((a) => <Fila key={a.n} nombre={a.n} peq={`${pc(a.pct)} de lo vendido`} valor={val(a.monto, def.v.c)} sin />)}</details>}
-      </Panel>
-      <Panel hd='Facturado por tipo de cliente' small='según la ficha del cliente'>
-        {e.tipos.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div> : e.tipos.map((t) => <Fila key={t.n} nombre={t.n} peq={`${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''} · ${pc(t.pct)} de lo facturado`} valor={mm(t.monto)} onClick={() => X.ir({ drill: { t: 'ind', k: 'conc' } })} />)}
-      </Panel>
+    <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 12, alignItems: 'start' }}>
+      {[['Vendido por tipo de trabajo', e.areas.map((a) => ({ n: a.n, pct: a.pct, monto: val(a.monto, def.v.c), sub: 'de lo vendido', azul: true })), 'Sin ventas del año.'],
+        ['Facturado por tipo de cliente', e.tipos.map((t) => ({ n: t.n, pct: t.pct, monto: mm(t.monto), sub: `${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''}`, amb: t.n === 'Sin tipo', go: () => X.ir({ drill: { t: 'ind', k: 'conc' } }) })), 'Aún no hay facturas emitidas este año.']].map(([hd, items, vacio]) => <div key={hd} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <span style={{ ...LBL, color: C.muted, padding: '0 4px' }}>{hd}</span>
+        {items.length === 0 ? <div style={{ fontSize: 13, color: C.muted, padding: '0 4px' }}>{vacio}</div>
+          : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>{items.map((t, ti) => { const tn = t.amb ? { bg: C.bgSoft, bd: C.border, fg: C.grisText } : TONOS_TARJETA[ti % TONOS_TARJETA.length]; return <div key={t.n} onClick={t.go} style={{ background: tn.bg, border: `1px solid ${tn.bd}`, borderRadius: 12, padding: 12, cursor: t.go ? 'pointer' : 'default', minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.accent }}><span style={{ minWidth: 0 }}>{t.n}</span><span style={{ fontSize: 11, fontWeight: 800, background: '#fff', borderRadius: 20, padding: '1px 8px', whiteSpace: 'nowrap', color: tn.fg }}>{pc(t.pct, t.pct < 10 ? 1 : 0)}</span></div>
+            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.4, color: C.accent, marginTop: 4, whiteSpace: 'nowrap' }}>{t.monto}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.sub}</div>
+          </div> })}</div>}
+      </div>)}
     </div>
+    {e.tipos[0]?.n === 'Sin tipo' && e.tipos[0].pct > 50 && <div style={{ fontSize: 11, color: C.muted, margin: '0 4px' }}>La mayoría de lo facturado sale «Sin tipo»: completar el tipo en la ficha del cliente mejora este análisis.</div>}
   </>
 }
 
@@ -326,7 +329,7 @@ export function DInd({ X, k }) {
   return <>
     {k !== 'vend' && k !== 'cob26' && <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>}
     {(k === 'vend' || k === 'cob26') && <Evolucion X={X} k={k === 'vend' ? 'vend' : 'cob'} />}
-    {x.rows.length > 0 && <Panel hd='De dónde sale' small='toca una fila'>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</Panel>}
+    {x.rows.length > 0 && (k === 'vend' || k === 'cob26' ? <Det t='De dónde sale'><div style={{ margin: '-8px -14px -10px' }}>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</div></Det> : <Panel hd='De dónde sale' small='toca una fila'>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</Panel>)}
     {x.texto && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>{x.texto}</div>}
     <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {x.fuente} · En la app: {x.app}</div>
   </>
