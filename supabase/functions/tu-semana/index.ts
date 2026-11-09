@@ -11,6 +11,7 @@ import { trabajosSinFacturar, noEmitirDeFilas } from "../_shared/ventasReglas.js
 import { cuotasVencidasSinFacturar } from "../_shared/porFacturar.js";
 import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { respaldoPorFactura } from "../_shared/fotoMes.js";
+import { gastoDelMes, estadoTope } from "../_shared/costoIA.js";
 
 // Correo semanal "Tu semana": el ÚNICO correo recurrente de la semana para cada persona (decisión del 26-10-2026), lunes 08:30.
 // Socios: además de lo suyo, notaría, cuotas sin emitir, compras por pagar, abonos por identificar y trabajos sin movimiento
@@ -208,6 +209,22 @@ serve(async (req) => {
     };
     const quienesBase = testTo ? [ NAME_OF_EMAIL[testTo] || "Martín" ] : [...SOCIOS, ...LIMITADOS];
     const of = quienesBase.some((n:string)=> SOCIOS.includes(n)) ? await cargarOficina() : null;
+    // Procesos con fallas en la semana (aunque hoy estén bien: la vigilancia solo avisa tras 6 fallos seguidos) y consumo de IA desde el 80 % del
+    // tope mensual. Solo para quien recibe los avisos de la vigilancia (learnings config vigilancia_avisar_a).
+    const mesIA = hoyCL.slice(0,7);
+    const [corridasFalla, cfgVig, usoIA, cfgTope] = await Promise.all([
+      selectAll(()=>sb.from("procesos_corridas").select("jobname,lanzado_at,estado").in("estado",["error","sin_respuesta"]).gte("lanzado_at", new Date(Date.now()-7*86400000).toISOString()).order("lanzado_at")),
+      sb.from("learnings").select("value").eq("kind","config").eq("key","vigilancia_avisar_a"),
+      selectAll(()=>sb.from("ia_uso_diario").select("dia,funcion,origen,modelo,llamadas,fallas,entrada,salida,cache_lectura,cache_escritura").gte("dia",`${mesIA}-01`).order("dia").order("funcion").order("origen").order("modelo")),
+      sb.from("learnings").select("value").eq("kind","config").eq("key","ia_tope_mensual_usd"),
+    ]);
+    const avisarVig = String(cfgVig.data?.[0]?.value||"").split(/[,;\s]+/).map((x:string)=>x.trim().toLowerCase()).filter(Boolean);
+    // La vigilancia misma y las corridas de prueba manuales no cuentan.
+    const jobsConFalla = new Set<string>(); let ultFalla = "";
+    for (const c of (corridasFalla.data||[]) as any[]) { if (c.jobname==="vigilancia-procesos-diario" || /^prueba-|-prueba$/.test(String(c.jobname))) continue; jobsConFalla.add(c.jobname); const u=String(c.lanzado_at).slice(0,10); if (u>ultFalla) ultFalla=u; }
+    const iaGasto = gastoDelMes((usoIA.data||[]) as any[], mesIA), iaTope = estadoTope(iaGasto.usd, Number(cfgTope.data?.[0]?.value)||0);
+    const iaAlerta = iaTope && iaTope.nivel!=="ok" ? iaTope : null;
+    const usd = (n:number)=> `US$ ${n.toLocaleString("es-CL",{ minimumFractionDigits:2, maximumFractionDigits:2 })}`;
     // Lo que no es de un socio va al primero (igual que el resumen del lunes); lo sin abogado, a ambos.
     const deSocio = (abg:string, persona:string, aAmbos=false)=> { const a=nTxt(abg); if (a) return a===nTxt(persona) || (!SOCIOS.some(n=>nTxt(n)===a) && (aAmbos || persona===SOCIOS[0])); return aAmbos || persona===SOCIOS[0]; };
     const datosSocio = (persona:string)=> {
@@ -328,6 +345,10 @@ serve(async (req) => {
         if (primerLunes && n.nLargas) t.push(tile(`OT de más de ${n.diasLargas} días`, String(n.nLargas), fmt(n.montoLargas), "Pedir fondos o castigar", "notaria", AMB));
         if (liqSinPago.length) t.push(tile("Liquidación sin pago", fmt(liqSinPago.reduce((a:number,r:any)=>a+(Number(r.total)||0),0)), `enviada ${fDia(String(liqSinPago[0].sent_at).slice(0,10))} · ${diasDe(String(liqSinPago[0].sent_at).slice(0,10))} días`, "Ver el pago", "notaria", RED));
         if (n.nDocs || n.nDocsOt) t.push(tile("Documentos", String(n.nDocs || n.nDocsOt), n.nDocs ? `por clasificar${n.nDocsOt ? ` · ${n.nDocsOt} esperan su OT` : ""}` : "esperan su OT", "Clasificar", "notaria")); }
+      if (d.vig) {
+        if (jobsConFalla.size) t.push(tile("Procesos con fallas", String(jobsConFalla.size), `esta semana · última ${fDia(ultFalla)}`, "Ver procesos", "procesos", RED));
+        if (iaAlerta) t.push(tile("Consumo de IA", usd(iaGasto.usd), `de ${usd(iaAlerta.tope)} · ${Math.round(iaAlerta.pct*100)} % del tope`, "Ver consumo", "procesos", iaAlerta.nivel==="sobre"?RED:AMB));
+      }
       if (!t.length) return "";
       const filas:string[] = []; for (let i=0;i<t.length;i+=2) filas.push(`<tr>${t[i]}${t[i+1]||'<td width="50%"></td>'}</tr>`);
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${filas.join("")}</table>`;
@@ -383,10 +404,11 @@ serve(async (req) => {
       // enviarA (solo por cron con secreto): redirige el DESTINO a otra bandeja para previsualizar el correo de esta persona.
       const to = (esCron && body.enviarA) ? String(body.enviarA).toLowerCase().trim() : (testTo || EMAIL[nombre]);
       if (!to) continue;
-      const d = datosDe(nombre);
+      const d:any = datosDe(nombre);
+      d.vig = avisarVig.includes(String(EMAIL[nombre]||"").toLowerCase()) && (jobsConFalla.size>0 || !!iaAlerta);
       const nC=(d.caja&&d.caja.nLiq)||0, nT=d.vencidas.length+d.semana.length, nN=d.notaria?(d.notaria.nOt+(d.notaria.nSinCli||0)+d.notaria.nCorreos+(d.notaria.nDocs||0)):0;
       const nK=d.cartera?(d.cartera.bills.length+d.cartera.fondos.length+((d.cartera.com&&d.cartera.com.nListas)||0)):0;
-      const nS=d.socio?1:0;
+      const nS=(d.socio||d.vig)?1:0;
       if (!testTo && !nC && !nT && !nN && !nK && !nS) continue;
       const html = armar(nombre, d);
       // Asunto descriptivo y sobrio (regla de lenguaje: sin ganchos ni tono de chat).
