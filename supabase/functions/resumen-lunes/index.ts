@@ -20,7 +20,6 @@ import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 import { fotoCartera, respaldoPorFactura, saldoFactura, venceFactura } from "../_shared/fotoMes.js";
-import { gastoDelMes, estadoTope } from "../_shared/costoIA.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -196,24 +195,6 @@ serve(async (req) => {
     const abgDe = (v: any) => v.responsible || (clients || []).find((c: any) => String(c.id) === String(v.client_id))?.abogado_responsable || "";
     const APP = "https://gestion.leabogados.cl";
 
-    // Procesos automáticos que fallaron en la semana, aunque hoy estén bien (la vigilancia solo avisa tras 6 fallos seguidos y los borra al sanar).
-    // Solo para quien recibe los avisos de la vigilancia (learnings config 'vigilancia_avisar_a').
-    // Consumo de IA: si el gasto estimado del mes llega al 80 % del tope (learnings config 'ia_tope_mensual_usd'), va como una fila de ese mismo bloque. Al llegar al tope se pausa la IA de toda la app.
-    const mesIA = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago" }).format(new Date()).slice(0, 7);
-    const [corridasFalla, catalogo, cfgVig, usoIA, cfgTope] = await Promise.all([
-      selectAll(() => sb.from("procesos_corridas").select("jobname,lanzado_at,estado").in("estado", ["error", "sin_respuesta"]).gte("lanzado_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("lanzado_at")),
-      sb.from("procesos_catalogo").select("jobname,nombre"),
-      sb.from("learnings").select("value").eq("kind", "config").eq("key", "vigilancia_avisar_a"),
-      selectAll(() => sb.from("ia_uso_diario").select("dia,funcion,origen,modelo,llamadas,fallas,entrada,salida,cache_lectura,cache_escritura").gte("dia", `${mesIA}-01`).order("dia").order("funcion").order("origen").order("modelo")),
-      sb.from("learnings").select("value").eq("kind", "config").eq("key", "ia_tope_mensual_usd"),
-    ]);
-    const iaGasto = gastoDelMes(usoIA.data || [], mesIA), iaTope = estadoTope(iaGasto.usd, Number(cfgTope.data?.[0]?.value) || 0);
-    const iaAlerta = iaTope && iaTope.nivel !== "ok" ? iaTope : null;
-    const avisarFallas = String(cfgVig.data?.[0]?.value || "").split(/[,;\s]+/).map((x: string) => x.trim().toLowerCase()).filter(Boolean);
-    const nomProceso = new Map((catalogo.data || []).map((c: { jobname: string; nombre: string }) => [c.jobname, c.nombre]));
-    const fallasSemana = new Map<string, { n: number; ult: string }>();
-    for (const c of corridasFalla.data || []) { if (c.jobname === "vigilancia-procesos-diario") continue; const f = fallasSemana.get(c.jobname) || { n: 0, ult: "" }; f.n++; f.ult = String(c.lanzado_at); fallasSemana.set(c.jobname, f); }
-
     for (const adm of ADMINS) {
       const nombres = [adm.name, ...adm.alt];
       // Tareas del admin
@@ -293,16 +274,6 @@ serve(async (req) => {
         const filaS = (x: any) => rowT(`<b style="color:${A}">${esc(cname(x.v.client_id) || "Cliente")}</b> &mdash; ${esc(x.v.title || "Trabajo")} &middot; sin movimiento desde ${fmtFecha(x.h.prueba?.ult || "")}`, fm(Number(x.h.monto) || 0), RED);
         const chip = [term.length ? `${term.length} por cerrar` : "", saldo.length ? `${saldo.length} con saldo` : ""].filter(Boolean).join(" &middot; ");
         bloques.push(sec("#FFF8E1", svgIco(AMB, ICO_PROY), "Trabajos sin movimiento", chip, AMB, term.map(filaT).join("") + saldo.map(filaS).join("") + (saldo.length ? `<a href="${APP}/?ir=cobranza" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver en Cobranza &rsaquo;</a>` : "")));
-      }
-
-      // 7) Procesos automáticos con fallas en la semana (solo quien recibe los avisos de la vigilancia).
-      if ((fallasSemana.size || iaAlerta) && avisarFallas.includes(String(adm.email || "").toLowerCase())) {
-        const lista = [...fallasSemana.entries()].sort((a, b) => b[1].n - a[1].n);
-        const usd = (n: number) => `US$ ${n.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const filaIA = iaAlerta ? rowT(`<b style="color:${A}">Consumo de IA</b> &middot; queda ${usd(iaAlerta.queda)}`, `${usd(iaGasto.usd)} de ${usd(iaAlerta.tope)}`, RED) : "";
-        const filas = filaIA + lista.slice(0, 6).map(([job, f]) => rowT(`<b style="color:${A}">${esc(String(nomProceso.get(job) || job))}</b>`, `${f.n} falla${f.n !== 1 ? "s" : ""} &middot; &uacute;ltima ${fmtFecha(f.ult.slice(0, 10))}`, RED)).join("");
-        const chipBloque = [lista.length ? `${lista.length} con fallas esta semana` : "", iaAlerta ? `IA al ${Math.round(iaAlerta.pct * 100)} % del tope` : ""].filter(Boolean).join(" &middot; ");
-        bloques.push(sec("#FBEBEA", svgIco(RED, ICO_TAREAS), "Procesos autom&aacute;ticos", chipBloque, RED, filas + (lista.length > 6 ? `<div style="font-size:11px;color:${MUT};padding:4px 0;">y ${lista.length - 6} m&aacute;s</div>` : "") + `<a href="${APP}/?ir=procesos" style="display:inline-block;font-size:11px;font-weight:700;color:${A};text-decoration:none;margin-top:6px;">Ver Procesos autom&aacute;ticos &rsaquo;</a>`));
       }
 
       if (!bloques.length) { sent.push({ to: adm.email, skipped: "sin contenido" }); continue; }
