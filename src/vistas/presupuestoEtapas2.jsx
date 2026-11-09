@@ -1,5 +1,5 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
 import { modeloPresupuesto, diferenciaSupuestos } from '../../supabase/functions/_shared/presupuesto.js'
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
@@ -246,7 +246,13 @@ export function indicadores(X) {
 
 // Evolución del año de Vendido o Cobrado contra su meta, y de qué trabajos y clientes salen los ingresos (estimación propia: reparte el total oficial de Inicio según las partidas).
 const dmy = (iso) => String(iso).slice(0, 10).split('-').reverse().join('-')
+function useAncho(def) {
+  const ref = useRef(null), [w, setW] = useState(def)
+  useEffect(() => { const f = () => { const el = ref.current; if (el) setW((p) => { const n = Math.max(280, Math.round(el.clientWidth) - 24); return n === p ? p : n }) }; f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) })
+  return [ref, w]
+}
 function Evolucion({ X, k }) {
+  const [refG, W] = useAncho(640), [refA, WA] = useAncho(480)
   const [modo, setModo] = useState(k === 'vend' ? 'v' : 'c')
   const [hov, setHov] = useState(null)
   const { datos: d, est } = X, e = d.evo, o = d.oficiales, uf = est.moneda === 'uf'
@@ -255,10 +261,10 @@ function Evolucion({ X, k }) {
   const val = (x, c) => (uf ? ufs(x * (c.clp > 0 ? c.uf / c.clp : 0)) : mm(x))
   const act = modo === 'a' ? [def.v, def.c] : [def[modo]]
   const top = Math.max(1, ...act.map((a) => Math.max(a.meta, ...a.serie.map((v) => v || 0)))) * 1.08
-  const W = X.D ? 640 : 360, Ht = X.D ? 220 : 200, L = X.D ? 62 : 54, B = 26, T = 22, R = 24, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
+  const Ht = X.D ? 260 : 210, L = X.D ? 62 : 54, B = 26, T = 22, R = 24, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
   const ref = def.v.c.clp > 0 ? def.v.c : def.c.c, vv = (v) => val(v, ref)
   const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: faltan ${val(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} para la meta`)
-  const barras = e.areas.slice(0, 6), bw = X.D ? 120 : 62, mx = Math.max(...barras.map((a) => a.monto), 1)
+  const barras = e.areas.slice(0, 6), bw = WA / Math.max(1, barras.length), mx = Math.max(...barras.map((a) => a.monto), 1)
   const sobre = def.v.c.clp > 0 ? (def.c.c.clp / def.v.c.clp) * 100 : null
   const filas = (modo === 'c' ? def.c : def.v).serie
   const estado = (a) => (a.meta <= 0 ? ['z', 'sin meta'] : a.mes != null ? ['g', 'meta superada ' + (a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase())] : ['y', 'faltan ' + val(Math.max(0, a.meta - (a.c.clp || 0)), a.c)])
@@ -270,7 +276,7 @@ function Evolucion({ X, k }) {
       {modo === 'a' && <div style={{ gridColumn: X.D ? undefined : '1 / -1', display: 'flex', flexDirection: 'column' }}><Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} /></div>}
     </Grid>
     <Panel hd={`Acumulado ${d.anioBase} contra la meta`} small={<span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>{act.map((a) => { const [t, tx] = estado(a); return <span key={a.nom} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: a.col, display: 'inline-block' }} /><b style={{ color: C.accent }}>{a.nom}</b><Chip tono={t}>{tx}</Chip></span> })}</span>}>
-      <div style={{ padding: '10px 12px 6px', position: 'relative' }} onMouseLeave={() => setHov(null)}>
+      <div ref={refG} style={{ padding: '10px 12px 6px', position: 'relative' }} onMouseLeave={() => setHov(null)}>
         {hov != null && (() => { const tip = act.map((a) => ({ a, v: a.serie[hov] })); if (tip.every((t) => t.v == null)) return null; const izq = x(hov) > W * 0.6
           return <div style={{ position: 'absolute', top: 6, [izq ? 'left' : 'right']: izq ? `calc(${(L / W) * 100}% + 12px)` : '3%', zIndex: 2, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 12, boxShadow: '0 4px 14px rgba(0,0,0,.08)', pointerEvents: 'none', minWidth: 150 }}>
             <div style={{ ...LBL, color: C.accent, marginBottom: 4 }}>{MESL[hov]}</div>
@@ -283,15 +289,15 @@ function Evolucion({ X, k }) {
           onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W, i = Math.round(((px - L) / (W - L - R)) * 11); setHov(i >= 0 && i <= H ? (i === hov ? null : i) : null) }}>
           {hov != null && <line x1={x(hov)} x2={x(hov)} y1={T} y2={y(0)} stroke={C.muted} strokeWidth='1' strokeDasharray='3 3' />}
           {gy.map((v, i) => <g key={i}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={C.border} strokeWidth='1' strokeDasharray={i === 0 ? undefined : '2 4'} /><text x={L - 8} y={y(v) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{vv(v)}</text></g>)}
-          {MESC.map((m, i) => (X.D || i % 3 === 0 || i === 11) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted} opacity={i <= H ? 1 : 0.5}>{m}</text>)}
-          {act.map((a, ai) => { const pts = a.serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean), last = pts[pts.length - 1], lv = a.serie.filter((v) => v != null).pop()
+          {MESC.map((m, i) => (W > 520 || i % 3 === 0 || i === 11) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted} opacity={i <= H ? 1 : 0.5}>{m}</text>)}
+          {act.map((a, ai) => { const pts = a.serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean), last = pts[pts.length - 1], lv = a.serie.filter((v) => v != null).pop(), sup = a.meta > 0 && lv >= a.meta
             return <g key={a.nom}>
-              {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.25' strokeDasharray='5 4' opacity='.8' /><text x={L + 8} y={y(a.meta) - 7} fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{a.nom === 'Vendido' ? 'Meta de ventas' : 'Meta de cobro'} · {vv(a.meta)}</text></>}
+              {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.25' strokeDasharray='5 4' opacity='.8' /><text x={sup ? W - R : L + 8} y={y(a.meta) + (sup ? 16 : -7)} textAnchor={sup ? 'end' : 'start'} fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{a.nom === 'Vendido' ? 'Meta de ventas' : 'Meta de cobro'} · {vv(a.meta)}</text></>}
               {pts.length > 1 && <polygon points={`${pts[0][0]},${y(0)} ${pts.map((p) => p.join(',')).join(' ')} ${last[0]},${y(0)}`} fill={a.col} opacity='.07' />}
               {pts.length > 1 && <polyline points={pts.map((p) => p.join(',')).join(' ')} fill='none' stroke={a.col} strokeWidth='2.5' strokeLinejoin='round' strokeLinecap='round' />}
               {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === hov ? 6 : i === pts.length - 1 ? 4.5 : 3} fill={i === pts.length - 1 ? a.col : C.card} stroke={a.col} strokeWidth='2' />)}
               {a.mes != null && a.serie[a.mes] != null && <circle cx={x(a.mes)} cy={y(a.serie[a.mes])} r='8' fill='none' stroke={C.greenText} strokeWidth='2' />}
-              {last && <text x={last[0]} y={last[1] + (modo === 'a' && ai === 1 ? 20 : -11)} textAnchor='end' fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{vv(lv)}</text>}
+              {last && <text x={last[0]} y={last[1] - 11} textAnchor='end' fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{vv(lv)}</text>}
             </g> })}
         </svg>
       </div>
@@ -302,8 +308,8 @@ function Evolucion({ X, k }) {
     <Titulo>De qué trabajos y clientes salen los ingresos · estimación propia</Titulo>
     <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'start' }}>
       <Panel hd='Vendido por tipo de trabajo' small='área de cada venta'>
-        {barras.length > 0 && <div style={{ padding: '10px 12px 0' }}><svg viewBox={`0 0 ${barras.length * bw} 150`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Vendido por tipo de trabajo'>
-          {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw * 0.27} y={118 - h} width={bw * 0.45} height={h} rx='4' fill={C.azulInfo} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.azulInfo}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > (X.D ? 11 : 9) ? a.n.slice(0, X.D ? 10 : 8) + '.' : a.n}</text></g> })}
+        {barras.length > 0 && <div ref={refA} style={{ padding: '10px 12px 0' }}><svg viewBox={`0 0 ${WA} 150`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Vendido por tipo de trabajo'>
+          {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw / 2 - Math.min(18, bw * 0.22)} y={118 - h} width={Math.min(36, bw * 0.44)} height={h} rx='4' fill={C.azulInfo} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.azulInfo}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > Math.floor(bw / 6.5) ? a.n.slice(0, Math.max(3, Math.floor(bw / 6.5) - 1)) + '.' : a.n}</text></g> })}
         </svg></div>}
         {e.areas.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Sin ventas del año.</div> : e.areas.map((a) => <Fila key={a.n} nombre={a.n} peq={`${pc(a.pct)} de lo vendido`} valor={val(a.monto, def.v.c)} sin />)}
       </Panel>
