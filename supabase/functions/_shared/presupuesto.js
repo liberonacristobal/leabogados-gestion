@@ -6,6 +6,10 @@
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
 /** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null }} PartidaCosto  m = monto por mes; meses = meses del año; alza propia (null = la del escenario) */
+/** Parte de cada socio en las metas de la oficina: partes iguales entre los socios (con dos socios, 50 % cada uno). «Sin socio» no tiene meta.
+ * @param {{ nombre:string }[]} socios @param {string} nombre */
+export const parteMeta = (socios, nombre) => { const n = (socios || []).filter((s) => s.nombre !== 'Sin socio').length; return n && nombre !== 'Sin socio' ? 1 / n : 0 }
+
 /** @typedef {{ v:number, esc:string, moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 

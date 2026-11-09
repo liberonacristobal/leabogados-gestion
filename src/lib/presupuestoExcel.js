@@ -1,5 +1,7 @@
 // Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Costos → Escenarios → Mes a mes → Por socio → Resumen del año).
 // Las fórmulas repiten el modelo de _shared/presupuesto.js; `evaluar` las calcula aquí mismo para guardar el valor al abrir el archivo y para probar que coinciden con el modelo.
+import { parteMeta } from '../../supabase/functions/_shared/presupuesto.js'
+
 const COL = (/** @type {number} */ i) => String.fromCharCode(65 + i)
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const PESOS = '#,##0', PCT = '0.0%', UF = '#,##0.00'
@@ -83,11 +85,11 @@ export function hojasPresupuesto(P) {
   }
   const nS = P.socios.length, bc = sc(iBase)
   const socio = {
-    nombre: 'Por socio', anchos: [22, 20, 16, 24, 24],
+    nombre: 'Por socio', anchos: [22, 20, 16, 24, 24, 18, 28, 28],
     filas: [
-      ['Socio', `Facturado ${P.anioBase} ($)`, 'Participación', `Facturado ${P.anio} · ${ESC[iBase][1]} ($)`, `Retiros · ${ESC[iBase][1]} ($)`],
-      ...P.socios.map((s, i) => [s.nombre, N(s.facturado), F(`IF(B${nS + 2}=0,0,B${i + 2}/B${nS + 2})`, PCT), F(`C${i + 2}*Escenarios!$${bc}$3`), F(`C${i + 2}*Escenarios!$${bc}$12`)]),
-      ['Total', F(`SUM(B2:B${nS + 1})`), F(`SUM(C2:C${nS + 1})`, PCT), F(`SUM(D2:D${nS + 1})`), F(`SUM(E2:E${nS + 1})`)],
+      ['Socio', `Facturado ${P.anioBase} ($)`, 'Participación', `Facturado ${P.anio} · ${ESC[iBase][1]} ($)`, `Retiros · ${ESC[iBase][1]} ($)`, 'Parte de las metas', `Meta de facturación · ${ESC[iBase][1]} ($)`, `Meta de cobro · ${ESC[iBase][1]} ($)`],
+      ...P.socios.map((s, i) => [s.nombre, N(s.facturado), F(`IF(B${nS + 2}=0,0,B${i + 2}/B${nS + 2})`, PCT), F(`C${i + 2}*Escenarios!$${bc}$3`), F(`C${i + 2}*Escenarios!$${bc}$12`), N(parteMeta(P.socios, s.nombre), PCT), F(`F${i + 2}*Escenarios!$${bc}$3`), F(`F${i + 2}*Escenarios!$${bc}$5`)]),
+      ['Total', F(`SUM(B2:B${nS + 1})`), F(`SUM(C2:C${nS + 1})`, PCT), F(`SUM(D2:D${nS + 1})`), F(`SUM(E2:E${nS + 1})`), F(`SUM(F2:F${nS + 1})`, PCT), F(`SUM(G2:G${nS + 1})`), F(`SUM(H2:H${nS + 1})`)],
     ],
   }
   const o = P.oficiales
