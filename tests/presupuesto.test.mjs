@@ -26,9 +26,9 @@ test('modelo: cada mes parte de la base en UF y la cascada cierra al peso', () =
     assert.ok(Math.abs(e.base - (e.caja - e.terc - e.costos)) < 1e-6)            // resultado = cobrado − terceros − costos
     assert.ok(Math.abs(e.post - (e.base - e.idpc)) < 1e-6)                        // después de impuesto
     assert.ok(Math.abs(e.retiros + e.reserva - Math.max(0, e.post)) < 1e-6)      // retiros + reserva = resultado después de impuesto
-    assert.ok(Math.abs(e.ppm - e.fact * 0.00125) < 1e-6)                          // PPM = 0,125 % de lo facturado (Pro Pyme, 2027)
+    assert.equal(e.ppm, 1_200_000)                                                // PPM = lo pagado hoy × 12 (conservador)
     assert.ok(Math.abs(e.saldo - (e.idpc - e.ppm)) < 1e-6)
-    assert.equal(st.ppmTasa, 0.125)
+    assert.equal(st.ppmAnual, 1_200_000)
   }
 })
 
@@ -122,7 +122,8 @@ test('tasas legales Pro Pyme por año comercial (circular SII 53/2025) y migraci
   assert.equal(tasaPPMLegal(2028, 10_000), 0.25); assert.equal(tasaPPMLegal(2028, 60_000), 0.5)     // sin rebaja en 2028
   const viejo = { v: 2, tasaIDPC: 15, ppmAnual: 1_200_000, esc: 'base', hecho: [], notas: {} }
   const m = migrarEstado(viejo, 2027)
-  assert.equal(m.v, 3); assert.equal(m.tasaIDPC, 12.5); assert.equal(m.ppmTasa, 0.125); assert.equal(m.ppmAnual, undefined)
+  assert.equal(m.v, 3); assert.equal(m.tasaIDPC, 12.5); assert.equal(m.ppmAnual, 1_200_000)
+  assert.equal(migrarEstado({ v: 3, ppmTasa: 0.125 }, 2027, 900_000).ppmAnual, 900_000)           // borrador guardado con tasa: recupera el PPM vigente
   assert.equal(migrarEstado({ v: 2, tasaIDPC: 20 }, 2027).tasaIDPC, 20)                              // una tasa editada a mano no se toca
   assert.deepEqual(migrarEstado(m, 2027), m)                                                          // idempotente
   assert.equal(estadoInicial({ anio: 2028 }).tasaIDPC, 15)
