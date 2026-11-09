@@ -15,13 +15,13 @@ export const CATEGORIAS_FIJAS = ['Remuneraciones', 'Leyes sociales', 'Arriendo y
 const hoyISO = () => new Date().toLocaleDateString('en-CA')
 
 /**
- * @param {{ sales:any[], billing:any[], terceros:any[], costosOfiRows:any[], expenses:any[], clients:any[], anticipos:any[] }} p
+ * @param {{ sales:any[], billing:any[], terceros:any[], costosOfiRows:any[], expenses:any[], clients:any[], anticipos:any[], anioSel?:number|null }} p
  */
-export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [] }) {
+export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], anioSel = null }) {
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: currentYear })
   const { fuRes, ufDias, ufRef, m, metaUF, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: com, metaCobranza, ingConc, ingAbonos, _esFactHon, extBillIds } = R
 
-  const hoy = hoyISO(), anio = currentYear + 1, ymHoy = hoy.slice(0, 7)
+  const hoy = hoyISO(), anio = anioSel || currentYear + 1, ymHoy = hoy.slice(0, 7)
 
   // Facturado propio por mes, de enero del año anterior hasta el mes en curso (el en curso va «a la fecha»). Es lo pesado: solo se recalcula si cambian las fuentes.
   const serie = useMemo(() => {

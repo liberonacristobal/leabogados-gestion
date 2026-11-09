@@ -1,3 +1,4 @@
+- 2026-11-09 · Presupuesto: selector de año (Presupuesto del año siguiente y Seguimiento del año en curso, cada uno con su borrador, versiones y versión oficial); el análisis por tipo de trabajo y de cliente pasa a tarjetas de distintos tonos, con «De dónde sale» plegado.
 - 2026-11-09 · Presupuesto en el celular: filas del Seguimiento parejas (el «Estimado» pasa a la columna Real), «Terceros» pasa a «Comisiones» en Costos y se corrigen textos de la etapa Base y de Metas.
 - 2026-11-09 · Presupuesto: los montos por tipo de trabajo quedan plegados bajo el gráfico de barras.
 - 2026-11-09 · Presupuesto: el gráfico de evolución de metas y el de tipos de trabajo se dibujan al tamaño real (un solo tamaño de letra, 11, en ejes, rótulos y cifras finales), con las etiquetas de meta colocadas para que no se pisen con las líneas y las seis barras completas también en el celular.

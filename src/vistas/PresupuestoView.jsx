@@ -19,7 +19,8 @@ const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r
 
 export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], user, onBack, backLabel = 'Oficina', onOpenPorFacturar }) {
   const D = useIsDesktop()
-  const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos })
+  const [anioSel, setAnioSel] = useState(null)
+  const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, anioSel })
   const anio = datos.anio
   const [est, setEst] = useState(null)
   const [vers, setVers] = useState([])
@@ -36,7 +37,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // ── Carga: borrador y versiones del año ──
   useEffect(() => {
     let vivo = true
-    setCargado(false); setEst(null); setEspera(false)
+    clearTimeout(tmr.current); setCargado(false); setEst(null); setEspera(false); setPila([]); setDrill(null); setUI({ etapa: 0, vx: null, confirma: null })
     const t = setTimeout(() => { if (vivo) setEspera(true) }, 1500)
     ;(async () => {
       try {
@@ -170,6 +171,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
       {!drill && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{ETAPAS.map((t, i) => <button key={t} onClick={() => irEtapa(i)} style={{ border: `1px solid ${ui.etapa === i ? C.azulBg : C.border}`, background: ui.etapa === i ? C.azulBg : C.card, color: ui.etapa === i ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: ui.etapa === i ? 800 : 600, padding: '7px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap' }}>{est.hecho.includes(i) ? '✓ ' : ''}{i + 1} · {t}</button>)}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
+        <Seg options={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`]]} value={anio} onChange={async (a) => { if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} />
         <Seg options={ESCENARIOS} value={est.esc} onChange={setEsc} />
         <Seg options={[['clp', 'Pesos'], ['uf', 'UF'], ['ambos', 'Ambos']]} value={est.moneda} onChange={(v) => setGen('moneda', v)} />
       </div>
