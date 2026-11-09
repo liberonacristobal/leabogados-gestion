@@ -180,6 +180,7 @@ Ningún render (propuesta, antes/después, mockup) se le muestra al usuario si n
 4. **Formatos:** $M con 1 decimal en tarjetas y resúmenes, fechas dd-mm-aaaa, cifras a la derecha.
 5. **Reusar los componentes de la app** (tarjeta KPI canónica, fila de lista, PageHeader), sin inventar formas nuevas.
 6. **Mirar antes de mostrar:** abrir el render, revisar la captura a 1280 y a 375 contra los puntos 1–5 y corregir lo que falle antes de enviarlo.
+7. **Pasar por el agente `ux-ui-propuestas`** (`.claude/agents/`) antes de mostrar una propuesta o render nuevo: todo clickeable y navegable (ir y volver al lugar exacto), escaneable, móvil primero. Y el render copia el formato vigente de la app, medido en la demo, no uno propio.
 
 ## Reglas de detalle (leerlas antes de tocar esas áreas; copia en `docs/reglas-detalle.md`)
 
