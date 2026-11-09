@@ -250,43 +250,49 @@ function Evolucion({ X, k }) {
   const [modo, setModo] = useState(k === 'vend' ? 'v' : 'c')
   const { datos: d, est } = X, e = d.evo, o = d.oficiales, uf = est.moneda === 'uf'
   const H = Number(d.hoy.slice(5, 7)) - 1
-  const def = { v: { nom: 'Vendido', c: o.vend, meta: o.metaVentasCLP, serie: e.vend, col: C.accent, tono: 'a', ic: 'ventas', mes: e.cruceV, fecha: null }, c: { nom: 'Cobrado', c: o.cob, meta: o.metaCobroCLP, serie: e.cob, col: C.greenText, tono: 'g', ic: 'wal', mes: e.cruceC ? Number(e.cruceC.slice(5, 7)) - 1 : null, fecha: e.cruceC } }
+  const def = { v: { nom: 'Vendido', c: o.vend, meta: o.metaVentasCLP, serie: e.vend, col: C.azulInfo, tono: 'a', ic: 'ventas', mes: e.cruceV, fecha: null }, c: { nom: 'Cobrado', c: o.cob, meta: o.metaCobroCLP, serie: e.cob, col: C.greenText, tono: 'g', ic: 'wal', mes: e.cruceC ? Number(e.cruceC.slice(5, 7)) - 1 : null, fecha: e.cruceC } }
   const val = (x, c) => (uf ? ufs(x * (c.clp > 0 ? c.uf / c.clp : 0)) : mm(x))
   const act = modo === 'a' ? [def.v, def.c] : [def[modo]]
   const top = Math.max(1, ...act.map((a) => Math.max(a.meta, ...a.serie.map((v) => v || 0)))) * 1.08
-  const W = X.D ? 640 : 360, Ht = X.D ? 220 : 200, L = X.D ? 58 : 52, B = 26, T = 16, R = 22, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
+  const W = X.D ? 640 : 360, Ht = X.D ? 220 : 200, L = X.D ? 62 : 54, B = 26, T = 22, R = 24, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
   const ref = def.v.c.clp > 0 ? def.v.c : def.c.c, vv = (v) => val(v, ref)
   const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: faltan ${val(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} para la meta`)
   const barras = e.areas.slice(0, 6), bw = X.D ? 120 : 62, mx = Math.max(...barras.map((a) => a.monto), 1)
   const sobre = def.v.c.clp > 0 ? (def.c.c.clp / def.v.c.clp) * 100 : null
   const filas = (modo === 'c' ? def.c : def.v).serie
+  const estado = (a) => (a.meta <= 0 ? ['z', 'sin meta'] : a.mes != null ? ['g', 'meta superada ' + (a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase())] : ['y', 'faltan ' + val(Math.max(0, a.meta - (a.c.clp || 0)), a.c)])
+  const gy = [0, 0.5, 1].map((f) => (top / 1.08) * f)
   return <>
     <Titulo right={<Seg options={[['v', 'Vendido'], ['c', 'Cobrado'], ['a', 'Ambos']]} value={modo} onChange={setModo} />}>Evolución contra la meta · estimación propia</Titulo>
-    <Grid cols={modo === 'a' ? 3 : 2} colsM={modo === 'a' ? 1 : 2}>
-      {act.map((a) => <Kpi key={a.nom} tono={a.tono} ic={a.ic} label={a.nom} value={val(a.c.clp, a.c)} sub={a.c.pct != null ? pc(a.c.pct, 0) + ' de la meta' : 'sin meta'} />)}
-      {modo === 'a' && <Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} />}
+    <Grid cols={modo === 'a' ? 3 : 2} colsM={2}>
+      {act.map((a) => <Kpi key={a.nom} tono={a.tono} ic={a.ic} label={a.nom} value={val(a.c.clp, a.c)} sub={a.c.pct != null ? <span><b style={{ color: C.accent, fontWeight: 800 }}>{pc(a.c.pct, 0)}</b> de la meta</span> : 'sin meta'} />)}
+      {modo === 'a' && <div style={{ gridColumn: X.D ? undefined : '1 / -1', display: 'flex', flexDirection: 'column' }}><Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} /></div>
     </Grid>
-    <Panel hd={act.map(frase).join(' · ')}>
-      <div style={{ padding: '8px 12px 4px' }}>
-        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Evolución acumulada contra la meta'>
-          {[0, 0.5, 1].map((f) => <g key={f}><line x1={L} x2={W - R} y1={y(top * f / 1.08)} y2={y(top * f / 1.08)} stroke={C.border} strokeWidth='1' /><text x={L - 6} y={y(top * f / 1.08) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{vv(top * f / 1.08)}</text></g>)}
-          {MESC.map((m, i) => (X.D || i % 2 === 0) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted}>{m}</text>)}
-          {act.map((a) => <g key={a.nom}>
-            {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.5' strokeDasharray='5 4' opacity='.7' /><text x={L + 8} y={y(a.meta) - 6} textAnchor='start' fontSize='12' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='5' paintOrder='stroke' strokeLinejoin='round'>Meta {a.nom === 'Vendido' ? 'de ventas' : 'de cobro'}</text></>}
-            <polyline points={a.serie.map((v, i) => (v == null ? null : x(i) + ',' + y(v))).filter(Boolean).join(' ')} fill='none' stroke={a.col} strokeWidth='2.5' strokeLinejoin='round' strokeLinecap='round' />
-            {a.serie.map((v, i) => v != null && <circle key={i} cx={x(i)} cy={y(v)} r='3.2' fill={C.card} stroke={a.col} strokeWidth='2' />)}
-            {a.mes != null && a.serie[a.mes] != null && <circle cx={x(a.mes)} cy={y(a.serie[a.mes])} r='7' fill='none' stroke={C.greenText} strokeWidth='2.5' />}
-          </g>)}
+    <Panel hd={`Acumulado ${d.anioBase} contra la meta`} small={<span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>{act.map((a) => { const [t, tx] = estado(a); return <span key={a.nom} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: a.col, display: 'inline-block' }} /><b style={{ color: C.accent }}>{a.nom}</b><Chip tono={t}>{tx}</Chip></span> })}</span>}>
+      <div style={{ padding: '10px 12px 6px' }}>
+        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Evolución acumulada contra la meta' fontFamily='inherit'>
+          {gy.map((v, i) => <g key={i}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={C.border} strokeWidth='1' strokeDasharray={i === 0 ? undefined : '2 4'} /><text x={L - 8} y={y(v) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{vv(v)}</text></g>)}
+          {MESC.map((m, i) => (X.D || i % 3 === 0 || i === 11) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted} opacity={i <= H ? 1 : 0.5}>{m}</text>)}
+          {act.map((a, ai) => { const pts = a.serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean), last = pts[pts.length - 1], lv = a.serie.filter((v) => v != null).pop()
+            return <g key={a.nom}>
+              {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.25' strokeDasharray='5 4' opacity='.8' /><text x={L + 8} y={y(a.meta) - 7} fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{a.nom === 'Vendido' ? 'Meta de ventas' : 'Meta de cobro'} · {vv(a.meta)}</text></>}
+              {pts.length > 1 && <polygon points={`${pts[0][0]},${y(0)} ${pts.map((p) => p.join(',')).join(' ')} ${last[0]},${y(0)}`} fill={a.col} opacity='.07' />}
+              {pts.length > 1 && <polyline points={pts.map((p) => p.join(',')).join(' ')} fill='none' stroke={a.col} strokeWidth='2.5' strokeLinejoin='round' strokeLinecap='round' />}
+              {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === pts.length - 1 ? 4.5 : 3} fill={i === pts.length - 1 ? a.col : C.card} stroke={a.col} strokeWidth='2' />)}
+              {a.mes != null && a.serie[a.mes] != null && <circle cx={x(a.mes)} cy={y(a.serie[a.mes])} r='8' fill='none' stroke={C.greenText} strokeWidth='2' />}
+              {last && <text x={last[0]} y={last[1] + (modo === 'a' && ai === 1 ? 20 : -11)} textAnchor='end' fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{vv(lv)}</text>}
+            </g> })}
         </svg>
       </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '0 16px 12px', fontSize: 12, color: C.muted }}>{act.map((a) => <span key={a.nom}><b style={{ color: a.col }}>●</b> {a.nom} acumulado</span>)}<span>- - - Meta, del color de su línea</span></div>
-      {filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}
     </Panel>
+    <Det t={`Mes a mes · acumulado${modo === 'a' ? ' vendido y cobrado' : ''}`}>
+      <div style={{ margin: '-8px -14px -10px' }}>{filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
+    </Det>
     <Titulo>De qué trabajos y clientes salen los ingresos · estimación propia</Titulo>
     <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'start' }}>
       <Panel hd='Vendido por tipo de trabajo' small='área de cada venta'>
         {barras.length > 0 && <div style={{ padding: '10px 12px 0' }}><svg viewBox={`0 0 ${barras.length * bw} 150`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Vendido por tipo de trabajo'>
-          {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw * 0.27} y={118 - h} width={bw * 0.45} height={h} rx='4' fill={C.accent} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.accent}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > (X.D ? 17 : 9) ? a.n.slice(0, X.D ? 16 : 8) + '.' : a.n}</text></g> })}
+          {barras.map((a, i) => { const h = Math.max(2, (a.monto / mx) * 100); return <g key={a.n}><rect x={i * bw + bw * 0.27} y={118 - h} width={bw * 0.45} height={h} rx='4' fill={C.azulInfo} /><text x={i * bw + bw / 2} y={112 - h} textAnchor='middle' fontSize='11' fontWeight='700' fill={C.azulInfo}>{pc(a.pct, 0)}</text><text x={i * bw + bw / 2} y={138} textAnchor='middle' fontSize='11' fill={C.muted}>{a.n.length > (X.D ? 11 : 9) ? a.n.slice(0, X.D ? 10 : 8) + '.' : a.n}</text></g> })}
         </svg></div>}
         {e.areas.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Sin ventas del año.</div> : e.areas.map((a) => <Fila key={a.n} nombre={a.n} peq={`${pc(a.pct)} de lo vendido`} valor={val(a.monto, def.v.c)} sin />)}
       </Panel>
@@ -301,7 +307,7 @@ export function DInd({ X, k }) {
   const x = indicadores(X)[k]
   if (!x) return null
   return <>
-    <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>
+    {k !== 'vend' && k !== 'cob26' && <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>}
     {(k === 'vend' || k === 'cob26') && <Evolucion X={X} k={k === 'vend' ? 'vend' : 'cob'} />}
     {x.rows.length > 0 && <Panel hd='De dónde sale' small='toca una fila'>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</Panel>}
     {x.texto && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>{x.texto}</div>}
