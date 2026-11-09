@@ -248,6 +248,7 @@ export function indicadores(X) {
 const dmy = (iso) => String(iso).slice(0, 10).split('-').reverse().join('-')
 function Evolucion({ X, k }) {
   const [modo, setModo] = useState(k === 'vend' ? 'v' : 'c')
+  const [hov, setHov] = useState(null)
   const { datos: d, est } = X, e = d.evo, o = d.oficiales, uf = est.moneda === 'uf'
   const H = Number(d.hoy.slice(5, 7)) - 1
   const def = { v: { nom: 'Vendido', c: o.vend, meta: o.metaVentasCLP, serie: e.vend, col: C.azulInfo, tono: 'a', ic: 'ventas', mes: e.cruceV, fecha: null }, c: { nom: 'Cobrado', c: o.cob, meta: o.metaCobroCLP, serie: e.cob, col: C.greenText, tono: 'g', ic: 'wal', mes: e.cruceC ? Number(e.cruceC.slice(5, 7)) - 1 : null, fecha: e.cruceC } }
@@ -266,11 +267,21 @@ function Evolucion({ X, k }) {
     <Titulo right={<Seg options={[['v', 'Vendido'], ['c', 'Cobrado'], ['a', 'Ambos']]} value={modo} onChange={setModo} />}>Evolución contra la meta · estimación propia</Titulo>
     <Grid cols={modo === 'a' ? 3 : 2} colsM={2}>
       {act.map((a) => <Kpi key={a.nom} tono={a.tono} ic={a.ic} label={a.nom} value={val(a.c.clp, a.c)} sub={a.c.pct != null ? <span><b style={{ color: C.accent, fontWeight: 800 }}>{pc(a.c.pct, 0)}</b> de la meta</span> : 'sin meta'} />)}
-      {modo === 'a' && <div style={{ gridColumn: X.D ? undefined : '1 / -1', display: 'flex', flexDirection: 'column' }}><Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} /></div>
+      {modo === 'a' && <div style={{ gridColumn: X.D ? undefined : '1 / -1', display: 'flex', flexDirection: 'column' }}><Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} /></div>}
     </Grid>
     <Panel hd={`Acumulado ${d.anioBase} contra la meta`} small={<span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>{act.map((a) => { const [t, tx] = estado(a); return <span key={a.nom} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><i style={{ width: 10, height: 10, borderRadius: 3, background: a.col, display: 'inline-block' }} /><b style={{ color: C.accent }}>{a.nom}</b><Chip tono={t}>{tx}</Chip></span> })}</span>}>
-      <div style={{ padding: '10px 12px 6px' }}>
-        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block' }} role='img' aria-label='Evolución acumulada contra la meta' fontFamily='inherit'>
+      <div style={{ padding: '10px 12px 6px', position: 'relative' }} onMouseLeave={() => setHov(null)}>
+        {hov != null && (() => { const tip = act.map((a) => ({ a, v: a.serie[hov] })); if (tip.every((t) => t.v == null)) return null; const izq = x(hov) > W * 0.6
+          return <div style={{ position: 'absolute', top: 6, [izq ? 'left' : 'right']: izq ? `calc(${(L / W) * 100}% + 12px)` : '3%', zIndex: 2, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px', fontSize: 12, boxShadow: '0 4px 14px rgba(0,0,0,.08)', pointerEvents: 'none', minWidth: 150 }}>
+            <div style={{ ...LBL, color: C.accent, marginBottom: 4 }}>{MESL[hov]}</div>
+            {tip.map(({ a, v }) => v != null && <div key={a.nom} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontVariantNumeric: 'tabular-nums' }}><span style={{ color: a.col, fontWeight: 700 }}>● {a.nom}</span><b style={{ color: C.accent }}>{vv(v)}</b></div>)}
+            {tip.map(({ a, v }) => v != null && a.meta > 0 && <div key={'m' + a.nom} style={{ color: C.muted, fontSize: 11 }}>{pc((v / a.meta) * 100, 0)} de la meta {a.nom === 'Vendido' ? 'de ventas' : 'de cobro'}</div>)}
+            {tip.map(({ a, v }) => v != null && hov > 0 && a.serie[hov - 1] != null && <div key={'d' + a.nom} style={{ color: C.muted, fontSize: 11 }}>{sgn(v - a.serie[hov - 1])}{vv(Math.abs(v - a.serie[hov - 1]))} en el mes · {a.nom.toLowerCase()}</div>)}
+          </div> })()}
+        <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: '100%', height: 'auto', display: 'block', touchAction: 'pan-y' }} role='img' aria-label='Evolución acumulada contra la meta' fontFamily='inherit'
+          onMouseMove={(ev) => { const r = ev.currentTarget.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W, i = Math.round(((px - L) / (W - L - R)) * 11); setHov(i >= 0 && i <= H ? i : null) }}
+          onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(), px = ((ev.clientX - r.left) / r.width) * W, i = Math.round(((px - L) / (W - L - R)) * 11); setHov(i >= 0 && i <= H ? (i === hov ? null : i) : null) }}>
+          {hov != null && <line x1={x(hov)} x2={x(hov)} y1={T} y2={y(0)} stroke={C.muted} strokeWidth='1' strokeDasharray='3 3' />}
           {gy.map((v, i) => <g key={i}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={C.border} strokeWidth='1' strokeDasharray={i === 0 ? undefined : '2 4'} /><text x={L - 8} y={y(v) + 4} textAnchor='end' fontSize='11' fill={C.muted}>{vv(v)}</text></g>)}
           {MESC.map((m, i) => (X.D || i % 3 === 0 || i === 11) && <text key={m} x={x(i)} y={Ht - 8} textAnchor='middle' fontSize='11' fill={C.muted} opacity={i <= H ? 1 : 0.5}>{m}</text>)}
           {act.map((a, ai) => { const pts = a.serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean), last = pts[pts.length - 1], lv = a.serie.filter((v) => v != null).pop()
@@ -278,7 +289,7 @@ function Evolucion({ X, k }) {
               {a.meta > 0 && <><line x1={L} x2={W - R} y1={y(a.meta)} y2={y(a.meta)} stroke={a.col} strokeWidth='1.25' strokeDasharray='5 4' opacity='.8' /><text x={L + 8} y={y(a.meta) - 7} fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{a.nom === 'Vendido' ? 'Meta de ventas' : 'Meta de cobro'} · {vv(a.meta)}</text></>}
               {pts.length > 1 && <polygon points={`${pts[0][0]},${y(0)} ${pts.map((p) => p.join(',')).join(' ')} ${last[0]},${y(0)}`} fill={a.col} opacity='.07' />}
               {pts.length > 1 && <polyline points={pts.map((p) => p.join(',')).join(' ')} fill='none' stroke={a.col} strokeWidth='2.5' strokeLinejoin='round' strokeLinecap='round' />}
-              {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === pts.length - 1 ? 4.5 : 3} fill={i === pts.length - 1 ? a.col : C.card} stroke={a.col} strokeWidth='2' />)}
+              {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={i === hov ? 6 : i === pts.length - 1 ? 4.5 : 3} fill={i === pts.length - 1 ? a.col : C.card} stroke={a.col} strokeWidth='2' />)}
               {a.mes != null && a.serie[a.mes] != null && <circle cx={x(a.mes)} cy={y(a.serie[a.mes])} r='8' fill='none' stroke={C.greenText} strokeWidth='2' />}
               {last && <text x={last[0]} y={last[1] + (modo === 'a' && ai === 1 ? 20 : -11)} textAnchor='end' fontSize='11' fontWeight='700' fill={a.col} stroke={C.card} strokeWidth='4' paintOrder='stroke' strokeLinejoin='round'>{vv(lv)}</text>}
             </g> })}
