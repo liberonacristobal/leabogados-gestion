@@ -399,7 +399,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const lvlLabel = t => <div style={{...SEC_LBL,padding:'14px 22px 0'}}>{t}</div>
   const {cal:calTrib} = useCalTrib(expenses)   // avisos del calendario tributario del estudio (misma fuente que Oficina › Calendario tributario)
   const [plazos,setPlazos] = useState([])   // plazos vencidos/próximos para "qué atender hoy"
-  useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
+  useEffect(()=>{ supabase.from('plazos').select('id,client_id,titulo,fecha:fecha_vencimiento,tipo,estado').neq('estado','descartado').then(({data})=>setPlazos(data||[]),()=>{}) },[])
   const [selYear,setSelYear] = useState(currentYear)
   // Resultado del año: UNA fuente (lib/resultadoAnio.js), la misma del Panel de socios. Fórmulas extraídas sin cambios.
   const resData = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear })

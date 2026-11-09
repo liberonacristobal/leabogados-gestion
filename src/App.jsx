@@ -4062,6 +4062,9 @@ function UsersView({onClose}) {
 
 // Calendario de plazos y obligaciones: extrae de un contrato del Drive (IA) y los agenda por urgencia.
 const PLAZO_TIPO_COL = { 'plazo':C.azulInfo, 'obligación':C.soonText||C.soon, 'hito':C.normal }
+// El tipo de la tabla plazos es una clave del catálogo legal (plazos_catalogo): los tres tipos del contrato se guardan con su código y se leen de vuelta.
+const PLAZO_COD = { 'plazo':'CONTRATO_PLAZO', 'obligación':'CONTRATO_PLAZO', 'hito':'INTERNO_ENTREGA' }
+const plazoTipoTxt = t => t==='CONTRATO_PLAZO' ? 'plazo' : t==='INTERNO_ENTREGA' ? 'hito' : String(t||'').toLowerCase().replace(/_/g,' ')
 function PlazosModal({clients=[], onClose, onOpenClientFicha}){
   const [rows,setRows]=useState(null)
   const isDesk=useIsDesktop()
@@ -4073,7 +4076,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
   const [openB,setOpenB]=useState(()=>new Set(['vencidos','prox']))
   const [mManual,setMManual]=useState(false); const [mF,setMF]=useState({titulo:'',fecha:'',tipo:'plazo'}); const [mSaving,setMSaving]=useState(false)
   const togB=k=>setOpenB(p=>{const s=new Set(p); s.has(k)?s.delete(k):s.add(k); return s})
-  const cargar=async()=>{ try{ const {data}=await supabase.from('plazos').select('*').order('fecha',{ascending:true,nullsFirst:false}); setRows(data||[]) }catch(_){ setRows([]) } }
+  const cargar=async()=>{ try{ const {data}=await supabase.from('plazos').select('*').neq('estado','descartado').order('fecha_vencimiento',{ascending:true,nullsFirst:false}); setRows((data||[]).map(p=>({...p,fecha:p.fecha_vencimiento}))) }catch(_){ setRows([]) } }
   useEffect(()=>{ cargar() },[])
   const cn=id=>clients.find(c=>String(c.id)===String(id))?.name||''
   const fmtF=f=>{ try{ return fmtFechaDMY(f) }catch(_){ return f||'' } }
@@ -4095,7 +4098,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     if(!extracted||!cliObj||saving) return
     setSaving(true); setExtErr(null)
     try{
-      const ins=extracted.items.map(x=>({client_id:String(cliObj.id),titulo:x.titulo,descripcion:x.descripcion||null,tipo:x.tipo,fecha:x.fecha,fuente:extracted.file.name,file_id:extracted.file.id}))
+      const ins=extracted.items.map(x=>({client_id:String(cliObj.id),titulo:x.titulo,descripcion:x.descripcion||null,tipo:PLAZO_COD[x.tipo]||'CONTRATO_PLAZO',fecha_vencimiento:x.fecha,fuente:'documento',notas:extracted.file.name,drive_file_id:extracted.file.id}))
       const {error}=await supabase.from('plazos').insert(ins); if(error) throw error
       logActividad('plazos.extraidos',{detalle:{name:cliObj.name,title:`${ins.length} plazos de ${extracted.file.name}`}})
       setExtracted(null); await cargar()
@@ -4108,7 +4111,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
     if(!mF.titulo.trim()||mSaving) return
     setMSaving(true); setExtErr(null)
     try{
-      const {error}=await supabase.from('plazos').insert({client_id:cliObj?String(cliObj.id):null, titulo:mF.titulo.trim(), tipo:mF.tipo, fecha:/^\d{4}-\d{2}-\d{2}$/.test(mF.fecha)?mF.fecha:null, fuente:'manual'})
+      const {error}=await supabase.from('plazos').insert({client_id:cliObj?String(cliObj.id):null, titulo:mF.titulo.trim(), tipo:PLAZO_COD[mF.tipo]||'CONTRATO_PLAZO', fecha_vencimiento:/^\d{4}-\d{2}-\d{2}$/.test(mF.fecha)?mF.fecha:null, vencimiento_manual:true, fuente:'manual'})
       if(error) throw error
       logActividad('plazos.agregado',{detalle:{title:mF.titulo.trim(),name:cliObj?.name||null}})
       setMF({titulo:'',fecha:'',tipo:'plazo'}); setMManual(false); await cargar()
@@ -4130,7 +4133,7 @@ function PlazosModal({clients=[], onClose, onOpenClientFicha}){
         <div style={{fontSize:13,color:C.text,textDecoration:p.estado==='cumplido'?'line-through':'none'}}>{p.titulo}</div>
         <div style={{fontSize:11,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
           {p.fecha&&<span style={{fontWeight:600,color:C.text}}>{fmtF(p.fecha)}</span>}
-          <span style={{color:PLAZO_TIPO_COL[p.tipo]||C.muted,fontWeight:600}}>{p.tipo}</span>
+          <span style={{color:PLAZO_TIPO_COL[plazoTipoTxt(p.tipo)]||C.muted,fontWeight:600}}>{plazoTipoTxt(p.tipo)}</span>
           {p.client_id&&<span>· <span onClick={()=>onOpenClientFicha&&onOpenClientFicha(p.client_id)} style={{color:C.accent,fontWeight:600,cursor:onOpenClientFicha?'pointer':'default'}}>{cn(p.client_id)}</span></span>}
           {p.fuente&&<span>· {p.fuente}</span>}
         </div>

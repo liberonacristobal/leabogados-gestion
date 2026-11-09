@@ -310,7 +310,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
   // OLA 4 — plazos legales del cliente (tabla `plazos`: audiencias, vencimientos, obligaciones) para integrarlos al Calendario del proyecto. Título propio del plazo, sin inventar.
   const [plazosAll,setPlazosAll] = useState([])
   useEffect(()=>{ if(DEMO){ setPlazosAll(demoData.plazos||[]); return }
-    supabase.from('plazos').select('id,client_id,titulo,fecha,tipo,estado').then(({data})=>setPlazosAll(data||[]),()=>{}) },[])
+    supabase.from('plazos').select('id,client_id,titulo,fecha:fecha_vencimiento,tipo,estado').neq('estado','descartado').then(({data})=>setPlazosAll(data||[]),()=>{}) },[])
   // OLA 3 #4 — Agente proactivo cross-cartera (barrido diario de Drive, server-side). Apagado hasta que el admin lo encienda; "Probar" simula sin escribir.
   const [crossCfg,setCrossCfg] = useState('off'); const [crossBusy,setCrossBusy] = useState(false); const [crossRes,setCrossRes] = useState(null)
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('value').eq('kind','config').eq('key','pmo_cross_cartera').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ if(data&&data[0]) setCrossCfg(String(data[0].value||'off').toLowerCase()) },()=>{}) },[])
@@ -767,7 +767,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       // Cae como hito del proyecto (panel Hitos + Mi semana), salvo que ya exista uno igual (dedup por título+fecha).
       const yaHito=(proyHitos||[]).some(h=>String(h.proyecto_id)===String(p.id)&&String(h.fecha||'').slice(0,10)===n.fecha&&_normTxt(h.titulo||'')===_normTxt(n.titulo||''))
       if(!yaHito&&onAddHito) onAddHito(p.id,n.titulo,n.fecha)
-      if(p.cliente_id) supabase.from('plazos').insert({client_id:String(p.cliente_id),titulo:n.titulo,fecha:n.fecha,tipo:'hito',fuente:'correo/calendario'}).then(()=>{},()=>{})
+      if(p.cliente_id) supabase.from('plazos').insert({client_id:String(p.cliente_id),titulo:n.titulo,fecha_vencimiento:n.fecha,vencimiento_manual:true,tipo:'INTERNO_ENTREGA',fuente:'correo'}).then(()=>{},()=>{})
       cerrarNov(idx)
     }
     else if(n.tipo==='nuevo'){
@@ -1791,7 +1791,7 @@ export function CarteraAlcanceModal({ proyecto, client, onClose, onApplied, onAd
       // Agenda las fases con fecha como plazos del cliente (misma tabla que el calendario de plazos)
       const conAgenda = faseSel.filter(f=>f.fecha)
       if(conAgenda.length && client?.id){
-        const ins = conAgenda.map(f=>({ client_id:String(client.id), titulo:f.titulo, tipo:'hito', fecha:f.fecha||null, fuente:file?.name||'propuesta', file_id:file?.id||null }))
+        const ins = conAgenda.map(f=>({ client_id:String(client.id), titulo:f.titulo, tipo:'INTERNO_ENTREGA', fecha_vencimiento:f.fecha||null, vencimiento_manual:true, fuente:'documento', notas:file?.name||'propuesta', drive_file_id:file?.id||null }))
         await supabase.from('plazos').insert(ins).then(()=>{},()=>{})   // tolera tabla ausente
       }
       // SIEMBRA EL PLAN desde la propuesta: cada fase = un paso (hito) ordenado, con sus sub-etapas (entregables colgando del hito). Pasos reales del documento, no inventados.
