@@ -1,0 +1,179 @@
+// Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Costos → Escenarios → Mes a mes → Por socio → Resumen del año).
+// Las fórmulas repiten el modelo de _shared/presupuesto.js; `evaluar` las calcula aquí mismo para guardar el valor al abrir el archivo y para probar que coinciden con el modelo.
+const COL = (/** @type {number} */ i) => String.fromCharCode(65 + i)
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const PESOS = '#,##0', PCT = '0.0%', UF = '#,##0.00'
+
+/** @param {string} f @param {string} z */ const F = (f, z = PESOS) => ({ f, z })
+/** @param {any} v @param {string} z */ const N = (v, z = PESOS) => ({ v: Number(v) || 0, z })
+
+/**
+ * Hojas del libro. Una celda es texto, {v,z} (número con formato), {f,z} (fórmula con formato) o null (vacía).
+ * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[] }} P
+ */
+export function hojasPresupuesto(P) {
+  const { est, ESC } = P, ne = ESC.length, iBase = Math.max(0, ESC.findIndex(([k]) => k === 'base'))
+  const sc = (/** @type {number} */ j) => COL(1 + j) // columna del escenario j en Supuestos y Escenarios
+  const nC = P.costos.length, totC = nC + 2
+
+  const supuestos = {
+    nombre: 'Supuestos', anchos: [38, 16, 16, 16],
+    filas: [
+      [`Presupuesto ${P.anio} · supuestos`],
+      ['Los valores de las columnas B a D se pueden cambiar.'],
+      [],
+      ['Año del presupuesto', N(P.anio, '0')],
+      ['UF de cierre del año base', N(P.ufDic, UF)],
+      ['Reajuste anual de la UF (%)', N(est.reajusteUF, '0.0')],
+      ['Tasa de primera categoría (%)', N(est.tasaIDPC, '0.0')],
+      ['PPM del año', N(est.ppmAnual)],
+      ['Reserva de caja (%)', N(est.reserva, '0.0')],
+      [],
+      ['Supuesto', ...ESC.map(([, n]) => n)],
+      ['Crecimiento real (%)', ...ESC.map(([k]) => N(est.p[k].g, '0.0'))],
+      ['Alza de costos (%)', ...ESC.map(([k]) => N(est.p[k].alza, '0.0'))],
+      ['Comisiones (% de lo cobrado)', ...ESC.map(([k]) => N(est.p[k].terc, '0.0'))],
+      ['Días de cobro', ...ESC.map(([k]) => N(est.p[k].dias, '0'))],
+    ],
+  }
+  const base = {
+    nombre: 'Base', anchos: [8, 14, 18, 18, 18],
+    filas: [
+      ['N.º', 'Mes', 'Facturado base ($)', 'Facturado base (UF)', 'UF proyectada'],
+      ...MESES.map((m, i) => [i + 1, m, N(P.baseCLP[i]), N(P.baseUF[i], UF), F(`Supuestos!$B$5*(1+Supuestos!$B$6/100)^(A${i + 2}/12)`, UF)]),
+    ],
+  }
+  const costos = {
+    nombre: 'Costos', anchos: [34, 14, 16, 8, 16, ...ESC.map(() => 18)],
+    filas: [
+      ['Partida', 'Tipo', 'Monto mensual', 'Meses', 'Alza propia (%)', ...ESC.map(([, n]) => n)],
+      ...P.costos.map((c, i) => [c.n, c.t || '', N(c.m), N(c.meses, '0'), c.alza == null ? null : N(c.alza, '0.0'), ...ESC.map((_, j) => F(`$C${i + 2}*$D${i + 2}*(1+IF(ISBLANK($E${i + 2}),Supuestos!${sc(j)}$13,$E${i + 2})/100)`))]),
+      ['Total', '', null, null, null, ...ESC.map((_, j) => F(`SUM(${COL(5 + j)}2:${COL(5 + j)}${nC + 1})`))],
+    ],
+  }
+  const r = (/** @type {number} */ k, /** @type {string} */ t, /** @type {(c:string)=>string} */ fn, z = PESOS) => [t, ...ESC.map((_, j) => F(fn(sc(j)), z))]
+  const escenarios = {
+    nombre: 'Escenarios', anchos: [40, 18, 18, 18],
+    filas: [
+      ['Concepto', ...ESC.map(([, n]) => n)],
+      r(2, 'Facturado (UF)', (c) => `SUM(Base!$D$2:$D$13)*(1+Supuestos!${c}$12/100)`, UF),
+      r(3, 'Facturado ($)', (c) => `SUMPRODUCT(Base!$D$2:$D$13,Base!$E$2:$E$13)*(1+Supuestos!${c}$12/100)`),
+      r(4, 'Variación de cuentas por cobrar', (c) => `Supuestos!${c}$15/30*(Base!$D$13*(1+Supuestos!${c}$12/100)*Base!$E$13-Base!$C$13)`),
+      r(5, 'Cobrado (caja)', (c) => `${c}3-${c}4`),
+      r(6, 'Comisiones', (c) => `${c}5*Supuestos!${c}$14/100`),
+      r(7, 'Costos de oficina', (c) => `Costos!${COL(5 + (c.charCodeAt(0) - 66))}${totC}`),
+      r(8, 'Resultado antes de impuesto', (c) => `${c}5-${c}6-${c}7`),
+      r(9, 'Impuesto de primera categoría', (c) => `MAX(0,${c}8)*Supuestos!$B$7/100`),
+      r(10, 'Resultado después de impuesto', (c) => `${c}8-${c}9`),
+      r(11, 'Reserva de caja', (c) => `MAX(0,${c}10)*Supuestos!$B$9/100`),
+      r(12, 'Retiros de los socios', (c) => `MAX(0,${c}10)*(1-Supuestos!$B$9/100)`),
+      r(13, 'PPM del año', () => 'Supuestos!$B$8'),
+      r(14, 'Impuesto por pagar (menos PPM)', (c) => `${c}9-${c}13`),
+    ],
+  }
+  const mes = {
+    nombre: 'Mes a mes', anchos: [14, 16, ...ESC.map(() => 18), ...ESC.map(() => 18)],
+    filas: [
+      ['Mes', 'UF proyectada', ...ESC.map(([, n]) => `${n} (UF)`), ...ESC.map(([, n]) => `${n} ($)`)],
+      ...MESES.map((m, i) => [m, F(`Base!E${i + 2}`, UF),
+        ...ESC.map((_, j) => F(`Base!$D${i + 2}*(1+Supuestos!${sc(j)}$12/100)`, UF)),
+        ...ESC.map((_, j) => F(`${COL(2 + j)}${i + 2}*$B${i + 2}`))]),
+      ['Total', null, ...ESC.map((_, j) => F(`SUM(${COL(2 + j)}2:${COL(2 + j)}13)`, UF)), ...ESC.map((_, j) => F(`SUM(${COL(2 + ne + j)}2:${COL(2 + ne + j)}13)`))],
+    ],
+  }
+  const nS = P.socios.length, bc = sc(iBase)
+  const socio = {
+    nombre: 'Por socio', anchos: [22, 20, 16, 24, 24],
+    filas: [
+      ['Socio', `Facturado ${P.anioBase} ($)`, 'Participación', `Facturado ${P.anio} · ${ESC[iBase][1]} ($)`, `Retiros · ${ESC[iBase][1]} ($)`],
+      ...P.socios.map((s, i) => [s.nombre, N(s.facturado), F(`IF(B${nS + 2}=0,0,B${i + 2}/B${nS + 2})`, PCT), F(`C${i + 2}*Escenarios!$${bc}$3`), F(`C${i + 2}*Escenarios!$${bc}$12`)]),
+      ['Total', F(`SUM(B2:B${nS + 1})`), F(`SUM(C2:C${nS + 1})`, PCT), F(`SUM(D2:D${nS + 1})`), F(`SUM(E2:E${nS + 1})`)],
+    ],
+  }
+  const o = P.oficiales
+  const resumen = {
+    nombre: `Resumen ${P.anioBase}`, anchos: [26, 18, 18, 18, 18],
+    filas: [
+      [`Resumen ${P.anioBase} · cifras de Inicio`],
+      ['Concepto', 'UF', '$'],
+      ['Vendido', N(o.vend.uf, UF), N(o.vend.clp)],
+      ['Facturado', N(o.fact.uf, UF), N(o.fact.clp)],
+      ['Cobrado', N(o.cob.uf, UF), N(o.cob.clp)],
+      ['Margen', N(o.marg.uf, UF), N(o.marg.clp)],
+      ['Meta de ventas', null, N(o.metaVentasCLP)],
+      ['Meta de cobranza', null, N(o.metaCobroCLP)],
+      [],
+      ['Mes', `Facturado ${P.anioBase - 1} ($)`, `Facturado ${P.anioBase} ($)`, 'Variación', `Cobrado ${P.anioBase} ($)`],
+      ...MESES.map((m, i) => { const x = P.mes26[i] || { a: null, f: null, cob: null }, f = i + 11; return [m, x.a == null ? null : N(x.a), x.f == null ? null : N(x.f), x.a && x.f != null ? F(`IF(B${f}=0,0,C${f}/B${f}-1)`, PCT) : null, x.cob == null ? null : N(x.cob)] }),
+    ],
+  }
+  return [supuestos, base, costos, escenarios, mes, socio, resumen]
+}
+
+/**
+ * Calcula las fórmulas de las hojas (SUM, SUMPRODUCT, MAX, IF, ISBLANK y aritmética) y devuelve cada celda con su valor.
+ * @param {{nombre:string, filas:any[][]}[]} hojas
+ */
+export function evaluar(hojas) {
+  const por = /** @type {Record<string, any[][]>} */ ({})
+  hojas.forEach((h) => { por[h.nombre] = h.filas })
+  const memo = /** @type {Record<string, any>} */ ({})
+  const colN = (/** @type {string} */ c) => c.split('').reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1
+  const celda = (/** @type {string} */ h, /** @type {number} */ c, /** @type {number} */ r) => {
+    const k = `${h}|${c}|${r}`
+    if (k in memo) return memo[k]
+    const x = (por[h] || [])[r]?.[c]
+    let v
+    if (x && typeof x === 'object' && 'f' in x) v = correr(x.f, h)
+    else if (x && typeof x === 'object') v = x.v
+    else v = x == null ? null : x
+    return (memo[k] = v)
+  }
+  const num = (/** @type {any} */ v) => (typeof v === 'number' ? v : 0)
+  const plano = (/** @type {any[]} */ a) => a.flat(Infinity)
+  const fn = {
+    SUM: (/** @type {any[]} */ ...a) => plano(a).reduce((s, v) => s + num(v), 0),
+    SUMPRODUCT: (/** @type {any[]} */ a, /** @type {any[]} */ b) => a.reduce((s, v, i) => s + num(v) * num(b[i]), 0),
+    MAX: (/** @type {any[]} */ ...a) => Math.max(...plano(a).map(num)),
+    IF: (/** @type {any} */ c, /** @type {any} */ a, /** @type {any} */ b) => (c ? a : b),
+    ISBLANK: (/** @type {any} */ v) => v == null || v === '',
+  }
+  /** @param {string} f @param {string} h */
+  function correr(f, h) {
+    const js = f.replace(/(?:(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))!)?\$?([A-Z]{1,2})\$?(\d+)(?::\$?([A-Z]{1,2})\$?(\d+))?/g, (_, q, s, c1, r1, c2, r2) => {
+      const hh = JSON.stringify(q || s || h)
+      if (c2 == null) return `CE(${hh},${colN(c1)},${Number(r1) - 1})`
+      return `RG(${hh},${colN(c1)},${Number(r1) - 1},${colN(c2)},${Number(r2) - 1})`
+    }).replace(/\^/g, '**').replace(/(?<![<>=!])=(?!=)/g, '==')
+    const CE = (/** @type {string} */ hh, /** @type {number} */ c, /** @type {number} */ r) => { const v = celda(hh, c, r); return v == null ? 0 : v }
+    const RG = (/** @type {string} */ hh, /** @type {number} */ c1, /** @type {number} */ r1, /** @type {number} */ c2, /** @type {number} */ r2) => { const o = []; for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++) o.push(celda(hh, c, r)); return o }
+    // ISBLANK necesita la celda sin convertir a 0
+    const js2 = js.replace(/ISBLANK\(CE\(/g, 'ISBLANK(RAW(')
+    const RAW = (/** @type {string} */ hh, /** @type {number} */ c, /** @type {number} */ r) => celda(hh, c, r)
+    return new Function('CE', 'RG', 'RAW', ...Object.keys(fn), `return (${js2})`)(CE, RG, RAW, ...Object.values(fn))
+  }
+  return hojas.map((h) => ({ nombre: h.nombre, filas: h.filas.map((fila, r) => fila.map((x, c) => (x && typeof x === 'object' && 'f' in x ? { ...x, v: celda(h.nombre, c, r) } : x))) }))
+}
+
+/** Escribe el libro con SheetJS (carga perezosa, como el resto de las descargas de la app). @returns {Promise<string|false>} */
+export async function descargarLibroPresupuesto(/** @type {Parameters<typeof hojasPresupuesto>[0]} */ P, /** @type {(m:string)=>void} */ avisar) {
+  try {
+    const XLSX = await import(/* @vite-ignore */ 'https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+    const wb = XLSX.utils.book_new()
+    evaluar(hojasPresupuesto(P)).forEach((h, i) => {
+      const ws = /** @type {Record<string, any>} */ ({}); let maxC = 0
+      h.filas.forEach((fila, r) => fila.forEach((x, c) => {
+        if (x == null) return
+        maxC = Math.max(maxC, c)
+        const ref = XLSX.utils.encode_cell({ r, c })
+        if (typeof x === 'object') ws[ref] = 'f' in x ? { t: typeof x.v === 'string' ? 's' : 'n', f: x.f, v: x.v, z: x.z } : { t: 'n', v: x.v, z: x.z }
+        else ws[ref] = { t: typeof x === 'number' ? 'n' : 's', v: x }
+      }))
+      ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, h.filas.length - 1), c: maxC } })
+      ws['!cols'] = ((hojasPresupuesto(P)[i] || {}).anchos || []).map((/** @type {number} */ w) => ({ wch: w }))
+      XLSX.utils.book_append_sheet(wb, ws, h.nombre)
+    })
+    XLSX.writeFile(wb, `Presupuesto_${P.anio}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    return 'Excel descargado'
+  } catch (e) { avisar('No se pudo generar el Excel: ' + (/** @type {any} */ (e)?.message || e)); return false }
+}
