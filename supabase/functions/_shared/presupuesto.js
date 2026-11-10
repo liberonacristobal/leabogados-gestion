@@ -749,6 +749,12 @@ export const referenciaSeguimiento = ({ actual, hayOficial, anio, primerAnio = 2
  * @param {{ anio:number, imponibleMensual:number, baseYM:string, calendario:{desde:string,pct:number}[] }} o
  * @returns {{ total:number, tasaBase:number, meses:{ ym:string, tasa:number, extra:number }[] }}
  */
+/** Nombre de la partida automática del alza de cotización del empleador (Ley 21.735); la identifica el id 'cot-empleador'. */
+export const NOMBRE_COT_EMPLEADOR = 'Alza de cotización del empleador (estimación)'
+/** Borradores guardados con el rótulo antiguo («Cotización empleador (estimación)»): se muestra el nuevo; un nombre escrito a mano no se toca. @param {PartidaCosto[]} costos */
+export function migrarRotuloCotEmpleador(costos) {
+  return (costos || []).map((c) => (c && c.id === 'cot-empleador' && c.n === 'Cotización empleador (estimación)' ? { ...c, n: NOMBRE_COT_EMPLEADOR } : c))
+}
 export function cotizacionEmpleador({ anio, imponibleMensual, baseYM, calendario }) {
   const cal = [...(calendario || [])].sort((a, b) => String(a.desde).localeCompare(String(b.desde)))
   const tasaEn = (/** @type {string} */ ym) => { let t = 0; for (const x of cal) if (String(x.desde) <= ym) t = Number(x.pct) || 0; return t }
