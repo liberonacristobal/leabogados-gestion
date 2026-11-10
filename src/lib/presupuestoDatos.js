@@ -157,8 +157,8 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
       const base = `${cat}|${r.item || ''}`, n = costos.filter((c) => String(c.id).startsWith(base)).length
       const vig = r.desde && r.monto_prev != null && Number(r.monto_prev) > 0 ? { desde: String(r.desde).slice(0, 10), mPrev: Math.round(Number(r.monto_prev)) } : {}
       costos.push({ id: n ? `${base}#${n}` : base, n: r.item || cat, m: Math.round(v), meses: 12, t: 'fijo', alza: /** @type {number|null} */ (null), g: cat, ...vig })
-    } else if (agrupa[cat]) agrupa[cat].m += v
-    else costos.push((agrupa[cat] = { id: cat, n: cat, m: v, meses: 12, t: CATEGORIAS_FIJAS.includes(cat) ? 'fijo' : 'discrecional', alza: /** @type {number|null} */ (null) }))
+    } else if (agrupa[cat]) { agrupa[cat].m += v; agrupa[cat].items.push({ n: r.item || cat, m: Math.round(v) }) }
+    else costos.push((agrupa[cat] = { id: cat, n: cat, m: v, meses: 12, t: CATEGORIAS_FIJAS.includes(cat) ? 'fijo' : 'discrecional', alza: /** @type {number|null} */ (null), items: [{ n: r.item || cat, m: Math.round(v) }] }))
   })
   costos.forEach((c) => { c.m = Math.round(c.m) })
 
@@ -169,6 +169,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     real: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cos || 0), 0), ppto: cerrados.reduce((a, m) => a + budMes(m), 0), pptoResto: faltan.reduce((a, m) => a + budMes(m), 0),
     desde: cerrados.length ? ym(currentYear, 1) : null, hasta: cerrados.length ? ym(currentYear, cerrados.length) : null,
     // En UF: lo real con la UF de cada mes (resultadoMes) y el presupuesto con la UF del mes que corresponde.
+    mes: Array.from({ length: 12 }, (_, i) => budMes(i + 1)),   // presupuesto de costos de cada mes (Seguimiento)
     realUF: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cosUF || 0), 0),
     pptoUF: cerrados.reduce((a, m) => a + budMes(m) / (uf26.porMes[m - 1] || 1), 0), pptoRestoUF: faltan.reduce((a, m) => a + budMes(m) / (uf26.porMes[m - 1] || 1), 0),
   }
@@ -182,6 +183,9 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     totalUF: sumaConUF(RS.movs.map((x) => ({ monto: x.amt, fecha: x.date })), ufAt, uf26.med).uf,
     porSocioUF: Object.fromEntries(RS.SOC.map((n) => [n, sumaConUF(RS.retSoc.filter((r) => r.socio === n).flatMap((r) => r.movs).map((x) => ({ monto: x.amt, fecha: x.date })), ufAt, uf26.med).uf])),
     sueldosUF: Object.fromEntries(RS.SOC.map((n) => [n, sumaConUF((expenses || []).filter((e) => RS.inOfi(e) && ['sueldos', 'bono'].includes(String(e.category || '').trim().toLowerCase()) && _SOCIO_SUELDO(e) === n).map((e) => ({ monto: Number(e.amount) || 0, fecha: String(e.date || '').slice(0, 10) })), ufAt, uf26.med).uf])),
+    // Retiros por mes del año (pesos y UF del día de cada transferencia), para el Seguimiento.
+    mes: Array.from({ length: 12 }, (_, i) => RS.movs.filter((x) => Number(x.date.slice(5, 7)) === i + 1).reduce((a, x) => a + x.amt, 0)),
+    mesUF: Array.from({ length: 12 }, (_, i) => RS.movs.filter((x) => Number(x.date.slice(5, 7)) === i + 1).reduce((a, x) => a + x.amt / (ufAt(x.date) || uf26.med || 1), 0)),
     desde: RS.movs.length ? RS.movs.reduce((a, x) => (x.date < a ? x.date : a), '9999-99-99') : null, hasta: RS.movs.length ? RS.movs.reduce((a, x) => (x.date > a ? x.date : a), '0000-00-00') : null,
   }
 

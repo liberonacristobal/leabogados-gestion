@@ -1,10 +1,10 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { modeloPresupuesto, diferenciaSupuestos, parteMeta, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, distribuirMensual, seguimientoMensual, afavor, COMPONENTES, modeloPresupuesto, diferenciaSupuestos, parteMeta, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros } from '../../supabase/functions/_shared/presupuesto.js'
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
-import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, ESC_TONO, Val, Pestanas, difMon, monedaActual, tasa27, aUF } from '../lib/presupuestoUI.jsx'
-import { nivelTxt } from '../lib/presupuestoBloques.jsx'
+import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, ESC_TONO, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF } from '../lib/presupuestoUI.jsx'
+import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 const fechaDMY = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -34,17 +34,17 @@ function Strip({ X }) {
 export function CardEsc({ X, k }) {
   const { est, M, setPal, setEsc, MT } = X, irEscTab = X.irEscTab, e = M.esc[k], p = est.p[k], b = M.esc.base, sel = est.esc === k, tn = ESC_TONO[k]
   const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio).find((x) => x.k === k)
-  const xr = (t, v, go, strong) => <div onClick={(ev) => { if (go) { ev.stopPropagation(); go() } }} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 4px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: go ? 'pointer' : 'default', fontWeight: strong ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}><Val v={mm(v)} /></b></div>
+  const xr = (t, v, go, strong) => <div onClick={(ev) => { if (go) { ev.stopPropagation(); go() } }} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: X.D ? '7px 4px' : '4px 2px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: go ? 'pointer' : 'default', fontWeight: strong ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}><Val v={mm(v)} /></b></div>
   const lv = (t, f, suf, d, mn, mx, int) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}><small style={{ ...LBL, fontSize: 10.5, color: C.accent }}>{t}</small><Stp value={p[f]} suf={suf} step={d} min={mn} max={mx} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} /></div>
-  return <div onClick={() => setEsc(k)} role='button' aria-pressed={sel} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: sel ? 13 : 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, boxSizing: 'border-box' }}>
+  return <div onClick={() => setEsc(k)} role='button' aria-pressed={sel} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: X.D ? (sel ? 13 : 14) : (sel ? 9 : 10), cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: X.D ? 6 : 3, minWidth: 0, boxSizing: 'border-box' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>{sel && <Chip>elegido</Chip>}{k !== 'base' && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs Base</Chip>}</div>
     <div style={{ ...LBL, color: C.muted }}>Retiros</div>
-    <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.overdueText, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
+    <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.overdueText, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
     <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros / 24)} por socio al mes</div>
     {cu && cu.dif != null && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif >= -1 ? 'sobran' : 'faltan'} {mmP(Math.abs(cu.dif))}</Flecha> de la meta de {nombreComponente(MT.ancla).toLowerCase()}</div>}
-    <div style={{ marginTop: 6 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
+    <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
     <div style={{ fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10, marginTop: 6 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
   </div>
 }
 
@@ -131,48 +131,125 @@ function MetasTabla({ X }) {
     {fil.map(([t, nota, ref, f]) => <div key={t} style={{ display: 'grid', gridTemplateColumns: g, gap: 10, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}<div style={{ fontSize: 11, color: C.muted }}>{nota}</div></span>{X.D && <span style={{ textAlign: 'right' }}><Val v={ref} /></span>}{cols.map(([k]) => <span key={k} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><Val v={mm(f(k))} /></span>)}</div>)}</Panel>
 }
 
-// ── 5 · Seguimiento (presupuesto contra real) ──
+// ── 6 · Seguimiento (presupuesto contra real) ──
+const TONO_SEG = { ventas: ['a', 'ventas'], fact: ['y', 'fact'], caja: ['g', 'wal'], costos: ['t', 'egr'], margen: ['w', 'tax'], retiros: ['r', 'ing'] }
+const sg2 = (/** @type {number} */ x) => (x >= 0 ? '+' : '−')
+const TONO_BG = { a: C.azulBg, y: C.soonBg, g: C.greenBg, t: C.tealBg, r: C.ambarBg }
+
+/**
+ * Presupuesto y real mes a mes de los seis componentes (pesos y UF). Seguimiento del año en curso: contra la meta de ventas y de cobro (repartidas con la estacionalidad del facturado base) y el presupuesto de costos del año;
+ * del año siguiente: contra la versión oficial (o el borrador). Lo que no tiene presupuesto propio (facturado y retiros del año en curso) queda sin desvío. Todo el reparto mensual es estimación propia.
+ */
+function seriesSeguimiento(X) {
+  const { M, datos: d, est } = X, Y = d.anio, actual = Y === d.anioBase, cerr = mesesCerradosAnio(d.hoy, Y), o = d.oficiales, terc = (d.terc ?? 0) / 100
+  const of = X.vers.find((v) => v.oficial), esc = of ? of.estado.esc : est.esc, ratio = X.MT.ratio
+  const ymk = (/** @type {number} */ i) => ym(Y, i)
+  /** @type {Record<string,(number|null)[]>} */ const P = {}, R = {}
+  /** @type {Record<string,(number|null)[]>} */ const PU = {}, RU = {}
+  const rate = (/** @type {number} */ i) => (actual ? d.uf26.porMes[i] : M.uf27[i]) || 1
+  const nul = () => Array(12).fill(null)
+  if (actual) {
+    const w = d.base.baseCLP, costosP = d.costos26.mes
+    P.ventas = o.metaVentasCLP > 0 ? distribuirMensual(o.metaVentasCLP, w) : nul(); P.caja = o.metaCobroCLP > 0 ? distribuirMensual(o.metaCobroCLP, w) : nul()
+    P.costos = costosP; P.fact = nul(); P.retiros = nul()
+    P.margen = P.caja.map((c, i) => (c == null ? null : c * (1 - terc) - costosP[i]))
+    const cum = d.evo.vend, kU = o.vend.clp > 0 ? o.vend.uf / o.vend.clp : 0
+    const vm = (/** @type {number} */ i) => (cum[i] == null ? null : cum[i] - (i > 0 ? cum[i - 1] ?? 0 : 0))
+    R.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.fac ?? null); RU.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.facUF ?? null)
+    R.ventas = Array.from({ length: 12 }, (_, i) => vm(i)); RU.ventas = R.ventas.map((x) => (x == null ? null : x * kU))
+    R.caja = Array.from({ length: 12 }, (_, i) => d.cobMes[ymk(i)] ?? null); RU.caja = Array.from({ length: 12 }, (_, i) => d.cobMesUF[ymk(i)] ?? null)
+    R.costos = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.cos ?? null); RU.costos = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.cosUF ?? null)
+    R.margen = R.caja.map((c, i) => (c == null || R.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (R.costos[i])))
+    RU.margen = RU.caja.map((c, i) => (c == null || RU.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (RU.costos[i])))
+    R.retiros = d.retiros26.mes.map((x) => x); RU.retiros = d.retiros26.mesUF.map((x) => x)
+  } else {
+    const e = of && of.resumen && of.resumen[esc] ? of.resumen[esc] : M.esc[esc]
+    const mens = of && of.resumen && of.resumen[esc] && of.resumen[esc].mensual ? of.resumen[esc].mensual : M.esc[esc].ing
+    const vA = valorComponente(e, 'ventas', ratio) ?? 0
+    P.fact = mens.slice(); P.ventas = distribuirMensual(vA, mens); P.caja = distribuirMensual(e.caja, mens); P.costos = distribuirMensual(e.costos, null); P.retiros = distribuirMensual(e.retiros, null)
+    const ter = distribuirMensual(e.terc, mens); P.margen = P.caja.map((c, i) => c - ter[i] - P.costos[i])
+    for (const kk of Object.keys(P)) R[kk] = nul()
+  }
+  const out = /** @type {Record<string,any>} */ ({})
+  for (const kk of Object.keys(P)) {
+    const real = R[kk] || nul(), rU = RU[kk] || nul()
+    const pU = P[kk].map((v, i) => (v == null ? null : v / rate(i)))
+    out[kk] = { c: seguimientoMensual({ pres: P[kk], real, cerrados: cerr, curso: actual && cerr < 12 }), u: seguimientoMensual({ curso: actual && cerr < 12, pres: pU, real: rU.map((x, i) => (real[i] != null && x == null ? /** @type {number} */ (real[i]) / rate(i) : x)), cerrados: cerr }) }
+  }
+  return { S: out, of, esc, cerr, actual }
+}
+
 export function Seguimiento({ X }) {
-  const { est, M, D, datos: d } = X, Y = d.anio
-  const of = X.vers.find((v) => v.oficial), k = of ? of.estado.esc : est.esc
-  const mens = of && of.resumen && of.resumen[k] && of.resumen[k].mensual ? of.resumen[k].mensual : M.esc[k].ing
-  const hoyY = Number(d.hoy.slice(0, 4)), hoyM = Number(d.hoy.slice(5, 7))
-  const cerrado = (i) => Y < hoyY || (Y === hoyY && i + 1 < hoyM)
-  const real = (i) => (cerrado(i) ? d.serie[ym(Y, i)]?.fac ?? null : null)
-  // En UF: el presupuesto de cada mes con la UF proyectada de ese mes y lo real con la UF de sus facturas.
-  const presU = mens.map((v, i) => aUF(v, M.uf27[i]) ?? 0), realU = (i) => (cerrado(i) ? d.serie[ym(Y, i)]?.facUF ?? null : null)
-  let acc = 0, accU = 0, realAcc = 0, realAccU = 0, presCerr = 0, presCerrU = 0
-  const filas = MESL.map((_, i) => { acc += mens[i]; accU += presU[i]; const r = real(i), ru = realU(i); if (r != null) { realAcc += r; realAccU += ru ?? 0; presCerr += mens[i]; presCerrU += presU[i] }
-    return { i, pres: mens[i], presU: presU[i], acc, accU, r, ru, des: r != null ? r - mens[i] : null } })
-  const tot = mens.reduce((a, x) => a + x, 0), totU = presU.reduce((a, x) => a + x, 0), pend = filas.filter((f) => f.r == null)
-  const proy = realAcc + pend.reduce((a, f) => a + f.pres, 0), proyU = realAccU + pend.reduce((a, f) => a + f.presU, 0), desv = realAcc - presCerr, desvU = realAccU - presCerrU
+  const { est, D, datos: d, ui, setUI } = X, Y = d.anio
+  const { S, of, esc, cerr } = seriesSeguimiento(X)
+  const modo = ui.sg || 'p', comp = ui.sc || 'fact'
+  const nombre = Object.fromEntries(COMPONENTES), corto = (/** @type {string} */ kk) => (kk === 'costos' ? 'Costos' : nombre[kk])
+  const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
+  const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
+  // Desvío con flecha (↑ sobre el presupuesto, ↓ bajo él; verde a favor, rojo en contra) en % o en dinero, según el conmutador.
+  const fl = (/** @type {string} */ kk, /** @type {any} */ m, /** @type {any} */ mu, /** @type {number} */ tam = 11) => (m == null || m.des == null ? <span style={{ color: C.muted }}>—</span>
+    : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: bueno(kk, m.des) ? C.greenText : C.overdueText }}>{m.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (m.pres ? `${sg2(m.des)}${pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
+  const flA = (/** @type {string} */ kk, /** @type {any} */ c, /** @type {any} */ u) => (c.des == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: bueno(kk, c.des) ? C.greenText : C.overdueText }}>{c.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (c.desPct != null ? `${sg2(c.des)}${pc(Math.abs(c.desPct), 0)}` : '—') : `${sg2(c.des)}${cel(Math.abs(c.des), Math.abs(u.des))}`}</span>)
+  const rango = cerr > 0 ? `ene–${MESC[cerr - 1]}` : ''
+  const tarjeta = (/** @type {string} */ kk) => {
+    const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
+    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={{ cap: rango ? `Real ${rango}` : 'Real', val: cerr > 0 ? mx(c.realAcum, u.realAcum) : '—' }} der={{ cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null && cerr > 0 ? mx(c.presAcum, u.presAcum) : cerr === 0 && c.cierre != null ? mx(c.cierre, u.cierre) : '—' }}
+      cmp={cerr === 0 ? <span>Sin meses cerrados · presupuesto del año</span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
+      det={[['Cierre proyectado', c.cierre != null ? mx(c.cierre, u.cierre) : '—'], ['Meses cerrados', String(cerr)], ['Plano', 'presupuesto mensual: estimación propia']]} onClick={() => setUI({ sc: kk })} />
+  }
   const avisos = []
-  if (presCerr > 0 && realAcc < presCerr * 0.9) avisos.push(`Facturado acumulado ${mx(realAcc, realAccU)} contra ${mx(presCerr, presCerrU)} presupuestados (${pc((realAcc / presCerr - 1) * 100, 0)}).`)
-  if (d.dias.promedio != null && d.dias.promedio > est.p[k].dias) avisos.push(`Días de cobro reales ${d.dias.promedio} sobre los ${est.p[k].dias} supuestos.`)
+  const f = S.fact.c
+  if (f.presAcum > 0 && f.realAcum < f.presAcum * 0.9) avisos.push(`Facturado acumulado ${mx(f.realAcum, S.fact.u.realAcum)} contra ${mx(f.presAcum, S.fact.u.presAcum)} presupuestados (${pc((f.realAcum / f.presAcum - 1) * 100, 0)}).`)
+  if (d.dias.promedio != null && d.dias.promedio > est.p[esc].dias) avisos.push(`Días de cobro reales ${d.dias.promedio} sobre los ${est.p[esc].dias} supuestos.`)
   const mayor = d.clientes[0], tope = 15
   if (mayor && d.totalFact && (mayor.monto / d.totalFact) * 100 > tope) avisos.push(`${mayor.name} concentra ${pc((mayor.monto / d.totalFact) * 100, 0)} de lo facturado (tope ${tope} %).`)
-  const lado = <>
-    <Panel hd='Avisos' pad flex>
-      {avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}
-      <div style={{ fontSize: 12, color: C.muted, marginTop: 10 }}>Sobre lo real del año.</div>
-    </Panel>
-  </>
+  const claves = Object.keys(S)
+  const nomEst = (/** @type {string} */ e) => (e === 'cerrado' ? 'cerrado' : e === 'curso' ? 'en curso' : 'por venir')
+  const conmut = <Seg options={[['p', '%'], ['m', '$']]} value={modo} onChange={(v) => setUI({ sg: v })} />
+  const colW = '100px repeat(12,minmax(0,1fr)) 68px 68px 76px 70px', borde = `1px solid ${C.border}`
+  const icono = (/** @type {string} */ kk) => { const [tono, ic] = TONO_SEG[kk]; return <span style={{ width: 24, height: 24, borderRadius: 8, background: tono === 'w' ? C.bgSoft : TONO_BG[tono], display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={14} /></span> }
+  const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut}>
+    <div style={{ overflowX: 'auto' }}><div style={{ minWidth: modo === 'p' ? 0 : 1120 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', ...LBL, fontSize: 10.5, color: C.accent }}>
+        <span style={{ padding: '10px 0' }}>Componente</span>{MESC.map((m, i) => <span key={m} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', padding: '10px 4px 10px 0', cursor: 'pointer', color: i > cerr ? C.done : C.accent }}>{m}</span>)}
+        {['Real', 'Presup.', 'Desvío', 'Cierre'].map((t) => <span key={t} style={{ textAlign: 'right', padding: '10px 0' }}>{t}</span>)}
+      </div>
+      {claves.map((kk) => { const c = S[kk].c, u = S[kk].u
+        return <div key={kk} style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', alignItems: 'center', borderTop: borde, minHeight: 46 }}>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: C.accent, fontWeight: 700, fontSize: 12.5 }}>{icono(kk)}{corto(kk)}</span>
+          {c.meses.map((m, i) => <span key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', paddingRight: 4, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>{m.estado === 'cerrado' ? fl(kk, m, u.meses[i]) : <span style={{ color: C.muted }}>—</span>}</span>)}
+          <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{cel(c.realAcum, u.realAcum)}</span>
+          <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.presAcum != null ? cel(c.presAcum, u.presAcum) : '—'}</span>
+          <span style={{ textAlign: 'right', fontSize: 12 }}>{flA(kk, c, u)}</span>
+          <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.cierre != null ? cel(c.cierre, u.cierre) : '—'}</span>
+        </div> })}
+      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '8px 12px 10px', borderTop: borde, fontSize: 10, color: C.muted }}><span>Estado</span>{S[claves[0]].c.meses.map((m, i) => <span key={i} style={{ textAlign: 'right', paddingRight: 4, color: m.estado === 'curso' ? C.accent : C.muted, fontWeight: m.estado === 'curso' ? 700 : 400 }} title={nomEst(m.estado)}>{m.estado === 'cerrado' ? '✓' : m.estado === 'curso' ? 'en curso' : '·'}</span>)}</div>
+    </div></div>
+  </Panel>
+  const ks = S[comp] ? comp : 'fact', sel = S[ks], gr = 'minmax(0,.7fr) repeat(3,minmax(0,1fr)) 12px'
+  const chips = <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>{claves.map((kk) => <button key={kk} onClick={() => setUI({ sc: kk })} aria-pressed={ks === kk} style={{ border: `1px solid ${ks === kk ? C.azulBg : C.border}`, background: ks === kk ? C.azulBg : C.card, color: ks === kk ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: ks === kk ? 800 : 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{corto(kk)}</button>)}</div>
+  const lista = <Panel>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px' }}>{conmut}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '8px 14px', borderTop: borde, ...LBL, fontSize: 10.5, color: C.accent }}><span>Mes</span><span style={{ textAlign: 'right' }}>Presup.</span><span style={{ textAlign: 'right' }}>Real</span><span style={{ textAlign: 'right' }}>Desvío</span><span /></div>
+    {sel.c.meses.map((m, i) => { const mu = sel.u.meses[i]
+      return <div key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '8px 14px', borderTop: borde, fontSize: 12, cursor: 'pointer', alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontWeight: 700 }}>{MESC[i]}</span>
+        <span style={{ textAlign: 'right', color: C.muted }}><Val v={m.pres != null ? cel(m.pres, mu.pres) : '—'} /></span>
+        <span style={{ textAlign: 'right' }}>{m.estado === 'cerrado' && m.real != null ? <b style={{ color: C.accent }}><Val v={cel(m.real, mu.real)} /></b> : <span style={{ color: C.muted }}>{m.estado === 'curso' ? 'a la fecha' : '—'}</span>}</span>
+        <span style={{ textAlign: 'right' }}>{m.estado === 'cerrado' ? fl(ks, m, mu, 12) : <span style={{ color: C.muted }}>{m.estado === 'venir' ? 'por venir' : '—'}</span>}</span>
+        <span style={{ color: C.done }}>›</span></div> })}
+    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '9px 14px', borderTop: `2px solid ${C.accent}`, fontSize: 12.5, fontWeight: 800, color: C.accent, background: C.bgSoft }}><span>Acum.</span><span style={{ textAlign: 'right' }}>{sel.c.presAcum != null ? cel(sel.c.presAcum, sel.u.presAcum) : '—'}</span><span style={{ textAlign: 'right' }}>{cel(sel.c.realAcum, sel.u.realAcum)}</span><span style={{ textAlign: 'right' }}>{flA(ks, sel.c, sel.u)}</span><span /></div>
+  </Panel>
   return <>
-    <Titulo>Presupuesto vs real {Y} · {X.nomEsc(k)}{of ? ' · oficial «' + of.nombre + '»' : ' · borrador'}</Titulo>
-    <Grid cols={4} colsM={2}>
-      <Mini ic='doc' label='Presupuesto' value={mx(tot, totU)} sub={`facturado ${Y}`} onClick={() => X.irEsc('res')} />
-      <Mini ic='egr' label='Real' value={realAcc > 0 ? mx(realAcc, realAccU) : 'sin dato'} sub={realAcc > 0 ? 'meses cerrados' : `se llena desde enero de ${Y}`} />
-      <Mini ic='alerta' label='Desvío' value={presCerr > 0 ? (desv >= 0 ? '+' : '−') + difMon(realAcc, presCerr, realAccU, presCerrU).abs : '—'} sub='solo meses cerrados' cls={presCerr > 0 ? (desv >= 0 ? 'pos' : 'neg') : 'amb'} />
-      <Mini ic='res' label='Facturado proyectado' value={mx(proy, proyU)} sub='real cerrado + presupuesto restante' />
-    </Grid>
-    <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 290px' : '1fr', gap: 14, alignItems: 'stretch' }}>
-      <Panel hd='Mes a mes' flex>
-        <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 100px 100px 100px 90px' : 'minmax(0,1fr) 90px 90px', gap: 10, padding: '10px 16px', ...LBL, color: C.accent }}><span>Mes</span><span style={{ textAlign: 'right' }}>Presup.</span>{D && <span style={{ textAlign: 'right' }}>Acumulado</span>}<span style={{ textAlign: 'right' }}>Real</span>{D && <span style={{ textAlign: 'right' }}>Desvío</span>}</div>
-        {filas.map((f) => <div key={f.i} onClick={() => X.ir({ drill: { t: 'mes', i: f.i } })} style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 100px 100px 100px 90px' : 'minmax(0,1fr) 90px 90px', gap: 10, padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, cursor: 'pointer' }}>
-          <span style={{ fontWeight: 600 }}>{MESL[f.i]}</span><span style={{ textAlign: 'right' }}><Val v={mx(f.pres, f.presU)} /></span>{D && <span style={{ textAlign: 'right' }}><Val v={mx(f.acc, f.accU)} /></span>}<span style={{ textAlign: 'right', color: f.r == null ? C.muted : C.text }}>{f.r == null ? <Chip tono='y'>Estimado</Chip> : <Val v={mx(f.r, f.ru)} />}</span>{D && <span style={{ textAlign: 'right', color: f.des == null ? C.muted : f.des >= 0 ? C.greenText : C.overdueText, fontWeight: 700 }}>{f.des == null ? '—' : (f.des >= 0 ? '+' : '−') + difMon(f.r, f.pres, f.ru, f.presU).abs}</span>}</div>)}
-      </Panel>
-      {D ? <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{lado}</div> : lado}
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `meses cerrados: ${rango}` : 'sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.muted }}>
+      <span>Se mide contra {of ? <>la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>el <b style={{ color: C.accent }}>borrador</b> (sin versión oficial)</>} · escenario <b style={{ color: C.accent }}>{X.nomEsc(esc)}</b></span>
+      <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Cambiar versión ›</span>
     </div>
+    <Grid cols={3} colsM={1} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{D ? 'toca una celda para ver el mes' : 'toca un mes'} · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>
+    {D ? tabla : <>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></>}
+    <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
   </>
 }
 
@@ -266,7 +343,7 @@ function Evolucion({ X, k }) {
   const Ht = X.D ? 260 : 210, L = X.D ? 62 : 54, B = 26, T = 22, R = 24, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
   const ref = def.v.c.clp > 0 ? def.v.c : def.c.c, vv = (v) => valP(v, ref)
   const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: faltan ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} para la meta`)
-  const barras = e.areas.slice(0, 6), bw = WA / Math.max(1, barras.length), mx = Math.max(...barras.map((a) => a.monto), 1)
+  const barras = e.areas.slice(0, 6), bw = WA / Math.max(1, barras.length), mxBar = Math.max(...barras.map((a) => a.monto), 1)
   const sobre = def.v.c.clp > 0 ? (def.c.c.clp / def.v.c.clp) * 100 : null
   const filas = (modo === 'c' ? def.c : def.v).serie
   const estado = (a) => (a.meta <= 0 ? ['z', 'sin meta'] : a.mes != null ? ['g', `meta ${valP(a.meta, a.c)} superada ` + (a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase())] : ['y', `faltan ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} de ${valP(a.meta, a.c)}`])
@@ -414,5 +491,5 @@ export function DCmp({ X, id }) {
   </>
 }
 
-export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : (indicadores(X)[d.k]?.tit || 'Detalle')
-export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : <DInd X={X} k={d.k} />
+export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : (indicadores(X)[d.k]?.tit || 'Detalle')
+export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : <DInd X={X} k={d.k} />

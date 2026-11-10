@@ -111,7 +111,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const setEsc = (k) => parche((c) => { c.esc = k })
   const setCosto = (i, f, v) => parche((c) => { c.costos[i][f] = v })
   const patchCosto = (i, o) => parche((c) => { Object.assign(c.costos[i], o) })
-  const addCosto = () => { parche((c) => { c.costos.push({ id: Date.now(), n: 'Nueva partida', m: 0, meses: 12, t: 'fijo', alza: null }) }); setUI({ abierta: (est ? est.costos.length : 0) }) }
+  const addCosto = () => { parche((c) => { c.costos.push({ id: Date.now(), n: 'Nueva partida', m: 0, meses: 12, t: 'fijo', alza: null }) }); setUI({ abierta: (est ? est.costos.length : 0), mats: [...(ui.mats || []), 'Nueva partida'] }) }
   const delCosto = (i) => { parche((c) => { c.costos.splice(i, 1) }); setUI({ abierta: null }) }
   const resetCostos = () => { parche((c) => { c.costos = datos.costos.map((x) => ({ ...x })) }); setUI({ abierta: null }) }
 
