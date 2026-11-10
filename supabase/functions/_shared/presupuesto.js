@@ -70,6 +70,10 @@ export const escenarioMetas = (st, cfg = CONFIG_DEFECTO) => { const l = escenari
 /** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app (de la configuración). @param {CfgPresupuesto} [cfg] */
 export const componentesDe = (cfg = CONFIG_DEFECTO) => /** @type {[string,string][]} */ (cfg.componentes.map((/** @type {any} */ c) => [c.k, c.n]))
 export const COMPONENTES = componentesDe()
+/** Nombre corto del componente para las tarjetas del módulo Presupuesto (el largo, `n`, es el de la app y sirve de respaldo). @param {string} k @param {CfgPresupuesto} [cfg] */
+export const nombreCorto = (k, cfg = CONFIG_DEFECTO) => { const c = cfg.componentes.find((/** @type {any} */ x) => x.k === k); return c ? (c.corto || c.n) : k }
+/** Como `componentesDe`, con el nombre corto. @param {CfgPresupuesto} [cfg] */
+export const componentesCortosDe = (cfg = CONFIG_DEFECTO) => /** @type {[string,string][]} */ (cfg.componentes.map((/** @type {any} */ c) => [c.k, c.corto || c.n]))
 /** Componentes en los que se puede escribir la meta (el presupuesto de costos se arma en el paso Costos). @param {CfgPresupuesto} [cfg] */
 export const anclasDe = (cfg = CONFIG_DEFECTO) => /** @type {string[]} */ (cfg.componentes.filter((/** @type {any} */ c) => c.ancla).map((/** @type {any} */ c) => c.k))
 export const ANCLAS = anclasDe()
