@@ -13,6 +13,8 @@
 
 export const CONFIG_DEFECTO = /** @type {any} */ ({
   pais: 'CL',
+  /** Primer año con presupuesto en la app: desde ese año el Seguimiento se mide contra la versión oficial (o el borrador); antes, contra las metas del año. */
+  primerAnio: 2027,
   /** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app. */
   componentes: [
     { k: 'ventas', n: 'Vendido', tono: 'a', ic: 'ventas', ancla: true },
