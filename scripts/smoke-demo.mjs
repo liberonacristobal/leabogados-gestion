@@ -94,6 +94,11 @@ try {
     }
     for (const t of TABS.filter(t => !solo.length || solo.includes(t)))
       await revisar(`pestaña ${t}`, { fn: t => { window.__demo.setModal(null); window.__demo.navTo({ tab: t }) }, arg: t })
+    // Presupuesto: los seis pasos (el 4.º, Metas, es nuevo) y la pestaña Por socio del paso 5; cada uno sin error ni scroll horizontal en celular.
+    if (!solo.length || solo.includes('presupuesto')) {
+      for (let i = 1; i <= 6; i++)
+        await revisar(`presupuesto paso ${i}`, { fn: async (i) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => new RegExp('^(✓ )?' + i + ' · ').test(b.textContent.trim()))?.click(); await esp(300); if (i === 5) { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Por socio')?.click(); await esp(300) } }, arg: i })
+    }
     // Procesos automáticos: los 4 chips filtran (aria-pressed) y tocarlos otra vez quitan el filtro; «Revisar ›» de Por aprobar está presente.
     if (!solo.length || solo.includes('procesos')) {
       await revisar('procesos · filtros', { fn: async () => {

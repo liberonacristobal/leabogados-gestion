@@ -57,3 +57,22 @@ test('metas por socio: partes iguales (50 % con dos socios), «Sin socio» sin m
   assert.ok(Math.abs(valor(h, 'Por socio', 'G2') - m.esc.base.fact / 2) < 1e-4)
   assert.ok(Math.abs(valor(h, 'Por socio', 'H5') - m.esc.base.caja) < 1e-4)
 })
+
+test('hoja «Metas 2027»: las fórmulas despejan y calculan lo mismo que la app para cada componente fijado, también con una rebaja de costos', async () => {
+  const { cadenaMeta, metasDesdeComponente, valorComponente, ANCLAS } = await import('./../supabase/functions/_shared/presupuesto.js')
+  const est = estadoInicial({ costos, tasa: 12.5, ppmMes: 100_000, reajusteUF: 3.5 })
+  est.costos[2].alza = -20                                       // una rebaja de costos también entra en el libro
+  const b = { baseCLP, baseUF, ufDic }
+  const ratio = 66
+  for (const comp of ANCLAS) {
+    const ref = cadenaMeta(b, est, 12, ratio), v = valorComponente(ref, comp, ratio)
+    const app = metasDesdeComponente(b, est, { componente: comp, valor: v, ratio })
+    const h = evaluar(hojasPresupuesto({ ...mk(est), ratio, metas: { ancla: comp, valor: v } }))
+    assert.ok(Math.abs(valor(h, 'Metas 2027', 'B12') - app.g) < 1e-6, `${comp} g`)
+    for (const [fila, campo] of [[15, 'fact'], [16, 'caja'], [17, 'terc'], [18, 'costos'], [19, 'margen'], [20, 'idpc'], [21, 'post'], [22, 'reserva'], [23, 'retiros'], [24, 'reservaCierre']]) {
+      assert.ok(Math.abs(valor(h, 'Metas 2027', 'B' + fila) - app[campo]) < 1e-3, `${comp} ${campo}`)
+    }
+    assert.ok(Math.abs(valor(h, 'Metas 2027', 'B14') - app.ventas) < 1e-3)
+    assert.ok(Math.abs(valor(h, 'Metas 2027', 'B25') - app.mesesReserva) < 1e-6)
+  }
+})

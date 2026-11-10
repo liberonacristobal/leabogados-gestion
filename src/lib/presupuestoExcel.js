@@ -1,4 +1,4 @@
-// Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Costos → Escenarios → Mes a mes → Por socio → Resumen del año).
+// Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Costos → Escenarios → Mes a mes → Por socio → Metas → Resumen del año).
 // Las fórmulas repiten el modelo de _shared/presupuesto.js; `evaluar` las calcula aquí mismo para guardar el valor al abrir el archivo y para probar que coinciden con el modelo.
 import { parteMeta } from '../../supabase/functions/_shared/presupuesto.js'
 
@@ -11,7 +11,7 @@ const PESOS = '#,##0', PCT = '0.0%', UF = '#,##0.00'
 
 /**
  * Hojas del libro. Una celda es texto, {v,z} (número con formato), {f,z} (fórmula con formato) o null (vacía).
- * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[] }} P
+ * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[], metas?:{ancla:string,valor:number}, ratio?:number|null, referencia?:Record<string,{cierre:number}> }} P
  */
 export function hojasPresupuesto(P) {
   const { est, ESC } = P, ne = ESC.length, iBase = Math.max(0, ESC.findIndex(([k]) => k === 'base'))
@@ -36,6 +36,8 @@ export function hojasPresupuesto(P) {
       ['Alza de costos (%)', ...ESC.map(([k]) => N(est.p[k].alza, '0.0'))],
       ['Comisiones (% de lo cobrado)', ...ESC.map(([k]) => N(est.p[k].terc, '0.0'))],
       ['Días de cobro', ...ESC.map(([k]) => N(est.p[k].dias, '0'))],
+      ['Facturado / vendido (%) · metas', N(P.ratio ?? 0, '0.0')],
+      ['Reserva mínima ya en caja ($) · por confirmar', N(est.reservaIni ?? 0)],
     ],
   }
   const base = {
@@ -92,6 +94,42 @@ export function hojasPresupuesto(P) {
       ['Total', F(`SUM(B2:B${nS + 1})`), F(`SUM(C2:C${nS + 1})`, PCT), F(`SUM(D2:D${nS + 1})`), F(`SUM(E2:E${nS + 1})`), F(`SUM(F2:F${nS + 1})`, PCT), F(`SUM(G2:G${nS + 1})`), F(`SUM(H2:H${nS + 1})`)],
     ],
   }
+  // Metas: la misma cascada del modelo en los dos sentidos. Se fija un componente (B2 = ventas, fact, caja, margen o retiros) y su valor (B3); el crecimiento exigido sale de despejarlo y el resto se calcula con los
+  // supuestos del escenario Base. Fórmulas equivalentes a metasDesdeComponente / cadenaMeta de _shared/presupuesto.js (la prueba las compara).
+  const bc2 = sc(iBase), sB = (/** @type {number} */ r) => `Supuestos!$${bc2}$${r}`
+  const m0 = P.metas || { ancla: 'retiros', valor: 0 }, ref = P.referencia || {}
+  const cierre = (/** @type {string} */ k) => (ref[k] ? N(ref[k].cierre) : null)
+  const caja1 = '(B9+B8)/(1-' + sB(14) + '/100)'
+  const metas = {
+    nombre: 'Metas 2027', anchos: [46, 20, 22],
+    filas: [
+      [`Metas ${P.anio}`, null, `Cierre ${P.anioBase} estimado`],
+      ['Componente fijado (ventas, fact, caja, margen o retiros)', String(m0.ancla)],
+      ['Meta fijada ($)', N(m0.valor)],
+      ['Facturado / vendido (%)', F('Supuestos!$B$16', '0.0')],
+      ['Días de cobro ÷ 30', F(`${sB(15)}/30`, '0.000')],
+      ['Facturado base, crecimiento 0 ($)', F('SUMPRODUCT(Base!$D$2:$D$13,Base!$E$2:$E$13)')],
+      ['Peso de diciembre en el facturado', F('IF(B6=0,0,Base!$D$13*Base!$E$13/B6)', '0.0000')],
+      ['Presupuesto de costos ($)', F(`Escenarios!$${bc2}$7`)],
+      ['Margen requerido ($)', F('IF(B2="margen",B3,IF(B2="retiros",B3/(1-Supuestos!$B$9/100)/(1-Supuestos!$B$7/100),0))')],
+      ['Cobrado requerido ($)', F(`IF(B2="caja",B3,IF(B2="margen",${caja1},IF(B2="retiros",${caja1},0)))`)],
+      ['Facturado requerido ($)', F('IF(B2="ventas",B3*B4/100,IF(B2="fact",B3,(B10-B5*Base!$C$13)/(1-B5*B7)))')],
+      ['Crecimiento real exigido (%)', F('IF(B6=0,0,(B11/B6-1)*100)', '0.0')],
+      [],
+      ['Vendido (estimación propia)', F('IF(B4>0,B11/(B4/100),0)'), cierre('ventas')],
+      ['Facturado', F('B11'), cierre('fact')],
+      ['Cobrado', F('B11-B5*(B7*B11-Base!$C$13)'), cierre('caja')],
+      ['Comisiones', F(`B16*${sB(14)}/100`)],
+      ['Presupuesto de costos', F('B8'), cierre('costos')],
+      ['Margen', F('B16-B17-B18'), cierre('margen')],
+      ['Impuesto de primera categoría', F('MAX(0,B19)*Supuestos!$B$7/100')],
+      ['Después de impuesto', F('B19-B20')],
+      ['Reserva de caja del año', F('MAX(0,B21)*Supuestos!$B$9/100')],
+      ['Retiros', F('MAX(0,B21)*(1-Supuestos!$B$9/100)'), cierre('retiros')],
+      ['Reserva al cierre (mínima + del año)', F('Supuestos!$B$17+B22')],
+      ['Meses de costos de oficina que cubre', F('IF(B18=0,0,B24/(B18/12))', '0.0')],
+    ],
+  }
   const o = P.oficiales
   const resumen = {
     nombre: `Resumen ${P.anioBase}`, anchos: [26, 18, 18, 18, 18],
@@ -109,7 +147,7 @@ export function hojasPresupuesto(P) {
       ...MESES.map((m, i) => { const x = P.mes26[i] || { a: null, f: null, cob: null }, f = i + 11; return [m, x.a == null ? null : N(x.a), x.f == null ? null : N(x.f), x.a && x.f != null ? F(`IF(B${f}=0,0,C${f}/B${f}-1)`, PCT) : null, x.cob == null ? null : N(x.cob)] }),
     ],
   }
-  return [supuestos, base, costos, escenarios, mes, socio, resumen]
+  return [supuestos, base, costos, escenarios, mes, socio, metas, resumen]
 }
 
 /**

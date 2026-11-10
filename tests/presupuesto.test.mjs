@@ -62,7 +62,8 @@ test('modelo: días de cobro aumentan lo por cobrar solo si diciembre crece cont
 test('resumen: guarda los facturados mensuales congelados', () => {
   const r = resumenModelo(modeloPresupuesto(base, estadoInicial({ costos })))
   assert.equal(r.base.mensual.length, 12); assert.equal(r.base.mensualUF.length, 12)
-  assert.ok(r.meta.retiros > r.prudente.retiros)
+  assert.ok(r.meta.retiros > r.prudente.retiros)   // la clave interna sigue siendo `meta`; el rótulo es «Optimista»
+  assert.deepEqual(ESCENARIOS.map((x) => x[1]), ['Prudente', 'Base', 'Optimista'])
 })
 
 test('estado inicial: terceros y días de cobro reales reemplazan los de partida', () => {
@@ -73,8 +74,9 @@ test('estado inicial: terceros y días de cobro reales reemplazan los de partida
 
 test('migración: marcas y notas del diseño de 8 etapas pasan a las 5 actuales, sin perder ninguna', () => {
   const m = migrarEstado({ hecho: [0, 2, 4, 7], notas: { 2: 'revisar tasa', 3: 'base ok', 7: 'avisos' } })
-  assert.deepEqual(m.hecho.sort(), [0, 2, 3, 4])
-  assert.equal(m.notas[3], "revisar tasa · base ok"); assert.equal(m.notas[4], "avisos"); assert.equal(m.v, 3)
+  // 8 etapas → 5 (v2) y luego entra «Metas 2027» en el 4.º lugar (v4): las marcas y notas desde la 4.ª etapa se desplazan una posición
+  assert.deepEqual(m.hecho.sort(), [0, 2, 4, 5])
+  assert.equal(m.notas[4], "revisar tasa · base ok"); assert.equal(m.notas[5], "avisos"); assert.equal(m.v, 4)
   assert.deepEqual(migrarEstado(m), m)   // idempotente
 })
 
@@ -122,7 +124,7 @@ test('tasas legales Pro Pyme por año comercial (circular SII 53/2025) y migraci
   assert.equal(tasaPPMLegal(2028, 10_000), 0.25); assert.equal(tasaPPMLegal(2028, 60_000), 0.5)     // sin rebaja en 2028
   const viejo = { v: 2, tasaIDPC: 15, ppmAnual: 1_200_000, esc: 'base', hecho: [], notas: {} }
   const m = migrarEstado(viejo, 2027)
-  assert.equal(m.v, 3); assert.equal(m.tasaIDPC, 12.5); assert.equal(m.ppmAnual, 1_200_000)
+  assert.equal(m.v, 4); assert.equal(m.tasaIDPC, 12.5); assert.equal(m.ppmAnual, 1_200_000)
   assert.equal(migrarEstado({ v: 3, ppmTasa: 0.125 }, 2027, 900_000).ppmAnual, 900_000)           // borrador guardado con tasa: recupera el PPM vigente
   assert.equal(migrarEstado({ v: 2, tasaIDPC: 20 }, 2027).tasaIDPC, 20)                              // una tasa editada a mano no se toca
   assert.deepEqual(migrarEstado(m, 2027), m)                                                          // idempotente
