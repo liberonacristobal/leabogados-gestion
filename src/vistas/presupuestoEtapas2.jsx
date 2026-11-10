@@ -247,7 +247,7 @@ export function Seguimiento({ X }) {
   const conmut = <Seg options={[['p', '%'], ['m', '$']]} value={modo} onChange={(v) => setUI({ sg: v })} />
   const colW = '130px repeat(12,minmax(0,1fr)) 72px 72px 84px 72px', borde = `1px solid ${C.border}`
   const icono = (/** @type {string} */ kk) => { const [tono, ic] = TONO_SEG[kk]; return <span style={{ width: 24, height: 24, borderRadius: 8, background: tono === 'w' ? C.bgSoft : TONO_BG[tono], display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={14} /></span> }
-  const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut}>
+  const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut} style={{ border: 0, borderRadius: 0 }}>
     <div style={{ overflowX: 'auto' }}><div style={{ minWidth: modo === 'p' ? 0 : 1120 }}>
       <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', ...LBL, fontSize: 11, color: C.accent }}>
         <span style={{ padding: '10px 0' }}>Componente</span>{MESC.map((m, i) => <span key={m} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', padding: '10px 4px 10px 0', cursor: 'pointer', color: i > cerr ? C.muted : C.accent }}>{m}</span>)}
@@ -283,14 +283,16 @@ export function Seguimiento({ X }) {
   </Panel>
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `Meses cerrados: ${rango}` : 'Sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12, color: C.muted }}>
-      <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : modoMetas ? <>Se mide contra las metas de {Y}: ventas, cobranza y costos</> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
-      <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span>
-    </div>
-    {cerr === 0 && <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>El real aparece al cierre de {MESL[0].toLowerCase()}.{d.anio !== d.anioBase && <> <span role='button' onClick={() => X.irAnio(d.anioBase)} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Ver Seguimiento {d.anioBase} ›</span></>}</div>}
+    <Pliegue t='Referencia' v={`${of ? `Oficial «${of.nombre}»` : modoMetas ? `Metas ${Y}` : 'Borrador'} · ${nombreEscenario(estS, esc)}`}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '10px 14px', fontSize: 12, color: C.muted }}>
+        <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : modoMetas ? <>Se mide contra las metas de {Y}: ventas, cobranza y costos</> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b>{cerr === 0 && <> · el real aparece al cierre de {MESL[0].toLowerCase()}</>}</span>
+        <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {cerr === 0 && d.anio !== d.anioBase && <span onClick={() => X.irAnio(d.anioBase)} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Ver Seguimiento {d.anioBase} ›</span>}
+          <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span></span>
+      </div>
+    </Pliegue>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
-    {D && <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>toca una celda para ver el mes · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>}
-    {D ? tabla : <Pliegue abajo t={`Mes a mes · ${Y}`} v={cerr > 0 ? `Acumulado ${cel(sel.c.realAcum, sel.u.realAcum)} · ${cerr} ${cerr === 1 ? 'mes cerrado' : 'meses cerrados'}` : 'Sin meses cerrados'}><div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></div></Pliegue>}
+    <Pliegue key={Y} abajo={!D} t={`Mes a mes · ${Y}`} v={cerr > 0 ? `Acumulado ${cel(sel.c.realAcum, sel.u.realAcum)} · ${cerr} ${cerr === 1 ? 'mes cerrado' : 'meses cerrados'}` : 'Sin meses cerrados'}>{D ? tabla : <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></div>}</Pliegue>
     <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
   </>
 }

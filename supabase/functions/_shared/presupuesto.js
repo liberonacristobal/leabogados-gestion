@@ -735,3 +735,17 @@ export function diferenciaEstructurada(a, b, f) {
  * se miden contra el borrador y el año en curso anterior a eso (2026), contra las metas de ventas y cobranza y el presupuesto de costos del año. @param {{ actual:boolean, hayOficial:boolean, anio?:number, primerAnio?:number }} o @returns {'oficial'|'metas'|'borrador'}
  */
 export const referenciaSeguimiento = ({ actual, hayOficial, anio, primerAnio = 2027 }) => (hayOficial ? 'oficial' : actual && !(Number(anio) >= primerAnio) ? 'metas' : 'borrador')
+
+/**
+ * Cotización adicional del empleador (Ley 21.735) que el presupuesto del año suma sobre lo que ya incluye la base de remuneraciones: por cada mes del año,
+ * (tasa vigente ese mes − tasa vigente en el mes de la base) × remuneración imponible mensual del equipo; solo cuenta lo que SUBE (nunca resta). Estimación propia.
+ * @param {{ anio:number, imponibleMensual:number, baseYM:string, calendario:{desde:string,pct:number}[] }} o
+ * @returns {{ total:number, tasaBase:number, meses:{ ym:string, tasa:number, extra:number }[] }}
+ */
+export function cotizacionEmpleador({ anio, imponibleMensual, baseYM, calendario }) {
+  const cal = [...(calendario || [])].sort((a, b) => String(a.desde).localeCompare(String(b.desde)))
+  const tasaEn = (/** @type {string} */ ym) => { let t = 0; for (const x of cal) if (String(x.desde) <= ym) t = Number(x.pct) || 0; return t }
+  const imp = Math.max(0, Number(imponibleMensual) || 0), tasaBase = tasaEn(String(baseYM || ''))
+  const meses = Array.from({ length: 12 }, (_, i) => { const ym = `${anio}-${String(i + 1).padStart(2, '0')}`, tasa = tasaEn(ym); return { ym, tasa, extra: Math.max(0, tasa - tasaBase) / 100 * imp } })
+  return { total: meses.reduce((a, m) => a + m.extra, 0), tasaBase, meses }
+}

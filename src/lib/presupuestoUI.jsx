@@ -113,17 +113,17 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
 // Tarjeta chica con ícono (indicadores, resumen). El rótulo va en mayúscula; la cifra a 20 px.
 export function Mini({ ic, label, value, sub, cls, onClick }) {
   const D = useIsDesktop(), col = cls === 'pos' ? C.greenText : cls === 'neg' ? C.overdueText : cls === 'amb' ? C.soonText : C.accent
-  return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 14 : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
+  return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '9px 12px' : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 34 : 28, height: D ? 34 : 28, borderRadius: 10, background: C.azulBg, color: C.azulInfo, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
     <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
   </div>
 }
 
-export const Titulo = ({ children, right, style }) => <div style={{ ...LBL, color: C.accent, margin: '8px 4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', ...style }}><span>{children}</span>{right}</div>
+export const Titulo = ({ children, right, style }) => <div style={{ ...LBL, color: C.accent, margin: '4px 4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', ...style }}><span>{children}</span>{right}</div>
 
 export function Panel({ hd, small, children, pad, style, flex }) {
   return <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0, overflow: 'hidden', ...(flex ? { flex: 1 } : {}), ...style }}>
-    {hd && <div style={{ ...LBL, color: C.accent, padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span>{hd}</span>{small && <span style={{ fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}>{small}</span>}</div>}
+    {hd && <div style={{ ...LBL, color: C.accent, padding: '9px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span>{hd}</span>{small && <span style={{ fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}>{small}</span>}</div>}
     {pad ? <div style={{ padding: '12px 16px' }}>{children}</div> : children}
   </div>
 }
@@ -131,14 +131,14 @@ export function Panel({ hd, small, children, pad, style, flex }) {
 export function Seg({ options, value, onChange, style, tonos }) {
   return <div role='group' style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', background: C.card, ...style }}>
     {options.map(([k, n]) => { const on = value === k, tn = tonos && tonos[k]
-      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600, padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
+      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600, padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
   </div>
 }
 
 export const Chip = ({ children, tono, c }) => { const t = c ? c : tono === 'y' ? { bg: C.ambarBg, fg: C.soonText } : tono === 'r' ? { bg: C.overdueBg, fg: C.overdueText } : tono === 'g' ? { bg: C.greenBg, fg: C.greenText } : tono === 'z' ? { bg: C.bgSoft, fg: C.muted } : { bg: C.azulBg, fg: C.azulInfo }
   return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: t.bg, color: t.fg, whiteSpace: 'nowrap' }}>{children}</span> }
 
-export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} className='pp-tac' disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
+export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} className='pp-tac' disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '4px 12px', lineHeight: 1.3, borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
 export const Lnk = ({ children, onClick, rojo, titulo }) => <button title={titulo} className='pp-tac' aria-label={titulo} onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
 
 // Campo con la unidad dentro. Escribe con el formato es-CL y confirma al salir del campo o con Enter (sin perder el foco mientras se teclea).
@@ -216,7 +216,7 @@ export function Stp({ value, suf, step, min, max, onChange, int }) {
 export function Fila({ nombre, peq, valor, sub, onClick, abierta, sin, tot, children }) {
   const D = useIsDesktop()
   return <>
-    <div {...tocable(onClick)} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '12px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
+    <div {...tocable(onClick)} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '8px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
       <div style={{ minWidth: 0 }}><div style={{ fontWeight: tot ? 800 : 600 }}>{nombre}</div>{peq && <div style={{ fontSize: 11, color: C.muted, marginTop: 1, fontWeight: 400 }}>{peq}</div>}</div>
       <span style={{ color: C.done, fontSize: 16, lineHeight: 1, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>{onClick && !sin ? '›' : ''}</span>
       <span />
@@ -260,7 +260,7 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, onClick, aria })
   const caja = { background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: /** @type {'border-box'} */ ('border-box'), alignContent: /** @type {'start'} */ ('start') }
   const ar = { role: onClick ? 'button' : undefined, tabIndex: onClick ? 0 : undefined, 'aria-label': aria, className: onClick ? 'pp-foco' : undefined, onClick, onKeyDown: tecla }
   if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: 'auto auto auto auto' }}>{cab}{fig(izq)}{der ? fig(der) : <div style={{ minHeight: ambos ? 32 : 18 }} />}{cmpEl}</div>
-  return <div {...ar} style={{ ...caja, padding: '16px 16px 14px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 12, alignItems: 'start' }}>
+  return <div {...ar} style={{ ...caja, padding: '12px 14px 10px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 6, alignItems: 'start' }}>
     <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={18} /></span>
     {cab}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{der && fig(der)}</div>
@@ -287,7 +287,7 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
 }
 
 /** Botón-chip de la barra de contexto (Versiones, Excel). */
-export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
+export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12, height: 28, minWidth: cuadrado ? 28 : undefined, padding: cuadrado ? 0 : '0 10px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
 
 /**
  * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
@@ -312,18 +312,17 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acc
     </div>
     {debajo}
   </div>
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, gap: 0 }}><span style={cap}>{D ? `Año base ${anioBase}` : anioBase}</span><span style={{ ...cap, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span></div>
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, alignItems: 'start' }}>
+  // Escritorio: una sola franja (la línea de tiempo «Año base | Presupuesto» sobre los pasos, y la nota a la derecha); el paso activo ya se lee en la franja, sin segunda fila de título.
+  const cols = `repeat(${n},minmax(0,1fr)) auto`
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: cols }}><span style={{ ...cap, paddingBottom: 3 }}>Año base {anioBase}</span><span style={{ ...cap, paddingBottom: 3, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span><span /></div>
+    <div role='group' aria-label='Pasos del presupuesto' style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center' }}>
       {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
-        return <button key={nom} title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 6, padding: D ? '4px 0' : 0, minHeight: D ? 36 : 44, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 12 }}>
-          <span style={{ width: D ? 28 : 38, height: D ? 28 : 38, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: D ? 12 : 14, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
-          {D && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>}
+        return <button key={nom} className='pp-tac' title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', visitado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 13 }}>
+          <span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>
         </button> })}
-    </div>
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap' }}>
-      <div style={{ minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div>{D && desc && <div style={{ fontSize: 12, color: C.muted }}>{desc[activa]}</div>}</div>
-      {acciones && <div style={{ flexShrink: 0 }}>{acciones}</div>}
+      <div style={{ paddingLeft: 10 }}>{acciones}</div>
     </div>
     {debajo}
   </div>
@@ -331,7 +330,7 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acc
 
 /** Pestañas subrayadas (sub-vistas de un paso). */
 export const Pestanas = ({ options, value, onChange }) => <div role='tablist' style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${C.border}` }}>
-  {options.map(([k, n]) => { const on = value === k; return <button key={k} className='pp-tac' role='tab' aria-selected={on} onClick={() => onChange(k)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: '10px 2px', fontSize: 13, fontWeight: on ? 800 : 600, color: on ? C.accent : C.muted, borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, marginBottom: -1 }}>{n}</button> })}
+  {options.map(([k, n]) => { const on = value === k; return <button key={k} className='pp-tac' role='tab' aria-selected={on} onClick={() => onChange(k)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: '6px 2px', fontSize: 13, fontWeight: on ? 800 : 600, color: on ? C.accent : C.muted, borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, marginBottom: -1 }}>{n}</button> })}
 </div>
 
 /** Sección plegada: una línea con el título, la cifra clave a la derecha y un chevrón; se abre y se cierra sin desmontar lo de adentro (lo escrito se conserva). */

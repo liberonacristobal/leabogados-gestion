@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesAtipicos, nombreComponente, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
-import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
+import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -57,20 +57,27 @@ export function Mirada({ X }) {
   }
   // Primer año sin historia: no hay nada que mostrar; se parte desde cero (Costos → Metas → Escenarios).
   if (d.sinBase && d.clientes.length === 0) return <VacioPaso titulo={`Sin datos de ${Y} en la app`} causa={`No hay facturas emitidas en ${Y}, así que no hay resultado que comparar. El presupuesto se puede preparar igual.`} pasos={[[1, 'Costos', 'las partidas de la oficina'], [2, `Metas ${d.anio}`, 'lo que se quiere retirar'], [3, 'Escenarios', 'qué tan alcanzable es la meta']]} acciones={[['Preparar desde cero', () => ir({ drill: { t: 'ini' } }), true], ...(X.esAdmin ? [['Configuración del presupuesto', () => ir({ drill: { t: 'cfg' } }), false]] : [])]} />
+  const dosCol = D && ui.vm !== 'tabla'
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>al {fmtFechaDMY(d.hoy)}</span>}>Resultado del año {Y}</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{tarjetas26}</Grid>
-    <div onClick={() => ir({ etapa: 3 })} role='button' style={{ fontSize: 12, fontWeight: 700, color: C.accent, margin: '-4px 4px 0', cursor: 'pointer', width: 'max-content', maxWidth: '100%' }}>Metas {d.anio} en el paso 4 ›</div>
+    {/* Escritorio: Indicadores y Mes a mes lado a lado (la tabla de meses, a todo el ancho) para bajar el scroll */}
+    <div style={{ display: 'grid', gridTemplateColumns: dosCol ? 'minmax(0,5fr) minmax(0,7fr)' : '1fr', gap: D ? 12 : 10, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
     <Titulo right={<Btn onClick={() => setUI({ mas: !ui.mas })}>{ui.mas ? 'Ver menos' : 'Ver más'}</Btn>}>Indicadores {Y}</Titulo>
-    <Grid cols={4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
-    {ui.mas && <Grid cols={4} colsM={2}>{mas.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>}
+    <Grid cols={D && dosCol ? 2 : 4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
+    {ui.mas && <Grid cols={D && dosCol ? 2 : 4} colsM={2}>{mas.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
     <Titulo right={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{atip.size > 0 && <Chip tono='y'>{atip.size} atípicos</Chip>}{D && <Seg options={[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']]} value={ui.vm} onChange={(v) => setUI({ vm: v })} />}</span>}>Mes a mes · {Y} contra {Y - 1}</Titulo>
     {ui.vm === 'tabla' && D
       ? <Panel><div style={{ display: 'grid', gridTemplateColumns: '120px repeat(12,minmax(0,1fr))', fontSize: 12 }}>
         <span />{MESC.map((m, i) => <span key={m} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ padding: '9px 6px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.accent, cursor: 'pointer' }}>{m}</span>)}
         {[['Facturado ' + (Y - 1), (m) => (m.a ? <Val v={mx(m.a.fac, m.a.facUF)} /> : '—')], ['Facturado ' + Y, (m) => (m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—')], ['Cobrado ' + Y, (m) => (m.cob != null ? <Val v={mx(m.cob, d.cobMesUF[ym(Y, m.i)])} /> : '—')]].map(([t, f]) => [<span key={t} style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}` }}>{t}</span>, ...meses.map((m) => <span key={t + m.i} style={{ padding: '10px 6px', textAlign: 'right', borderTop: `1px solid ${C.border}` }}>{f(m)}</span>)])}
       </div></Panel>
-      : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 6 : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
+      : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? (dosCol ? 4 : 6) : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
+      </div>
+    </div>
     <Panel hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
       {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
         : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.muted, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} peq={`${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado`} valor={mx(c.monto, c.uf)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
@@ -105,7 +112,6 @@ export function Base({ X }) {
   return <>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
-    <div onClick={() => ir({ etapa: 3 })} role='button' style={{ fontSize: 12, fontWeight: 700, color: C.accent, margin: '-4px 4px 0', cursor: 'pointer', width: 'max-content', maxWidth: '100%' }}>Metas {Y} en el paso 4 ›</div>
     <Titulo>Ingreso {Y}</Titulo>
     <Panel>{ingreso.map(([n, sub, v, go], i) => <Fila key={n} nombre={n} peq={sub} valor={v} onClick={go} />)}</Panel>
     {d.sinBase && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>No hay facturas emitidas en los últimos 12 meses cerrados: la base queda en cero y el presupuesto no tiene de qué partir.</div>}
@@ -177,27 +183,26 @@ export function Costos({ X }) {
   return <>
     <Titulo>Costos {Y}</Titulo>
     {/* H02 / N05 / R3: una sola cifra de costos y un solo nombre; el «vigente» pasa al detalle («Cómo se calcula»); tarjetas A2 con textos breves */}
-    <Grid cols={2} colsM={2} gap={D ? 10 : 8}>
-      <Tarjeta tono='t' ic='egr' label={nombreComponente('costos', CFG)} aria={nombreComponente('costos', CFG)} izq={{ cap: `${nomE} ${Y}`, val: mm(e.costos) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
-      <Tarjeta tono='w' ic='com' label='Comisiones' aria='Comisiones' izq={{ cap: 'Del cobrado', val: mm(e.terc) }} cmp={<span>{pc(p.terc)} de lo cobrado</span>} onClick={() => X.irEsc('res')} />
-    </Grid>
+    <Tarjeta tono='t' ic='egr' label={`Presupuesto de costos ${Y} · ${nomE}`} aria={`Presupuesto de costos ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Panel flex hd={`Partidas · ${nomE}`} small={<span style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></span>}>
+        <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
+          <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
           <Fila nombre='Comisiones' peq={`variable · ${pc(p.terc)} de lo cobrado · se ajusta arriba`} valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
           <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
           <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>
-        </Panel>
+        </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cómo se calcula'><Lista items={[<span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cómo se calcula'><Lista items={[<span><b>Cotización empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida en Leyes sociales, editable{est.sinCotEmpleador ? ' (quitada)' : ''}. Se confirma con la contadora.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }
 const TXc = (/** @type {string} */ k) => CFG.tributario.textos[k]
+const LBLC = { borderBottom: `1px solid ${C.border}` }
 const cap = { fontSize: 11, fontWeight: 600, color: C.muted }
 const eti = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent, marginBottom: 4 }
 const eti2 = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }

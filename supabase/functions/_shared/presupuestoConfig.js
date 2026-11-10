@@ -13,6 +13,11 @@
 
 export const CONFIG_DEFECTO = /** @type {any} */ ({
   pais: 'CL',
+  /**
+   * Cotización adicional del empleador (Ley 21.735, reforma de pensiones): calendario del aporte TOTAL del empleador sobre la remuneración imponible (con tope imponible): 1 % desde ago-2025, 3,5 % desde ago-2026,
+   * 4,25 % desde ago-2027, 5 % desde ago-2028 (con incrementos posteriores a definir). Fuentes: KPMG, ChileAtiende y la tabla de la circular SII 53/2025. Estimación: se confirma con la contadora.
+   */
+  previsional: { empleador: [{ desde: '2025-08', pct: 1 }, { desde: '2026-08', pct: 3.5 }, { desde: '2027-08', pct: 4.25 }, { desde: '2028-08', pct: 5 }] },
   /** Primer año con presupuesto en la app: desde ese año el Seguimiento se mide contra la versión oficial (o el borrador); antes, contra las metas del año. */
   primerAnio: 2027,
   /** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app. */
@@ -160,6 +165,11 @@ export function validarConfig(over) {
   const m = o.moneda
   if (m) { texto('moneda.simbolo', m.simbolo, 4); texto('moneda.unidad', m.unidad, 8); rango('moneda.reajusteAnual', m.reajusteAnual, -10, 100); if (m.nombres) for (const k of Object.keys(m.nombres)) texto(`moneda.nombres.${k}`, m.nombres[k], 20) }
   if (o.socios && o.socios.lista != null && (!Array.isArray(o.socios.lista) || o.socios.lista.some((/** @type {any} */ x) => typeof x !== 'string' || !x.trim() || x.length > 40))) mal('socios.lista', 'debe ser una lista de nombres')
+  if (o.previsional && o.previsional.empleador !== undefined) {
+    const l = o.previsional.empleador
+    if (!Array.isArray(l)) mal('previsional.empleador', 'debe ser una lista de tramos')
+    else l.forEach((x, i) => { if (!x || !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(x.desde))) mal(`previsional.empleador.${i}.desde`, 'mes en formato AAAA-MM'); else if (i > 0 && l[i - 1] && String(x.desde) <= String(l[i - 1].desde)) mal(`previsional.empleador.${i}.desde`, 'los meses deben ir en orden ascendente'); rango(`previsional.empleador.${i}.pct`, x && x.pct, 0, 30) })
+  }
   if (o.costos) { for (const k of ['fijas', 'porPersona']) if (o.costos[k] !== undefined && (!Array.isArray(o.costos[k]) || o.costos[k].some((/** @type {any} */ x) => typeof x !== 'string' || !x.trim()))) mal(`costos.${k}`, 'debe ser una lista de nombres') }
   return { ok: e.length === 0, errores: e }
 }

@@ -3,7 +3,9 @@
 //  · Facturado propio por mes (pesos y UF del día de cada factura): resultadoMes (el de Resultado del año).
 //  · Cobrado por mes: conciliación a factura o anticipo por fecha del depósito (como Inicio).
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { supabase, DEMO } from '../supabase'
+import { cotizacionEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
 import { CFG_PRESUPUESTO, sociosDelEstudio } from './presupuestoCfg.js'
 import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
@@ -27,6 +29,12 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const { fuRes, ufDias, ufRef, m, metaUF, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: com, metaCobranza, ingConc, ingAbonos, _esFactHon, extBillIds } = R
 
   const hoy = hoyISO(), anio = anioSel || currentYear + 1, ymHoy = hoy.slice(0, 7)
+  // Remuneración imponible mensual del equipo: el último mes con liquidaciones reales (remuneraciones_tributables, solo administradores). En demo o sin filas se usa lo de Remuneraciones en Costos.
+  const [liqImp, setLiqImp] = useState(/** @type {{mes:string,monto:number}|null} */ (null))
+  useEffect(() => {
+    if (DEMO) return
+    supabase.from('remuneraciones_tributables').select('periodo,imponible').order('periodo', { ascending: false }).limit(60).then(({ data }) => { if (!data || !data.length) return; const p = data[0].periodo; setLiqImp({ mes: String(p), monto: data.filter((x) => x.periodo === p).reduce((a, x) => a + (Number(x.imponible) || 0), 0) }) }, () => {})
+  }, [])
 
   // UF de cada mes del año en curso (fin de mes; el mes en curso, hoy) y UF media de los meses transcurridos: convierte lo que solo existe en pesos (selector UF). Lo que trae su propia UF no pasa por aquí.
   const mesHoy = Number(hoy.slice(5, 7))
@@ -237,8 +245,12 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Estacionalidad: peso de cada mes del facturado propio en UF, promedio suavizado de los años observados (el anterior completo y el en curso hasta el último mes cerrado).
   const pesosEst = pesosEstacionalidad([-1, 0].map((dy) => Array.from({ length: 12 }, (_, i) => { const k = ym(currentYear + dy, i + 1); return k < ymHoy && serie[k] ? serie[k].facUF : null })))
 
+  const sueldosMes = costos.filter((c) => c.g === CFG.costos.grupoSueldos).reduce((a, c) => a + (Number(c.m) || 0), 0)
+  const mesPrev = (() => { const [y, mo] = ymHoy.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}` })()
+  const impBase = liqImp && liqImp.monto > 0 ? { mes: liqImp.mes, monto: liqImp.monto, fuente: 'liquidaciones de la contadora' } : { mes: mesPrev, monto: sueldosMes, fuente: 'Remuneraciones de Costos' }
+  const cotEmp = { ...cotizacionEmpleador({ anio, imponibleMensual: impBase.monto, baseYM: impBase.mes, calendario: CFG.previsional.empleador }), base: impBase }
   return {
-    hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios,
   }

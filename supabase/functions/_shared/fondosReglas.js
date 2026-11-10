@@ -114,3 +114,15 @@ export function clienteDeCorreo(emails, texto, clients, mapa) {
   const hits = (clients || []).filter((c) => c.status !== 'Terminado' && !c.is_internal && solo(c.name).trim().length >= 5 && t.includes(solo(c.name)));
   return hits.length === 1 ? String(hits[0].id) : null;
 }
+
+/**
+ * Fondos (expenses type='fondo') que un movimiento del banco ya concilió y que siguen a nombre de OTRO cliente que el nuevo: al reasignar el cliente del movimiento hay que pasarlos también,
+ * porque el movimiento y el fondo guardan cada uno su `client_id` (la reasignación solo cambiaba el del movimiento y el fondo quedaba con el cliente anterior).
+ * El proyecto, la venta y la razón social eran del cliente anterior: se limpian en el cambio.
+ * @param {{ movId:any, clienteId:any, conc:any[], expenses:any[] }} o @returns {{ ids:string[], filas:any[], patch:{client_id:any,entity_id:null,sale_id:null,project:null,subproject:null} }}
+ */
+export function planReasignacionFondos({ movId, clienteId, conc = [], expenses = [] }) {
+  const ligados = new Set((conc || []).filter((c) => c && String(c.movimiento_id) === String(movId) && c.tipo_destino === 'fondo' && c.gasto_id != null).map((c) => String(c.gasto_id)))
+  const filas = (expenses || []).filter((e) => e && e.type === 'fondo' && !e.deleted_at && ligados.has(String(e.id)) && String(e.client_id || '') !== String(clienteId || ''))
+  return { ids: filas.map((e) => String(e.id)), filas, patch: { client_id: clienteId, entity_id: null, sale_id: null, project: null, subproject: null } }
+}
