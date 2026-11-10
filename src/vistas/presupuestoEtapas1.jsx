@@ -1,9 +1,10 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesAtipicos, COMPONENTES, afavor, cadenaMeta, valorComponente, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesAtipicos, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
+import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 
@@ -31,15 +32,15 @@ export function Mirada({ X }) {
   // Seis tarjetas de solo lectura, una por componente (los mismos nombres, tonos e íconos de los pasos 2 y 4). Cada cifra en la moneda elegida, con la UF de su fuente.
   const nSoc = d.retiros26.socios.length || 1, c26 = d.costos26, r26 = d.referencia, RU = d.refUF
   const cumple = (real, meta, realU, metaU) => { if (!(meta > 0)) return <span>Sin meta</span>; const x = difMon(real, meta, realU, metaU); return <><Flecha sube={real >= meta} bueno={real >= meta}>{pc((real / meta) * 100, 0)}</Flecha><Flecha sube={real >= meta} bueno={real >= meta}>{x.sg}{x.abs}</Flecha></> }
-  const enUF = (c) => (monedaActual() === 'clp' ? [['En UF', 'UF ' + nf.format(Math.round(c.uf))]] : [])
+  const enUF = (c) => (monedaActual() === 'clp' ? [['En UF', ufs(c.uf)]] : [])
   const hastaC = c26.hasta ? MESC[Number(c26.hasta.slice(5, 7)) - 1] : null
   const dMin = d.retiros26.desde, dMax = d.retiros26.hasta, mVU = d.metaVentasUF > 0 ? d.metaVentasUF : null
-  const T = Object.fromEntries(COMPONENTES.map(([k, n]) => [k, TONO_COMP[k]]))
-  const tarjetas26 = COMPONENTES.map(([k, nombre]) => {
+  const T = Object.fromEntries(componentesDe(CFG).map(([k, n]) => [k, TONO_COMP[k]]))
+  const tarjetas26 = componentesDe(CFG).map(([k, nombre]) => {
     const [tono, ic] = T[k]
     const base = { tono, ic, label: nombre, aria: nombre }
-    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.vend.clp, o.vend.uf) }} der={{ cap: 'Meta', val: o.metaVentasCLP > 0 ? mx(o.metaVentasCLP, mVU) : '—' }} cmp={cumple(o.vend.clp, o.metaVentasCLP, o.vend.uf, mVU)} det={[...enUF(o.vend), ['Plano', 'ventas activas y terminadas del año, netas de costos de terceros']]} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
-    if (k === 'fact') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.fact.clp, o.fact.uf) }} der={{ cap: 'De lo vendido', val: o.vend.clp > 0 ? pc((o.fact.clp / o.vend.clp) * 100, 0) : '—' }} cmp={<span>Sin meta propia</span>} det={[...enUF(o.fact), ['Plano', 'facturas emitidas con folio']]} onClick={() => ir({ drill: { t: 'ind', k: 'fact26' } })} />
+    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.vend.clp, o.vend.uf) }} der={{ cap: 'Meta', val: o.metaVentasCLP > 0 ? mx(o.metaVentasCLP, mVU) : '—' }} cmp={cumple(o.vend.clp, o.metaVentasCLP, o.vend.uf, mVU)} det={[['Bruto', mx(o.vendBruto.clp, o.vendBruto.uf)], ['− Comisiones de venta', mx(o.comisVentas.clp, o.comisVentas.uf)], ...enUF(o.vend), ['Plano', 'neto de comisiones a terceros, como la meta; ventas activas y terminadas del año']]} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
+    if (k === 'fact') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.fact.clp, o.fact.uf) }} der={{ cap: 'De lo vendido', val: o.vendBruto.clp > 0 ? pc((o.fact.clp / o.vendBruto.clp) * 100, 0) : '—' }} cmp={<span>Sin meta propia</span>} det={[...enUF(o.fact), ['Plano', 'facturas emitidas con folio, contra el vendido bruto']]} onClick={() => ir({ drill: { t: 'ind', k: 'fact26' } })} />
     if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : '—' }} cmp={cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null)} det={[...enUF(o.cob), ['Plano', 'caja, por conciliación bancaria']]} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
     if (k === 'costos') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(c26.real, c26.realUF) }} der={{ cap: 'Presupuesto', val: mx(c26.ppto, c26.pptoUF) }} cmp={c26.ppto > 0 ? (() => { const x = difMon(c26.real, c26.ppto, c26.realUF, c26.pptoUF); return <Flecha sube={x.sube} bueno={afavor('costos', x.sube)}>{x.sg}{x.abs} · {x.sg}{pc(Math.abs(x.pct))}</Flecha> })() : <span>—</span>} det={[['Meses', hastaC ? `enero a ${hastaC}, real aproximado` : 'real aproximado'], ['Desvío', 'real contra el presupuesto de los mismos meses'], ['Real', 'costos de operación de Resultado del año, por confirmar'], ['Presupuesto del año', mx(c26.ppto + c26.pptoResto, c26.pptoUF + c26.pptoRestoUF)]]} onClick={() => ir({ drill: { t: 'ind', k: 'cost' } })} />
     if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} det={[...enUF(o.marg), ['Real', 'devengado, como en Inicio'], ['En caja', 'cobrado − comisiones − costos; estimación propia']]} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
@@ -78,15 +79,15 @@ export function Mirada({ X }) {
 // ── 2 · Base 2027 ──
 export function Base({ X }) {
   const { datos: d, est, D, ui, setUI, ir, MT } = X
-  const Y = d.anio, rec = d.recurrente, recAnual = rec.anualCLP
+  const Y = d.anio, rec = d.recurrente
   const b = d.base, tot = b.baseCLP.reduce((a, x) => a + x, 0), totUF = b.baseUF.reduce((a, x) => a + x, 0)
   const origen = (i) => { const c = d.cierres.find((x) => Number(x.ym.slice(5, 7)) - 1 === i); return c ? c.ym.slice(0, 4) : '—' }
   // Seis tarjetas de solo lectura: el cierre 2026 estimado contra la base de {Y} (últimos 12 meses cerrados, sin crecimiento, con los supuestos del escenario Base).
-  const ch0 = cadenaMeta(d.base, est, 0, MT.ratio)
-  const tarjetasBase = COMPONENTES.map(([k, nombre]) => {
-    const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio), ref = d.referencia[k]
+  const ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv), rk = escenarioMetas(est, CFG)
+  const tarjetasBase = componentesDe(CFG).map(([k, nombre]) => {
+    const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio, MT.cv), ref = d.referencia[k]
     const ir1 = k === 'costos' ? () => X.irCostos() : k === 'retiros' ? () => ir({ drill: { t: 'socios' } }) : k === 'margen' ? () => X.irEscTab('imp') : () => ir({ etapa: 3 })
-    const det = [['Base', 'sin crecimiento; no cambia con el escenario'], ...detalleReferencia(X, k), ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `estimación propia: facturado ÷ ${pc(MT.ratio, 0)}` : 'falta la relación facturado/vendido']] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p.base.alza)}`]] : [])]
+    const det = [['Base', 'sin crecimiento; no cambia con el escenario'], ...detalleReferencia(X, k), ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `neto de comisiones · estimación propia: facturado ÷ ${pc(MT.ratio, 0)} = bruto, menos ${pc(MT.cv)} de comisiones` : 'falta la relación facturado/vendido'], ...(ch0.ventasBruto != null ? [['Bruto', mm(ch0.ventasBruto)], ['− Comisiones de venta', mm(ch0.comisVentas)]] : [])] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p[rk].alza)}`]] : [])]
     return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: k === 'retiros' ? 'Real' : 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} det={det} onClick={ir1} />
   })
   const tile = (i) => <div key={i} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
@@ -94,11 +95,12 @@ export function Base({ X }) {
     <div style={{ fontSize: D ? 20 : 14.5, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}><Val v={mx(b.baseCLP[i], b.baseUF[i])} /></div>
     <div style={{ fontSize: 11, color: C.muted }}>{monedaActual() === 'clp' ? ufs(b.baseUF[i]) : ' '}</div></div>
   const mesesTxt = `${d.cierres[0]?.ym.slice(5, 7)}-${d.cierres[0]?.ym.slice(2, 4)} a ${d.cierres[11]?.ym.slice(5, 7)}-${d.cierres[11]?.ym.slice(2, 4)}`
-  const vNuevo = MT.ch.ventas != null ? mx(Math.max(0, MT.ch.ventas - recAnual), Math.max(0, MT.ch.ventas / tasa27() - rec.anualUF)) : '—'
+  // Todo en el plano de Vendido (neto de comisiones): meta de ventas − recurrente neto.
+  const vNuevo = MT.ch.ventas != null ? mx(Math.max(0, MT.ch.ventas - rec.netoCLP), Math.max(0, MT.ch.ventas / tasa27() - rec.netoUF)) : '—'
   const ingreso = [
-    ['Recurrente', `${rec.n} ventas mensuales · ${mx(recAnual / 12, rec.anualUF / 12)} al mes`, mx(recAnual, rec.anualUF), () => ir({ drill: { t: 'ind', k: 'rec' } })],
+    ['Recurrente', `${rec.n} ventas mensuales · ${mx(rec.netoCLP / 12, rec.netoUF / 12)} al mes · neto de comisiones`, mx(rec.netoCLP, rec.netoUF), () => ir({ drill: { t: 'ind', k: 'rec' } })],
     ['Por facturar', 'cuotas de ventas aceptadas', 'ver en Por facturar', X.irPorFacturar],
-    ['Vendido nuevo', `meta de ventas ${Y} − recurrente`, vNuevo, () => ir({ etapa: 3 })],
+    ['Vendido nuevo', `meta de ventas ${Y} (neta) − recurrente`, vNuevo, () => ir({ etapa: 3 })],
   ]
   return <>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>

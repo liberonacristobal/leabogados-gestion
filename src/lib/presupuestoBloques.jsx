@@ -2,8 +2,9 @@
 // Cada cifra sale de un helper de _shared/presupuesto.js (metasDesdeComponente, reservaRecomendada, sueldosYRetiros); aquí solo se dibujan.
 import { C, useIsDesktop, fmtFechaDMY } from './base.jsx'
 import {
-  ANCLAS, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos,
+  anclasDe, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
 } from '../../supabase/functions/_shared/presupuesto.js'
+import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { mm, mx, pc, Flecha, Fld, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
 
 /**
@@ -12,13 +13,15 @@ import { mm, mx, pc, Flecha, Fld, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lis
  * @param {any} d datos del Presupuesto @param {any} est estado
  */
 export function calcMetas(d, est) {
+  // facturado/vendido se aplica al vendido BRUTO; la comisión sobre ventas (% del bruto, la observada en el año en curso salvo que se edite) lleva el bruto al NETO de la meta de ventas.
   const ratio = est.metas?.ratio ?? d.ratioFactVend ?? null
-  const ancla = ANCLAS.includes(est.metas?.ancla) ? est.metas.ancla : 'retiros'
-  // Sin nada escrito parte con lo real de 2026; si no hay (p. ej. sin retiros registrados), con lo que da el escenario Base.
+  const cv = est.metas?.cv ?? d.comisVentaPct ?? 0
+  const ancla = anclasDe(CFG).includes(est.metas?.ancla) ? est.metas.ancla : CFG.anclaInicial
+  // Sin nada escrito parte con lo real de 2026; si no hay (p. ej. sin retiros registrados), con lo que da el escenario de referencia (Base).
   const refAncla = d.referencia[ancla].cierre
-  const valor = est.metas?.valor != null ? est.metas.valor : refAncla > 0 ? refAncla : valorComponente(cadenaMeta(d.base, est, est.p.base.g, ratio), ancla, ratio) ?? 0
-  const r = metasDesdeComponente(d.base, est, { componente: ancla, valor, ratio })
-  return { ancla, valor, ratio, ok: !!r.ok, motivo: r.ok ? null : r.motivo, ch: r.ok ? r : cadenaMeta(d.base, est, 0, ratio), ref: d.referencia }
+  const valor = est.metas?.valor != null ? est.metas.valor : refAncla > 0 ? refAncla : valorComponente(cadenaMeta(d.base, est, est.p[escenarioMetas(est, CFG)].g, ratio, cv), ancla, ratio, cv) ?? 0
+  const r = metasDesdeComponente(d.base, est, { componente: ancla, valor, ratio, cv }, CFG)
+  return { ancla, valor, ratio, cv, ok: !!r.ok, motivo: r.ok ? null : r.motivo, ch: r.ok ? r : cadenaMeta(d.base, est, 0, ratio, cv), ref: d.referencia }
 }
 
 /** Motivo en texto de una meta sin solución. */
@@ -32,21 +35,26 @@ export function Cmp({ comp, v, refv, vU = null, refU = null }) {
   return <span style={{ display: 'inline-flex', gap: 12, flexWrap: 'wrap', justifyContent: 'inherit' }}>{d.pct != null && <Flecha sube={d.sube} bueno={bueno}>{d.sg}{pc(Math.abs(d.pct))}</Flecha>}<Flecha sube={d.sube} bueno={bueno}>{d.sg}{d.abs}</Flecha></span>
 }
 
-/** Frase de qué escenario cubre la meta. */
-export const nivelTxt = (/** @type {string|null} */ k) => (k === 'prudente' ? 'La cubre el escenario Prudente' : k === 'base' ? 'La cubre desde el escenario Base' : k === 'meta' ? 'La cubre solo el escenario Optimista' : 'Sobre el escenario Optimista')
+/** Frase de qué escenario cubre la meta: el primero de la lista que la cubre («desde» si hay más ambiciosos, «solo» si es el último) o, si ninguno, «Sobre» el último. @param {string|null} k @param {[string,string][]} lista [clave, nombre] en el orden de la lista */
+export function nivelTxt(k, lista) {
+  const i = lista.findIndex((x) => x[0] === k), ult = lista[lista.length - 1]
+  if (i < 0) return `Sobre el escenario ${ult ? ult[1] : ''}`.trim()
+  return i === 0 || lista.length === 1 ? `La cubre el escenario ${lista[i][1]}` : i === lista.length - 1 ? `La cubre solo el escenario ${lista[i][1]}` : `La cubre desde el escenario ${lista[i][1]}`
+}
 
 // ── Supuestos con su efecto ──
-/** Seis supuestos de las metas (los del escenario Base y los generales), cada uno con su efecto en pesos; filas con líneas de corte dentro de una tarjeta: 3 por fila en escritorio y 2 en el celular. */
+/** Siete supuestos de las metas (los del escenario de referencia y los generales), cada uno con su efecto en pesos; filas con líneas de corte dentro de una tarjeta: 3 por fila en escritorio y 2 en el celular. */
 export function Supuestos({ X, MT }) {
-  const D = useIsDesktop(), { est, setPal, setGen, parche } = X, ch = MT.ch, p = est.p.base
+  const D = useIsDesktop(), { est, setPal, setGen, parche } = X, ch = MT.ch, rk = escenarioMetas(est, CFG), p = est.p[rk]
   const cols = D ? 3 : 2
   const campos = [
-    ['Comisiones', 'terc', 'pct', '%', p.terc, (v) => setPal('base', 'terc', Math.max(0, v)), mm(ch.terc), 'de comisiones'],
-    ['Días de cobro', 'dias', 'int', 'días', p.dias, (v) => setPal('base', 'dias', Math.max(0, Math.round(v))), mm(ch.dCob), 'por cobrar al cierre'],
-    ['Alza de costos', 'alza', 'pct', '%', p.alza, (v) => setPal('base', 'alza', v), mm(ch.costos), 'de costos ' + X.datos.anio],
+    ['Comisiones', 'terc', 'pct', '%', p.terc, (v) => setPal(rk, 'terc', Math.max(0, v)), mm(ch.terc), 'de comisiones'],
+    ['Días de cobro', 'dias', 'int', 'días', p.dias, (v) => setPal(rk, 'dias', Math.max(0, Math.round(v))), mm(ch.dCob), 'por cobrar al cierre'],
+    ['Alza de costos', 'alza', 'pct', '%', p.alza, (v) => setPal(rk, 'alza', v), mm(ch.costos), 'de costos ' + X.datos.anio],
     ['Impuesto', 'tasa', 'pct', '%', est.tasaIDPC, (v) => setGen('tasaIDPC', Math.max(0, v)), mm(ch.idpc), 'de impuesto'],
     ['Reserva de caja', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'a la reserva'],
-    ['Facturado / vendido', 'ratio', 'pct', '%', MT.ratio, (v) => parche((c) => { c.metas = { ...(c.metas || {}), ratio: v == null ? null : Math.min(100, Math.max(1, v)) } }), MT.ratio != null ? mm(ch.fact) : '—', 'facturables'],
+    ['Facturado / vendido bruto', 'ratio', 'pct', '%', MT.ratio, (v) => parche((c) => { c.metas = { ...(c.metas || {}), ratio: v == null ? null : Math.min(100, Math.max(1, v)) } }), MT.ratio != null ? mm(ch.fact) : '—', 'facturables'],
+    ['Comisión sobre ventas', 'cv', 'pct', '%', MT.cv, (v) => parche((c) => { c.metas = { ...(c.metas || {}), cv: v == null ? null : Math.min(99, Math.max(0, v)) } }), ch.comisVentas != null ? mm(ch.comisVentas) : '—', 'de comisiones de venta'],
   ]
   return <Panel>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols},minmax(0,1fr))` }}>
@@ -63,7 +71,7 @@ export function Supuestos({ X, MT }) {
 /** Reserva mínima + reserva del año = reserva al cierre, en meses de costos, y la recomendación (regla simple de criterio). Por confirmar contra el saldo del Banco. */
 export function ReservaBloque({ X, ch, irBanco }) {
   const D = useIsDesktop(), { est } = X
-  const r = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post) })
+  const r = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post), cfg: CFG })
   const fila = (t, v, o = {}) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: D ? '10px 20px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13, alignItems: 'baseline', background: o.tot ? C.bgSoft : 'transparent', fontWeight: o.tot ? 800 : 400 }}><span style={{ minWidth: 0 }}>{t}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: o.tot ? C.accent : C.text }}>{v}</span></div>
   return <>
     {fila(<>Reserva mínima <span style={{ color: C.muted, fontSize: 12 }}>· base que no se toca</span></>, mm(est.reservaIni))}
@@ -81,12 +89,12 @@ export function ReservaBloque({ X, ch, irBanco }) {
 /** Filas por socio para un año: 2026 real (sueldos pagados + retiros) y 2027 (sueldo del presupuesto + retiros en partes iguales). @param {any} X @param {number} alza @param {number} retiros */
 export function repartoSocios(X, alza, retiros) {
   const d = X.datos
-  return sueldosYRetiros({ socios: d.retiros26.socios, costos: X.est.costos, alza, retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio } })
+  return sueldosYRetiros({ socios: d.retiros26.socios, costos: X.est.costos, alza, retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio }, cfg: CFG })
 }
 /** Lo real de 2026 de cada socio en UF (cada sueldo y retiro con la UF de su día). @param {any} X */
 export function repartoSocios26UF(X) {
   const d = X.datos
-  return sueldosYRetiros({ socios: d.retiros26.socios, costos: [], alza: 0, retiros: 0, real: { sueldos: d.retiros26.sueldosUF, retiros: d.retiros26.porSocioUF } })
+  return sueldosYRetiros({ socios: d.retiros26.socios, costos: [], alza: 0, retiros: 0, real: { sueldos: d.retiros26.sueldosUF, retiros: d.retiros26.porSocioUF }, cfg: CFG })
 }
 
 /**

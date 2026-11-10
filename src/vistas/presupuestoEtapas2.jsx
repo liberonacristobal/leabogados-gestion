@@ -1,9 +1,10 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { mesesCerradosAnio, distribuirMensual, seguimientoMensual, afavor, COMPONENTES, modeloPresupuesto, diferenciaSupuestos, parteMeta, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaSupuestos, parteMeta, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
-import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, ESC_TONO, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF } from '../lib/presupuestoUI.jsx'
+import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
@@ -24,27 +25,48 @@ function Filas({ X, filas, tit }) {
 // ── 4 · Escenarios ──
 function Strip({ X }) {
   const { est, setGen, D } = X
-  const campos = [['Reajuste UF', 'reajusteUF', 'pct', { suf: '%' }, 'Supuesto de inflación'], ['Tasa 1ª categoría', 'tasaIDPC', 'pct', { suf: '%' }, 'Pro Pyme · circular SII 53/2025'], ['PPM del año', 'ppmAnual', 'money', { pre: '$' }, 'Lo pagado hoy: ' + mp(X.datos.ppmMes) + ' al mes'], ['Reserva de caja', 'reserva', 'pct', { suf: '%' }, '% que no se retira']]
+  const campos = [['Reajuste UF', 'reajusteUF', 'pct', { suf: '%' }, 'Supuesto de inflación'], ['Tasa 1ª categoría', 'tasaIDPC', 'pct', { suf: '%' }, CFG.tributario.etiqueta], ['PPM del año', 'ppmAnual', 'money', { pre: '$' }, 'Lo pagado hoy: ' + mp(X.datos.ppmMes) + ' al mes'], ['Reserva de caja', 'reserva', 'pct', { suf: '%' }, '% que no se retira']]
   return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 4 : 2},minmax(0,1fr))`, gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px' }}>
     {campos.map(([t, f, k, u, n]) => <div key={f} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 10.5, color: C.accent, marginBottom: 4 }}>{t}</div>{f === 'ppmAnual' ? <FldDin clp={est[f]} tasa={tasa27()} onCommit={(v) => setGen(f, v)} w={9999} /> : <Fld kind={k} value={est[f]} onCommit={(v) => setGen(f, v)} w={9999} {...u} />}<div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{n}</div></div>)}
   </div>
 }
 
-// Tarjeta de escenario: la MISMA en el paso 4 (Escenarios contra la meta) y en el paso 5. Cada escenario lleva su tono (ESC_TONO), dice si cubre la meta escrita en el paso 4 y la reserva al cierre en meses de costos.
-export function CardEsc({ X, k }) {
-  const { est, M, setPal, setEsc, MT } = X, irEscTab = X.irEscTab, e = M.esc[k], p = est.p[k], b = M.esc.base, sel = est.esc === k, tn = ESC_TONO[k]
-  const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio).find((x) => x.k === k)
+/** Columnas de la grilla de escenarios en escritorio: 3, salvo con 4 (2 × 2) para que las filas queden completas. */
+export const colsEsc = (/** @type {number} */ n) => (n === 4 ? 2 : 3)
+
+// Nombre del escenario en línea (sin ventana): Enter o salir del campo lo guarda; Escape lo deja como estaba.
+function RenombrarEsc({ valor, tn, onFin }) {
+  const [v, setV] = useState(valor), cancela = useRef(false)
+  return <input autoFocus value={v} maxLength={MAX_NOMBRE_ESCENARIO} aria-label='Nombre del escenario' size={Math.max(8, Math.min(MAX_NOMBRE_ESCENARIO, v.length + 1))} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setV(ev.target.value)} onFocus={(ev) => ev.target.select()}
+    onBlur={() => onFin(cancela.current ? null : v)} onKeyDown={(ev) => { if (ev.key === 'Enter') ev.currentTarget.blur(); else if (ev.key === 'Escape') { cancela.current = true; ev.currentTarget.blur() } }}
+    style={{ border: `1px solid ${C.accent}`, background: C.card, color: C.accent, borderRadius: 20, padding: '1px 10px', fontSize: 13, fontWeight: 800, fontFamily: 'inherit', outline: 'none', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }} />
+}
+
+// Tarjeta de escenario: la MISMA en el paso 4 (Escenarios contra la meta) y en el paso 5. Cada escenario lleva su tono (tonoEsc), dice si cubre la meta escrita en el paso 4 y la reserva al cierre en meses de costos.
+// Con `editable` (paso 5) suma las acciones discretas Duplicar, Renombrar y Eliminar (y mover), sin botones nuevos en la barra.
+export function CardEsc({ X, k, editable }) {
+  const { est, M, setPal, setEsc, MT } = X, irEscTab = X.irEscTab, e = M.esc[k], p = est.p[k], rk = escenarioMetas(est, CFG), b = M.esc[rk], sel = est.esc === k, tn = tonoEsc(X.tonoDe(k))
+  const [ren, setRen] = useState(false)
+  const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio, MT.cv).find((x) => x.k === k)
+  const idx = X.ESC.findIndex((x) => x[0] === k), n = X.ESC.length
   const xr = (t, v, go, strong) => <div onClick={(ev) => { if (go) { ev.stopPropagation(); go() } }} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: X.D ? '7px 4px' : '4px 2px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: go ? 'pointer' : 'default', fontWeight: strong ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}><Val v={mm(v)} /></b></div>
   const lv = (t, f, suf, d, mn, mx, int) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}><small style={{ ...LBL, fontSize: 10.5, color: C.accent }}>{t}</small><Stp value={p[f]} suf={suf} step={d} min={mn} max={mx} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} /></div>
+  const acc = { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', borderTop: `1px solid ${C.border}`, paddingTop: 4, marginTop: X.D ? 2 : 0 }
   return <div onClick={() => setEsc(k)} role='button' aria-pressed={sel} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: X.D ? (sel ? 13 : 14) : (sel ? 9 : 10), cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: X.D ? 6 : 3, minWidth: 0, boxSizing: 'border-box' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>{sel && <Chip>elegido</Chip>}{k !== 'base' && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs Base</Chip>}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}{sel && <Chip>elegido</Chip>}{k !== rk && b && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs {X.nomEsc(rk)}</Chip>}</div>
     <div style={{ ...LBL, color: C.muted }}>Retiros</div>
     <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.overdueText, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
     <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros / 24)} por socio al mes</div>
-    {cu && cu.dif != null && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif >= -1 ? 'sobran' : 'faltan'} {mmP(Math.abs(cu.dif))}</Flecha> de la meta de {nombreComponente(MT.ancla).toLowerCase()}</div>}
+    {cu && cu.dif != null && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif >= -1 ? 'sobran' : 'faltan'} {mmP(Math.abs(cu.dif))}</Flecha> de la meta de {nombreComponente(MT.ancla, CFG).toLowerCase()}</div>}
     <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
     <div style={{ fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
+    {editable && <div style={acc} onClick={(ev) => ev.stopPropagation()}>
+      {n < CFG.maxEscenarios && <Lnk onClick={() => X.duplicarEsc(k)}>Duplicar</Lnk>}
+      <Lnk onClick={() => setRen(true)}>Renombrar</Lnk>
+      {n > 1 && <Lnk rojo onClick={() => X.eliminarEsc(k)}>Eliminar</Lnk>}
+      {n > 1 && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 2 }}>{idx > 0 ? <Lnk titulo='Mover antes' onClick={() => X.moverEsc(k, -1)}>‹</Lnk> : <span style={{ width: 14 }} />}{idx < n - 1 ? <Lnk titulo='Mover después' onClick={() => X.moverEsc(k, 1)}>›</Lnk> : null}</span>}
+    </div>}
   </div>
 }
 
@@ -53,7 +75,7 @@ export function CardEsc({ X, k }) {
 function TabImp({ X }) {
   const { est, M, setEsc } = X
   return <>
-    <Grid cols={3} colsM={1}>{X.ESC.map(([k, n]) => { const e = M.esc[k], sel = est.esc === k
+    <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => { const e = M.esc[k], sel = est.esc === k
       return <div key={k} onClick={() => setEsc(k)} style={{ background: C.card, border: sel ? `2px solid ${C.accent}` : `1px solid ${C.border}`, borderRadius: 12, padding: sel ? 13 : 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><b style={{ color: C.accent, fontSize: 15 }}>{n}</b>{sel && <Chip>elegido</Chip>}</div>
         <div style={{ ...LBL, color: C.muted }}>Saldo en abril de {X.datos.anio + 1}</div>
@@ -65,18 +87,18 @@ function TabImp({ X }) {
 }
 
 // Metas de la oficina por escenario y la parte de cada socio (Vendido con la misma relación facturado/vendido de las metas).
-const metasEsc = (X, k) => ({ ventas: valorComponente(X.M.esc[k], 'ventas', X.MT.ratio) ?? 0, fact: X.M.esc[k].fact, cobro: X.M.esc[k].caja })
+const metasEsc = (X, k) => ({ ventas: valorComponente(X.M.esc[k], 'ventas', X.MT.ratio, X.MT.cv) ?? 0, fact: X.M.esc[k].fact, cobro: X.M.esc[k].caja })
 
 function TabSoc({ X }) {
   const { est, M, datos: d } = X, e = M.esc[est.esc], tot = d.socios.reduce((a, s) => a + s.facturado, 0), mt = metasEsc(X, est.esc)
   return <>
-    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={`partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre) * 100, 0)} cada socio)`}>
+    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={`partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre, CFG) * 100, 0)} cada socio)`}>
       {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio', pm = parteMeta(d.socios, s.nombre)
         return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + mmP(e.retiros / 24) + ' por mes'}`} sub={sin ? 'facturado ' + mmP(e.fact * sh) : `meta de ventas ${mmP(mt.ventas * pm)} · cobro ${mmP(mt.cobro * pm)}`} valor={sin ? '—' : mm(e.retiros / 2)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
       <Fila tot sin nombre='Oficina' sub={`meta de ventas ${mmP(mt.ventas)} · cobro ${mmP(mt.cobro)}`} valor={mm(e.retiros)} />
     </Panel>
     <Titulo>Sueldos y retiros por escenario</Titulo>
-    <Grid cols={3} colsM={1}>{X.ESC.map(([k, n]) => { const r = sueldosYRetiros({ socios: d.retiros26.socios, costos: est.costos, alza: est.p[k].alza, retiros: M.esc[k].retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio } }), tn = ESC_TONO[k]
+    <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => { const r = sueldosYRetiros({ socios: d.retiros26.socios, costos: est.costos, alza: est.p[k].alza, retiros: M.esc[k].retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio }, cfg: CFG }), tn = tonoEsc(X.tonoDe(k))
       return <Panel key={k} hd={<span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', letterSpacing: 0, textTransform: 'none', fontSize: 13 }}>{n}</span>}>
         {r.filas.map((f) => <Fila key={f.nombre} nombre={f.nombre} peq={`sueldo ${mmP(f.sueldo27)} + retiros ${mmP(f.ret27)}`} valor={mm(f.tot27)} onClick={X.onOpenSocios} />)}
         <Fila tot sin nombre='Oficina' peq={`sueldos ${mmP(r.total.sueldo27)} + retiros ${mmP(r.total.ret27)}`} valor={mm(r.total.tot27)} />
@@ -89,7 +111,7 @@ function TabSoc({ X }) {
 export function descargarExcel(X) {
   const { est, datos: d } = X
   descargarLibroPresupuesto({
-    anio: d.anio, anioBase: d.anioBase, ufDic: d.ufDic, baseCLP: d.base.baseCLP, baseUF: d.base.baseUF, est, ESC: X.ESC, costos: est.costos, socios: d.socios, oficiales: d.oficiales, metas: { ancla: X.MT.ancla, valor: X.MT.valor }, ratio: X.MT.ratio, referencia: d.referencia,
+    anio: d.anio, anioBase: d.anioBase, ufDic: d.ufDic, baseCLP: d.base.baseCLP, baseUF: d.base.baseUF, est, ESC: X.ESC, refK: escenarioMetas(est, CFG), costos: est.costos, socios: d.socios, oficiales: d.oficiales, metas: { ancla: X.MT.ancla, valor: X.MT.valor }, ratio: X.MT.ratio, cv: X.MT.cv, referencia: d.referencia,
     mes26: Array.from({ length: 12 }, (_, i) => { const k = (y) => `${y}-${String(i + 1).padStart(2, '0')}`; return { a: d.serie[k(d.anioBase - 1)]?.fac ?? null, f: d.serie[k(d.anioBase)]?.fac ?? null, cob: d.cobMes[k(d.anioBase)] ?? null } }),
   }, (t) => appAlert(t))
 }
@@ -97,22 +119,24 @@ export function descargarExcel(X) {
 export function Escenarios({ X }) {
   const { est, M, D, ui, setUI, datos: d } = X
   const tabs = [['res', 'Resultado'], ['imp', 'Impuesto'], ['soc', 'Por socio']]
-  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <Grid cols={3} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid>
-  const cascada = [['', 'Vendido (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', 'Presupuesto de costos', (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Reserva de caja', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
+  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} editable />)}</Grid>
+  const cascada = [['', 'Vendido neto (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio, X.MT.cv) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', 'Presupuesto de costos', (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Reserva de caja', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
   const e = M.esc[est.esc]
   const mensual = <div>{MESC.map((m, i) => <Fila key={m} nombre={MESL[i]} sub={monedaActual() === 'clp' ? ufs(e.ingUF[i]) : ''} valor={mx(e.ing[i], e.ingUF[i])} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
-  const dg = { display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr', gap: 10, alignItems: 'start' }
+  const fmtN = (x) => Number(x).toLocaleString('es-CL', { maximumFractionDigits: 1 })
+  const dg = { display: 'grid', gridTemplateColumns: D && X.ESC.length <= 3 ? '1fr 1fr' : '1fr',   // con más de 3 escenarios las tablas por escenario piden todo el ancho
+     gap: 10, alignItems: 'start' }
   return <>
     <Pestanas options={tabs} value={ui.tab} onChange={(v) => setUI({ tab: v })} />
     {ui.tab !== 'soc' && <Strip X={X} />}
-    {ui.tab === 'res' && <><Titulo right={X.MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}>exige <b style={{ color: C.accent }}>{sgn(X.MT.ch.g)}{pc(Math.abs(X.MT.ch.g))}</b> real en UF</span> : null}>Escenarios contra la meta de {nombreComponente(X.MT.ancla).toLowerCase()} · {mm(X.MT.valor)}</Titulo><div style={{ fontSize: 12, color: C.muted, margin: '-6px 4px 0' }}>{nivelTxt(escenariosContraMeta(X.M, X.MT.ancla, X.MT.valor, X.MT.ratio).find((x) => x.cubre)?.k ?? null)}.</div></>}
+    {ui.tab === 'res' && <><Titulo right={X.MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}>exige <b style={{ color: C.accent }}>{sgn(X.MT.ch.g)}{pc(Math.abs(X.MT.ch.g))}</b> real en UF</span> : null}>Escenarios contra la meta de {nombreComponente(X.MT.ancla, CFG).toLowerCase()} · {mm(X.MT.valor)}</Titulo><div style={{ fontSize: 12, color: C.muted, margin: '-6px 4px 0' }}>{nivelTxt(escenariosContraMeta(X.M, X.MT.ancla, X.MT.valor, X.MT.ratio, X.MT.cv).find((x) => x.cubre)?.k ?? null, X.ESC)}.</div></>}
     {cuerpo}
     <div style={dg}>
       {ui.tab === 'res' && <>
         <Det t={`Metas ${d.anio} · por escenario`}><MetasTabla X={X} /></Det>
         <Det t='Estado de resultados por escenario'><div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Caja, sin IVA · UF media {nf.format(Math.round(M.ufMed))}</div><Filas X={X} filas={cascada} /></Det>
         <Det t={`Facturado mes a mes · ${X.nomEsc(est.esc)}`}>{mensual}</Det>
-        <Det t='Por qué estos valores'><Lista items={[<span><b>Crecimiento real de ventas 0 / 10 / 25 %:</b> se aplica en UF sobre la base de {d.anioBase}. Es un criterio, no un cálculo: no hay conversión de propuestas para estimar la cartera nueva. El 10 % base supera el reajuste de la UF.</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; el prudente usa 6 % por si la inflación sorprende.</span>, <span><b>Comisiones:</b> parte de lo cobrado, la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ')' : ''}.</span>, <span><b>Días de cobro:</b> el prudente supone más días que el promedio real{d.dias.promedio != null ? ' (' + d.dias.promedio + ' días, mediana ' + d.dias.mediana + ')' : ''}.</span>, <span><b>Impuesto:</b> tasa de primera categoría de {pc(est.tasaIDPC)} para el año comercial {d.anio} (Pro Pyme, circular SII 53/2025); editable.</span>, <span><b>Reserva de caja:</b> {pc(est.reserva, 0)} del resultado después de impuesto; la reserva mínima de {mm(est.reservaIni)} ya está en caja.</span>]} /></Det>
+        <Det t='Por qué estos valores'><Lista items={[<span><b>Crecimiento real de ventas {X.ESC.map(([kk]) => fmtN(est.p[kk].g)).join(' / ')} %:</b> se aplica en UF sobre la base de {d.anioBase}. Es un criterio, no un cálculo: no hay conversión de propuestas para estimar la cartera nueva. El del escenario {X.nomEsc(escenarioMetas(est, CFG))} ({pc(est.p[escenarioMetas(est, CFG)].g, 0)}) se compara con el reajuste de la UF ({pc(est.reajusteUF)}).</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; cada escenario parte con la suya (editable).</span>, <span><b>Comisiones:</b> parte de lo cobrado, la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ')' : ''}.</span>, <span><b>Días de cobro:</b> el escenario más cauteloso supone más días que el promedio real{d.dias.promedio != null ? ' (' + d.dias.promedio + ' días, mediana ' + d.dias.mediana + ')' : ''}.</span>, <span><b>Impuesto:</b> tasa de primera categoría de {pc(est.tasaIDPC)} para el año comercial {d.anio} (Pro Pyme, circular SII 53/2025); editable.</span>, <span><b>Reserva de caja:</b> {pc(est.reserva, 0)} del resultado después de impuesto; la reserva mínima de {mm(est.reservaIni)} ya está en caja.</span>]} /></Det>
       </>}
       {ui.tab === 'imp' && <>
         <Det t='Qué se paga y cuándo'><Lista items={[<span><b>Cada mes:</b> PPM en el F29 del mes siguiente (hoy {mp(d.ppmMes)} presupuestados).</span>, <span><b>Abril de {d.anio + 1}:</b> declaración anual de {d.anio}; se paga el saldo o se pide la devolución.</span>, <span><b>Sin IVA:</b> no hay IVA que proyectar ni crédito fiscal.</span>, <span><b>Boletas de honorarios:</b> las retenciones siguen yendo al F29, como hoy.</span>]} /></Det>
@@ -125,7 +149,7 @@ export function Escenarios({ X }) {
 // Tabla de metas por escenario (Vendido, Facturado y Cobrado), con las mismas cifras de la cascada.
 function MetasTabla({ X }) {
   const { est, M, datos: d } = X, o = d.oficiales
-  const fil = [['Vendido', 'facturado ÷ ' + (X.MT.ratio != null ? pc(X.MT.ratio, 0) : 'relación sin dato') + ' · estimación propia', mx(o.vend.clp, o.vend.uf), (kk) => valorComponente(M.esc[kk], 'ventas', X.MT.ratio) ?? 0], ['Facturado', 'sin meta propia', mx(o.fact.clp, o.fact.uf), (kk) => M.esc[kk].fact], ['Cobrado', 'plano caja', mx(o.cob.clp, o.cob.uf), (kk) => M.esc[kk].caja]]
+  const fil = [['Vendido', 'neto: facturado ÷ ' + (X.MT.ratio != null ? pc(X.MT.ratio, 0) : 'relación sin dato') + ' − ' + pc(X.MT.cv) + ' de comisiones · estimación propia', mx(o.vend.clp, o.vend.uf), (kk) => valorComponente(M.esc[kk], 'ventas', X.MT.ratio, X.MT.cv) ?? 0], ['Facturado', 'sin meta propia', mx(o.fact.clp, o.fact.uf), (kk) => M.esc[kk].fact], ['Cobrado', 'plano caja', mx(o.cob.clp, o.cob.uf), (kk) => M.esc[kk].caja]]
   const cols = X.D ? X.ESC : X.ESC.filter(([k]) => k === est.esc), g = `minmax(0,1fr) ${X.D ? '110px ' : ''}${cols.map(() => '100px').join(' ')}`
   return <Panel><div style={{ display: 'grid', gridTemplateColumns: g, gap: 10, padding: '10px 16px', ...LBL, color: C.accent }}><span />{X.D && <span style={{ textAlign: 'right' }}>{d.anioBase} a la fecha</span>}{cols.map(([k, n]) => <span key={k} style={{ textAlign: 'right' }}>{n}</span>)}</div>
     {fil.map(([t, nota, ref, f]) => <div key={t} style={{ display: 'grid', gridTemplateColumns: g, gap: 10, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}<div style={{ fontSize: 11, color: C.muted }}>{nota}</div></span>{X.D && <span style={{ textAlign: 'right' }}><Val v={ref} /></span>}{cols.map(([k]) => <span key={k} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><Val v={mm(f(k))} /></span>)}</div>)}</Panel>
@@ -137,20 +161,22 @@ const sg2 = (/** @type {number} */ x) => (x >= 0 ? '+' : '−')
 const TONO_BG = { a: C.azulBg, y: C.soonBg, g: C.greenBg, t: C.tealBg, r: C.ambarBg }
 
 /**
- * Presupuesto y real mes a mes de los seis componentes (pesos y UF). Seguimiento del año en curso: contra la meta de ventas y de cobro (repartidas con la estacionalidad del facturado base) y el presupuesto de costos del año;
- * del año siguiente: contra la versión oficial (o el borrador). Lo que no tiene presupuesto propio (facturado y retiros del año en curso) queda sin desvío. Todo el reparto mensual es estimación propia.
+ * Presupuesto y real mes a mes de los seis componentes (pesos y UF). Seguimiento del año en curso: contra la meta de ventas (neta) y de cobro, repartidas con la distribución mensual elegida en Metas (por defecto partes iguales),
+ * y el presupuesto de costos del año; del año siguiente: contra la versión oficial (o el borrador), con la distribución de esa versión. Lo que no tiene presupuesto propio (facturado y retiros del año en curso) queda sin desvío.
+ * Todo el reparto mensual es estimación propia.
  */
 function seriesSeguimiento(X) {
   const { M, datos: d, est } = X, Y = d.anio, actual = Y === d.anioBase, cerr = mesesCerradosAnio(d.hoy, Y), o = d.oficiales, terc = (d.terc ?? 0) / 100
-  const of = X.vers.find((v) => v.oficial), esc = of ? of.estado.esc : est.esc, ratio = X.MT.ratio
+  const of = X.vers.find((v) => v.oficial), esc = of ? of.estado.esc : est.esc, ratio = X.MT.ratio, cv = X.MT.cv
+  const dist = (of ? of.estado.dist : est.dist) || { modo: {}, manual: {} }, pe = d.pesosEst, rep12 = (/** @type {number} */ total, /** @type {string} */ c) => repartoMensual(total, dist, c, pe)
   const ymk = (/** @type {number} */ i) => ym(Y, i)
   /** @type {Record<string,(number|null)[]>} */ const P = {}, R = {}
   /** @type {Record<string,(number|null)[]>} */ const PU = {}, RU = {}
   const rate = (/** @type {number} */ i) => (actual ? d.uf26.porMes[i] : M.uf27[i]) || 1
   const nul = () => Array(12).fill(null)
   if (actual) {
-    const w = d.base.baseCLP, costosP = d.costos26.mes
-    P.ventas = o.metaVentasCLP > 0 ? distribuirMensual(o.metaVentasCLP, w) : nul(); P.caja = o.metaCobroCLP > 0 ? distribuirMensual(o.metaCobroCLP, w) : nul()
+    const costosP = d.costos26.mes
+    P.ventas = o.metaVentasCLP > 0 ? rep12(o.metaVentasCLP, 'ventas') : nul(); P.caja = o.metaCobroCLP > 0 ? rep12(o.metaCobroCLP, 'caja') : nul()
     P.costos = costosP; P.fact = nul(); P.retiros = nul()
     P.margen = P.caja.map((c, i) => (c == null ? null : c * (1 - terc) - costosP[i]))
     const cum = d.evo.vend, kU = o.vend.clp > 0 ? o.vend.uf / o.vend.clp : 0
@@ -163,11 +189,10 @@ function seriesSeguimiento(X) {
     RU.margen = RU.caja.map((c, i) => (c == null || RU.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (RU.costos[i])))
     R.retiros = d.retiros26.mes.map((x) => x); RU.retiros = d.retiros26.mesUF.map((x) => x)
   } else {
-    const e = of && of.resumen && of.resumen[esc] ? of.resumen[esc] : M.esc[esc]
-    const mens = of && of.resumen && of.resumen[esc] && of.resumen[esc].mensual ? of.resumen[esc].mensual : M.esc[esc].ing
-    const vA = valorComponente(e, 'ventas', ratio) ?? 0
-    P.fact = mens.slice(); P.ventas = distribuirMensual(vA, mens); P.caja = distribuirMensual(e.caja, mens); P.costos = distribuirMensual(e.costos, null); P.retiros = distribuirMensual(e.retiros, null)
-    const ter = distribuirMensual(e.terc, mens); P.margen = P.caja.map((c, i) => c - ter[i] - P.costos[i])
+    const e = of && of.resumen && of.resumen[esc] ? of.resumen[esc] : M.esc[esc] || M.esc[est.esc]
+    const vA = valorComponente(e, 'ventas', ratio, cv) ?? 0
+    P.fact = rep12(e.fact, 'fact'); P.ventas = rep12(vA, 'ventas'); P.caja = rep12(e.caja, 'caja'); P.costos = rep12(e.costos, 'costos'); P.retiros = rep12(e.retiros, 'retiros')
+    const ter = rep12(e.terc, 'caja'); P.margen = P.caja.map((c, i) => c - ter[i] - P.costos[i])   // las comisiones siguen al cobrado
     for (const kk of Object.keys(P)) R[kk] = nul()
   }
   const out = /** @type {Record<string,any>} */ ({})
@@ -176,14 +201,14 @@ function seriesSeguimiento(X) {
     const pU = P[kk].map((v, i) => (v == null ? null : v / rate(i)))
     out[kk] = { c: seguimientoMensual({ pres: P[kk], real, cerrados: cerr, curso: actual && cerr < 12 }), u: seguimientoMensual({ curso: actual && cerr < 12, pres: pU, real: rU.map((x, i) => (real[i] != null && x == null ? /** @type {number} */ (real[i]) / rate(i) : x)), cerrados: cerr }) }
   }
-  return { S: out, of, esc, cerr, actual }
+  return { S: out, of, esc, cerr, actual, estS: of ? of.estado : est }
 }
 
 export function Seguimiento({ X }) {
   const { est, D, datos: d, ui, setUI } = X, Y = d.anio
-  const { S, of, esc, cerr } = seriesSeguimiento(X)
+  const { S, of, esc, cerr, estS } = seriesSeguimiento(X)
   const modo = ui.sg || 'p', comp = ui.sc || 'fact'
-  const nombre = Object.fromEntries(COMPONENTES), corto = (/** @type {string} */ kk) => (kk === 'costos' ? 'Costos' : nombre[kk])
+  const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => (kk === 'costos' ? 'Costos' : nombre[kk])
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
   const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
   // Desvío con flecha (↑ sobre el presupuesto, ↓ bajo él; verde a favor, rojo en contra) en % o en dinero, según el conmutador.
@@ -195,12 +220,13 @@ export function Seguimiento({ X }) {
     const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
     return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={{ cap: rango ? `Real ${rango}` : 'Real', val: cerr > 0 ? mx(c.realAcum, u.realAcum) : '—' }} der={{ cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null && cerr > 0 ? mx(c.presAcum, u.presAcum) : cerr === 0 && c.cierre != null ? mx(c.cierre, u.cierre) : '—' }}
       cmp={cerr === 0 ? <span>Sin meses cerrados · presupuesto del año</span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
-      det={[['Cierre proyectado', c.cierre != null ? mx(c.cierre, u.cierre) : '—'], ['Meses cerrados', String(cerr)], ['Plano', 'presupuesto mensual: estimación propia']]} onClick={() => setUI({ sc: kk })} />
+      det={[['Cierre proyectado', c.cierre != null ? mx(c.cierre, u.cierre) : '—'], ['Meses cerrados', String(cerr)], ...(kk === 'ventas' && Y === d.anioBase ? [['Bruto a la fecha', mx(d.oficiales.vendBruto.clp, d.oficiales.vendBruto.uf)], ['Plano', 'neto de comisiones, como la meta']] : []), ['Plano', 'presupuesto mensual: estimación propia · ' + resumenDistribucion(estS.dist, (cc) => nombreComponente(cc, CFG))]]} onClick={() => setUI({ sc: kk })} />
   }
   const avisos = []
   const f = S.fact.c
   if (f.presAcum > 0 && f.realAcum < f.presAcum * 0.9) avisos.push(`Facturado acumulado ${mx(f.realAcum, S.fact.u.realAcum)} contra ${mx(f.presAcum, S.fact.u.presAcum)} presupuestados (${pc((f.realAcum / f.presAcum - 1) * 100, 0)}).`)
-  if (d.dias.promedio != null && d.dias.promedio > est.p[esc].dias) avisos.push(`Días de cobro reales ${d.dias.promedio} sobre los ${est.p[esc].dias} supuestos.`)
+  const diasSup = (estS.p[esc] || est.p[est.esc]).dias
+  if (d.dias.promedio != null && d.dias.promedio > diasSup) avisos.push(`Días de cobro reales ${d.dias.promedio} sobre los ${diasSup} supuestos.`)
   const mayor = d.clientes[0], tope = 15
   if (mayor && d.totalFact && (mayor.monto / d.totalFact) * 100 > tope) avisos.push(`${mayor.name} concentra ${pc((mayor.monto / d.totalFact) * 100, 0)} de lo facturado (tope ${tope} %).`)
   const claves = Object.keys(S)
@@ -243,7 +269,7 @@ export function Seguimiento({ X }) {
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `meses cerrados: ${rango}` : 'sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.muted }}>
-      <span>Se mide contra {of ? <>la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>el <b style={{ color: C.accent }}>borrador</b> (sin versión oficial)</>} · escenario <b style={{ color: C.accent }}>{X.nomEsc(esc)}</b></span>
+      <span>Se mide contra {of ? <>la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>el <b style={{ color: C.accent }}>borrador</b> (sin versión oficial)</>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
       <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Cambiar versión ›</span>
     </div>
     <Grid cols={3} colsM={1} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
@@ -274,7 +300,7 @@ export function DMes({ X, i }) {
       <Mini ic='cal' label='UF del mes' value={nf.format(Math.round(M.uf27[i]))} sub={`${d.anio} proyectada`} />
     </Grid>
     <Titulo>Proyección de {MESL[i].toLowerCase()} de {d.anio}</Titulo>
-    <Grid cols={3} colsM={1}>{X.ESC.map(([k, n]) => <Mini key={k} ic='tgt' label={n + (k === est.esc ? ' · elegido' : '')} value={mx(M.esc[k].ing[i], M.esc[k].ingUF[i])} sub={monedaActual() === 'clp' ? ufs(M.esc[k].ingUF[i]) : ''} onClick={() => X.irEscTab('res')} />)}</Grid>
+    <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => <Mini key={k} ic='tgt' label={n + (k === est.esc ? ' · elegido' : '')} value={mx(M.esc[k].ing[i], M.esc[k].ingUF[i])} sub={monedaActual() === 'clp' ? ufs(M.esc[k].ingUF[i]) : ''} onClick={() => X.irEscTab('res')} />)}</Grid>
     {notas.length > 0 && <Panel hd='Notas del mes' pad><Lista items={notas} /></Panel>}
     <Pager prev={i > 0 && { t: MESL[i - 1], go: () => X.irDrill({ t: 'mes', i: i - 1 }) }} next={i < 11 && { t: MESL[i + 1], go: () => X.irDrill({ t: 'mes', i: i + 1 }) }} />
   </>
@@ -303,18 +329,19 @@ export function DCli({ X, id }) {
 
 export function indicadores(X) {
   const { datos: d } = X, o = d.oficiales, Y = d.anioBase, H = Number(d.hoy.slice(5, 7)) - 1
-  const mU = d.metaVentasUF > 0 ? d.metaVentasUF : null, enUF = (clp, u) => (monedaActual() === 'clp' ? [{ n: 'En UF', v: 'UF ' + nf.format(Math.round(u)) }] : [])
+  const mU = d.metaVentasUF > 0 ? d.metaVentasUF : null, enUF = (clp, u) => (monedaActual() === 'clp' ? [{ n: 'En UF', v: ufs(u) }] : [])
   const top5 = d.clientes.slice(0, 5).reduce((a, c) => a + c.monto, 0)
+  const lento = [...X.ESC].sort((a, b) => X.est.p[b[0]].dias - X.est.p[a[0]].dias)[0][0]   // el escenario de cobro más lento
   return {
-    vend: { tit: `Vendido ${Y}`, val: mx(o.vend.clp, o.vend.uf), sub: o.vend.pct != null ? pc(o.vend.pct, 0) + ' de la meta' : 'sin meta', fuente: 'ventas activas y terminadas del año, netas de costos de terceros, contra la meta anual', app: 'Oficina › Resultado del año', rows: [{ n: `Meta de ventas ${Y}`, c: 'neto de costos de terceros', v: o.metaVentasCLP ? mx(o.metaVentasCLP, mU) : 'sin meta' }, { n: 'Avance a la fecha', v: o.vend.pct != null ? pc(o.vend.pct, 0) : '—' }, { n: 'Ya facturado', c: 'de lo vendido', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—', go: () => X.ir({ drill: { t: 'ind', k: 'fact26' } }) }] },
-    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' de lo vendido' : '', fuente: 'facturas emitidas con folio, contra lo vendido', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido', v: mx(o.vend.clp, o.vend.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vend.clp - o.fact.clp), Math.max(0, o.vend.uf - o.fact.uf)) }], texto: 'La facturación no tiene meta propia: la app la mide contra lo vendido.' },
+    vend: { tit: `Vendido ${Y}`, val: mx(o.vend.clp, o.vend.uf), sub: o.vend.pct != null ? pc(o.vend.pct, 0) + ' de la meta' : 'sin meta', fuente: 'ventas activas y terminadas del año, netas de comisiones a terceros, contra la meta anual (también neta)', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf) }, { n: '− Comisiones de venta', c: 'costo a terceros', v: mx(o.comisVentas.clp, o.comisVentas.uf) }, { n: '= Vendido neto', v: mx(o.vend.clp, o.vend.uf) }, { n: `Meta de ventas ${Y}`, c: 'neta de comisiones a terceros', v: o.metaVentasCLP ? mx(o.metaVentasCLP, mU) : 'sin meta' }, { n: 'Avance a la fecha', c: 'neto contra la meta', v: o.vend.pct != null ? pc(o.vend.pct, 0) : '—' }, { n: 'Ya facturado', c: 'del vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—', go: () => X.ir({ drill: { t: 'ind', k: 'fact26' } }) }] },
+    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' del vendido bruto' : '', fuente: 'facturas emitidas con folio, contra el vendido bruto', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vendBruto.clp - o.fact.clp), Math.max(0, o.vendBruto.uf - o.fact.uf)) }], texto: 'La facturación no tiene meta propia: la app la mide contra lo vendido bruto.' },
     cob26: { tit: `Cobrado ${Y}`, val: mx(o.cob.clp, o.cob.uf), sub: o.cob.pct != null ? pc(o.cob.pct, 0) + ' de la meta' : 'sin meta', fuente: 'conciliación con el banco, contra la meta de cobranza', app: 'Oficina › Cobrado', rows: [{ n: `Meta de cobranza ${Y}`, v: o.metaCobroCLP ? mx(o.metaCobroCLP, null) : 'sin meta' }, { n: 'Avance a la fecha', v: o.cob.pct != null ? pc(o.cob.pct, 0) : '—' }, { n: 'Cobrado', v: mx(o.cob.clp, o.cob.uf) }] },
     marg: { tit: `Margen ${Y}`, val: mx(o.marg.clp, o.marg.uf), sub: o.marg.pct != null ? pc(o.marg.pct) + ' de ingresos' : '', fuente: 'ingresos menos costos de operación y comisiones', app: 'Oficina › Resultado del año', rows: [{ n: 'Margen', v: mx(o.marg.clp, o.marg.uf) }, { n: 'Sobre los ingresos', v: o.marg.pct != null ? pc(o.marg.pct) : '—' }] },
     ret26: { tit: `Retiros ${Y}`, val: mx(d.retiros26.total, d.retiros26.totalUF), sub: `${d.retiros26.n} retiro${d.retiros26.n !== 1 ? 's' : ''} de los socios`, fuente: 'transferencias a los socios (gastos «Retiros» de la oficina), como en la página Socios; por confirmar', app: 'Socios', rows: d.retiros26.socios.map((n) => ({ n, c: `sueldos pagados ${mxP(d.retiros26.sueldos[n] || 0, d.retiros26.sueldosUF[n] || 0)}`, v: mx(d.retiros26.porSocio[n] || 0, d.retiros26.porSocioUF[n] || 0), go: X.onOpenSocios })).concat([{ n: 'Sueldos de los socios', c: 'ya están en Remuneraciones', v: mx(d.retiros26.sueldoTot, Object.values(d.retiros26.sueldosUF).reduce((a, x) => a + Number(x), 0)) }]) },
     conc: { tit: 'Concentración de clientes', val: pc((d.totalFact ? top5 / d.totalFact : 0) * 100, 0), sub: `los 5 primeros de ${d.clientes.length} clientes facturados`, fuente: `facturado ${Y} por cliente`, app: 'Clientes', rows: d.clientes.slice(0, 5).map((c, i) => ({ n: `${i + 1}. ${c.name}`, v: mx(c.monto, c.uf), go: () => X.ir({ drill: { t: 'cli', n: c.id } }) })) },
     rec: { tit: 'Recurrente mensual', val: mx(d.recurrente.anualCLP / 12, d.recurrente.anualUF / 12), sub: `${d.recurrente.n} ventas mensuales activas`, fuente: 'ventas con cobro mensual y estado activo, sin subarriendo', app: 'Ventas', rows: [{ n: 'Anualizado ×12', c: 'como en Ventas', v: mx(d.recurrente.anualCLP, d.recurrente.anualUF) }, ...enUF(0, d.recurrente.anualUF), { n: 'Ingreso base de la proyección', c: 'ver la etapa Base', v: '', go: () => X.irBase() }] },
-    dias: { tit: 'Días de cobro', val: d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', sub: d.dias.n ? `promedio ${Y} · mediana ${d.dias.mediana}` : 'sin facturas pagadas este año', fuente: `${d.dias.n} facturas pagadas en ${Y}, de la emisión al pago`, app: 'Cobranza', rows: [{ n: 'Promedio', v: d.dias.promedio != null ? d.dias.promedio + ' días' : '—' }, { n: 'Mediana', v: d.dias.mediana != null ? d.dias.mediana + ' días' : '—' }, { n: 'Facturas pagadas', v: String(d.dias.n) }, { n: 'Supuesto del escenario Prudente', v: X.est.p.prudente.dias + ' días', go: () => X.irEscTab('res') }] },
-    terc: { tit: 'Comisiones', val: d.terc != null ? pc(d.terc) : 'sin dato', sub: 'de lo cobrado en el año', fuente: 'comisiones pagadas del año contra el cobrado propio, como en Inicio', app: 'Comisiones', rows: [{ n: 'Parte de lo cobrado', v: d.terc != null ? pc(d.terc) : '—' }, { n: `Supuesto del presupuesto ${d.anio}`, v: pc(X.est.p.base.terc), go: () => X.irEscTab('res') }] },
+    dias: { tit: 'Días de cobro', val: d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', sub: d.dias.n ? `promedio ${Y} · mediana ${d.dias.mediana}` : 'sin facturas pagadas este año', fuente: `${d.dias.n} facturas pagadas en ${Y}, de la emisión al pago`, app: 'Cobranza', rows: [{ n: 'Promedio', v: d.dias.promedio != null ? d.dias.promedio + ' días' : '—' }, { n: 'Mediana', v: d.dias.mediana != null ? d.dias.mediana + ' días' : '—' }, { n: 'Facturas pagadas', v: String(d.dias.n) }, { n: `Supuesto del escenario ${nombreEscenario(X.est, lento)}`, v: X.est.p[lento].dias + ' días', go: () => X.irEscTab('res') }] },
+    terc: { tit: 'Comisiones', val: d.terc != null ? pc(d.terc) : 'sin dato', sub: 'de lo cobrado en el año', fuente: 'comisiones pagadas del año contra el cobrado propio, como en Inicio', app: 'Comisiones', rows: [{ n: 'Parte de lo cobrado', v: d.terc != null ? pc(d.terc) : '—' }, { n: `Supuesto del presupuesto ${d.anio}`, v: pc(X.est.p[escenarioMetas(X.est, CFG)].terc), go: () => X.irEscTab('res') }] },
     cost: { tit: 'Costos de oficina por mes', val: mx(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes, null), sub: 'presupuesto vigente, con PPM', fuente: 'costos de oficina vigentes por categoría', app: 'Oficina › Resultado del año › Presupuesto vs real', rows: d.costos.map((c) => ({ n: c.n, v: mx(c.m, null) + ' /mes', go: () => X.irCostos() })).concat([{ n: 'PPM', v: mx(d.ppmMes, null) + ' /mes', go: () => X.irEscTab('imp') }]) },
     conv: { tit: 'Conversión de propuestas', val: 'sin dato', sub: 'el índice de propuestas no tiene registros', fuente: 'índice de propuestas (Drive)', app: 'Ventas › Propuestas', rows: [], texto: `Para estimar la cartera nueva de ${d.anio} hace falta registrar las propuestas enviadas y las aceptadas. Sin ese dato, el crecimiento de ventas sale de un criterio y no de un cálculo.` },
   }
@@ -477,11 +504,14 @@ const campo = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 
 export function DCmp({ X, id }) {
   const v = X.vers.find((x) => x.id === id)
   if (!v) return <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>Esa versión ya no existe.</div>
-  const A = v.estado, B = X.est, mA = modeloPresupuesto(X.datos.base, A), mB = modeloPresupuesto(X.datos.base, B), k = X.est.esc, eA = mA.esc[k], eB = mB.esc[k]
+  const A = v.estado, B = X.est, mA = modeloPresupuesto(X.datos.base, A), mB = modeloPresupuesto(X.datos.base, B)
+  const comunes = mB.lista.filter(([kk]) => mA.esc[kk]).map(([kk]) => kk), k = comunes.includes(X.est.esc) ? X.est.esc : comunes[0]
+  if (!k) return <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>La versión y el borrador no comparten ningún escenario: no hay cifras que comparar.</div>
+  const eA = mA.esc[k], eB = mB.esc[k]
   const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], ['Presupuesto de costos', 'costos', 0], ['Margen', 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], ['Retiros', 'retiros', 1]]
   const dif = diferenciaSupuestos(A, B, { mm, pc })
   return <>
-    <Titulo>Escenario {X.nomEsc(k)} · versión contra el borrador de hoy</Titulo>
+    <Titulo>Escenario {nombreEscenario(B, k)} · versión contra el borrador de hoy</Titulo>
     <Panel>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 90px 90px', gap: 10, padding: '10px 16px', ...LBL, color: C.accent }}><span /><span style={{ textAlign: 'right' }}>Versión</span><span style={{ textAlign: 'right' }}>Borrador</span><span style={{ textAlign: 'right' }}>Diferencia</span></div>
       {rows.map(([t, key, bueno]) => { const dd = eB[key] - eA[key], nulo = Math.abs(dd) < 1

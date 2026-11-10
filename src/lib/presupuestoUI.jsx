@@ -6,20 +6,23 @@ import { aUF, aPesos } from '../../supabase/functions/_shared/presupuesto.js'
 
 export const nf = new Intl.NumberFormat('es-CL')
 export const pes = n => (n < 0 ? '−' : '') + '$' + nf.format(Math.abs(Math.round(n)))
-export const ufs = n => (n < 0 ? '−' : '') + nf.format(Math.abs(Math.round(n))) + ' UF'
+// Formato único de cifras: pesos en millones SIN espacio ($806,7M, fmtMill); la unidad reajustable (UF, módulo país de la configuración) siempre después del número y separada por un espacio (12.345 UF), nunca antes.
+let UNIDAD = 'UF'
+export const unidadUF = () => UNIDAD
+export const ufs = n => (n < 0 ? '−' : '') + nf.format(Math.abs(Math.round(n))) + ' ' + UNIDAD
 
 // ── Moneda: UN solo formateador para toda cifra en dinero del Presupuesto ──
 // El selector Pesos / UF / Ambos vive en el estado del presupuesto; PresupuestoView lo fija en cada render con `setMoneda` (antes de dibujar los pasos) y todo lo demás pasa por estas funciones.
 // Qué UF usa cada una: `mm` = cifras 2027 proyectadas (UF media del año del modelo; los meses traen su propia UF y usan `mx`); `mx` = cifras con su UF exacta (la del día o período de cada movimiento, de la fuente);
 // `m26` = cifra 2026 que solo existe en pesos: UF media de los meses transcurridos, marcada «≈». Los nombres con P devuelven una sola moneda (en Ambos, pesos) para chips, flechas y gráficos.
 let CFG = { moneda: 'clp', uf27: 0, uf26: 0 }
-/** @param {{ moneda?:string, uf27?:number, uf26?:number }} c */
-export const setMoneda = (c) => { CFG = { moneda: c.moneda === 'uf' || c.moneda === 'ambos' ? c.moneda : 'clp', uf27: Number(c.uf27) > 0 ? Number(c.uf27) : 0, uf26: Number(c.uf26) > 0 ? Number(c.uf26) : 0 } }
+/** @param {{ moneda?:string, uf27?:number, uf26?:number, unidad?:string }} c */
+export const setMoneda = (c) => { if (c.unidad) UNIDAD = String(c.unidad); CFG = { moneda: c.moneda === 'uf' || c.moneda === 'ambos' ? c.moneda : 'clp', uf27: Number(c.uf27) > 0 ? Number(c.uf27) : 0, uf26: Number(c.uf26) > 0 ? Number(c.uf26) : 0 } }
 export const monedaActual = () => CFG.moneda
 export const tasa27 = () => CFG.uf27
 export const tasa26 = () => CFG.uf26
 const AMB = '\u2060 · '                       // separa pesos y UF en Ambos; las tarjetas lo parten en dos líneas
-const ufTxt = (/** @type {number|null} */ u, /** @type {boolean} */ aprox, dec = 0) => (u == null || !isFinite(u) ? '—' : (aprox ? '≈ ' : '') + (u < 0 ? '−' : '') + Math.abs(u).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' UF')
+const ufTxt = (/** @type {number|null} */ u, /** @type {boolean} */ aprox, dec = 0) => (u == null || !isFinite(u) ? '—' : (aprox ? '≈ ' : '') + (u < 0 ? '−' : '') + Math.abs(u).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' ' + UNIDAD)
 const dinero = (/** @type {any} */ clp, /** @type {number|null} */ u, /** @type {boolean} */ aprox, /** @type {(n:number)=>string} */ fp, dec, /** @type {boolean} */ una) => {
   const c = Number(clp) || 0, m = CFG.moneda
   if (m === 'clp' || (una && m === 'ambos')) return fp(c)
@@ -81,13 +84,18 @@ const TONO = {
   t: { bg: C.tealBg, fg: C.tealText, v: C.tealText, bd: C.tealBg },
   r: { bg: C.ambarBg, fg: C.coralText, v: C.coralText, bd: C.ambarBg },
 }
-// Un tono por escenario, con fichas de C que no chocan con los de los componentes (Vendido azul, Facturado amarillo, Cobrado verde, Presupuesto de costos turquesa, Retiros ámbar, Margen blanco):
-// Prudente = gris cálido (cautela), Base = azul acero tenue con el azul de la marca, Optimista = azul marino sólido con letra blanca. Se aplica al selector, a la tarjeta y a su chip.
-export const ESC_TONO = {
-  prudente: { bg: C.bgWarm, fg: C.grisText, bd: C.border },
-  base: { bg: C.tileLineOn, fg: C.accent, bd: C.tileLineOn },
-  meta: { bg: C.accent, fg: '#fff', bd: C.accent },
-}
+// Un tono por escenario (el índice `t` guardado en cada escenario), con fichas de C que no chocan con los de los componentes (Vendido azul, Facturado amarillo, Cobrado verde, Presupuesto de costos turquesa, Retiros ámbar, Margen blanco):
+// 0 gris cálido (cautela), 1 azul acero tenue con el azul de la marca, 2 azul marino sólido con letra blanca, 3 azul grisáceo sólido (AZUL2) con letra blanca y 4 azul grisáceo claro (AZUL3) con letra de la marca.
+// Se aplica al selector, a la tarjeta y a su chip. Con más escenarios que tonos, el tono se repite (el nombre los distingue).
+export const ESC_TONOS = [
+  { bg: C.bgWarm, fg: C.grisText, bd: C.border },
+  { bg: C.tileLineOn, fg: C.accent, bd: C.tileLineOn },
+  { bg: C.accent, fg: '#fff', bd: C.accent },
+  { bg: C.muted, fg: '#fff', bd: C.muted },
+  { bg: C.done, fg: C.accent, bd: C.done },
+]
+/** Tono (bg/fg/bd) de un escenario del estado por su índice de tono. @param {number|null|undefined} t */
+export const tonoEsc = (t) => ESC_TONOS[((Number(t) || 0) % ESC_TONOS.length + ESC_TONOS.length) % ESC_TONOS.length]
 export const LBL = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase' }
 
 // Tarjeta de resultado (la de Inicio): ícono en caja blanca, rótulo, cifra grande y una línea.
@@ -128,7 +136,7 @@ export const Chip = ({ children, tono, c }) => { const t = c ? c : tono === 'y' 
   return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: t.bg, color: t.fg, whiteSpace: 'nowrap' }}>{children}</span> }
 
 export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
-export const Lnk = ({ children, onClick, rojo }) => <button onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
+export const Lnk = ({ children, onClick, rojo, titulo }) => <button title={titulo} aria-label={titulo} onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
 
 // Campo con la unidad dentro. Escribe con el formato es-CL y confirma al salir del campo o con Enter (sin perder el foco mientras se teclea).
 // `sobrio`: sin relleno (el fondo es el de la tarjeta), subrayado fino al pasar o enfocar y, en pantallas táctiles, un recuadro tenue siempre visible; la cifra no se mueve (el recuadro sale
@@ -162,7 +170,7 @@ export function Fld({ kind = 'pct', value, onCommit, pre, suf, ph, w = 132, text
  */
 export function FldDin({ clp, tasa, onCommit, kind = 'money', pre = '$', suf, ...rest }) {
   const m = CFG.moneda, ok = Number(tasa) > 0
-  if (m === 'uf' && ok) { const u = Number(clp) / tasa; return <Fld {...rest} chica kind='uf' suf=' UF' value={Math.abs(u) >= 1000 ? Math.round(u) : Math.round(u * 100) / 100} onCommit={(x) => onCommit(Math.round(x * tasa))} /> }
+  if (m === 'uf' && ok) { const u = Number(clp) / tasa; return <Fld {...rest} chica kind='uf' suf={'\u00A0' + UNIDAD} value={Math.abs(u) >= 1000 ? Math.round(u) : Math.round(u * 100) / 100} onCommit={(x) => onCommit(Math.round(x * tasa))} /> }
   const campo = <Fld {...rest} kind={kind} pre={pre} suf={suf} value={clp} onCommit={onCommit} />
   if (m !== 'ambos' || !ok) return campo
   return <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>{campo}<span style={{ fontSize: 10.5, fontWeight: 500, color: C.muted, letterSpacing: 0, lineHeight: 1.3 }}>{ufTxt(Number(clp) / tasa, false)}</span></span>
@@ -172,12 +180,12 @@ export function FldDin({ clp, tasa, onCommit, kind = 'money', pre = '$', suf, ..
 export function EstilosPresupuesto() {
   const A = C.accent, tenue = `color-mix(in srgb, ${A} 14%, transparent)`, medio = `color-mix(in srgb, ${A} 38%, transparent)`
   return <style>{`
-.pfs{flex-shrink:0;display:inline-flex;align-items:baseline;gap:2px;box-sizing:border-box;cursor:text;border:0 solid transparent;border-bottom-width:1px;padding:0 8px;margin:0 -8px -1px;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
+.pfs{flex-shrink:0;display:inline-flex;align-items:baseline;gap:0;box-sizing:border-box;cursor:text;border:0 solid transparent;border-bottom-width:1px;padding:0 8px;margin:0 -8px -1px;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
 .pfs:hover,.pfs:focus-within{border-bottom-color:${medio}}
 .pfs:focus-within,.pfs.sel{border-bottom-color:${A}}
 .pfs .pfw{display:inline-grid;min-width:1.2ch}
 .pfs .pfw>*{grid-area:1/1;font:inherit;letter-spacing:inherit;min-width:0}
-.pfs .pfm{min-width:auto!important;visibility:hidden;white-space:pre;padding:0 3px 0 1px;height:1.15em;line-height:1.15}
+.pfs .pfm{min-width:auto!important;visibility:hidden;white-space:pre;padding:0 1px 0 0;height:1.15em;line-height:1.15}
 .pfs input{width:100%;border:0;outline:0;background:transparent;color:inherit;padding:0;text-align:left;height:1.15em;line-height:1.15;font-variant-numeric:tabular-nums}
 .pfs input::placeholder{color:${C.done};font-weight:500}
 .pfs .pfu{font:inherit;letter-spacing:inherit}

@@ -21,7 +21,7 @@ const cerca = (a, b, tol = 1) => assert.ok(Math.abs(a - b) <= tol, `${a} ≠ ${b
 
 test('los seis componentes tienen un solo nombre y las escenarios se renombran sin tocar la clave', () => {
   assert.deepEqual(COMPONENTES.map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Margen', 'Retiros'])
-  assert.deepEqual(ANCLAS, ['retiros', 'margen', 'caja', 'fact', 'ventas'])
+  assert.deepEqual([...ANCLAS].sort(), ['caja', 'fact', 'margen', 'retiros', 'ventas'])   // el presupuesto de costos se arma en su paso, no se fija como meta
   assert.deepEqual(ESCENARIOS.map((x) => x[0]), ['prudente', 'base', 'meta'])
 })
 
@@ -179,12 +179,13 @@ test('sueldos y retiros de los socios: el mismo dinero por socio, sin doble cont
 test('migración v3 → v4: las etapas desde la 4.ª se desplazan, se agregan metas y reserva, y es idempotente', () => {
   const v3 = { v: 3, esc: 'base', hecho: [0, 1, 2, 3, 4], notas: { 0: 'a', 3: 'escenarios', 4: 'seguimiento' }, p: {}, costos: [], tasaIDPC: 12.5, ppmAnual: 1 }
   const m = migrarEstado(v3, 2027)
-  assert.equal(m.v, 4); assert.deepEqual(m.hecho, [0, 1, 2, 4, 5])
+  assert.equal(m.v, 5); assert.deepEqual(m.hecho, [0, 1, 2, 4, 5])
   assert.deepEqual(m.notas, { 0: 'a', 4: 'escenarios', 5: 'seguimiento' })
   assert.deepEqual(m.metas, { ancla: 'retiros', valor: null, ratio: null }); assert.equal(m.reservaIni, RESERVA_MINIMA)
   assert.deepEqual(migrarEstado(m, 2027), m)
-  assert.deepEqual(migrarEstado({ v: 4, hecho: [3], notas: {}, metas: { ancla: 'caja', valor: 5, ratio: 70 }, reservaIni: 10 }), { v: 4, hecho: [3], notas: {}, metas: { ancla: 'caja', valor: 5, ratio: 70 }, reservaIni: 10, ppmAnual: 0 })
-  assert.equal(migrarEstado(null).v, 4)
-  assert.equal(estadoInicial({ costos }).v, 4)
+  const m4 = migrarEstado({ v: 4, hecho: [3], notas: {}, metas: { ancla: 'caja', valor: 5, ratio: 70 }, reservaIni: 10 })
+  assert.equal(m4.v, 5); assert.deepEqual(m4.hecho, [3]); assert.deepEqual(m4.metas, { ancla: 'caja', valor: 5, ratio: 70 }); assert.equal(m4.reservaIni, 10); assert.equal(m4.ppmAnual, 0)
+  assert.equal(migrarEstado(null).v, 5)
+  assert.equal(estadoInicial({ costos }).v, 5)
   assert.equal(supuestosMetas(estado()).alza, 4.5)
 })
