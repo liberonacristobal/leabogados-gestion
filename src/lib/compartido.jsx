@@ -622,7 +622,7 @@ export function useUF(){
   return state
 }
 
-export function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente…'}) {
+export function AsignarClienteInline({bill,clients,onAssign,label='Asignar cliente',placeholder='Buscar cliente…',sugeridos=null}) {
   const [open,setOpen] = useState(false)
   const [q,setQ] = useState('')
   const wrapRef = useRef(null)
@@ -637,6 +637,10 @@ export function AsignarClienteInline({bill,clients,onAssign,label='Asignar clien
   )
   return (
     <div ref={wrapRef} style={{position:'relative',minWidth:180}}>
+      {sugeridos&&sugeridos.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:6}}>
+        <span style={{fontSize:10,color:C.textSoft}}>Sugeridos</span>
+        {sugeridos.map(s=><button key={s.cid} onMouseDown={()=>{onAssign(bill,s.cid);setOpen(false);setQ('')}} style={{padding:'3px 9px',borderRadius:8,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{s.txt}</button>)}
+      </div>}
       <input autoFocus value={q} onChange={e=>setQ(e.target.value)} onBlur={()=>setTimeout(()=>setOpen(false),180)} placeholder={placeholder} style={{width:'100%',padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,color:C.text,fontSize:12,boxSizing:'border-box',outline:'none'}}/>
       {open&&q.trim()&&pos&&createPortal(
         <div style={{position:'fixed',top:pos.top,left:pos.left,width:pos.width,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 6px 22px rgba(0,0,0,.18)',zIndex:99999,maxHeight:240,overflowY:'auto'}}>
