@@ -24,7 +24,7 @@ import { Spin } from './base.jsx'
 import { sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
-import { UMBRAL_DEUDA } from '../../supabase/functions/_shared/fondosReglas.js'
+import { UMBRAL_DEUDA, planReasignacionFondos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { anticiposSobreCuotas, clasificarPorFacturar, destinoCuotaFlujo } from '../../supabase/functions/_shared/porFacturar.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
@@ -1645,6 +1645,18 @@ export const _DEMO_BANDEJA = [
   {id:'d5',recibido_at:'2026-10-09T14:29:00Z',de:'adquisiciones@bastro.cl',de_nombre:'Bastro',asunto:'COMPROBANTE DE PAGO',cuerpo:'',adjuntos:[],tipo:'comprobante',cliente_nombre:'Eduardo Barra',abogado:'Erasmo',estado:'registrado',motivo:'Depósito del 09-10-2026 ya conciliado',propuesta:{},evidencia:[{texto:'Depósito 09-10-2026',monto:1369907,fuente:'cartola'}]},
   {id:'d6',recibido_at:'2026-10-16T12:00:00Z',de:'noticias@legalnews.cl',de_nombre:'Legal News',asunto:'Boletín semanal',cuerpo:'',adjuntos:[],tipo:'spam',estado:'sin_accion',motivo:'Publicidad o notificación',propuesta:{},evidencia:[]},
 ]
+
+// Reasignar el cliente de un movimiento del banco: los fondos que ese movimiento ya concilió pasan al cliente nuevo (el movimiento y el fondo guardan cada uno su client_id; antes solo cambiaba el del movimiento y el
+// fondo seguía a nombre del anterior). Regla pura en _shared/fondosReglas.js (planReasignacionFondos). Lanza si la base rechaza el cambio; devuelve los fondos pasados para que la vista lo confirme.
+export async function reasignarFondosDeMovimiento({mov, clienteId, conc=[], expenses=[], setExpenses}){
+  const plan=planReasignacionFondos({movId:mov.id,clienteId,conc,expenses})
+  if(!plan.ids.length) return {n:0,filas:[]}
+  const {error}=await supabase.from('expenses').update(plan.patch).in('id',plan.ids)
+  if(error) throw new Error(`El movimiento pasó al cliente nuevo, pero el fondo no: ${error.message}`)
+  setExpenses&&setExpenses(p=>(p||[]).map(e=>plan.ids.includes(String(e.id))?{...e,...plan.patch}:e))
+  logActividad('fondos.cliente_reasignado',{tabla:'expenses',id:plan.ids[0],detalle:{movimiento:mov.id,fondos:plan.ids,cliente:clienteId}})
+  return {n:plan.ids.length,filas:plan.filas}
+}
 
 // Fondo por registrar (conciliacion-auto lo propone desde el aviso del banco o la cartola, con señal de fondo): una persona
 // lo confirma desde Gastos › Revisar o la Bandeja. Nunca dos veces: si el depósito ya se concilió en Banco, solo se cierra; si

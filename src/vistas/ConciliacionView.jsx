@@ -12,7 +12,7 @@ import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
@@ -666,6 +666,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         : (learnedK&&crNormRut(m.rut_contraparte)===learnedK&&!m.cliente_id ? {...m,cliente_id:clientId}
         : (learnedNom&&m.nombre_contraparte===learnedNom&&!m.cliente_id ? {...m,cliente_id:clientId} : m))))
       logActividad('banco.cliente_asignado',{tabla:'cartola_movimientos',id:mov.id,detalle:{name:cmap[clientId]||null,title:mov.nombre_contraparte||null,monto:mov.monto}})
+      // Los fondos que este movimiento ya concilió pasan al cliente nuevo (antes quedaban en el anterior y la reasignación «no se reflejaba»); se confirma o falla a la vista.
+      const rf=await reasignarFondosDeMovimiento({mov,clienteId:clientId,conc,expenses,setExpenses})
+      if(rf.n) appAlert(`${rf.n===1?'El fondo':'Los '+rf.n+' fondos'} de ${fmt(rf.filas.reduce((a,e)=>a+(Number(e.amount)||0),0))} también ${rf.n===1?'pasó':'pasaron'} a ${cmap[clientId]||'este cliente'}.`)
       setEditMov(null); setEditForm({rut:'',nombre:''})
     }catch(e){ appAlert('Error: '+e.message) }
   }

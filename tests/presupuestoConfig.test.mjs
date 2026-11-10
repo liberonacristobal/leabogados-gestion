@@ -118,3 +118,10 @@ test('validarConfig: la lista de socios del estudio debe ser nombres y vacía (n
   assert.ok(validarConfig({ socios: { lista: ['Ana', ''] } }).errores.some((e) => e.ruta === 'socios.lista')); assert.ok(validarConfig({ socios: { lista: 'Ana' } }).errores.some((e) => e.ruta === 'socios.lista'))
   assert.equal(CONFIG_DEFECTO.socios.lista, null)
 })
+
+test('validarConfig: el calendario de la cotización del empleador pide meses AAAA-MM ascendentes y porcentajes entre 0 y 30', () => {
+  assert.equal(validarConfig({ previsional: { empleador: [{ desde: '2026-08', pct: 3.5 }, { desde: '2027-08', pct: 4.25 }] } }).ok, true)
+  const r = (l) => validarConfig({ previsional: { empleador: l } }).errores.map((e) => e.ruta)
+  assert.ok(r([{ desde: '2026-13', pct: 3 }]).includes('previsional.empleador.0.desde')); assert.ok(r([{ desde: '2027-08', pct: 4 }, { desde: '2026-08', pct: 3 }]).includes('previsional.empleador.1.desde'))
+  assert.ok(r([{ desde: '2026-08', pct: 40 }]).includes('previsional.empleador.0.pct')); assert.ok(r('x').includes('previsional.empleador'))
+})

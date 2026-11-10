@@ -97,3 +97,14 @@ test('referencia del Seguimiento: la oficial manda; sin oficial, el año en curs
   assert.equal(referenciaSeguimiento({ actual: false, hayOficial: false, anio: 2027 }), 'borrador'); assert.equal(referenciaSeguimiento({ actual: false, hayOficial: false, anio: 2028 }), 'borrador')
   assert.equal(referenciaSeguimiento({ actual: true, hayOficial: true, anio: 2026 }), 'oficial'); assert.equal(referenciaSeguimiento({ actual: false, hayOficial: true, anio: 2028 }), 'oficial')
 })
+
+import { cotizacionEmpleador } from './../supabase/functions/_shared/presupuesto.js'
+import { CONFIG_DEFECTO as CFG_DEF } from './../supabase/functions/_shared/presupuestoConfig.js'
+test('cotización del empleador (Ley 21.735): 2027 sube 0,75 puntos de agosto a diciembre; 2028 todo el año; base vacía o tasa 0 no suman', () => {
+  const cal = CFG_DEF.previsional.empleador, base = { imponibleMensual: 10_000_000, baseYM: '2026-10', calendario: cal }
+  const a27 = cotizacionEmpleador({ anio: 2027, ...base }); cerca(a27.total, 375_000, 1e-6); assert.equal(a27.tasaBase, 3.5); assert.equal(a27.meses.filter((m) => m.extra > 0).length, 5)
+  cerca(cotizacionEmpleador({ anio: 2028, ...base }).total, 7 * 75_000 + 5 * 150_000, 1e-6)
+  assert.equal(cotizacionEmpleador({ anio: 2027, ...base, imponibleMensual: 0 }).total, 0); assert.equal(cotizacionEmpleador({ anio: 2027, ...base, imponibleMensual: null }).total, 0)
+  assert.equal(cotizacionEmpleador({ anio: 2027, ...base, calendario: [] }).total, 0)   // tasa 0: nada que sumar
+  assert.equal(cotizacionEmpleador({ anio: 2026, ...base }).total, 0)                 // 2026 ya está en la base (3,5 % desde ago-2026)
+})
