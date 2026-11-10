@@ -328,6 +328,36 @@ export function sueldosYRetiros(o) {
   return { filas, total: { sueldo26: t('sueldo26'), ret26: t('ret26'), tot26: t('tot26'), sueldo27: t('sueldo27'), ret27: t('ret27'), tot27: t('tot27'), leyes27: t('leyes27') } }
 }
 
+// ── Moneda: pesos ↔ UF (selector Pesos / UF / Ambos del Presupuesto) ──
+/** Pesos → UF con la UF dada. null si falta una UF válida o el monto no es un número (nunca NaN ni Infinity). @param {any} clp @param {any} uf */
+export function aUF(clp, uf) {
+  const c = Number(clp), u = Number(uf)
+  return clp != null && Number.isFinite(c) && Number.isFinite(u) && u > 0 ? c / u : null
+}
+/** UF → pesos con la UF dada (inversa de aUF). @param {any} ufMonto @param {any} uf */
+export function aPesos(ufMonto, uf) {
+  const m = Number(ufMonto), u = Number(uf)
+  return ufMonto != null && Number.isFinite(m) && Number.isFinite(u) && u > 0 ? m * u : null
+}
+/** Media de las UF válidas (> 0); null si no hay ninguna. @param {any[]} valores */
+export function ufMedia(valores) {
+  const v = (valores || []).map(Number).filter((x) => Number.isFinite(x) && x > 0)
+  return v.length ? sum(v) / v.length : null
+}
+/**
+ * Suma movimientos fechados en pesos y en UF, cada uno con la UF de su día; los que no tienen UF válida se convierten con `respaldo` (y se cuentan en `sinUF`).
+ * @param {{ monto:number, fecha:string }[]} movs @param {(fecha:string)=>number|null|undefined} ufDeFecha @param {number|null} [respaldo]
+ */
+export function sumaConUF(movs, ufDeFecha, respaldo = null) {
+  let clp = 0, uf = 0, sinUF = 0
+  for (const m of movs || []) {
+    const c = num(m.monto); clp += c
+    let u = Number(ufDeFecha(m.fecha)); if (!(u > 0)) { u = Number(respaldo); sinUF++ }
+    if (u > 0) uf += c / u
+  }
+  return { clp, uf, sinUF }
+}
+
 /** Resumen por escenario que se guarda con cada versión (y sus facturados mensuales, congelados: la base se mueve cada mes). @param {ReturnType<typeof modeloPresupuesto>} m */
 export function resumenModelo(m) {
   const o = /** @type {Record<string, any>} */ ({})

@@ -7,11 +7,11 @@ import { C, useIsDesktop } from '../lib/base.jsx'
 import { PageHeader } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { ESCENARIOS, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos } from '../../supabase/functions/_shared/presupuesto.js'
-import { mm, ufs, pc, Kpi, Seg, Btn, Fld, Grid, Titulo, ESC_TONO, EstilosPresupuesto } from '../lib/presupuestoUI.jsx'
+import { mm, pc, Kpi, Btn, Fld, Grid, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic } from '../lib/presupuestoUI.jsx'
 import { calcMetas } from '../lib/presupuestoBloques.jsx'
 import { Mirada, Base, Costos } from './presupuestoEtapas1.jsx'
 import { Metas } from './presupuestoMetas.jsx'
-import { Escenarios, Seguimiento, vistaDrill, titulosDrill } from './presupuestoEtapas2.jsx'
+import { Escenarios, Seguimiento, vistaDrill, titulosDrill, descargarExcel } from './presupuestoEtapas2.jsx'
 
 const scrollEl = () => (typeof document !== 'undefined' ? document.getElementById('main-scroll') : null)
 const getY = () => { const e = scrollEl(); return e ? e.scrollTop : window.scrollY }
@@ -101,9 +101,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // ── Modelo ──
   const M = useMemo(() => (est ? modeloPresupuesto(datos.base, est) : null), [datos.base, est])
   const U = M ? M.ufMed : 1
-  const moneda = est ? est.moneda : 'clp'
-  const fm = (v) => (moneda === 'uf' ? ufs(v / U) : moneda === 'ambos' ? <span>{mm(v)}<div style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>{ufs(v / U)}</div></span> : mm(v))
-  const fmS = (v) => (moneda === 'uf' ? ufs(v / U) : mm(v))
+  setMoneda({ moneda: est ? est.moneda : 'clp', uf27: M ? M.ufMed : 0, uf26: datos.uf26.med })   // formateador único (presupuestoUI): todo el dinero de los pasos y detalles lo sigue
   const nomEsc = (k) => ESCENARIOS.find((x) => x[0] === k)[1]
 
   // ── Cambios del estado ──
@@ -161,7 +159,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
 
   const MT = est ? calcMetas(datos, est) : null
-  const X = { D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, fm, fmS, nomEsc, ESC: ESCENARIOS, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
+  const X = { D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, ESC: ESCENARIOS, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
     irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
@@ -175,24 +173,24 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const cuerpo = drill ? vistaDrill(X, drill)
     : ui.etapa === 0 ? <Mirada X={X} /> : ui.etapa === 1 ? <Base X={X} /> : ui.etapa === 2 ? <Costos X={X} /> : ui.etapa === 3 ? <Metas X={X} /> : ui.etapa === 4 ? <Escenarios X={X} /> : <Seguimiento X={X} />
   const irEtapa = (i) => { setDrill(null); setUI({ etapa: i }); setY(0) }
-  const chipEstado = <button onClick={() => ir({ drill: { t: 'ver' } })} style={{ border: `1px solid ${guardado.est === 'error' ? C.overdueBd : C.border}`, background: guardado.est === 'error' ? C.overdueBg : C.card, color: guardado.est === 'error' ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, padding: '7px 14px', borderRadius: 20, cursor: 'pointer' }}>Versiones · {estadoTxt}</button>
+  const estadoCorto = { cargando: 'cargando…', pendiente: 'sin guardar', guardando: 'guardando…', error: 'no se guardó', local: 'en este equipo', ok: 'guardado' }[guardado.est] || 'guardado'
+  const chipEstado = <ChipBtn error={guardado.est === 'error'} titulo={estadoTxt} onClick={() => ir({ drill: { t: 'ver' } })}>Versiones · {estadoCorto}</ChipBtn>
+  const MONEDAS = [['clp', 'Pesos'], ['uf', 'UF'], ['ambos', 'Pesos y UF']]
+  const chipMoneda = <span style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontWeight: 700, fontSize: 12.5, height: 32, padding: '0 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center' }}><Menu aria='Moneda' derecha boton={est.moneda === 'uf' ? 'UF' : est.moneda === 'ambos' ? '$ · UF' : '$'} opciones={MONEDAS} valor={est.moneda} onChange={(v) => setGen('moneda', v)} /></span>
+  const chipExcel = <ChipBtn cuadrado aria='Descargar Excel' onClick={() => descargarExcel(X)}><Ic n='doc' s={16} /></ChipBtn>
+  const controles = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{chipMoneda}{chipEstado}{chipExcel}</span>
+  const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`]]} valor={anio} onChange={async (a) => { if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
+  const DESC = ['Lo ocurrido en el año base', 'Recurrente y por facturar, antes de vender', 'Presupuesto de costos de la oficina', 'Lo que se quiere retirar, ganar, cobrar y vender', 'Tres hipótesis de crecimiento contra las metas', 'Lo presupuestado contra lo real, mes a mes']
 
   return <div style={{ ...wrap, display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
     <EstilosPresupuesto />
-    <PageHeader origen={origen} onBack={volver} titulo={drill ? titulosDrill(X, drill) : `Presupuesto ${anio}`} right={D ? chipEstado : null} style={{ margin: D ? '-12px -20px 0' : '-8px -16px 0' }} />
-    {!D && <div>{chipEstado}</div>}
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-      {!drill && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{ETAPAS.map((t, i) => <button key={t} onClick={() => irEtapa(i)} style={{ border: `1px solid ${ui.etapa === i ? C.azulBg : C.border}`, background: ui.etapa === i ? C.azulBg : C.card, color: ui.etapa === i ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: ui.etapa === i ? 800 : 600, padding: '7px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap' }}>{est.hecho.includes(i) ? '✓ ' : ''}{i + 1} · {t}</button>)}</div>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
-        <Seg options={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`]]} value={anio} onChange={async (a) => { if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} />
-        <Seg options={ESCENARIOS} value={est.esc} onChange={setEsc} tonos={ESC_TONO} />
-        <Seg options={[['clp', 'Pesos'], ['uf', 'UF'], ['ambos', 'Ambos']]} value={est.moneda} onChange={(v) => setGen('moneda', v)} />
-      </div>
-    </div>
-    {!drill && ui.etapa > 0 && ui.etapa !== 3 && <Grid cols={4} colsM={2}>
-      <Kpi tono='g' ic='res' label='Resultado' value={fm(e.post)} sub='después de impuesto' onClick={() => ir({ etapa: 4, tab: 'res' })} />
-      <Kpi tono='a' ic='ing' label='Ingresos' value={fm(e.fact)} sub={`facturado ${anio}`} onClick={() => ir({ etapa: 1 })} />
-      <Kpi tono='y' ic='egr' label='Egresos' value={fm(-e.egr)} sub='costos + comisiones + impuesto' onClick={() => ir({ etapa: 2 })} />
+    <PageHeader origen={origen} onBack={volver} titulo={titulo} right={D ? controles : null} style={{ margin: D ? '-12px -20px 0' : '-8px -16px 0' }} />
+    {!D && <div>{controles}</div>}
+    {!drill && <Pasos nombres={ETAPAS} activa={ui.etapa} hechos={est.hecho} onIr={irEtapa} anioBase={datos.anioBase} anio={anio} desc={DESC} />}
+    {!drill && (ui.etapa === 4 || ui.etapa === 5) && <Grid cols={4} colsM={2}>   {/* siguen al escenario elegido: solo donde el escenario importa */}
+      <Kpi tono='g' ic='res' label='Resultado' value={mm(e.post)} sub='después de impuesto' onClick={() => ir({ etapa: 4, tab: 'res' })} />
+      <Kpi tono='a' ic='ing' label='Ingresos' value={mm(e.fact)} sub={`facturado ${anio}`} onClick={() => ir({ etapa: 1 })} />
+      <Kpi tono='y' ic='egr' label='Egresos' value={mm(-e.egr)} sub='costos + comisiones + impuesto' onClick={() => ir({ etapa: 2 })} />
       <Kpi tono='w' ic='gauge' label='Margen' value={e.caja > 0 ? pc((e.post / e.caja) * 100) : '—'} sub='sobre lo cobrado' onClick={() => ir({ etapa: 4, tab: 'imp' })} />
     </Grid>}
     {cuerpo}

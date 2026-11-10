@@ -4,7 +4,7 @@ import { C, useIsDesktop, fmtFechaDMY } from './base.jsx'
 import {
   ANCLAS, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos,
 } from '../../supabase/functions/_shared/presupuesto.js'
-import { mm, pc, Flecha, Fld, Panel, Seg, Titulo, LBL } from './presupuestoUI.jsx'
+import { mm, mx, pc, Flecha, Fld, Panel, Seg, Titulo, LBL, Val, difMon } from './presupuestoUI.jsx'
 
 /**
  * Las metas 2027 con lo que haya escrito el usuario: el componente fijado (ancla) y su valor; sin nada escrito parte con los retiros reales de 2026.
@@ -24,14 +24,12 @@ export function calcMetas(d, est) {
 /** Motivo en texto de una meta sin solución. */
 export const motivoMeta = (/** @type {string|null|undefined} */ m) => (m === 'valor' ? 'Escribe una meta mayor que cero.' : m === 'ratio' ? 'Falta la relación facturado/vendido para llevar la meta de ventas a facturado.' : m === 'base' ? 'No hay facturas en los últimos 12 meses cerrados: la base está en cero.' : m === 'supuestos' ? 'Con estos supuestos la meta no tiene solución: revisa comisiones, días de cobro, impuesto y reserva.' : 'La meta pide un facturado negativo: sube el valor.')
 
-const sg = (/** @type {number} */ x) => (x >= 0 ? '+' : '−')
-
-/** Comparación con flecha contra la referencia: variación % y diferencia en pesos (el Presupuesto de costos, una sola flecha). */
-export function Cmp({ comp, v, refv }) {
+/** Comparación con flecha contra la referencia: variación % y diferencia (el Presupuesto de costos, una sola flecha). `vU`/`refU` = las mismas cifras en UF si la fuente las trae; en UF se compara UF contra UF. */
+export function Cmp({ comp, v, refv, vU = null, refU = null }) {
   if (v == null || refv == null) return <span>—</span>
-  const sube = v >= refv, bueno = afavor(comp, sube), dif = v - refv, p = refv ? (v / refv - 1) * 100 : null
-  if (comp === 'costos') return <Flecha sube={sube} bueno={bueno}>{sg(dif)}{mm(Math.abs(dif))}{p != null ? ` · ${sg(p)}${pc(Math.abs(p))}` : ''}</Flecha>
-  return <>{p != null && <Flecha sube={sube} bueno={bueno}>{sg(p)}{pc(Math.abs(p))}</Flecha>}<Flecha sube={sube} bueno={bueno}>{sg(dif)}{mm(Math.abs(dif))}</Flecha></>
+  const d = difMon(v, refv, vU, refU), bueno = afavor(comp, d.sube)
+  if (comp === 'costos') return <Flecha sube={d.sube} bueno={bueno}>{d.sg}{d.abs}{d.pct != null ? ` · ${d.sg}${pc(Math.abs(d.pct))}` : ''}</Flecha>
+  return <>{d.pct != null && <Flecha sube={d.sube} bueno={bueno}>{d.sg}{pc(Math.abs(d.pct))}</Flecha>}<Flecha sube={d.sube} bueno={bueno}>{d.sg}{d.abs}</Flecha></>
 }
 
 /** Frase de qué escenario cubre la meta. */
@@ -67,7 +65,7 @@ export function ReservaBloque({ X, ch, irBanco }) {
   const D = useIsDesktop(), { est } = X
   const r = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post) })
   const fila = (t, v, o = {}) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: D ? '10px 20px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13, alignItems: 'baseline', background: o.tot ? C.bgSoft : 'transparent', fontWeight: o.tot ? 800 : 400 }}><span style={{ minWidth: 0 }}>{t}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: o.tot ? C.accent : C.text }}>{v}</span></div>
-  return <Panel hd='Reserva de caja' small={irBanco ? <span onClick={irBanco} style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>por confirmar contra el saldo del Banco ›</span> : 'por confirmar contra el saldo del Banco'}>
+  return <Panel hd='Reserva de caja' small={irBanco ? <span onClick={irBanco} style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>por confirmar en Banco ›</span> : 'por confirmar en Banco'}>
     {fila(<>Reserva mínima <span style={{ color: C.muted, fontSize: 12 }}>· base que no se toca</span></>, mm(est.reservaIni))}
     {fila(`+ Reserva del año (${pc(est.reserva, 0)} de ${mm(Math.max(0, ch.post))} después de impuesto)`, mm(ch.reserva))}
     {fila('= Reserva al cierre', mm(ch.reservaCierre), { tot: true })}
@@ -87,6 +85,11 @@ export function repartoSocios(X, alza, retiros) {
   const d = X.datos
   return sueldosYRetiros({ socios: d.retiros26.socios, costos: X.est.costos, alza, retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio } })
 }
+/** Lo real de 2026 de cada socio en UF (cada sueldo y retiro con la UF de su día). @param {any} X */
+export function repartoSocios26UF(X) {
+  const d = X.datos
+  return sueldosYRetiros({ socios: d.retiros26.socios, costos: [], alza: 0, retiros: 0, real: { sueldos: d.retiros26.sueldosUF, retiros: d.retiros26.porSocioUF } })
+}
 
 /**
  * Sueldos y retiros de los socios: el mismo dinero del presupuesto visto por socio (no se suma a los costos; Margen y Retiros no cambian).
@@ -94,35 +97,43 @@ export function repartoSocios(X, alza, retiros) {
  */
 export function SociosBloque({ X, alza, retiros, solo26, ir }) {
   const D = useIsDesktop(), { ui, setUI, datos: d } = X, mensual = ui.sm === 'm'
-  const R = repartoSocios(X, alza, retiros ?? 0)
+  const R = repartoSocios(X, alza, retiros ?? 0), U = repartoSocios26UF(X)
   const f26 = mensual ? 1 / Math.max(1, mesesTranscurridos(d.hoy)) : 1, f27 = mensual ? 1 / 12 : 1
-  const fila = (key, nombre, sueldo, ret, tot, cmp, o = {}) => D
-    ? <div key={key} onClick={ir} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) repeat(3,minmax(0,1fr)) minmax(0,1.1fr)', gap: 8, padding: '9px 20px', borderTop: `1px solid ${C.border}`, fontSize: 13, alignItems: 'center', cursor: ir ? 'pointer' : 'default', background: o.tt ? C.bgSoft : 'transparent' }}>
-      <span style={{ fontWeight: o.tt ? 800 : 600, color: o.tt ? C.accent : C.text }}>{nombre}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{mm(sueldo)}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{mm(ret)}</span><b style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.accent }}>{mm(tot)}</b><span style={{ textAlign: 'right' }}>{cmp}</span></div>
-    : <div key={key} onClick={ir} style={{ padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: ir ? 'pointer' : 'default', background: o.tt ? C.bgSoft : 'transparent', display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: '4px 8px' }}>
-      <span style={{ gridColumn: '1 / -1', fontWeight: o.tt ? 800 : 600, color: o.tt ? C.accent : C.text }}>{nombre}</span>
-      {[['Sueldos', mm(sueldo)], ['Retiros', mm(ret)], ['Total', mm(tot)]].map(([c, v]) => <span key={c} style={{ fontVariantNumeric: 'tabular-nums' }}><span style={{ display: 'block', fontSize: 10.5, color: C.muted }}>{c}</span>{c === 'Total' ? <b style={{ color: C.accent }}>{v}</b> : v}</span>)}
-      {cmp && <span style={{ gridColumn: '1 / -1' }}>{cmp}</span>}</div>
+  // 2026: pesos y UF de la fuente (u = {s, r, t} en UF); 2027: pesos del modelo con la UF media del año.
+  const g = (/** @type {number} */ clp, /** @type {number|undefined} */ u, /** @type {number} */ f) => (u == null ? mm(clp * f) : mx(clp * f, u * f))
+  const fila = (key, nombre, sueldo, ret, tot, cmp, o = {}, u = null) => {
+    const vs = [g(sueldo, u?.s, 1), g(ret, u?.r, 1), g(tot, u?.t, 1)]
+    return D
+      ? <div key={key} onClick={ir} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) repeat(3,minmax(0,1fr)) minmax(0,1.1fr)', gap: 8, padding: '9px 20px', borderTop: `1px solid ${C.border}`, fontSize: 13, alignItems: 'center', cursor: ir ? 'pointer' : 'default', background: o.tt ? C.bgSoft : 'transparent' }}>
+        <span style={{ fontWeight: o.tt ? 800 : 600, color: o.tt ? C.accent : C.text }}>{nombre}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><Val v={vs[0]} /></span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><Val v={vs[1]} /></span><b style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.accent }}><Val v={vs[2]} /></b><span style={{ textAlign: 'right' }}>{cmp}</span></div>
+      : <div key={key} onClick={ir} style={{ padding: '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: ir ? 'pointer' : 'default', background: o.tt ? C.bgSoft : 'transparent', display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: '4px 8px' }}>
+        <span style={{ gridColumn: '1 / -1', fontWeight: o.tt ? 800 : 600, color: o.tt ? C.accent : C.text }}>{nombre}</span>
+        {[['Sueldos', vs[0]], ['Retiros', vs[1]], ['Total', vs[2]]].map(([c, v]) => <span key={c} style={{ fontVariantNumeric: 'tabular-nums' }}><span style={{ display: 'block', fontSize: 10.5, color: C.muted }}>{c}</span>{c === 'Total' ? <b style={{ color: C.accent }}><Val v={v} /></b> : <Val v={v} />}</span>)}
+        {cmp && <span style={{ gridColumn: '1 / -1' }}>{cmp}</span>}</div>
+  }
   const cabeza = D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) repeat(3,minmax(0,1fr)) minmax(0,1.1fr)', gap: 8, padding: '10px 20px', ...LBL, color: C.accent }}><span>Socio</span><span style={{ textAlign: 'right' }}>Sueldos</span><span style={{ textAlign: 'right' }}>Retiros</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ textAlign: 'right' }}>{solo26 ? '' : 'Variación'}</span></div>
+  const u26 = (/** @type {any} */ f) => ({ s: f.sueldo26, r: f.ret26, t: f.tot26 })
+  const cmp27 = (/** @type {number} */ v, /** @type {number} */ r, /** @type {number} */ rU) => <Cmp comp='retiros' v={v * f27} refv={r * f26} refU={rU * f26} />
   return <>
     <Titulo right={<Seg options={[['a', 'Anual'], ['m', 'Mensual']]} value={mensual ? 'm' : 'a'} onChange={(v) => setUI({ sm: v })} />}>Sueldos y retiros de los socios · {solo26 ? d.anioBase : d.anio}</Titulo>
     <Panel>
       {cabeza}
-      {R.filas.flatMap((f) => solo26
-        ? [fila(f.nombre, f.nombre, f.sueldo26 * f26, f.ret26 * f26, f.tot26 * f26, null)]
-        : [fila(f.nombre + '26', `${f.nombre} · ${d.anioBase} real`, f.sueldo26 * f26, f.ret26 * f26, f.tot26 * f26, null),
-          fila(f.nombre + '27', `${f.nombre} · ${d.anio} meta`, f.sueldo27 * f27, f.ret27 * f27, f.tot27 * f27, <Cmp comp='retiros' v={f.tot27 * f27} refv={f.tot26 * f26} />)])}
+      {R.filas.flatMap((f, i) => solo26
+        ? [fila(f.nombre, f.nombre, f.sueldo26 * f26, f.ret26 * f26, f.tot26 * f26, null, {}, scale(u26(U.filas[i]), f26))]
+        : [fila(f.nombre + '26', `${f.nombre} · ${d.anioBase} real`, f.sueldo26 * f26, f.ret26 * f26, f.tot26 * f26, null, {}, scale(u26(U.filas[i]), f26)),
+          fila(f.nombre + '27', `${f.nombre} · ${d.anio} meta`, f.sueldo27 * f27, f.ret27 * f27, f.tot27 * f27, cmp27(f.tot27, f.tot26, U.filas[i].tot26))])}
       {solo26
-        ? fila('t', 'Oficina', R.total.sueldo26 * f26, R.total.ret26 * f26, R.total.tot26 * f26, null, { tt: true })
-        : <>{fila('t26', `Oficina · ${d.anioBase} real`, R.total.sueldo26 * f26, R.total.ret26 * f26, R.total.tot26 * f26, null, { tt: true })}{fila('t27', `Oficina · ${d.anio} meta`, R.total.sueldo27 * f27, R.total.ret27 * f27, R.total.tot27 * f27, <Cmp comp='retiros' v={R.total.tot27 * f27} refv={R.total.tot26 * f26} />, { tt: true })}</>}
+        ? fila('t', 'Oficina', R.total.sueldo26 * f26, R.total.ret26 * f26, R.total.tot26 * f26, null, { tt: true }, scale(u26(U.total), f26))
+        : <>{fila('t26', `Oficina · ${d.anioBase} real`, R.total.sueldo26 * f26, R.total.ret26 * f26, R.total.tot26 * f26, null, { tt: true }, scale(u26(U.total), f26))}{fila('t27', `Oficina · ${d.anio} meta`, R.total.sueldo27 * f27, R.total.ret27 * f27, R.total.tot27 * f27, cmp27(R.total.tot27, R.total.tot26, U.total.tot26), { tt: true })}</>}
     </Panel>
     <div style={{ fontSize: 12, color: C.muted, margin: '-6px 4px 0' }}>
-      {solo26 ? 'Los sueldos ya están en el presupuesto de costos (Remuneraciones): es el mismo dinero visto por socio. El impuesto personal de cada socio no se proyecta.'
-        : `Sueldo ${d.anio} = Remuneraciones de cada socio con su aumento; sus leyes sociales son costo de la oficina. No se suman a los costos: Margen y Retiros no cambian. Retiros en partes iguales.`}{mensual ? ` Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses transcurridos.` : ''}
-      {!solo26 && d.retiros26.desde ? ` Retiros ${d.anioBase}: ${d.retiros26.n} entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}, por confirmar contra la página Socios.` : ''}
+      {solo26 ? 'Los sueldos ya están en Remuneraciones: es el mismo dinero, visto por socio.'
+        : `Sueldo = Remuneraciones del socio con su aumento; no se suma a los costos. Retiros en partes iguales.`}{mensual ? ` Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses.` : ''}
+      {!solo26 && d.retiros26.desde ? ` Retiros ${d.anioBase}: ${d.retiros26.n} entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}, por confirmar en Socios.` : ''}
     </div>
   </>
 }
+const scale = (/** @type {{s:number,r:number,t:number}} */ u, /** @type {number} */ f) => ({ s: u.s * f, r: u.r * f, t: u.t * f })
 
 /** Estado de resultados de la meta, con el cierre 2026 estimado al lado y la variación. */
 export function TablaPresupuesto({ X, MT, irPaso }) {
@@ -133,12 +144,12 @@ export function TablaPresupuesto({ X, MT, irPaso }) {
     ['−', 'Impuesto de primera categoría', ch.idpc, null, null, 0], ['=', 'Después de impuesto', ch.post, null, null, 1], ['−', 'Reserva de caja', ch.reserva, null, null, 0], ['=', 'Retiros', ch.retiros, ref.retiros.cierre, 'retiros', 1],
   ]
   const g = D ? 'minmax(0,1fr) 110px 110px 150px' : 'minmax(0,1fr) 88px 88px'
-  return <Panel hd={`Presupuesto ${an}`} small='la meta escrita, como estado de resultados'>
+  return <Panel hd={`Presupuesto ${an}`} small='estado de resultados'>
     <div style={{ display: 'grid', gridTemplateColumns: g, gap: 10, padding: '10px 16px', ...LBL, color: C.accent }}><span /><span style={{ textAlign: 'right' }}>{an}</span><span style={{ textAlign: 'right' }}>Cierre {X.datos.anioBase}</span>{D && <span style={{ textAlign: 'right' }}>Variación</span>}</div>
     {L.map(([op, t, v, r, comp, tot, go], i) => <div key={i} onClick={go} style={{ display: 'grid', gridTemplateColumns: g, gap: 10, padding: '9px 16px', borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400, fontSize: 13, cursor: go ? 'pointer' : 'default', alignItems: 'center' }}>
       <span><span style={{ display: 'inline-block', width: 16, color: C.textSoft, fontWeight: 700 }}>{op}</span>{t}{go ? <span style={{ color: C.done }}> ›</span> : null}</span>
-      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{v != null ? mm(v) : '—'}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}>{r != null ? mm(r) : '—'}</span>
-      {D && <span style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>{comp && v != null && r != null ? <Cmp comp={comp} v={v} refv={r} /> : ''}</span>}</div>)}
+      <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><Val v={v != null ? mm(v) : '—'} /></span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}><Val v={r != null ? mx(r, comp ? X.datos.refUF[comp].cierre : null) : '—'} /></span>
+      {D && <span style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>{comp && v != null && r != null ? <Cmp comp={comp} v={v} refv={r} refU={X.datos.refUF[comp].cierre} /> : ''}</span>}</div>)}
   </Panel>
 }
 

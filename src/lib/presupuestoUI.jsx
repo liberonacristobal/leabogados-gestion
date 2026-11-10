@@ -2,11 +2,59 @@
 import { useState, useEffect, useRef } from 'react'
 import { C, useIsDesktop } from './base.jsx'
 import { fmtMill } from './compartido.jsx'
+import { aUF, aPesos } from '../../supabase/functions/_shared/presupuesto.js'
 
 export const nf = new Intl.NumberFormat('es-CL')
-export const mm = fmtMill
 export const pes = n => (n < 0 ? '−' : '') + '$' + nf.format(Math.abs(Math.round(n)))
 export const ufs = n => (n < 0 ? '−' : '') + nf.format(Math.abs(Math.round(n))) + ' UF'
+
+// ── Moneda: UN solo formateador para toda cifra en dinero del Presupuesto ──
+// El selector Pesos / UF / Ambos vive en el estado del presupuesto; PresupuestoView lo fija en cada render con `setMoneda` (antes de dibujar los pasos) y todo lo demás pasa por estas funciones.
+// Qué UF usa cada una: `mm` = cifras 2027 proyectadas (UF media del año del modelo; los meses traen su propia UF y usan `mx`); `mx` = cifras con su UF exacta (la del día o período de cada movimiento, de la fuente);
+// `m26` = cifra 2026 que solo existe en pesos: UF media de los meses transcurridos, marcada «≈». Los nombres con P devuelven una sola moneda (en Ambos, pesos) para chips, flechas y gráficos.
+let CFG = { moneda: 'clp', uf27: 0, uf26: 0 }
+/** @param {{ moneda?:string, uf27?:number, uf26?:number }} c */
+export const setMoneda = (c) => { CFG = { moneda: c.moneda === 'uf' || c.moneda === 'ambos' ? c.moneda : 'clp', uf27: Number(c.uf27) > 0 ? Number(c.uf27) : 0, uf26: Number(c.uf26) > 0 ? Number(c.uf26) : 0 } }
+export const monedaActual = () => CFG.moneda
+export const tasa27 = () => CFG.uf27
+export const tasa26 = () => CFG.uf26
+const AMB = '\u2060 · '                       // separa pesos y UF en Ambos; las tarjetas lo parten en dos líneas
+const ufTxt = (/** @type {number|null} */ u, /** @type {boolean} */ aprox, dec = 0) => (u == null || !isFinite(u) ? '—' : (aprox ? '≈ ' : '') + (u < 0 ? '−' : '') + Math.abs(u).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' UF')
+const dinero = (/** @type {any} */ clp, /** @type {number|null} */ u, /** @type {boolean} */ aprox, /** @type {(n:number)=>string} */ fp, dec, /** @type {boolean} */ una) => {
+  const c = Number(clp) || 0, m = CFG.moneda
+  if (m === 'clp' || (una && m === 'ambos')) return fp(c)
+  return m === 'uf' ? ufTxt(u, aprox, dec) : fp(c) + AMB + ufTxt(u, aprox, dec)
+}
+/** Cifra 2027 (o del modelo): pesos y UF media del año. */
+export const mm = (/** @type {any} */ clp) => dinero(clp, aUF(clp, CFG.uf27), false, fmtMill, 0, false)
+/** Con la UF exacta de la fuente (`ufMonto`); sin ella, UF media de 2026 marcada «≈». */
+export const mx = (/** @type {any} */ clp, /** @type {number|null|undefined} */ ufMonto) => { const ok = ufMonto != null && isFinite(ufMonto); return dinero(clp, ok ? ufMonto : aUF(clp, CFG.uf26), !ok, fmtMill, 0, false) }
+/** Cifra 2026 que solo existe en pesos. */
+export const m26 = (/** @type {any} */ clp) => mx(clp, null)
+/** Una sola moneda (pesos en Ambos): chips, flechas y gráficos. */
+export const mmP = (/** @type {any} */ clp) => dinero(clp, aUF(clp, CFG.uf27), false, fmtMill, 0, true)
+export const mxP = (/** @type {any} */ clp, /** @type {number|null|undefined} */ ufMonto) => { const ok = ufMonto != null && isFinite(ufMonto); return dinero(clp, ok ? ufMonto : aUF(clp, CFG.uf26), !ok, fmtMill, 0, true) }
+/** Pesos completos (monto mensual): «$1.234.567»; en UF con dos decimales. `ufMonto` opcional como en `mx`. */
+export const mp = (/** @type {any} */ clp, /** @type {number|null|undefined} */ ufMonto) => { const ok = ufMonto != null && isFinite(ufMonto); return dinero(clp, ok ? ufMonto : aUF(clp, CFG.uf26), !ok, pes, 2, false) }
+/**
+ * Diferencia entre una cifra `a` (2027 o del modelo) y una referencia `b` (2026): en UF compara UF contra UF (crecimiento real); en Pesos y Ambos, pesos.
+ * Sin UF propia, `a` usa la UF media 2027 y `b` la media 2026 («≈»).
+ * @param {number} a @param {number} b @param {number|null} [aU] @param {number|null} [bU]
+ */
+export function difMon(a, b, aU = null, bU = null) {
+  const ua = aU ?? aUF(a, CFG.uf27), ub = bU ?? aUF(b, CFG.uf26), uf = CFG.moneda === 'uf' && ua != null && ub != null
+  const x = uf ? /** @type {number} */ (ua) : a, y = uf ? /** @type {number} */ (ub) : b, dif = x - y
+  return { sube: dif >= 0, sg: dif >= 0 ? '+' : '−', abs: uf ? ufTxt(Math.abs(dif), bU == null) : fmtMill(Math.abs(dif)), pct: y ? (x / y - 1) * 100 : null }
+}
+/** UF → pesos con la UF dada, de ida y vuelta con `aUF`. */
+export { aUF, aPesos }
+/** Parte «pesos / UF» de una cifra en Ambos; null si es de una sola moneda. */
+export const partirDin = (/** @type {any} */ v) => { const p = typeof v === 'string' ? v.split(AMB) : []; return p.length === 2 ? p : null }
+/** Cifra en una celda: en Ambos, los pesos y debajo la UF en chico. */
+export function Val({ v }) {
+  const p = partirDin(v)
+  return p ? <>{p[0]}<span style={{ display: 'block', fontSize: '.55em', fontWeight: 500, letterSpacing: 0, color: C.muted, lineHeight: 1.25, whiteSpace: 'nowrap' }}>{p[1]}</span></> : <>{v}</>
+}
 export const pc = (n, d = 1) => (n == null || !isFinite(n) ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' %')
 export const sgn = v => (v >= 0 ? '+' : '−')
 export const MESL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -14,7 +62,7 @@ export const MESC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'se
 
 // Número editable con coma decimal y punto de miles: «1.000.000», «4,5».
 // `mill` = pesos mostrados en millones con un decimal («101,0»); al escribir, un número de 100.000 o más se entiende como pesos y uno menor como millones.
-export const fmtIn = (v, k) => (v == null || v === '' ? '' : k === 'mill' ? (v / 1e6).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : k === 'money' ? nf.format(Math.round(v)) : k === 'int' ? String(Math.round(v)) : Number(v).toLocaleString('es-CL', { maximumFractionDigits: 3 }))
+export const fmtIn = (v, k) => (v == null || v === '' ? '' : k === 'uf' ? Number(v).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : k === 'mill' ? (v / 1e6).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : k === 'money' ? nf.format(Math.round(v)) : k === 'int' ? String(Math.round(v)) : Number(v).toLocaleString('es-CL', { maximumFractionDigits: 3 }))
 export const parseIn = t => { const x = parseFloat(String(t).replace(/[$\sM%]/g, '').replace(/−/g, '-').replace(/\./g, '').replace(',', '.')); return Number.isFinite(x) ? x : NaN }
 
 const P = {
@@ -47,7 +95,7 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
   const t = TONO[tono], D = useIsDesktop()
   return <div onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '12px 10px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 32 : 30, height: D ? 32 : 30, borderRadius: D ? 10 : 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
+    <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 22 : 20, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
   </div>
 }
 
@@ -56,7 +104,7 @@ export function Mini({ ic, label, value, sub, cls, onClick }) {
   const col = cls === 'pos' ? C.greenText : cls === 'neg' ? C.overdueText : cls === 'amb' ? C.soonText : C.accent
   return <div onClick={onClick} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: 34, height: 34, borderRadius: 10, background: C.azulBg, color: C.azulInfo, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
+    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
   </div>
 }
 
@@ -108,6 +156,18 @@ export function Fld({ kind = 'pct', value, onCommit, pre, suf, ph, w = 132, text
   </label>
 }
 
+/**
+ * Campo de dinero que sigue al selector: en Pesos escribe pesos (`kind` money o mill, como el campo original); en UF escribe UF con dos decimales y guarda pesos = UF × `tasa`;
+ * en Ambos escribe pesos y muestra debajo el equivalente en UF. `clp` = valor guardado (pesos); `tasa` = UF con que se convierte (27 = `tasa27()`, 26 = `tasa26()`, aproximada).
+ */
+export function FldDin({ clp, tasa, onCommit, kind = 'money', pre = '$', suf, ...rest }) {
+  const m = CFG.moneda, ok = Number(tasa) > 0
+  if (m === 'uf' && ok) return <Fld {...rest} kind='uf' suf=' UF' value={Math.round((Number(clp) / tasa) * 100) / 100} onCommit={(x) => onCommit(Math.round(x * tasa))} />
+  const campo = <Fld {...rest} kind={kind} pre={pre} suf={suf} value={clp} onCommit={onCommit} />
+  if (m !== 'ambos' || !ok) return campo
+  return <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>{campo}<span style={{ fontSize: 10.5, fontWeight: 500, color: C.muted, letterSpacing: 0, lineHeight: 1.3 }}>{ufTxt(Number(clp) / tasa, false)}</span></span>
+}
+
 // Estilos del campo sobrio (hover, foco y pantallas táctiles no se pueden escribir en línea). Una sola vez, al abrir el Presupuesto.
 export function EstilosPresupuesto() {
   const A = C.accent, tenue = `color-mix(in srgb, ${A} 14%, transparent)`, medio = `color-mix(in srgb, ${A} 38%, transparent)`
@@ -146,8 +206,8 @@ export function Fila({ nombre, peq, valor, sub, onClick, abierta, sin, tot, chil
       <div style={{ minWidth: 0 }}><div style={{ fontWeight: tot ? 800 : 600 }}>{nombre}</div>{peq && <div style={{ fontSize: 11, color: C.muted, marginTop: 1, fontWeight: 400 }}>{peq}</div>}</div>
       <span style={{ color: C.done, fontSize: 16, lineHeight: 1, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>{onClick && !sin ? '›' : ''}</span>
       <span />
-      {D && <span style={{ textAlign: 'right', color: C.muted }}>{sub}</span>}
-      <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', gridColumn: D ? undefined : 4 }}>{valor}</span>
+      {D && <span style={{ textAlign: 'right', color: C.muted }}><Val v={sub} /></span>}
+      <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', gridColumn: D ? undefined : 4 }}><Val v={valor} /></span>
     </div>
     {children}
   </>
@@ -171,7 +231,7 @@ export const Flecha = ({ sube, bueno, children }) => <span style={{ fontWeight: 
 export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, det, onClick, aria }) {
   const t = TONO[tono], D = useIsDesktop(), [abre, setAbre] = useState(false), ref = useRef(null)
   const fig = f => <div style={{ minWidth: 0 }}><div style={{ fontSize: 10.5, fontWeight: 500, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 1 }}>{f.cap}</div>
-    <div style={{ fontSize: D ? 26 : 22, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}>{f.val}</div></div>
+    <div style={{ fontSize: D ? 26 : 22, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
   return <div ref={ref} role={onClick ? 'button' : undefined} aria-label={aria} onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <span style={{ width: 32, height: 32, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
@@ -185,3 +245,52 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, det, onClick, ar
     </div>}
   </div>
 }
+
+// ── Navegación del Presupuesto: menú desplegable, pasos numerados y pestañas subrayadas ──
+/** Botón con menú de opciones (año, moneda): se cierra al elegir o al tocar fuera. `boton` = contenido del botón; `opciones` = [[valor, rótulo]]. */
+export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }) {
+  const [abre, setAbre] = useState(false), ref = useRef(null)
+  useEffect(() => {
+    if (!abre) return
+    const fuera = (/** @type {any} */ e) => { if (ref.current && !ref.current.contains(e.target)) setAbre(false) }
+    document.addEventListener('mousedown', fuera); document.addEventListener('touchstart', fuera)
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('touchstart', fuera) }
+  }, [abre])
+  return <span ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
+    <button aria-label={aria} aria-haspopup='menu' aria-expanded={abre} onClick={() => setAbre((a) => !a)} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', ...estilo }}>{boton}<span aria-hidden='true' style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '5px solid currentColor', display: 'inline-block' }} /></button>
+    {abre && <div role='menu' style={{ position: 'absolute', top: '100%', [derecha ? 'right' : 'left']: 0, zIndex: 30, marginTop: 6, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 6, minWidth: 170, boxShadow: '0 8px 24px rgba(0,60,80,.14)' }}>
+      {opciones.map(([k, n]) => <button key={String(k)} role='menuitem' onClick={() => { setAbre(false); onChange(k) }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, fontFamily: 'inherit', cursor: 'pointer', padding: '9px 10px', borderRadius: 8, whiteSpace: 'nowrap', fontSize: 13, background: valor === k ? C.azulBg : 'transparent', color: valor === k ? C.accent : C.muted, fontWeight: valor === k ? 800 : 600 }}>{n}</button>)}
+    </div>}
+  </span>
+}
+
+/** Botón-chip de la barra de contexto (Versiones, Excel). */
+export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
+
+/**
+ * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
+ * En escritorio cada círculo lleva su nombre; en el celular solo los círculos y, debajo, «Paso n de 6» con el nombre del paso activo.
+ */
+export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc }) {
+  const D = useIsDesktop(), n = nombres.length
+  const cap = { fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.accent, paddingBottom: 5, borderBottom: `1px solid ${C.done}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, gap: 0 }}><span style={cap}>{D ? `Año base ${anioBase}` : anioBase}</span><span style={{ ...cap, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span></div>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, alignItems: 'start' }}>
+      {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
+        return <button key={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 8, padding: D ? '4px 2px' : 0, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 13 }}>
+          <span style={{ width: D ? 28 : 38, height: D ? 28 : 38, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: D ? 12.5 : 14, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
+          {D && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>}
+        </button> })}
+    </div>
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div></div>
+      {D && desc && <div style={{ fontSize: 12.5, color: C.muted }}>{desc[activa]}</div>}
+    </div>
+  </div>
+}
+
+/** Pestañas subrayadas (sub-vistas de un paso). */
+export const Pestanas = ({ options, value, onChange }) => <div role='tablist' style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${C.border}` }}>
+  {options.map(([k, n]) => { const on = value === k; return <button key={k} role='tab' aria-selected={on} onClick={() => onChange(k)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: '10px 2px', fontSize: 13, fontWeight: on ? 800 : 600, color: on ? C.accent : C.muted, borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, marginBottom: -1 }}>{n}</button> })}
+</div>
