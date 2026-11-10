@@ -90,3 +90,10 @@ test('diferencia estructurada: agrupa Supuestos, Costos, Metas y Notas; solo lo 
   assert.equal(g('Notas')[0].despues, 'Revisar alza'); assert.equal(g('Notas')[0].antes, '—')
   assert.ok(diferenciaSupuestos(A, B, f).some((x) => /Tasa de primera categoría/.test(x)))
 })
+
+import { referenciaSeguimiento } from './../supabase/functions/_shared/presupuesto.js'
+test('referencia del Seguimiento: la oficial manda; sin oficial, el año en curso anterior a 2027 va contra las metas y desde 2027 contra el borrador', () => {
+  assert.equal(referenciaSeguimiento({ actual: true, hayOficial: false, anio: 2026 }), 'metas'); assert.equal(referenciaSeguimiento({ actual: true, hayOficial: false, anio: 2027 }), 'borrador')
+  assert.equal(referenciaSeguimiento({ actual: false, hayOficial: false, anio: 2027 }), 'borrador'); assert.equal(referenciaSeguimiento({ actual: false, hayOficial: false, anio: 2028 }), 'borrador')
+  assert.equal(referenciaSeguimiento({ actual: true, hayOficial: true, anio: 2026 }), 'oficial'); assert.equal(referenciaSeguimiento({ actual: false, hayOficial: true, anio: 2028 }), 'oficial')
+})

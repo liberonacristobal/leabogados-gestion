@@ -729,3 +729,9 @@ export function diferenciaEstructurada(a, b, f) {
   for (const i of [...new Set([...Object.keys(na), ...Object.keys(nb)])].sort()) { const x = String(na[i] || '').trim(), y = String(nb[i] || '').trim(); if (x !== y) o.push({ grupo: 'Notas', etiqueta: paso(Number(i)), antes: x || '—', despues: y || '—' }) }
   return o
 }
+
+/**
+ * Contra qué se mide el Seguimiento de un año: con versión OFICIAL del presupuesto de ese año, contra ella (cubre los seis componentes); sin oficial, los años desde `primerAnio` (el primer año con presupuesto en la app, 2027)
+ * se miden contra el borrador y el año en curso anterior a eso (2026), contra las metas de ventas y cobranza y el presupuesto de costos del año. @param {{ actual:boolean, hayOficial:boolean, anio?:number, primerAnio?:number }} o @returns {'oficial'|'metas'|'borrador'}
+ */
+export const referenciaSeguimiento = ({ actual, hayOficial, anio, primerAnio = 2027 }) => (hayOficial ? 'oficial' : actual && !(Number(anio) >= primerAnio) ? 'metas' : 'borrador')

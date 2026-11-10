@@ -296,6 +296,22 @@ export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) =>
 export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acciones, debajo }) {
   const D = useIsDesktop(), n = nombres.length
   const cap = { fontSize: D ? 11 : 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.accent, paddingBottom: 5, borderBottom: `1px solid ${C.done}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  // Móvil (alternativa D): círculos numerados unidos por una línea que se vuelve verde en los pasos revisados; el título lleva ✓ y nota, sin «Paso n de 6». Zona táctil de 44 px por paso.
+  if (!D) return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div role='group' aria-label='Pasos del presupuesto' style={{ display: 'flex', alignItems: 'center' }}>
+      {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
+        return <span key={nom} style={{ display: 'contents' }}>
+          {i > 0 && <span aria-hidden='true' style={{ flex: 1, height: 2, background: hechos.includes(i - 1) ? C.normal : C.border }} />}
+          <button className='pp-tac' title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', padding: 0, width: 44, height: 44, display: 'grid', placeItems: 'center', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, margin: '0 -6px' }}>
+            <span style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}>{ok ? '✓' : i + 1}</span>
+          </button></span> })}
+    </div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2, minWidth: 0 }}>{nombres[activa]}</div>
+      {acciones && <div style={{ flexShrink: 0 }}>{acciones}</div>}
+    </div>
+    {debajo}
+  </div>
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, gap: 0 }}><span style={cap}>{D ? `Año base ${anioBase}` : anioBase}</span><span style={{ ...cap, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span></div>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, alignItems: 'start' }}>
@@ -319,10 +335,10 @@ export const Pestanas = ({ options, value, onChange }) => <div role='tablist' st
 </div>
 
 /** Sección plegada: una línea con el título, la cifra clave a la derecha y un chevrón; se abre y se cierra sin desmontar lo de adentro (lo escrito se conserva). */
-export function Pliegue({ t, v, children, abierto }) {
+export function Pliegue({ t, v, children, abierto, abajo }) {
   return <details open={abierto} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0 }}>
-    <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', fontSize: 13 }}>
-      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={{ flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16 }}>›</span>
+    <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', flexWrap: abajo ? 'wrap' : 'nowrap', gap: abajo ? '2px 10px' : 10, padding: '12px 16px', fontSize: 13 }}>
+      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={abajo ? { order: 3, flexBasis: '100%', textAlign: 'left', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 } : { flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16, marginLeft: abajo ? 'auto' : 0 }}>›</span>
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>

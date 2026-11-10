@@ -1,11 +1,11 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
-import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
+import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Pliegue, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 import { filasBase } from './presupuestoEtapas1.jsx'
 import { filasMetas } from './presupuestoMetas.jsx'
@@ -182,11 +182,9 @@ function seriesSeguimiento(X) {
   /** @type {Record<string,(number|null)[]>} */ const PU = {}, RU = {}
   const rate = (/** @type {number} */ i) => (actual ? d.uf26.porMes[i] : M.uf27[i]) || 1
   const nul = () => Array(12).fill(null)
-  if (actual) {
+  const ref = referenciaSeguimiento({ actual, hayOficial: !!of, anio: Y, primerAnio: CFG.primerAnio }), modoMetas = ref === 'metas'
+  if (actual) {   // el real del año en curso, mes a mes
     const costosP = d.costos26.mes
-    P.ventas = o.metaVentasCLP > 0 ? rep12(o.metaVentasCLP, 'ventas') : nul(); P.caja = o.metaCobroCLP > 0 ? rep12(o.metaCobroCLP, 'caja') : nul()
-    P.costos = costosP; P.fact = nul(); P.retiros = nul()
-    P.margen = P.caja.map((c, i) => (c == null ? null : c * (1 - terc) - costosP[i]))
     const cum = d.evo.vend, kU = o.vend.clp > 0 ? o.vend.uf / o.vend.clp : 0
     const vm = (/** @type {number} */ i) => (cum[i] == null ? null : cum[i] - (i > 0 ? cum[i - 1] ?? 0 : 0))
     R.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.fac ?? null); RU.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.facUF ?? null)
@@ -196,12 +194,18 @@ function seriesSeguimiento(X) {
     R.margen = R.caja.map((c, i) => (c == null || R.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (R.costos[i])))
     RU.margen = RU.caja.map((c, i) => (c == null || RU.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (RU.costos[i])))
     R.retiros = d.retiros26.mes.map((x) => x); RU.retiros = d.retiros26.mesUF.map((x) => x)
-  } else {
+    if (modoMetas) {   // sin oficial: metas de ventas y cobranza y presupuesto de costos del año; facturado y retiros no tienen presupuesto propio
+      P.ventas = o.metaVentasCLP > 0 ? rep12(o.metaVentasCLP, 'ventas') : nul(); P.caja = o.metaCobroCLP > 0 ? rep12(o.metaCobroCLP, 'caja') : nul()
+      P.costos = costosP; P.fact = nul(); P.retiros = nul()
+      P.margen = P.caja.map((c, i) => (c == null ? null : c * (1 - terc) - costosP[i]))
+    }
+  }
+  if (!modoMetas) {   // contra la versión oficial (o el borrador): sus metas cubren los seis componentes
     const e = of && of.resumen && of.resumen[esc] ? of.resumen[esc] : M.esc[esc] || M.esc[est.esc]
     const vA = valorComponente(e, 'ventas', ratio, cv) ?? 0
     P.fact = rep12(e.fact, 'fact'); P.ventas = rep12(vA, 'ventas'); P.caja = rep12(e.caja, 'caja'); P.costos = rep12(e.costos, 'costos'); P.retiros = rep12(e.retiros, 'retiros')
     const ter = rep12(e.terc, 'caja'); P.margen = P.caja.map((c, i) => c - ter[i] - P.costos[i])   // las comisiones siguen al cobrado
-    for (const kk of Object.keys(P)) R[kk] = nul()
+    if (!actual) for (const kk of Object.keys(P)) R[kk] = nul()
   }
   const out = /** @type {Record<string,any>} */ ({})
   for (const kk of Object.keys(P)) {
@@ -209,25 +213,25 @@ function seriesSeguimiento(X) {
     const pU = P[kk].map((v, i) => (v == null ? null : v / rate(i)))
     out[kk] = { c: seguimientoMensual({ pres: P[kk], real, cerrados: cerr, curso: actual && cerr < 12 }), u: seguimientoMensual({ curso: actual && cerr < 12, pres: pU, real: rU.map((x, i) => (real[i] != null && x == null ? /** @type {number} */ (real[i]) / rate(i) : x)), cerrados: cerr }) }
   }
-  return { S: out, of, esc, cerr, actual, estS: of ? of.estado : est }
+  return { S: out, of, esc, cerr, actual, modoMetas, estS: of ? of.estado : est }
 }
 
 export function Seguimiento({ X }) {
   const { est, D, datos: d, ui, setUI } = X, Y = d.anio
-  const { S, of, esc, cerr, estS } = seriesSeguimiento(X)
+  const { S, of, esc, cerr, estS, modoMetas } = seriesSeguimiento(X)
   const modo = ui.sg || 'p', comp = ui.sc || 'fact'
   const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
   const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
   const color = (/** @type {string} */ kk, /** @type {number} */ des) => (kk === 'retiros' ? C.muted : bueno(kk, des) ? C.greenText : C.overdueText)   // retiros bajo el presupuesto: color neutro, no es una alarma
   // Desvío con flecha (↑ sobre el presupuesto, ↓ bajo él; verde a favor, rojo en contra) en % o en dinero, según el conmutador.
-  const fl = (/** @type {string} */ kk, /** @type {any} */ m, /** @type {any} */ mu, /** @type {number} */ tam = 11) => (m == null || m.des == null ? <span style={{ color: C.muted }}>—</span>
-    : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: color(kk, m.des) }}>{m.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (m.pres ? `${sg2(m.des)}${pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
+  const fl = (/** @type {string} */ kk, /** @type {any} */ m, /** @type {any} */ mu, /** @type {number} */ tam = 11, /** @type {boolean} */ compacto = false) => (m == null || m.des == null ? <span style={{ color: C.muted }}>—</span>
+    : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: color(kk, m.des) }}>{compacto ? '' : (m.des >= 0 ? '↑ ' : '↓ ')}{modo === 'p' ? (m.pres ? `${sg2(m.des)}${compacto ? Math.round(Math.abs((m.des / m.pres) * 100)) + '%' : pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
   const flA = (/** @type {string} */ kk, /** @type {any} */ c, /** @type {any} */ u) => (c.des == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: color(kk, c.des) }}>{c.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (c.desPct != null ? `${sg2(c.des)}${pc(Math.abs(c.desPct), 0)}` : '—') : `${sg2(c.des)}${cel(Math.abs(c.des), Math.abs(u.des))}`}</span>)
   const rango = cerr > 0 ? `ene–${MESC[cerr - 1]}` : ''
   const tarjeta = (/** @type {string} */ kk) => {
     const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
-    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={cerr === 0 ? { cap: 'Presupuesto del año', val: c.cierre != null ? mx(c.cierre, u.cierre) : '—' } : { cap: rango ? `Real ${rango}` : 'Real', val: mx(c.realAcum, u.realAcum) }} der={cerr === 0 ? undefined : { cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null ? mx(c.presAcum, u.presAcum) : '—' }}
+    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={cerr === 0 ? { cap: 'Presup.', val: c.cierre != null ? mx(c.cierre, u.cierre) : '—' } : { cap: 'Real', val: mx(c.realAcum, u.realAcum) }} der={cerr === 0 ? undefined : { cap: 'Presup.', val: c.presAcum != null ? mx(c.presAcum, u.presAcum) : '—' }}
       cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
       onClick={() => { setUI({ sc: kk }); X.ir({ drill: { t: 'comp', de: 'seg', k: kk } }) }} />
   }
@@ -241,7 +245,7 @@ export function Seguimiento({ X }) {
   const claves = componentesDe(CFG).map(([kk]) => kk).filter((kk) => S[kk])   // mismo orden y nombres que el resto (lista de componentes de la configuración)
   const nomEst = (/** @type {string} */ e) => (e === 'cerrado' ? 'cerrado' : e === 'curso' ? 'en curso' : 'por venir')
   const conmut = <Seg options={[['p', '%'], ['m', '$']]} value={modo} onChange={(v) => setUI({ sg: v })} />
-  const colW = '100px repeat(12,minmax(0,1fr)) 68px 68px 76px 70px', borde = `1px solid ${C.border}`
+  const colW = '130px repeat(12,minmax(0,1fr)) 72px 72px 84px 72px', borde = `1px solid ${C.border}`
   const icono = (/** @type {string} */ kk) => { const [tono, ic] = TONO_SEG[kk]; return <span style={{ width: 24, height: 24, borderRadius: 8, background: tono === 'w' ? C.bgSoft : TONO_BG[tono], display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={14} /></span> }
   const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut}>
     <div style={{ overflowX: 'auto' }}><div style={{ minWidth: modo === 'p' ? 0 : 1120 }}>
@@ -251,11 +255,11 @@ export function Seguimiento({ X }) {
       </div>
       {claves.map((kk) => { const c = S[kk].c, u = S[kk].u
         return <div key={kk} style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', alignItems: 'center', borderTop: borde, minHeight: 46 }}>
-          <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: C.accent, fontWeight: 700, fontSize: 12 }}>{icono(kk)}{corto(kk)}</span>
-          {c.meses.map((m, i) => <span key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', paddingRight: 4, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>{m.estado === 'cerrado' ? fl(kk, m, u.meses[i]) : <span style={{ color: C.muted }}>—</span>}</span>)}
-          <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{cel(c.realAcum, u.realAcum)}</span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: C.accent, fontWeight: 700, fontSize: 12 }}>{icono(kk)}{kk === 'costos' ? 'Costos' : corto(kk)}</span>
+          {c.meses.map((m, i) => <span key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', paddingRight: 4, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>{m.estado === 'cerrado' ? fl(kk, m, u.meses[i], 11, true) : <span style={{ color: C.muted }}>—</span>}</span>)}
+          <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{cerr > 0 ? cel(c.realAcum, u.realAcum) : '—'}</span>
           <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.presAcum != null ? cel(c.presAcum, u.presAcum) : '—'}</span>
-          <span style={{ textAlign: 'right', fontSize: 12 }}>{flA(kk, c, u)}</span>
+          <span style={{ textAlign: 'right', fontSize: 12 }}>{cerr > 0 ? flA(kk, c, u) : <span style={{ color: C.muted }}>—</span>}</span>
           <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.cierre != null ? cel(c.cierre, u.cierre) : '—'}</span>
         </div> })}
       <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '8px 12px 10px', borderTop: borde, fontSize: 11, color: C.muted }}><span>Estado</span>{S[claves[0]].c.meses.map((m, i) => <span key={i} style={{ textAlign: 'right', paddingRight: 4, color: m.estado === 'curso' ? C.accent : C.muted, fontWeight: m.estado === 'curso' ? 700 : 400 }} title={nomEst(m.estado)}>{m.estado === 'cerrado' ? '✓' : m.estado === 'curso' ? 'en curso' : '·'}</span>)}</div>
@@ -278,15 +282,15 @@ export function Seguimiento({ X }) {
     <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '9px 14px', borderTop: `2px solid ${C.accent}`, fontSize: 12, fontWeight: 800, color: C.accent, background: C.bgSoft }}><span>Acum.</span><span style={{ textAlign: 'right' }}>{sel.c.presAcum != null ? cel(sel.c.presAcum, sel.u.presAcum) : '—'}</span><span style={{ textAlign: 'right' }}>{cel(sel.c.realAcum, sel.u.realAcum)}</span><span style={{ textAlign: 'right' }}>{flA(ks, sel.c, sel.u)}</span><span /></div>
   </Panel>
   return <>
-    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `meses cerrados: ${rango}` : 'sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `Meses cerrados: ${rango}` : 'Sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12, color: C.muted }}>
-      <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
+      <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : modoMetas ? <>Se mide contra las metas de {Y}: ventas, cobranza y costos</> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
       <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span>
     </div>
     {cerr === 0 && <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>El real aparece al cierre de {MESL[0].toLowerCase()}.{d.anio !== d.anioBase && <> <span role='button' onClick={() => X.irAnio(d.anioBase)} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Ver Seguimiento {d.anioBase} ›</span></>}</div>}
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
-    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{D ? 'toca una celda para ver el mes' : 'toca un mes'} · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>
-    {D ? tabla : <>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></>}
+    {D && <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>toca una celda para ver el mes · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>}
+    {D ? tabla : <Pliegue abajo t={`Mes a mes · ${Y}`} v={cerr > 0 ? `Acumulado ${cel(sel.c.realAcum, sel.u.realAcum)} · ${cerr} ${cerr === 1 ? 'mes cerrado' : 'meses cerrados'}` : 'Sin meses cerrados'}><div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></div></Pliegue>}
     <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
   </>
 }
