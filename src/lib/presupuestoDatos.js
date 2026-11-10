@@ -5,10 +5,10 @@
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
 import { useMemo } from 'react'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
-import { resultadoMes, ufDelDia, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
+import { resultadoMes, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio } from './cifras.js'
-import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026 } from '../../supabase/functions/_shared/presupuesto.js'
-import { retirosSocios } from '../vistas/SociosView.jsx'
+import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF } from '../../supabase/functions/_shared/presupuesto.js'
+import { retirosSocios, _SOCIO_SUELDO } from '../vistas/SociosView.jsx'
 
 /** Categorías de costo que son fijas (el resto se trata como discrecional). */
 export const CATEGORIAS_FIJAS = ['Remuneraciones', 'Leyes sociales', 'Arriendo y espacio', 'Arriendo y GGCC', 'Contadora']
@@ -27,6 +27,13 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
 
   const hoy = hoyISO(), anio = anioSel || currentYear + 1, ymHoy = hoy.slice(0, 7)
 
+  // UF de cada mes del año en curso (fin de mes; el mes en curso, hoy) y UF media de los meses transcurridos: convierte lo que solo existe en pesos (selector UF). Lo que trae su propia UF no pasa por aquí.
+  const mesHoy = Number(hoy.slice(5, 7))
+  const uf26 = useMemo(() => {
+    const porMes = Array.from({ length: 12 }, (_, i) => Number(ufDelDia(ufDias, finMesOHoy(`${currentYear}-${String(i + 1).padStart(2, '0')}`), ufRef)) || 0)
+    return { porMes, med: ufMedia(porMes.slice(0, mesHoy)) ?? (Number(ufRef) || 0) }
+  }, [ufDias, ufRef, mesHoy])
+
   // Facturado propio por mes, de enero del año anterior hasta el mes en curso (el en curso va «a la fecha»). Es lo pesado: solo se recalcula si cambian las fuentes.
   const serie = useMemo(() => {
     const deps = { billing, terceros, costosOfiRows, expenses, clients, ufd: ufDias, ufFb: ufRef }
@@ -36,7 +43,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
       const ym = `${y}-${String(mm).padStart(2, '0')}`
       if (ym > ymHoy) break
       const r = resultadoMes(fuRes, deps, ym)
-      o[ym] = { fac: r.fac || 0, facUF: r.facUF || 0, cos: r.cos || 0 }
+      o[ym] = { fac: r.fac || 0, facUF: r.facUF || 0, cos: r.cos || 0, cosUF: r.cosUF || 0 }
     }
     return o
   }, [fuRes, billing, terceros, costosOfiRows, expenses, clients, ufDias, ufRef, ymHoy])
@@ -51,19 +58,26 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     ;(ingConc || []).forEach((c) => { const f = fechaAbono[String(c.movimiento_id)]; if (f) o[f.slice(0, 7)] = (o[f.slice(0, 7)] || 0) + (Number(c.monto_aplicado) || 0) })
     return o
   }, [ingConc, ingAbonos])
+  // El mismo cobrado, en UF del día de cada depósito.
+  const cobMesUF = useMemo(() => {
+    /** @type {Record<string,number>} */
+    const o = {}
+    ;(ingConc || []).forEach((c) => { const a = (ingAbonos || []).find((x) => String(x.id) === String(c.movimiento_id)); const f = a ? String(a.fecha || '').slice(0, 10) : ''; if (f) o[f.slice(0, 7)] = (o[f.slice(0, 7)] || 0) + (Number(c.monto_aplicado) || 0) / (Number(ufDelDia(ufDias, f, ufRef)) || 1) })
+    return o
+  }, [ingConc, ingAbonos, ufDias, ufRef])
 
   // Facturado por cliente en el año (honorarios propios; sin lo facturado por cuenta de terceros), de mayor a menor.
   const clientes = useMemo(() => {
-    /** @type {Record<string,{id:string,name:string,monto:number,n:number}>} */
+    /** @type {Record<string,{id:string,name:string,monto:number,uf:number,n:number}>} */
     const porCli = {}
     const nombreDe = (/** @type {any} */ id) => (clients || []).find((c) => String(c.id) === String(id))?.name || 'Sin cliente'
     ;(billing || []).forEach((b) => {
       if (!_esFactHon(b) || extBillIds.has(String(b.id)) || String(b.issued_at || '').slice(0, 4) !== String(currentYear)) return
-      const k = String(b.client_id || 'x'), c = porCli[k] || (porCli[k] = { id: k, name: nombreDe(b.client_id), monto: 0, n: 0 })
-      c.monto += montoFactura(b); c.n++
+      const k = String(b.client_id || 'x'), c = porCli[k] || (porCli[k] = { id: k, name: nombreDe(b.client_id), monto: 0, uf: 0, n: 0 })
+      const mf = montoFactura(b); c.monto += mf; c.uf += mf / (Number(ufDelDia(ufDias, b.issued_at, ufRef)) || 1); c.n++
     })
     return Object.values(porCli).filter((c) => c.monto > 0).sort((a, b) => b.monto - a.monto)
-  }, [billing, clients, extBillIds])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [billing, clients, extBillIds, ufDias, ufRef])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const dias = useMemo(() => diasDeCobro(billing, currentYear), [billing])
 
@@ -86,7 +100,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     fact: { uf: resAnio.verUF?.fac || 0, clp: resAnio.verCLP?.fac || 0, pct: m.bruto > 0 ? factPct : null },
     cob: { uf: ing?.totalUF || 0, clp: ing?.total || 0, pct: metaCobranza > 0 ? cobroPct : null },
     marg: { uf: resAnio.verUF?.res || 0, clp: resAnio.verCLP?.res || 0, pct: resAnio.pct },
-    metaVentasCLP: m.meta || 0, metaCobroCLP: metaCobranza || 0,
+    metaVentasCLP: m.meta || 0, metaVentasUF: metaUF || 0, metaCobroCLP: metaCobranza || 0,
   }
   const totalFact = clientes.reduce((a, c) => a + c.monto, 0)
 
@@ -110,14 +124,14 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     /** @type {Record<string,number>} */ const ar = {}
     V.forEach((x) => { const k = x.s?.area || 'Sin área'; ar[k] = (ar[k] || 0) + (x.m || 0) * kV })
     const totA = Object.values(ar).reduce((a, v) => a + v, 0)
-    /** @type {Record<string,{monto:number,n:number}>} */ const tp = {}
+    /** @type {Record<string,{monto:number,uf:number,n:number}>} */ const tp = {}
     const tipoDe = (/** @type {any} */ id) => (clients || []).find((c) => String(c.id) === String(id))?.type || 'Sin tipo'
-    clientes.forEach((c) => { const k = tipoDe(c.id), t = tp[k] || (tp[k] = { monto: 0, n: 0 }); t.monto += c.monto; t.n++ })
+    clientes.forEach((c) => { const k = tipoDe(c.id), t = tp[k] || (tp[k] = { monto: 0, uf: 0, n: 0 }); t.monto += c.monto; t.uf += c.uf; t.n++ })
     const totT = Object.values(tp).reduce((a, v) => a + v.monto, 0)
     return {
       vend, cob, cruceV: iV >= 0 ? iV : null, cruceC,
       areas: Object.entries(ar).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([n, monto]) => ({ n, monto, pct: totA ? (monto / totA) * 100 : 0 })),
-      tipos: Object.entries(tp).sort((a, b) => b[1].monto - a[1].monto).map(([n, t]) => ({ n, monto: t.monto, nClientes: t.n, pct: totT ? (t.monto / totT) * 100 : 0 })),
+      tipos: Object.entries(tp).sort((a, b) => b[1].monto - a[1].monto).map(([n, t]) => ({ n, monto: t.monto, uf: t.uf, nClientes: t.n, pct: totT ? (t.monto / totT) * 100 : 0 })),
     }
   }, [V, ingConc, ingAbonos, clientes, clients, hoy])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -150,16 +164,24 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
 
   // Presupuesto de costos del año en curso por mes (misma regla de Presupuesto vs real, en Resultado del año): vigente por mes, sin PPM ni ingresos.
   const budMes = (/** @type {number} */ mes) => (costosOfiRows || []).filter((r) => r && r.activo !== false && !r.es_ingreso && !esPPMcosto(r)).reduce((a, r) => a + (Number(r.desde && `${currentYear}-${String(mes).padStart(2, '0')}` < String(r.desde).slice(0, 7) ? (r.monto_prev ?? r.monto) : r.monto) || 0), 0)
-  const mesHoy = Number(hoy.slice(5, 7)), cerrados = Array.from({ length: mesHoy - 1 }, (_, i) => i + 1), faltan = Array.from({ length: 12 - (mesHoy - 1) }, (_, i) => mesHoy + i)
+  const cerrados = Array.from({ length: mesHoy - 1 }, (_, i) => i + 1), faltan = Array.from({ length: 12 - (mesHoy - 1) }, (_, i) => mesHoy + i)
   const costos26 = {
     real: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cos || 0), 0), ppto: cerrados.reduce((a, m) => a + budMes(m), 0), pptoResto: faltan.reduce((a, m) => a + budMes(m), 0),
     desde: cerrados.length ? ym(currentYear, 1) : null, hasta: cerrados.length ? ym(currentYear, cerrados.length) : null,
+    // En UF: lo real con la UF de cada mes (resultadoMes) y el presupuesto con la UF del mes que corresponde.
+    realUF: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cosUF || 0), 0),
+    pptoUF: cerrados.reduce((a, m) => a + budMes(m) / (uf26.porMes[m - 1] || 1), 0), pptoRestoUF: faltan.reduce((a, m) => a + budMes(m) / (uf26.porMes[m - 1] || 1), 0),
   }
 
   // Retiros y sueldos de los socios del año: la misma fuente de la página Socios (retirosSocios).
+  const ufAt = (/** @type {string} */ f) => Number(ufDelDia(ufDias, f, ufRef)) || 0
   const RS = useMemo(() => retirosSocios({ expenses, clients, socios: [], yr: currentYear }), [expenses, clients])
   const retiros26 = {
     total: RS.totalRet, n: RS.nRet, porSocio: RS.retTot, sueldos: RS.sueldos, sueldoTot: RS.sueldoTot, socios: RS.SOC,
+    // En UF: cada transferencia con la UF de su día; los sueldos (por socio) igual.
+    totalUF: sumaConUF(RS.movs.map((x) => ({ monto: x.amt, fecha: x.date })), ufAt, uf26.med).uf,
+    porSocioUF: Object.fromEntries(RS.SOC.map((n) => [n, sumaConUF(RS.retSoc.filter((r) => r.socio === n).flatMap((r) => r.movs).map((x) => ({ monto: x.amt, fecha: x.date })), ufAt, uf26.med).uf])),
+    sueldosUF: Object.fromEntries(RS.SOC.map((n) => [n, sumaConUF((expenses || []).filter((e) => RS.inOfi(e) && ['sueldos', 'bono'].includes(String(e.category || '').trim().toLowerCase()) && _SOCIO_SUELDO(e) === n).map((e) => ({ monto: Number(e.amount) || 0, fecha: String(e.date || '').slice(0, 10) })), ufAt, uf26.med).uf])),
     desde: RS.movs.length ? RS.movs.reduce((a, x) => (x.date < a ? x.date : a), '9999-99-99') : null, hasta: RS.movs.length ? RS.movs.reduce((a, x) => (x.date > a ? x.date : a), '0000-00-00') : null,
   }
 
@@ -178,11 +200,20 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     },
     costos: { real: costos26.real, pptoResto: costos26.pptoResto }, terc: (ing?.total || 0) > 0 ? ((com?.total || 0) / ing.total) * 100 : null,
   })
+  // La misma referencia en UF: lo real a la fecha con la UF de cada movimiento (cifras oficiales de Inicio, retiros, costos) y lo que resta del año con la UF vigente (estimación propia).
+  const ufResto = Number(ufRef) || uf26.med, rUF = (/** @type {number} */ aFechaUF, /** @type {number} */ resto) => ({ aFecha: aFechaUF, cierre: aFechaUF + resto / ufResto })
+  const refUFv = rUF(oficiales.vend.uf, referencia.ventas.resto), refUFf = rUF(oficiales.fact.uf, referencia.fact.resto), refUFc = rUF(oficiales.cob.uf, referencia.caja.resto)
+  const tc = 1 - (terc || 0) / 100, costosUF = { aFecha: costos26.realUF, cierre: costos26.realUF + costos26.pptoRestoUF }
+  const refUF = {
+    ventas: refUFv, fact: refUFf, caja: refUFc, costos: costosUF,
+    margen: { aFecha: refUFc.aFecha * tc - costosUF.aFecha, cierre: refUFc.cierre * tc - costosUF.cierre },
+    retiros: { aFecha: retiros26.totalUF, cierre: retiros26.totalUF },
+  }
   // Relación facturado/vendido del año a la fecha: estimación propia (aún sin ciclo completo), para llevar una meta de ventas a facturado.
   const ratioFactVend = oficiales.vend.clp > 0 ? (oficiales.fact.clp / oficiales.vend.clp) * 100 : null
 
   return {
-    hoy, anio, anioBase: currentYear, costos26, retiros26, referencia, ratioFactVend, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios,
   }

@@ -1,7 +1,7 @@
 // Presupuesto anual: modelo por escenario, migración, diferencias, días de cobro. Datos de ejemplo, sin cifras reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tasaIDPCLegal, tasaPPMLegal, estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS } from './../supabase/functions/_shared/presupuesto.js'
+import { tasaIDPCLegal, tasaPPMLegal, estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS, aUF, aPesos, ufMedia, sumaConUF } from './../supabase/functions/_shared/presupuesto.js'
 
 const costos = [
   { id: 0, n: 'Sueldos', m: 5_000_000, meses: 12, t: 'fijo', alza: null },
@@ -129,4 +129,26 @@ test('tasas legales Pro Pyme por año comercial (circular SII 53/2025) y migraci
   assert.equal(migrarEstado({ v: 2, tasaIDPC: 20 }, 2027).tasaIDPC, 20)                              // una tasa editada a mano no se toca
   assert.deepEqual(migrarEstado(m, 2027), m)                                                          // idempotente
   assert.equal(estadoInicial({ anio: 2028 }).tasaIDPC, 15)
+})
+
+test('moneda: pesos ↔ UF de ida y vuelta, y casos borde sin NaN', () => {
+  assert.ok(Math.abs(aPesos(aUF(1_234_567, 39_000), 39_000) - 1_234_567) < 1e-6)
+  assert.equal(aUF(0, 39_000), 0)
+  assert.equal(aUF(null, 39_000), null)
+  assert.equal(aUF(1000, 0), null)
+  assert.equal(aUF(1000, null), null)
+  assert.equal(aUF(NaN, 39_000), null)
+  assert.equal(aPesos(undefined, 39_000), null)
+  assert.equal(aPesos(10, -1), null)
+  assert.equal(aUF(-390_000, 39_000), -10)
+})
+
+test('moneda: UF media ignora valores inválidos y suma con la UF de cada día', () => {
+  assert.equal(ufMedia([]), null)
+  assert.equal(ufMedia([0, null, 'x']), null)
+  assert.equal(ufMedia([38_000, 40_000, 0]), 39_000)
+  const uf = { '2026-01-10': 38_000, '2026-02-10': 40_000 }
+  const r = sumaConUF([{ monto: 380_000, fecha: '2026-01-10' }, { monto: 400_000, fecha: '2026-02-10' }, { monto: 390_000, fecha: '2026-03-01' }], (f) => uf[f], 39_000)
+  assert.equal(r.clp, 1_170_000); assert.ok(Math.abs(r.uf - 30) < 1e-9); assert.equal(r.sinUF, 1)
+  assert.deepEqual(sumaConUF([], () => 1), { clp: 0, uf: 0, sinUF: 0 })
 })
