@@ -74,7 +74,7 @@ export const COMPONENTES = componentesDe()
 export const anclasDe = (cfg = CONFIG_DEFECTO) => /** @type {string[]} */ (cfg.componentes.filter((/** @type {any} */ c) => c.ancla).map((/** @type {any} */ c) => c.k))
 export const ANCLAS = anclasDe()
 export const nombreComponente = (/** @type {string} */ k, /** @type {CfgPresupuesto} */ cfg = CONFIG_DEFECTO) => (componentesDe(cfg).find((x) => x[0] === k) || [k, k])[1]
-/** Reserva de caja mínima que ya está en caja al comenzar el año: base que no se toca (parámetro del estado, no editable en pantalla; por confirmar contra el saldo del Banco). */
+/** Reserva en cuenta corriente al comenzar el año: base fija que no se toca (parámetro del estado, no editable en pantalla). */
 export const RESERVA_MINIMA = /** @type {number} */ (CONFIG_DEFECTO.reserva.minima)
 /** Regla de la reserva recomendada: meses de costos de oficina a los que llegar, repartidos por trimestre. Recomendación de criterio, editable en la configuración; no es un cálculo oficial. */
 export const REGLA_RESERVA = { meses: /** @type {number} */ (CONFIG_DEFECTO.reserva.meses), trimestres: /** @type {number} */ (CONFIG_DEFECTO.reserva.trimestres) }
@@ -570,7 +570,7 @@ export const ETAPA_ANTIGUA = /** @type {Record<number,number>} */ ({ 0: 0, 1: 1,
 
 /**
  * Lleva un estado guardado a la versión actual: etapas de 8 → 5 (v2), tasa legal de primera categoría (v3) y la etapa nueva «Metas 2027» en el lugar 4 (v4: las marcas «revisada» y las
- * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva mínima). Idempotente.
+ * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva en cuenta corriente). Idempotente.
  * @param {any} st
  */
 export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0, cfg = CONFIG_DEFECTO) {
@@ -624,7 +624,7 @@ export function diferenciaSupuestos(a, b, f) {
   /** @type {string[]} */
   const o = []
   const t = (/** @type {string} */ n, /** @type {any} */ x, /** @type {any} */ y) => { if (x !== y) o.push(`${n}: ${x} → ${y}`) }
-  t('Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Reserva de caja', f.pc(a.reserva), f.pc(b.reserva))
+  t('Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Aumento de reserva', f.pc(a.reserva), f.pc(b.reserva))
   const L = /** @type {Record<string,string>} */ ({ g: 'Crecimiento', alza: 'Alza de costos', terc: 'Comisiones', dias: 'Días de cobro' })
   const la = escenariosDe(a), lb = escenariosDe(b)
   for (const [k, nom] of lb) {
@@ -705,7 +705,7 @@ export function diferenciaEstructurada(a, b, f) {
   /** @type {{ grupo:string, etiqueta:string, antes:string, despues:string }[]} */
   const o = []
   const t = (/** @type {string} */ g, /** @type {string} */ n, /** @type {any} */ x, /** @type {any} */ y) => { if (x !== y) o.push({ grupo: g, etiqueta: n, antes: String(x), despues: String(y) }) }
-  t('Supuestos', 'Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Supuestos', 'Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('Supuestos', 'PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Supuestos', 'Reserva de caja', f.pc(a.reserva), f.pc(b.reserva)); t('Supuestos', 'Reserva inicial', f.mm(a.reservaIni), f.mm(b.reservaIni))
+  t('Supuestos', 'Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Supuestos', 'Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('Supuestos', 'PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Supuestos', 'Aumento de reserva', f.pc(a.reserva), f.pc(b.reserva)); t('Supuestos', 'Reserva en cuenta corriente', f.mm(a.reservaIni), f.mm(b.reservaIni))
   const L = /** @type {Record<string,string>} */ ({ g: 'Crecimiento', alza: 'Alza de costos', terc: 'Comisiones', dias: 'Días de cobro' })
   const la = escenariosDe(a), lb = escenariosDe(b)
   for (const [k, nom] of lb) {

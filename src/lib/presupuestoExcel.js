@@ -37,7 +37,7 @@ export function hojasPresupuesto(P) {
       ['Comisiones (% de lo cobrado)', ...ESC.map(([k]) => N(est.p[k].terc, '0.0'))],
       ['Días de cobro', ...ESC.map(([k]) => N(est.p[k].dias, '0'))],
       ['Facturado / vendido bruto (%) · metas', N(P.ratio ?? 0, '0.0')],
-      ['Reserva en cuenta corriente ($) · por confirmar', N(est.reservaIni ?? 0)],
+      ['Reserva en cuenta corriente ($)', N(est.reservaIni ?? 0)],
       ['Comisión sobre ventas (% del bruto) · metas', N(P.cv ?? 0, '0.0')],
     ],
   }
@@ -125,7 +125,7 @@ export function hojasPresupuesto(P) {
       ['Margen', F('B16-B17-B18'), cierre('margen')],
       ['Impuesto de primera categoría', F('MAX(0,B19)*Supuestos!$B$7/100')],
       ['Después de impuesto', F('B19-B20')],
-      ['Aumento de reserva del año', F('MAX(0,B21)*Supuestos!$B$9/100')],
+      ['Aumento de reserva', F('MAX(0,B21)*Supuestos!$B$9/100')],
       ['Retiros', F('MAX(0,B21)*(1-Supuestos!$B$9/100)'), cierre('retiros')],
       ['Reserva al cierre (cuenta corriente + aumento)', F('Supuestos!$B$17+B22')],
       ['Meses de costos de oficina que cubre', F('IF(B18=0,0,B24/(B18/12))', '0.0')],
