@@ -5,7 +5,7 @@ import {
   anclasDe, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
 } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
-import { mm, mx, pc, Flecha, Fld, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
+import { mm, mx, pc, Flecha, Fld, Btn, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
 
 /**
  * Las metas 2027 con lo que haya escrito el usuario: el componente fijado (ancla) y su valor; sin nada escrito parte con los retiros reales de 2026.
@@ -56,7 +56,7 @@ export function Supuestos({ X, MT }) {
     ['Días de cobro', 'dias', 'int', 'días', p.dias, (v) => setPal(rk, 'dias', Math.max(0, Math.round(v))), mm(ch.dCob), 'por cobrar al cierre'],
     ['Alza de costos', 'alza', 'pct', '%', p.alza, (v) => setPal(rk, 'alza', v), mm(ch.costos), 'de costos ' + X.datos.anio],
     ['Impuesto', 'tasa', 'pct', '%', est.tasaIDPC, (v) => setGen('tasaIDPC', Math.max(0, v)), mm(ch.idpc), 'de impuesto'],
-    ['Reserva de caja', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'a la reserva'],
+    ['Reserva de caja', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'de aumento'],
     ['Facturado / vendido bruto', 'ratio', 'pct', '%', MT.ratio, (v) => parche((c) => { c.metas = { ...(c.metas || {}), ratio: v == null ? null : Math.min(100, Math.max(1, v)) } }), MT.ratio != null ? mm(ch.fact) : '—', 'facturables'],
     ['Comisión sobre ventas', 'cv', 'pct', '%', MT.cv, (v) => parche((c) => { c.metas = { ...(c.metas || {}), cv: v == null ? null : Math.min(99, Math.max(0, v)) } }), ch.comisVentas != null ? mm(ch.comisVentas) : '—', 'de comisiones de venta'],
   ]
@@ -78,12 +78,13 @@ export function ReservaBloque({ X, ch, irBanco }) {
   const r = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post), cfg: CFG })
   const fila = (t, v, o = {}) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: D ? '10px 20px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13, alignItems: 'baseline', background: o.tot ? C.bgSoft : 'transparent', fontWeight: o.tot ? 800 : 400 }}><span style={{ minWidth: 0 }}>{t}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: o.tot ? C.accent : C.text }}>{v}</span></div>
   return <>
-    {fila(<>Reserva mínima <span style={{ color: C.muted, fontSize: 12 }}>· base que no se toca</span></>, mm(est.reservaIni))}
-    {fila(`+ Reserva del año (${pc(est.reserva, 0)} de ${mm(Math.max(0, ch.post))} después de impuesto)`, mm(ch.reserva))}
+    {fila(<>Reserva en cuenta corriente <span style={{ color: C.muted, fontSize: 12 }}>· no se toca</span></>, mm(est.reservaIni))}
+    {fila(`+ Aumento del año (${pc(est.reserva, 1)} de ${mm(Math.max(0, ch.post))} después de impuesto)`, mm(ch.reserva))}
     {fila('= Reserva al cierre', mm(ch.reservaCierre), { tot: true })}
     {fila('Meses de costos que cubre', <span><b style={{ color: C.accent }}>{r.mesesCierre != null ? r.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) : '—'}</b> de {mm(r.costosMes)} al mes</span>)}
     <div style={{ padding: D ? '10px 20px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div><b style={{ color: C.accent }}>Recomendación</b> · llegar a {r.meses} meses de costos ({mm(r.objetivo)}){r.brecha > 0 ? `, con ${mm(r.porTrimestre)} más por trimestre` : ''}. <Flecha sube={r.cubre} bueno={r.cubre}>{r.cubre ? 'la reserva del año la cubre' : `déficit ${mm(r.falta)}`}</Flecha></div>
+      <div><b style={{ color: C.accent }}>Recomendación</b> · llegar a {r.meses} meses de costos ({mm(r.objetivo)}){r.brecha > 0 ? `, con ${mm(r.porTrimestre)} más por trimestre` : ''}. <Flecha sube={r.cubre} bueno={r.cubre}>{r.cubre ? 'la cubre' : `déficit ${mm(r.falta)}`}</Flecha></div>
+      {r.pctNecesario != null && !r.cubre && <div><Btn onClick={() => X.setGen('reserva', Math.min(99, Math.ceil(r.pctNecesario * 10) / 10))}>Usar la recomendada · {pc(Math.min(99, Math.ceil(r.pctNecesario * 10) / 10), 1)}</Btn></div>}
       {irBanco && <div onClick={irBanco} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Por confirmar en Banco ›</div>}
     </div>
   </>
@@ -136,7 +137,7 @@ export function TablaPresupuesto({ X, MT, irPaso }) {
   const L = [
     ['', 'Vendido', ch.ventas, ref.ventas.cierre, 'ventas', 0], ['', 'Facturado', ch.fact, ref.fact.cierre, 'fact', 0], ['−', 'Aumento de lo por cobrar', ch.dCob, null, null, 0], ['=', 'Cobrado', ch.caja, ref.caja.cierre, 'caja', 1],
     ['−', 'Comisiones', ch.terc, null, null, 0], ['−', 'Presupuesto de costos', ch.costos, ref.costos.cierre, 'costos', 0, () => irPaso(2)], ['=', 'Margen', ch.margen, ref.margen.cierre, 'margen', 1],
-    ['−', 'Impuesto de primera categoría', ch.idpc, null, null, 0], ['=', 'Después de impuesto', ch.post, null, null, 1], ['−', 'Reserva de caja', ch.reserva, null, null, 0], ['=', 'Retiros', ch.retiros, ref.retiros.cierre, 'retiros', 1],
+    ['−', 'Impuesto de primera categoría', ch.idpc, null, null, 0], ['=', 'Después de impuesto', ch.post, null, null, 1], ['−', 'Aumento de reserva', ch.reserva, null, null, 0], ['=', 'Retiros', ch.retiros, ref.retiros.cierre, 'retiros', 1],
   ]
   const g = D ? 'minmax(0,1fr) 110px 110px 150px' : 'minmax(0,1fr) 88px 88px'
   return <Panel hd={`Presupuesto ${an}`} small='estado de resultados'>

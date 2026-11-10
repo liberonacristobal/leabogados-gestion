@@ -40,8 +40,8 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
   /** Escenario cuyos supuestos usan las metas (si no existe, el primero de la lista). */
   escenarioMetas: 'base',
   maxEscenarios: 5,
-  /** Reserva de caja: mínima ya en caja al comenzar el año (por confirmar contra el Banco), % del resultado después de impuesto que se reserva, y la regla recomendada (meses de costos a los que llegar, repartidos por trimestre). */
-  reserva: { minima: 30_000_000, porcentaje: 15, meses: 3, trimestres: 4 },
+  /** Reserva de caja: mínima ya en caja al comenzar el año (por confirmar contra el Banco), % del resultado después de impuesto que se agrega a la reserva (0 por defecto: solo aumenta si el usuario lo fija o adopta la recomendada), y la regla recomendada (meses de costos a los que llegar, repartidos por trimestre). */
+  reserva: { minima: 30_000_000, porcentaje: 0, meses: 3, trimestres: 4 },
   /** Reparto de las metas entre socios: 'iguales' o un mapa { nombre: fracción }. «Sin socio» no tiene meta. */
   socios: { reparto: 'iguales', lista: null },   // lista = nombres de los socios del estudio; null = los administradores de la app (ADMIN_NAMES)
   /** Categorías de costo: cuáles son fijas (el resto es discrecional), cuáles van por persona (una partida por fila) y cuáles son el sueldo y las leyes sociales de un socio. */

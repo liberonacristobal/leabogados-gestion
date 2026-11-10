@@ -14,8 +14,8 @@ const base = { baseCLP: Array.from({ length: 12 }, (_, i) => 10_000_000 + i * 70
 const estado = (o = {}) => estadoInicial({ costos, terc: 24.4, dias: 30, anio: 2027, ppmMes: 100_000, reajusteUF: 3.5, ...o })
 const r0 = (x) => Math.round(x)
 
-test('regresión: con la configuración por defecto, el modelo da las mismas cifras de antes (pesos redondeados)', () => {
-  const st = estado(), m = modeloPresupuesto(base, st)
+test('regresión: con un 15 % de reserva fijado (borradores guardados), el modelo da las mismas cifras de antes (pesos redondeados)', () => {
+  const st = estado({ reserva: 15 }), m = modeloPresupuesto(base, st)
   const dorado = {
     prudente: { fact: 162860452, caja: 163552452, costos: 76320000, terc: 39906798, base: 47325653, idpc: 5915707, post: 41409947, retiros: 35198455, reserva: 6211492, reservaCierre: 36211492, saldo: 4715707, dCob: -692000 },
     base: { fact: 179146497, caja: 177947397, costos: 75240000, terc: 43419165, base: 59288232, idpc: 7411029, post: 51877203, retiros: 44095622, reserva: 7781580, reservaCierre: 37781580, saldo: 6211029, dCob: 1199100 },
@@ -32,13 +32,13 @@ test('regresión: con la configuración por defecto, el modelo da las mismas cif
   assert.deepEqual(st.p, { prudente: { g: 0, alza: 6, terc: 24.4, dias: 40 }, base: { g: 10, alza: 4.5, terc: 24.4, dias: 30 }, meta: { g: 25, alza: 4.5, terc: 24.4, dias: 30 } })
   assert.deepEqual([st.reservaIni, st.tasaIDPC, st.ppmAnual, st.reserva, st.reajusteUF], [30_000_000, 12.5, 1_200_000, 15, 3.5])
   assert.deepEqual(componentesDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Margen', 'Retiros'])
-  assert.deepEqual(estado({ cfg: configPresupuesto() }), st)                              // pasar la configuración por defecto explícita no cambia nada
+  assert.deepEqual(estado({ cfg: configPresupuesto(), reserva: 15 }), st)                              // pasar la configuración por defecto explícita no cambia nada
 })
 
 test('configuración: mezclar no toca el defecto, reemplaza arreglos y mezcla objetos', () => {
   const antes = JSON.stringify(CONFIG_DEFECTO)
   const c = configPresupuesto({ reserva: { minima: 1 }, tributario: { idpc: [{ tasa: 27 }] }, socios: { reparto: { A: 0.7, B: 0.3 } } })
-  assert.equal(c.reserva.minima, 1); assert.equal(c.reserva.porcentaje, 15); assert.equal(c.reserva.meses, 3)       // objeto: se mezcla clave a clave
+  assert.equal(c.reserva.minima, 1); assert.equal(c.reserva.porcentaje, 0); assert.equal(c.reserva.meses, 3)       // objeto: se mezcla clave a clave
   assert.deepEqual(c.tributario.idpc, [{ tasa: 27 }]); assert.equal(c.tributario.ppm.umbralUF, 50000)                // arreglo: se reemplaza
   assert.equal(JSON.stringify(CONFIG_DEFECTO), antes)
   assert.deepEqual(mezclarConfig({ a: 1, b: { c: 2 } }, undefined), { a: 1, b: { c: 2 } })
@@ -124,4 +124,20 @@ test('validarConfig: el calendario de la cotización del empleador pide meses AA
   const r = (l) => validarConfig({ previsional: { empleador: l } }).errores.map((e) => e.ruta)
   assert.ok(r([{ desde: '2026-13', pct: 3 }]).includes('previsional.empleador.0.desde')); assert.ok(r([{ desde: '2027-08', pct: 4 }, { desde: '2026-08', pct: 3 }]).includes('previsional.empleador.1.desde'))
   assert.ok(r([{ desde: '2026-08', pct: 40 }]).includes('previsional.empleador.0.pct')); assert.ok(r('x').includes('previsional.empleador'))
+})
+
+test('reserva: por defecto el aumento del año es 0 %, los retiros son todo el resultado después de impuesto y la reserva queda en los $30M; se adopta la recomendada solo cuando se fija', () => {
+  const st = estado(), m = modeloPresupuesto(base, st)
+  assert.equal(st.reserva, 0); assert.equal(st.reservaIni, 30_000_000)
+  for (const k of ['prudente', 'base', 'meta']) { const e = m.esc[k]; assert.equal(e.reserva, 0); assert.ok(Math.abs(e.retiros - Math.max(0, e.post)) < 1e-6); assert.equal(e.reservaCierre, 30_000_000) }
+  const rr = reservaRecomendada({ costosAnio: m.esc.base.costos, reservaIni: st.reservaIni, reservaAnio: m.esc.base.reserva, post: m.esc.base.post })
+  assert.equal(rr.cubre, true)   // 6 meses de costos con la reserva inicial: no hace falta aumentar
+  // la recomendación pide un % cuando la reserva inicial no alcanza; fijado en el estado, la reserva al cierre llega al objetivo y retiros + aumento = resultado
+  const eb = m.esc.base, r1 = reservaRecomendada({ costosAnio: 144_000_000, reservaIni: 30_000_000, reservaAnio: 0, post: eb.post })
+  assert.equal(r1.cubre, false); assert.ok(r1.pctNecesario > 0)
+  const e2 = modeloPresupuesto(base, { ...st, reserva: r1.pctNecesario }).esc.base
+  assert.ok(Math.abs(e2.reserva - r1.brecha) < 1); assert.ok(Math.abs(e2.retiros + e2.reserva - e2.post) < 1e-6)
+  // metas inversas siguen cuadrando con el 0 % (ida y vuelta de Retiros)
+  const inv = metasDesdeComponente(base, st, { componente: 'retiros', valor: 50_000_000, ratio: 66 }), ch = cadenaMeta(base, st, inv.g, 66)
+  assert.ok(Math.abs(ch.retiros - 50_000_000) < 1)
 })
