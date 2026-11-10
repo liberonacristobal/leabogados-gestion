@@ -108,3 +108,14 @@ test('cotización del empleador (Ley 21.735): 2027 sube 0,75 puntos de agosto a 
   assert.equal(cotizacionEmpleador({ anio: 2027, ...base, calendario: [] }).total, 0)   // tasa 0: nada que sumar
   assert.equal(cotizacionEmpleador({ anio: 2026, ...base }).total, 0)                 // 2026 ya está en la base (3,5 % desde ago-2026)
 })
+
+import { costoAnualBase, costoVigente, monto27, costosPresupuesto } from './../supabase/functions/_shared/presupuesto.js'
+test('cotización del empleador (estimación): no cuenta en el año base ni en lo vigente, solo en 2027', () => {
+  const sueldo = { id: 1, n: 'Sueldos', m: 1_000_000, meses: 12, t: 'fijo', alza: 0 }, cot = { id: 'cot-empleador', n: 'Cotización empleador (estimación)', m: 31_250, meses: 12, t: 'fijo', alza: 0, sinBase: true }
+  assert.equal(costoAnualBase(cot, 2026), 0); assert.equal(costoVigente(cot), 0)
+  assert.equal(costoAnualBase({ ...cot, sinBase: undefined }, 2026), 0)   // también si un borrador guardado perdió la marca
+  assert.equal(costoVigente(sueldo), 12_000_000)
+  assert.equal(Math.round(monto27(cot, 0)), 375_000)
+  const vigente = [sueldo, cot].reduce((a, c) => a + costoVigente(c), 0), p27 = costosPresupuesto({ costos: [sueldo, cot] }, 0)
+  assert.equal(vigente, 12_000_000); assert.equal(Math.round(p27), 12_375_000)
+})

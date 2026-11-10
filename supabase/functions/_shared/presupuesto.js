@@ -5,7 +5,7 @@
 // Plano: CAJA (el régimen Pro Pyme tributa lo percibido menos lo pagado). Sociedad de profesionales exenta de IVA: lo facturado es el neto.
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
-/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
+/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
 
 /** Configuración por estudio (presupuestoConfig.js): toda regla que depende del estudio o del país la recibe como `cfg` opcional; sin ella usa el defecto del tenant actual. */
@@ -338,6 +338,7 @@ export const fijarAlza = (pct) => ({ alza: Math.max(-100, num(pct)) })
  * @param {PartidaCosto} c @param {number} anioBase
  */
 export function costoAnualBase(c, anioBase) {
+  if (c.sinBase || c.id === 'cot-empleador') return 0   // estimación sin monto vigente hoy (p. ej. cotización del empleador, Ley 21.735): no cuenta en el año base
   const m = num(c.m) * 12
   if (!c.desde || c.mPrev == null) return m
   const y = Number(String(c.desde).slice(0, 4)), mes = Number(String(c.desde).slice(5, 7))
@@ -345,6 +346,8 @@ export function costoAnualBase(c, anioBase) {
   if (y > anioBase) return num(c.mPrev) * 12
   return num(c.mPrev) * (mes - 1) + num(c.m) * (12 - (mes - 1))
 }
+/** Lo vigente hoy de una partida por año (monto mensual × 12); una estimación sin base (`sinBase`) no tiene monto vigente. @param {PartidaCosto} c */
+export const costoVigente = (c) => (c.sinBase || c.id === 'cot-empleador' ? 0 : num(c.m) * 12)
 /** Reajuste reciente de una partida (desde un mes del año base en adelante), para no reajustarla dos veces por error. @param {PartidaCosto} c @param {number} anioBase */
 export function reajusteVigente(c, anioBase) {
   if (!c.desde || !(num(c.mPrev) > 0) || Number(String(c.desde).slice(0, 4)) < anioBase) return null
