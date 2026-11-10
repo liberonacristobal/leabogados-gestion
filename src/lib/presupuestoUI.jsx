@@ -113,7 +113,7 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
 // Tarjeta chica con ícono (indicadores, resumen). El rótulo va en mayúscula; la cifra a 20 px.
 export function Mini({ ic, label, value, sub, cls, onClick }) {
   const D = useIsDesktop(), col = cls === 'pos' ? C.greenText : cls === 'neg' ? C.overdueText : cls === 'amb' ? C.soonText : C.accent
-  return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '9px 12px' : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
+  return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '7px 12px' : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 34 : 28, height: D ? 34 : 28, borderRadius: 10, background: C.azulBg, color: C.azulInfo, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
     <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
   </div>
@@ -131,14 +131,14 @@ export function Panel({ hd, small, children, pad, style, flex }) {
 export function Seg({ options, value, onChange, style, tonos }) {
   return <div role='group' style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', background: C.card, ...style }}>
     {options.map(([k, n]) => { const on = value === k, tn = tonos && tonos[k]
-      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600, padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
+      return <button key={k} className='pp-tac pp-pill' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600, padding: '4px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
   </div>
 }
 
 export const Chip = ({ children, tono, c }) => { const t = c ? c : tono === 'y' ? { bg: C.ambarBg, fg: C.soonText } : tono === 'r' ? { bg: C.overdueBg, fg: C.overdueText } : tono === 'g' ? { bg: C.greenBg, fg: C.greenText } : tono === 'z' ? { bg: C.bgSoft, fg: C.muted } : { bg: C.azulBg, fg: C.azulInfo }
   return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: t.bg, color: t.fg, whiteSpace: 'nowrap' }}>{children}</span> }
 
-export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} className='pp-tac' disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '4px 12px', lineHeight: 1.3, borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
+export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} className='pp-tac pp-pill' disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '4px 12px', lineHeight: 1.3, borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
 export const Lnk = ({ children, onClick, rojo, titulo }) => <button title={titulo} className='pp-tac' aria-label={titulo} onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
 
 // Campo con la unidad dentro. Escribe con el formato es-CL y confirma al salir del campo o con Enter (sin perder el foco mientras se teclea).
@@ -184,8 +184,10 @@ export function EstilosPresupuesto() {
   const A = C.accent, tenue = `color-mix(in srgb, ${A} 14%, transparent)`, medio = `color-mix(in srgb, ${A} 38%, transparent)`
   return <style>{`
 .pp-foco:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid ${A};outline-offset:2px}
-@media (max-width:1023px){.pp-tac,.pfs{position:relative}.pp-tac::after{content:'';position:absolute;left:-4px;right:-4px;top:-8px;bottom:-8px}.pfs::after{content:'';position:absolute;left:-4px;right:-4px;top:-14px;bottom:-14px}}
+@media (max-width:1023px){.pp-pill{min-height:32px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}.pp-tac,.pfs{position:relative}.pp-tac::after{content:'';position:absolute;left:-4px;right:-4px;top:-8px;bottom:-8px}.pfs::after{content:'';position:absolute;left:-4px;right:-4px;top:-14px;bottom:-14px}}
 .pfs{flex-shrink:0;display:inline-flex;align-items:baseline;gap:0;box-sizing:border-box;cursor:text;border:0 solid transparent;border-bottom-width:1px;padding:0 8px;margin:0 -8px -1px;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
+.pp-dg>details[open]{grid-column:1 / -1}
+@media (min-width:1024px){.pp-dg>details{padding:8px 10px!important}}
 .pfs:hover,.pfs:focus-within{border-bottom-color:${medio}}
 .pfs:focus-within,.pfs.sel{border-bottom-color:${A}}
 .pfs .pfw{display:inline-grid;min-width:1.2ch}
@@ -216,7 +218,7 @@ export function Stp({ value, suf, step, min, max, onChange, int }) {
 export function Fila({ nombre, peq, valor, sub, onClick, abierta, sin, tot, children }) {
   const D = useIsDesktop()
   return <>
-    <div {...tocable(onClick)} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '8px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
+    <div {...tocable(onClick)} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '6px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
       <div style={{ minWidth: 0 }}><div style={{ fontWeight: tot ? 800 : 600 }}>{nombre}</div>{peq && <div style={{ fontSize: 11, color: C.muted, marginTop: 1, fontWeight: 400 }}>{peq}</div>}</div>
       <span style={{ color: C.done, fontSize: 16, lineHeight: 1, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>{onClick && !sin ? '›' : ''}</span>
       <span />
@@ -249,18 +251,18 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, onClick, aria })
   const tecla = onClick ? (/** @type {any} */ e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(e) } } : undefined
   const flecha = onClick && <svg width={D ? 16 : 12} height={D ? 16 : 12} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' style={{ flexShrink: 0, opacity: 0.7 }}><path d='M9 6l6 6-6 6' /></svg>
   const fig = (/** @type {any} */ f) => D
-    ? <div style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.7px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap', marginBottom: 5 }}>{f.cap}</div>
+    ? <div style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.7px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap', marginBottom: 2 }}>{f.cap}</div>
       <div style={{ fontSize: CFG.moneda === 'uf' ? 16 : 21, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
     : <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, minWidth: 0, minHeight: ambos ? 32 : 18 }}><span style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.4px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.cap}</span>
       <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', textAlign: 'right', minWidth: 0 }}><Val v={f.val} /></span></div>
-  const cab = <div style={{ display: 'flex', alignItems: 'center', gap: D ? 8 : 6, minHeight: D ? ico : 30, minWidth: 0 }}>
+  const cab = <div style={{ display: 'flex', alignItems: 'center', gap: D ? 8 : 6, minHeight: D ? 30 : 30, minWidth: 0 }}>
     {!D && <span style={{ width: ico, height: ico, flexShrink: 0, borderRadius: 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={15} /></span>}
     <span style={{ ...LBL, fontSize: D ? 13 : 12, fontWeight: 700, letterSpacing: D ? '.5px' : '.2px', flex: 1, minWidth: 0, lineHeight: 1.15, color: tono === 'w' ? C.muted : 'inherit', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{label}</span>{flecha}</div>
   const cmpEl = <div style={{ display: 'flex', gap: D ? '2px 14px' : '0 8px', flexWrap: D ? 'wrap' : 'nowrap', overflow: D ? undefined : 'hidden', whiteSpace: D ? undefined : 'nowrap', fontSize: D ? 12 : 11, color: C.muted, fontVariantNumeric: 'tabular-nums', minHeight: D ? 18 : 16, alignItems: 'center' }}>{cmp}</div>
   const caja = { background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: /** @type {'border-box'} */ ('border-box'), alignContent: /** @type {'start'} */ ('start') }
   const ar = { role: onClick ? 'button' : undefined, tabIndex: onClick ? 0 : undefined, 'aria-label': aria, className: onClick ? 'pp-foco' : undefined, onClick, onKeyDown: tecla }
   if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: 'auto auto auto auto' }}>{cab}{fig(izq)}{der ? fig(der) : <div style={{ minHeight: ambos ? 32 : 18 }} />}{cmpEl}</div>
-  return <div {...ar} style={{ ...caja, padding: '12px 14px 10px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 6, alignItems: 'start' }}>
+  return <div {...ar} style={{ ...caja, padding: '8px 14px 6px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 4, alignItems: 'start' }}>
     <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={18} /></span>
     {cab}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{der && fig(der)}</div>
@@ -287,7 +289,7 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
 }
 
 /** Botón-chip de la barra de contexto (Versiones, Excel). */
-export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12, height: 28, minWidth: cuadrado ? 28 : undefined, padding: cuadrado ? 0 : '0 10px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
+export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac pp-pill' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12, height: 28, minWidth: cuadrado ? 28 : undefined, padding: cuadrado ? 0 : '0 10px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
 
 /**
  * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
@@ -346,14 +348,14 @@ export function Pliegue({ t, v, children, abierto, abajo }) {
 /** Resumen del paso 5 (H06): una sola tarjeta de tres cifras que siguen la cascada del escenario elegido: Margen → Resultado → Retiros. Margen siempre en $. Cada celda abre su detalle. */
 export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onResultado, onRetiros }) {
   const D = useIsDesktop()
-  const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '12px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Margen' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
+  const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '8px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Margen' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
     <div style={{ ...LBL, color: C.accent, whiteSpace: 'nowrap' }}>{rot}</div>
     <div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: D ? -0.6 : -0.4, color: ult ? C.greenText : C.accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, whiteSpace: 'nowrap' }}><Val v={v} /></div>
     {D && <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>}
   </div>
   return <div>
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después de la reserva', onRetiros, true)}</div>
-    <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc} · elegido</div>
+    <div style={{ position: 'relative', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después de la reserva', onRetiros, true)}{D && <span style={{ position: 'absolute', top: 8, right: 16, fontSize: 11, color: C.muted }}>Escenario {esc} · elegido</span>}</div>
+    {!D && <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc} · elegido</div>}
   </div>
 }
 

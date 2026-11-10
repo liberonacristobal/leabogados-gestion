@@ -1,6 +1,6 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesAtipicos, nombreComponente, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesAtipicos, nombreComponente, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
@@ -48,11 +48,10 @@ export function Mirada({ X }) {
   })
   const tile = (m) => {
     const x = m.f && m.a && fv(m.a) && m.i < H ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)   // el mes en curso no se compara (queda «a la fecha»)
-    return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D ? MESL[m.i] : MESC[m.i]}</span>{x == null ? null : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
+    return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? '9px 12px' : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 1 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D && !dosCol ? MESL[m.i] : MESC[m.i]}</span>{at ? <span style={{ fontSize: 11, fontWeight: 700, color: C.soonText }}>atípico</span> : m.i === H ? <span style={{ fontSize: 11, color: C.muted }}>a la fecha</span> : null}{x == null ? null : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
       <div style={{ fontSize: D ? 21 : 14, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
-      <div style={{ fontSize: 11, color: C.muted }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}{m.i === H ? ' · a la fecha' : ''}</div>
-      {at && <div style={{ fontSize: 11, fontWeight: 700, color: C.soonText }}>atípico</div>}
+      <div style={{ fontSize: 11, color: C.muted }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}</div>
     </div>
   }
   // Primer año sin historia: no hay nada que mostrar; se parte desde cero (Costos → Metas → Escenarios).
@@ -61,14 +60,9 @@ export function Mirada({ X }) {
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>al {fmtFechaDMY(d.hoy)}</span>}>Resultado del año {Y}</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{tarjetas26}</Grid>
-    {/* Escritorio: Indicadores y Mes a mes lado a lado (la tabla de meses, a todo el ancho) para bajar el scroll */}
-    <div style={{ display: 'grid', gridTemplateColumns: dosCol ? 'minmax(0,5fr) minmax(0,7fr)' : '1fr', gap: D ? 12 : 10, alignItems: 'start' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
-    <Titulo right={<Btn onClick={() => setUI({ mas: !ui.mas })}>{ui.mas ? 'Ver menos' : 'Ver más'}</Btn>}>Indicadores {Y}</Titulo>
-    <Grid cols={D && dosCol ? 2 : 4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
-    {ui.mas && <Grid cols={D && dosCol ? 2 : 4} colsM={2}>{mas.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
+    {/* Escritorio: Indicadores y Mes a mes lado a lado (4 × 3) y debajo Clientes; en tabla y en el celular, uno bajo otro */}
+    {(() => {
+      const mesB = <div key='mes' style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
     <Titulo right={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{atip.size > 0 && <Chip tono='y'>{atip.size} atípicos</Chip>}{D && <Seg options={[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']]} value={ui.vm} onChange={(v) => setUI({ vm: v })} />}</span>}>Mes a mes · {Y} contra {Y - 1}</Titulo>
     {ui.vm === 'tabla' && D
       ? <Panel><div style={{ display: 'grid', gridTemplateColumns: '120px repeat(12,minmax(0,1fr))', fontSize: 12 }}>
@@ -77,11 +71,18 @@ export function Mirada({ X }) {
       </div></Panel>
       : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? (dosCol ? 4 : 6) : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
       </div>
-    </div>
-    <Panel hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
-      {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
-        : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.muted, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} peq={`${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado`} valor={mx(c.monto, c.uf)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
-    </Panel>
+      const indB = <div key='ind' style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
+    <Titulo right={<Btn onClick={() => setUI({ mas: !ui.mas })}>{ui.mas ? 'Ver menos' : 'Ver más'}</Btn>}>Indicadores {Y}</Titulo>
+    <Grid cols={dosCol ? 2 : 4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
+    {ui.mas && <Grid cols={dosCol ? 2 : 4} colsM={2}>{mas.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>}
+      </div>
+      const cliB = <Panel key='cli' hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
+        {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
+          : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.muted, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} {...(D ? { sub: <span style={{ whiteSpace: 'nowrap' }}>{pc((c.monto / d.totalFact) * 100)} · {c.n} factura{c.n !== 1 ? 's' : ''}</span> } : { peq: `${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado` })} valor={mx(c.monto, c.uf)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
+      </Panel>
+
+      return dosCol ? [<div key='dos' style={{ display: 'grid', gridTemplateColumns: 'minmax(0,5fr) minmax(0,7fr)', gap: 12, alignItems: 'start' }}>{indB}{mesB}</div>, cliB] : [indB, mesB, cliB]
+    })()}
   </>
 }
 
@@ -106,7 +107,7 @@ export function Base({ X }) {
   const vNuevo = MT.ch.ventas != null ? mx(Math.max(0, MT.ch.ventas - rec.netoCLP), Math.max(0, MT.ch.ventas / tasa27() - rec.netoUF)) : '—'
   const ingreso = [
     ['Recurrente', `${rec.n} ventas mensuales · ${mx(rec.netoCLP / 12, rec.netoUF / 12)} al mes · neto de comisiones`, mx(rec.netoCLP, rec.netoUF), () => ir({ drill: { t: 'ind', k: 'rec' } })],
-    ['Por facturar', 'cuotas de ventas aceptadas', 'ver en Por facturar', X.irPorFacturar],
+    ['Por facturar', 'cuotas de ventas aceptadas', '', X.irPorFacturar],
     ['Vendido nuevo', `meta de ventas ${Y} (neta) − recurrente`, vNuevo, () => ir({ etapa: 3 })],
   ]
   return <>
@@ -132,7 +133,7 @@ export function Base({ X }) {
 export function Costos({ X }) {
   const { datos: d, est, D, ui, setUI, M, setCosto, patchCosto, addCosto, delCosto, resetCostos, setPal, ir: ir1 } = X
   const k = est.esc, p = est.p[k], e = M.esc[k], nomE = X.nomEsc(k), Yb = d.anioBase
-  const base26 = est.costos.reduce((a, c) => a + costoAnualBase(c, Yb), 0), tot26 = est.costos.reduce((a, c) => a + c.m * 12, 0)
+  const base26 = est.costos.reduce((a, c) => a + costoAnualBase(c, Yb), 0), tot26 = est.costos.reduce((a, c) => a + costoVigente(c), 0)
   const val = (c, kk) => monto27(c, est.p[kk].alza)
   const dc = difMon(e.costos, tot26), Y = d.anio
   const mats = ui.mats || []
@@ -197,7 +198,7 @@ export function Costos({ X }) {
         </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cómo se calcula'><Lista items={[<span><b>Cotización empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida en Leyes sociales, editable{est.sinCotEmpleador ? ' (quitada)' : ''}. Se confirma con la contadora.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cómo se calcula'><Lista items={[<span><b>Cotización empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }
