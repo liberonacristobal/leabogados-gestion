@@ -107,7 +107,7 @@ export function Base({ X }) {
   const vNuevo = MT.ch.ventas != null ? mx(Math.max(0, MT.ch.ventas - rec.netoCLP), Math.max(0, MT.ch.ventas / tasa27() - rec.netoUF)) : '—'
   const ingreso = [
     ['Recurrente', `${rec.n} ventas mensuales · ${mx(rec.netoCLP / 12, rec.netoUF / 12)} al mes · neto de comisiones`, mx(rec.netoCLP, rec.netoUF), () => ir({ drill: { t: 'ind', k: 'rec' } })],
-    ['Por facturar', 'cuotas de ventas aceptadas', m26(X.porFacturar || 0), X.irPorFacturar],
+    ['Por facturar', 'cuotas de ventas ya vendidas · fuera de Vendido nuevo', m26(X.porFacturar || 0), X.irPorFacturar],
     ['Vendido nuevo', `meta de ventas ${Y} (neta) − recurrente`, vNuevo, () => ir({ etapa: 3 })],
   ]
   return <>
