@@ -3,10 +3,11 @@
 // Reglas puras en supabase/functions/_shared/presupuesto.js; datos de partida en lib/presupuestoDatos.js (cada cifra de su fuente única).
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, useIsDesktop } from '../lib/base.jsx'
+import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
 import { PageHeader } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
-import { ESCENARIOS, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos } from '../../supabase/functions/_shared/presupuesto.js'
+import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario } from '../../supabase/functions/_shared/presupuesto.js'
+import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 import { mm, pc, Kpi, Btn, Fld, Grid, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic } from '../lib/presupuestoUI.jsx'
 import { calcMetas } from '../lib/presupuestoBloques.jsx'
 import { Mirada, Base, Costos } from './presupuestoEtapas1.jsx'
@@ -17,7 +18,7 @@ const scrollEl = () => (typeof document !== 'undefined' ? document.getElementByI
 const getY = () => { const e = scrollEl(); return e ? e.scrollTop : window.scrollY }
 const setY = (y) => { const e = scrollEl(); if (e) e.scrollTop = y; else window.scrollTo(0, y) }
 const hace = (t) => { if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'hace instantes' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h` }
-const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r.nota || '', estado: migrarEstado(r.estado), resumen: r.resumen || null, oficial: !!r.oficial, created_at: r.created_at, creado_por: r.creado_por || '' })
+const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r.nota || '', estado: migrarEstado(r.estado, undefined, 0, CFG), resumen: r.resumen || null, oficial: !!r.oficial, created_at: r.created_at, creado_por: r.creado_por || '' })
 
 export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], user, onBack, backLabel = 'Oficina', onOpenPorFacturar, onOpenSocios, onOpenBanco }) {
   const D = useIsDesktop()
@@ -56,7 +57,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
         if (!vivo) return
         setVers(filas.map(filaAVersion))
         // Un borrador de formato anterior se migra y queda pendiente de guardar (lastJSON conserva el original para que el autoguardado lo escriba).
-        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12); lastJSON.current = borr.estado?.v === 4 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
+        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12, CFG); lastJSON.current = borr.estado?.v === 5 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
         else setGuardado({ est: DEMO ? 'local' : 'ok', t: null })
         setCargado(true)
       } catch (e) { if (vivo) { setGuardado({ est: 'error', t: null }); setCargado(true) } }
@@ -67,7 +68,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // Sin borrador: estado inicial con los costos vigentes y los datos reales del año anterior (cuando ya cargaron, o tras una breve espera).
   useEffect(() => {
     if (!cargado || est || !(datos.terc != null || espera || DEMO)) return
-    setEst(estadoInicial({ costos: datos.costos, terc: datos.terc, dias: datos.dias.promedio, anio, ppmMes: datos.ppmMes }))
+    setEst(estadoInicial({ costos: datos.costos, terc: datos.terc, dias: datos.dias.promedio, anio, ppmMes: datos.ppmMes, cfg: CFG }))
   }, [cargado, est, datos.terc, espera, datos.costos, datos.dias.promedio, anio, datos.ppmMes])
 
   // Un borrador anterior tiene Remuneraciones y Leyes sociales en una sola partida: se desglosan por persona repartiendo el mismo monto (el total no cambia).
@@ -101,14 +102,21 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // ── Modelo ──
   const M = useMemo(() => (est ? modeloPresupuesto(datos.base, est) : null), [datos.base, est])
   const U = M ? M.ufMed : 1
-  setMoneda({ moneda: est ? est.moneda : 'clp', uf27: M ? M.ufMed : 0, uf26: datos.uf26.med })   // formateador único (presupuestoUI): todo el dinero de los pasos y detalles lo sigue
-  const nomEsc = (k) => ESCENARIOS.find((x) => x[0] === k)[1]
+  setMoneda({ moneda: est ? est.moneda : 'clp', uf27: M ? M.ufMed : 0, uf26: datos.uf26.med, unidad: CFG.moneda.unidad })   // formateador único (presupuestoUI): todo el dinero de los pasos y detalles lo sigue
+  const ESC = est ? escenariosDe(est) : []
+  const nomEsc = (k) => nombreEscenario(est, k)
+  const tonoDe = (k) => ((est && est.escs) || []).find((e) => e.k === k)?.t ?? 0
 
   // ── Cambios del estado ──
   const parche = (fn) => setEst((e) => { const c = JSON.parse(JSON.stringify(e)); fn(c); return c })
   const setPal = (k, f, v) => parche((c) => { c.p[k][f] = v })
   const setGen = (f, v) => parche((c) => { c[f] = v })
   const setEsc = (k) => parche((c) => { c.esc = k })
+  // Escenarios editables (funciones puras de _shared/presupuesto.js): crear duplicando, renombrar, eliminar (con confirmación) y reordenar.
+  const duplicarEsc = (k) => setEst((e) => duplicarEscenario(e, k, CFG))
+  const renombrarEsc = (k, n) => setEst((e) => renombrarEscenario(e, k, n))
+  const moverEsc = (k, dir) => setEst((e) => moverEscenario(e, k, dir))
+  const eliminarEsc = async (k) => { if (await appConfirm(`¿Eliminar el escenario «${nombreEscenario(estRef.current, k)}»?\nLas versiones guardadas conservan el suyo.`)) setEst((e) => eliminarEscenario(e, k)) }
   const setCosto = (i, f, v) => parche((c) => { c.costos[i][f] = v })
   const patchCosto = (i, o) => parche((c) => { Object.assign(c.costos[i], o) })
   const addCosto = () => { parche((c) => { c.costos.push({ id: Date.now(), n: 'Nueva partida', m: 0, meses: 12, t: 'fijo', alza: null }) }); setUI({ abierta: (est ? est.costos.length : 0), mats: [...(ui.mats || []), 'Nueva partida'] }) }
@@ -159,7 +167,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
 
   const MT = est ? calcMetas(datos, est) : null
-  const X = { D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, ESC: ESCENARIOS, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
+  const X = { D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
     irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
@@ -175,12 +183,12 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const irEtapa = (i) => { setDrill(null); setUI({ etapa: i }); setY(0) }
   const estadoCorto = { cargando: 'cargando…', pendiente: 'sin guardar', guardando: 'guardando…', error: 'no se guardó', local: 'en este equipo', ok: 'guardado' }[guardado.est] || 'guardado'
   const chipEstado = <ChipBtn error={guardado.est === 'error'} titulo={estadoTxt} onClick={() => ir({ drill: { t: 'ver' } })}>Versiones · {estadoCorto}</ChipBtn>
-  const MONEDAS = [['clp', 'Pesos'], ['uf', 'UF'], ['ambos', 'Pesos y UF']]
-  const chipMoneda = <span style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontWeight: 700, fontSize: 12.5, height: 32, padding: '0 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center' }}><Menu aria='Moneda' derecha boton={est.moneda === 'uf' ? 'UF' : est.moneda === 'ambos' ? '$ · UF' : '$'} opciones={MONEDAS} valor={est.moneda} onChange={(v) => setGen('moneda', v)} /></span>
+  const MONEDAS = [['clp', CFG.moneda.nombres.clp], ['uf', CFG.moneda.nombres.uf], ['ambos', CFG.moneda.nombres.ambos]]
+  const chipMoneda = <span style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontWeight: 700, fontSize: 12.5, height: 32, padding: '0 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center' }}><Menu aria='Moneda' derecha boton={est.moneda === 'uf' ? CFG.moneda.unidad : est.moneda === 'ambos' ? `${CFG.moneda.simbolo} · ${CFG.moneda.unidad}` : CFG.moneda.simbolo} opciones={MONEDAS} valor={est.moneda} onChange={(v) => setGen('moneda', v)} /></span>
   const chipExcel = <ChipBtn cuadrado aria='Descargar Excel' onClick={() => descargarExcel(X)}><Ic n='doc' s={16} /></ChipBtn>
   const controles = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{chipMoneda}{chipEstado}{chipExcel}</span>
   const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`]]} valor={anio} onChange={async (a) => { if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
-  const DESC = ['Lo ocurrido en el año base', 'Recurrente y por facturar, antes de vender', 'Presupuesto de costos de la oficina', 'Lo que se quiere retirar, ganar, cobrar y vender', 'Tres hipótesis de crecimiento contra las metas', 'Lo presupuestado contra lo real, mes a mes']
+  const DESC = ['Lo ocurrido en el año base', 'Recurrente y por facturar, antes de vender', 'Presupuesto de costos de la oficina', 'Lo que se quiere retirar, ganar, cobrar y vender', 'Hipótesis de crecimiento contra las metas', 'Lo presupuestado contra lo real, mes a mes']
 
   return <div style={{ ...wrap, display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
     <EstilosPresupuesto />

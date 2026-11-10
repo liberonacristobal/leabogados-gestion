@@ -11,15 +11,15 @@ const PESOS = '#,##0', PCT = '0.0%', UF = '#,##0.00'
 
 /**
  * Hojas del libro. Una celda es texto, {v,z} (número con formato), {f,z} (fórmula con formato) o null (vacía).
- * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[], metas?:{ancla:string,valor:number}, ratio?:number|null, referencia?:Record<string,{cierre:number}> }} P
+ * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[], metas?:{ancla:string,valor:number}, ratio?:number|null, cv?:number|null, refK?:string, referencia?:Record<string,{cierre:number}> }} P
  */
 export function hojasPresupuesto(P) {
-  const { est, ESC } = P, ne = ESC.length, iBase = Math.max(0, ESC.findIndex(([k]) => k === 'base'))
+  const { est, ESC } = P, ne = ESC.length, iBase = Math.max(0, ESC.findIndex(([k]) => k === (P.refK || 'base')))   // iBase = escenario de referencia de las metas (Base)
   const sc = (/** @type {number} */ j) => COL(1 + j) // columna del escenario j en Supuestos y Escenarios
   const nC = P.costos.length, totC = nC + 2
 
   const supuestos = {
-    nombre: 'Supuestos', anchos: [38, 16, 16, 16],
+    nombre: 'Supuestos', anchos: [38, 16, 16, 16, 16, 16],
     filas: [
       [`Presupuesto ${P.anio} · supuestos`],
       ['Los valores de las columnas B a D se pueden cambiar.'],
@@ -36,8 +36,9 @@ export function hojasPresupuesto(P) {
       ['Alza de costos (%)', ...ESC.map(([k]) => N(est.p[k].alza, '0.0'))],
       ['Comisiones (% de lo cobrado)', ...ESC.map(([k]) => N(est.p[k].terc, '0.0'))],
       ['Días de cobro', ...ESC.map(([k]) => N(est.p[k].dias, '0'))],
-      ['Facturado / vendido (%) · metas', N(P.ratio ?? 0, '0.0')],
+      ['Facturado / vendido bruto (%) · metas', N(P.ratio ?? 0, '0.0')],
       ['Reserva mínima ya en caja ($) · por confirmar', N(est.reservaIni ?? 0)],
+      ['Comisión sobre ventas (% del bruto) · metas', N(P.cv ?? 0, '0.0')],
     ],
   }
   const base = {
@@ -113,10 +114,10 @@ export function hojasPresupuesto(P) {
       ['Presupuesto de costos ($)', F(`Escenarios!$${bc2}$7`)],
       ['Margen requerido ($)', F('IF(B2="margen",B3,IF(B2="retiros",B3/(1-Supuestos!$B$9/100)/(1-Supuestos!$B$7/100),0))')],
       ['Cobrado requerido ($)', F(`IF(B2="caja",B3,IF(B2="margen",${caja1},IF(B2="retiros",${caja1},0)))`)],
-      ['Facturado requerido ($)', F('IF(B2="ventas",B3*B4/100,IF(B2="fact",B3,(B10-B5*Base!$C$13)/(1-B5*B7)))')],
+      ['Facturado requerido ($)', F('IF(B2="ventas",B3/(1-Supuestos!$B$18/100)*B4/100,IF(B2="fact",B3,(B10-B5*Base!$C$13)/(1-B5*B7)))')],
       ['Crecimiento real exigido (%)', F('IF(B6=0,0,(B11/B6-1)*100)', '0.0')],
       [],
-      ['Vendido (estimación propia)', F('IF(B4>0,B11/(B4/100),0)'), cierre('ventas')],
+      ['Vendido neto (estimación propia)', F('IF(B4>0,B11/(B4/100)*(1-Supuestos!$B$18/100),0)'), cierre('ventas')],
       ['Facturado', F('B11'), cierre('fact')],
       ['Cobrado', F('B11-B5*(B7*B11-Base!$C$13)'), cierre('caja')],
       ['Comisiones', F(`B16*${sB(14)}/100`)],
@@ -128,6 +129,8 @@ export function hojasPresupuesto(P) {
       ['Retiros', F('MAX(0,B21)*(1-Supuestos!$B$9/100)'), cierre('retiros')],
       ['Reserva al cierre (mínima + del año)', F('Supuestos!$B$17+B22')],
       ['Meses de costos de oficina que cubre', F('IF(B18=0,0,B24/(B18/12))', '0.0')],
+      ['Vendido bruto (facturado ÷ relación)', F('IF(B4>0,B11/(B4/100),0)')],
+      ['Comisiones de venta', F('B26*Supuestos!$B$18/100')],
     ],
   }
   const o = P.oficiales

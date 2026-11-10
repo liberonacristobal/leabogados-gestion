@@ -6,66 +6,99 @@
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
 /** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
-/** Parte de cada socio en las metas de la oficina: partes iguales entre los socios (con dos socios, 50 % cada uno). «Sin socio» no tiene meta.
- * @param {{ nombre:string }[]} socios @param {string} nombre */
-export const parteMeta = (socios, nombre) => { const n = (socios || []).filter((s) => s.nombre !== 'Sin socio').length; return n && nombre !== 'Sin socio' ? 1 / n : 0 }
+import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
+
+/** Configuración por estudio (presupuestoConfig.js): toda regla que depende del estudio o del país la recibe como `cfg` opcional; sin ella usa el defecto del tenant actual. */
+/** @typedef {typeof CONFIG_DEFECTO} CfgPresupuesto */
 
 /**
- * Tasa de primera categoría del régimen Pro Pyme general (14 D N°3) por año COMERCIAL. Circular SII N° 53 de 2025 (Ley 21.755): 12,5 % en 2025, 2026 y 2027 y 15 % en 2028,
- * siempre que la cotización del empleador (Ley 21.735) sea la del año (la circular la da por cumplida hasta 2028); desde 2029 la tasa permanente es 25 %.
- * @param {number|null|undefined} anio
+ * Parte de cada socio en las metas de la oficina: por defecto partes iguales entre los socios (con dos socios, 50 % cada uno); `cfg.socios.reparto` puede traer un mapa { nombre: fracción }. «Sin socio» no tiene meta.
+ * @param {{ nombre:string }[]} socios @param {string} nombre @param {CfgPresupuesto} [cfg]
  */
-export const tasaIDPCLegal = (anio) => { const a = num(anio, 2027); return a <= 2027 ? 12.5 : a === 2028 ? 15 : 25 }
+export const parteMeta = (socios, nombre, cfg = CONFIG_DEFECTO) => {
+  if (nombre === 'Sin socio') return 0
+  const rep = cfg.socios && cfg.socios.reparto
+  if (rep && typeof rep === 'object') return Number(rep[nombre]) || 0
+  const n = (socios || []).filter((s) => s.nombre !== 'Sin socio').length
+  return n ? 1 / n : 0
+}
 
 /**
- * Tasa legal del PPM de un contribuyente 14 D N°3 (% de los ingresos brutos del giro). Normal: 0,25 % (ingresos del año anterior hasta 50.000 UF) o 0,5 % (más de 50.000 UF);
+ * Tasa de primera categoría por año COMERCIAL según el régimen configurado (por defecto Pro Pyme general 14 D N°3: Circular SII N° 53 de 2025, Ley 21.755: 12,5 % hasta 2027, 15 % en 2028 y 25 % desde 2029,
+ * siempre que la cotización del empleador (Ley 21.735) sea la del año).
+ * @param {number|null|undefined} anio @param {CfgPresupuesto} [cfg]
+ */
+export const tasaIDPCLegal = (anio, cfg = CONFIG_DEFECTO) => num((tramoDelAnio(cfg.tributario.idpc, num(anio, cfg.tributario.anioPorDefecto)) || { tasa: 0 }).tasa)
+
+/**
+ * Tasa legal del PPM de un contribuyente 14 D N°3 (% de los ingresos brutos del giro). Normal: 0,25 % (ingresos del año anterior hasta el umbral, 50.000 UF) o 0,5 % (más);
  * con la rebaja transitoria (ingresos de agosto de 2025 a diciembre de 2027) queda en 0,125 % o 0,25 %. Sin rebaja desde 2028 (Circular SII N° 53 de 2025, § 2.2 y 2.3).
- * @param {number|null|undefined} anio @param {number|null|undefined} ufAnterior ingresos brutos del año anterior en UF
+ * @param {number|null|undefined} anio @param {number|null|undefined} ufAnterior ingresos brutos del año anterior en UF @param {CfgPresupuesto} [cfg]
  */
-export const tasaPPMLegal = (anio, ufAnterior) => { const grande = num(ufAnterior) > 50_000; return num(anio, 2027) <= 2027 ? (grande ? 0.25 : 0.125) : (grande ? 0.5 : 0.25) }
+export const tasaPPMLegal = (anio, ufAnterior, cfg = CONFIG_DEFECTO) => {
+  const grande = num(ufAnterior) > cfg.tributario.ppm.umbralUF, t = tramoDelAnio(cfg.tributario.ppm.tramos, num(anio, cfg.tributario.anioPorDefecto))
+  return t ? num(grande ? t.grande : t.chica) : 0
+}
 
-/** @typedef {{ v:number, esc:string, moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null}, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
+/** @typedef {{ k:string, n:string, t:number }} EscenarioEstado  clave interna (estable), nombre que ve el usuario y tono (índice) */
+/** @typedef {{ modo:Record<string,string>, manual:Record<string,number[]> }} Distribucion  modo por componente: 'iguales' (defecto), 'estacional' o 'manual'; manual = pesos de los 12 meses */
+/** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 
+// ── Escenarios: una LISTA editable en el estado (`st.escs`: clave, nombre y tono; `st.p[clave]`: sus palancas). Hasta `maxEscenarios`; mínimo uno. ──
 // La clave interna `meta` se mantiene para no romper los estados y versiones guardados; solo el rótulo es «Optimista» (la palabra «meta» queda para lo que el usuario fija).
-export const ESCENARIOS = /** @type {[string,string][]} */ ([['prudente', 'Prudente'], ['base', 'Base'], ['meta', 'Optimista']])
+/** Escenarios de partida [clave, nombre] (los del defecto de presupuestoConfig.js). */
+export const ESCENARIOS = /** @type {[string,string][]} */ (CONFIG_DEFECTO.escenarios.map((/** @type {any} */ e) => [e.k, e.n]))
+export const MAX_ESCENARIOS = /** @type {number} */ (CONFIG_DEFECTO.maxEscenarios)
+/** Lista de escenarios del estado como pares [clave, nombre]; un estado sin lista (anterior a v5) usa los de partida. @param {any} st @returns {[string,string][]} */
+export const escenariosDe = (st) => (Array.isArray(st && st.escs) && st.escs.length ? st.escs.map((/** @type {EscenarioEstado} */ e) => /** @type {[string,string]} */ ([e.k, e.n])) : ESCENARIOS)
+/** Nombre de un escenario del estado (la clave si no existe). @param {any} st @param {string} k */
+export const nombreEscenario = (st, k) => (escenariosDe(st).find((x) => x[0] === k) || [k, k])[1]
+/** Escenario de referencia de las metas: el configurado (Base) si existe; si no, el primero. @param {any} st @param {CfgPresupuesto} [cfg] */
+export const escenarioMetas = (st, cfg = CONFIG_DEFECTO) => { const l = escenariosDe(st); return (l.find((x) => x[0] === cfg.escenarioMetas) || l[0])[0] }
 
-/** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app. */
-export const COMPONENTES = /** @type {[string,string][]} */ ([['ventas', 'Vendido'], ['fact', 'Facturado'], ['caja', 'Cobrado'], ['costos', 'Presupuesto de costos'], ['margen', 'Margen'], ['retiros', 'Retiros']])
-/** Componentes en los que se puede escribir la meta (el presupuesto de costos se arma en el paso Costos). */
-export const ANCLAS = ['retiros', 'margen', 'caja', 'fact', 'ventas']
-export const nombreComponente = (/** @type {string} */ k) => (COMPONENTES.find((x) => x[0] === k) || [k, k])[1]
+/** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app (de la configuración). @param {CfgPresupuesto} [cfg] */
+export const componentesDe = (cfg = CONFIG_DEFECTO) => /** @type {[string,string][]} */ (cfg.componentes.map((/** @type {any} */ c) => [c.k, c.n]))
+export const COMPONENTES = componentesDe()
+/** Componentes en los que se puede escribir la meta (el presupuesto de costos se arma en el paso Costos). @param {CfgPresupuesto} [cfg] */
+export const anclasDe = (cfg = CONFIG_DEFECTO) => /** @type {string[]} */ (cfg.componentes.filter((/** @type {any} */ c) => c.ancla).map((/** @type {any} */ c) => c.k))
+export const ANCLAS = anclasDe()
+export const nombreComponente = (/** @type {string} */ k, /** @type {CfgPresupuesto} */ cfg = CONFIG_DEFECTO) => (componentesDe(cfg).find((x) => x[0] === k) || [k, k])[1]
 /** Reserva de caja mínima que ya está en caja al comenzar el año: base que no se toca (parámetro del estado, no editable en pantalla; por confirmar contra el saldo del Banco). */
-export const RESERVA_MINIMA = 30_000_000
-/** Regla de la reserva recomendada: meses de costos de oficina a los que llegar, repartidos por trimestre. Recomendación de criterio, editable aquí; no es un cálculo oficial. */
-export const REGLA_RESERVA = { meses: 3, trimestres: 4 }
+export const RESERVA_MINIMA = /** @type {number} */ (CONFIG_DEFECTO.reserva.minima)
+/** Regla de la reserva recomendada: meses de costos de oficina a los que llegar, repartidos por trimestre. Recomendación de criterio, editable en la configuración; no es un cálculo oficial. */
+export const REGLA_RESERVA = { meses: /** @type {number} */ (CONFIG_DEFECTO.reserva.meses), trimestres: /** @type {number} */ (CONFIG_DEFECTO.reserva.trimestres) }
 
-/** Supuestos de partida de cada escenario: criterio inicial editable, no un cálculo (el crecimiento) o el dato real del año anterior (terceros, días de cobro). */
-export const PALANCAS_INICIALES = /** @type {Record<string,Supuestos>} */ ({
-  prudente: { g: 0, alza: 6, terc: 24.4, dias: 35 },
-  base: { g: 10, alza: 4.5, terc: 24.4, dias: 24 },
-  meta: { g: 25, alza: 4.5, terc: 24.4, dias: 24 },
-})
+/** Supuestos de partida de cada escenario: criterio inicial editable (el crecimiento) o el dato real del año anterior (terceros, días de cobro). */
+export const PALANCAS_INICIALES = /** @type {Record<string,Supuestos>} */ (Object.fromEntries(CONFIG_DEFECTO.escenarios.map((/** @type {any} */ e) => [e.k, { ...e.p }])))
 
 const sum = (/** @type {number[]} */ a) => a.reduce((x, y) => x + (Number(y) || 0), 0)
 const num = (/** @type {any} */ x, d = 0) => { const n = Number(x); return Number.isFinite(n) ? n : d }
 
 /**
- * Estado inicial editable. `terc` y `dias` (reales del año anterior) reemplazan el valor de partida de los escenarios Base y Meta; el Prudente supone cobro más lento.
+ * Estado inicial editable. `terc` y `dias` (reales del año anterior) reemplazan el valor de partida de los escenarios (el primero cuya clave es `prudente` supone cobro más lento: +10 días sobre el real).
  * `anio` (año comercial del presupuesto) define la tasa legal de primera categoría de partida. El PPM parte de lo que se paga hoy (`ppmMes` × 12): supuesto conservador, la tasa legal (tasaPPMLegal) es menor y queda por confirmar con la contadora.
- * @param {{ costos?:PartidaCosto[], terc?:number|null, dias?:number|null, tasa?:number, ppmMes?:number, anio?:number, reajusteUF?:number, reserva?:number, reservaIni?:number }} [o]
+ * @param {{ costos?:PartidaCosto[], terc?:number|null, dias?:number|null, tasa?:number, ppmMes?:number, anio?:number, reajusteUF?:number, reserva?:number, reservaIni?:number, cfg?:CfgPresupuesto }} [o]
  * @returns {EstadoPresupuesto}
  */
 export function estadoInicial(o = {}) {
-  const p = /** @type {Record<string,Supuestos>} */ (JSON.parse(JSON.stringify(PALANCAS_INICIALES)))
+  const cfg = o.cfg || CONFIG_DEFECTO
+  const p = /** @type {Record<string,Supuestos>} */ (Object.fromEntries(cfg.escenarios.map((/** @type {any} */ e) => [e.k, { ...e.p }])))
   if (o.terc != null && Number.isFinite(Number(o.terc))) for (const k of Object.keys(p)) p[k].terc = Math.round(Number(o.terc) * 10) / 10
-  if (o.dias != null && Number.isFinite(Number(o.dias)) && Number(o.dias) > 0) { p.base.dias = Math.round(Number(o.dias)); p.meta.dias = Math.round(Number(o.dias)); p.prudente.dias = Math.max(p.prudente.dias, Math.round(Number(o.dias)) + 10) }
+  if (o.dias != null && Number.isFinite(Number(o.dias)) && Number(o.dias) > 0) {
+    const d = Math.round(Number(o.dias))
+    for (const k of Object.keys(p)) p[k].dias = k === 'prudente' ? Math.max(p[k].dias, d + 10) : d
+  }
+  const primero = cfg.escenarios.find((/** @type {any} */ e) => e.k === cfg.escenarioMetas) || cfg.escenarios[0]
   return {
-    v: 4, esc: 'base', moneda: 'clp', reajusteUF: num(o.reajusteUF, 3.5), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, 15),
-    reservaIni: num(o.reservaIni, RESERVA_MINIMA), metas: { ancla: 'retiros', valor: null, ratio: null },
+    v: 5, esc: primero.k, escs: cfg.escenarios.map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t })), moneda: 'clp', reajusteUF: num(o.reajusteUF, cfg.moneda.reajusteAnual), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio, cfg)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, cfg.reserva.porcentaje),
+    reservaIni: num(o.reservaIni, cfg.reserva.minima), metas: { ancla: cfg.anclaInicial, valor: null, ratio: null }, dist: distribucionInicial(),
     p, costos: (o.costos || []).map((c) => ({ ...c })), hecho: [], notas: {}, basadaEn: null,
   }
 }
+
+/** Distribución mensual de partida: todos los componentes en partes iguales. @returns {Distribucion} */
+export const distribucionInicial = () => ({ modo: {}, manual: {} })
 
 /** UF proyectada del mes `mesIdx` (0 = enero) con reajuste anual compuesto mensual sobre la UF de cierre del año anterior. @param {number} ufDic @param {number} reajustePct @param {number} mesIdx */
 export function proyectarUF(ufDic, reajustePct, mesIdx) {
@@ -116,8 +149,9 @@ export function modeloPresupuesto(base, st) {
   const { uf27 } = contexto(base, st)
   const ufMed = sum(uf27) / 12
   const esc = /** @type {Record<string, any>} */ ({})
-  for (const [k] of ESCENARIOS) esc[k] = calculoEscenario(base, st, st.p[k], uf27)
-  return { uf27, ufMed, esc }
+  const lista = escenariosDe(st)
+  for (const [k] of lista) esc[k] = calculoEscenario(base, st, st.p[k], uf27)
+  return { uf27, ufMed, esc, lista }
 }
 
 // ── Metas: la misma cascada en los dos sentidos ──
@@ -125,26 +159,39 @@ export function modeloPresupuesto(base, st) {
 // escribir la meta de cualquier componente despeja el g que la produce y vuelve a calcular el resto con la cascada de arriba. Los supuestos de las metas son los del
 // escenario Base (comisiones, días de cobro, alza de costos) y los generales (impuesto, reserva); la relación facturado/vendido es una estimación propia (el real, aún sin ciclo completo).
 
-/** Supuestos con que se calculan las metas: los del escenario Base. @param {EstadoPresupuesto} st */
-export const supuestosMetas = (st) => ({ ...st.p.base })
+/** Supuestos con que se calculan las metas: los del escenario de referencia (Base). @param {EstadoPresupuesto} st @param {CfgPresupuesto} [cfg] */
+export const supuestosMetas = (st, cfg = CONFIG_DEFECTO) => ({ ...st.p[escenarioMetas(st, cfg)] })
 
-/** Vendido a partir de lo facturado, con la relación facturado/vendido (%). @param {number} fact @param {number|null|undefined} ratio */
-export const ventasDeFact = (fact, ratio) => (num(ratio) > 0 ? fact / (num(ratio) / 100) : null)
+// ── Vendido: bruto ↔ neto ──
+// La meta de ventas se mide NETA de comisiones a terceros (como la meta de Inicio, metricasAnio().neto = bruto − comisionesVenta). Dos relaciones, cada una sobre su plano:
+//  · facturado/vendido (ratio, %): se aplica al vendido BRUTO (lo que se factura es el honorario completo; las comisiones se pagan aparte).
+//  · comisión sobre ventas (cv, % del bruto): costo a terceros / bruto observado en el año en curso (d.comisVentaPct, editable en Supuestos).
+// Cadena: facturado → bruto = facturado ÷ ratio → neto = bruto × (1 − cv). La inversa de una meta neta: bruto = neto ÷ (1 − cv) → facturado = bruto × ratio. Estimación propia.
+/** Vendido NETO a partir del bruto y la comisión sobre ventas (%). @param {number} bruto @param {number|null|undefined} cv */
+export const netoDeBruto = (bruto, cv) => bruto * (1 - num(cv) / 100)
+/** Vendido BRUTO a partir del neto (inversa de netoDeBruto); null si la comisión no tiene solución (≥ 100 %). @param {number} neto @param {number|null|undefined} cv */
+export const brutoDeNeto = (neto, cv) => (num(cv) < 100 ? neto / (1 - num(cv) / 100) : null)
+/** Vendido BRUTO a partir de lo facturado, con la relación facturado/vendido (%). @param {number} fact @param {number|null|undefined} ratio */
+export const ventasBrutoDeFact = (fact, ratio) => (num(ratio) > 0 ? fact / (num(ratio) / 100) : null)
+/** Vendido NETO a partir de lo facturado, con la relación facturado/vendido (%) y la comisión sobre ventas (%; 0 si no se indica). @param {number} fact @param {number|null|undefined} ratio @param {number|null|undefined} [cv] */
+export const ventasDeFact = (fact, ratio, cv = 0) => { const b = ventasBrutoDeFact(fact, ratio); return b == null ? null : netoDeBruto(b, cv) }
 
 /**
  * Cascada completa para un crecimiento real `g` (%) con los supuestos de las metas, más Vendido (estimación propia).
- * @param {BasePresupuesto} base @param {EstadoPresupuesto} st @param {number} g @param {number|null} ratio facturado ÷ vendido, en %
+ * `ventas` es el vendido NETO (meta de ventas); `ventasBruto` y `comisVentas` lo abren.
+ * @param {BasePresupuesto} base @param {EstadoPresupuesto} st @param {number} g @param {number|null} ratio facturado ÷ vendido bruto, en % @param {number} [cv] comisión sobre ventas, % del bruto
  */
-export function cadenaMeta(base, st, g, ratio) {
+export function cadenaMeta(base, st, g, ratio, cv = 0) {
   const { uf27 } = contexto(base, st)
   const e = calculoEscenario(base, st, { ...supuestosMetas(st), g }, uf27)
-  return { ...e, g, margen: e.base, ventas: ventasDeFact(e.fact, ratio) }
+  const ventasBruto = ventasBrutoDeFact(e.fact, ratio), ventas = ventasBruto == null ? null : netoDeBruto(ventasBruto, cv)
+  return { ...e, g, margen: e.base, ventas, ventasBruto, comisVentas: ventasBruto == null || ventas == null ? null : ventasBruto - ventas }
 }
 
-/** Valor de un componente en una cascada (escenario o meta). @param {Record<string,any>} e @param {string} comp @param {number|null|undefined} [ratio] */
-export function valorComponente(e, comp, ratio) {
+/** Valor de un componente en una cascada (escenario o meta). Vendido es el NETO. @param {Record<string,any>} e @param {string} comp @param {number|null|undefined} [ratio] @param {number|null|undefined} [cv] */
+export function valorComponente(e, comp, ratio, cv = 0) {
   switch (comp) {
-    case 'ventas': return e.ventas != null ? e.ventas : ventasDeFact(e.fact, ratio)
+    case 'ventas': return e.ventas != null ? e.ventas : ventasDeFact(e.fact, ratio, cv)
     case 'fact': return e.fact
     case 'caja': return e.caja
     case 'costos': return e.costos
@@ -158,17 +205,22 @@ export function valorComponente(e, comp, ratio) {
  * Inversa: la cascada que produce la meta `valor` del componente `componente` (ventas | fact | caja | margen | retiros).
  * Devuelve { ok:false, motivo } si no hay solución: meta ≤ 0 (con retiros o margen ≤ 0 no hay un crecimiento único), base vacía, componente que no se fija aquí,
  * relación facturado/vendido ausente, supuestos sin solución (comisiones, impuesto o reserva ≥ 100 %, días de cobro que anulan la caja) o un facturado negativo.
- * @param {BasePresupuesto} base @param {EstadoPresupuesto} st @param {{ componente:string, valor:number, ratio:number|null }} o
+ * La meta de ventas es NETA: `o.cv` (comisión sobre ventas, % del bruto) la lleva al bruto antes de aplicar la relación facturado/vendido.
+ * @param {BasePresupuesto} base @param {EstadoPresupuesto} st @param {{ componente:string, valor:number, ratio:number|null, cv?:number|null }} o @param {CfgPresupuesto} [cfg]
  */
-export function metasDesdeComponente(base, st, o) {
-  const v = Number(o.valor)
-  if (!ANCLAS.includes(o.componente)) return { ok: false, motivo: 'componente' }
+export function metasDesdeComponente(base, st, o, cfg = CONFIG_DEFECTO) {
+  const v = Number(o.valor), cv = num(o.cv)
+  if (!anclasDe(cfg).includes(o.componente)) return { ok: false, motivo: 'componente' }
   if (!(v > 0)) return { ok: false, motivo: 'valor' }
   const { F0, pesoDic, b11 } = contexto(base, st)
   if (!(F0 > 0)) return { ok: false, motivo: 'base' }
-  const p = supuestosMetas(st), a = p.dias / 30, den = 1 - a * pesoDic
+  const p = supuestosMetas(st, cfg), a = p.dias / 30, den = 1 - a * pesoDic
   let fact
-  if (o.componente === 'ventas') { if (!(num(o.ratio) > 0)) return { ok: false, motivo: 'ratio' }; fact = (v * num(o.ratio)) / 100 }
+  if (o.componente === 'ventas') {
+    if (!(num(o.ratio) > 0)) return { ok: false, motivo: 'ratio' }
+    const bruto = brutoDeNeto(v, cv); if (bruto == null) return { ok: false, motivo: 'supuestos' }
+    fact = (bruto * num(o.ratio)) / 100
+  }
   else if (o.componente === 'fact') fact = v
   else {
     let caja
@@ -183,18 +235,18 @@ export function metasDesdeComponente(base, st, o) {
   }
   if (!(fact > 0)) return { ok: false, motivo: 'negativo' }
   const g = (fact / F0 - 1) * 100
-  return { ok: true, ...cadenaMeta(base, st, g, o.ratio) }
+  return { ok: true, ...cadenaMeta(base, st, g, o.ratio, cv) }
 }
 
 /**
- * Cuánto da cada escenario del componente de la meta, contra la meta: diferencia (escenario − meta) y si la cubre.
- * @param {ReturnType<typeof modeloPresupuesto>} modelo @param {string} comp @param {number} valor @param {number|null} ratio
+ * Cuánto da cada escenario del componente de la meta, contra la meta: diferencia (escenario − meta) y si la cubre. Sigue la lista de escenarios del modelo, en su orden.
+ * @param {ReturnType<typeof modeloPresupuesto>} modelo @param {string} comp @param {number} valor @param {number|null} ratio @param {number|null} [cv]
  */
-export function escenariosContraMeta(modelo, comp, valor, ratio) {
-  return ESCENARIOS.map(([k, n]) => { const v = valorComponente(modelo.esc[k], comp, ratio); return { k, n, valor: v, dif: v == null ? null : v - valor, cubre: v != null && v >= valor - 1 } })
+export function escenariosContraMeta(modelo, comp, valor, ratio, cv = 0) {
+  return modelo.lista.map(([k, n]) => { const v = valorComponente(modelo.esc[k], comp, ratio, cv); return { k, n, valor: v, dif: v == null ? null : v - valor, cubre: v != null && v >= valor - 1 } })
 }
 
-/** El primer escenario (Prudente, Base, Optimista) que cubre la meta, o null si ninguno. @param {ReturnType<typeof escenariosContraMeta>} lista */
+/** El primer escenario de la lista (en su orden: de menor a mayor ambición) que cubre la meta, o null si ninguno. @param {ReturnType<typeof escenariosContraMeta>} lista */
 export const nivelDeMeta = (lista) => (lista.find((x) => x.cubre) || { k: null }).k
 
 /** ¿Una variación es a favor? Más presupuesto de costos es en contra; en los demás componentes, más es a favor. @param {string} comp @param {boolean} sube */
@@ -239,10 +291,11 @@ export function referencia2026(o) {
 // ── Reserva de caja ──
 /**
  * Reserva recomendada: llegar a `meses` de costos de oficina con un aumento gradual por trimestre, sin tope sobre los retiros. Regla simple de criterio (REGLA_RESERVA), no un cálculo oficial.
- * @param {{ costosAnio:number, reservaIni:number, reservaAnio:number, post:number, meses?:number, trimestres?:number }} o
+ * @param {{ costosAnio:number, reservaIni:number, reservaAnio:number, post:number, meses?:number, trimestres?:number, cfg?:CfgPresupuesto }} o
  */
 export function reservaRecomendada(o) {
-  const meses = o.meses ?? REGLA_RESERVA.meses, tr = o.trimestres ?? REGLA_RESERVA.trimestres
+  const cfg = o.cfg || CONFIG_DEFECTO
+  const meses = o.meses ?? cfg.reserva.meses, tr = o.trimestres ?? cfg.reserva.trimestres
   const costosMes = num(o.costosAnio) / 12, ini = num(o.reservaIni), objetivo = meses * costosMes
   const brecha = Math.max(0, objetivo - ini), porTrimestre = brecha / tr
   const reservaCierre = ini + num(o.reservaAnio), falta = Math.max(0, objetivo - reservaCierre)
@@ -315,13 +368,14 @@ export function esDePersona(item, nombre) {
 /**
  * Sueldos y retiros de los socios: el mismo dinero ya presente en el presupuesto, visto por socio (no se suma a los costos ni cambia Margen ni Retiros).
  * Sueldo 2027 = las partidas de Remuneraciones de la persona con su aumento; sus leyes sociales son costo de la oficina y se informan aparte. Retiros en partes iguales (parteMeta).
- * @param {{ socios:string[], costos:PartidaCosto[], alza:number, retiros:number, real:{ sueldos:Record<string,number>, retiros:Record<string,number> } }} o
+ * @param {{ socios:string[], costos:PartidaCosto[], alza:number, retiros:number, real:{ sueldos:Record<string,number>, retiros:Record<string,number> }, cfg?:CfgPresupuesto }} o
  */
 export function sueldosYRetiros(o) {
+  const cfg = o.cfg || CONFIG_DEFECTO
   const filas = o.socios.map((nombre) => {
     const mias = (/** @type {string} */ g) => o.costos.filter((c) => c.g === g && esDePersona(c.n, nombre))
-    const sueldo27 = sum(mias('Remuneraciones').map((c) => monto27(c, o.alza))), leyes27 = sum(mias('Leyes sociales').map((c) => monto27(c, o.alza)))
-    const sueldo26 = num(o.real.sueldos[nombre]), ret26 = num(o.real.retiros[nombre]), ret27 = o.retiros * parteMeta(o.socios.map((n) => ({ nombre: n })), nombre)
+    const sueldo27 = sum(mias(cfg.costos.grupoSueldos).map((c) => monto27(c, o.alza))), leyes27 = sum(mias(cfg.costos.grupoLeyes).map((c) => monto27(c, o.alza)))
+    const sueldo26 = num(o.real.sueldos[nombre]), ret26 = num(o.real.retiros[nombre]), ret27 = o.retiros * parteMeta(o.socios.map((n) => ({ nombre: n })), nombre, cfg)
     return { nombre, sueldo26, ret26, tot26: sueldo26 + ret26, sueldo27, ret27, tot27: sueldo27 + ret27, leyes27 }
   })
   const t = (/** @type {keyof typeof filas[0]} */ k) => sum(filas.map((f) => Number(f[k])))
@@ -369,6 +423,55 @@ export function distribuirMensual(total, pesos = null) {
   const t = num(total), w = (pesos || []).map((x) => Math.max(0, num(x))), sw = sum(w)
   return Array.from({ length: 12 }, (_, i) => (w.length === 12 && sw > 0 ? (t * w[i]) / sw : t / 12))
 }
+
+// ── Distribución mensual del presupuesto ──
+// Regla decidida (análisis del Registro de Ventas SII, enero a octubre de 2025 y 2026): el facturado mensual no tiene una estacionalidad estable entre un año y otro (pocas facturas grandes mueven los meses),
+// así que el presupuesto mensual se reparte por defecto en PARTES IGUALES. Por componente se puede elegir «Estacionalidad» (promedio suavizado de los años observados) o «Manual» (pesos por mes). Estimación propia.
+export const MODOS_DIST = /** @type {[string,string][]} */ ([['iguales', 'Partes iguales'], ['estacional', 'Estacionalidad'], ['manual', 'Manual']])
+/** Componentes que se distribuyen por mes; el Margen sale de los otros (cobrado − comisiones − costos). */
+export const COMPONENTES_DIST = ['ventas', 'fact', 'caja', 'costos', 'retiros']
+
+/**
+ * Pesos de estacionalidad: de cada año observado (12 meses, null donde no hay dato o el mes no está cerrado) se toma el peso de cada mes contra el promedio de ese año
+ * (así un año más grande no pesa más), se promedian los años y se suaviza con el promedio móvil de tres meses (en los bordes, con los vecinos que existen).
+ * Devuelve null si no hay ningún año con datos (el llamador usa partes iguales).
+ * @param {(number|null)[][]} anios
+ * @returns {number[]|null}
+ */
+export function pesosEstacionalidad(anios) {
+  /** @type {number[][]} */
+  const rel = []
+  for (const a of anios || []) {
+    const v = (a || []).map((x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x)))
+    const ok = v.filter((x) => x != null), prom = ok.length ? sum(/** @type {number[]} */ (ok)) / ok.length : 0
+    if (ok.length >= 3 && prom > 0) rel.push(Array.from({ length: 12 }, (_, i) => (v[i] == null ? NaN : /** @type {number} */ (v[i]) / prom)))
+  }
+  if (!rel.length) return null
+  const crudo = Array.from({ length: 12 }, (_, i) => { const x = rel.map((r) => r[i]).filter((y) => Number.isFinite(y)); return x.length ? sum(x) / x.length : NaN })
+  const lleno = crudo.map((x) => (Number.isFinite(x) ? x : (() => { const y = crudo.filter((z) => Number.isFinite(z)); return sum(y) / y.length })()))
+  return lleno.map((_, i) => { const v = [lleno[i - 1], lleno[i], lleno[i + 1]].filter((z) => z != null); return sum(v) / v.length })
+}
+
+/**
+ * Pesos de los 12 meses de un componente según su modo de distribución, o null para partes iguales (modo «iguales», sin pesos válidos o sin estacionalidad disponible).
+ * @param {Distribucion|null|undefined} dist @param {string} comp @param {number[]|null} [pesosEst] pesos de estacionalidad (pesosEstacionalidad)
+ */
+export function pesosDe(dist, comp, pesosEst = null) {
+  const modo = (dist && dist.modo && dist.modo[comp]) || 'iguales'
+  const w = modo === 'estacional' ? pesosEst : modo === 'manual' ? (dist && dist.manual && dist.manual[comp]) || null : null
+  return w && w.length === 12 && sum(w.map((x) => Math.max(0, num(x)))) > 0 ? w.map((x) => Math.max(0, num(x))) : null
+}
+
+/** Reparte el total anual de un componente en 12 meses con su distribución elegida. Las partes suman el total. @param {number} total @param {Distribucion|null|undefined} dist @param {string} comp @param {number[]|null} [pesosEst] */
+export const repartoMensual = (total, dist, comp, pesosEst = null) => distribuirMensual(total, pesosDe(dist, comp, pesosEst))
+
+/** Resumen en una línea de la distribución elegida. @param {Distribucion|null|undefined} dist @param {(c:string)=>string} nombre */
+export function resumenDistribucion(dist, nombre) {
+  const otros = COMPONENTES_DIST.filter((c) => ((dist && dist.modo && dist.modo[c]) || 'iguales') !== 'iguales')
+  if (!otros.length) return 'partes iguales'
+  const t = /** @type {Record<string,string>} */ ({ estacional: 'estacionalidad', manual: 'manual' })
+  return otros.map((c) => `${nombre(c).toLowerCase()} ${t[/** @type {string} */ (dist && dist.modo[c])]}`).join(' · ')
+}
 /**
  * Presupuesto contra real mes a mes de un componente. Un mes cuenta para la desviación solo si está cerrado y tiene real; el cierre proyectado es el real de esos meses más el presupuesto de los demás.
  * Sin presupuesto (null) en ningún mes no hay desviación ni cierre.
@@ -388,10 +491,61 @@ export function seguimientoMensual(o) {
   return { meses, presAcum: hayP ? presAcum : null, realAcum, des, desPct: hayP && presAcum && des != null ? (des / presAcum) * 100 : null, cierre: hayP ? realAcum + resto : null }
 }
 
+// ── Escenarios editables: crear (duplicando uno), renombrar, eliminar y reordenar. Funciones puras: devuelven un estado nuevo y no tocan el recibido. ──
+/** Largo máximo del nombre de un escenario (cabe en la tarjeta y en la columna de las tablas). */
+export const MAX_NOMBRE_ESCENARIO = 24
+/** Nombre de escenario limpio: sin espacios sobrantes y de largo acotado; vacío si no quedó nada. @param {any} n */
+export const nombreEscenarioLimpio = (n) => String(n == null ? '' : n).replace(/\s+/g, ' ').trim().slice(0, MAX_NOMBRE_ESCENARIO)
+/** Primer índice de tono que ningún escenario usa (los tonos rotan: con más escenarios que tonos, se repiten). @param {EscenarioEstado[]} escs @param {number} nTonos */
+const tonoLibre = (escs, nTonos) => { for (let t = 0; t < nTonos; t++) if (!escs.some((e) => e.t === t)) return t; return escs.length % nTonos }
+/** Cantidad de tonos de escenario disponibles (la paleta de la interfaz usa la misma cantidad). */
+export const N_TONOS_ESC = 5
+
+/**
+ * Agrega un escenario copiando las palancas de `deK` (su nombre con «copia»); queda al final y pasa a ser el elegido. Con el máximo de escenarios, devuelve el estado sin cambios.
+ * @param {EstadoPresupuesto} st @param {string} deK @param {CfgPresupuesto} [cfg]
+ */
+export function duplicarEscenario(st, deK, cfg = CONFIG_DEFECTO) {
+  const c = /** @type {EstadoPresupuesto} */ (JSON.parse(JSON.stringify(st))), lista = c.escs || []
+  const origen = lista.find((e) => e.k === deK)
+  if (!origen || lista.length >= cfg.maxEscenarios) return c
+  let n = 1; while (lista.some((e) => e.k === 'e' + n)) n++
+  const k = 'e' + n
+  let nombre = nombreEscenarioLimpio(origen.n + ' (copia)')
+  for (let i = 2; lista.some((e) => e.n === nombre); i++) nombre = nombreEscenarioLimpio(origen.n.slice(0, MAX_NOMBRE_ESCENARIO - 5) + ' (copia ' + i + ')')
+  lista.push({ k, n: nombre, t: tonoLibre(lista, N_TONOS_ESC) })
+  c.escs = lista; c.p[k] = { ...c.p[deK] }; c.esc = k
+  return c
+}
+
+/** Cambia el nombre de un escenario (no se acepta vacío). @param {EstadoPresupuesto} st @param {string} k @param {string} nombre */
+export function renombrarEscenario(st, k, nombre) {
+  const c = /** @type {EstadoPresupuesto} */ (JSON.parse(JSON.stringify(st))), n = nombreEscenarioLimpio(nombre), e = (c.escs || []).find((x) => x.k === k)
+  if (e && n) e.n = n
+  return c
+}
+
+/** Elimina un escenario; queda al menos uno. Si era el elegido, pasa al siguiente (o al anterior si era el último). @param {EstadoPresupuesto} st @param {string} k */
+export function eliminarEscenario(st, k) {
+  const c = /** @type {EstadoPresupuesto} */ (JSON.parse(JSON.stringify(st))), lista = c.escs || [], i = lista.findIndex((e) => e.k === k)
+  if (i < 0 || lista.length <= 1) return c
+  lista.splice(i, 1); delete c.p[k]; c.escs = lista
+  if (c.esc === k) c.esc = lista[Math.min(i, lista.length - 1)].k
+  return c
+}
+
+/** Mueve un escenario una posición (-1 antes, +1 después). @param {EstadoPresupuesto} st @param {string} k @param {number} dir */
+export function moverEscenario(st, k, dir) {
+  const c = /** @type {EstadoPresupuesto} */ (JSON.parse(JSON.stringify(st))), lista = c.escs || [], i = lista.findIndex((e) => e.k === k), j = i + (dir < 0 ? -1 : 1)
+  if (i < 0 || j < 0 || j >= lista.length) return c
+  const [e] = lista.splice(i, 1); lista.splice(j, 0, e); c.escs = lista
+  return c
+}
+
 /** Resumen por escenario que se guarda con cada versión (y sus facturados mensuales, congelados: la base se mueve cada mes). @param {ReturnType<typeof modeloPresupuesto>} m */
 export function resumenModelo(m) {
   const o = /** @type {Record<string, any>} */ ({})
-  for (const [k] of ESCENARIOS) {
+  for (const [k] of m.lista) {
     const e = m.esc[k]
     o[k] = { fact: e.fact, caja: e.caja, costos: e.costos, terc: e.terc, base: e.base, idpc: e.idpc, post: e.post, retiros: e.retiros, mensual: e.ing, mensualUF: e.ingUF }
   }
@@ -406,9 +560,9 @@ export const ETAPA_ANTIGUA = /** @type {Record<number,number>} */ ({ 0: 0, 1: 1,
  * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva mínima). Idempotente.
  * @param {any} st
  */
-export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0) {
+export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0, cfg = CONFIG_DEFECTO) {
   const c = JSON.parse(JSON.stringify(st || {}))
-  if (c.v !== 2 && c.v !== 3 && c.v !== 4) {
+  if (c.v !== 2 && c.v !== 3 && c.v !== 4 && c.v !== 5) {
     const h = new Set(), n = /** @type {Record<string,string>} */ ({})
     ;(c.hecho || []).forEach((/** @type {number} */ i) => { if (ETAPA_ANTIGUA[i] != null) h.add(ETAPA_ANTIGUA[i]) })
     Object.keys(c.notas || {}).sort().forEach((k) => { const t = ETAPA_ANTIGUA[/** @type {any} */ (k)]; if (t == null || !c.notas[k]) return; n[t] = n[t] ? n[t] + ' · ' + c.notas[k] : c.notas[k] })
@@ -416,7 +570,7 @@ export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefin
   }
   if (c.v === 2) {
     // v3: la tasa de primera categoría de partida (15 %) pasa a la legal del año comercial (circular SII 53/2025).
-    if (anio != null && num(c.tasaIDPC, 15) === 15) c.tasaIDPC = tasaIDPCLegal(anio)
+    if (anio != null && num(c.tasaIDPC, 15) === 15) c.tasaIDPC = tasaIDPCLegal(anio, cfg)
     c.v = 3
   }
   if (c.v === 3) {
@@ -426,8 +580,21 @@ export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefin
     Object.keys(c.notas || {}).forEach((k) => { n[Number(k) >= 3 ? String(Number(k) + 1) : k] = c.notas[k] })
     c.notas = n
     if (c.metas == null) c.metas = { ancla: 'retiros', valor: null, ratio: null }
-    if (c.reservaIni == null) c.reservaIni = RESERVA_MINIMA
+    if (c.reservaIni == null) c.reservaIni = cfg.reserva.minima
     c.v = 4
+  }
+  if (c.v === 4) {
+    // v5: los tres escenarios fijos pasan a una lista editable (`escs`), con el mismo orden, nombres y claves (`meta` sigue siendo «Optimista»); se agrega la distribución mensual (partes iguales).
+    if (!Array.isArray(c.escs) || !c.escs.length) {
+      const claves = Object.keys(c.p || {})
+      c.escs = cfg.escenarios.filter((/** @type {any} */ e) => claves.length === 0 || claves.includes(e.k)).map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t }))
+      for (const k of claves) if (!c.escs.some((/** @type {EscenarioEstado} */ e) => e.k === k)) c.escs.push({ k, n: k, t: c.escs.length })
+    }
+    if (!c.escs.some((/** @type {EscenarioEstado} */ e) => e.k === c.esc)) c.esc = c.escs[0].k
+    c.p = c.p || {}
+    for (const e of c.escs) if (!c.p[e.k]) c.p[e.k] = { ...((cfg.escenarios.find((/** @type {any} */ x) => x.k === e.k) || cfg.escenarios[0]).p) }
+    if (c.dist == null) c.dist = distribucionInicial()
+    c.v = 5
   }
   // El PPM vuelve a ser un monto anual (el pagado hoy); un borrador que alcanzó a guardarse con tasa lo recupera del PPM vigente.
   if (c.ppmAnual == null) c.ppmAnual = Math.round(num(ppmAnualRef))
@@ -446,7 +613,14 @@ export function diferenciaSupuestos(a, b, f) {
   const t = (/** @type {string} */ n, /** @type {any} */ x, /** @type {any} */ y) => { if (x !== y) o.push(`${n}: ${x} → ${y}`) }
   t('Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Reserva de caja', f.pc(a.reserva), f.pc(b.reserva))
   const L = /** @type {Record<string,string>} */ ({ g: 'Crecimiento', alza: 'Alza de costos', terc: 'Comisiones', dias: 'Días de cobro' })
-  for (const [k, nom] of ESCENARIOS) for (const campo of Object.keys(L)) t(nom + ' · ' + L[campo], a.p[k][/** @type {keyof Supuestos} */ (campo)], b.p[k][/** @type {keyof Supuestos} */ (campo)])
+  const la = escenariosDe(a), lb = escenariosDe(b)
+  for (const [k, nom] of lb) {
+    const antes = la.find((x) => x[0] === k)
+    if (!antes) { o.push(`Escenario nuevo: ${nom}`); continue }
+    if (antes[1] !== nom) o.push(`Escenario «${antes[1]}» renombrado a «${nom}»`)
+    for (const campo of Object.keys(L)) t(nom + ' · ' + L[campo], (a.p[k] || {})[/** @type {keyof Supuestos} */ (campo)], (b.p[k] || {})[/** @type {keyof Supuestos} */ (campo)])
+  }
+  for (const [k, nom] of la) if (!lb.some((x) => x[0] === k)) o.push(`Escenario quitado: ${nom}`)
   const ma = new Map(a.costos.map((c) => [c.id, c])), mb = new Map(b.costos.map((c) => [c.id, c]))
   for (const c of b.costos) {
     const x = ma.get(c.id)

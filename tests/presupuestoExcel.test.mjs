@@ -1,7 +1,7 @@
 // Excel del presupuesto: las fórmulas del libro dan lo mismo que el modelo de la app. Datos de ejemplo.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { estadoInicial, modeloPresupuesto, ESCENARIOS } from './../supabase/functions/_shared/presupuesto.js'
+import { estadoInicial, modeloPresupuesto, ESCENARIOS, escenariosDe, duplicarEscenario, eliminarEscenario } from './../supabase/functions/_shared/presupuesto.js'
 import { hojasPresupuesto, evaluar } from './../src/lib/presupuestoExcel.js'
 
 const costos = [
@@ -75,4 +75,22 @@ test('hoja «Metas 2027»: las fórmulas despejan y calculan lo mismo que la app
     assert.ok(Math.abs(valor(h, 'Metas 2027', 'B14') - app.ventas) < 1e-3)
     assert.ok(Math.abs(valor(h, 'Metas 2027', 'B25') - app.mesesReserva) < 1e-6)
   }
+})
+
+test('columnas dinámicas: con 5 escenarios (o con uno quitado) el libro sigue cuadrando con el modelo, incluido «Por socio» sobre el de referencia', () => {
+  let est = estadoInicial({ costos, tasa: 15, ppmMes: 100_000 })
+  est = duplicarEscenario(duplicarEscenario(est, 'prudente'), 'meta'); est.p.e2.g = 40
+  const lista = escenariosDe(est), m = modeloPresupuesto({ baseCLP, baseUF, ufDic }, est)
+  const h = evaluar(hojasPresupuesto({ ...mk(est), ESC: lista, refK: 'base' }))
+  lista.forEach(([k], j) => {
+    const c = String.fromCharCode(66 + j), e = m.esc[k]
+    for (const [fila, campo] of [[3, 'fact'], [5, 'caja'], [7, 'costos'], [12, 'retiros']]) assert.ok(Math.abs(valor(h, 'Escenarios', c + fila) - e[campo]) < 1e-4, `${k} ${campo}`)
+  })
+  assert.equal(h.find((x) => x.nombre === 'Mes a mes').filas[0].length, 2 + 2 * lista.length)
+  assert.ok(Math.abs(valor(h, 'Por socio', 'D5') - m.esc.base.fact) < 1e-4)
+  // sin «Base», la referencia pasa al primero y las columnas siguen el orden de la lista
+  const sin = eliminarEscenario(est, 'base'), l2 = escenariosDe(sin), m2 = modeloPresupuesto({ baseCLP, baseUF, ufDic }, sin)
+  const h2 = evaluar(hojasPresupuesto({ ...mk(sin), ESC: l2, refK: l2[0][0] }))
+  assert.ok(Math.abs(valor(h2, 'Escenarios', 'C12') - m2.esc[l2[1][0]].retiros) < 1e-4)
+  assert.ok(Math.abs(valor(h2, 'Por socio', 'D5') - m2.esc[l2[0][0]].fact) < 1e-4)
 })

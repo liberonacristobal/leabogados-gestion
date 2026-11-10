@@ -5,15 +5,15 @@
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
 import { useMemo } from 'react'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
-import { resultadoMes, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
+import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio } from './cifras.js'
-import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF } from '../../supabase/functions/_shared/presupuesto.js'
+import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
+import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF, pesosEstacionalidad } from '../../supabase/functions/_shared/presupuesto.js'
 import { retirosSocios, _SOCIO_SUELDO } from '../vistas/SociosView.jsx'
 
-/** Categorías de costo que son fijas (el resto se trata como discrecional). */
-export const CATEGORIAS_FIJAS = ['Remuneraciones', 'Leyes sociales', 'Arriendo y espacio', 'Arriendo y GGCC', 'Contadora']
-/** Categorías cuyas filas son por persona: cada una es una partida propia (sueldo y leyes sociales de cada uno, con su reajuste). El resto de las categorías se suma en una sola partida. */
-export const CATEGORIAS_POR_PERSONA = ['Remuneraciones', 'Leyes sociales']
+/** Categorías de costo que son fijas (el resto se trata como discrecional) y las que van por persona (una partida propia por fila, con su reajuste): de la configuración del estudio. */
+export const CATEGORIAS_FIJAS = CFG.costos.fijas
+export const CATEGORIAS_POR_PERSONA = CFG.costos.porPersona
 
 const hoyISO = () => new Date().toLocaleDateString('en-CA')
 const ym = (/** @type {number} */ y, /** @type {number} */ m) => `${y}-${String(m).padStart(2, '0')}`
@@ -94,9 +94,12 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const base = baseMensual(cierres, ufDic)
 
   // Cifras oficiales del año (las de Inicio), con su meta.
-  const { ventaPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD: ing?.total || 0, metaCobranza })
+  const { ventaPct, ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD: ing?.total || 0, metaCobranza })
+  // Vendido = NETO de comisiones a terceros (metricasAnio().neto), el plano de la meta anual (400 M netos); el bruto y la comisión van al lado. El % de la meta es ventaNetoPct (pctsAnio, el mismo de Inicio).
   const oficiales = {
-    vend: { uf: m.brutoUF, clp: m.bruto, pct: m.meta > 0 ? ventaPct : null },
+    vend: { uf: m.netoUF, clp: m.neto, pct: m.meta > 0 ? ventaNetoPct : null },
+    vendBruto: { uf: m.brutoUF, clp: m.bruto, pct: m.meta > 0 ? ventaPct : null },
+    comisVentas: { uf: m.costoUF, clp: m.costo },
     fact: { uf: resAnio.verUF?.fac || 0, clp: resAnio.verCLP?.fac || 0, pct: m.bruto > 0 ? factPct : null },
     cob: { uf: ing?.totalUF || 0, clp: ing?.total || 0, pct: metaCobranza > 0 ? cobroPct : null },
     marg: { uf: resAnio.verUF?.res || 0, clp: resAnio.verCLP?.res || 0, pct: resAnio.pct },
@@ -107,9 +110,12 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Evolución del año: vendido acumulado por mes de inicio de cada venta y cobrado acumulado por fecha del depósito, ambos llevados al total oficial de Inicio (estimación propia: reparte el total oficial según las partidas).
   const evo = useMemo(() => {
     const Y = currentYear, H = Number(hoy.slice(5, 7)) - 1
-    const kV = V.reduce((a, x) => a + (x.m || 0), 0) > 0 && oficiales.vend.clp > 0 ? oficiales.vend.clp / V.reduce((a, x) => a + (x.m || 0), 0) : 1
+    // Vendido NETO por venta (bruto − comisionesVenta, la fuente única de metricasAnio): el total oficial es neto, así el reparto por mes y por área queda en el mismo plano.
+    const Vn = V.map((x) => ({ ...x, m: (x.m || 0) - comisionesVenta(x.s, terceros, billing, ufRef).anual }))
+    const sumV = Vn.reduce((a, x) => a + x.m, 0)
+    const kV = sumV > 0 && oficiales.vend.clp > 0 ? oficiales.vend.clp / sumV : 1
     const porMes = Array(12).fill(0)
-    V.forEach((x) => { const i = String(x.ym).slice(0, 4) === String(Y) ? Number(String(x.ym).slice(5, 7)) - 1 : 0; porMes[Math.max(0, Math.min(11, i))] += (x.m || 0) * kV })
+    Vn.forEach((x) => { const i = String(x.ym).slice(0, 4) === String(Y) ? Number(String(x.ym).slice(5, 7)) - 1 : 0; porMes[Math.max(0, Math.min(11, i))] += (x.m || 0) * kV })
     let ac = 0
     const vend = porMes.map((v, i) => (i <= H ? (ac += v) : null))
     const fechaAbono = /** @type {Record<string,string>} */ ({})
@@ -122,7 +128,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     let u = 0; const cob = cobMesAc.map((v, i) => { if (v > 0) u = v; return i <= H ? u : null })
     const iV = oficiales.metaVentasCLP > 0 ? vend.findIndex((v) => v != null && v >= oficiales.metaVentasCLP) : -1
     /** @type {Record<string,number>} */ const ar = {}
-    V.forEach((x) => { const k = x.s?.area || 'Sin área'; ar[k] = (ar[k] || 0) + (x.m || 0) * kV })
+    Vn.forEach((x) => { const k = x.s?.area || 'Sin área'; ar[k] = (ar[k] || 0) + (x.m || 0) * kV })
     const totA = Object.values(ar).reduce((a, v) => a + v, 0)
     /** @type {Record<string,{monto:number,uf:number,n:number}>} */ const tp = {}
     const tipoDe = (/** @type {any} */ id) => (clients || []).find((c) => String(c.id) === String(id))?.type || 'Sin tipo'
@@ -133,11 +139,16 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
       areas: Object.entries(ar).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([n, monto]) => ({ n, monto, pct: totA ? (monto / totA) * 100 : 0 })),
       tipos: Object.entries(tp).sort((a, b) => b[1].monto - a[1].monto).map(([n, t]) => ({ n, monto: t.monto, uf: t.uf, nClientes: t.n, pct: totT ? (t.monto / totT) * 100 : 0 })),
     }
-  }, [V, ingConc, ingAbonos, clientes, clients, hoy])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [V, ingConc, ingAbonos, clientes, clients, hoy, terceros, billing, ufRef])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recurrente (ventas mensuales activas, sin subarriendo), anualizado como en Ventas.
   const rec = (sales || []).filter((s) => !s.deleted_at && esRecurrente(s) && !esSubarriendo(s))
-  const recurrente = { n: rec.length, anualCLP: rec.reduce((a, s) => a + ventaCLP(s, ufRef), 0), anualUF: rec.reduce((a, s) => a + ventaUF(s, ufRef), 0) }
+  const comRec = (/** @type {any} */ s) => comisionesVenta(s, terceros, billing, ufRef).anual
+  const recurrente = {
+    n: rec.length, anualCLP: rec.reduce((a, s) => a + ventaCLP(s, ufRef), 0), anualUF: rec.reduce((a, s) => a + ventaUF(s, ufRef), 0),
+    // En el plano de Vendido (neto de comisiones): lo recurrente que descuenta de la meta de ventas.
+    netoCLP: rec.reduce((a, s) => a + ventaCLP(s, ufRef) - comRec(s), 0), netoUF: rec.reduce((a, s) => a + ventaUF(s, ufRef) - (comRec(s) / (parseFloat(s.uf_value) || ufRef || 1)), 0),
+  }
 
   // Costos de oficina: lo vigente al comenzar el año del presupuesto (un reajuste con `desde` anterior ya rige; uno posterior queda al monto previo), con la regla de vigencia de resultadoMes.
   // Sueldos y leyes sociales van por persona (una partida por fila, con su vigencia); el resto, sumado por categoría. El PPM va aparte (lo pagado hoy).
@@ -214,10 +225,16 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     retiros: { aFecha: retiros26.totalUF, cierre: retiros26.totalUF },
   }
   // Relación facturado/vendido del año a la fecha: estimación propia (aún sin ciclo completo), para llevar una meta de ventas a facturado.
-  const ratioFactVend = oficiales.vend.clp > 0 ? (oficiales.fact.clp / oficiales.vend.clp) * 100 : null
+  // Se aplica al vendido BRUTO (lo facturado es el honorario completo).
+  const ratioFactVend = oficiales.vendBruto.clp > 0 ? (oficiales.fact.clp / oficiales.vendBruto.clp) * 100 : null
+  // Comisión sobre ventas observada en el año en curso: costo a terceros ÷ vendido bruto (metricasAnio). Lleva el vendido bruto al neto de la meta; editable en Supuestos.
+  const comisVentaPct = oficiales.vendBruto.clp > 0 ? (oficiales.comisVentas.clp / oficiales.vendBruto.clp) * 100 : null
+
+  // Estacionalidad: peso de cada mes del facturado propio en UF, promedio suavizado de los años observados (el anterior completo y el en curso hasta el último mes cerrado).
+  const pesosEst = pesosEstacionalidad([-1, 0].map((dy) => Array.from({ length: 12 }, (_, i) => { const k = ym(currentYear + dy, i + 1); return k < ymHoy && serie[k] ? serie[k].facUF : null })))
 
   return {
-    hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios,
   }
