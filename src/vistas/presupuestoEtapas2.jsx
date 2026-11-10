@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
@@ -63,7 +63,7 @@ export function CardEsc({ X, k, editable }) {
     {!X.D && <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes</div>}
     {cu && cu.dif != null && Math.abs(cu.dif) >= 1 && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha></div>}
     {(() => { const det = <>
-    <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Aumento de reserva', e.reserva)}</div>
+    <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr(`− ${nombreCorto('costos', CFG)}`, e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Aumento de reserva', e.reserva)}</div>
     <div style={{ fontSize: X.D ? 11 : 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 5 : 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
     {editable && <div style={acc} onClick={(ev) => ev.stopPropagation()}>
@@ -128,7 +128,7 @@ export function Escenarios({ X }) {
   const { est, M, D, ui, setUI, datos: d } = X
   const tabs = [['res', 'Resultado'], ['imp', 'Impuesto'], ['soc', 'Por socio']]
   const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} editable />)}</Grid>
-  const cascada = [['', 'Vendido neto (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio, X.MT.cv) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', 'Presupuesto de costos', (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Aumento de reserva', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
+  const cascada = [['', 'Vendido neto (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio, X.MT.cv) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', nombreCorto('costos', CFG), (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Aumento de reserva', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
   const e = M.esc[est.esc]
   const mensual = <div>{MESC.map((m, i) => <Fila key={m} nombre={MESL[i]} sub={monedaActual() === 'clp' ? ufs(e.ingUF[i]) : ''} valor={mx(e.ing[i], e.ingUF[i])} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
   const fmtN = (x) => Number(x).toLocaleString('es-CL', { maximumFractionDigits: 1 })
@@ -220,7 +220,7 @@ export function Seguimiento({ X }) {
   const { est, D, datos: d, ui, setUI } = X, Y = d.anio
   const { S, of, esc, cerr, estS, modoMetas } = seriesSeguimiento(X)
   const modo = ui.sg || 'p', comp = ui.sc || 'fact'
-  const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
+  const nombre = Object.fromEntries(componentesCortosDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
   const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
   const color = (/** @type {string} */ kk, /** @type {number} */ des) => (kk === 'retiros' ? C.muted : bueno(kk, des) ? C.greenText : C.overdueText)   // retiros bajo el presupuesto: color neutro, no es una alarma
@@ -549,8 +549,8 @@ export function DCmp({ X, id }) {
   </div></Panel>
   if (!k) return <>{cab}{aviso('Las dos no comparten ningún escenario: no hay cifras que comparar.')}</>
   const eA = mA.esc[k], eB = mB.esc[k]
-  const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], [nombreComponente('costos', CFG), 'costos', 0], [nombreComponente('margen', CFG), 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], [nombreComponente('retiros', CFG), 'retiros', 1]]
-  const cambios = diferenciaEstructurada(A, B, { mm, pc, nombreComp: (/** @type {string} */ kk) => nombreComponente(kk, CFG), paso: (/** @type {number} */ i) => `Paso ${Number(i) + 1}` })
+  const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], [nombreCorto('costos', CFG), 'costos', 0], [nombreComponente('margen', CFG), 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], [nombreComponente('retiros', CFG), 'retiros', 1]]
+  const cambios = diferenciaEstructurada(A, B, { mm, pc, nombreComp: (/** @type {string} */ kk) => nombreCorto(kk, CFG), paso: (/** @type {number} */ i) => `Paso ${Number(i) + 1}` })
   const grupos = ['Supuestos', 'Costos', 'Metas', 'Notas'].map((g) => [g, cambios.filter((x) => x.grupo === g)]).filter(([, l]) => l.length)
   const cols = X.D ? 'minmax(0,1fr) 96px 96px 96px' : 'minmax(0,1fr) 70px 70px 74px'
   return <>

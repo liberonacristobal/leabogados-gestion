@@ -2,7 +2,7 @@
 // Cada cifra sale de un helper de _shared/presupuesto.js (metasDesdeComponente, reservaRecomendada, sueldosYRetiros); aquí solo se dibujan.
 import { C, useIsDesktop, fmtFechaDMY } from './base.jsx'
 import {
-  anclasDe, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
+  anclasDe, nombreCorto, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
 } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { mm, mx, pc, Flecha, Fld, Btn, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
@@ -136,7 +136,7 @@ export function TablaPresupuesto({ X, MT, irPaso }) {
   const D = useIsDesktop(), ch = MT.ch, ref = MT.ref, an = X.datos.anio
   const L = [
     ['', 'Vendido', ch.ventas, ref.ventas.cierre, 'ventas', 0], ['', 'Facturado', ch.fact, ref.fact.cierre, 'fact', 0], ['−', 'Aumento de lo por cobrar', ch.dCob, null, null, 0], ['=', 'Cobrado', ch.caja, ref.caja.cierre, 'caja', 1],
-    ['−', 'Comisiones', ch.terc, null, null, 0], ['−', 'Presupuesto de costos', ch.costos, ref.costos.cierre, 'costos', 0, () => irPaso(2)], ['=', 'Margen', ch.margen, ref.margen.cierre, 'margen', 1],
+    ['−', 'Comisiones', ch.terc, null, null, 0], ['−', nombreCorto('costos', CFG), ch.costos, ref.costos.cierre, 'costos', 0, () => irPaso(2)], ['=', 'Margen', ch.margen, ref.margen.cierre, 'margen', 1],
     ['−', 'Impuesto de primera categoría', ch.idpc, null, null, 0], ['=', 'Después de impuesto', ch.post, null, null, 1], ['−', 'Aumento de reserva', ch.reserva, null, null, 0], ['=', 'Retiros', ch.retiros, ref.retiros.cierre, 'retiros', 1],
   ]
   const g = D ? 'minmax(0,1fr) 110px 110px 150px' : 'minmax(0,1fr) 88px 88px'

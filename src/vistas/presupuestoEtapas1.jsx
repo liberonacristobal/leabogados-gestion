@@ -1,6 +1,6 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesAtipicos, nombreComponente, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
@@ -35,7 +35,7 @@ export function Mirada({ X }) {
   const cumple = (real, meta, realU, metaU) => { if (!(meta > 0)) return <span>Sin meta</span>; const x = difMon(real, meta, realU, metaU); return <><Flecha sube={real >= meta} bueno={real >= meta}>{pc((real / meta) * 100, 0)}</Flecha><Flecha sube={real >= meta} bueno={real >= meta}>{x.sg}{x.abs}</Flecha></> }
   const mVU = d.metaVentasUF > 0 ? d.metaVentasUF : null
   const T = Object.fromEntries(componentesDe(CFG).map(([k, n]) => [k, TONO_COMP[k]]))
-  const tarjetas26 = componentesDe(CFG).map(([k, nombre]) => {
+  const tarjetas26 = componentesCortosDe(CFG).map(([k, nombre]) => {
     const [tono, ic] = T[k]
     const base = { tono, ic, label: nombre, aria: nombre }
     // Vendido (alternativa D): cifras gemelas BRUTO | NETO del mismo tamaño; la comparación es el neto contra la meta («Sin meta» si no hay). En el celular el bruto va primero.
@@ -94,7 +94,7 @@ export function Base({ X }) {
   const origen = (i) => { const c = d.cierres.find((x) => Number(x.ym.slice(5, 7)) - 1 === i); return c ? c.ym.slice(0, 4) : '—' }
   // Seis tarjetas de solo lectura: el cierre 2026 estimado contra la base de {Y} (últimos 12 meses cerrados, sin crecimiento, con los supuestos del escenario Base). Tocar una abre su página (filasBase).
   const ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv)
-  const tarjetasBase = componentesDe(CFG).map(([k, nombre]) => {
+  const tarjetasBase = componentesCortosDe(CFG).map(([k, nombre]) => {
     const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio, MT.cv), ref = d.referencia[k]
     return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} onClick={() => ir({ drill: { t: 'comp', de: 'base', k } })} />
   })
@@ -182,9 +182,8 @@ export function Costos({ X }) {
     </div>
   }
   return <>
-    <Titulo>Costos {Y}</Titulo>
     {/* H02 / N05 / R3: una sola cifra de costos y un solo nombre; el «vigente» pasa al detalle («Cómo se calcula»); tarjetas A2 con textos breves */}
-    <Tarjeta tono='t' ic='egr' label={`Presupuesto de costos ${Y} · ${nomE}`} aria={`Presupuesto de costos ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
+    <Tarjeta tono='t' ic='egr' label={`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`} aria={`${nombreCorto('costos', CFG)} ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>

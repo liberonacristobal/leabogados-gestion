@@ -337,9 +337,10 @@ export const Pestanas = ({ options, value, onChange }) => <div role='tablist' st
 
 /** Sección plegada: una línea con el título, la cifra clave a la derecha y un chevrón; se abre y se cierra sin desmontar lo de adentro (lo escrito se conserva). */
 export function Pliegue({ t, v, children, abierto, abajo }) {
+  const D = useIsDesktop()
   return <details open={abierto} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0 }}>
-    <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', flexWrap: abajo ? 'wrap' : 'nowrap', gap: abajo ? '2px 10px' : 10, padding: '12px 16px', fontSize: 13 }}>
-      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={abajo ? { order: 3, flexBasis: '100%', textAlign: 'left', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 } : { flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16, marginLeft: abajo ? 'auto' : 0 }}>›</span>
+    <summary className='pp-tac' style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', flexWrap: abajo ? 'wrap' : 'nowrap', gap: abajo ? '1px 10px' : 10, padding: abajo ? '7px 14px' : D ? '6px 16px' : '6px 14px', minHeight: abajo ? undefined : 34, boxSizing: 'border-box', lineHeight: 1.25, fontSize: D ? 13 : 12 }}>
+      <b style={{ color: C.accent, fontSize: 13 }}>{t}</b><span style={abajo ? { order: 3, flexBasis: '100%', textAlign: 'left', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 } : { flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16, lineHeight: 1, marginLeft: abajo ? 'auto' : 0 }}>›</span>
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>

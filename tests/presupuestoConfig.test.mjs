@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  estadoInicial, modeloPresupuesto, cadenaMeta, metasDesdeComponente, reservaRecomendada, tasaIDPCLegal, tasaPPMLegal, parteMeta, componentesDe, anclasDe, nombreComponente, migrarEstado, sueldosYRetiros,
+  estadoInicial, modeloPresupuesto, nombreCorto, componentesCortosDe, cadenaMeta, metasDesdeComponente, reservaRecomendada, tasaIDPCLegal, tasaPPMLegal, parteMeta, componentesDe, anclasDe, nombreComponente, migrarEstado, sueldosYRetiros,
 } from './../supabase/functions/_shared/presupuesto.js'
 import { CONFIG_DEFECTO, configPresupuesto, mezclarConfig, tramoDelAnio } from './../supabase/functions/_shared/presupuestoConfig.js'
 
@@ -151,4 +151,14 @@ test('reserva en cuenta corriente editable: cambia la reserva al cierre y la rec
   const inv = metasDesdeComponente(base, st2, { componente: 'retiros', valor: 50_000_000, ratio: 66 })
   assert.ok(Math.abs(cadenaMeta(base, st2, inv.g, 66).retiros - 50_000_000) < 1)
   assert.equal(validarConfig({ reserva: { minima: -1 } }).ok, false); assert.equal(validarConfig({ reserva: { minima: 0 } }).ok, true)
+})
+
+test('nombre corto de los componentes: «Presupuesto» para las tarjetas, el largo sigue siendo el de la app y sirve de respaldo; la validación lo acota', () => {
+  assert.equal(nombreCorto('costos'), 'Presupuesto'); assert.equal(nombreCorto('ventas'), 'Vendido'); assert.equal(nombreCorto('x'), 'x')
+  assert.deepEqual(componentesCortosDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto', 'Margen', 'Retiros'])
+  assert.deepEqual(componentesDe().map((x) => x[1])[3], 'Presupuesto de costos')
+  const otra = configPresupuesto({ componentes: CONFIG_DEFECTO.componentes.map((c) => (c.k === 'costos' ? { ...c, corto: undefined } : c)) })
+  assert.equal(nombreCorto('costos', otra), 'Presupuesto de costos')   // sin corto, respaldo en el largo
+  const r = (c) => validarConfig({ componentes: CONFIG_DEFECTO.componentes.map((x) => (x.k === 'costos' ? { ...x, ...c } : x)) })
+  assert.equal(r({ corto: 'Costos' }).ok, true); assert.equal(r({ corto: '' }).ok, false); assert.equal(r({ corto: 'x'.repeat(25) }).ok, false)
 })
