@@ -2277,6 +2277,16 @@ export function useCompromisosCobranza(){
 // Decisiones guardadas sobre cuotas (learnings cuota_no_emitir: «No corresponde» y «Ya facturada»). Reactivo: al guardar una decisión las vistas abiertas
 // se actualizan sin recargar. En la demo no se escribe: la decisión vive solo en la sesión.
 const _noEmitirSubs=new Set(); const _noEmitirDemo=new Map()
+// «Por facturar» de la app para vistas que no son la página Por facturar (p. ej. Presupuesto): las mismas entradas que ella le da a clasificarPorFacturar; la cifra es `grupos.vigente.m`.
+export function usePorFacturar({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], fantasmaIds = null }) {
+  const noEmitir = useNoEmitirSet()
+  const bb = useMemo(() => (billing || []).filter(b => !b.deleted_at && !(fantasmaIds && fantasmaIds.has(String(b.id)))), [billing, fantasmaIds])
+  const ufFechas = useUFFechas(bb)
+  return useMemo(() => {
+    const yaFacturadas = new Set(matchProgEmitidas(bb, clients, clientEntities, { sales }).map(m => String(m.prog.id)))
+    return clasificarPorFacturar({ billing: bb, sales, anticipos, uf: ufFechas || {}, noEmitir, yaFacturadas, hoy: isoLocal(Date.now()) })
+  }, [bb, sales, clients, clientEntities, anticipos, ufFechas, noEmitir])
+}
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)
   useEffect(()=>{ const f=()=>setN(x=>x+1); _noEmitirSubs.add(f); return ()=>{ _noEmitirSubs.delete(f) } },[])

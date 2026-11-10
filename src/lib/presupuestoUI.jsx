@@ -339,7 +339,7 @@ export const Pestanas = ({ options, value, onChange }) => <div role='tablist' st
 export function Pliegue({ t, v, children, abierto, abajo }) {
   return <details open={abierto} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0 }}>
     <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', flexWrap: abajo ? 'wrap' : 'nowrap', gap: abajo ? '2px 10px' : 10, padding: '12px 16px', fontSize: 13 }}>
-      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={abajo ? { order: 3, flexBasis: '100%', textAlign: 'left', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 } : { flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16, marginLeft: abajo ? 'auto' : 0 }}>›</span>
+      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={abajo ? { order: 3, flexBasis: '100%', textAlign: 'left', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 } : { flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16, marginLeft: abajo ? 'auto' : 0 }}>›</span>
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>
