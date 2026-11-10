@@ -46,7 +46,7 @@ export function Metas({ X }) {
     <Pliegue t='Reserva de caja' v={`${mm(ch.reservaCierre)} al cierre${rr.mesesCierre != null ? ` · ${rr.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses` : ''}`}><ReservaBloque X={X} ch={ch} irBanco={X.onOpenBanco} /></Pliegue>
     <Pliegue t='Supuestos · 7' v={`comisiones ${pc(est.p[rk].terc)} · cobro ${est.p[rk].dias} días`}><Supuestos X={X} MT={MT} /></Pliegue>
     </div>
-    <Pliegue t='Escenarios contra la meta' v={MT.ok ? <span>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> real en UF{D && <> · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel, X.ESC)}</b></>}</span> : null}><div style={{ padding: '10px 12px 6px' }}><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div></Pliegue>
+    <Pliegue t='Escenarios contra la meta' v={MT.ok ? <span>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> {D && ' real en UF'}{D && <> · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel, X.ESC)}</b></>}</span> : null}><div style={{ padding: '10px 12px 6px' }}><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div></Pliegue>
     <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: 10, alignItems: 'start' }}>
     <Pliegue t='Distribución mensual' v={resumenDistribucion(est.dist, (c) => nombreComponente(c, CFG))}><Distribucion X={X} /></Pliegue>
     <Pliegue t='Estado de resultados' v={`retiros ${mm(ch.retiros)}`}><TablaPresupuesto X={X} MT={MT} irPaso={(i) => X.ir({ etapa: i })} /></Pliegue>

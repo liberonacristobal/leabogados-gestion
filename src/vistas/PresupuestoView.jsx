@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
-import { PageHeader } from '../lib/compartido.jsx'
+import { PageHeader, usePorFacturar } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
@@ -21,10 +21,11 @@ const hace = (t) => { if (!t) return ''; const m = Math.round((Date.now() - t) /
 // cfgFoto = foto de la configuración con que se guardó la versión (migrarEstado no la conoce: se conserva aparte).
 const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r.nota || '', estado: { ...migrarEstado(r.estado, undefined, 0, CFG), ...(r.estado && r.estado.cfgFoto ? { cfgFoto: r.estado.cfgFoto } : {}) }, resumen: r.resumen || null, oficial: !!r.oficial, created_at: r.created_at, creado_por: r.creado_por || '' })
 
-export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], user, esAdmin = false, onBack, backLabel = 'Oficina', onOpenPorFacturar, onOpenSocios, onOpenBanco }) {
+export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], clientEntities = [], fantasmaIds = null, user, esAdmin = false, onBack, backLabel = 'Oficina', onOpenPorFacturar, onOpenSocios, onOpenBanco }) {
   const D = useIsDesktop()
   const [anioSel, setAnioSel] = useState(null)
   const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, anioSel })
+  const porFacturar = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds }).grupos.vigente.m
   const anio = datos.anio
   const [est, setEst] = useState(null)
   const [vers, setVers] = useState([])
@@ -211,7 +212,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
   const MT = est ? calcMetas(datos, est) : null
   const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
-    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), irPorFacturar: onOpenPorFacturar }
+    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
   const origen = drill && drill.t === 'cfg' ? `Presupuesto ${anio}` : pila.length ? (pila[pila.length - 1].drill ? titulosDrill(X, pila[pila.length - 1].drill) : ETAPAS[pila[pila.length - 1].etapa]) : backLabel

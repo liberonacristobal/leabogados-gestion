@@ -29,9 +29,9 @@ function Filas({ X, filas, tit }) {
 // ── 4 · Escenarios ──
 function Strip({ X }) {
   const { est, setGen, D } = X
-  const campos = [['Reajuste UF', 'reajusteUF', 'pct', { suf: '%' }, ''], ['Tasa 1ª categoría', 'tasaIDPC', 'pct', { suf: '%' }, CFG.tributario.etiqueta], ['PPM del año', 'ppmAnual', 'money', { pre: '$' }, 'Lo pagado hoy: ' + mp(X.datos.ppmMes) + ' al mes'], ['Reserva en cuenta corriente', 'reservaIni', 'money', { pre: '$' }, ''], ['Aumento de reserva', 'reserva', 'pct', { suf: '%' }, '']]
-  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 5 : 2},minmax(0,1fr))`, gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '8px 14px' }}>
-    {campos.map(([t, f, k, u, n]) => <div key={f} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, color: C.accent, marginBottom: 2 }}>{t}</div>{f === 'ppmAnual' || f === 'reservaIni' ? <FldDin clp={est[f]} tasa={f === 'reservaIni' ? tasa26() : tasa27()} onCommit={(v) => setGen(f, f === 'reservaIni' ? Math.max(0, v) : v)} w={9999} /> : <Fld kind={k} value={est[f]} onCommit={(v) => setGen(f, v)} w={9999} {...u} />}{n && <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{n}</div>}</div>)}
+  const campos = [['Reajuste UF', 'reajusteUF', 'pct', { suf: '%' }, ''], ['Tasa 1ª categoría', 'tasaIDPC', 'pct', { suf: '%' }, CFG.tributario.etiqueta], ['PPM del año', 'ppmAnual', 'money', { pre: '$' }, 'Hoy: ' + mp(X.datos.ppmMes) + ' al mes'], ['Reserva en cuenta corriente', 'reservaIni', 'money', { pre: '$' }, ''], ['Aumento de reserva', 'reserva', 'pct', { suf: '%' }, '']]
+  return <div style={{ display: 'grid', gridTemplateColumns: `${D ? 'minmax(0,.8fr) minmax(0,.85fr) minmax(0,1fr) minmax(0,1.5fr) minmax(0,1.25fr)' : 'repeat(2,minmax(0,1fr))'}`, gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '8px 14px' }}>
+    {campos.map(([t, f, k, u, n]) => <div key={f} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, color: C.accent, marginBottom: 2, minHeight: D ? 14 : 28, display: 'flex', alignItems: 'flex-end', lineHeight: 1.25 }}>{t}</div>{f === 'ppmAnual' || f === 'reservaIni' ? <FldDin clp={est[f]} tasa={f === 'reservaIni' ? tasa26() : tasa27()} onCommit={(v) => setGen(f, f === 'reservaIni' ? Math.max(0, v) : v)} w={9999} /> : <Fld kind={k} value={est[f]} onCommit={(v) => setGen(f, v)} w={9999} {...u} />}{n && <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{n}</div>}</div>)}
   </div>
 }
 
