@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesAtipicos, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
-import { nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
+import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -39,12 +39,12 @@ export function Mirada({ X }) {
     const [tono, ic] = T[k]
     const base = { tono, ic, label: nombre, aria: nombre }
     // Vendido (alternativa D): cifras gemelas BRUTO | NETO del mismo tamaño; la comparación es el neto contra la meta («Sin meta» si no hay). En el celular el bruto va primero.
-    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Bruto', val: mx(o.vendBruto.clp, o.vendBruto.uf) }} der={{ cap: 'Neto', val: mx(o.vend.clp, o.vend.uf) }} cmp={o.metaVentasCLP > 0 ? <><Flecha sube={o.vend.clp >= o.metaVentasCLP} bueno={o.vend.clp >= o.metaVentasCLP}>{pc((o.vend.clp / o.metaVentasCLP) * 100, 0)} neto</Flecha>{D && <span>Meta {mxP(o.metaVentasCLP, mVU)}</span>}</> : <span>Sin meta</span>} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
+    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Bruto', val: mx(o.vendBruto.clp, o.vendBruto.uf) }} der={{ cap: 'Neto', val: mx(o.vend.clp, o.vend.uf) }} cmp={o.metaVentasCLP > 0 ? <><Flecha sube={o.vend.clp >= o.metaVentasCLP} bueno={o.vend.clp >= o.metaVentasCLP}>{pc((o.vend.clp / o.metaVentasCLP) * 100, 0)} neto</Flecha>{D && <span>Meta {mxP(o.metaVentasCLP, mVU)}</span>}</> : <span role='button' onClick={(ev) => { ev.stopPropagation(); ir({ etapa: 3 }) }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Sin meta · Definir meta ›</span>} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
     if (k === 'fact') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.fact.clp, o.fact.uf) }} der={{ cap: 'Del bruto', val: o.vendBruto.clp > 0 ? pc((o.fact.clp / o.vendBruto.clp) * 100, 0) : '—' }} cmp={<span>Sin meta propia</span>} onClick={() => ir({ drill: { t: 'ind', k: 'fact26' } })} />
-    if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : 'Sin meta' }} cmp={o.metaCobroCLP > 0 ? cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null) : <span> </span>} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
+    if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : 'Sin meta' }} cmp={o.metaCobroCLP > 0 ? cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null) : <span role='button' onClick={(ev) => { ev.stopPropagation(); ir({ etapa: 3 }) }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Definir meta ›</span>} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
     if (k === 'costos') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(c26.real, c26.realUF) }} der={{ cap: 'Presupuesto', val: mx(c26.ppto, c26.pptoUF) }} cmp={c26.ppto > 0 ? (() => { const x = difMon(c26.real, c26.ppto, c26.realUF, c26.pptoUF); return <Flecha sube={x.sube} bueno={afavor('costos', x.sube)}>{x.sg}{x.abs} · {x.sg}{pc(Math.abs(x.pct))}</Flecha> })() : <span>—</span>} onClick={() => ir({ drill: { t: 'ind', k: 'costos26' } })} />
     if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
-    return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) }} der={{ cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) }} cmp={<span> </span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
+    return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) }} der={{ cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) }} cmp={d.retiros26.total > 0 ? <span> </span> : <span>sin retiros registrados{D && <> · <span role='button' onClick={(ev) => { ev.stopPropagation(); X.onOpenSocios && X.onOpenSocios() }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Socios ›</span></>}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
   })
   const tile = (m) => {
     const x = m.f && m.a && fv(m.a) && m.i < H ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)   // el mes en curso no se compara (queda «a la fecha»)
@@ -55,6 +55,8 @@ export function Mirada({ X }) {
       {at && <div style={{ fontSize: 10.5, fontWeight: 700, color: C.soonText }}>atípico</div>}
     </div>
   }
+  // Primer año sin historia: no hay nada que mostrar; se parte desde cero (Costos → Metas → Escenarios).
+  if (d.sinBase && d.clientes.length === 0) return <VacioPaso titulo={`Sin datos de ${Y} en la app`} causa={`No hay facturas emitidas en ${Y}, así que no hay resultado que comparar. El presupuesto se puede preparar igual.`} pasos={[[1, 'Costos', 'las partidas de la oficina'], [2, `Metas ${d.anio}`, 'lo que se quiere retirar'], [3, 'Escenarios', 'qué tan alcanzable es la meta']]} acciones={[['Preparar desde cero', () => ir({ etapa: 2 }), true], ...(X.esAdmin ? [['Configuración del presupuesto', () => ir({ drill: { t: 'cfg' } }), false]] : [])]} />
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>al {fmtFechaDMY(d.hoy)}</span>}>Resultado del año {Y}</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{tarjetas26}</Grid>

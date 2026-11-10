@@ -691,3 +691,41 @@ export function diasDeCobro(billing, anio) {
 export function concentracion(montosOrdenados, total, k = 5) {
   return total > 0 ? sum(montosOrdenados.slice(0, k)) / total : 0
 }
+
+/**
+ * Diferencias entre dos estados del presupuesto en forma estructurada {grupo, etiqueta, antes, despues}: Supuestos, Costos, Metas y Notas (con las metas y las notas de los pasos).
+ * `diferenciaSupuestos` (texto) queda sobre las mismas comparaciones; esta es la que alimenta la página «Comparar versiones». Solo devuelve lo que cambió.
+ * @param {EstadoPresupuesto} a @param {EstadoPresupuesto} b @param {{ mm:(n:number)=>string, pc:(n:number)=>string, nombreComp?:(k:string)=>string, paso?:(i:number)=>string }} f
+ * @returns {{ grupo:string, etiqueta:string, antes:string, despues:string }[]}
+ */
+export function diferenciaEstructurada(a, b, f) {
+  /** @type {{ grupo:string, etiqueta:string, antes:string, despues:string }[]} */
+  const o = []
+  const t = (/** @type {string} */ g, /** @type {string} */ n, /** @type {any} */ x, /** @type {any} */ y) => { if (x !== y) o.push({ grupo: g, etiqueta: n, antes: String(x), despues: String(y) }) }
+  t('Supuestos', 'Reajuste de la UF', f.pc(a.reajusteUF), f.pc(b.reajusteUF)); t('Supuestos', 'Tasa de primera categoría', f.pc(a.tasaIDPC), f.pc(b.tasaIDPC)); t('Supuestos', 'PPM del año', f.mm(a.ppmAnual), f.mm(b.ppmAnual)); t('Supuestos', 'Reserva de caja', f.pc(a.reserva), f.pc(b.reserva)); t('Supuestos', 'Reserva inicial', f.mm(a.reservaIni), f.mm(b.reservaIni))
+  const L = /** @type {Record<string,string>} */ ({ g: 'Crecimiento', alza: 'Alza de costos', terc: 'Comisiones', dias: 'Días de cobro' })
+  const la = escenariosDe(a), lb = escenariosDe(b)
+  for (const [k, nom] of lb) {
+    const antes = la.find((x) => x[0] === k)
+    if (!antes) { o.push({ grupo: 'Supuestos', etiqueta: 'Escenario', antes: '—', despues: nom }); continue }
+    if (antes[1] !== nom) o.push({ grupo: 'Supuestos', etiqueta: 'Escenario renombrado', antes: antes[1], despues: nom })
+    for (const campo of Object.keys(L)) { const x = (a.p[k] || {})[/** @type {keyof Supuestos} */ (campo)], y = (b.p[k] || {})[/** @type {keyof Supuestos} */ (campo)]; if (x !== y) o.push({ grupo: 'Supuestos', etiqueta: nom + ' · ' + L[campo], antes: campo === 'dias' ? `${x} d` : f.pc(x), despues: campo === 'dias' ? `${y} d` : f.pc(y) }) }
+  }
+  for (const [k, nom] of la) if (!lb.some((x) => x[0] === k)) o.push({ grupo: 'Supuestos', etiqueta: 'Escenario', antes: nom, despues: '—' })
+  const ma = new Map(a.costos.map((c) => [c.id, c])), mb = new Map(b.costos.map((c) => [c.id, c]))
+  for (const c of b.costos) {
+    const x = ma.get(c.id)
+    if (!x) { o.push({ grupo: 'Costos', etiqueta: 'Partida', antes: '—', despues: `${c.n} · ${f.mm(c.m)} por mes, ${c.meses} meses` }); continue }
+    if (x.n !== c.n) o.push({ grupo: 'Costos', etiqueta: 'Partida renombrada', antes: x.n, despues: c.n })
+    if (x.m !== c.m) o.push({ grupo: 'Costos', etiqueta: `${c.n} · por mes`, antes: f.mm(x.m), despues: f.mm(c.m) })
+    if (x.meses !== c.meses) o.push({ grupo: 'Costos', etiqueta: `${c.n} · meses`, antes: String(x.meses), despues: String(c.meses) })
+    if (x.alza !== c.alza) o.push({ grupo: 'Costos', etiqueta: `${c.n} · alza`, antes: x.alza == null ? 'del escenario' : f.pc(x.alza), despues: c.alza == null ? 'del escenario' : f.pc(c.alza) })
+  }
+  for (const c of a.costos) if (!mb.has(c.id)) o.push({ grupo: 'Costos', etiqueta: 'Partida', antes: c.n, despues: '—' })
+  const nc = f.nombreComp || ((/** @type {string} */ k) => k), ma2 = a.metas || { ancla: null, valor: null }, mb2 = b.metas || { ancla: null, valor: null }
+  if (ma2.ancla !== mb2.ancla) o.push({ grupo: 'Metas', etiqueta: 'Meta escrita en', antes: ma2.ancla ? nc(ma2.ancla) : '—', despues: mb2.ancla ? nc(mb2.ancla) : '—' })
+  if ((ma2.valor ?? null) !== (mb2.valor ?? null)) o.push({ grupo: 'Metas', etiqueta: `Valor de la meta${mb2.ancla ? ' · ' + nc(mb2.ancla) : ''}`, antes: ma2.valor == null ? '—' : f.mm(ma2.valor), despues: mb2.valor == null ? '—' : f.mm(mb2.valor) })
+  const na = a.notas || {}, nb = b.notas || {}, paso = f.paso || ((/** @type {number} */ i) => `Paso ${i + 1}`)
+  for (const i of [...new Set([...Object.keys(na), ...Object.keys(nb)])].sort()) { const x = String(na[i] || '').trim(), y = String(nb[i] || '').trim(); if (x !== y) o.push({ grupo: 'Notas', etiqueta: paso(Number(i)), antes: x || '—', despues: y || '—' }) }
+  return o
+}

@@ -1,14 +1,15 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaSupuestos, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
-const TX = CFG.tributario.textos, cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
+const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
 import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 import { filasBase } from './presupuestoEtapas1.jsx'
 import { filasMetas } from './presupuestoMetas.jsx'
+import { DCfg } from './presupuestoConfigVista.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 const fechaDMY = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -58,7 +59,7 @@ export function CardEsc({ X, k, editable }) {
   return <div onClick={() => setEsc(k)} role='button' aria-pressed={sel} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: X.D ? (sel ? 13 : 14) : (sel ? 9 : 10), cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: X.D ? 6 : 3, minWidth: 0, boxSizing: 'border-box' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}{sel && <Chip>elegido</Chip>}{k !== rk && b && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs {X.nomEsc(rk)}</Chip>}</div>
     <div style={{ ...LBL, color: C.muted }}>Retiros</div>
-    <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.overdueText, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
+    <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.muted, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>{e.retiros <= 0 && <div style={{ fontSize: 12, color: C.muted }}>no alcanza para retirar</div>}
     <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes</div>
     {cu && cu.dif != null && Math.abs(cu.dif) >= 1 && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha> contra la meta de {nombreComponente(MT.ancla, CFG).toLowerCase()}</div>}
     <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
@@ -214,15 +215,16 @@ export function Seguimiento({ X }) {
   const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
   const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
+  const color = (/** @type {string} */ kk, /** @type {number} */ des) => (kk === 'retiros' ? C.muted : bueno(kk, des) ? C.greenText : C.overdueText)   // retiros bajo el presupuesto: color neutro, no es una alarma
   // Desvío con flecha (↑ sobre el presupuesto, ↓ bajo él; verde a favor, rojo en contra) en % o en dinero, según el conmutador.
   const fl = (/** @type {string} */ kk, /** @type {any} */ m, /** @type {any} */ mu, /** @type {number} */ tam = 11) => (m == null || m.des == null ? <span style={{ color: C.muted }}>—</span>
-    : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: bueno(kk, m.des) ? C.greenText : C.overdueText }}>{m.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (m.pres ? `${sg2(m.des)}${pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
-  const flA = (/** @type {string} */ kk, /** @type {any} */ c, /** @type {any} */ u) => (c.des == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: bueno(kk, c.des) ? C.greenText : C.overdueText }}>{c.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (c.desPct != null ? `${sg2(c.des)}${pc(Math.abs(c.desPct), 0)}` : '—') : `${sg2(c.des)}${cel(Math.abs(c.des), Math.abs(u.des))}`}</span>)
+    : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: color(kk, m.des) }}>{m.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (m.pres ? `${sg2(m.des)}${pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
+  const flA = (/** @type {string} */ kk, /** @type {any} */ c, /** @type {any} */ u) => (c.des == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: color(kk, c.des) }}>{c.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (c.desPct != null ? `${sg2(c.des)}${pc(Math.abs(c.desPct), 0)}` : '—') : `${sg2(c.des)}${cel(Math.abs(c.des), Math.abs(u.des))}`}</span>)
   const rango = cerr > 0 ? `ene–${MESC[cerr - 1]}` : ''
   const tarjeta = (/** @type {string} */ kk) => {
     const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
     return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={{ cap: rango ? `Real ${rango}` : 'Real', val: cerr > 0 ? mx(c.realAcum, u.realAcum) : '—' }} der={{ cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null && cerr > 0 ? mx(c.presAcum, u.presAcum) : cerr === 0 && c.cierre != null ? mx(c.cierre, u.cierre) : '—' }}
-      cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
+      cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
       onClick={() => { setUI({ sc: kk }); X.ir({ drill: { t: 'comp', de: 'seg', k: kk } }) }} />
   }
   const avisos = []
@@ -272,8 +274,8 @@ export function Seguimiento({ X }) {
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `meses cerrados: ${rango}` : 'sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.muted }}>
-      <span>Se mide contra {of ? <>la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>el <b style={{ color: C.accent }}>borrador</b> (sin versión oficial)</>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
-      <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Cambiar versión ›</span>
+      <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
+      <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span>
     </div>
     {cerr === 0 && <div style={{ fontSize: 12.5, color: C.muted, margin: '0 4px' }}>Sin meses cerrados: el real aparece al cierre de {MESL[0].toLowerCase()}. Las tarjetas muestran el presupuesto del año.</div>}
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
@@ -510,39 +512,55 @@ export function DVer({ X }) {
       </div>
       <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><Btn onClick={() => X.guardarVersion((refN.current?.value || '').trim() || 'Versión', (refNo.current?.value || '').trim())}>Guardar versión</Btn><span style={{ fontSize: 12, color: C.muted }}>{base ? `El borrador parte de «${base.nombre}»` : 'Se guarda la foto de todos los supuestos, costos y notas de las etapas.'}</span></div>
     </Panel>
-    <Titulo>Versiones guardadas · {vers.length}</Titulo>
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: vers.length >= 6 ? C.soonText : C.muted }}>{vers.length} de 6</span>}>Versiones guardadas</Titulo>
     <Panel>{vers.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay versiones. Guarda la primera cuando termines una etapa.</div>
       : vers.map((v) => { const abierta = ui.vx === v.id, b = v.resumen && v.resumen.base ? v.resumen.base : null, c = conf && conf.id === v.id ? conf.a : null
         return <Fila key={v.id} abierta={abierta} nombre={<>{v.nombre}{v.oficial && <span style={{ marginLeft: 8 }}><Chip>Oficial</Chip></span>}{v.id === X.est.basadaEn && <span style={{ marginLeft: 8 }}><Chip tono='y'>borrador parte de aquí</Chip></span>}</>} peq={`${fechaDMY(v.created_at)}${v.creado_por ? ' · ' + v.creado_por : ''} · ${v.nota || 'sin nota'}`} sub={b ? 'retiros ' + mm(b.retiros) : ''} valor={b ? mm(b.fact) : ''} onClick={() => setUI({ vx: abierta ? null : v.id, confirma: null })}>
           {abierta && <div style={{ background: C.bgSoft, padding: '4px 16px 14px', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
             {c === 'abrir' ? <><span>Reemplaza el borrador actual. Guárdalo antes como versión si lo necesitas.</span><span><Btn onClick={() => X.abrirVersion(v)}>Abrir</Btn> <Lnk onClick={() => setUI({ confirma: null })}>Cancelar</Lnk></span></>
               : c === 'borrar' ? <><span>Esta versión se elimina y no se puede recuperar.</span><span><Btn onClick={() => X.borrarVersion(v)}>Eliminar</Btn> <Lnk onClick={() => setUI({ confirma: null })}>Cancelar</Lnk></span></>
-                : <><span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Btn onClick={() => setUI({ confirma: { a: 'abrir', id: v.id } })}>Abrir</Btn><Btn onClick={() => X.ir({ drill: { t: 'cmp', id: v.id } })}>Comparar con el borrador</Btn><Btn onClick={() => X.marcarOficial(v)}>{v.oficial ? 'Quitar como oficial' : 'Marcar como oficial'}</Btn></span><Lnk rojo onClick={() => setUI({ confirma: { a: 'borrar', id: v.id } })}>Eliminar</Lnk></>}
+                : <><span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Btn onClick={() => setUI({ confirma: { a: 'abrir', id: v.id } })}>Abrir</Btn><Btn onClick={() => { setUI({ cmpA: v.id, cmpB: 'borrador', cmpE: null }); X.ir({ drill: { t: 'cmp', id: v.id } }) }}>Comparar con…</Btn><Btn onClick={() => X.marcarOficial(v)}>{v.oficial ? 'Quitar como oficial' : 'Marcar como oficial'}</Btn></span><Lnk rojo onClick={() => setUI({ confirma: { a: 'borrar', id: v.id } })}>Eliminar</Lnk></>}
           </div>}
         </Fila> })}</Panel>
   </>
 }
 const campo = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, color: C.text, outline: 'none' }
 
+// Comparar versiones: se elige Antes y Después (versiones guardadas o el borrador actual; se pueden intercambiar) y el escenario; arriba las seis cifras con su diferencia y debajo los cambios agrupados en Supuestos, Costos, Metas y Notas.
 export function DCmp({ X, id }) {
-  const v = X.vers.find((x) => x.id === id)
-  if (!v) return <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>Esa versión ya no existe.</div>
-  const A = v.estado, B = X.est, mA = modeloPresupuesto(X.datos.base, A), mB = modeloPresupuesto(X.datos.base, B)
-  const comunes = mB.lista.filter(([kk]) => mA.esc[kk]).map(([kk]) => kk), k = comunes.includes(X.est.esc) ? X.est.esc : comunes[0]
-  if (!k) return <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>La versión y el borrador no comparten ningún escenario: no hay cifras que comparar.</div>
+  const { vers, ui, setUI } = X, idA = ui.cmpA || id, idB = ui.cmpB || 'borrador'
+  const quita = (/** @type {any} */ e) => { const { cfgFoto, ...r } = e || {}; return r }
+  const get = (/** @type {string} */ i) => (i === 'borrador' ? { nombre: 'Borrador actual', estado: X.est } : vers.find((v) => v.id === i))
+  const va = get(idA), vb = get(idB), aviso = (/** @type {string} */ t) => <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>{t}</div>
+  if (!va || !vb) return aviso('Esa versión ya no existe.')
+  const opts = [...vers.map((v) => [v.id, /\d{2}-\d{2}-\d{4}/.test(v.nombre) ? v.nombre : `${v.nombre} · ${fechaDMY(v.created_at).slice(0, 10)}`]), ['borrador', 'Borrador actual']]
+  const sel = (/** @type {string} */ rot, /** @type {string} */ val, /** @type {(v:string)=>void} */ on) => <label style={{ display: 'block', minWidth: 0 }}><span style={{ ...LBL, color: C.muted, fontSize: 10.5 }}>{rot}</span><select value={val} onChange={(ev) => on(ev.target.value)} style={{ ...campo, height: 44, marginTop: 3 }}>{opts.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
+  const A = quita(va.estado), B = quita(vb.estado), mA = modeloPresupuesto(X.datos.base, A), mB = modeloPresupuesto(X.datos.base, B)
+  const comunes = mB.lista.filter(([kk]) => mA.esc[kk]).map(([kk]) => kk), k = comunes.includes(ui.cmpE) ? ui.cmpE : comunes.includes(X.est.esc) ? X.est.esc : comunes[0]
+  const cab = <Panel><div style={{ padding: 12, display: 'grid', gridTemplateColumns: X.D ? 'minmax(0,1fr) auto minmax(0,1fr)' : '1fr', gap: 8, alignItems: 'end' }}>
+    {sel('Antes', idA, (v) => setUI({ cmpA: v, cmpB: idB }))}
+    <button aria-label='Intercambiar' onClick={() => setUI({ cmpA: idB, cmpB: idA })} className='pp-tac' style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.border}`, background: C.card, color: C.accent, cursor: 'pointer', justifySelf: 'center', fontSize: 16 }}>⇄</button>
+    {sel('Después', idB, (v) => setUI({ cmpB: v, cmpA: idA }))}
+  </div></Panel>
+  if (!k) return <>{cab}{aviso('Las dos no comparten ningún escenario: no hay cifras que comparar.')}</>
   const eA = mA.esc[k], eB = mB.esc[k]
-  const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], ['Presupuesto de costos', 'costos', 0], ['Margen', 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], ['Retiros', 'retiros', 1]]
-  const dif = diferenciaSupuestos(A, B, { mm, pc })
+  const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], [nombreComponente('costos', CFG), 'costos', 0], [nombreComponente('margen', CFG), 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], [nombreComponente('retiros', CFG), 'retiros', 1]]
+  const cambios = diferenciaEstructurada(A, B, { mm, pc, nombreComp: (/** @type {string} */ kk) => nombreComponente(kk, CFG), paso: (/** @type {number} */ i) => `Paso ${Number(i) + 1}` })
+  const grupos = ['Supuestos', 'Costos', 'Metas', 'Notas'].map((g) => [g, cambios.filter((x) => x.grupo === g)]).filter(([, l]) => l.length)
+  const cols = X.D ? 'minmax(0,1fr) 96px 96px 96px' : 'minmax(0,1fr) 70px 70px 74px'
   return <>
-    <Titulo>Escenario {nombreEscenario(B, k)} · versión contra el borrador de hoy</Titulo>
+    {cab}
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><span style={{ ...LBL, color: C.muted }}>Escenario</span><Seg options={comunes.map((kk) => [kk, nombreEscenario(B, kk)])} value={k} onChange={(v) => setUI({ cmpE: v })} /></div>
     <Panel>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 90px 90px', gap: 10, padding: '10px 16px', ...LBL, color: C.accent }}><span /><span style={{ textAlign: 'right' }}>Versión</span><span style={{ textAlign: 'right' }}>Borrador</span><span style={{ textAlign: 'right' }}>Diferencia</span></div>
+      <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '10px 16px', ...LBL, color: C.accent }}><span /><span style={{ textAlign: 'right' }}>Antes</span><span style={{ textAlign: 'right' }}>Después</span><span style={{ textAlign: 'right' }}>Dif.</span></div>
       {rows.map(([t, key, bueno]) => { const dd = eB[key] - eA[key], nulo = Math.abs(dd) < 1
-        return <div key={t} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 90px 90px', gap: 10, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}</span><span style={{ textAlign: 'right' }}><Val v={mm(eA[key])} /></span><span style={{ textAlign: 'right' }}><Val v={mm(eB[key])} /></span><b style={{ textAlign: 'right', color: nulo ? C.muted : bueno ? (dd > 0 ? C.greenText : C.overdueText) : C.text }}>{nulo ? '—' : (dd > 0 ? '+' : '−') + mmP(Math.abs(dd))}</b></div> })}
+        return <div key={t} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}</span><span style={{ textAlign: 'right', color: C.muted }}><Val v={mmP(eA[key])} /></span><span style={{ textAlign: 'right' }}><Val v={mmP(eB[key])} /></span><b style={{ textAlign: 'right', color: nulo ? C.muted : bueno ? (dd > 0 ? C.greenText : C.overdueText) : C.text }}>{nulo ? '—' : (dd > 0 ? '↑ ' : '↓ ') + mmP(Math.abs(dd))}</b></div> })}
     </Panel>
-    <Panel hd='Supuestos que cambian' small={`${dif.length} cambio${dif.length !== 1 ? 's' : ''}`} pad>{dif.length ? <Lista items={dif} /> : <span style={{ fontSize: 13, color: C.muted }}>El borrador es igual a esta versión.</span>}</Panel>
+    <Titulo>Qué cambió · {cambios.length}</Titulo>
+    {grupos.length === 0 ? <Panel pad><span style={{ fontSize: 13, color: C.muted }}>Las dos son iguales: no hay supuestos, costos, metas ni notas distintos.</span></Panel>
+      : grupos.map(([g, l]) => <Panel key={g} hd={g} small={`${l.length} cambio${l.length !== 1 ? 's' : ''}`}>{l.map((x, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderTop: i ? `1px solid ${C.border}` : 'none', fontSize: 13, flexDirection: X.D ? 'row' : 'column' }}><span>{x.etiqueta}</span><span style={{ fontWeight: 700, color: C.accent, textAlign: X.D ? 'right' : 'left' }}><span style={{ color: C.muted, fontWeight: 500 }}>{x.antes}</span> → {x.despues}</span></div>)}</Panel>)}
   </>
 }
 
-export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : (indicadores(X)[d.k]?.tit || 'Detalle')
-export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : <DInd X={X} k={d.k} />
+export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : d.t === 'cfg' ? 'Configuración del presupuesto' : (indicadores(X)[d.k]?.tit || 'Detalle')
+export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : d.t === 'cfg' ? (X.esAdmin ? <DCfg X={X} /> : null) : <DInd X={X} k={d.k} />

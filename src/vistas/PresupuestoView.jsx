@@ -7,8 +7,8 @@ import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
 import { PageHeader } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario } from '../../supabase/functions/_shared/presupuesto.js'
-import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
-import { mm, pc, Kpi, Btn, Fld, Grid, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic } from '../lib/presupuestoUI.jsx'
+import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
+import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic, ResumenCascada } from '../lib/presupuestoUI.jsx'
 import { calcMetas } from '../lib/presupuestoBloques.jsx'
 import { Mirada, Base, Costos } from './presupuestoEtapas1.jsx'
 import { Metas } from './presupuestoMetas.jsx'
@@ -18,9 +18,10 @@ const scrollEl = () => (typeof document !== 'undefined' ? document.getElementByI
 const getY = () => { const e = scrollEl(); return e ? e.scrollTop : window.scrollY }
 const setY = (y) => { const e = scrollEl(); if (e) e.scrollTop = y; else window.scrollTo(0, y) }
 const hace = (t) => { if (!t) return ''; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'hace instantes' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h` }
-const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r.nota || '', estado: migrarEstado(r.estado, undefined, 0, CFG), resumen: r.resumen || null, oficial: !!r.oficial, created_at: r.created_at, creado_por: r.creado_por || '' })
+// cfgFoto = foto de la configuración con que se guardó la versión (migrarEstado no la conoce: se conserva aparte).
+const filaAVersion = (r) => ({ id: r.id, nombre: r.nombre || 'Versión', nota: r.nota || '', estado: { ...migrarEstado(r.estado, undefined, 0, CFG), ...(r.estado && r.estado.cfgFoto ? { cfgFoto: r.estado.cfgFoto } : {}) }, resumen: r.resumen || null, oficial: !!r.oficial, created_at: r.created_at, creado_por: r.creado_por || '' })
 
-export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], user, onBack, backLabel = 'Oficina', onOpenPorFacturar, onOpenSocios, onOpenBanco }) {
+export function PresupuestoView({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], user, esAdmin = false, onBack, backLabel = 'Oficina', onOpenPorFacturar, onOpenSocios, onOpenBanco }) {
   const D = useIsDesktop()
   const [anioSel, setAnioSel] = useState(null)
   const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, anioSel })
@@ -35,6 +36,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const [pila, setPila] = useState([])
   // H05: si falla la LECTURA del borrador no se crea un estado inicial ni se autoguarda (insertaría un borrador paralelo): se muestra el error y se bloquea el guardado hasta reintentar.
   const raiz = useRef(null)
+  const [cfgDe, setCfgDe] = useState(null), [, setCfgTick] = useState(0)   // nombre de la versión cuya configuración se está viendo (null = la vigente)
   useEffect(() => { const el = raiz.current; if (el) el.querySelectorAll('[role=button]:not([tabindex])').forEach((n) => { n.setAttribute('tabindex', '0'); n.classList.add('pp-foco') }) })
   const [errorCarga, setErrorCarga] = useState(false), [reintento, setReintento] = useState(0)
   const lastJSON = useRef(''), tmr = useRef(null), borradorId = useRef(null), enVuelo = useRef(false), estRef = useRef(null)
@@ -48,6 +50,8 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     const t = setTimeout(() => { if (vivo) setEspera(true) }, 1500)
     ;(async () => {
       try {
+        // La configuración guardada del estudio (solo administradores) se aplica ANTES de crear o leer nada: si falla la lectura, no se crea estado alguno.
+        if (esAdmin) { aplicarConfigGuardada(await leerConfigGuardada()); setCfgDe(null) }
         let borr = null, filas = []
         if (DEMO) {
           const b = localStorage.getItem('ppto_demo_' + anio), v = localStorage.getItem('ppto_demo_v_' + anio)
@@ -143,8 +147,16 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const irEscTab = (tab) => ir({ etapa: 4, tab })
 
   // ── Versiones ──
+  const MAX_VERSIONES = 6
   const guardarVersion = async (nombre, nota) => {
-    const estado = JSON.parse(JSON.stringify(est)), resumen = resumenModelo(M)
+    const estado = { ...JSON.parse(JSON.stringify(est)), cfgFoto: configGuardada() }, resumen = resumenModelo(M)   // la versión congela la configuración vigente (foto) y se abre con ella
+    if (vers.length >= MAX_VERSIONES) {
+      // Tope de 6 (la oficial cuenta): se ofrece eliminar la más antigua que no sea oficial; la oficial nunca se elimina sin que se elija.
+      const vieja = [...vers].filter((v) => !v.oficial).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0]
+      if (!vieja) { await appConfirm(`Ya hay ${MAX_VERSIONES} versiones y todas son oficiales: elimina una desde Versiones antes de guardar otra.`); return }
+      if (!(await appConfirm(`Ya hay ${MAX_VERSIONES} versiones guardadas (el máximo).\n¿Eliminar la más antigua que no es oficial, «${vieja.nombre}» (${String(vieja.created_at || '').slice(0, 10).split('-').reverse().join('-')}), para guardar esta?`))) return
+      await borrarVersion(vieja)
+    }
     try {
       let fila
       if (DEMO) { fila = { id: 'v' + Date.now(), nombre, nota, estado, resumen, oficial: false, created_at: new Date().toISOString(), creado_por: user?.name || '' }; const nv = [fila, ...vers]; localStorage.setItem('ppto_demo_v_' + anio, JSON.stringify(nv.map((v) => ({ ...v, tipo: 'version' })))) }
@@ -152,7 +164,13 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
       setVers((v) => [filaAVersion(fila), ...v]); parche((c) => { c.basadaEn = fila.id }); setUI({ vx: fila.id, confirma: null })
     } catch (e) { setGuardado((g) => ({ ...g, est: 'error' })) }
   }
-  const abrirVersion = (v) => { setEst({ ...migrarEstado(v.estado, anio, datos.ppmMes * 12), basadaEn: v.id }); setUI({ confirma: null }) }
+  // Una versión se abre con SU configuración (foto); «Usar la vigente» vuelve a la del estudio. El borrador usa siempre la vigente.
+  const abrirVersion = (v) => {
+    const { cfgFoto, ...resto } = v.estado || {}
+    if (esAdmin && cfgFoto) { aplicarConfigGuardada(cfgFoto, false); setCfgDe(v.nombre) } else if (cfgDe) { aplicarConfigGuardada(configVigente()); setCfgDe(null) }
+    setCfgTick((n) => n + 1); setEst({ ...migrarEstado(resto, anio, datos.ppmMes * 12, CFG), basadaEn: v.id }); setUI({ confirma: null })
+  }
+  const usarVigente = () => { aplicarConfigGuardada(configVigente()); setCfgDe(null); setCfgTick((n) => n + 1) }
   const borrarVersion = async (v) => {
     try {
       if (DEMO) localStorage.setItem('ppto_demo_v_' + anio, JSON.stringify(vers.filter((x) => x.id !== v.id)))
@@ -171,11 +189,11 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
 
   const MT = est ? calcMetas(datos, est) : null
-  const X = { D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
+  const X = { user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
     irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
-  const origen = pila.length ? (pila[pila.length - 1].drill ? titulosDrill(X, pila[pila.length - 1].drill) : ETAPAS[pila[pila.length - 1].etapa]) : backLabel
+  const origen = drill && drill.t === 'cfg' ? `Presupuesto ${anio}` : pila.length ? (pila[pila.length - 1].drill ? titulosDrill(X, pila[pila.length - 1].drill) : ETAPAS[pila[pila.length - 1].etapa]) : backLabel
   const estadoTxt = guardado.est === 'cargando' ? 'cargando…' : guardado.est === 'pendiente' ? 'cambios sin guardar' : guardado.est === 'guardando' ? 'guardando…' : guardado.est === 'error' ? 'no se pudo guardar' : (guardado.est === 'local' ? 'guardado solo en este equipo' : 'guardado') + (guardado.t ? ' · ' + hace(guardado.t) : '')
   const wrap = D ? { maxWidth: 1180, margin: '0 auto', padding: '12px 20px 40px' } : { padding: '8px 16px 40px' }
 
@@ -195,26 +213,27 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const controles = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{chipMoneda}{!drill && chipEstado}{!drill && chipExcel}</span>
   const chipMas = <span style={{ border: `1px solid ${guardado.est === 'error' ? C.overdueBd : C.border}`, background: guardado.est === 'error' ? C.overdueBg : C.card, color: guardado.est === 'error' ? C.overdueText : C.accent, fontWeight: 800, fontSize: 16, height: 32, minWidth: 40, borderRadius: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Menu aria={`Más opciones · ${estadoTxt}`} derecha boton='⋯' opciones={[['ver', `Versiones · ${estadoCorto}`], ['xls', 'Descargar Excel']]} valor={null} onChange={(v) => { if (v === 'ver') ir({ drill: { t: 'ver' } }); else descargarExcel(X) }} /></span>
   const controlesM = <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{chipMoneda}{!drill && chipMas}</span>
-  const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`]]} valor={anio} onChange={async (a) => { if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
+  const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`], ...(esAdmin ? [['cfg', 'Configuración del presupuesto']] : [])]} valor={anio} onChange={async (a) => { if (a === 'cfg') { ir({ drill: { t: 'cfg' } }); return } if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
   const DESC = ['Lo ocurrido en el año base', 'Recurrente y por facturar, antes de vender', 'Presupuesto de costos de la oficina', 'Lo que se quiere retirar, ganar, cobrar y vender', 'Hipótesis de crecimiento contra las metas', 'Lo presupuestado contra lo real, mes a mes']
 
+  // H18: «Revisado» y la nota viven junto al título del paso (la nota, como ícono con campo en línea y un punto si hay nota); abajo solo Anterior y Siguiente. Siguiente NO marca el paso como revisado.
+  const alternarRevisado = () => parche((c) => { const i = c.hecho.indexOf(ui.etapa); if (i >= 0) c.hecho.splice(i, 1); else c.hecho.push(ui.etapa) })
+  const hayNota = !!String(est.notas[ui.etapa] || '').trim()
+  const accionesPaso = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+    <button className='pp-tac' aria-pressed={h} aria-label={h ? 'Revisado, deshacer' : 'Marcar como revisado'} onClick={alternarRevisado} style={{ border: `1px solid ${h ? C.normal : C.border}`, background: h ? C.greenBg : C.card, color: h ? C.greenText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, height: 36, minWidth: 36, padding: D ? '0 14px' : 0, borderRadius: 20, cursor: 'pointer' }}>{D ? (h ? '✓ Revisado' : 'Marcar revisado') : '✓'}</button>
+    <button className='pp-tac' aria-label={hayNota ? 'Nota del paso (con nota)' : 'Nota del paso'} aria-expanded={!!ui.notaAbierta} onClick={() => setUI({ notaAbierta: !ui.notaAbierta })} style={{ position: 'relative', border: `1px solid ${C.border}`, background: C.card, color: C.accent, width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', display: 'grid', placeItems: 'center', padding: 0 }}><Ic n='doc' s={16} />{hayNota && <i aria-hidden='true' style={{ position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: '50%', background: C.accent, opacity: 0.55 }} />}</button>
+  </span>
   // H04: los role='button' sueltos de los pasos (acordeones, enlaces) reciben tabIndex y foco visible; Enter y Espacio los abren (los que ya traen tecla propia marcan defaultPrevented).
   const tecla = (ev) => { const t = ev.target; if (!ev.defaultPrevented && (ev.key === 'Enter' || ev.key === ' ') && t && t.getAttribute && t.getAttribute('role') === 'button' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) { ev.preventDefault(); t.click() } }
   return <div ref={raiz} onKeyDown={tecla} style={{ ...wrap, display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
     <EstilosPresupuesto />
     <PageHeader origen={D || drill ? origen : ''} onBack={volver} titulo={titulo} right={D ? controles : controlesM} style={{ margin: D ? '-12px -20px 0' : '-8px -16px 0' }} />
-    {!drill && <Pasos nombres={ETAPAS} activa={ui.etapa} hechos={est.hecho} onIr={irEtapa} anioBase={datos.anioBase} anio={anio} desc={DESC} />}
-    {!drill && (ui.etapa === 4 || ui.etapa === 5) && <Grid cols={4} colsM={2}>   {/* siguen al escenario elegido: solo donde el escenario importa */}
-      <Kpi tono='g' ic='res' label='Resultado' value={mm(e.post)} sub='después de impuesto' onClick={() => ir({ etapa: 4, tab: 'res' })} />
-      <Kpi tono='a' ic='ing' label='Ingresos' value={mm(e.fact)} sub={`facturado ${anio}`} onClick={() => ir({ etapa: 1 })} />
-      <Kpi tono='y' ic='egr' label='Egresos' value={mm(-e.egr)} sub='costos + comisiones + impuesto' onClick={() => ir({ etapa: 2 })} />
-      <Kpi tono='w' ic='gauge' label='Margen' value={e.caja > 0 ? pc((e.post / e.caja) * 100) : '—'} sub='sobre lo cobrado' onClick={() => ir({ etapa: 4, tab: 'imp' })} />
-    </Grid>}
+    {!drill && <Pasos nombres={ETAPAS} activa={ui.etapa} hechos={est.hecho} onIr={irEtapa} anioBase={datos.anioBase} anio={anio} desc={DESC} acciones={accionesPaso} debajo={ui.notaAbierta ? <Fld text ph='Nota del paso' value={est.notas[ui.etapa] || ''} onCommit={(v) => parche((c) => { c.notas[ui.etapa] = v })} /> : null} />}
+    {cfgDe && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}><span>Se muestra con la configuración de la versión «{cfgDe}».</span><span role='button' onClick={usarVigente} style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Usar la vigente ›</span></div>}
+    {!drill && ui.etapa === 4 && <ResumenCascada margen={mm(e.base)} resultado={mm(e.post)} retiros={mm(e.retiros)} esc={nomEsc(est.esc)} onMargen={() => ir({ etapa: 4, tab: 'imp' })} onResultado={() => ir({ etapa: 4, tab: 'imp' })} onRetiros={() => ir({ drill: { t: 'socios' } })} />}
     {cuerpo}
-    {!drill && <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+    {!drill && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
       <Btn disabled={ui.etapa === 0} onClick={() => irEtapa(ui.etapa - 1)}>← Anterior</Btn>
-      <Btn onClick={() => parche((c) => { const i = c.hecho.indexOf(ui.etapa); if (i >= 0) c.hecho.splice(i, 1); else c.hecho.push(ui.etapa) })}>{h ? '✓ Revisada · deshacer' : 'Marcar como revisada'}</Btn>
-      <div style={{ flex: 1, minWidth: 200 }}><Fld text ph='Nota del paso' value={est.notas[ui.etapa] || ''} onCommit={(v) => parche((c) => { c.notas[ui.etapa] = v })} /></div>
       <Btn primary disabled={ui.etapa === 5} onClick={() => irEtapa(ui.etapa + 1)}>Siguiente →</Btn>
     </div>}
   </div>

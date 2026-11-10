@@ -93,3 +93,70 @@ export function tramoDelAnio(tramos, anio) {
   const t = (tramos || []).find((/** @type {any} */ x) => x.hasta == null || anio <= x.hasta)
   return t || (tramos || [])[(tramos || []).length - 1] || null
 }
+
+/**
+ * Solo lo que difiere del defecto: es lo que se guarda en `presupuesto_config` (el estudio hereda el resto del código). Los objetos se comparan clave a clave; los arreglos y valores simples, enteros.
+ * @param {any} cfg configuración completa @param {any} [base]
+ * @returns {any}
+ */
+export function diferenciaConfig(cfg, base = CONFIG_DEFECTO) {
+  /** @type {Record<string,any>} */ const out = {}
+  for (const k of Object.keys(cfg || {})) {
+    const a = cfg[k], b = base ? base[k] : undefined
+    if (esObj(a) && esObj(b)) { const d = diferenciaConfig(a, b); if (Object.keys(d).length) out[k] = d }
+    else if (JSON.stringify(a) !== JSON.stringify(b)) out[k] = JSON.parse(JSON.stringify(a))
+  }
+  return out
+}
+
+/**
+ * Valida una configuración (completa o solo las diferencias) antes de guardarla: números en rango, claves de componentes intactas, escenarios entre 1 y el máximo, reparto de socios que suma 100 %, tramos de impuesto
+ * ordenados y con un último tramo sin `hasta`. Devuelve los errores por ruta; nunca modifica la entrada.
+ * @param {any} over @returns {{ ok:boolean, errores:{ ruta:string, msg:string }[] }}
+ */
+export function validarConfig(over) {
+  /** @type {{ ruta:string, msg:string }[]} */ const e = []
+  const mal = (/** @type {string} */ ruta, /** @type {string} */ msg) => e.push({ ruta, msg })
+  const rango = (/** @type {string} */ ruta, /** @type {any} */ v, /** @type {number} */ min, /** @type {number} */ max) => { if (v === undefined) return; const n = Number(v); if (v === null || v === '' || !Number.isFinite(n) || n < min || n > max) mal(ruta, `debe ser un número entre ${min} y ${max}`) }
+  const texto = (/** @type {string} */ ruta, /** @type {any} */ v, /** @type {number} */ max) => { if (v === undefined) return; if (typeof v !== 'string' || !v.trim() || v.length > max) mal(ruta, `debe ser un texto de 1 a ${max} caracteres`) }
+  const o = over || {}
+  if (!esObj(o)) return { ok: false, errores: [{ ruta: '', msg: 'la configuración debe ser un objeto' }] }
+  const cfg = mezclarConfig(CONFIG_DEFECTO, o)
+  if (o.componentes !== undefined) {
+    if (!Array.isArray(o.componentes)) mal('componentes', 'debe ser una lista')
+    else {
+      const claves = CONFIG_DEFECTO.componentes.map((/** @type {any} */ c) => c.k), vistas = new Set()
+      o.componentes.forEach((/** @type {any} */ c, /** @type {number} */ i) => { texto(`componentes.${i}.n`, c && c.n, 40); if (!c || !claves.includes(c.k)) mal(`componentes.${i}.k`, 'componente desconocido'); else if (vistas.has(c.k)) mal(`componentes.${i}.k`, 'componente repetido'); else vistas.add(c.k) })
+      if (vistas.size !== claves.length) mal('componentes', 'deben estar los seis componentes')
+    }
+  }
+  if (o.escenarios !== undefined) {
+    if (!Array.isArray(o.escenarios) || !o.escenarios.length) mal('escenarios', 'debe haber al menos un escenario')
+    else {
+      if (o.escenarios.length > cfg.maxEscenarios) mal('escenarios', `máximo ${cfg.maxEscenarios} escenarios`)
+      const ks = new Set()
+      o.escenarios.forEach((/** @type {any} */ s, /** @type {number} */ i) => { texto(`escenarios.${i}.n`, s && s.n, 30); if (!s || !s.k || ks.has(s.k)) mal(`escenarios.${i}.k`, 'clave vacía o repetida'); else ks.add(s.k); const p = (s && s.p) || {}
+        rango(`escenarios.${i}.p.g`, p.g, -100, 500); rango(`escenarios.${i}.p.alza`, p.alza, 0, 100); rango(`escenarios.${i}.p.terc`, p.terc, 0, 100); rango(`escenarios.${i}.p.dias`, p.dias, 0, 365) })
+    }
+  }
+  if (o.reserva) { rango('reserva.minima', o.reserva.minima, 0, 1e12); rango('reserva.porcentaje', o.reserva.porcentaje, 0, 100); rango('reserva.meses', o.reserva.meses, 0, 36); rango('reserva.trimestres', o.reserva.trimestres, 1, 12) }
+  const rep = o.socios && o.socios.reparto
+  if (rep !== undefined && rep !== 'iguales') {
+    if (!esObj(rep)) mal('socios.reparto', 'debe ser «iguales» o una parte por socio')
+    else { const v = Object.values(rep).map(Number); if (v.some((x) => !Number.isFinite(x) || x < 0 || x > 1)) mal('socios.reparto', 'cada parte debe estar entre 0 y 100 %'); else if (Math.abs(v.reduce((a, x) => a + x, 0) - 1) > 0.001) mal('socios.reparto', 'las partes deben sumar 100 %') }
+  }
+  const t = o.tributario
+  if (t) {
+    texto('tributario.regimen', t.regimen, 40); texto('tributario.etiqueta', t.etiqueta, 80)
+    const tramos = (/** @type {string} */ r, /** @type {any} */ arr, /** @type {(x:any,i:number)=>void} */ campos) => { if (arr === undefined) return
+      if (!Array.isArray(arr) || !arr.length) { mal(r, 'debe tener al menos un tramo'); return }
+      arr.forEach((/** @type {any} */ x, /** @type {number} */ i) => { const ult = i === arr.length - 1; if (ult && x.hasta != null) mal(`${r}.${i}.hasta`, 'el último tramo no lleva año'); if (!ult) { if (!Number.isInteger(Number(x.hasta)) || Number(x.hasta) < 2000 || Number(x.hasta) > 2100) mal(`${r}.${i}.hasta`, 'año entre 2000 y 2100'); else if (i > 0 && Number(x.hasta) <= Number(arr[i - 1].hasta)) mal(`${r}.${i}.hasta`, 'los años deben ir en orden ascendente') } campos(x, i) }) }
+    tramos('tributario.idpc', t.idpc, (x, i) => rango(`tributario.idpc.${i}.tasa`, x.tasa, 0, 100))
+    if (t.ppm) { rango('tributario.ppm.umbralUF', t.ppm.umbralUF, 0, 1e9); tramos('tributario.ppm.tramos', t.ppm.tramos, (x, i) => { rango(`tributario.ppm.tramos.${i}.chica`, x.chica, 0, 100); rango(`tributario.ppm.tramos.${i}.grande`, x.grande, 0, 100) }) }
+    if (t.textos) for (const k of Object.keys(t.textos)) texto(`tributario.textos.${k}`, t.textos[k], 40)
+  }
+  const m = o.moneda
+  if (m) { texto('moneda.simbolo', m.simbolo, 4); texto('moneda.unidad', m.unidad, 8); rango('moneda.reajusteAnual', m.reajusteAnual, -10, 100); if (m.nombres) for (const k of Object.keys(m.nombres)) texto(`moneda.nombres.${k}`, m.nombres[k], 20) }
+  if (o.costos) { for (const k of ['fijas', 'porPersona']) if (o.costos[k] !== undefined && (!Array.isArray(o.costos[k]) || o.costos[k].some((/** @type {any} */ x) => typeof x !== 'string' || !x.trim()))) mal(`costos.${k}`, 'debe ser una lista de nombres') }
+  return { ok: e.length === 0, errores: e }
+}
