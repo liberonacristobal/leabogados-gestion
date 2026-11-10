@@ -29,9 +29,13 @@ export const motivoMeta = (/** @type {string|null|undefined} */ m) => (m === 'va
 
 /** Comparación con flecha contra la referencia: variación % y diferencia (el Presupuesto de costos, una sola flecha). `vU`/`refU` = las mismas cifras en UF si la fuente las trae; en UF se compara UF contra UF. */
 export function Cmp({ comp, v, refv, vU = null, refU = null }) {
+  const D = useIsDesktop()
   if (v == null || refv == null) return <span>—</span>
   const d = difMon(v, refv, vU, refU), bueno = afavor(comp, d.sube)
+  if (comp === 'costos' && !D && d.pct != null) return <Flecha sube={d.sube} bueno={bueno}>{d.sg}{pc(Math.abs(d.pct))}</Flecha>
   if (comp === 'costos') return <Flecha sube={d.sube} bueno={bueno}>{d.sg}{d.abs}{d.pct != null ? ` · ${d.sg}${pc(Math.abs(d.pct))}` : ''}</Flecha>
+  // En la tarjeta compacta del celular (dos por fila) cabe una sola flecha: el % (o la diferencia si no hay %); la otra queda en la página del componente.
+  if (!D && d.pct != null) return <Flecha sube={d.sube} bueno={bueno}>{d.sg}{pc(Math.abs(d.pct))}</Flecha>
   return <span style={{ display: 'inline-flex', gap: 12, flexWrap: 'wrap', justifyContent: 'inherit' }}>{d.pct != null && <Flecha sube={d.sube} bueno={bueno}>{d.sg}{pc(Math.abs(d.pct))}</Flecha>}<Flecha sube={d.sube} bueno={bueno}>{d.sg}{d.abs}</Flecha></span>
 }
 
@@ -79,7 +83,7 @@ export function ReservaBloque({ X, ch, irBanco }) {
     {fila('= Reserva al cierre', mm(ch.reservaCierre), { tot: true })}
     {fila('Meses de costos que cubre', <span><b style={{ color: C.accent }}>{r.mesesCierre != null ? r.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) : '—'}</b> de {mm(r.costosMes)} al mes</span>)}
     <div style={{ padding: D ? '10px 20px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div><b style={{ color: C.accent }}>Recomendación</b> · llegar a {r.meses} meses de costos ({mm(r.objetivo)}){r.brecha > 0 ? `, con ${mm(r.porTrimestre)} más por trimestre` : ''}. <Flecha sube={r.cubre} bueno={r.cubre}>{r.cubre ? 'la reserva del año la cubre' : `faltan ${mm(r.falta)}`}</Flecha></div>
+      <div><b style={{ color: C.accent }}>Recomendación</b> · llegar a {r.meses} meses de costos ({mm(r.objetivo)}){r.brecha > 0 ? `, con ${mm(r.porTrimestre)} más por trimestre` : ''}. <Flecha sube={r.cubre} bueno={r.cubre}>{r.cubre ? 'la reserva del año la cubre' : `déficit ${mm(r.falta)}`}</Flecha></div>
       {irBanco && <div onClick={irBanco} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Por confirmar en Banco ›</div>}
     </div>
   </>

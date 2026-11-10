@@ -42,7 +42,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const billById=useMemo(()=>{const m={};(billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b });return m},[billing])
   const ctx={saleById,cliById,ov:fu.ov}
   const P=useMemo(()=>partidasPorSocio({billing,sales,clients,anticipos,terceros,expenses,ic:fu.ic,ia:fu.ia,ov:fu.ov,fondoExtra}),[billing,sales,clients,anticipos,terceros,expenses,fu,fondoExtra])
-  const V=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y),[sales,clients,ufRef,y])
+  const V=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y,null,{terceros,billing}),[sales,clients,ufRef,y,terceros,billing])
   const {inPer,sumP,vend,KF,KC,KI,card6}=kpisPorSocio({P,V,ym})   // fuente única (compartido.jsx): la misma que usa el Panel de socios
   // «Sin socio» dice de quién es: los abogados no socios dueños de sus partidas del año (venta.responsible → abogado del cliente).
   const sinAbos=useMemo(()=>{ const set=new Set(); P.forEach(r=>{ if(r.soc!==SIN_SOCIO||r.k==='sub'||!String(r.d).startsWith(String(y))) return; const b=r.bid&&billById[String(r.bid)], sv=b&&b.sale_id&&saleById[String(b.sale_id)], a=(sv&&sv.responsible)||cliById[String(r.cid)]?.abogado_responsable; if(a&&!ADMIN_NAMES.includes(a)) set.add(a) }); return [...set].sort() },[P,y,billById,saleById,cliById])
@@ -68,7 +68,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
 
   // ── Tarjetas: Oficina arriba, socios abajo · Octubre y Acumulado · pesos exactos (cuadran en toda dirección)
   const pcY=(()=>{ const v=COLS.map(s=>card6(s,'ytd')[5]), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),1):v.map(()=>0) })()
-  const filasCard=[['ref','Vendido',0],['ref','Facturado',1],['sep','Cobrado propio',2],['','− Com. pagadas',3],['','+ Com. percibidas',4],['res','= Ingreso real',5]]
+  const filasCard=[['ref','Vendido neto',0],['ref','Facturado',1],['sep','Cobrado propio',2],['','− Com. pagadas',3],['','+ Com. percibidas',4],['res','= Ingreso real',5]]
   const tdC=(v,i,soc,p,col,big)=>{ const on=Math.abs(v)>=1; return <td onClick={on?()=>irDatos(soc,i,p):undefined} className={on?'er-c':undefined} style={{textAlign:'right',padding:'4px 0 4px 8px',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',cursor:on?'pointer':'default',fontSize:big?(isDesk?19:13.5):i===5?13.5:12,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.text,borderTop:i===5?`1.5px solid ${col}`:i===2?`1px solid ${C.border}`:i===6?`1px dashed ${C.border}`:'none'}}>{on?P$(v):'—'}</td> }
   const cardSocio=(soc,col)=>{ const m=card6(soc,'mes'), a=card6(soc,'ytd'), pc=soc?pcY[COLS.indexOf(soc)]:0, filas=soc?filasCard:[...filasCard,['apt','Subarriendo',6]]
     return <div key={soc||'of'} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'12px 16px 10px':'11px 12px 8px',minWidth:0}}>
@@ -77,7 +77,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
         <thead><tr><th/>{[mesLbl,'Acumulado'].map(h=><th key={h} style={{fontSize:10,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',textAlign:'right',padding:'4px 0 4px 8px',color:C.muted,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
         <tbody>{filas.map(([cl,l,i])=><tr key={i}><td style={{fontSize:i===5?12.5:12,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.muted,padding:'4px 0',borderTop:i===5?`1.5px solid ${col}`:i===2?`1px solid ${C.border}`:i===6?`1px dashed ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</td>{tdC(m[i],i,soc,'mes',col,!soc&&i===5)}{tdC(a[i],i,soc,'ytd',col,!soc&&i===5)}</tr>)}</tbody></table></div> }
   const cardOficinaAncha=()=>{ const m=card6(null,'mes'), a=card6(null,'ytd'), col=C.greenText, socsPc=COLS.map((s,i)=>`${L(s)} ${pcY[i]} %`).join(' · ')
-    const hdr=['Vendido','Facturado','Cobrado propio','− Com. pagadas','+ Com. percibidas','= Ingreso real','Subarriendo · aparte']
+    const hdr=['Vendido neto','Facturado','Cobrado propio','− Com. pagadas','+ Com. percibidas','= Ingreso real','Subarriendo · aparte']
     return <div style={{gridColumn:'1/-1',background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 16px 10px'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:9,height:9,borderRadius:'50%',background:col}}/><span onClick={()=>{ setTab('res'); setPs(true); setSec({f:true,c:true}) }} style={{fontSize:11,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:col,cursor:'pointer'}}>Oficina <Gl n='chevron'/></span><span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:C.muted}}>{socsPc} del ingreso real del año</span></div>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -189,7 +189,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     if(['pcob','venc','moro','pfat','deuda','favor'].includes(k)){ const o=KV[k]; return o?(soc?z(o.v[soc]):Object.values(o.v).reduce((a,v)=>a+v,0)):0 }
     const its=V.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym))
     if(k==='nven') return its.length
-    if(k==='tick') return its.length?its.reduce((a,x)=>a+x.m,0)/its.length:null
+    if(k==='tick') return its.length?its.reduce((a,x)=>a+x.b,0)/its.length:null
     if(k==='cact') return new Set(its.map(x=>String(x.s.client_id))).size
     const ss=(sales||[]).filter(s=>s&&!s.deleted_at&&!esSubarriendo(s)&&(!soc||socioDeVenta(s,{cliById})===soc))
     if(k==='conv'){ const g=ss.filter(s=>s.activated_at).length, r=ss.filter(s=>s.status==='Rechazada').length; return (g+r)?g/(g+r)*100:null }

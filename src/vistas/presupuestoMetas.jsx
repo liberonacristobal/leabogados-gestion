@@ -1,7 +1,7 @@
 // Presupuesto anual · paso 4: Metas 2027. Se escribe la meta de UN componente (retiros al partir) y los demás se proyectan con la misma cascada del modelo, en cualquier dirección
 // (metasDesdeComponente en _shared/presupuesto.js). Pasos 1 y 2 muestran los mismos seis componentes de solo lectura; las metas se escriben solo aquí.
 import { C } from '../lib/base.jsx'
-import { componentesDe, anclasDe, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente, reservaRecomendada, escenarioMetas, resumenDistribucion } from '../../supabase/functions/_shared/presupuesto.js'
+import { componentesDe, anclasDe, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente, reservaRecomendada, escenarioMetas, resumenDistribucion, partePorSocio } from '../../supabase/functions/_shared/presupuesto.js'
 import { mm, mx, pc, sgn, Tarjeta, FldDin, Titulo, Btn, Grid, tasa27, Pliegue } from '../lib/presupuestoUI.jsx'
 import { Cmp, Supuestos, ReservaBloque, TablaPresupuesto, motivoMeta, nivelTxt } from '../lib/presupuestoBloques.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -33,25 +33,30 @@ export function Metas({ X }) {
     const editable = anclasDe(CFG).includes(k) && v != null
     const der = k === 'costos' ? { cap: 'Presupuesto', val: mm(v) }
       : { cap: anc ? 'Meta' : 'Proyectado', val: editable ? <FldDin sobrio grande kind='mill' suf='M' sel={anc} clp={anc ? MT.valor : v} tasa={tasa27()} onCommit={fijar(k)} label={`Meta de ${nombre}`} /> : (v != null ? mm(v) : '—') }
-    const plano = PLANO[k](MT.ratio, MT.cv)
-    const det = [...detalleReferencia(X, k), ['Plano', plano[0]], ['Cálculo', k === 'costos' ? `presupuesto ${Y} + alza ${pc(est.p[rk].alza)}` : plano[1]],
-      ...(k === 'ventas' && ch.ventasBruto != null ? [['Bruto', mm(ch.ventasBruto)], [`− Comisiones de venta · ${pc(MT.cv)}`, mm(ch.comisVentas)], ['Facturado / vendido', 'se aplica al vendido bruto']] : []),
-      ...(k === 'retiros' ? [['Por socio', `${mm(ch.retiros / 2)} · ${mm(ch.retiros / 24)} al mes`]] : []), ...(k === 'margen' ? [['Comisiones', `${mm(ch.terc)} (${pc(est.p[rk].terc)})`]] : [])]
-    const ir = k === 'costos' ? () => X.irCostos() : k === 'retiros' ? () => X.ir({ drill: { t: 'socios' } }) : k === 'margen' ? () => X.irEscTab('imp') : () => X.irBase()
-    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} izq={{ cap: k === 'retiros' ? 'Real' : 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={der} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} det={det} onClick={ir} aria={nombre} />
+    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} izq={{ cap: 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={der} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} onClick={() => X.ir({ drill: { t: 'comp', de: 'metas', k } })} aria={nombre} />
   }
   const rr = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post), cfg: CFG })
   const lista = escenariosContraMeta(X.M, MT.ancla, MT.valor, MT.ratio, MT.cv), nivel = nivelDeMeta(lista)
   const copiar = () => { const t = `Metas ${an} · ${nombreComponente(MT.ancla, CFG)} ${mm(MT.valor)}\n` + componentesDe(CFG).map(([k, n]) => `${n}: ${mm(valorComponente(ch, k, MT.ratio, MT.cv))} (cierre ${Y} est. ${mx(d.referencia[k].cierre, d.refUF[k].cierre)})`).join('\n'); try { navigator.clipboard?.writeText(t) } catch { /* sin portapapeles */ } }
   return <>
     <Titulo right={<Btn onClick={copiar}>Copiar resumen</Btn>}>Metas {an}</Titulo>
-    <Grid cols={3} colsM={1}>{componentesDe(CFG).map(tarjeta)}</Grid>
+    <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{componentesDe(CFG).map(tarjeta)}</Grid>
     {!MT.ok && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>{motivoMeta(MT.motivo)} Mientras tanto se muestra el punto de partida, sin crecimiento.</div>}
     <Pliegue t='Reserva de caja' v={`${mm(ch.reservaCierre)} al cierre${rr.mesesCierre != null ? ` · ${rr.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses` : ''}`}><ReservaBloque X={X} ch={ch} irBanco={X.onOpenBanco} /></Pliegue>
     <Pliegue t='Supuestos · 7' v={`comisiones ${pc(est.p[rk].terc)} · cobro ${est.p[rk].dias} días`}><Supuestos X={X} MT={MT} /></Pliegue>
-    <Pliegue t='Escenarios contra la meta' v={MT.ok ? <span>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> real en UF · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel, X.ESC)}</b></span> : null}><div style={{ padding: '10px 12px 6px' }}><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div></Pliegue>
+    <Pliegue t='Escenarios contra la meta' v={MT.ok ? <span>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> real en UF{D && <> · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel, X.ESC)}</b></>}</span> : null}><div style={{ padding: '10px 12px 6px' }}><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div></Pliegue>
     <Pliegue t='Distribución mensual' v={resumenDistribucion(est.dist, (c) => nombreComponente(c, CFG))}><Distribucion X={X} /></Pliegue>
     <Pliegue t={`Presupuesto ${an} · estado de resultados`} v={`retiros ${mm(ch.retiros)}`}><TablaPresupuesto X={X} MT={MT} irPaso={(i) => X.ir({ etapa: i })} /></Pliegue>
   </>
 }
 
+
+// Aclaraciones de las tarjetas del paso 4 (antes en el plegable): se muestran en la página del componente.
+export function filasMetas(X, k) {
+  const { est, datos: d, MT } = X, ch = MT.ch, Y = d.anioBase, rk = escenarioMetas(est, CFG), plano = PLANO[k](MT.ratio, MT.cv), pp = partePorSocio(d.socios, CFG)
+  const rows = [...detalleReferencia(X, k), ['Plano', plano[0]], ['Cálculo', k === 'costos' ? `presupuesto ${Y} + alza ${pc(est.p[rk].alza)}` : plano[1]],
+    ...(k === 'ventas' && ch.ventasBruto != null ? [['Bruto', mm(ch.ventasBruto)], [`− Comisiones de venta · ${pc(MT.cv)}`, mm(ch.comisVentas)], ['Facturado / vendido', 'se aplica al vendido bruto']] : []),
+    ...(k === 'retiros' ? [['Por socio', `${mm(ch.retiros * pp)} · ${mm(ch.retiros * pp / 12)} al mes`]] : []), ...(k === 'margen' ? [['Comisiones', `${mm(ch.terc)} (${pc(est.p[rk].terc)})`]] : [])]
+  const go = k === 'costos' ? ['Presupuesto de costos', () => X.irCostos()] : k === 'retiros' ? ['Sueldos y retiros de los socios', () => X.ir({ drill: { t: 'socios' } })] : k === 'margen' ? ['Impuesto en Escenarios', () => X.irEscTab('imp')] : ['Base del paso 2', () => X.irBase()]
+  return { rows, go }
+}

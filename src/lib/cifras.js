@@ -60,6 +60,14 @@ export function redondearPartes(partes, paso=1, fijos=[]){
   return out.map(x=>x*paso)
 }
 
+// Cascada del Vendido del año: Bruto − Comisiones de venta = NETO, con una sola cifra de neto en Inicio, Panel de socios, imágenes y Presupuesto.
+// El neto (el plano de la meta) se redondea solo, sin ajuste; la comisión absorbe el resto, así que bruto − comisión = neto se lee exacto. m = metricasAnio(); paso = 1 (UF) o 1e5 (pesos en $M).
+/** @param {{bruto:number,costo:number,neto:number,brutoUF:number,costoUF:number,netoUF:number}} m @param {boolean} enUF @returns {{bruto:number,costo:number,neto:number}} */
+export function cascadaVendido(m, enUF){
+  const paso=enUF?1:1e5, [neto,costo]=redondearPartes(enUF?[m.netoUF,m.costoUF]:[m.neto,m.costo],paso,[0])
+  return { neto, costo, bruto:neto+costo }
+}
+
 // Cifras por socio de un período — FUENTE ÚNICA de la ventana «Por socio» y del Panel de socios. Mismas fórmulas de siempre, extraídas de PorSocioVista
 // sin cambios: P = partidasPorSocio, V = vendidoPorSocio, ym = 'AAAA-MM' (el mes elegido; el año corre de enero a ese mes).
 // card6(socio|null, 'mes'|'ytd') = [Vendido, Facturado, Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo].
@@ -68,7 +76,12 @@ export function kpisPorSocio({P,V,ym}){
   const y=Number(ym.slice(0,4))
   /** @type {(d:any,p:string)=>boolean} */ const inPer=(d,p)=>{ const s=String(d||'').slice(0,7); return p==='mes'?s===ym:(s>=`${y}-01`&&s<=ym) }
   /** @type {(s:string,k:any,soc:any,p:string)=>number} */ const sumP=(s,k,soc,p)=>P.reduce((a,r)=>a+((r.s===s&&(k==null||(Array.isArray(k)?k.includes(r.k):r.k===k))&&(!soc||r.soc===soc)&&inPer(r.d,p))?r.m:0),0)
-  /** @type {(soc:any,p:string)=>number} */ const vend=(soc,p)=>V.reduce((a,x)=>a+((!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym)?x.m:0),0)
+  // Vendido NETO (V[].m = bruto − comisión de cada venta): cada socio redondeado al peso con redondearPartes, así Socios + Sin socio = Oficina (soc nulo) exacto.
+  /** @type {Record<string,{o:Record<string,number>,tot:number}>} */ const vCache={}
+  /** @type {(p:string)=>{o:Record<string,number>,tot:number}} */ const vPer=p=>{ if(vCache[p]) return vCache[p]
+    const its=V.filter(x=>p==='mes'?x.ym===ym:x.ym<=ym), socs=[...new Set(its.map(x=>x.soc))], r=redondearPartes(socs.map(s=>its.reduce((a,x)=>a+(x.soc===s?x.m:0),0)),1,[]), o=/** @type {Record<string,number>} */ ({})
+    socs.forEach((s,i)=>{ o[s]=r[i] }); return (vCache[p]={ o, tot:r.reduce((a,x)=>a+x,0) }) }
+  /** @type {(soc:any,p:string)=>number} */ const vend=(soc,p)=>{ const v=vPer(p); return soc?(v.o[soc]||0):v.tot }
   const KF=['emit','cext','reemb','nc'], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']
   /** @type {(soc:any,p:string)=>number[]} */ const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p)] }
   // Ingreso EMITIDO (plano facturado): facturado (KF) − comisiones de lo facturado. El subarriendo no entra (va aparte, 'sub').

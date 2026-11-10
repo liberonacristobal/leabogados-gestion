@@ -18,38 +18,38 @@ export function Mirada({ X }) {
   const atip = new Set(mesesAtipicos(meses.map((m) => (m.f && m.i < H ? m.f.fac : null))))
   const r5 = d.clientes.slice(0, 5).reduce((a, c) => a + c.monto, 0), conc = d.totalFact ? r5 / d.totalFact : 0
   const rec = d.recurrente, recMes = rec.anualCLP / 12
-  // Orden por lo que mueve el resultado (modelo del Presupuesto, escenario Base): +1 punto de comisiones resta ~4 veces más a los retiros que +10 días de cobro; lo recurrente y la concentración no son palancas del modelo (base de ingreso casi seguro y riesgo, en ese orden).
+  // Orden por el efecto en los retiros de un choque estándar (escenario Base de la demo): perder al mayor cliente (−47 %), −10 % de lo recurrente (−10 %), +1 punto de comisiones (−2 %) y +10 días de cobro (0 en la demo: el modelo solo mide diciembre).
+  // Estimación propia en Concentración y Recurrente (el modelo no trae esos choques); Comisiones y Días de cobro salen del modelo (supuestos terc y dias). Los choques no son comparables entre sí: el orden es de magnitud.
   const indic = [
+    ['pers', 'Concentración', pc(conc * 100, 0), `5 de ${d.clientes.length} · ene–${MESC[H]}`, 'amb', 'conc'],
+    ['cal', 'Recurrente mensual', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
     ['com', 'Comisiones', d.terc != null ? pc(d.terc) : 'sin dato', 'de lo cobrado en el año', '', 'terc'],
     ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `promedio · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
-    ['cal', 'Recurrente mensual', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
-    ['pers', 'Concentración', pc(conc * 100, 0), `5 de ${d.clientes.length} · ene–${MESC[H]}`, 'amb', 'conc'],
   ]
   const mas = [
-    ['egr', 'Costos de oficina', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
+    ['egr', 'Presupuesto de costos', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
     ['alerta', 'Conversión de propuestas', 'sin dato', 'el índice de propuestas no tiene registros', 'amb', 'conv'],
   ]
   // Seis tarjetas de solo lectura, una por componente (los mismos nombres, tonos e íconos de los pasos 2 y 4). Cada cifra en la moneda elegida, con la UF de su fuente.
   const nSoc = d.retiros26.socios.length || 1, c26 = d.costos26, r26 = d.referencia, RU = d.refUF
   const cumple = (real, meta, realU, metaU) => { if (!(meta > 0)) return <span>Sin meta</span>; const x = difMon(real, meta, realU, metaU); return <><Flecha sube={real >= meta} bueno={real >= meta}>{pc((real / meta) * 100, 0)}</Flecha><Flecha sube={real >= meta} bueno={real >= meta}>{x.sg}{x.abs}</Flecha></> }
-  const enUF = (c) => (monedaActual() === 'clp' ? [['En UF', ufs(c.uf)]] : [])
-  const hastaC = c26.hasta ? MESC[Number(c26.hasta.slice(5, 7)) - 1] : null
-  const dMin = d.retiros26.desde, dMax = d.retiros26.hasta, mVU = d.metaVentasUF > 0 ? d.metaVentasUF : null
+  const mVU = d.metaVentasUF > 0 ? d.metaVentasUF : null
   const T = Object.fromEntries(componentesDe(CFG).map(([k, n]) => [k, TONO_COMP[k]]))
   const tarjetas26 = componentesDe(CFG).map(([k, nombre]) => {
     const [tono, ic] = T[k]
     const base = { tono, ic, label: nombre, aria: nombre }
-    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.vend.clp, o.vend.uf) }} der={{ cap: 'Meta', val: o.metaVentasCLP > 0 ? mx(o.metaVentasCLP, mVU) : '—' }} cmp={cumple(o.vend.clp, o.metaVentasCLP, o.vend.uf, mVU)} det={[['Bruto', mx(o.vendBruto.clp, o.vendBruto.uf)], ['− Comisiones de venta', mx(o.comisVentas.clp, o.comisVentas.uf)], ...enUF(o.vend), ['Plano', 'neto de comisiones a terceros, como la meta; ventas activas y terminadas del año']]} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
-    if (k === 'fact') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.fact.clp, o.fact.uf) }} der={{ cap: 'De lo vendido', val: o.vendBruto.clp > 0 ? pc((o.fact.clp / o.vendBruto.clp) * 100, 0) : '—' }} cmp={<span>Sin meta propia</span>} det={[...enUF(o.fact), ['Plano', 'facturas emitidas con folio, contra el vendido bruto']]} onClick={() => ir({ drill: { t: 'ind', k: 'fact26' } })} />
-    if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : '—' }} cmp={cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null)} det={[...enUF(o.cob), ['Plano', 'caja, por conciliación bancaria']]} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
-    if (k === 'costos') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(c26.real, c26.realUF) }} der={{ cap: 'Presupuesto', val: mx(c26.ppto, c26.pptoUF) }} cmp={c26.ppto > 0 ? (() => { const x = difMon(c26.real, c26.ppto, c26.realUF, c26.pptoUF); return <Flecha sube={x.sube} bueno={afavor('costos', x.sube)}>{x.sg}{x.abs} · {x.sg}{pc(Math.abs(x.pct))}</Flecha> })() : <span>—</span>} det={[['Meses', hastaC ? `enero a ${hastaC}, real aproximado` : 'real aproximado'], ['Desvío', 'real contra el presupuesto de los mismos meses'], ['Real', 'costos de operación de Resultado del año, por confirmar'], ['Presupuesto del año', mx(c26.ppto + c26.pptoResto, c26.pptoUF + c26.pptoRestoUF)]]} onClick={() => ir({ drill: { t: 'ind', k: 'cost' } })} />
-    if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} det={[...enUF(o.marg), ['Real', 'devengado, como en Inicio'], ['En caja', 'cobrado − comisiones − costos; estimación propia']]} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
-    return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) }} der={{ cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) }} cmp={<span> </span>} det={[['Retiros', `${d.retiros26.n}${dMin ? ` · ${fmtFechaDMY(dMin)} a ${fmtFechaDMY(dMax)}` : ''}`], ['Plano', 'transferencias a los socios, como en la página Socios; por confirmar']]} onClick={() => ir({ drill: { t: 'socios' } })} />
+    // Vendido (alternativa D): cifras gemelas BRUTO | NETO del mismo tamaño; la comparación es el neto contra la meta («Sin meta» si no hay). En el celular el bruto va primero.
+    if (k === 'ventas') return <Tarjeta key={k} {...base} izq={{ cap: 'Bruto', val: mx(o.vendBruto.clp, o.vendBruto.uf) }} der={{ cap: 'Neto', val: mx(o.vend.clp, o.vend.uf) }} cmp={o.metaVentasCLP > 0 ? <><Flecha sube={o.vend.clp >= o.metaVentasCLP} bueno={o.vend.clp >= o.metaVentasCLP}>{pc((o.vend.clp / o.metaVentasCLP) * 100, 0)} neto</Flecha>{D && <span>Meta {mxP(o.metaVentasCLP, mVU)}</span>}</> : <span>Sin meta</span>} onClick={() => ir({ drill: { t: 'ind', k: 'vend' } })} />
+    if (k === 'fact') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.fact.clp, o.fact.uf) }} der={{ cap: 'Del bruto', val: o.vendBruto.clp > 0 ? pc((o.fact.clp / o.vendBruto.clp) * 100, 0) : '—' }} cmp={<span>Sin meta propia</span>} onClick={() => ir({ drill: { t: 'ind', k: 'fact26' } })} />
+    if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : 'Sin meta' }} cmp={o.metaCobroCLP > 0 ? cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null) : <span> </span>} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
+    if (k === 'costos') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(c26.real, c26.realUF) }} der={{ cap: 'Presupuesto', val: mx(c26.ppto, c26.pptoUF) }} cmp={c26.ppto > 0 ? (() => { const x = difMon(c26.real, c26.ppto, c26.realUF, c26.pptoUF); return <Flecha sube={x.sube} bueno={afavor('costos', x.sube)}>{x.sg}{x.abs} · {x.sg}{pc(Math.abs(x.pct))}</Flecha> })() : <span>—</span>} onClick={() => ir({ drill: { t: 'ind', k: 'costos26' } })} />
+    if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
+    return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) }} der={{ cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) }} cmp={<span> </span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
   })
   const tile = (m) => {
-    const x = m.f && m.a && fv(m.a) ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)
+    const x = m.f && m.a && fv(m.a) && m.i < H ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)   // el mes en curso no se compara (queda «a la fecha»)
     return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D ? MESL[m.i] : MESC[m.i]}</span>{x == null ? <Chip tono='z'>—</Chip> : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D ? MESL[m.i] : MESC[m.i]}</span>{x == null ? null : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
       <div style={{ fontSize: D ? 20 : 14.5, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
       <div style={{ fontSize: 11, color: C.muted }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}{m.i === H ? ' · a la fecha' : ''}</div>
       {at && <div style={{ fontSize: 10.5, fontWeight: 700, color: C.soonText }}>atípico</div>}
@@ -57,7 +57,7 @@ export function Mirada({ X }) {
   }
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>al {fmtFechaDMY(d.hoy)}</span>}>Resultado del año {Y}</Titulo>
-    <Grid cols={3} colsM={1}>{tarjetas26}</Grid>
+    <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{tarjetas26}</Grid>
     <div onClick={() => ir({ etapa: 3 })} role='button' style={{ fontSize: 12, fontWeight: 700, color: C.accent, margin: '-4px 4px 0', cursor: 'pointer', width: 'max-content', maxWidth: '100%' }}>Metas {d.anio} en el paso 4 ›</div>
     <Titulo right={<Btn onClick={() => setUI({ mas: !ui.mas })}>{ui.mas ? 'Ver menos' : 'Ver más'}</Btn>}>Indicadores {Y}</Titulo>
     <Grid cols={4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
@@ -82,13 +82,11 @@ export function Base({ X }) {
   const Y = d.anio, rec = d.recurrente
   const b = d.base, tot = b.baseCLP.reduce((a, x) => a + x, 0), totUF = b.baseUF.reduce((a, x) => a + x, 0)
   const origen = (i) => { const c = d.cierres.find((x) => Number(x.ym.slice(5, 7)) - 1 === i); return c ? c.ym.slice(0, 4) : '—' }
-  // Seis tarjetas de solo lectura: el cierre 2026 estimado contra la base de {Y} (últimos 12 meses cerrados, sin crecimiento, con los supuestos del escenario Base).
-  const ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv), rk = escenarioMetas(est, CFG)
+  // Seis tarjetas de solo lectura: el cierre 2026 estimado contra la base de {Y} (últimos 12 meses cerrados, sin crecimiento, con los supuestos del escenario Base). Tocar una abre su página (filasBase).
+  const ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv)
   const tarjetasBase = componentesDe(CFG).map(([k, nombre]) => {
     const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio, MT.cv), ref = d.referencia[k]
-    const ir1 = k === 'costos' ? () => X.irCostos() : k === 'retiros' ? () => ir({ drill: { t: 'socios' } }) : k === 'margen' ? () => X.irEscTab('imp') : () => ir({ etapa: 3 })
-    const det = [['Base', 'sin crecimiento; no cambia con el escenario'], ...detalleReferencia(X, k), ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `neto de comisiones · estimación propia: facturado ÷ ${pc(MT.ratio, 0)} = bruto, menos ${pc(MT.cv)} de comisiones` : 'falta la relación facturado/vendido'], ...(ch0.ventasBruto != null ? [['Bruto', mm(ch0.ventasBruto)], ['− Comisiones de venta', mm(ch0.comisVentas)]] : [])] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p[rk].alza)}`]] : [])]
-    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: k === 'retiros' ? 'Real' : 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} det={det} onClick={ir1} />
+    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} onClick={() => ir({ drill: { t: 'comp', de: 'base', k } })} />
   })
   const tile = (i) => <div key={i} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{MESC[i]}</span>{D && <Chip tono='z'>{origen(i)}</Chip>}</div>
@@ -104,7 +102,7 @@ export function Base({ X }) {
   ]
   return <>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
-    <Grid cols={3} colsM={1} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
+    <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
     <div onClick={() => ir({ etapa: 3 })} role='button' style={{ fontSize: 12, fontWeight: 700, color: C.accent, margin: '-4px 4px 0', cursor: 'pointer', width: 'max-content', maxWidth: '100%' }}>Metas {Y} en el paso 4 ›</div>
     <Titulo>Ingreso {Y}</Titulo>
     <Panel>{ingreso.map(([n, sub, v, go], i) => <Fila key={n} nombre={n} peq={sub} valor={v} onClick={go} />)}</Panel>
@@ -176,7 +174,7 @@ export function Costos({ X }) {
   }
   return <>
     <Titulo>Costos {Y}</Titulo>
-    <Grid cols={3} colsM={1}>
+    <Grid cols={3} colsM={2}>
       <Mini ic='doc' label='Presupuesto vigente' value={m26(tot26)} sub={`costos de oficina × 12, sin PPM${Math.abs(base26 - tot26) > 1 ? ' · ' + Yb + ' con sus reajustes ' + m26(base26) : ''}`} />
       <Mini ic='egr' label={`Presupuesto de costos ${nomE} ${Y}`} value={mm(e.costos)} sub={`${dc.sg}${dc.abs} contra hoy`} />
       <Mini ic='com' label='Comisiones' value={mm(e.terc)} sub={`${pc(p.terc)} de lo cobrado`} />
@@ -200,3 +198,11 @@ export function Costos({ X }) {
 const cap = { fontSize: 10.5, fontWeight: 600, color: C.muted }
 const eti = { fontSize: 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent, marginBottom: 4 }
 const eti2 = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }
+
+// Aclaraciones de las tarjetas del paso 2 (antes en el plegable de la tarjeta): se muestran en la página del componente. `ir` = a dónde llevaba la tarjeta, ahora un enlace de la página.
+export function filasBase(X, k) {
+  const { datos: d, est, MT, ir } = X, ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv), rk = escenarioMetas(est, CFG)
+  const rows = [['Base', 'sin crecimiento; no cambia con el escenario'], ...detalleReferencia(X, k), ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `neto de comisiones · estimación propia: facturado ÷ ${pc(MT.ratio, 0)} = bruto, menos ${pc(MT.cv)} de comisiones` : 'falta la relación facturado/vendido'], ...(ch0.ventasBruto != null ? [['Bruto', mm(ch0.ventasBruto)], ['− Comisiones de venta', mm(ch0.comisVentas)]] : [])] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p[rk].alza)}`]] : [])]
+  const go = k === 'costos' ? ['Presupuesto de costos', () => X.irCostos()] : k === 'retiros' ? ['Sueldos y retiros de los socios', () => ir({ drill: { t: 'socios' } })] : k === 'margen' ? ['Impuesto en Escenarios', () => X.irEscTab('imp')] : ['Metas del paso 4', () => ir({ etapa: 3 })]
+  return { rows, go }
+}

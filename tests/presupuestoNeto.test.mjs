@@ -66,3 +66,13 @@ test('Excel: Vendido neto y bruto con la comisión coinciden con la cadena de la
   cerca(v(14), 280_000_000, 1e-3); cerca(v(15), r.fact, 1e-3); cerca(v(12), r.g, 1e-6)       // vendido neto = la meta, facturado y crecimiento = los de la app
   cerca(v(26), r.ventasBruto, 1e-3); cerca(v(27), r.comisVentas, 1e-3)
 })
+
+// H03 · los retiros por socio salen de parteMeta / partePorSocio (config), no de un «/ 2» cableado: 1, 2 y 3 socios, con y sin reparto configurado.
+import { parteMeta, partePorSocio } from './../supabase/functions/_shared/presupuesto.js'
+test('parte por socio: 1, 2 y 3 socios con partes iguales; «Sin socio» no cuenta y el reparto configurado manda', () => {
+  const S = (n) => [...Array.from({ length: n }, (_, i) => ({ nombre: 'S' + i })), { nombre: 'Sin socio' }]
+  for (const n of [1, 2, 3]) { cerca(partePorSocio(S(n)), 1 / n, 1e-12); cerca(parteMeta(S(n), 'S0') * 120, 120 / n, 1e-9); assert.equal(parteMeta(S(n), 'Sin socio'), 0) }
+  const cfg = { socios: { reparto: { S0: 0.6, S1: 0.4 } } }
+  cerca(parteMeta(S(2), 'S0', cfg) + parteMeta(S(2), 'S1', cfg), 1, 1e-12); cerca(partePorSocio(S(2), cfg), 0.5, 1e-12)
+  assert.equal(partePorSocio([], undefined), 0)
+})

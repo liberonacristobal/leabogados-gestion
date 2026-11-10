@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { useResultadoAnio, pctsAnio } from '../lib/resultadoAnio.js'
+import { cascadaVendido } from '../lib/cifras.js'
+import { CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -51,7 +53,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
   },[resAnio,ingConc])
   const Chev = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
   const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0, percYTD=ingresosPorAnioVenta.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
-  const {ventaPct,ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})
+  const {ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   const mRes=(k,abs)=>{ const v=(dashMoneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return dashMoneda==='UF'?fmtUFk(x):fmtShort(x) }
@@ -114,28 +116,26 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
               const comisList = resComis && comisPagos.slice(0,30).map((x,i)=>{ const mes=x.pagado_at?mesCorto(x.pagado_at+'T12:00'):''; return (
                 <div key={x.id||i} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'6px 13px 6px 24px',fontSize:11,background:C.bgSoft,borderTop:`1px solid ${C.border}`}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,color:C.text}}>{x.proveedor||'Colaborador'}{mes?` · ${mes}`:''}</span><span style={{fontWeight:700,color:C.overdueText,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtMonD(Number(x.monto)||0,x.pagado_at)}</span></div>) })
 
-              // VENDIDO — neto de comisiones (devengadas) + meta/falta
+              // VENDIDO — neto de comisiones (devengadas) contra la meta (neta): Bruto − Costos de terceros = Neto; Meta − Neto = Falta (o Neto − Meta = Sobre). Neto y meta se redondean solos (cascadaVendido), la diferencia es exacta.
               if(t==='vend'){
-                // Bruto − Costos de terceros = Neto; y la meta: Meta − Bruto = Falta (o Bruto − Meta = Sobre). Meta en UF con la UF promedio de lo vendido.
-                const A=cuadra([[m.netoUF,m.neto],[m.costoUF,m.costo]])   // neto + costo = bruto (el total es la tarjeta)
-                const sobre=m.bruto>=m.meta
-                const M = sobre ? cuadra([[metaUF,m.meta],[m.brutoUF-metaUF,m.bruto-m.meta]]) : cuadra([[m.brutoUF,m.bruto],[metaUF-m.brutoUF,m.meta-m.bruto]],[0])
+                const enUF=dashMoneda==='UF', paso=enUF?1:1e5, fV=x=>enUF?fmtUFk(Math.abs(x)):fmtMillLR(Math.abs(x))
+                const CV=cascadaVendido(m,enUF), metaR=Math.round((enUF?metaUF:m.meta)/paso)*paso, sobre=m.neto>=m.meta, dif=Math.abs(CV.neto-metaR)
                 return (<div style={box}>
                   {capR(`Resultado de ventas ${selYear}`)}
-                  {cxR({label:'Vendido bruto',val:A.tot,onClick:()=>go('sales')})}
-                  {m.costo!==0&&cxR({sg:'−',label:'Costos de terceros',val:A.s[1],kind:'neg',onClick:()=>go('proveedores')})}
-                  {cxR({sg:'=',label:'Vendido neto',extra:m.meta>0&&pctX(ventaNetoPct,'de la meta'),val:A.s[0],kind:'res',onClick:()=>go('sales')})}
+                  {cxR({label:'Vendido bruto',val:fV(CV.bruto),onClick:()=>go('sales')})}
+                  {m.costo!==0&&cxR({sg:'−',label:'Costos de terceros',val:fV(CV.costo),kind:'neg',onClick:()=>go('proveedores')})}
+                  {cxR({sg:'=',label:'Vendido neto',extra:m.meta>0&&pctX(ventaNetoPct,'de la meta'),val:fV(CV.neto),kind:'res',onClick:()=>go('sales')})}
                   {m.meta>0&&<>
                     {capR(`Meta ${selYear}`,true)}
                     {sobre ? <>
-                      {cxR({label:'Vendido bruto',val:M.tot,kind:'sub',onClick:()=>go('sales')})}
-                      {cxR({sg:'−',label:'Meta del año',val:M.s[0],kind:'sub',onClick:()=>go('sales')})}
-                      {cxR({sg:'=',label:'Sobre la meta',extra:pctX(ventaPct,'cumplido'),val:M.s[1],kind:'tot',onClick:()=>go('sales')})}
+                      {cxR({label:'Vendido neto',val:fV(CV.neto),kind:'sub',onClick:()=>go('sales')})}
+                      {cxR({sg:'−',label:'Meta del año',val:fV(metaR),kind:'sub',onClick:()=>go('sales')})}
+                      {cxR({sg:'=',label:'Sobre la meta',extra:pctX(ventaNetoPct,'cumplido'),val:fV(dif),kind:'tot',onClick:()=>go('sales')})}
                     </> : <>
-                      {cxR({label:'Meta del año',val:M.tot,kind:'sub',onClick:()=>go('sales')})}
-                      {cxR({sg:'−',label:'Vendido bruto',val:M.s[0],kind:'sub',onClick:()=>go('sales')})}
-                      {cxR({sg:'=',label:'Falta para la meta',extra:pctX(ventaPct,'cumplido'),val:M.s[1],kind:'tot',onClick:()=>go('sales')})}
-                      {propAbiertas&&propAbiertas.uf>0&&(()=>{ const faltaUF=metaUF-m.brutoUF, resto=faltaUF-propAbiertas.uf, B=cuadra([[propAbiertas.uf,propAbiertas.uf*ufRef],[resto,resto*ufRef]])
+                      {cxR({label:'Meta del año',val:fV(metaR),kind:'sub',onClick:()=>go('sales')})}
+                      {cxR({sg:'−',label:'Vendido neto',val:fV(CV.neto),kind:'sub',onClick:()=>go('sales')})}
+                      {cxR({sg:'=',label:'Falta para la meta',extra:pctX(ventaNetoPct,'cumplido'),val:fV(dif),kind:'tot',onClick:()=>go('sales')})}
+                      {propAbiertas&&propAbiertas.uf>0&&(()=>{ const faltaUF=metaUF-m.netoUF, resto=faltaUF-propAbiertas.uf, B=cuadra([[propAbiertas.uf,propAbiertas.uf*ufRef],[resto,resto*ufRef]])
                         return <>{capR('Si se cierran las propuestas abiertas',true)}
                           {cxR({k:'pf',label:'Falta para la meta',val:B.tot,kind:'sub',onClick:()=>go('sales')})}
                           {cxR({k:'pp',sg:'−',label:`Propuestas abiertas · ${propAbiertas.n}`,extra:faltaUF>0&&pctX(Math.round(propAbiertas.uf/faltaUF*100),'de lo que falta'),val:B.s[0],kind:'sub',onClick:propAbiertas.onClick})}
@@ -481,6 +481,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const vMon = (uf,clp) => dashMoneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   // Meta en UF con la MISMA UF promedio de lo vendido (pesos de las ventas ÷ sus UF): así «% de la meta» = pesos ÷ pesos y no se infla
   // por dividir la meta (pesos) con la UF de hoy mientras lo vendido está en las UF de cada venta. Sin ventas, la UF de hoy.
+  const [vendPrinc,setVendPrinc] = usePersistedState('d_vend_princ','bruto')   // cifra principal de la tarjeta Vendido: 'bruto' | 'neto' (la otra va tenue)
   const [resDrill,setResDrill] = usePersistedState('d_resdrill',null)   // {tile:'vend'|'fact'|'cob'|'marg', year:number|null} — embudo: nivel1 resumen, nivel2 años, nivel3 clientes
   const [resOrd,setResOrd] = usePersistedState('d_resord','fecha')      // orden del detalle por año: 'fecha' (más reciente) o 'monto' (mayor)
   const [resSeeAll,setResSeeAll] = useState({})                          // {`${tile}-${y}`:true} → ver TODOS los cobros de ese año (si no, tope 6)
@@ -499,8 +500,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const armarSecciones = () => {
       const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0
       const percYTD=ingresosPorAnioVenta.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
-      const vPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0            // sin tope (sobrecumplimiento), igual que en pantalla
-      const cobPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0 // sin tope (sobrecumplimiento)
+      const { ventaNetoPct:vPct, factPct, cobroPct:cobPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })   // los % salen de la fuente única (lib/resultadoAnio.js), no se recalculan aquí
+      const CVu=cascadaVendido(m,true)   // UF enteras que cuadran: bruto − costos = neto
       const uf=n=>fmtUFk(n), pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL'), pS=n=>fmtShort(n)
       const iv=ingresosPorAnioVenta, ufR=ufRef||1
       const yrsCob=(iv.allYears||[]).slice(0,3)
@@ -508,12 +509,12 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       const yrLbl=(y)=> y? `De ventas ${y}${y!==selYear?' (ant.)':''}` : 'Sin venta asociada'
       // ── secciones (cada recuadro): title, %chip, hero UF+CLP, líneas [label, UF, CLP] (el peso va DEBAJO de la UF), barra opcional
       const secs=[
-        { t:'Ventas', pct:vPct, uf:uf(m.brutoUF), clp:pe(m.bruto), lines:[
-            ['Neto de costos de terceros', fmtUFk(m.netoUF), pe(m.neto)],
-            ['Costos de terceros', '− '+fmtUFk(m.costoUF), pe(m.costo)],
+        { t:'Vendido neto', pct:vPct, uf:uf(CVu.neto), clp:pe(m.neto), lines:[
+            ['Vendido bruto', fmtUFk(CVu.bruto), pe(m.bruto)],
+            ['Costos de terceros', '− '+fmtUFk(CVu.costo), pe(m.costo)],
             ['Meta del año', fmtUFk(metaUF), pe(m.meta)] ], bar:vPct },
         // UF con la UF del DÍA de cada movimiento (mismas cifras que la pantalla); los pesos, tal cual.
-        { t:`Facturado · emitido en ${selYear}`, pct:m.bruto>0?Math.min(100,Math.round(resAnio.fac/m.bruto*100)):0, uf:uf(resAnio.verUF.fac), clp:pe(resAnio.fac),
+        { t:`Facturado · emitido en ${selYear}`, pct:m.bruto>0?factPct:0, uf:uf(resAnio.verUF.fac), clp:pe(resAnio.fac),
           lines: [...yrsFac.map(y=>[yrLbl(y), fmtUFk(fbyU[y]||0), pe(fby[y]||0)]), ...(facturadoEmitido.total>0?[['Total emitido (con terceros y reembolsos)', fmtUFk(facturadoEmitido.totalUF), pe(facturadoEmitido.total)]]:[])] },
         { t:'Cobrado propio', uf:uf(iv.totalUF), clp:pe(ingYTD), lines:[
             ['Comisiones pagadas', '− '+fmtUFk(comisPagadasAnioVenta.totalUF), pe(comisYTD)],
@@ -586,7 +587,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const percYTD=iv.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
     const A='#003C50', MUT='#537281', AZ3='#99ABB4', GRAY='#E4E8EB', GREEN=C.greenText, RED='#C0453F'
     const pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL')
-    const pct=(a,b)=>b>0?Math.round(a/b*100):0
+    const { ventaNetoPct, factPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza }), pct=(a,b)=>b>0?Math.round(a/b*100):0   // % de Vendido y Facturado: fuente única (pctsAnio), no se recalculan
     // fila de detalle: la UF manda y el peso va DEBAJO (no al lado), más chico
     const row=(l,ufv,clpv,neg)=>`<tr><td style='padding:7px 0;color:${neg?RED:MUT};font-size:12px;vertical-align:top'>${l}</td><td style='padding:7px 0;text-align:right;font-variant-numeric:tabular-nums'><div style='font-weight:800;color:${neg?RED:A};font-size:12.5px;line-height:1.15'>${neg?'− ':''}${fmtUFk(ufv)}</div><div style='color:${AZ3};font-size:10.5px;font-weight:600'>${pe(clpv)}</div></td></tr>`
     const card=(titulo,ufv,clpv,chip,rowsHtml)=>`<div style='border:1px solid ${GRAY};border-radius:12px;padding:14px 16px;margin-bottom:12px'><div style='display:flex;justify-content:space-between;align-items:baseline'><div style='font-size:10px;font-weight:800;color:${MUT};text-transform:uppercase;letter-spacing:.5px'>${titulo}</div>${chip!=null?`<div style='font-size:11px;font-weight:800;color:${A}'>${chip}</div>`:''}</div><div style='margin-top:6px;font-size:22px;font-weight:800;color:${A};letter-spacing:-.5px;line-height:1'>${fmtUFk(ufv)}</div><div style='font-size:12.5px;color:${MUT};font-weight:700;margin-top:2px'>${pe(clpv)}</div>${rowsHtml?`<table style='width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #EFF1F3'>${rowsHtml}</table>`:''}</div>`
@@ -595,8 +596,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const yrsCob=(iv.allYears||[]).map(y=>row(yrLbl(y), (iv.byYearUF||{})[y]||0, iv.byYear[y]||0)).join('')
     const fby=facturadoByYear.byYear||{}, fbyU=facturadoByYear.byYearUF||{}; const yrsFac=Object.keys(fby).map(Number).sort((a,b)=>b-a).map(y=>row(yrLbl(y), fbyU[y]||0, fby[y]||0)).join('')
     const V=resAnio.verUF, comU=comisPagadasAnioVenta.totalUF||0, percU=iv.percibidasUF||0
-    const ventasCard=card('Ventas', m.brutoUF, m.bruto, `${pct(m.bruto,m.meta)} % de la meta`, row('Neto de costos de terceros',m.netoUF,m.neto)+row('Costos de terceros',m.costoUF,m.costo,true)+row('Meta del año',metaUF,m.meta))
-    const factCard=card('Facturado', V.fac, resAnio.fac, `${pct(resAnio.fac,m.bruto)} % de lo vendido`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
+    const CVu=cascadaVendido(m,true), ventasCard=card('Vendido neto', CVu.neto, m.neto, `${ventaNetoPct} % de la meta`, row('Vendido bruto',CVu.bruto,m.bruto)+row('Costos de terceros',CVu.costo,m.costo,true)+row('Meta del año',metaUF,m.meta))
+    const factCard=card('Facturado', V.fac, resAnio.fac, `${m.bruto>0?factPct:0} % de lo vendido bruto`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
     const cobCard=card('Cobrado propio', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Comisiones pagadas',comU,comisYTD,true)+row('+ Comisiones percibidas',percU,percYTD)+row('Ingreso real',(iv.totalUF||0)-comU+percU,ingReal)+row('Total a caja',iv.totalCajaUF||0,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
     const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.sub?row('+ Subarriendo',V.sub,resAnio.sub):'')+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos de operación',V.cos,resAnio.cos,true)+row('Comisiones pagadas',V.com,resAnio.com,true))
     const _mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, _sob=ingYTD>=metaCobranza
@@ -859,7 +860,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         const comisYTD=comisPagadasAnioVenta.total||0                    // comisiones PAGADAS del año por ventas propias (base caja) — se restan
         const percYTD=ingresosPorAnioVenta.percibidas||0                  // comisiones PERCIBIDAS (nuestro % de facturas por cuenta de terceros) — se suman
         const ingReal=ingYTD-comisYTD+percYTD                             // Ingreso real = cobrado propio − comisiones pagadas + comisiones percibidas
-        const {ventaPct,ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})   // % de meta y de lo vendido: fuente única (lib/resultadoAnio.js), la misma del Panel de socios
+        const {ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})   // % de meta y de lo vendido: fuente única (lib/resultadoAnio.js), la misma del Panel de socios
         // Cifras del año en UF con la UF del DÍA de cada movimiento (ufDelDia); en CLP, los pesos tal cual. mRes = cifras de la cascada del resultado.
         const mRes=(k,abs)=>{ const v=(dashMoneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return dashMoneda==='UF'?fmtUFk(x):fmtShort(x) }
         const ingYTDUF=ingresosPorAnioVenta.totalUF||0, comisYTDUF=comisPagadasAnioVenta.totalUF||0, percYTDUF=ingresosPorAnioVenta.percibidasUF||0, ingRealUF=ingYTDUF-comisYTDUF+percYTDUF
@@ -900,21 +901,21 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                 marg:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
               }
               // Tarjeta: icono a la izquierda; título, cifra y "% · rótulo" alineados en columna (el % va BAJO la cifra, no rompe en escritorio).
-              const kpiTile=(key,label,bg,bd,icoBg,icoCol,fig,pct,cap)=>(
-                <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',cursor:'pointer',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
-                  <span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
+              const kpiTile=(key,label,bg,bd,icoBg,icoCol,fig,pct,cap,dual)=>(
+                <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',minHeight:isDeskRes?undefined:86,boxSizing:'border-box',cursor:'pointer',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
+                  {!dual&&<span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>}
                   <div style={{minWidth:0,flex:1}}>
-                    <div style={{...SEC_LBL,fontSize:isDeskRes?11:10,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>
-                    <div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>
+                    <div style={{...SEC_LBL,fontSize:isDeskRes?13:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>
+                    {dual?<CifrasBrutoNeto desk={isDeskRes} bruto={dual.bruto} neto={dual.neto} princ={vendPrinc} onAlt={setVendPrinc}/>:<div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>}
                     {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
                   </div>
                 </div>
               )
               return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
-                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, vMon(m.brutoUF,m.bruto), m.meta>0?ventaPct:null,'de la meta')}
-                {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'de lo vendido')}
+                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?ventaNetoPct:null,'neto de la meta', {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
+                {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'del bruto')}
                 {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, vMon(ingYTDUF,ingYTD), metaCobranza>0?cobroPct:null,'de la meta')}
-                {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'de ingresos')}
+                {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
               </div>)
             })()}
             {resDrill&&<ResDrillPanel datos={resData} clients={clients} terceros={terceros} tile={resDrill.tile} year={resDrill.year} setDrill={setResDrill} moneda={dashMoneda} go={go} isDesk={isDeskRes} selYear={selYear} onOpenClientFicha={onOpenClientFicha} onOpenEstadoResultados={onOpenEstadoResultados}/>}

@@ -24,6 +24,16 @@ export const parteMeta = (socios, nombre, cfg = CONFIG_DEFECTO) => {
 }
 
 /**
+ * Parte «media» por socio (sin nombre): 1 ÷ n de los socios que no son «Sin socio»; con `cfg.socios.reparto`, el promedio de las partes configuradas. Reemplaza el `/ 2` cableado.
+ * @param {{ nombre:string }[]} socios @param {CfgPresupuesto} [cfg]
+ */
+export const partePorSocio = (socios, cfg = CONFIG_DEFECTO) => {
+  const rep = cfg.socios && cfg.socios.reparto, n = (socios || []).filter((s) => s.nombre !== 'Sin socio').length
+  if (rep && typeof rep === 'object') { const v = Object.values(rep).map(Number).filter((x) => x > 0); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : 0 }
+  return n ? 1 / n : 0
+}
+
+/**
  * Tasa de primera categoría por año COMERCIAL según el régimen configurado (por defecto Pro Pyme general 14 D N°3: Circular SII N° 53 de 2025, Ley 21.755: 12,5 % hasta 2027, 15 % en 2028 y 25 % desde 2029,
  * siempre que la cotización del empleador (Ley 21.735) sea la del año).
  * @param {number|null|undefined} anio @param {CfgPresupuesto} [cfg]

@@ -98,10 +98,13 @@ export const ESC_TONOS = [
 export const tonoEsc = (t) => ESC_TONOS[((Number(t) || 0) % ESC_TONOS.length + ESC_TONOS.length) % ESC_TONOS.length]
 export const LBL = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase' }
 
+/** Props de un elemento tocable con teclado (H04): rol botón, tabIndex, Enter y Espacio, y foco visible (clase pp-foco). Sin onClick no agrega nada. */
+export const tocable = (/** @type {any} */ onClick) => onClick ? { role: 'button', tabIndex: 0, className: 'pp-foco', onClick, onKeyDown: (/** @type {any} */ e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(e) } } } : {}
+
 // Tarjeta de resultado (la de Inicio): ícono en caja blanca, rótulo, cifra grande y una línea.
 export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
   const t = TONO[tono], D = useIsDesktop()
-  return <div onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '8px 10px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
+  return <div {...tocable(onClick)} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '8px 10px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 32 : 30, height: D ? 32 : 30, borderRadius: D ? 10 : 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
     <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 22 : 18, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
   </div>
@@ -110,7 +113,7 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
 // Tarjeta chica con ícono (indicadores, resumen). El rótulo va en mayúscula; la cifra a 20 px.
 export function Mini({ ic, label, value, sub, cls, onClick }) {
   const D = useIsDesktop(), col = cls === 'pos' ? C.greenText : cls === 'neg' ? C.overdueText : cls === 'amb' ? C.soonText : C.accent
-  return <div onClick={onClick} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 14 : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
+  return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 14 : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 34 : 28, height: D ? 34 : 28, borderRadius: 10, background: C.azulBg, color: C.azulInfo, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
     <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: D ? 20 : 17, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
   </div>
@@ -128,15 +131,15 @@ export function Panel({ hd, small, children, pad, style, flex }) {
 export function Seg({ options, value, onChange, style, tonos }) {
   return <div role='group' style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', background: C.card, ...style }}>
     {options.map(([k, n]) => { const on = value === k, tn = tonos && tonos[k]
-      return <button key={k} aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 800 : 600, padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
+      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 800 : 600, padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
   </div>
 }
 
 export const Chip = ({ children, tono, c }) => { const t = c ? c : tono === 'y' ? { bg: C.ambarBg, fg: C.soonText } : tono === 'r' ? { bg: C.overdueBg, fg: C.overdueText } : tono === 'g' ? { bg: C.greenBg, fg: C.greenText } : tono === 'z' ? { bg: C.bgSoft, fg: C.muted } : { bg: C.azulBg, fg: C.azulInfo }
   return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: t.bg, color: t.fg, whiteSpace: 'nowrap' }}>{children}</span> }
 
-export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
-export const Lnk = ({ children, onClick, rojo, titulo }) => <button title={titulo} aria-label={titulo} onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
+export const Btn = ({ children, onClick, primary, disabled, style, title }) => <button title={title} className='pp-tac' disabled={disabled} onClick={onClick} style={{ border: `1px solid ${primary ? C.accent : C.border}`, background: primary ? C.accent : C.card, color: primary ? '#fff' : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 20, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, whiteSpace: 'nowrap', ...style }}>{children}</button>
+export const Lnk = ({ children, onClick, rojo, titulo }) => <button title={titulo} className='pp-tac' aria-label={titulo} onClick={onClick} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: rojo ? C.overdueText : C.accent, cursor: 'pointer', padding: '4px 2px' }}>{children}</button>
 
 // Campo con la unidad dentro. Escribe con el formato es-CL y confirma al salir del campo o con Enter (sin perder el foco mientras se teclea).
 // `sobrio`: sin relleno (el fondo es el de la tarjeta), subrayado fino al pasar o enfocar y, en pantallas táctiles, un recuadro tenue siempre visible; la cifra no se mueve (el recuadro sale
@@ -180,6 +183,8 @@ export function FldDin({ clp, tasa, onCommit, kind = 'money', pre = '$', suf, ..
 export function EstilosPresupuesto() {
   const A = C.accent, tenue = `color-mix(in srgb, ${A} 14%, transparent)`, medio = `color-mix(in srgb, ${A} 38%, transparent)`
   return <style>{`
+.pp-foco:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid ${A};outline-offset:2px}
+@media (max-width:1023px){.pp-tac{position:relative}.pp-tac::after{content:'';position:absolute;left:-4px;right:-4px;top:-8px;bottom:-8px}}
 .pfs{flex-shrink:0;display:inline-flex;align-items:baseline;gap:0;box-sizing:border-box;cursor:text;border:0 solid transparent;border-bottom-width:1px;padding:0 8px;margin:0 -8px -1px;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
 .pfs:hover,.pfs:focus-within{border-bottom-color:${medio}}
 .pfs:focus-within,.pfs.sel{border-bottom-color:${A}}
@@ -191,8 +196,8 @@ export function EstilosPresupuesto() {
 .pfs .pfu{font:inherit;letter-spacing:inherit}
 .pfs.g{font-size:18px;font-weight:800;letter-spacing:-.9px;line-height:1.15;color:${A}}
 @media (min-width:1024px){.pfs.g.c{font-size:16px}}
-@media (max-width:700px){.pfs.g{font-size:19px}}
 @media (hover:none){.pfs{border:1px solid ${tenue};border-radius:8px;margin:-1px -9px;padding:0 8px}.pfs:focus-within,.pfs.sel{border-color:${A}}}
+@media (max-width:700px){.pfs.g{font-size:14.5px;letter-spacing:-.4px;padding:0 5px;margin:-1px -6px}}   /* cifra editable de la tarjeta compacta (dos por fila): del tamaño de las demás cifras y sin tocar el borde */
 `}</style>
 }
 
@@ -201,9 +206,9 @@ export function Stp({ value, suf, step, min, max, onChange, int }) {
   const dar = d => onChange(Math.min(max, Math.max(min, Math.round((value + d) * 100) / 100)))
   const b = { border: 0, background: 'transparent', width: 28, height: 28, color: C.accent, fontSize: 16, fontWeight: 700, cursor: 'pointer', padding: 0, lineHeight: 1 }
   return <div style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 20, background: C.bgSoft, height: 30, maxWidth: '100%' }}>
-    <button aria-label='Menos' onClick={e => { e.stopPropagation(); dar(-step) }} style={b}>−</button>
+    <button aria-label='Menos' className='pp-tac' onClick={e => { e.stopPropagation(); dar(-step) }} style={b}>−</button>
     <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>{fmtIn(value, int ? 'int' : 'pct')}{suf}</span>
-    <button aria-label='Más' onClick={e => { e.stopPropagation(); dar(step) }} style={b}>+</button>
+    <button aria-label='Más' className='pp-tac' onClick={e => { e.stopPropagation(); dar(step) }} style={b}>+</button>
   </div>
 }
 
@@ -211,7 +216,7 @@ export function Stp({ value, suf, step, min, max, onChange, int }) {
 export function Fila({ nombre, peq, valor, sub, onClick, abierta, sin, tot, children }) {
   const D = useIsDesktop()
   return <>
-    <div onClick={onClick} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '12px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
+    <div {...tocable(onClick)} style={{ display: 'grid', gridTemplateColumns: D ? 'fit-content(62%) 18px minmax(0,1fr) auto auto' : 'fit-content(75%) 18px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: D ? '12px 16px' : '9px 14px', cursor: onClick ? 'pointer' : 'default', fontSize: 13, borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: abierta || tot ? C.bgSoft : 'transparent', fontWeight: tot ? 800 : 400 }}>
       <div style={{ minWidth: 0 }}><div style={{ fontWeight: tot ? 800 : 600 }}>{nombre}</div>{peq && <div style={{ fontSize: 11, color: C.muted, marginTop: 1, fontWeight: 400 }}>{peq}</div>}</div>
       <span style={{ color: C.done, fontSize: 16, lineHeight: 1, transform: abierta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>{onClick && !sin ? '›' : ''}</span>
       <span />
@@ -235,24 +240,31 @@ export function Grid({ cols = 4, colsM = 2, gap = 10, children, style }) {
 // Flecha de comparación: ↑ si la cifra está sobre la referencia y ↓ si está bajo; verde = a favor, rojo = en contra.
 export const Flecha = ({ sube, bueno, children }) => <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', color: bueno ? C.greenText : C.overdueText }}>{sube ? '↑' : '↓'} {children}</span>
 
-// Tarjeta de un componente (A2): carril de ícono a la izquierda y, a su derecha, tres filas de alto fijo: rótulo, dos cifras con su rótulo en mayúsculas y UNA línea de comparación con flechas
-// (la fila se reserva aunque esté vacía, así las seis tarjetas de una grilla miden lo mismo). Solo tipografía: sin pills ni barras. `izq`/`der` = { cap, val } (val puede ser un campo editable);
-// `cmp` = <Flecha/> o texto; `det` = filas [rótulo, valor, ir?] que se abren con la flecha. En el celular: menos relleno y cifras más chicas.
-export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, det, onClick, aria }) {
-  const t = TONO[tono], D = useIsDesktop(), [abre, setAbre] = useState(false), ico = D ? 36 : 28
-  const fig = f => <div style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.7px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap', marginBottom: D ? 5 : 2 }}>{f.cap}</div>
-    <div style={{ fontSize: D ? (CFG.moneda === 'uf' ? 17 : 21) : 19, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
-  return <div role={onClick ? 'button' : undefined} aria-label={aria} onClick={onClick} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '16px 16px 14px' : '10px 12px 9px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: D ? 12 : 10, rowGap: D ? 12 : 6, alignItems: 'start', minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
-    <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: D ? 10 : 9, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={D ? 18 : 16} /></span>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: ico }}>
-      <span style={{ ...LBL, fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.7px', flex: 1, lineHeight: 1.2, color: tono === 'w' ? C.muted : 'inherit' }}>{label}</span>
-      {det && <button aria-label={abre ? 'Cerrar el detalle' : 'Ver el detalle'} aria-expanded={abre} onClick={e => { e.stopPropagation(); setAbre(a => !a) }} style={{ border: 0, background: 'transparent', color: 'inherit', width: 28, height: 28, display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0, transform: abre ? 'rotate(90deg)' : 'none' }}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d='M9 6l6 6-6 6' /></svg></button>}
-    </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: D ? -4 : -3 }}>{fig(izq)}{fig(der)}</div>
-    <div style={{ display: 'flex', gap: '2px 14px', flexWrap: 'wrap', fontSize: D ? 12 : 11.5, color: C.muted, fontVariantNumeric: 'tabular-nums', minHeight: D ? 18 : 16, alignItems: 'center' }}>{cmp}</div>
-    {abre && det && <div style={{ gridColumn: '1 / -1', borderTop: `1px solid color-mix(in srgb, currentColor 18%, transparent)`, paddingTop: 8, display: 'grid', gap: 4, fontSize: 12 }}>
-      {det.map(([k, v, go], i) => <div key={i} onClick={go ? e => { e.stopPropagation(); go() } : undefined} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, cursor: go ? 'pointer' : 'default' }}><span style={{ color: C.muted }}>{k}{go ? ' ›' : ''}</span><b style={{ color: C.accent, textAlign: 'right' }}>{v}</b></div>)}
-    </div>}
+// Tarjeta de un componente (A2): SIN detalle plegable, siempre del mismo alto; tocarla abre su página de detalle (la flecha › lo indica) y ahí viven las aclaraciones.
+// Escritorio: carril de ícono a la izquierda y, a su derecha, rótulo, dos cifras con su rótulo y UNA línea de comparación con flechas. Celular (dos por fila): ícono 26 px y rótulo en una línea,
+// REAL y META apiladas (rótulo a la izquierda, cifra a la derecha) y la comparación en una línea. Solo tipografía: sin pills ni barras. `izq`/`der` = { cap, val } (val puede ser un campo editable);
+// `cmp` = <Flecha/> o texto. Teclado: Enter y Espacio abren, con foco visible (clase pp-foco, ver EstilosPresupuesto).
+export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, onClick, aria }) {
+  const t = TONO[tono], D = useIsDesktop(), ico = D ? 36 : 26, ambos = CFG.moneda === 'ambos'
+  const tecla = onClick ? (/** @type {any} */ e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(e) } } : undefined
+  const flecha = onClick && <svg width={D ? 16 : 12} height={D ? 16 : 12} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' style={{ flexShrink: 0, opacity: 0.7 }}><path d='M9 6l6 6-6 6' /></svg>
+  const fig = (/** @type {any} */ f) => D
+    ? <div style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.7px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap', marginBottom: 5 }}>{f.cap}</div>
+      <div style={{ fontSize: CFG.moneda === 'uf' ? 17 : 21, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
+    : <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, minWidth: 0, minHeight: ambos ? 30 : 18 }}><span style={{ ...LBL, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.cap}</span>
+      <span style={{ fontSize: 14.5, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', textAlign: 'right', minWidth: 0 }}><Val v={f.val} /></span></div>
+  const cab = <div style={{ display: 'flex', alignItems: 'center', gap: D ? 8 : 6, minHeight: D ? ico : 30, minWidth: 0 }}>
+    {!D && <span style={{ width: ico, height: ico, flexShrink: 0, borderRadius: 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={15} /></span>}
+    <span style={{ ...LBL, fontSize: D ? 13 : 12, fontWeight: 700, letterSpacing: D ? '.5px' : '.2px', flex: 1, minWidth: 0, lineHeight: 1.15, color: tono === 'w' ? C.muted : 'inherit', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{label}</span>{flecha}</div>
+  const cmpEl = <div style={{ display: 'flex', gap: D ? '2px 14px' : '0 8px', flexWrap: D ? 'wrap' : 'nowrap', overflow: D ? undefined : 'hidden', whiteSpace: D ? undefined : 'nowrap', fontSize: D ? 12 : 10.5, color: C.muted, fontVariantNumeric: 'tabular-nums', minHeight: D ? 18 : 16, alignItems: 'center' }}>{cmp}</div>
+  const caja = { background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: /** @type {'border-box'} */ ('border-box'), alignContent: /** @type {'start'} */ ('start') }
+  const ar = { role: onClick ? 'button' : undefined, tabIndex: onClick ? 0 : undefined, 'aria-label': aria, className: onClick ? 'pp-foco' : undefined, onClick, onKeyDown: tecla }
+  if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: 'auto auto auto auto' }}>{cab}{fig(izq)}{fig(der)}{cmpEl}</div>
+  return <div {...ar} style={{ ...caja, padding: '16px 16px 14px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 12, alignItems: 'start' }}>
+    <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={18} /></span>
+    {cab}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{fig(der)}</div>
+    {cmpEl}
   </div>
 }
 
@@ -267,7 +279,7 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
     return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('touchstart', fuera) }
   }, [abre])
   return <span ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
-    <button aria-label={aria} aria-haspopup='menu' aria-expanded={abre} onClick={() => setAbre((a) => !a)} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', ...estilo }}>{boton}<span aria-hidden='true' style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '5px solid currentColor', display: 'inline-block' }} /></button>
+    <button aria-label={aria} aria-haspopup='menu' className='pp-tac' aria-expanded={abre} onClick={() => setAbre((a) => !a)} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', ...estilo }}>{boton}<span aria-hidden='true' style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '5px solid currentColor', display: 'inline-block' }} /></button>
     {abre && <div role='menu' style={{ position: 'absolute', top: '100%', [derecha ? 'right' : 'left']: 0, zIndex: 30, marginTop: 6, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 6, minWidth: 170, boxShadow: '0 8px 24px rgba(0,60,80,.14)' }}>
       {opciones.map(([k, n]) => <button key={String(k)} role='menuitem' onClick={() => { setAbre(false); onChange(k) }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, fontFamily: 'inherit', cursor: 'pointer', padding: '9px 10px', borderRadius: 8, whiteSpace: 'nowrap', fontSize: 13, background: valor === k ? C.azulBg : 'transparent', color: valor === k ? C.accent : C.muted, fontWeight: valor === k ? 800 : 600 }}>{n}</button>)}
     </div>}
@@ -275,7 +287,7 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
 }
 
 /** Botón-chip de la barra de contexto (Versiones, Excel). */
-export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
+export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
 
 /**
  * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
@@ -288,7 +300,7 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc }) {
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, gap: 0 }}><span style={cap}>{D ? `Año base ${anioBase}` : anioBase}</span><span style={{ ...cap, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span></div>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, alignItems: 'start' }}>
       {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
-        return <button key={nom} title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 6, padding: D ? '4px 0' : 0, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 12.5 }}>
+        return <button key={nom} title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 6, padding: D ? '4px 0' : 0, minHeight: D ? 36 : 44, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 12.5 }}>
           <span style={{ width: D ? 28 : 38, height: D ? 28 : 38, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: D ? 12.5 : 14, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
           {D && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>}
         </button> })}
@@ -309,7 +321,7 @@ export const Pestanas = ({ options, value, onChange }) => <div role='tablist' st
 export function Pliegue({ t, v, children, abierto }) {
   return <details open={abierto} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0 }}>
     <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', fontSize: 13 }}>
-      <b style={{ color: C.accent, fontSize: 13.5 }}>{t}</b><span style={{ flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16 }}>›</span>
+      <b style={{ color: C.accent, fontSize: 13.5 }}>{t}</b><span style={{ flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16 }}>›</span>
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>

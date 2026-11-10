@@ -3,7 +3,7 @@
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
 import { Children, useMemo, useState } from 'react'
 import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF } from '../lib/compartido.jsx'
+import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
@@ -28,12 +28,12 @@ const ICO_ANIO = {
   check:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>,
   tPct:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
 }
-const KpiAnio = ({ic,tono='nt',label,value,pct,cap,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
-  <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
-    <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
+const KpiAnio = ({ic,tono='nt',label,value,dual,pct,cap,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
+  <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',minHeight:D?undefined:86,boxSizing:'border-box',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
+    {!dual&&<span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>}
     <div style={{minWidth:0,flex:1}}>
-      <div style={{...SEC_LBL,fontSize:D?11:10,...DOS_LINEAS}}>{label}</div>
-      <div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>
+      <div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>
+      {dual||<div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>}
       {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
     </div>
   </div>) }
@@ -126,6 +126,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const hoy = new Date().toISOString().slice(0,10), ymNow = hoy.slice(0,7), ymPrev = _ymPrev(ymNow)
   const mesPasado = MESES[Number(ymPrev.slice(5,7))-1], mesActual = MESES[Number(ymNow.slice(5,7))-1]
   const [moneda,setMoneda] = usePersistedState('panel_moneda','UF')
+  const [vendPrinc,setVendPrinc] = usePersistedState('d_vend_princ','bruto')   // misma elección que en Inicio
   const [drill,setDrill] = usePersistedState('panel_resdrill',null)   // {tile:'vend'|'fact'|'cob'|'marg', year} — desglose bajo los tiles del año, el mismo de Inicio
   const [abiertas,setAbiertas] = usePersistedState('panel_abiertas',[])
   const lista = Array.isArray(abiertas)?abiertas:[]
@@ -139,7 +140,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear:currentYear })
   const { m, resAnio, ingresosPorAnioVenta:ing, comisPagadasAnioVenta:comP, metaCobranza, metaUF, ufRef, ufDias, fuRes } = R
   const ingYTD = ing.total||0, ingYTDUF = ing.totalUF||0
-  const { ventaPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
+  const { ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
   const vMon = (uf,clp) => moneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   const mRes = (k,abs) => { const v=(moneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return moneda==='UF'?fmtUFk(x):fmtShort(x) }
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
@@ -159,7 +160,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   // ── Por socio y retiros ──
   const [fu] = usePorSocioFuentes()
   const P = useMemo(()=>partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic:fu.ic, ia:fu.ia, ov:fu.ov, fondoExtra:{} }),[billing,sales,clients,anticipos,terceros,expenses,fu])
-  const V = useMemo(()=>vendidoPorSocio(sales, clients, ufRef, currentYear),[sales,clients,ufRef])
+  const V = useMemo(()=>vendidoPorSocio(sales, clients, ufRef, currentYear, null, { terceros, billing }),[sales,clients,ufRef,terceros,billing])
   const { card6, sumP, emitido, nEmitidas, emitidoMeses } = useMemo(()=>kpisPorSocio({ P, V, ym:ymNow }),[P,V,ymNow])
   // Ingreso emitido (facturado − comisiones de lo facturado; helper único de cifras.js): mes en curso, acumulado del año y mes a mes.
   const sumaN = a => a.reduce((x,y)=>x+y,0)
@@ -204,15 +205,16 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   // ── Bloques ──
   const sociosFilas = [...ADMIN_NAMES, SIN_SOCIO, null]
   const tonoSoc = s => s===ADMIN_NAMES[0]?'az':s===ADMIN_NAMES[1]?'am':s===SIN_SOCIO?'am':'gy'
+  const cextAnio = sumP('f','cext',null,'ytd')   // diferencia estructural entre esta tabla (DTE emitidos, con nuestra comisión de externos) y la tarjeta Facturado (honorarios propios)
   const tablaSocios = (
     <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:isDesktop?12.5:12,fontVariantNumeric:'tabular-nums'}}>
-      <thead><tr>{['Socio','Vendido','Facturado','Cobrado','Ingreso real'].map((h,i)=><th key={h} style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:isDesktop?10:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:isDesktop?.5:.2,color:C.accent,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:isDesktop?'nowrap':'normal',verticalAlign:'bottom',lineHeight:1.15}}>{h}</th>)}</tr></thead>
+      <thead><tr>{['Socio','Vendido neto','Facturado','Cobrado','Ingreso real'].map((h,i)=><th key={h} style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:isDesktop?10:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:isDesktop?.5:.2,color:C.accent,background:C.bgSoft,textAlign:i?'right':'left',whiteSpace:isDesktop?'nowrap':'normal',verticalAlign:'bottom',lineHeight:1.15}}>{h}</th>)}</tr></thead>
       <tbody>{sociosFilas.map(s=>{ const v=card6(s,'ytd'), tot=s===null; return (
         <tr key={s||'ofi'} onClick={()=>go('porSocio')} style={{cursor:'pointer',background:tot?C.bgSoft:undefined,fontWeight:tot?800:400}}>
           <td style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,fontWeight:tot?800:600,color:tot?C.accent:C.text}}>{tot?'Oficina':s}</td>
           {[0,1,2,5].map(i=><td key={i} onClick={e=>{ e.stopPropagation(); go('porSocio',s,i) }} style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
         </tr>) })}</tbody>
-    </table></div>)
+    </table>{cextAnio>=1&&<div style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:11,color:C.muted}}>Facturado incluye la parte nuestra de las facturas por cuenta de externos ({fmtShort(cextAnio)}); la tarjeta Facturado del año cuenta solo honorarios propios y esa comisión va en Margen.</div>}</div>)
   const Mes1 = mesActual.charAt(0).toUpperCase()+mesActual.slice(1)
   const celdasEm = [...emMes.map((x,i)=>({ k:x.s, soc:x.s, v:fmtShort(emIng[i]), sub:`${x.n} factura${x.n!==1?'s':''}${emCom[i]>0?` · com. ${fmtShort(emCom[i])}`:''}` })), ...(Math.abs(emSub)>=1?[{ k:'Subarriendo', v:fmtShort(emSub), sub:'aparte, sin socio' }]:[])]
   const tablaEm = (() => { const cols = emAnio.map(x=>{ const [i,c]=isDesktop?[x.i,x.c]:redondearPartes([x.i,x.c],1e5); return { s:x.s, f:i+c, c, i } })
@@ -315,8 +317,9 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     // Resumen: año (pesos y UF lado a lado), cierre del mes pasado y cada bloque del detalle con las filas que se ven
     const R=[ {v:[`Panel de socios · datos al ${fmtFechaDMY(hoy)}`],s:'tit'}, {v:[]},
       {v:['Concepto','Detalle','Valor ($)','Valor (UF)'],s:'hdr'}, {v:[`Año ${currentYear}`,'','',''],s:'sec'},
-      {v:['Vendido',m.meta>0?`${ventaPct} % de la meta`:'',m.bruto,m.brutoUF],z:[null,null,PESOS,UF_F]},
-      {v:['Facturado',m.bruto>0?`${factPct} % de lo vendido`:'',resAnio.verCLP.fac,resAnio.verUF.fac],z:[null,null,PESOS,UF_F]},
+      {v:['Vendido bruto','',m.bruto,m.brutoUF],z:[null,null,PESOS,UF_F]},
+      {v:['Vendido neto',m.meta>0?`${ventaNetoPct} % de la meta`:'',m.neto,m.netoUF],z:[null,null,PESOS,UF_F]},
+      {v:['Facturado',m.bruto>0?`${factPct} % de lo vendido bruto`:'',resAnio.verCLP.fac,resAnio.verUF.fac],z:[null,null,PESOS,UF_F]},
       {v:['Cobrado',metaCobranza>0?`${cobroPct} % de la meta`:'',ingYTD,ingYTDUF],z:[null,null,PESOS,UF_F]},
       {v:['Margen',resAnio.pct!=null?`${pct1(resAnio.pct)} % de ingresos`:'',resAnio.verCLP.res,resAnio.verUF.res],z:[null,null,PESOS,UF_F]},
       {v:[`Cierre de ${mesPasado}`,'','',''],s:'sec'},
@@ -330,7 +333,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         const enUF=f.unit==='UF', esCuenta=/^Pendientes|^Datos por/.test(String(f.label))
         R.push({ v:[f.label,f.sub||'', num&&!enUF?f.raw:(num?'':(f.txt==='›'?'':f.txt)), num&&enUF?f.raw:''], z:[null,null,esCuenta?NUM:PESOS,UF_F] }) } }) }
     // Por socio (acumulado del año)
-    const S=[ {v:[`Por socio · enero–${mesActual} ${currentYear}`],s:'tit'}, {v:[]}, {v:['Socio','Vendido','Facturado','Cobrado','Ingreso real'],s:'hdr'},
+    const S=[ {v:[`Por socio · enero–${mesActual} ${currentYear}`],s:'tit'}, {v:[]}, {v:['Socio','Vendido neto','Facturado','Cobrado','Ingreso real'],s:'hdr'},
       ...sociosFilas.map(s=>{ const v=card6(s,'ytd'); return {v:[s===null?'Oficina':s,v[0],v[1],v[2],v[5]],z:[null,PESOS,PESOS,PESOS,PESOS]} }) ]
     // Ingreso emitido: mes en curso, acumulado y mes a mes (facturado − comisiones de lo facturado)
     const E=[ {v:[`Ingreso emitido · ${Mes1} en curso`],s:'tit'}, {v:[]}, {v:['Socio','Facturado','Comisiones','Ingreso emitido','Facturas'],s:'hdr'},
@@ -364,10 +367,10 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const ano = (<>
     <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
-      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' value={vMon(m.brutoUF,m.bruto)} pct={m.meta>0?ventaPct:null} cap='de la meta' activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
-      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='de lo vendido' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>
+      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?ventaNetoPct:null} cap='neto de la meta' activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
+      <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='del bruto' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>
       <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' activo={drill?.tile==='cob'} onClick={()=>setDrill(d=>d&&d.tile==='cob'?null:{tile:'cob',year:null})}/>
-      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='de ingresos' activo={drill?.tile==='marg'} onClick={()=>setDrill(d=>d&&d.tile==='marg'?null:{tile:'marg',year:null})}/>}
+      {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='ingresos' activo={drill?.tile==='marg'} onClick={()=>setDrill(d=>d&&d.tile==='marg'?null:{tile:'marg',year:null})}/>}
     </div>
     {drill&&<ResDrillPanel datos={R} clients={clients} terceros={terceros} tile={drill.tile} year={drill.year} setDrill={setDrill} moneda={moneda} isDesk={isDesktop} selYear={currentYear}
       go={t=>go(({sales:'ventas',billing:'facturacion',expenses:'gastos',presupuestoOficina:'oficina'})[t]||t)} onOpenClientFicha={id=>go('cliente',id)} onOpenEstadoResultados={()=>go('resultadoAnio')} propAbiertas={{uf:propUF,n:props.length,onClick:()=>go('ventasPropuestas')}}/>}

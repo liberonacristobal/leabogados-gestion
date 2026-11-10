@@ -1,11 +1,14 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert } from '../lib/base.jsx'
-import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaSupuestos, parteMeta, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, modeloPresupuesto, diferenciaSupuestos, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, valorComponente, nombreComponente, sueldosYRetiros, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
+const TX = CFG.tributario.textos, cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
 import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Tarjeta, Ic, difMon, monedaActual, tasa27, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
+import { filasBase } from './presupuestoEtapas1.jsx'
+import { filasMetas } from './presupuestoMetas.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 const fechaDMY = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -56,8 +59,8 @@ export function CardEsc({ X, k, editable }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}{sel && <Chip>elegido</Chip>}{k !== rk && b && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs {X.nomEsc(rk)}</Chip>}</div>
     <div style={{ ...LBL, color: C.muted }}>Retiros</div>
     <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.overdueText, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
-    <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros / 24)} por socio al mes</div>
-    {cu && cu.dif != null && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif >= -1 ? 'sobran' : 'faltan'} {mmP(Math.abs(cu.dif))}</Flecha> de la meta de {nombreComponente(MT.ancla, CFG).toLowerCase()}</div>}
+    <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes</div>
+    {cu && cu.dif != null && Math.abs(cu.dif) >= 1 && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha> contra la meta de {nombreComponente(MT.ancla, CFG).toLowerCase()}</div>}
     <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
     <div style={{ fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
@@ -78,11 +81,11 @@ function TabImp({ X }) {
     <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => { const e = M.esc[k], sel = est.esc === k
       return <div key={k} onClick={() => setEsc(k)} style={{ background: C.card, border: sel ? `2px solid ${C.accent}` : `1px solid ${C.border}`, borderRadius: 12, padding: sel ? 13 : 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><b style={{ color: C.accent, fontSize: 15 }}>{n}</b>{sel && <Chip>elegido</Chip>}</div>
-        <div style={{ ...LBL, color: C.muted }}>Saldo en abril de {X.datos.anio + 1}</div>
+        <div style={{ ...LBL, color: C.muted }}>Saldo en {TX.mesAnual} de {X.datos.anio + 1}</div>
         <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.6, color: e.saldo > 0 ? C.soonText : C.greenText, lineHeight: 1.1 }}><Val v={mm(Math.abs(e.saldo))} /></div>
         <div style={{ fontSize: 11, color: C.muted }}>{e.saldo >= 0 ? 'por pagar' : 'a favor'}</div>
         <div style={{ marginTop: 6 }}>{[['Base imponible', mm(e.base)], ['× Tasa de primera categoría', pc(est.tasaIDPC)], [`= Impuesto del año ${X.datos.anio}`, mm(e.idpc), 1], [`− PPM pagados en ${X.datos.anio}`, mm(e.ppm)], ['Impuesto sobre el resultado', pc((e.idpc / Math.max(1, e.base)) * 100)]].map(([t, v, s]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 4px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: s ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, textAlign: 'right' }}><Val v={v} /></b></div>)}</div></div> })}</Grid>
-    <Panel hd='Calendario y alcance' pad><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Chip>{`Cada mes · PPM en el F29 (hoy ${mp(X.datos.ppmMes)} al mes)`}</Chip><Chip>{`Abril ${X.datos.anio + 1} · declaración anual de ${X.datos.anio}`}</Chip><Chip>Sin IVA · no hay crédito fiscal</Chip><Chip tono='y'>Fuera: impuesto personal de los socios, depreciación · tasa de PPM por confirmar</Chip></div></Panel>
+    <Panel hd='Calendario y alcance' pad><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Chip>{`Cada mes · ${TX.pagoMensual} en el ${TX.formulario} (hoy ${mp(X.datos.ppmMes)} al mes)`}</Chip><Chip>{`${cap(TX.mesAnual)} ${X.datos.anio + 1} · declaración anual de ${X.datos.anio}`}</Chip><Chip>{`Sin ${TX.impuestoIndirecto} · no hay crédito fiscal`}</Chip><Chip tono='y'>Fuera: impuesto personal de los socios, depreciación · tasa de {TX.pagoMensual} por confirmar</Chip></div></Panel>
   </>
 }
 
@@ -92,9 +95,9 @@ const metasEsc = (X, k) => ({ ventas: valorComponente(X.M.esc[k], 'ventas', X.MT
 function TabSoc({ X }) {
   const { est, M, datos: d } = X, e = M.esc[est.esc], tot = d.socios.reduce((a, s) => a + s.facturado, 0), mt = metasEsc(X, est.esc)
   return <>
-    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={`partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre, CFG) * 100, 0)} cada socio)`}>
-      {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio', pm = parteMeta(d.socios, s.nombre)
-        return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + mmP(e.retiros / 24) + ' por mes'}`} sub={sin ? 'facturado ' + mmP(e.fact * sh) : `meta de ventas ${mmP(mt.ventas * pm)} · cobro ${mmP(mt.cobro * pm)}`} valor={sin ? '—' : mm(e.retiros / 2)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
+    <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={CFG.socios && CFG.socios.reparto ? 'reparto de la configuración' : `partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre, CFG) * 100, 0)} cada socio)`}>
+      {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio', pm = parteMeta(d.socios, s.nombre, CFG)
+        return <Fila key={s.nombre} nombre={s.nombre} peq={`${pc(sh * 100)} de lo facturado en ${d.anioBase}${sin ? '' : ' · retiros ' + mmP(e.retiros * pm / 12) + ' por mes'}`} sub={sin ? 'facturado ' + mmP(e.fact * sh) : `meta de ventas ${mmP(mt.ventas * pm)} · cobro ${mmP(mt.cobro * pm)}`} valor={sin ? '—' : mm(e.retiros * pm)} onClick={() => X.ir({ drill: { t: 'soc', n: s.nombre } })} /> })}
       <Fila tot sin nombre='Oficina' sub={`meta de ventas ${mmP(mt.ventas)} · cobro ${mmP(mt.cobro)}`} valor={mm(e.retiros)} />
     </Panel>
     <Titulo>Sueldos y retiros por escenario</Titulo>
@@ -134,13 +137,13 @@ export function Escenarios({ X }) {
     <div style={dg}>
       {ui.tab === 'res' && <>
         <Det t={`Metas ${d.anio} · por escenario`}><MetasTabla X={X} /></Det>
-        <Det t='Estado de resultados por escenario'><div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Caja, sin IVA · UF media {nf.format(Math.round(M.ufMed))}</div><Filas X={X} filas={cascada} /></Det>
+        <Det t='Estado de resultados por escenario'><div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Caja, sin {TX.impuestoIndirecto} · UF media {nf.format(Math.round(M.ufMed))}</div><Filas X={X} filas={cascada} /></Det>
         <Det t={`Facturado mes a mes · ${X.nomEsc(est.esc)}`}>{mensual}</Det>
-        <Det t='Por qué estos valores'><Lista items={[<span><b>Crecimiento real de ventas {X.ESC.map(([kk]) => fmtN(est.p[kk].g)).join(' / ')} %:</b> se aplica en UF sobre la base de {d.anioBase}. Es un criterio, no un cálculo: no hay conversión de propuestas para estimar la cartera nueva. El del escenario {X.nomEsc(escenarioMetas(est, CFG))} ({pc(est.p[escenarioMetas(est, CFG)].g, 0)}) se compara con el reajuste de la UF ({pc(est.reajusteUF)}).</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; cada escenario parte con la suya (editable).</span>, <span><b>Comisiones:</b> parte de lo cobrado, la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ')' : ''}.</span>, <span><b>Días de cobro:</b> el escenario más cauteloso supone más días que el promedio real{d.dias.promedio != null ? ' (' + d.dias.promedio + ' días, mediana ' + d.dias.mediana + ')' : ''}.</span>, <span><b>Impuesto:</b> tasa de primera categoría de {pc(est.tasaIDPC)} para el año comercial {d.anio} (Pro Pyme, circular SII 53/2025); editable.</span>, <span><b>Reserva de caja:</b> {pc(est.reserva, 0)} del resultado después de impuesto; la reserva mínima de {mm(est.reservaIni)} ya está en caja.</span>]} /></Det>
+        <Det t='Por qué estos valores'><Lista items={[<span><b>Crecimiento real de ventas {X.ESC.map(([kk]) => fmtN(est.p[kk].g)).join(' / ')} %:</b> se aplica en UF sobre la base de {d.anioBase}. Es un criterio, no un cálculo: no hay conversión de propuestas para estimar la cartera nueva. El del escenario {X.nomEsc(escenarioMetas(est, CFG))} ({pc(est.p[escenarioMetas(est, CFG)].g, 0)}) se compara con el reajuste de la UF ({pc(est.reajusteUF)}).</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; cada escenario parte con la suya (editable).</span>, <span><b>Comisiones:</b> parte de lo cobrado, la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ')' : ''}.</span>, <span><b>Días de cobro:</b> el escenario más cauteloso supone más días que el promedio real{d.dias.promedio != null ? ' (' + d.dias.promedio + ' días, mediana ' + d.dias.mediana + ')' : ''}.</span>, <span><b>Impuesto:</b> tasa de primera categoría de {pc(est.tasaIDPC)} para el año comercial {d.anio} ({CFG.tributario.etiqueta}); editable.</span>, <span><b>Reserva de caja:</b> {pc(est.reserva, 0)} del resultado después de impuesto; la reserva mínima de {mm(est.reservaIni)} ya está en caja.</span>]} /></Det>
       </>}
       {ui.tab === 'imp' && <>
-        <Det t='Qué se paga y cuándo'><Lista items={[<span><b>Cada mes:</b> PPM en el F29 del mes siguiente (hoy {mp(d.ppmMes)} presupuestados).</span>, <span><b>Abril de {d.anio + 1}:</b> declaración anual de {d.anio}; se paga el saldo o se pide la devolución.</span>, <span><b>Sin IVA:</b> no hay IVA que proyectar ni crédito fiscal.</span>, <span><b>Boletas de honorarios:</b> las retenciones siguen yendo al F29, como hoy.</span>]} /></Det>
-        <Det t='Lo que no se proyecta aquí'><Lista items={['El impuesto personal de cada socio por sus retiros.', 'Depreciación y gastos rechazados: se estiman con la contadora.', `Tasa de PPM: se mantiene lo pagado hoy (conservador); la legal Pro Pyme (${pc(tasaPPMLegal(d.anio, d.oficiales.fact.uf), 3)}) es menor, por confirmar con la contadora.`]} /></Det>
+        <Det t='Qué se paga y cuándo'><Lista items={[<span><b>Cada mes:</b> {TX.pagoMensual} en el {TX.formulario} del mes siguiente (hoy {mp(d.ppmMes)} presupuestados).</span>, <span><b>{cap(TX.mesAnual)} de {d.anio + 1}:</b> declaración anual de {d.anio}; se paga el saldo o se pide la devolución.</span>, <span><b>Sin {TX.impuestoIndirecto}:</b> no hay {TX.impuestoIndirecto} que proyectar ni crédito fiscal.</span>, <span><b>{cap(TX.retenciones)}:</b> las retenciones siguen yendo al {TX.formulario}, como hoy.</span>]} /></Det>
+        <Det t='Lo que no se proyecta aquí'><Lista items={['El impuesto personal de cada socio por sus retiros.', 'Depreciación y gastos rechazados: se estiman con la contadora.', `Tasa de ${TX.pagoMensual}: se mantiene lo pagado hoy (conservador); la legal ${CFG.tributario.regimen} (${pc(tasaPPMLegal(d.anio, d.oficiales.fact.uf), 3)}) es menor, por confirmar con la contadora.`]} /></Det>
       </>}
     </div>
   </>
@@ -208,7 +211,7 @@ export function Seguimiento({ X }) {
   const { est, D, datos: d, ui, setUI } = X, Y = d.anio
   const { S, of, esc, cerr, estS } = seriesSeguimiento(X)
   const modo = ui.sg || 'p', comp = ui.sc || 'fact'
-  const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => (kk === 'costos' ? 'Costos' : nombre[kk])
+  const nombre = Object.fromEntries(componentesDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
   const bueno = (/** @type {string} */ kk, /** @type {number} */ des) => (des === 0 ? true : (des > 0) === afavor(kk, true))
   // Desvío con flecha (↑ sobre el presupuesto, ↓ bajo él; verde a favor, rojo en contra) en % o en dinero, según el conmutador.
@@ -219,8 +222,8 @@ export function Seguimiento({ X }) {
   const tarjeta = (/** @type {string} */ kk) => {
     const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
     return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={{ cap: rango ? `Real ${rango}` : 'Real', val: cerr > 0 ? mx(c.realAcum, u.realAcum) : '—' }} der={{ cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null && cerr > 0 ? mx(c.presAcum, u.presAcum) : cerr === 0 && c.cierre != null ? mx(c.cierre, u.cierre) : '—' }}
-      cmp={cerr === 0 ? <span>Sin meses cerrados · presupuesto del año</span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
-      det={[['Cierre proyectado', c.cierre != null ? mx(c.cierre, u.cierre) : '—'], ['Meses cerrados', String(cerr)], ...(kk === 'ventas' && Y === d.anioBase ? [['Bruto a la fecha', mx(d.oficiales.vendBruto.clp, d.oficiales.vendBruto.uf)], ['Plano', 'neto de comisiones, como la meta']] : []), ['Plano', 'presupuesto mensual: estimación propia · ' + resumenDistribucion(estS.dist, (cc) => nombreComponente(cc, CFG))]]} onClick={() => setUI({ sc: kk })} />
+      cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
+      onClick={() => { setUI({ sc: kk }); X.ir({ drill: { t: 'comp', de: 'seg', k: kk } }) }} />
   }
   const avisos = []
   const f = S.fact.c
@@ -229,7 +232,7 @@ export function Seguimiento({ X }) {
   if (d.dias.promedio != null && d.dias.promedio > diasSup) avisos.push(`Días de cobro reales ${d.dias.promedio} sobre los ${diasSup} supuestos.`)
   const mayor = d.clientes[0], tope = 15
   if (mayor && d.totalFact && (mayor.monto / d.totalFact) * 100 > tope) avisos.push(`${mayor.name} concentra ${pc((mayor.monto / d.totalFact) * 100, 0)} de lo facturado (tope ${tope} %).`)
-  const claves = Object.keys(S)
+  const claves = componentesDe(CFG).map(([kk]) => kk).filter((kk) => S[kk])   // mismo orden y nombres que el resto (lista de componentes de la configuración)
   const nomEst = (/** @type {string} */ e) => (e === 'cerrado' ? 'cerrado' : e === 'curso' ? 'en curso' : 'por venir')
   const conmut = <Seg options={[['p', '%'], ['m', '$']]} value={modo} onChange={(v) => setUI({ sg: v })} />
   const colW = '100px repeat(12,minmax(0,1fr)) 68px 68px 76px 70px', borde = `1px solid ${C.border}`
@@ -237,7 +240,7 @@ export function Seguimiento({ X }) {
   const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut}>
     <div style={{ overflowX: 'auto' }}><div style={{ minWidth: modo === 'p' ? 0 : 1120 }}>
       <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', ...LBL, fontSize: 10.5, color: C.accent }}>
-        <span style={{ padding: '10px 0' }}>Componente</span>{MESC.map((m, i) => <span key={m} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', padding: '10px 4px 10px 0', cursor: 'pointer', color: i > cerr ? C.done : C.accent }}>{m}</span>)}
+        <span style={{ padding: '10px 0' }}>Componente</span>{MESC.map((m, i) => <span key={m} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', padding: '10px 4px 10px 0', cursor: 'pointer', color: i > cerr ? C.muted : C.accent }}>{m}</span>)}
         {['Real', 'Presup.', 'Desvío', 'Cierre'].map((t) => <span key={t} style={{ textAlign: 'right', padding: '10px 0' }}>{t}</span>)}
       </div>
       {claves.map((kk) => { const c = S[kk].c, u = S[kk].u
@@ -272,7 +275,8 @@ export function Seguimiento({ X }) {
       <span>Se mide contra {of ? <>la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>el <b style={{ color: C.accent }}>borrador</b> (sin versión oficial)</>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
       <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Cambiar versión ›</span>
     </div>
-    <Grid cols={3} colsM={1} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
+    {cerr === 0 && <div style={{ fontSize: 12.5, color: C.muted, margin: '0 4px' }}>Sin meses cerrados: el real aparece al cierre de {MESL[0].toLowerCase()}. Las tarjetas muestran el presupuesto del año.</div>}
+    <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{D ? 'toca una celda para ver el mes' : 'toca un mes'} · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>
     {D ? tabla : <>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></>}
     <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
@@ -282,7 +286,7 @@ export function Seguimiento({ X }) {
 // ── Páginas de detalle ──
 const nombreMes = (i) => MESL[i]
 function Pager({ prev, next }) {
-  const b = (x, izq) => <button disabled={!x} onClick={x ? x.go : undefined} style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '9px 16px', borderRadius: 20, cursor: x ? 'pointer' : 'default', opacity: x ? 1 : 0.35 }}>{izq ? '‹ ' : ''}{x ? x.t : '—'}{izq ? '' : ' ›'}</button>
+  const b = (x, izq) => !x ? <span /> : <button onClick={x.go} style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 13, padding: '9px 16px', borderRadius: 20, cursor: x ? 'pointer' : 'default', opacity: x ? 1 : 0.35 }}>{izq ? '‹ ' : ''}{x ? x.t : '—'}{izq ? '' : ' ›'}</button>
   return <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>{b(prev, true)}{b(next, false)}</div>
 }
 
@@ -333,16 +337,17 @@ export function indicadores(X) {
   const top5 = d.clientes.slice(0, 5).reduce((a, c) => a + c.monto, 0)
   const lento = [...X.ESC].sort((a, b) => X.est.p[b[0]].dias - X.est.p[a[0]].dias)[0][0]   // el escenario de cobro más lento
   return {
-    vend: { tit: `Vendido ${Y}`, val: mx(o.vend.clp, o.vend.uf), sub: o.vend.pct != null ? pc(o.vend.pct, 0) + ' de la meta' : 'sin meta', fuente: 'ventas activas y terminadas del año, netas de comisiones a terceros, contra la meta anual (también neta)', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf) }, { n: '− Comisiones de venta', c: 'costo a terceros', v: mx(o.comisVentas.clp, o.comisVentas.uf) }, { n: '= Vendido neto', v: mx(o.vend.clp, o.vend.uf) }, { n: `Meta de ventas ${Y}`, c: 'neta de comisiones a terceros', v: o.metaVentasCLP ? mx(o.metaVentasCLP, mU) : 'sin meta' }, { n: 'Avance a la fecha', c: 'neto contra la meta', v: o.vend.pct != null ? pc(o.vend.pct, 0) : '—' }, { n: 'Ya facturado', c: 'del vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—', go: () => X.ir({ drill: { t: 'ind', k: 'fact26' } }) }] },
-    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' del vendido bruto' : '', fuente: 'facturas emitidas con folio, contra el vendido bruto', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vendBruto.clp - o.fact.clp), Math.max(0, o.vendBruto.uf - o.fact.uf)) }], texto: 'La facturación no tiene meta propia: la app la mide contra lo vendido bruto.' },
-    cob26: { tit: `Cobrado ${Y}`, val: mx(o.cob.clp, o.cob.uf), sub: o.cob.pct != null ? pc(o.cob.pct, 0) + ' de la meta' : 'sin meta', fuente: 'conciliación con el banco, contra la meta de cobranza', app: 'Oficina › Cobrado', rows: [{ n: `Meta de cobranza ${Y}`, v: o.metaCobroCLP ? mx(o.metaCobroCLP, null) : 'sin meta' }, { n: 'Avance a la fecha', v: o.cob.pct != null ? pc(o.cob.pct, 0) : '—' }, { n: 'Cobrado', v: mx(o.cob.clp, o.cob.uf) }] },
-    marg: { tit: `Margen ${Y}`, val: mx(o.marg.clp, o.marg.uf), sub: o.marg.pct != null ? pc(o.marg.pct) + ' de ingresos' : '', fuente: 'ingresos menos costos de operación y comisiones', app: 'Oficina › Resultado del año', rows: [{ n: 'Margen', v: mx(o.marg.clp, o.marg.uf) }, { n: 'Sobre los ingresos', v: o.marg.pct != null ? pc(o.marg.pct) : '—' }] },
-    ret26: { tit: `Retiros ${Y}`, val: mx(d.retiros26.total, d.retiros26.totalUF), sub: `${d.retiros26.n} retiro${d.retiros26.n !== 1 ? 's' : ''} de los socios`, fuente: 'transferencias a los socios (gastos «Retiros» de la oficina), como en la página Socios; por confirmar', app: 'Socios', rows: d.retiros26.socios.map((n) => ({ n, c: `sueldos pagados ${mxP(d.retiros26.sueldos[n] || 0, d.retiros26.sueldosUF[n] || 0)}`, v: mx(d.retiros26.porSocio[n] || 0, d.retiros26.porSocioUF[n] || 0), go: X.onOpenSocios })).concat([{ n: 'Sueldos de los socios', c: 'ya están en Remuneraciones', v: mx(d.retiros26.sueldoTot, Object.values(d.retiros26.sueldosUF).reduce((a, x) => a + Number(x), 0)) }]) },
+    vend: { tit: `Vendido ${Y}`, val: mx(o.vend.clp, o.vend.uf), sub: o.vend.pct != null ? pc(o.vend.pct, 0) + ' de la meta' : 'sin meta', fuente: 'ventas activas y terminadas del año, netas de comisiones a terceros, contra la meta anual (también neta)', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendCascada.clp.bruto, o.vendCascada.uf.bruto) }, { n: '− Comisiones de venta', c: 'costo a terceros', v: mx(o.vendCascada.clp.costo, o.vendCascada.uf.costo) }, { n: '= Vendido neto', v: mx(o.vendCascada.clp.neto, o.vendCascada.uf.neto) }, ...enUF(o.vend.clp, o.vend.uf), { n: `Meta de ventas ${Y}`, c: 'neta de comisiones a terceros', v: o.metaVentasCLP ? mx(o.metaVentasCLP, mU) : 'sin meta' }, { n: 'Avance a la fecha', c: 'neto contra la meta', v: o.vend.pct != null ? pc(o.vend.pct, 0) : '—' }, { n: 'Ya facturado', c: 'del vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—', go: () => X.ir({ drill: { t: 'ind', k: 'fact26' } }) }] },
+    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' del vendido bruto' : '', fuente: 'facturas emitidas con folio, contra el vendido bruto', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, ...enUF(o.fact.clp, o.fact.uf), { n: 'Del vendido bruto', c: 'facturado ÷ vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—' }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vendBruto.clp - o.fact.clp), Math.max(0, o.vendBruto.uf - o.fact.uf)) }], texto: 'La facturación no tiene meta propia: la app la mide contra lo vendido bruto.' },
+    cob26: { tit: `Cobrado ${Y}`, val: mx(o.cob.clp, o.cob.uf), sub: o.cob.pct != null ? pc(o.cob.pct, 0) + ' de la meta' : 'sin meta', fuente: 'conciliación con el banco, contra la meta de cobranza', app: 'Oficina › Cobrado', rows: [{ n: `Meta de cobranza ${Y}`, v: o.metaCobroCLP ? mx(o.metaCobroCLP, null) : 'sin meta' }, { n: 'Avance a la fecha', v: o.cob.pct != null ? pc(o.cob.pct, 0) : '—' }, { n: 'Cobrado', c: 'plano caja', v: mx(o.cob.clp, o.cob.uf) }, ...enUF(o.cob.clp, o.cob.uf)] },
+    marg: { tit: `Margen ${Y}`, val: mx(o.marg.clp, o.marg.uf), sub: o.marg.pct != null ? pc(o.marg.pct) + ' de ingresos' : '', fuente: 'ingresos menos costos de operación y comisiones', app: 'Oficina › Resultado del año', rows: [{ n: 'Margen', c: 'devengado, como en Inicio', v: mx(o.marg.clp, o.marg.uf) }, ...enUF(o.marg.clp, o.marg.uf), { n: 'Sobre los ingresos', v: o.marg.pct != null ? pc(o.marg.pct) : '—' }, { n: 'En caja', c: 'cobrado − comisiones − costos · estimación propia', v: mx(d.referencia.margen.aFecha, d.refUF.margen.aFecha) }] },
+    ret26: { tit: `Retiros ${Y}`, val: mx(d.retiros26.total, d.retiros26.totalUF), sub: `${d.retiros26.n} retiro${d.retiros26.n !== 1 ? 's' : ''} de los socios`, fuente: 'transferencias a los socios (gastos «Retiros» de la oficina), como en la página Socios; por confirmar', app: 'Socios', rows: [{ n: 'Retiros', c: d.retiros26.desde ? `${dmy(d.retiros26.desde)} a ${dmy(d.retiros26.hasta)}` : '', v: String(d.retiros26.n) }].concat(d.retiros26.socios.map((n) => ({ n, c: `sueldos pagados ${mxP(d.retiros26.sueldos[n] || 0, d.retiros26.sueldosUF[n] || 0)}`, v: mx(d.retiros26.porSocio[n] || 0, d.retiros26.porSocioUF[n] || 0), go: X.onOpenSocios }))).concat([{ n: 'Sueldos de los socios', c: 'ya están en Remuneraciones', v: mx(d.retiros26.sueldoTot, Object.values(d.retiros26.sueldosUF).reduce((a, x) => a + Number(x), 0)) }]) },
+    costos26: { tit: `Presupuesto de costos ${Y}`, val: mx(d.costos26.real, d.costos26.realUF), sub: d.costos26.ppto > 0 ? 'real contra el presupuesto de los mismos meses' : 'sin presupuesto', fuente: 'costos de operación de Resultado del año (real aproximado, por confirmar) contra el presupuesto vigente', app: 'Oficina › Resultado del año › Presupuesto vs real', rows: [{ n: 'Real', c: d.costos26.hasta ? `enero a ${MESC[Number(d.costos26.hasta.slice(5, 7)) - 1]}, aproximado` : 'aproximado', v: mx(d.costos26.real, d.costos26.realUF) }, { n: 'Presupuesto de los mismos meses', v: mx(d.costos26.ppto, d.costos26.pptoUF) }, { n: 'Presupuesto del año', v: mx(d.costos26.ppto + d.costos26.pptoResto, d.costos26.pptoUF + d.costos26.pptoRestoUF) }, ...enUF(d.costos26.real, d.costos26.realUF)] },
     conc: { tit: 'Concentración de clientes', val: pc((d.totalFact ? top5 / d.totalFact : 0) * 100, 0), sub: `los 5 primeros de ${d.clientes.length} clientes facturados`, fuente: `facturado ${Y} por cliente`, app: 'Clientes', rows: d.clientes.slice(0, 5).map((c, i) => ({ n: `${i + 1}. ${c.name}`, v: mx(c.monto, c.uf), go: () => X.ir({ drill: { t: 'cli', n: c.id } }) })) },
     rec: { tit: 'Recurrente mensual', val: mx(d.recurrente.anualCLP / 12, d.recurrente.anualUF / 12), sub: `${d.recurrente.n} ventas mensuales activas`, fuente: 'ventas con cobro mensual y estado activo, sin subarriendo', app: 'Ventas', rows: [{ n: 'Anualizado ×12', c: 'como en Ventas', v: mx(d.recurrente.anualCLP, d.recurrente.anualUF) }, ...enUF(0, d.recurrente.anualUF), { n: 'Ingreso base de la proyección', c: 'ver la etapa Base', v: '', go: () => X.irBase() }] },
     dias: { tit: 'Días de cobro', val: d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', sub: d.dias.n ? `promedio ${Y} · mediana ${d.dias.mediana}` : 'sin facturas pagadas este año', fuente: `${d.dias.n} facturas pagadas en ${Y}, de la emisión al pago`, app: 'Cobranza', rows: [{ n: 'Promedio', v: d.dias.promedio != null ? d.dias.promedio + ' días' : '—' }, { n: 'Mediana', v: d.dias.mediana != null ? d.dias.mediana + ' días' : '—' }, { n: 'Facturas pagadas', v: String(d.dias.n) }, { n: `Supuesto del escenario ${nombreEscenario(X.est, lento)}`, v: X.est.p[lento].dias + ' días', go: () => X.irEscTab('res') }] },
     terc: { tit: 'Comisiones', val: d.terc != null ? pc(d.terc) : 'sin dato', sub: 'de lo cobrado en el año', fuente: 'comisiones pagadas del año contra el cobrado propio, como en Inicio', app: 'Comisiones', rows: [{ n: 'Parte de lo cobrado', v: d.terc != null ? pc(d.terc) : '—' }, { n: `Supuesto del presupuesto ${d.anio}`, v: pc(X.est.p[escenarioMetas(X.est, CFG)].terc), go: () => X.irEscTab('res') }] },
-    cost: { tit: 'Costos de oficina por mes', val: mx(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes, null), sub: 'presupuesto vigente, con PPM', fuente: 'costos de oficina vigentes por categoría', app: 'Oficina › Resultado del año › Presupuesto vs real', rows: d.costos.map((c) => ({ n: c.n, v: mx(c.m, null) + ' /mes', go: () => X.irCostos() })).concat([{ n: 'PPM', v: mx(d.ppmMes, null) + ' /mes', go: () => X.irEscTab('imp') }]) },
+    cost: { tit: 'Presupuesto de costos por mes', val: mx(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes, null), sub: 'presupuesto vigente, con PPM', fuente: 'costos de oficina vigentes por categoría', app: 'Oficina › Resultado del año › Presupuesto vs real', rows: d.costos.map((c) => ({ n: c.n, v: mx(c.m, null) + ' /mes', go: () => X.irCostos() })).concat([{ n: 'PPM', v: mx(d.ppmMes, null) + ' /mes', go: () => X.irEscTab('imp') }]) },
     conv: { tit: 'Conversión de propuestas', val: 'sin dato', sub: 'el índice de propuestas no tiene registros', fuente: 'índice de propuestas (Drive)', app: 'Ventas › Propuestas', rows: [], texto: `Para estimar la cartera nueva de ${d.anio} hace falta registrar las propuestas enviadas y las aceptadas. Sin ese dato, el crecimiento de ventas sale de un criterio y no de un cálculo.` },
   }
 }
@@ -369,11 +374,11 @@ function Evolucion({ X, k }) {
   const nT = Math.max(1, Math.ceil(maxV / paso - 1e-9)), top = nT * paso
   const Ht = X.D ? 260 : 210, L = X.D ? 62 : 54, B = 26, T = 22, R = 24, x = (i) => L + (i * (W - L - R)) / 11, y = (v) => T + (1 - v / top) * (Ht - T - B)
   const ref = def.v.c.clp > 0 ? def.v.c : def.c.c, vv = (v) => valP(v, ref)
-  const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: faltan ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} para la meta`)
+  const frase = (a) => (a.meta <= 0 ? `${a.nom}: sin meta definida` : a.mes != null ? `${a.nom}: meta superada ${a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase()}` : `${a.nom}: déficit de ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} contra la meta`)
   const barras = e.areas.slice(0, 6), bw = WA / Math.max(1, barras.length), mxBar = Math.max(...barras.map((a) => a.monto), 1)
   const sobre = def.v.c.clp > 0 ? (def.c.c.clp / def.v.c.clp) * 100 : null
   const filas = (modo === 'c' ? def.c : def.v).serie
-  const estado = (a) => (a.meta <= 0 ? ['z', 'sin meta'] : a.mes != null ? ['g', `meta ${valP(a.meta, a.c)} superada ` + (a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase())] : ['y', `faltan ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} de ${valP(a.meta, a.c)}`])
+  const estado = (a) => (a.meta <= 0 ? ['z', 'sin meta'] : a.mes != null ? ['g', `meta ${valP(a.meta, a.c)} superada ` + (a.fecha ? 'el ' + dmy(a.fecha) : 'en ' + MESL[a.mes].toLowerCase())] : ['y', `déficit ${valP(Math.max(0, a.meta - (a.c.clp || 0)), a.c)} de ${valP(a.meta, a.c)}`])
   const gy = Array.from({ length: nT + 1 }, (_, i) => i * paso), tk = (v) => vv(v).replace(',0M', 'M')
   // Colocación de rótulos sin pisar líneas ni otros rótulos: cada uno prueba cuatro posiciones y toma la primera libre.
   const polis = act.map((a) => a.serie.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean))
@@ -388,6 +393,9 @@ function Evolucion({ X, k }) {
     ocup.push(b); return { txt, x: l[0], y: b.y1 - 2 } })
   // Las metas se rotulan en el eje (valor en el color de su serie) para no competir con las líneas; el rótulo baja si dos metas quedan casi a la misma altura.
   const ejeMetas = act.filter((a) => a.meta > 0).map((a) => ({ a, yy: y(a.meta) + 4 })).sort((p, q) => p.yy - q.yy).map((m, i, arr) => ({ ...m, yy: i > 0 && m.yy - arr[i - 1].yy < 12 ? arr[i - 1].yy + 12 : m.yy }))
+  // Una sola categoría al 100 % solo repite el total: no se muestra.
+  const origen = [['Vendido por tipo de trabajo', e.areas.map((a) => ({ n: a.n, pct: a.pct, monto: val(a.monto, def.v.c), sub: 'de lo vendido', azul: true })), 'Sin ventas del año.'],
+        ['Facturado por tipo de cliente', e.tipos.map((t) => ({ n: t.n, pct: t.pct, monto: mx(t.monto, t.uf), sub: `${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''}`, amb: t.n === 'Sin tipo', go: () => X.ir({ drill: { t: 'ind', k: 'conc' } }) })), 'Aún no hay facturas emitidas este año.']].filter(([, it]) => !(it.length === 1 && it[0].pct >= 99.5))
   return <>
     <Titulo right={<Seg options={[['v', 'Vendido'], ['c', 'Cobrado'], ['a', 'Ambos']]} value={modo} onChange={setModo} />}>Evolución contra la meta · estimación propia</Titulo>
     <Grid cols={modo === 'a' ? 3 : 2} colsM={2}>
@@ -425,10 +433,9 @@ function Evolucion({ X, k }) {
     <Det t={`Mes a mes · acumulado${modo === 'a' ? ' vendido y cobrado' : ''}`}>
       <div style={{ margin: '-8px -14px -10px' }}>{filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
     </Det>
-    <Titulo>Origen de los ingresos · estimación propia</Titulo>
-    <div style={{ display: 'grid', gridTemplateColumns: X.D ? '1fr 1fr' : '1fr', gap: 12, alignItems: 'start' }}>
-      {[['Vendido por tipo de trabajo', e.areas.map((a) => ({ n: a.n, pct: a.pct, monto: val(a.monto, def.v.c), sub: 'de lo vendido', azul: true })), 'Sin ventas del año.'],
-        ['Facturado por tipo de cliente', e.tipos.map((t) => ({ n: t.n, pct: t.pct, monto: mx(t.monto, t.uf), sub: `${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''}`, amb: t.n === 'Sin tipo', go: () => X.ir({ drill: { t: 'ind', k: 'conc' } }) })), 'Aún no hay facturas emitidas este año.']].map(([hd, items, vacio]) => <div key={hd} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+    {origen.length > 0 && <Titulo>Origen de los ingresos · estimación propia</Titulo>}
+    {origen.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: X.D && origen.length > 1 ? '1fr 1fr' : '1fr', gap: 12, alignItems: 'start' }}>
+      {origen.map(([hd, items, vacio]) => <div key={hd} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         <span style={{ ...LBL, color: C.muted, padding: '0 4px' }}>{hd}</span>
         {items.length === 0 ? <div style={{ fontSize: 13, color: C.muted, padding: '0 4px' }}>{vacio}</div>
           : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>{items.map((t, ti) => { const tn = t.amb ? { bg: C.bgSoft, bd: C.border, fg: C.grisText } : TONOS_TARJETA[ti % TONOS_TARJETA.length]; return <div key={t.n} onClick={t.go} style={{ background: tn.bg, border: `1px solid ${tn.bd}`, borderRadius: 12, padding: 12, cursor: t.go ? 'pointer' : 'default', minWidth: 0 }}>
@@ -437,9 +444,25 @@ function Evolucion({ X, k }) {
             <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.sub}</div>
           </div> })}</div>}
       </div>)}
-    </div>
+    </div>}
     {e.tipos[0]?.n === 'Sin tipo' && e.tipos[0].pct > 50 && <div style={{ fontSize: 11, color: C.muted, margin: '0 4px' }}>La mayoría de lo facturado sale «Sin tipo»: completar el tipo en la ficha del cliente mejora este análisis.</div>}
   </>
+}
+
+// Aclaraciones de las tarjetas del paso 6 (antes en el plegable de la tarjeta).
+export function filasSeg(X, kk) {
+  const { datos: d } = X, Y = d.anio, { S, cerr, estS } = seriesSeguimiento(X), c = S[kk].c, u = S[kk].u
+  const rows = [['Cierre proyectado', c.cierre != null ? mx(c.cierre, u.cierre) : '—'], ['Meses cerrados', String(cerr)], ...(kk === 'ventas' && Y === d.anioBase ? [['Bruto a la fecha', mx(d.oficiales.vendBruto.clp, d.oficiales.vendBruto.uf)], ['Plano', 'neto de comisiones, como la meta']] : []), ['Plano', 'presupuesto mensual: estimación propia · ' + resumenDistribucion(estS.dist, (cc) => nombreComponente(cc, CFG))]]
+  return { rows, go: null }
+}
+
+// Página de un componente de los pasos 2, 4 y 6: las aclaraciones que antes se abrían dentro de la tarjeta, más el enlace al lugar al que llevaba.
+export function DComp({ X, de, k }) {
+  const f = de === 'base' ? filasBase(X, k) : de === 'metas' ? filasMetas(X, k) : filasSeg(X, k)
+  return <Panel hd='Detalle'>
+    {f.rows.map(([t, v], i) => (String(v).length > 26 ? <Fila key={i} sin nombre={t} peq={v} valor='' /> : <Fila key={i} sin nombre={t} valor={v} />))}
+    {f.go && <Fila nombre={f.go[0]} valor='' onClick={f.go[1]} />}
+  </Panel>
 }
 
 export function DInd({ X, k }) {
@@ -457,20 +480,20 @@ export function DInd({ X, k }) {
 export function DSoc({ X, n }) {
   const { datos: d, M, est } = X, ss = d.socios, i = ss.findIndex((s) => s.nombre === n), s = ss[i]
   if (!s) return null
-  const tot = ss.reduce((a, x) => a + x.facturado, 0), sh = tot ? s.facturado / tot : 0, e = M.esc[est.esc], sin = n === 'Sin socio', pm = parteMeta(ss, n), mt = metasEsc(X, est.esc)
+  const tot = ss.reduce((a, x) => a + x.facturado, 0), sh = tot ? s.facturado / tot : 0, e = M.esc[est.esc], sin = n === 'Sin socio', pm = parteMeta(ss, n, CFG), mt = metasEsc(X, est.esc)
   return <>
     <Grid cols={4} colsM={2}>
       <Mini ic='ventas' label={`Facturado ${d.anioBase}`} value={mx(s.facturado, null)} sub='atribuido, a la fecha' />
       <Mini ic='gauge' label='Parte de la oficina' value={pc(sh * 100)} sub='de lo facturado' />
       <Mini ic='tgt' label={`Facturado ${d.anio} · ${X.nomEsc(est.esc)}`} value={mm(e.fact * sh)} sub={monedaActual() === 'clp' ? ufs(e.factUF * sh) : ''} />
-      <Mini ic='wal' label={`Retiros ${d.anio} · ${X.nomEsc(est.esc)}`} value={sin ? '—' : mm(e.retiros / 2)} sub={sin ? 'no retira' : 'parte igual de la oficina'} />
+      <Mini ic='wal' label={`Retiros ${d.anio} · ${X.nomEsc(est.esc)}`} value={sin ? '—' : mm(e.retiros * pm)} sub={sin ? 'no retira' : `${pc(pm * 100, 0)} de la oficina`} />
     </Grid>
-    {!sin && <Grid cols={3} colsM={1}>
+    {!sin && <Grid cols={3} colsM={2}>
       <Mini ic='ventas' label={`Meta de ventas ${d.anio}`} value={mm(mt.ventas * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.ventas)}`} />
       <Mini ic='fact' label={`Meta de facturación ${d.anio}`} value={mm(mt.fact * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.fact)}`} />
       <Mini ic='wal' label={`Meta de cobro ${d.anio}`} value={mm(mt.cobro * pm)} sub={`${pc(pm * 100, 0)} de ${mm(mt.cobro)}`} />
     </Grid>}
-    <Panel hd='Por escenario' small='toca para ver el resultado'>{X.ESC.map(([k, nn]) => <Fila key={k} nombre={nn} peq={'retiros ' + (sin ? '—' : mm(M.esc[k].retiros / 2))} valor={mm(M.esc[k].fact * sh)} onClick={() => { X.setEsc(k); X.irEscTab('soc') }} />)}</Panel>
+    <Panel hd='Por escenario' small='toca para ver el resultado'>{X.ESC.map(([k, nn]) => <Fila key={k} nombre={nn} peq={'retiros ' + (sin ? '—' : mm(M.esc[k].retiros * pm))} valor={mm(M.esc[k].fact * sh)} onClick={() => { X.setEsc(k); X.irEscTab('soc') }} />)}</Panel>
     <Pager prev={i > 0 && { t: ss[i - 1].nombre, go: () => X.irDrill({ t: 'soc', n: ss[i - 1].nombre }) }} next={i < ss.length - 1 && { t: ss[i + 1].nombre, go: () => X.irDrill({ t: 'soc', n: ss[i + 1].nombre }) }} />
   </>
 }
@@ -521,5 +544,5 @@ export function DCmp({ X, id }) {
   </>
 }
 
-export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : (indicadores(X)[d.k]?.tit || 'Detalle')
-export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : <DInd X={X} k={d.k} />
+export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : (indicadores(X)[d.k]?.tit || 'Detalle')
+export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : <DInd X={X} k={d.k} />
