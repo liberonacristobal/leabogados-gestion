@@ -5,6 +5,7 @@
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
 import { useMemo } from 'react'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
+import { CFG_PRESUPUESTO, sociosDelEstudio } from './presupuestoCfg.js'
 import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio, cascadaVendido } from './cifras.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
@@ -86,11 +87,12 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const P = useMemo(() => partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic: fuSocio.ic, ia: fuSocio.ia, ov: fuSocio.ov, fondoExtra: {} }), [billing, sales, clients, anticipos, terceros, expenses, fuSocio])
   const V = useMemo(() => vendidoPorSocio(sales, clients, ufRef, currentYear, null, { terceros, billing }), [sales, clients, ufRef, terceros, billing])
   const { emitido } = useMemo(() => kpisPorSocio({ P, V, ym: ymHoy }), [P, V, ymHoy])
-  const socios = [...ADMIN_NAMES, SIN_SOCIO].map((nombre) => ({ nombre, facturado: Math.max(0, emitido(nombre, 'ytd').f || 0) }))
+  const socios = [...sociosDelEstudio(), SIN_SOCIO].map((nombre) => ({ nombre, facturado: Math.max(0, emitido(nombre, 'ytd').f || 0) }))
 
   // Base: últimos 12 meses cerrados, cada uno en el mes calendario del año del presupuesto.
   const cierres = ultimosCerrados(hoy).map((ym) => ({ ym, clp: serie[ym]?.fac || 0, uf: serie[ym]?.facUF || 0 }))
-  const ufDic = ufDelDia(ufDias, `${currentYear}-12-31`, ufRef)
+  // H24: para un año más allá del siguiente, la UF de partida del año anterior al presupuestado se reajusta con la inflación de la configuración (un año por cada año de más).
+  const ufDic = ufDelDia(ufDias, `${currentYear}-12-31`, ufRef) * Math.pow(1 + (Number(CFG_PRESUPUESTO.moneda.reajusteAnual) || 0) / 100, Math.max(0, anio - currentYear - 1))
   const base = baseMensual(cierres, ufDic)
 
   // Cifras oficiales del año (las de Inicio), con su meta.

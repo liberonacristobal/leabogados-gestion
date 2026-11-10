@@ -5,6 +5,7 @@
 import { BRAND } from './base.jsx'
 import { configPresupuesto, mezclarConfig, diferenciaConfig, validarConfig } from '../../supabase/functions/_shared/presupuestoConfig.js'
 import { supabase, DEMO } from '../supabase'
+import { ADMIN_NAMES } from './compartido.jsx'
 
 const marca = () => /** @type {any} */ (BRAND).presupuesto || {}
 export const CFG_PRESUPUESTO = configPresupuesto(marca())
@@ -48,3 +49,6 @@ export async function guardarConfig(cfgCompleta, autor) {
   aplicarConfigGuardada(diff)
   return { ok: true, errores: [] }
 }
+
+/** Socios del estudio: los de la configuración (`socios.lista`) o, si no hay, los administradores de la app. */
+export const sociosDelEstudio = () => { const l = /** @type {any} */ (CFG_PRESUPUESTO).socios.lista; return Array.isArray(l) && l.length ? [...l] : [...ADMIN_NAMES] }

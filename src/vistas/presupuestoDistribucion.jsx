@@ -22,7 +22,7 @@ export function Distribucion({ X }) {
     const modo = dist.modo[comp] || 'iguales', manual = modo === 'manual', w = dist.manual[comp] || [], suma = w.reduce((a, x) => a + (Number(x) || 0), 0), sinEst = modo === 'estacional' && !pesosDe(dist, comp, d.pesosEst)
     return <div key={comp} style={{ padding: D ? '12px 16px' : '10px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <b style={{ color: C.accent, fontSize: 13.5 }}>{nombreComponente(comp, CFG)}</b>
+        <b style={{ color: C.accent, fontSize: 14 }}>{nombreComponente(comp, CFG)}</b>
         <Seg options={MODOS_DIST} value={modo} onChange={(m) => { poner(comp, m); setUI({ distAbierta: m === 'manual' ? comp : abierto === comp ? null : abierto }) }} />
       </div>
       {sinEst && <div style={{ fontSize: 12, color: C.muted }}>No hay meses cerrados suficientes en 2025 y 2026: se usan partes iguales.</div>}
@@ -31,8 +31,8 @@ export function Distribucion({ X }) {
         {abierto === comp && <>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 6 : 3},minmax(0,1fr))`, gap: D ? 10 : 8 }}>
             {MESC.map((m, i) => <div key={m} style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 10, padding: '7px 10px', minWidth: 0 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{m}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: C.accent }}><Fld sobrio kind='pct' suf='%' value={w.length === 12 ? w[i] : 100 / 12} onCommit={(v) => ponerMes(comp, i, v)} label={`${nombreComponente(comp, CFG)} · ${m}`} /></div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{m}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: C.accent }}><Fld sobrio kind='pct' suf='%' value={w.length === 12 ? w[i] : 100 / 12} onCommit={(v) => ponerMes(comp, i, v)} label={`${nombreComponente(comp, CFG)} · ${m}`} /></div>
             </div>)}
           </div>
           <div style={{ fontSize: 12, color: Math.abs(suma - 100) < 0.05 ? C.muted : C.soonText }}>Suma {pc(suma)}{Math.abs(suma - 100) < 0.05 ? '' : ' · se ajusta a 100 % al repartir'}</div>
@@ -41,7 +41,7 @@ export function Distribucion({ X }) {
     </div>
   }
   return <>
-    <div style={{ padding: D ? '10px 16px' : '10px 14px', fontSize: 12.5, color: C.muted }}>Sin estacionalidad estable: entre 2025 y 2026 los meses cambian de peso (pocas facturas grandes los mueven), por eso parte en partes iguales. Estimación propia; el Seguimiento usa esta misma distribución.</div>
+    <div style={{ padding: D ? '10px 16px' : '10px 14px', fontSize: 12, color: C.muted }}>Sin estacionalidad estable: entre 2025 y 2026 los meses cambian de peso (pocas facturas grandes los mueven), por eso parte en partes iguales. Estimación propia; el Seguimiento usa esta misma distribución.</div>
     {COMPONENTES_DIST.map(fila)}
     <div style={{ padding: D ? '10px 16px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
       <span>El Margen se calcula cada mes con Cobrado, comisiones y Presupuesto de costos.</span>

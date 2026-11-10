@@ -56,7 +56,7 @@ export const partirDin = (/** @type {any} */ v) => { const p = typeof v === 'str
 /** Cifra en una celda: en Ambos, los pesos y debajo la UF en chico. */
 export function Val({ v }) {
   const p = partirDin(v)
-  return p ? <>{p[0]}<span style={{ display: 'block', fontSize: '.55em', fontWeight: 500, letterSpacing: 0, color: C.muted, lineHeight: 1.25, whiteSpace: 'nowrap' }}>{p[1]}</span></> : <>{v}</>
+  return p ? <>{p[0]}<span style={{ display: 'block', fontSize: 11, fontWeight: 500, letterSpacing: 0, color: C.muted, lineHeight: 1.25, whiteSpace: 'nowrap' }}>{p[1]}</span></> : <>{v}</>
 }
 export const pc = (n, d = 1) => (n == null || !isFinite(n) ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' %')
 export const sgn = v => (v >= 0 ? '+' : '−')
@@ -106,7 +106,7 @@ export function Kpi({ tono = 'w', ic, label, value, sub, onClick }) {
   const t = TONO[tono], D = useIsDesktop()
   return <div {...tocable(onClick)} style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, padding: D ? '10px 12px' : '8px 10px', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 32 : 30, height: D ? 32 : 30, borderRadius: D ? 10 : 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 22 : 18, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
+    <div style={{ minWidth: 0, flex: 1 }}><div style={{ ...LBL, color: C.accent, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.25 }}>{label}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, letterSpacing: -0.6, lineHeight: 1.1, color: C.accent, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, marginTop: 2, color: C.muted }}>{sub}</div>}</div>
   </div>
 }
 
@@ -115,7 +115,7 @@ export function Mini({ ic, label, value, sub, cls, onClick }) {
   const D = useIsDesktop(), col = cls === 'pos' ? C.greenText : cls === 'neg' ? C.overdueText : cls === 'amb' ? C.soonText : C.accent
   return <div {...tocable(onClick)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 14 : '9px 10px', display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 34 : 28, height: D ? 34 : 28, borderRadius: 10, background: C.azulBg, color: C.azulInfo, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={18} /></span>
-    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: D ? 20 : 17, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
+    <div style={{ minWidth: 0 }}><div style={{ ...LBL, color: C.accent, lineHeight: 1.2 }}>{label}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.4, color: col, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}><Val v={value} /></div>{sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}</div>
   </div>
 }
 
@@ -131,7 +131,7 @@ export function Panel({ hd, small, children, pad, style, flex }) {
 export function Seg({ options, value, onChange, style, tonos }) {
   return <div role='group' style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', background: C.card, ...style }}>
     {options.map(([k, n]) => { const on = value === k, tn = tonos && tonos[k]
-      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 800 : 600, padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
+      return <button key={k} className='pp-tac' aria-pressed={on} onClick={() => onChange(k)} style={{ border: 0, background: on ? (tn ? tn.bg : C.azulBg) : 'transparent', color: on ? (tn ? tn.fg : C.accent) : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: on ? 800 : 600, padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{n}</button> })}
   </div>
 }
 
@@ -162,7 +162,7 @@ export function Fld({ kind = 'pct', value, onCommit, pre, suf, ph, w = 132, text
   </label>
   return <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, width: '100%', maxWidth: text ? 'none' : w, boxSizing: 'border-box' }}>
     {pre && <span style={{ fontSize: 12, color: C.muted }}>{pre}</span>}
-    <input value={v} placeholder={ph} aria-label={label} inputMode={text ? 'text' : 'decimal'} onChange={e => setV(e.target.value)} onBlur={fin} onKeyDown={alTeclear} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 13.5, fontWeight: text ? 600 : 700, color: C.text, textAlign: text ? 'left' : 'right', width: '100%', minWidth: 0, padding: 0, outline: 'none' }} />
+    <input value={v} placeholder={ph} aria-label={label} inputMode={text ? 'text' : 'decimal'} onChange={e => setV(e.target.value)} onBlur={fin} onKeyDown={alTeclear} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', fontSize: 14, fontWeight: text ? 600 : 700, color: C.text, textAlign: text ? 'left' : 'right', width: '100%', minWidth: 0, padding: 0, outline: 'none' }} />
     {suf && <span style={{ fontSize: 12, color: C.muted, flexShrink: 0 }}>{suf}</span>}
   </label>
 }
@@ -176,7 +176,7 @@ export function FldDin({ clp, tasa, onCommit, kind = 'money', pre = '$', suf, ..
   if (m === 'uf' && ok) { const u = Number(clp) / tasa; return <Fld {...rest} chica kind='uf' suf={'\u00A0' + UNIDAD} value={Math.abs(u) >= 1000 ? Math.round(u) : Math.round(u * 100) / 100} onCommit={(x) => onCommit(Math.round(x * tasa))} /> }
   const campo = <Fld {...rest} kind={kind} pre={pre} suf={suf} value={clp} onCommit={onCommit} />
   if (m !== 'ambos' || !ok) return campo
-  return <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>{campo}<span style={{ fontSize: 10.5, fontWeight: 500, color: C.muted, letterSpacing: 0, lineHeight: 1.3 }}>{ufTxt(Number(clp) / tasa, false)}</span></span>
+  return <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>{campo}<span style={{ fontSize: 11, fontWeight: 500, color: C.muted, letterSpacing: 0, lineHeight: 1.3 }}>{ufTxt(Number(clp) / tasa, false)}</span></span>
 }
 
 // Estilos del campo sobrio (hover, foco y pantallas táctiles no se pueden escribir en línea). Una sola vez, al abrir el Presupuesto.
@@ -184,7 +184,7 @@ export function EstilosPresupuesto() {
   const A = C.accent, tenue = `color-mix(in srgb, ${A} 14%, transparent)`, medio = `color-mix(in srgb, ${A} 38%, transparent)`
   return <style>{`
 .pp-foco:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid ${A};outline-offset:2px}
-@media (max-width:1023px){.pp-tac{position:relative}.pp-tac::after{content:'';position:absolute;left:-4px;right:-4px;top:-8px;bottom:-8px}}
+@media (max-width:1023px){.pp-tac,.pfs{position:relative}.pp-tac::after{content:'';position:absolute;left:-4px;right:-4px;top:-8px;bottom:-8px}.pfs::after{content:'';position:absolute;left:-4px;right:-4px;top:-14px;bottom:-14px}}
 .pfs{flex-shrink:0;display:inline-flex;align-items:baseline;gap:0;box-sizing:border-box;cursor:text;border:0 solid transparent;border-bottom-width:1px;padding:0 8px;margin:0 -8px -1px;color:inherit;font:inherit;letter-spacing:inherit;line-height:inherit;font-variant-numeric:tabular-nums}
 .pfs:hover,.pfs:focus-within{border-bottom-color:${medio}}
 .pfs:focus-within,.pfs.sel{border-bottom-color:${A}}
@@ -194,10 +194,10 @@ export function EstilosPresupuesto() {
 .pfs input{width:100%;border:0;outline:0;background:transparent;color:inherit;padding:0;text-align:left;height:1.15em;line-height:1.15;font-variant-numeric:tabular-nums}
 .pfs input::placeholder{color:${C.done};font-weight:500}
 .pfs .pfu{font:inherit;letter-spacing:inherit}
-.pfs.g{font-size:18px;font-weight:800;letter-spacing:-.9px;line-height:1.15;color:${A}}
+.pfs.g{font-size:19px;font-weight:800;letter-spacing:-.9px;line-height:1.15;color:${A}}
 @media (min-width:1024px){.pfs.g.c{font-size:16px}}
 @media (hover:none){.pfs{border:1px solid ${tenue};border-radius:8px;margin:-1px -9px;padding:0 8px}.pfs:focus-within,.pfs.sel{border-color:${A}}}
-@media (max-width:700px){.pfs.g{font-size:14.5px;letter-spacing:-.4px;padding:0 5px;margin:-1px -6px}}   /* cifra editable de la tarjeta compacta (dos por fila): del tamaño de las demás cifras y sin tocar el borde */
+@media (max-width:700px){.pfs.g{font-size:14px;letter-spacing:-.4px;padding:0 5px;margin:-1px -6px}}   /* cifra editable de la tarjeta compacta (dos por fila): del tamaño de las demás cifras y sin tocar el borde */
 `}</style>
 }
 
@@ -207,7 +207,7 @@ export function Stp({ value, suf, step, min, max, onChange, int }) {
   const b = { border: 0, background: 'transparent', width: 28, height: 28, color: C.accent, fontSize: 16, fontWeight: 700, cursor: 'pointer', padding: 0, lineHeight: 1 }
   return <div style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 20, background: C.bgSoft, height: 30, maxWidth: '100%' }}>
     <button aria-label='Menos' className='pp-tac' onClick={e => { e.stopPropagation(); dar(-step) }} style={b}>−</button>
-    <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>{fmtIn(value, int ? 'int' : 'pct')}{suf}</span>
+    <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>{fmtIn(value, int ? 'int' : 'pct')}{suf}</span>
     <button aria-label='Más' className='pp-tac' onClick={e => { e.stopPropagation(); dar(step) }} style={b}>+</button>
   </div>
 }
@@ -227,7 +227,7 @@ export function Fila({ nombre, peq, valor, sub, onClick, abierta, sin, tot, chil
   </>
 }
 
-export const Det = ({ t, children }) => <details style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.muted }}><summary style={{ cursor: 'pointer', fontWeight: 700, color: C.accent, fontSize: 12 }}>{t}</summary><div style={{ marginTop: 8, color: C.text }}>{children}</div></details>
+export const Det = ({ t, children }) => <details style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', fontSize: 12, color: C.muted }}><summary style={{ cursor: 'pointer', fontWeight: 700, color: C.accent, fontSize: 12 }}>{t}</summary><div style={{ marginTop: 8, color: C.text }}>{children}</div></details>
 
 export const Lista = ({ items }) => <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>{items.map((x, i) => <li key={i}>{x}</li>)}</ul>
 
@@ -250,20 +250,20 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, onClick, aria })
   const flecha = onClick && <svg width={D ? 16 : 12} height={D ? 16 : 12} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' style={{ flexShrink: 0, opacity: 0.7 }}><path d='M9 6l6 6-6 6' /></svg>
   const fig = (/** @type {any} */ f) => D
     ? <div style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.7px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap', marginBottom: 5 }}>{f.cap}</div>
-      <div style={{ fontSize: CFG.moneda === 'uf' ? 17 : 21, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
-    : <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, minWidth: 0, minHeight: ambos ? 30 : 18 }}><span style={{ ...LBL, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.cap}</span>
-      <span style={{ fontSize: 14.5, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', textAlign: 'right', minWidth: 0 }}><Val v={f.val} /></span></div>
+      <div style={{ fontSize: CFG.moneda === 'uf' ? 16 : 21, fontWeight: 800, letterSpacing: -0.9, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minHeight: '1.15em' }}><Val v={f.val} /></div></div>
+    : <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, minWidth: 0, minHeight: ambos ? 32 : 18 }}><span style={{ ...LBL, fontSize: 11, fontWeight: 700, letterSpacing: '.4px', color: tono === 'w' ? C.muted : t.fg, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.cap}</span>
+      <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1.15, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', textAlign: 'right', minWidth: 0 }}><Val v={f.val} /></span></div>
   const cab = <div style={{ display: 'flex', alignItems: 'center', gap: D ? 8 : 6, minHeight: D ? ico : 30, minWidth: 0 }}>
     {!D && <span style={{ width: ico, height: ico, flexShrink: 0, borderRadius: 8, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={15} /></span>}
     <span style={{ ...LBL, fontSize: D ? 13 : 12, fontWeight: 700, letterSpacing: D ? '.5px' : '.2px', flex: 1, minWidth: 0, lineHeight: 1.15, color: tono === 'w' ? C.muted : 'inherit', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{label}</span>{flecha}</div>
-  const cmpEl = <div style={{ display: 'flex', gap: D ? '2px 14px' : '0 8px', flexWrap: D ? 'wrap' : 'nowrap', overflow: D ? undefined : 'hidden', whiteSpace: D ? undefined : 'nowrap', fontSize: D ? 12 : 10.5, color: C.muted, fontVariantNumeric: 'tabular-nums', minHeight: D ? 18 : 16, alignItems: 'center' }}>{cmp}</div>
+  const cmpEl = <div style={{ display: 'flex', gap: D ? '2px 14px' : '0 8px', flexWrap: D ? 'wrap' : 'nowrap', overflow: D ? undefined : 'hidden', whiteSpace: D ? undefined : 'nowrap', fontSize: D ? 12 : 11, color: C.muted, fontVariantNumeric: 'tabular-nums', minHeight: D ? 18 : 16, alignItems: 'center' }}>{cmp}</div>
   const caja = { background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: /** @type {'border-box'} */ ('border-box'), alignContent: /** @type {'start'} */ ('start') }
   const ar = { role: onClick ? 'button' : undefined, tabIndex: onClick ? 0 : undefined, 'aria-label': aria, className: onClick ? 'pp-foco' : undefined, onClick, onKeyDown: tecla }
-  if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: 'auto auto auto auto' }}>{cab}{fig(izq)}{fig(der)}{cmpEl}</div>
+  if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: 'auto auto auto auto' }}>{cab}{fig(izq)}{der ? fig(der) : <div style={{ minHeight: ambos ? 32 : 18 }} />}{cmpEl}</div>
   return <div {...ar} style={{ ...caja, padding: '16px 16px 14px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 12, alignItems: 'start' }}>
     <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={18} /></span>
     {cab}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{fig(der)}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{der && fig(der)}</div>
     {cmpEl}
   </div>
 }
@@ -287,7 +287,7 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
 }
 
 /** Botón-chip de la barra de contexto (Versiones, Excel). */
-export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12.5, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
+export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) => <button aria-label={aria} title={titulo} className='pp-tac' onClick={onClick} style={{ border: `1px solid ${error ? C.overdueBd : C.border}`, background: error ? C.overdueBg : C.card, color: error ? C.overdueText : C.accent, fontFamily: 'inherit', fontWeight: 700, fontSize: 12, height: 32, minWidth: cuadrado ? 32 : undefined, padding: cuadrado ? 0 : '0 12px', borderRadius: 20, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap' }}>{children}</button>
 
 /**
  * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
@@ -295,18 +295,18 @@ export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) =>
  */
 export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acciones, debajo }) {
   const D = useIsDesktop(), n = nombres.length
-  const cap = { fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.accent, paddingBottom: 5, borderBottom: `1px solid ${C.done}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  const cap = { fontSize: D ? 11 : 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.accent, paddingBottom: 5, borderBottom: `1px solid ${C.done}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, gap: 0 }}><span style={cap}>{D ? `Año base ${anioBase}` : anioBase}</span><span style={{ ...cap, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span></div>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${n},minmax(0,1fr))`, alignItems: 'start' }}>
       {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
-        return <button key={nom} title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 6, padding: D ? '4px 0' : 0, minHeight: D ? 36 : 44, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 12.5 }}>
-          <span style={{ width: D ? 28 : 38, height: D ? 28 : 38, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: D ? 12.5 : 14, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
+        return <button key={nom} title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: D ? 'row' : 'column', alignItems: 'center', justifyContent: D ? 'flex-start' : 'center', gap: 6, padding: D ? '4px 0' : 0, minHeight: D ? 36 : 44, textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 12 }}>
+          <span style={{ width: D ? 28 : 38, height: D ? 28 : 38, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: D ? 12 : 14, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
           {D && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>}
         </button> })}
     </div>
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap' }}>
-      <div style={{ minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div>{D && desc && <div style={{ fontSize: 12.5, color: C.muted }}>{desc[activa]}</div>}</div>
+      <div style={{ minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div>{D && desc && <div style={{ fontSize: 12, color: C.muted }}>{desc[activa]}</div>}</div>
       {acciones && <div style={{ flexShrink: 0 }}>{acciones}</div>}
     </div>
     {debajo}
@@ -315,14 +315,14 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acc
 
 /** Pestañas subrayadas (sub-vistas de un paso). */
 export const Pestanas = ({ options, value, onChange }) => <div role='tablist' style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${C.border}` }}>
-  {options.map(([k, n]) => { const on = value === k; return <button key={k} role='tab' aria-selected={on} onClick={() => onChange(k)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: '10px 2px', fontSize: 13, fontWeight: on ? 800 : 600, color: on ? C.accent : C.muted, borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, marginBottom: -1 }}>{n}</button> })}
+  {options.map(([k, n]) => { const on = value === k; return <button key={k} className='pp-tac' role='tab' aria-selected={on} onClick={() => onChange(k)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: '10px 2px', fontSize: 13, fontWeight: on ? 800 : 600, color: on ? C.accent : C.muted, borderBottom: `2px solid ${on ? C.accent : 'transparent'}`, marginBottom: -1 }}>{n}</button> })}
 </div>
 
 /** Sección plegada: una línea con el título, la cifra clave a la derecha y un chevrón; se abre y se cierra sin desmontar lo de adentro (lo escrito se conserva). */
 export function Pliegue({ t, v, children, abierto }) {
   return <details open={abierto} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, minWidth: 0 }}>
     <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', fontSize: 13 }}>
-      <b style={{ color: C.accent, fontSize: 13.5 }}>{t}</b><span style={{ flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16 }}>›</span>
+      <b style={{ color: C.accent, fontSize: 14 }}>{t}</b><span style={{ flex: 1, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</span><span aria-hidden='true' style={{ color: C.done, fontSize: 16 }}>›</span>
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>
@@ -333,7 +333,7 @@ export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onRe
   const D = useIsDesktop()
   const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '12px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Margen' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
     <div style={{ ...LBL, color: C.accent, whiteSpace: 'nowrap' }}>{rot}</div>
-    <div style={{ fontSize: D ? 22 : 16, fontWeight: 800, letterSpacing: D ? -0.6 : -0.4, color: ult ? C.greenText : C.accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, whiteSpace: 'nowrap' }}><Val v={v} /></div>
+    <div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: D ? -0.6 : -0.4, color: ult ? C.greenText : C.accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, whiteSpace: 'nowrap' }}><Val v={v} /></div>
     {D && <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>}
   </div>
   return <div>
@@ -345,9 +345,9 @@ export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onRe
 /** Estado vacío de un paso: título, la causa, los pasos siguientes numerados y los botones (el primero es el principal). */
 export function VacioPaso({ titulo, causa, pasos = [], acciones = [] }) {
   return <div style={{ background: C.card, border: `1px dashed ${C.done}`, borderRadius: 12, padding: '18px 18px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
-    <div style={{ fontWeight: 800, color: C.accent, fontSize: 15 }}>{titulo}</div>
-    <div style={{ color: C.muted, fontSize: 13.5 }}>{causa}</div>
-    {pasos.length > 0 && <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>{pasos.map(([n, t, s], i) => <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${C.border}` : 'none' }}><span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${C.done}`, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: C.muted, flexShrink: 0 }}>{n}</span><div style={{ fontSize: 13.5 }}><b style={{ color: C.accent }}>{t}</b><div style={{ color: C.muted, fontSize: 12.5 }}>{s}</div></div></div>)}</div>}
+    <div style={{ fontWeight: 800, color: C.accent, fontSize: 14 }}>{titulo}</div>
+    <div style={{ color: C.muted, fontSize: 14 }}>{causa}</div>
+    {pasos.length > 0 && <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>{pasos.map(([n, t, s], i) => <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${C.border}` : 'none' }}><span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${C.done}`, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: C.muted, flexShrink: 0 }}>{n}</span><div style={{ fontSize: 14 }}><b style={{ color: C.accent }}>{t}</b><div style={{ color: C.muted, fontSize: 12 }}>{s}</div></div></div>)}</div>}
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{acciones.map(([t, go, primary]) => <Btn key={t} primary={primary} onClick={go}>{t}</Btn>)}</div>
   </div>
 }

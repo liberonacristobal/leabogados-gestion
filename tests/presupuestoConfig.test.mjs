@@ -112,3 +112,9 @@ test('diferenciaConfig: solo guarda lo que cambia respecto del defecto y vuelve 
   assert.deepEqual(d, { reserva: { porcentaje: 20 }, tributario: { regimen: 'Régimen X' } })
   assert.deepEqual(configPresupuesto(d), cfg); assert.deepEqual(diferenciaConfig(CONFIG_DEFECTO), {})
 })
+
+test('validarConfig: la lista de socios del estudio debe ser nombres y vacía (null) vale por «los administradores»', () => {
+  assert.equal(validarConfig({ socios: { lista: ['Ana', 'Luis', 'Eva'] } }).ok, true); assert.equal(validarConfig({ socios: { lista: null } }).ok, true)
+  assert.ok(validarConfig({ socios: { lista: ['Ana', ''] } }).errores.some((e) => e.ruta === 'socios.lista')); assert.ok(validarConfig({ socios: { lista: 'Ana' } }).errores.some((e) => e.ruta === 'socios.lista'))
+  assert.equal(CONFIG_DEFECTO.socios.lista, null)
+})

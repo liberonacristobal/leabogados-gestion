@@ -9,7 +9,7 @@ import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, 
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 import { filasBase } from './presupuestoEtapas1.jsx'
 import { filasMetas } from './presupuestoMetas.jsx'
-import { DCfg } from './presupuestoConfigVista.jsx'
+import { DCfg, DIni } from './presupuestoConfigVista.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 const fechaDMY = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -31,7 +31,7 @@ function Strip({ X }) {
   const { est, setGen, D } = X
   const campos = [['Reajuste UF', 'reajusteUF', 'pct', { suf: '%' }, 'Supuesto de inflación'], ['Tasa 1ª categoría', 'tasaIDPC', 'pct', { suf: '%' }, CFG.tributario.etiqueta], ['PPM del año', 'ppmAnual', 'money', { pre: '$' }, 'Lo pagado hoy: ' + mp(X.datos.ppmMes) + ' al mes'], ['Reserva de caja', 'reserva', 'pct', { suf: '%' }, '% que no se retira']]
   return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 4 : 2},minmax(0,1fr))`, gap: 10, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px' }}>
-    {campos.map(([t, f, k, u, n]) => <div key={f} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 10.5, color: C.accent, marginBottom: 4 }}>{t}</div>{f === 'ppmAnual' ? <FldDin clp={est[f]} tasa={tasa27()} onCommit={(v) => setGen(f, v)} w={9999} /> : <Fld kind={k} value={est[f]} onCommit={(v) => setGen(f, v)} w={9999} {...u} />}<div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{n}</div></div>)}
+    {campos.map(([t, f, k, u, n]) => <div key={f} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 11, color: C.accent, marginBottom: 4 }}>{t}</div>{f === 'ppmAnual' ? <FldDin clp={est[f]} tasa={tasa27()} onCommit={(v) => setGen(f, v)} w={9999} /> : <Fld kind={k} value={est[f]} onCommit={(v) => setGen(f, v)} w={9999} {...u} />}<div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{n}</div></div>)}
   </div>
 }
 
@@ -53,8 +53,8 @@ export function CardEsc({ X, k, editable }) {
   const [ren, setRen] = useState(false)
   const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio, MT.cv).find((x) => x.k === k)
   const idx = X.ESC.findIndex((x) => x[0] === k), n = X.ESC.length
-  const xr = (t, v, go, strong) => <div onClick={(ev) => { if (go) { ev.stopPropagation(); go() } }} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: X.D ? '7px 4px' : '4px 2px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, cursor: go ? 'pointer' : 'default', fontWeight: strong ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}><Val v={mm(v)} /></b></div>
-  const lv = (t, f, suf, d, mn, mx, int) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}><small style={{ ...LBL, fontSize: 10.5, color: C.accent }}>{t}</small><Stp value={p[f]} suf={suf} step={d} min={mn} max={mx} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} /></div>
+  const xr = (t, v, go, strong) => <div onClick={(ev) => { if (go) { ev.stopPropagation(); go() } }} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: X.D ? '7px 4px' : '4px 2px', borderTop: `1px solid ${C.border}`, fontSize: 12, cursor: go ? 'pointer' : 'default', fontWeight: strong ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'right' }}><Val v={mm(v)} /></b></div>
+  const lv = (t, f, suf, d, mn, mx, int) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}><small style={{ ...LBL, fontSize: 11, color: C.accent }}>{t}</small><Stp value={p[f]} suf={suf} step={d} min={mn} max={mx} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} /></div>
   const acc = { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', borderTop: `1px solid ${C.border}`, paddingTop: 4, marginTop: X.D ? 2 : 0 }
   return <div onClick={() => setEsc(k)} role='button' aria-pressed={sel} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: X.D ? (sel ? 13 : 14) : (sel ? 9 : 10), cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: X.D ? 6 : 3, minWidth: 0, boxSizing: 'border-box' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}{sel && <Chip>elegido</Chip>}{k !== rk && b && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs {X.nomEsc(rk)}</Chip>}</div>
@@ -62,6 +62,7 @@ export function CardEsc({ X, k, editable }) {
     <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.muted, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>{e.retiros <= 0 && <div style={{ fontSize: 12, color: C.muted }}>no alcanza para retirar</div>}
     <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes</div>
     {cu && cu.dif != null && Math.abs(cu.dif) >= 1 && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha> contra la meta de {nombreComponente(MT.ancla, CFG).toLowerCase()}</div>}
+    {(() => { const det = <>
     <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr('− Presupuesto de costos', e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Reserva de caja', e.reserva)}</div>
     <div style={{ fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
@@ -71,6 +72,9 @@ export function CardEsc({ X, k, editable }) {
       {n > 1 && <Lnk rojo onClick={() => X.eliminarEsc(k)}>Eliminar</Lnk>}
       {n > 1 && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 2 }}>{idx > 0 ? <Lnk titulo='Mover antes' onClick={() => X.moverEsc(k, -1)}>‹</Lnk> : <span style={{ width: 14 }} />}{idx < n - 1 ? <Lnk titulo='Mover después' onClick={() => X.moverEsc(k, 1)}>›</Lnk> : null}</span>}
     </div>}
+    </>
+      // En el celular el detalle de cada escenario va plegado (solo el elegido abierto): el paso 5 baja de ~2.100 px a una tarjeta corta por escenario.
+      return X.D ? det : <details open={sel} onClick={(ev) => ev.stopPropagation()}><summary className='pp-tac' style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.accent, padding: '10px 0', listStyle: 'none' }}>Detalle y supuestos ›</summary>{det}</details> })()}
   </div>
 }
 
@@ -81,11 +85,11 @@ function TabImp({ X }) {
   return <>
     <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => { const e = M.esc[k], sel = est.esc === k
       return <div key={k} onClick={() => setEsc(k)} style={{ background: C.card, border: sel ? `2px solid ${C.accent}` : `1px solid ${C.border}`, borderRadius: 12, padding: sel ? 13 : 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><b style={{ color: C.accent, fontSize: 15 }}>{n}</b>{sel && <Chip>elegido</Chip>}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><b style={{ color: C.accent, fontSize: 14 }}>{n}</b>{sel && <Chip>elegido</Chip>}</div>
         <div style={{ ...LBL, color: C.muted }}>Saldo en {TX.mesAnual} de {X.datos.anio + 1}</div>
         <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.6, color: e.saldo > 0 ? C.soonText : C.greenText, lineHeight: 1.1 }}><Val v={mm(Math.abs(e.saldo))} /></div>
         <div style={{ fontSize: 11, color: C.muted }}>{e.saldo >= 0 ? 'por pagar' : 'a favor'}</div>
-        <div style={{ marginTop: 6 }}>{[['Base imponible', mm(e.base)], ['× Tasa de primera categoría', pc(est.tasaIDPC)], [`= Impuesto del año ${X.datos.anio}`, mm(e.idpc), 1], [`− PPM pagados en ${X.datos.anio}`, mm(e.ppm)], ['Impuesto sobre el resultado', pc((e.idpc / Math.max(1, e.base)) * 100)]].map(([t, v, s]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 4px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: s ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, textAlign: 'right' }}><Val v={v} /></b></div>)}</div></div> })}</Grid>
+        <div style={{ marginTop: 6 }}>{[['Base imponible', mm(e.base)], ['× Tasa de primera categoría', pc(est.tasaIDPC)], [`= Impuesto del año ${X.datos.anio}`, mm(e.idpc), 1], [`− PPM pagados en ${X.datos.anio}`, mm(e.ppm)], ['Impuesto sobre el resultado', pc((e.idpc / Math.max(1, e.base)) * 100)]].map(([t, v, s]) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 4px', borderTop: `1px solid ${C.border}`, fontSize: 12, fontWeight: s ? 800 : 400 }}><span>{t}</span><b style={{ fontWeight: 700, textAlign: 'right' }}><Val v={v} /></b></div>)}</div></div> })}</Grid>
     <Panel hd='Calendario y alcance' pad><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Chip>{`Cada mes · ${TX.pagoMensual} en el ${TX.formulario} (hoy ${mp(X.datos.ppmMes)} al mes)`}</Chip><Chip>{`${cap(TX.mesAnual)} ${X.datos.anio + 1} · declaración anual de ${X.datos.anio}`}</Chip><Chip>{`Sin ${TX.impuestoIndirecto} · no hay crédito fiscal`}</Chip><Chip tono='y'>Fuera: impuesto personal de los socios, depreciación · tasa de {TX.pagoMensual} por confirmar</Chip></div></Panel>
   </>
 }
@@ -223,7 +227,7 @@ export function Seguimiento({ X }) {
   const rango = cerr > 0 ? `ene–${MESC[cerr - 1]}` : ''
   const tarjeta = (/** @type {string} */ kk) => {
     const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
-    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={{ cap: rango ? `Real ${rango}` : 'Real', val: cerr > 0 ? mx(c.realAcum, u.realAcum) : '—' }} der={{ cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null && cerr > 0 ? mx(c.presAcum, u.presAcum) : cerr === 0 && c.cierre != null ? mx(c.cierre, u.cierre) : '—' }}
+    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={cerr === 0 ? { cap: 'Presupuesto del año', val: c.cierre != null ? mx(c.cierre, u.cierre) : '—' } : { cap: rango ? `Real ${rango}` : 'Real', val: mx(c.realAcum, u.realAcum) }} der={cerr === 0 ? undefined : { cap: rango ? `Presupuesto ${rango}` : 'Presupuesto', val: c.presAcum != null ? mx(c.presAcum, u.presAcum) : '—' }}
       cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
       onClick={() => { setUI({ sc: kk }); X.ir({ drill: { t: 'comp', de: 'seg', k: kk } }) }} />
   }
@@ -241,27 +245,29 @@ export function Seguimiento({ X }) {
   const icono = (/** @type {string} */ kk) => { const [tono, ic] = TONO_SEG[kk]; return <span style={{ width: 24, height: 24, borderRadius: 8, background: tono === 'w' ? C.bgSoft : TONO_BG[tono], display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={14} /></span> }
   const tabla = <Panel hd='Desvío por mes · contra el presupuesto' small={conmut}>
     <div style={{ overflowX: 'auto' }}><div style={{ minWidth: modo === 'p' ? 0 : 1120 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', ...LBL, fontSize: 10.5, color: C.accent }}>
+      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', ...LBL, fontSize: 11, color: C.accent }}>
         <span style={{ padding: '10px 0' }}>Componente</span>{MESC.map((m, i) => <span key={m} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', padding: '10px 4px 10px 0', cursor: 'pointer', color: i > cerr ? C.muted : C.accent }}>{m}</span>)}
         {['Real', 'Presup.', 'Desvío', 'Cierre'].map((t) => <span key={t} style={{ textAlign: 'right', padding: '10px 0' }}>{t}</span>)}
       </div>
       {claves.map((kk) => { const c = S[kk].c, u = S[kk].u
         return <div key={kk} style={{ display: 'grid', gridTemplateColumns: colW, padding: '0 12px', alignItems: 'center', borderTop: borde, minHeight: 46 }}>
-          <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: C.accent, fontWeight: 700, fontSize: 12.5 }}>{icono(kk)}{corto(kk)}</span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center', color: C.accent, fontWeight: 700, fontSize: 12 }}>{icono(kk)}{corto(kk)}</span>
           {c.meses.map((m, i) => <span key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ textAlign: 'right', paddingRight: 4, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>{m.estado === 'cerrado' ? fl(kk, m, u.meses[i]) : <span style={{ color: C.muted }}>—</span>}</span>)}
           <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{cel(c.realAcum, u.realAcum)}</span>
           <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.presAcum != null ? cel(c.presAcum, u.presAcum) : '—'}</span>
           <span style={{ textAlign: 'right', fontSize: 12 }}>{flA(kk, c, u)}</span>
           <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{c.cierre != null ? cel(c.cierre, u.cierre) : '—'}</span>
         </div> })}
-      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '8px 12px 10px', borderTop: borde, fontSize: 10, color: C.muted }}><span>Estado</span>{S[claves[0]].c.meses.map((m, i) => <span key={i} style={{ textAlign: 'right', paddingRight: 4, color: m.estado === 'curso' ? C.accent : C.muted, fontWeight: m.estado === 'curso' ? 700 : 400 }} title={nomEst(m.estado)}>{m.estado === 'cerrado' ? '✓' : m.estado === 'curso' ? 'en curso' : '·'}</span>)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: colW, padding: '8px 12px 10px', borderTop: borde, fontSize: 11, color: C.muted }}><span>Estado</span>{S[claves[0]].c.meses.map((m, i) => <span key={i} style={{ textAlign: 'right', paddingRight: 4, color: m.estado === 'curso' ? C.accent : C.muted, fontWeight: m.estado === 'curso' ? 700 : 400 }} title={nomEst(m.estado)}>{m.estado === 'cerrado' ? '✓' : m.estado === 'curso' ? 'en curso' : '·'}</span>)}</div>
     </div></div>
   </Panel>
   const ks = S[comp] ? comp : 'fact', sel = S[ks], gr = 'minmax(0,.7fr) repeat(3,minmax(0,1fr)) 12px'
-  const chips = <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>{claves.map((kk) => <button key={kk} onClick={() => setUI({ sc: kk })} aria-pressed={ks === kk} style={{ border: `1px solid ${ks === kk ? C.azulBg : C.border}`, background: ks === kk ? C.azulBg : C.card, color: ks === kk ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12.5, fontWeight: ks === kk ? 800 : 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{corto(kk)}</button>)}</div>
-  const lista = <Panel>
+  const chips = <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>{claves.map((kk) => <button key={kk} onClick={() => setUI({ sc: kk })} aria-pressed={ks === kk} style={{ border: `1px solid ${ks === kk ? C.azulBg : C.border}`, background: ks === kk ? C.azulBg : C.card, color: ks === kk ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: ks === kk ? 800 : 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{corto(kk)}</button>)}</div>
+  // N08: sin meses cerrados y con el mismo presupuesto cada mes, una sola línea en vez de doce filas iguales.
+  const mismoMes = cerr === 0 && sel.c.meses.length > 0 && sel.c.meses.every((m) => m.pres === sel.c.meses[0].pres)
+  const lista = mismoMes ? <Panel pad><span style={{ fontSize: 13 }}>Presupuesto mensual <b style={{ color: C.accent }}><Val v={cel(sel.c.meses[0].pres, sel.u.meses[0].pres)} /></b> por mes · el real aparece al cierre de cada mes.</span></Panel> : <Panel>
     <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px' }}>{conmut}</div>
-    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '8px 14px', borderTop: borde, ...LBL, fontSize: 10.5, color: C.accent }}><span>Mes</span><span style={{ textAlign: 'right' }}>Presup.</span><span style={{ textAlign: 'right' }}>Real</span><span style={{ textAlign: 'right' }}>Desvío</span><span /></div>
+    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '8px 14px', borderTop: borde, ...LBL, fontSize: 11, color: C.accent }}><span>Mes</span><span style={{ textAlign: 'right' }}>Presup.</span><span style={{ textAlign: 'right' }}>Real</span><span style={{ textAlign: 'right' }}>Desvío</span><span /></div>
     {sel.c.meses.map((m, i) => { const mu = sel.u.meses[i]
       return <div key={i} onClick={() => X.ir({ drill: { t: 'mes', i } })} style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '8px 14px', borderTop: borde, fontSize: 12, cursor: 'pointer', alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
         <span style={{ fontWeight: 700 }}>{MESC[i]}</span>
@@ -269,15 +275,15 @@ export function Seguimiento({ X }) {
         <span style={{ textAlign: 'right' }}>{m.estado === 'cerrado' && m.real != null ? <b style={{ color: C.accent }}><Val v={cel(m.real, mu.real)} /></b> : <span style={{ color: C.muted }}>{m.estado === 'curso' ? 'a la fecha' : '—'}</span>}</span>
         <span style={{ textAlign: 'right' }}>{m.estado === 'cerrado' ? fl(ks, m, mu, 12) : <span style={{ color: C.muted }}>{m.estado === 'venir' ? 'por venir' : '—'}</span>}</span>
         <span style={{ color: C.done }}>›</span></div> })}
-    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '9px 14px', borderTop: `2px solid ${C.accent}`, fontSize: 12.5, fontWeight: 800, color: C.accent, background: C.bgSoft }}><span>Acum.</span><span style={{ textAlign: 'right' }}>{sel.c.presAcum != null ? cel(sel.c.presAcum, sel.u.presAcum) : '—'}</span><span style={{ textAlign: 'right' }}>{cel(sel.c.realAcum, sel.u.realAcum)}</span><span style={{ textAlign: 'right' }}>{flA(ks, sel.c, sel.u)}</span><span /></div>
+    <div style={{ display: 'grid', gridTemplateColumns: gr, gap: 8, padding: '9px 14px', borderTop: `2px solid ${C.accent}`, fontSize: 12, fontWeight: 800, color: C.accent, background: C.bgSoft }}><span>Acum.</span><span style={{ textAlign: 'right' }}>{sel.c.presAcum != null ? cel(sel.c.presAcum, sel.u.presAcum) : '—'}</span><span style={{ textAlign: 'right' }}>{cel(sel.c.realAcum, sel.u.realAcum)}</span><span style={{ textAlign: 'right' }}>{flA(ks, sel.c, sel.u)}</span><span /></div>
   </Panel>
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `meses cerrados: ${rango}` : 'sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.muted }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: C.card, border: borde, borderRadius: 12, padding: '10px 14px', fontSize: 12, color: C.muted }}>
       <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b></span>
       <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span>
     </div>
-    {cerr === 0 && <div style={{ fontSize: 12.5, color: C.muted, margin: '0 4px' }}>Sin meses cerrados: el real aparece al cierre de {MESL[0].toLowerCase()}. Las tarjetas muestran el presupuesto del año.</div>}
+    {cerr === 0 && <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>El real aparece al cierre de {MESL[0].toLowerCase()}.{d.anio !== d.anioBase && <> <span role='button' onClick={() => X.irAnio(d.anioBase)} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Ver Seguimiento {d.anioBase} ›</span></>}</div>}
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{D ? 'toca una celda para ver el mes' : 'toca un mes'} · presupuesto mensual: estimación propia</span>}>Mes a mes · {Y}</Titulo>
     {D ? tabla : <>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></>}
@@ -356,7 +362,6 @@ export function indicadores(X) {
 
 // Evolución del año de Vendido o Cobrado contra su meta, y de qué trabajos y clientes salen los ingresos (estimación propia: reparte el total oficial de Inicio según las partidas).
 const dmy = (iso) => String(iso).slice(0, 10).split('-').reverse().join('-')
-const TONOS_TARJETA = [{ bg: C.azulBg, bd: C.azulBd, fg: C.azulInfo }, { bg: C.greenBg, bd: C.greenDeep, fg: C.greenText }, { bg: C.soonBg, bd: C.avisoLine, fg: C.soonText }, { bg: C.tealBg, bd: C.tealBg, fg: C.tealText }, { bg: C.ambarBg, bd: C.avisoLine, fg: C.coralText }]
 function useAncho(def) {
   const ref = useRef(null), [w, setW] = useState(def)
   useEffect(() => { const f = () => { const el = ref.current; if (el) setW((p) => { const n = Math.max(280, Math.round(el.clientWidth) - 24); return n === p ? p : n }) }; f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) })
@@ -400,7 +405,7 @@ function Evolucion({ X, k }) {
         ['Facturado por tipo de cliente', e.tipos.map((t) => ({ n: t.n, pct: t.pct, monto: mx(t.monto, t.uf), sub: `${t.nClientes} cliente${t.nClientes !== 1 ? 's' : ''}`, amb: t.n === 'Sin tipo', go: () => X.ir({ drill: { t: 'ind', k: 'conc' } }) })), 'Aún no hay facturas emitidas este año.']].filter(([, it]) => !(it.length === 1 && it[0].pct >= 99.5))
   return <>
     <Titulo right={<Seg options={[['v', 'Vendido'], ['c', 'Cobrado'], ['a', 'Ambos']]} value={modo} onChange={setModo} />}>Evolución contra la meta · estimación propia</Titulo>
-    <Grid cols={modo === 'a' ? 3 : 2} colsM={2}>
+    <Grid cols={modo === 'a' ? 3 : 1} colsM={modo === 'a' ? 2 : 1}>
       {act.map((a) => <Kpi key={a.nom} tono={a.tono} ic={a.ic} label={a.nom} value={val(a.c.clp, a.c)} sub={a.c.pct != null ? <span><b style={{ color: C.accent, fontWeight: 800 }}>{pc(a.c.pct, 0)}</b> de la meta</span> : 'sin meta'} />)}
       {modo === 'a' && <div style={{ gridColumn: X.D ? undefined : '1 / -1', display: 'flex', flexDirection: 'column' }}><Kpi tono='y' ic='gauge' label='Cobrado sobre vendido' value={sobre != null ? pc(sobre, 0) : '—'} sub={`${vv(Math.max(0, def.v.c.clp - def.c.c.clp))} vendido sin cobrar`} /></div>}
     </Grid>
@@ -436,16 +441,10 @@ function Evolucion({ X, k }) {
       <div style={{ margin: '-8px -14px -10px' }}>{filas.map((v, i) => i <= H && <Fila key={i} nombre={MESL[i]} peq={modo === 'a' ? `cobrado ${e.cob[i] != null ? vv(e.cob[i]) : '—'}` : i > 0 && filas[i - 1] != null && v != null ? `${sgn(v - filas[i - 1])}${vv(Math.abs(v - filas[i - 1]))} en el mes` : undefined} valor={v != null ? vv(v) : '—'} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
     </Det>
     {origen.length > 0 && <Titulo>Origen de los ingresos · estimación propia</Titulo>}
+    {/* H15: filas neutras (los tonos son solo de los seis componentes), de mayor a menor, sin tarjetas solitarias */}
     {origen.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: X.D && origen.length > 1 ? '1fr 1fr' : '1fr', gap: 12, alignItems: 'start' }}>
-      {origen.map(([hd, items, vacio]) => <div key={hd} style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-        <span style={{ ...LBL, color: C.muted, padding: '0 4px' }}>{hd}</span>
-        {items.length === 0 ? <div style={{ fontSize: 13, color: C.muted, padding: '0 4px' }}>{vacio}</div>
-          : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>{items.map((t, ti) => { const tn = t.amb ? { bg: C.bgSoft, bd: C.border, fg: C.grisText } : TONOS_TARJETA[ti % TONOS_TARJETA.length]; return <div key={t.n} onClick={t.go} style={{ background: tn.bg, border: `1px solid ${tn.bd}`, borderRadius: 12, padding: 12, cursor: t.go ? 'pointer' : 'default', minWidth: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.accent }}><span style={{ minWidth: 0 }}>{t.n}</span><span style={{ fontSize: 11, fontWeight: 800, background: '#fff', borderRadius: 20, padding: '1px 8px', whiteSpace: 'nowrap', color: tn.fg }}>{pc(t.pct, t.pct < 10 ? 1 : 0)}</span></div>
-            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.4, color: C.accent, marginTop: 4, whiteSpace: 'nowrap' }}><Val v={t.monto} /></div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{t.sub}</div>
-          </div> })}</div>}
-      </div>)}
+      {origen.map(([hd, items, vacio]) => <Panel key={hd} hd={hd}>{items.length === 0 ? <div style={{ fontSize: 13, color: C.muted, padding: '12px 16px' }}>{vacio}</div>
+        : [...items].sort((x, y) => y.pct - x.pct).map((t) => <Fila key={t.n} nombre={t.n} peq={`${pc(t.pct, t.pct < 10 ? 1 : 0)} · ${t.sub}`} valor={t.monto} onClick={t.go} sin={!t.go} />)}</Panel>)}
     </div>}
     {e.tipos[0]?.n === 'Sin tipo' && e.tipos[0].pct > 50 && <div style={{ fontSize: 11, color: C.muted, margin: '0 4px' }}>La mayoría de lo facturado sale «Sin tipo»: completar el tipo en la ficha del cliente mejora este análisis.</div>}
   </>
@@ -512,7 +511,7 @@ export function DVer({ X }) {
       </div>
       <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><Btn onClick={() => X.guardarVersion((refN.current?.value || '').trim() || 'Versión', (refNo.current?.value || '').trim())}>Guardar versión</Btn><span style={{ fontSize: 12, color: C.muted }}>{base ? `El borrador parte de «${base.nombre}»` : 'Se guarda la foto de todos los supuestos, costos y notas de las etapas.'}</span></div>
     </Panel>
-    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: vers.length >= 6 ? C.soonText : C.muted }}>{vers.length} de 6</span>}>Versiones guardadas</Titulo>
+    <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: vers.length >= 6 ? C.soonText : C.muted, display: 'inline-flex', gap: 10, alignItems: 'center' }}>{vers.length >= 2 && <Btn onClick={() => { setUI({ cmpA: vers[1].id, cmpB: vers[0].id, cmpE: null }); X.ir({ drill: { t: 'cmp', id: vers[1].id } }) }}>Comparar</Btn>}{vers.length} de 6</span>}>Versiones guardadas</Titulo>
     <Panel>{vers.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay versiones. Guarda la primera cuando termines una etapa.</div>
       : vers.map((v) => { const abierta = ui.vx === v.id, b = v.resumen && v.resumen.base ? v.resumen.base : null, c = conf && conf.id === v.id ? conf.a : null
         return <Fila key={v.id} abierta={abierta} nombre={<>{v.nombre}{v.oficial && <span style={{ marginLeft: 8 }}><Chip>Oficial</Chip></span>}{v.id === X.est.basadaEn && <span style={{ marginLeft: 8 }}><Chip tono='y'>borrador parte de aquí</Chip></span>}</>} peq={`${fechaDMY(v.created_at)}${v.creado_por ? ' · ' + v.creado_por : ''} · ${v.nota || 'sin nota'}`} sub={b ? 'retiros ' + mm(b.retiros) : ''} valor={b ? mm(b.fact) : ''} onClick={() => setUI({ vx: abierta ? null : v.id, confirma: null })}>
@@ -524,7 +523,7 @@ export function DVer({ X }) {
         </Fila> })}</Panel>
   </>
 }
-const campo = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, color: C.text, outline: 'none' }
+const campo = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: C.text, outline: 'none' }
 
 // Comparar versiones: se elige Antes y Después (versiones guardadas o el borrador actual; se pueden intercambiar) y el escenario; arriba las seis cifras con su diferencia y debajo los cambios agrupados en Supuestos, Costos, Metas y Notas.
 export function DCmp({ X, id }) {
@@ -534,7 +533,7 @@ export function DCmp({ X, id }) {
   const va = get(idA), vb = get(idB), aviso = (/** @type {string} */ t) => <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, borderRadius: 12, padding: 14, fontSize: 13 }}>{t}</div>
   if (!va || !vb) return aviso('Esa versión ya no existe.')
   const opts = [...vers.map((v) => [v.id, /\d{2}-\d{2}-\d{4}/.test(v.nombre) ? v.nombre : `${v.nombre} · ${fechaDMY(v.created_at).slice(0, 10)}`]), ['borrador', 'Borrador actual']]
-  const sel = (/** @type {string} */ rot, /** @type {string} */ val, /** @type {(v:string)=>void} */ on) => <label style={{ display: 'block', minWidth: 0 }}><span style={{ ...LBL, color: C.muted, fontSize: 10.5 }}>{rot}</span><select value={val} onChange={(ev) => on(ev.target.value)} style={{ ...campo, height: 44, marginTop: 3 }}>{opts.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
+  const sel = (/** @type {string} */ rot, /** @type {string} */ val, /** @type {(v:string)=>void} */ on) => <label style={{ display: 'block', minWidth: 0 }}><span style={{ ...LBL, color: C.muted, fontSize: 11 }}>{rot}</span><select value={val} onChange={(ev) => on(ev.target.value)} style={{ ...campo, height: 44, marginTop: 3 }}>{opts.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></label>
   const A = quita(va.estado), B = quita(vb.estado), mA = modeloPresupuesto(X.datos.base, A), mB = modeloPresupuesto(X.datos.base, B)
   const comunes = mB.lista.filter(([kk]) => mA.esc[kk]).map(([kk]) => kk), k = comunes.includes(ui.cmpE) ? ui.cmpE : comunes.includes(X.est.esc) ? X.est.esc : comunes[0]
   const cab = <Panel><div style={{ padding: 12, display: 'grid', gridTemplateColumns: X.D ? 'minmax(0,1fr) auto minmax(0,1fr)' : '1fr', gap: 8, alignItems: 'end' }}>
@@ -562,5 +561,5 @@ export function DCmp({ X, id }) {
   </>
 }
 
-export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : d.t === 'cfg' ? 'Configuración del presupuesto' : (indicadores(X)[d.k]?.tit || 'Detalle')
-export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : d.t === 'cfg' ? (X.esAdmin ? <DCfg X={X} /> : null) : <DInd X={X} k={d.k} />
+export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : d.t === 'cfg' ? 'Configuración del presupuesto' : d.t === 'ini' ? 'Preparar desde cero' : (indicadores(X)[d.k]?.tit || 'Detalle')
+export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : d.t === 'cfg' ? (X.esAdmin ? <DCfg X={X} /> : null) : d.t === 'ini' ? <DIni X={X} /> : <DInd X={X} k={d.k} />
