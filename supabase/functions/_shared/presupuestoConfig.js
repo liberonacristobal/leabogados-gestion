@@ -4,8 +4,8 @@
 //
 // Qué es configurable: lista de componentes de las metas (clave, nombre, tono, ícono, orden), escenarios de partida y sus palancas, reserva mínima y regla de reserva, reparto
 // de las metas entre socios, reglas tributarias por régimen y año (tasa de primera categoría y PPM legal), categorías de costo fijas y por persona, y la moneda reajustable (módulo país).
-// Qué sigue cableado (por falta de tabla de configuración; sin migraciones en esta ronda): los textos de ayuda del paso Escenarios › Impuesto (Pro Pyme, F29, abril, sin IVA),
-// el nombre de los grupos de sueldos en algunos textos, la fuente de la UF (mindicador.cl, en compartido.jsx) y la lista de socios (ADMIN_NAMES de la app).
+// Los textos del régimen (PPM, F29, abril, IVA) salen de `tributario.textos` y la lista de socios de `socios.lista` (por defecto, los administradores de la app). Lo guardado por el estudio vive en la tabla
+// `presupuesto_config` (solo diferencias; supabase/migrations). Sigue cableada la fuente de la UF (mindicador.cl, en compartido.jsx).
 
 /** @typedef {{ k:string, n:string, tono:string, ic:string, ancla:boolean }} ComponenteCfg  tono = clave del tono de tarjeta (a, y, g, t, r, w); ic = ícono; ancla = se puede escribir su meta */
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} PalancasCfg */
@@ -36,7 +36,7 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
   /** Reserva de caja: mínima ya en caja al comenzar el año (por confirmar contra el Banco), % del resultado después de impuesto que se reserva, y la regla recomendada (meses de costos a los que llegar, repartidos por trimestre). */
   reserva: { minima: 30_000_000, porcentaje: 15, meses: 3, trimestres: 4 },
   /** Reparto de las metas entre socios: 'iguales' o un mapa { nombre: fracción }. «Sin socio» no tiene meta. */
-  socios: { reparto: 'iguales' },
+  socios: { reparto: 'iguales', lista: null },   // lista = nombres de los socios del estudio; null = los administradores de la app (ADMIN_NAMES)
   /** Categorías de costo: cuáles son fijas (el resto es discrecional), cuáles van por persona (una partida por fila) y cuáles son el sueldo y las leyes sociales de un socio. */
   costos: {
     fijas: ['Remuneraciones', 'Leyes sociales', 'Arriendo y espacio', 'Arriendo y GGCC', 'Contadora'],
@@ -157,6 +157,7 @@ export function validarConfig(over) {
   }
   const m = o.moneda
   if (m) { texto('moneda.simbolo', m.simbolo, 4); texto('moneda.unidad', m.unidad, 8); rango('moneda.reajusteAnual', m.reajusteAnual, -10, 100); if (m.nombres) for (const k of Object.keys(m.nombres)) texto(`moneda.nombres.${k}`, m.nombres[k], 20) }
+  if (o.socios && o.socios.lista != null && (!Array.isArray(o.socios.lista) || o.socios.lista.some((/** @type {any} */ x) => typeof x !== 'string' || !x.trim() || x.length > 40))) mal('socios.lista', 'debe ser una lista de nombres')
   if (o.costos) { for (const k of ['fijas', 'porPersona']) if (o.costos[k] !== undefined && (!Array.isArray(o.costos[k]) || o.costos[k].some((/** @type {any} */ x) => typeof x !== 'string' || !x.trim()))) mal(`costos.${k}`, 'debe ser una lista de nombres') }
   return { ok: e.length === 0, errores: e }
 }

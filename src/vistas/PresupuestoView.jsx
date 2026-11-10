@@ -35,7 +35,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const [drill, setDrill] = useState(null)
   const [pila, setPila] = useState([])
   // H05: si falla la LECTURA del borrador no se crea un estado inicial ni se autoguarda (insertaría un borrador paralelo): se muestra el error y se bloquea el guardado hasta reintentar.
-  const raiz = useRef(null)
+  const raiz = useRef(null), iniPend = useRef(null)
   const [cfgDe, setCfgDe] = useState(null), [, setCfgTick] = useState(0)   // nombre de la versión cuya configuración se está viendo (null = la vigente)
   useEffect(() => { const el = raiz.current; if (el) el.querySelectorAll('[role=button]:not([tabindex])').forEach((n) => { n.setAttribute('tabindex', '0'); n.classList.add('pp-foco') }) })
   const [errorCarga, setErrorCarga] = useState(false), [reintento, setReintento] = useState(0)
@@ -76,6 +76,8 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // Sin borrador: estado inicial con los costos vigentes y los datos reales del año anterior (cuando ya cargaron, o tras una breve espera).
   useEffect(() => {
     if (!cargado || errorCarga || est || !(datos.terc != null || espera || DEMO)) return
+    const p = iniPend.current
+    if (p) { iniPend.current = null; setEst(construirInicial(p)); setUIS((u) => ({ ...u, etapa: p.etapa })); return }
     setEst(estadoInicial({ costos: datos.costos, terc: datos.terc, dias: datos.dias.promedio, anio, ppmMes: datos.ppmMes, cfg: CFG }))
   }, [cargado, est, datos.terc, espera, datos.costos, datos.dias.promedio, anio, datos.ppmMes])
 
@@ -188,8 +190,20 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     } catch (e) { setGuardado((g) => ({ ...g, est: 'error' })) }
   }
 
+  // R7 · «Preparar desde cero»: parte de lo ocurrido (la base de los últimos 12 meses y los costos vigentes), de una meta de retiros o vacío; con la reserva inicial editable. Reemplaza el borrador (con confirmación).
+  const construirInicial = ({ modo, meta, reserva, anio: a }) => {
+    const base = estadoInicial({ costos: modo === 'vacio' ? [] : datos.costos, terc: modo === 'vacio' ? null : datos.terc, dias: modo === 'vacio' ? null : datos.dias.promedio, anio: a || anio, ppmMes: datos.ppmMes, cfg: CFG, reservaIni: reserva > 0 ? reserva : undefined })
+    if (modo === 'meta' && meta > 0) base.metas = { ancla: 'retiros', valor: meta, ratio: null }
+    return base
+  }
+  const prepararDesdeCero = async (o) => {
+    if (!(await appConfirm('Esto reemplaza el borrador del año elegido. Guárdalo antes como versión si lo necesitas. ¿Continuar?'))) return false
+    const etapa = o.modo === 'vacio' ? 2 : o.modo === 'meta' ? 3 : 0
+    if (o.anio && o.anio !== anio) { if (guardado.est === 'pendiente') await guardarBorrador(); iniPend.current = { ...o, etapa }; setAnioSel(o.anio); return true }   // el borrador nuevo se arma al cargar el otro año
+    setEst(construirInicial(o)); setDrill(null); setPila([]); setUIS((u) => ({ ...u, etapa })); return true
+  }
   const MT = est ? calcMetas(datos, est) : null
-  const X = { user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
+  const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
     irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
@@ -198,22 +212,21 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const wrap = D ? { maxWidth: 1180, margin: '0 auto', padding: '12px 20px 40px' } : { padding: '8px 16px 40px' }
 
   if (errorCarga) return <div style={wrap}><PageHeader origen={backLabel} onBack={onBack} titulo={`Presupuesto ${anio}`} style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} /><div role='alert' style={{ margin: 16, background: C.overdueBg, border: `1px solid ${C.overdueBd}`, color: C.overdueText, borderRadius: 12, padding: '14px 16px', fontSize: 13 }}>No se pudo leer el borrador del presupuesto {anio}. No se guardó ni se creó nada.<div style={{ marginTop: 10 }}><Btn onClick={() => setReintento((n) => n + 1)}>Reintentar</Btn></div></div></div>
-  if (!est || !M) return <div style={wrap}><PageHeader origen={backLabel} onBack={onBack} titulo={`Presupuesto ${anio}`} style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} /><div style={{ padding: 24, fontSize: 13, color: C.muted }}>Cargando el presupuesto…</div></div>
+  if (!est || !M) return <div style={wrap} aria-busy='true'><PageHeader origen={backLabel} onBack={onBack} titulo={`Presupuesto ${anio}`} style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} /><div role='status' aria-label='Cargando el presupuesto' style={{ display: 'flex', flexDirection: 'column', gap: 14 }}><div style={{ height: 52, borderRadius: 12, background: C.bgSoft }} /><div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 3 : 2},minmax(0,1fr))`, gap: D ? 10 : 8 }}>{Array.from({ length: 6 }, (_, i) => <div key={i} style={{ height: D ? 174 : 112, borderRadius: 12, background: C.bgSoft, border: `1px solid ${C.border}` }} />)}</div><div style={{ fontSize: 12, color: C.muted }}>Cargando el presupuesto…</div></div></div>
 
   const e = M.esc[est.esc], h = est.hecho.includes(ui.etapa)
   const cuerpo = drill ? vistaDrill(X, drill)
     : ui.etapa === 0 ? <Mirada X={X} /> : ui.etapa === 1 ? <Base X={X} /> : ui.etapa === 2 ? <Costos X={X} /> : ui.etapa === 3 ? <Metas X={X} /> : ui.etapa === 4 ? <Escenarios X={X} /> : <Seguimiento X={X} />
   const irEtapa = (i) => { setDrill(null); setUI({ etapa: i }); setY(0) }
   const estadoCorto = { cargando: 'cargando…', pendiente: 'sin guardar', guardando: 'guardando…', error: 'no se guardó', local: 'en este equipo', ok: 'guardado' }[guardado.est] || 'guardado'
-  const chipEstado = <ChipBtn error={guardado.est === 'error'} titulo={estadoTxt} onClick={() => ir({ drill: { t: 'ver' } })}>Versiones · {estadoCorto}</ChipBtn>
   const MONEDAS = [['clp', CFG.moneda.nombres.clp], ['uf', CFG.moneda.nombres.uf], ['ambos', CFG.moneda.nombres.ambos]]
-  const chipMoneda = <span style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontWeight: 700, fontSize: 12.5, height: 32, padding: '0 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center' }}><Menu aria='Moneda' derecha boton={est.moneda === 'uf' ? CFG.moneda.unidad : est.moneda === 'ambos' ? `${CFG.moneda.simbolo} · ${CFG.moneda.unidad}` : CFG.moneda.simbolo} opciones={MONEDAS} valor={est.moneda} onChange={(v) => setGen('moneda', v)} /></span>
-  const chipExcel = <ChipBtn cuadrado aria='Descargar Excel' onClick={() => descargarExcel(X)}><Ic n='doc' s={16} /></ChipBtn>
+  const chipMoneda = <span style={{ border: `1px solid ${C.border}`, background: C.card, color: C.accent, fontWeight: 700, fontSize: 12, height: 32, padding: '0 10px', borderRadius: 20, display: 'inline-flex', alignItems: 'center' }}><Menu aria='Moneda' derecha boton={est.moneda === 'uf' ? CFG.moneda.unidad : est.moneda === 'ambos' ? `${CFG.moneda.simbolo} · ${CFG.moneda.unidad}` : CFG.moneda.simbolo} opciones={MONEDAS} valor={est.moneda} onChange={(v) => setGen('moneda', v)} /></span>
   // H10: en las páginas de detalle solo queda la moneda (Versiones y Excel son del presupuesto, no del detalle). H01: en móvil, una sola fila de cabecera: moneda y «⋯» (Versiones · estado, Excel).
-  const controles = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{chipMoneda}{!drill && chipEstado}{!drill && chipExcel}</span>
   const chipMas = <span style={{ border: `1px solid ${guardado.est === 'error' ? C.overdueBd : C.border}`, background: guardado.est === 'error' ? C.overdueBg : C.card, color: guardado.est === 'error' ? C.overdueText : C.accent, fontWeight: 800, fontSize: 16, height: 32, minWidth: 40, borderRadius: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Menu aria={`Más opciones · ${estadoTxt}`} derecha boton='⋯' opciones={[['ver', `Versiones · ${estadoCorto}`], ['xls', 'Descargar Excel']]} valor={null} onChange={(v) => { if (v === 'ver') ir({ drill: { t: 'ver' } }); else descargarExcel(X) }} /></span>
-  const controlesM = <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{chipMoneda}{!drill && chipMas}</span>
-  const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[[datos.anioBase + 1, `Presupuesto ${datos.anioBase + 1}`], [datos.anioBase, `Seguimiento ${datos.anioBase}`], ...(esAdmin ? [['cfg', 'Configuración del presupuesto']] : [])]} valor={anio} onChange={async (a) => { if (a === 'cfg') { ir({ drill: { t: 'cfg' } }); return } if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
+  const esCfg = !!drill && drill.t === 'cfg'   // N07: la moneda no actúa en Configuración
+  const controles = <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{!esCfg && chipMoneda}{!drill && chipMas}</span>
+  const controlesM = <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{!esCfg && chipMoneda}{!drill && chipMas}</span>
+  const titulo = drill ? titulosDrill(X, drill) : <Menu aria='Año del presupuesto' boton={anio === datos.anioBase ? `Seguimiento ${datos.anioBase}` : `Presupuesto ${anio}`} opciones={[...[1, 2, 3].map((n) => [datos.anioBase + n, `Presupuesto ${datos.anioBase + n}`]), [datos.anioBase, `Seguimiento ${datos.anioBase}`], ['ini', 'Preparar desde cero…'], ...(esAdmin ? [['cfg', 'Configuración del presupuesto']] : [])]} valor={anio} onChange={async (a) => { if (a === 'cfg') { ir({ drill: { t: 'cfg' } }); return } if (a === 'ini') { ir({ drill: { t: 'ini' } }); return } if (a === anio) return; if (guardado.est === 'pendiente') await guardarBorrador(); setAnioSel(a) }} estilo={{ fontSize: 16, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }} />
   const DESC = ['Lo ocurrido en el año base', 'Recurrente y por facturar, antes de vender', 'Presupuesto de costos de la oficina', 'Lo que se quiere retirar, ganar, cobrar y vender', 'Hipótesis de crecimiento contra las metas', 'Lo presupuestado contra lo real, mes a mes']
 
   // H18: «Revisado» y la nota viven junto al título del paso (la nota, como ícono con campo en línea y un punto si hay nota); abajo solo Anterior y Siguiente. Siguiente NO marca el paso como revisado.

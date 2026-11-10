@@ -63,8 +63,8 @@ export function Supuestos({ X, MT }) {
   return <Panel>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols},minmax(0,1fr))` }}>
       {campos.map(([t, k, kind, suf, val, set, ef, txt], i) => <div key={k} style={{ padding: D ? '14px 20px 16px' : '12px 14px 14px', borderTop: i >= cols ? `1px solid ${C.border}` : 'none', borderLeft: i % cols ? `1px solid ${C.border}` : 'none', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 600, color: C.muted, lineHeight: 1.2 }}>{t}</div>
-        <div style={{ fontSize: D ? 20 : 18, fontWeight: 800, letterSpacing: -0.4, color: C.accent, lineHeight: 1.2 }}><Fld sobrio kind={kind} suf={suf} value={val} ph={k === 'ratio' ? '—' : undefined} onCommit={set} label={t} /></div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, lineHeight: 1.2 }}>{t}</div>
+        <div style={{ fontSize: D ? 21 : 19, fontWeight: 800, letterSpacing: -0.4, color: C.accent, lineHeight: 1.2 }}><Fld sobrio kind={kind} suf={suf} value={val} ph={k === 'ratio' ? '—' : undefined} onCommit={set} label={t} /></div>
         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.3 }}><b style={{ color: C.accent, fontSize: 14 }}>{ef}</b> {txt}</div>
       </div>)}
     </div>
@@ -82,7 +82,7 @@ export function ReservaBloque({ X, ch, irBanco }) {
     {fila(`+ Reserva del año (${pc(est.reserva, 0)} de ${mm(Math.max(0, ch.post))} después de impuesto)`, mm(ch.reserva))}
     {fila('= Reserva al cierre', mm(ch.reservaCierre), { tot: true })}
     {fila('Meses de costos que cubre', <span><b style={{ color: C.accent }}>{r.mesesCierre != null ? r.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) : '—'}</b> de {mm(r.costosMes)} al mes</span>)}
-    <div style={{ padding: D ? '10px 20px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div style={{ padding: D ? '10px 20px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div><b style={{ color: C.accent }}>Recomendación</b> · llegar a {r.meses} meses de costos ({mm(r.objetivo)}){r.brecha > 0 ? `, con ${mm(r.porTrimestre)} más por trimestre` : ''}. <Flecha sube={r.cubre} bueno={r.cubre}>{r.cubre ? 'la reserva del año la cubre' : `déficit ${mm(r.falta)}`}</Flecha></div>
       {irBanco && <div onClick={irBanco} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Por confirmar en Banco ›</div>}
     </div>
@@ -113,7 +113,7 @@ export function DSocios({ X, alza, retiros, ir, irRetiros }) {
   const cel = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 0 }
   const fila = (/** @type {string} */ t, /** @type {string} */ a, /** @type {string} */ b, /** @type {boolean} */ tot = false) => <div key={t} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr)', gap: 10, padding: '9px 0', borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, fontSize: 13, fontWeight: tot ? 800 : 400, color: tot ? C.accent : C.text, alignItems: 'baseline' }}><span>{t}</span><span style={cel}><Val v={a} /></span><span style={cel}><Val v={b} /></span></div>
   const tarjeta = (/** @type {string} */ nombre, /** @type {any} */ f, /** @type {any} */ u, /** @type {boolean} */ of = false) => <div key={nombre} onClick={ir} style={{ background: of ? C.bgSoft : C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '14px 18px 12px' : '11px 14px 10px', cursor: ir ? 'pointer' : 'default', minWidth: 0 }}>
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr)', gap: 10, alignItems: 'baseline', paddingBottom: 8 }}><b style={{ color: C.accent, fontSize: 15 }}>{nombre}</b><span style={{ ...cel, ...LBL, color: C.muted, fontWeight: 600 }}>{d.anioBase} real</span><span style={{ ...cel, ...LBL, color: C.muted, fontWeight: 600 }}>{d.anio} meta</span></div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr)', gap: 10, alignItems: 'baseline', paddingBottom: 8 }}><b style={{ color: C.accent, fontSize: 14 }}>{nombre}</b><span style={{ ...cel, ...LBL, color: C.muted, fontWeight: 600 }}>{d.anioBase} real</span><span style={{ ...cel, ...LBL, color: C.muted, fontWeight: 600 }}>{d.anio} meta</span></div>
     {fila('Sueldos', v26(f.sueldo26, u.sueldo26), v27(f.sueldo27))}
     {fila('Retiros', v26(f.ret26, u.ret26), v27(f.ret27))}
     {fila('Total', v26(f.tot26, u.tot26), v27(f.tot27), true)}
@@ -122,7 +122,7 @@ export function DSocios({ X, alza, retiros, ir, irRetiros }) {
   return <>
     <Titulo right={<Seg options={[['a', 'Anual'], ['m', 'Mensual']]} value={mensual ? 'm' : 'a'} onChange={(v) => setUI({ sm: v })} />}>{d.anioBase} real contra {d.anio} meta</Titulo>
     <Grid cols={3} colsM={1}>{R.filas.map((f, i) => tarjeta(f.nombre, f, U.filas[i]))}{tarjeta('Oficina', R.total, U.total, true)}</Grid>
-    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12.5, fontWeight: 700, color: C.accent }}>
+    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12, fontWeight: 700, color: C.accent }}>
       {d.retiros26.desde && irRetiros && <span onClick={irRetiros} role='button' style={{ cursor: 'pointer' }}>Ver los {d.retiros26.n} retiros ›</span>}
       {ir && <span onClick={ir} role='button' style={{ cursor: 'pointer' }}>Panel de socios ›</span>}
     </div>

@@ -1,6 +1,6 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesAtipicos, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesAtipicos, nombreComponente, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
@@ -22,7 +22,7 @@ export function Mirada({ X }) {
   // Estimación propia en Concentración y Recurrente (el modelo no trae esos choques); Comisiones y Días de cobro salen del modelo (supuestos terc y dias). Los choques no son comparables entre sí: el orden es de magnitud.
   const indic = [
     ['pers', 'Concentración', pc(conc * 100, 0), `5 de ${d.clientes.length} · ene–${MESC[H]}`, 'amb', 'conc'],
-    ['cal', 'Recurrente mensual', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
+    ['cal', 'Recurrente', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
     ['com', 'Comisiones', d.terc != null ? pc(d.terc) : 'sin dato', 'de lo cobrado en el año', '', 'terc'],
     ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `promedio · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
   ]
@@ -44,19 +44,19 @@ export function Mirada({ X }) {
     if (k === 'caja') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.cob.clp, o.cob.uf) }} der={{ cap: 'Meta', val: o.metaCobroCLP > 0 ? m26(o.metaCobroCLP) : 'Sin meta' }} cmp={o.metaCobroCLP > 0 ? cumple(o.cob.clp, o.metaCobroCLP, o.cob.uf, null) : <span role='button' onClick={(ev) => { ev.stopPropagation(); ir({ etapa: 3 }) }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Definir meta ›</span>} onClick={() => ir({ drill: { t: 'ind', k: 'cob26' } })} />
     if (k === 'costos') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(c26.real, c26.realUF) }} der={{ cap: 'Presupuesto', val: mx(c26.ppto, c26.pptoUF) }} cmp={c26.ppto > 0 ? (() => { const x = difMon(c26.real, c26.ppto, c26.realUF, c26.pptoUF); return <Flecha sube={x.sube} bueno={afavor('costos', x.sube)}>{x.sg}{x.abs} · {x.sg}{pc(Math.abs(x.pct))}</Flecha> })() : <span>—</span>} onClick={() => ir({ drill: { t: 'ind', k: 'costos26' } })} />
     if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
-    return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) }} der={{ cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) }} cmp={d.retiros26.total > 0 ? <span> </span> : <span>sin retiros registrados{D && <> · <span role='button' onClick={(ev) => { ev.stopPropagation(); X.onOpenSocios && X.onOpenSocios() }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Socios ›</span></>}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
+    return <Tarjeta key={k} {...base} izq={d.retiros26.total > 0 ? { cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) } : { cap: 'Real', val: 'Sin retiros' }} der={d.retiros26.total > 0 ? { cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) } : undefined} cmp={d.retiros26.total > 0 ? <span> </span> : <span>{D ? 'sin retiros registrados' : ''}{D && <> · <span role='button' onClick={(ev) => { ev.stopPropagation(); X.onOpenSocios && X.onOpenSocios() }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Socios ›</span></>}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
   })
   const tile = (m) => {
     const x = m.f && m.a && fv(m.a) && m.i < H ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)   // el mes en curso no se compara (queda «a la fecha»)
     return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D ? MESL[m.i] : MESC[m.i]}</span>{x == null ? null : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
-      <div style={{ fontSize: D ? 20 : 14.5, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
+      <div style={{ fontSize: D ? 21 : 14, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
       <div style={{ fontSize: 11, color: C.muted }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}{m.i === H ? ' · a la fecha' : ''}</div>
-      {at && <div style={{ fontSize: 10.5, fontWeight: 700, color: C.soonText }}>atípico</div>}
+      {at && <div style={{ fontSize: 11, fontWeight: 700, color: C.soonText }}>atípico</div>}
     </div>
   }
   // Primer año sin historia: no hay nada que mostrar; se parte desde cero (Costos → Metas → Escenarios).
-  if (d.sinBase && d.clientes.length === 0) return <VacioPaso titulo={`Sin datos de ${Y} en la app`} causa={`No hay facturas emitidas en ${Y}, así que no hay resultado que comparar. El presupuesto se puede preparar igual.`} pasos={[[1, 'Costos', 'las partidas de la oficina'], [2, `Metas ${d.anio}`, 'lo que se quiere retirar'], [3, 'Escenarios', 'qué tan alcanzable es la meta']]} acciones={[['Preparar desde cero', () => ir({ etapa: 2 }), true], ...(X.esAdmin ? [['Configuración del presupuesto', () => ir({ drill: { t: 'cfg' } }), false]] : [])]} />
+  if (d.sinBase && d.clientes.length === 0) return <VacioPaso titulo={`Sin datos de ${Y} en la app`} causa={`No hay facturas emitidas en ${Y}, así que no hay resultado que comparar. El presupuesto se puede preparar igual.`} pasos={[[1, 'Costos', 'las partidas de la oficina'], [2, `Metas ${d.anio}`, 'lo que se quiere retirar'], [3, 'Escenarios', 'qué tan alcanzable es la meta']]} acciones={[['Preparar desde cero', () => ir({ drill: { t: 'ini' } }), true], ...(X.esAdmin ? [['Configuración del presupuesto', () => ir({ drill: { t: 'cfg' } }), false]] : [])]} />
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>al {fmtFechaDMY(d.hoy)}</span>}>Resultado del año {Y}</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 10 : 8}>{tarjetas26}</Grid>
@@ -73,7 +73,7 @@ export function Mirada({ X }) {
       : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 6 : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
     <Panel hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
       {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
-        : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.done, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} peq={`${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado`} valor={mx(c.monto, c.uf)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
+        : <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr' }}>{d.clientes.slice(0, 8).map((c, i) => <div key={c.id} style={{ borderRight: D && i % 2 === 0 ? `1px solid ${C.border}` : 'none' }}><Fila nombre={<><span style={{ color: C.muted, fontWeight: 700, fontSize: 12, marginRight: 8 }}>{i + 1}</span>{c.name}</>} peq={`${c.n} factura${c.n !== 1 ? 's' : ''} · ${pc((c.monto / d.totalFact) * 100)} de lo facturado`} valor={mx(c.monto, c.uf)} onClick={() => ir({ drill: { t: 'cli', n: c.id } })} /></div>)}</div>}
     </Panel>
   </>
 }
@@ -91,8 +91,8 @@ export function Base({ X }) {
     return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} onClick={() => ir({ drill: { t: 'comp', de: 'base', k } })} />
   })
   const tile = (i) => <div key={i} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{MESC[i]}</span>{D && <Chip tono='z'>{origen(i)}</Chip>}</div>
-    <div style={{ fontSize: D ? 20 : 14.5, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}><Val v={mx(b.baseCLP[i], b.baseUF[i])} /></div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: D ? 11 : 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{MESC[i]}</span>{D && <Chip tono='z'>{origen(i)}</Chip>}</div>
+    <div style={{ fontSize: D ? 21 : 14, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}><Val v={mx(b.baseCLP[i], b.baseUF[i])} /></div>
     <div style={{ fontSize: 11, color: C.muted }}>{monedaActual() === 'clp' ? ufs(b.baseUF[i]) : ' '}</div></div>
   const mesesTxt = `${d.cierres[0]?.ym.slice(5, 7)}-${d.cierres[0]?.ym.slice(2, 4)} a ${d.cierres[11]?.ym.slice(5, 7)}-${d.cierres[11]?.ym.slice(2, 4)}`
   // Todo en el plano de Vendido (neto de comisiones): meta de ventas − recurrente neto.
@@ -124,7 +124,7 @@ export function Base({ X }) {
 // ── 3 · Costos ──
 // Cada partida se edita por su monto 2027 o por su aumento (puede ser negativo), enlazados en los dos sentidos. Sueldos y leyes sociales van por persona, con su reajuste propio.
 export function Costos({ X }) {
-  const { datos: d, est, D, ui, setUI, M, setCosto, patchCosto, addCosto, delCosto, resetCostos, setPal } = X
+  const { datos: d, est, D, ui, setUI, M, setCosto, patchCosto, addCosto, delCosto, resetCostos, setPal, ir: ir1 } = X
   const k = est.esc, p = est.p[k], e = M.esc[k], nomE = X.nomEsc(k), Yb = d.anioBase
   const base26 = est.costos.reduce((a, c) => a + costoAnualBase(c, Yb), 0), tot26 = est.costos.reduce((a, c) => a + c.m * 12, 0)
   const val = (c, kk) => monto27(c, est.p[kk].alza)
@@ -176,10 +176,10 @@ export function Costos({ X }) {
   }
   return <>
     <Titulo>Costos {Y}</Titulo>
-    <Grid cols={3} colsM={2}>
-      <Mini ic='doc' label='Presupuesto vigente' value={m26(tot26)} sub={`costos de oficina × 12, sin PPM${Math.abs(base26 - tot26) > 1 ? ' · ' + Yb + ' con sus reajustes ' + m26(base26) : ''}`} />
-      <Mini ic='egr' label={`Presupuesto de costos ${nomE} ${Y}`} value={mm(e.costos)} sub={`${dc.sg}${dc.abs} contra hoy`} />
-      <Mini ic='com' label='Comisiones' value={mm(e.terc)} sub={`${pc(p.terc)} de lo cobrado`} />
+    {/* H02 / N05 / R3: una sola cifra de costos y un solo nombre; el «vigente» pasa al detalle («Cómo se calcula»); tarjetas A2 con textos breves */}
+    <Grid cols={2} colsM={2} gap={D ? 10 : 8}>
+      <Tarjeta tono='t' ic='egr' label={nombreComponente('costos', CFG)} aria={nombreComponente('costos', CFG)} izq={{ cap: `${nomE} ${Y}`, val: mm(e.costos) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
+      <Tarjeta tono='w' ic='com' label='Comisiones' aria='Comisiones' izq={{ cap: 'Del cobrado', val: mm(e.terc) }} cmp={<span>{pc(p.terc)} de lo cobrado</span>} onClick={() => X.irEsc('res')} />
     </Grid>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -187,18 +187,19 @@ export function Costos({ X }) {
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
           <Fila nombre='Comisiones' peq={`variable · ${pc(p.terc)} de lo cobrado · se ajusta arriba`} valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
-          <Fila nombre='Impuestos y patentes' peq='PPM · lo pagado hoy · fuera del total, se ve en Impuesto' valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
-          <Fila tot sin nombre='Presupuesto de costos + comisiones' valor={mm(e.costos + e.terc)} />
+          <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
+          <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>
         </Panel>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cómo se calcula'><Lista items={['Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cómo se calcula'><Lista items={[<span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }
-const cap = { fontSize: 10.5, fontWeight: 600, color: C.muted }
-const eti = { fontSize: 10.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent, marginBottom: 4 }
+const TXc = (/** @type {string} */ k) => CFG.tributario.textos[k]
+const cap = { fontSize: 11, fontWeight: 600, color: C.muted }
+const eti = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent, marginBottom: 4 }
 const eti2 = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }
 
 // Aclaraciones de las tarjetas del paso 2 (antes en el plegable de la tarjeta): se muestran en la página del componente. `ir` = a dónde llevaba la tarjeta, ahora un enlace de la página.
