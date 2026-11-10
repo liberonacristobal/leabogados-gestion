@@ -91,3 +91,24 @@ test('otros grupos de sueldos y otras escenarios de partida: el reparto por soci
   assert.deepEqual(Object.keys(st.p), ['a', 'b']); assert.equal(st.esc, 'a'); assert.equal(st.p.a.terc, 20)
   assert.equal(modeloPresupuesto(base, st).lista.length, 2)
 })
+
+// ── Configuración guardada: validarConfig y diferenciaConfig ──
+import { validarConfig, diferenciaConfig } from './../supabase/functions/_shared/presupuestoConfig.js'
+test('validarConfig: lo válido pasa; rangos, componentes, reparto y tramos se rechazan con su ruta', () => {
+  assert.equal(validarConfig({}).ok, true); assert.equal(validarConfig({ reserva: { porcentaje: 20 } }).ok, true)
+  const r = (o) => validarConfig(o).errores.map((e) => e.ruta)
+  assert.deepEqual(r({ reserva: { porcentaje: 120 } }), ['reserva.porcentaje'])
+  assert.deepEqual(r({ escenarios: [] }), ['escenarios'])
+  assert.ok(r({ escenarios: [{ k: 'a', n: 'A', t: 0, p: { g: 10, alza: -1, terc: 5, dias: 12 } }] }).includes('escenarios.0.p.alza'))
+  assert.ok(r({ socios: { reparto: { A: 0.6, B: 0.5 } } }).includes('socios.reparto')); assert.equal(validarConfig({ socios: { reparto: { A: 0.6, B: 0.4 } } }).ok, true)
+  assert.ok(r({ tributario: { idpc: [{ hasta: 2028, tasa: 15 }, { hasta: 2027, tasa: 12 }, { tasa: 25 }] } }).includes('tributario.idpc.1.hasta'))
+  assert.ok(r({ tributario: { idpc: [{ hasta: 2027, tasa: 12.5 }] } }).includes('tributario.idpc.0.hasta'))
+  assert.ok(r({ componentes: [{ k: 'ventas', n: 'V' }] }).includes('componentes'))
+  assert.ok(r({ moneda: { simbolo: '' } }).includes('moneda.simbolo'))
+})
+test('diferenciaConfig: solo guarda lo que cambia respecto del defecto y vuelve a mezclarse igual', () => {
+  const cfg = configPresupuesto({ reserva: { porcentaje: 20 }, tributario: { regimen: 'Régimen X' } })
+  const d = diferenciaConfig(cfg)
+  assert.deepEqual(d, { reserva: { porcentaje: 20 }, tributario: { regimen: 'Régimen X' } })
+  assert.deepEqual(configPresupuesto(d), cfg); assert.deepEqual(diferenciaConfig(CONFIG_DEFECTO), {})
+})

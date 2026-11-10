@@ -238,7 +238,7 @@ export function Grid({ cols = 4, colsM = 2, gap = 10, children, style }) {
 }
 
 // Flecha de comparación: ↑ si la cifra está sobre la referencia y ↓ si está bajo; verde = a favor, rojo = en contra.
-export const Flecha = ({ sube, bueno, children }) => <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', color: bueno ? C.greenText : C.overdueText }}>{sube ? '↑' : '↓'} {children}</span>
+export const Flecha = ({ sube, bueno, children }) => <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', color: bueno == null ? C.muted : bueno ? C.greenText : C.overdueText }}>{sube ? '↑' : '↓'} {children}</span>
 
 // Tarjeta de un componente (A2): SIN detalle plegable, siempre del mismo alto; tocarla abre su página de detalle (la flecha › lo indica) y ahí viven las aclaraciones.
 // Escritorio: carril de ícono a la izquierda y, a su derecha, rótulo, dos cifras con su rótulo y UNA línea de comparación con flechas. Celular (dos por fila): ícono 26 px y rótulo en una línea,
@@ -293,7 +293,7 @@ export const ChipBtn = ({ children, onClick, aria, error, cuadrado, titulo }) =>
  * Pasos del presupuesto en una sola fila de círculos (check en los revisados), con la línea de tiempo encima: el año base sobre el paso 1 y el año del presupuesto sobre los pasos 2 a 6.
  * En escritorio cada círculo lleva su nombre; en el celular solo los círculos y, debajo, «Paso n de 6» con el nombre del paso activo.
  */
-export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc }) {
+export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acciones, debajo }) {
   const D = useIsDesktop(), n = nombres.length
   const cap = { fontSize: D ? 11 : 10.5, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.accent, paddingBottom: 5, borderBottom: `1px solid ${C.done}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -305,10 +305,11 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc }) {
           {D && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>}
         </button> })}
     </div>
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-      <div><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div></div>
-      {D && desc && <div style={{ fontSize: 12.5, color: C.muted }}>{desc[activa]}</div>}
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'nowrap' }}>
+      <div style={{ minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: C.muted }}>Paso {activa + 1} de {n}</div><div style={{ fontSize: D ? 21 : 19, fontWeight: 800, color: C.accent, letterSpacing: -0.3, lineHeight: 1.2 }}>{nombres[activa]}</div>{D && desc && <div style={{ fontSize: 12.5, color: C.muted }}>{desc[activa]}</div>}</div>
+      {acciones && <div style={{ flexShrink: 0 }}>{acciones}</div>}
     </div>
+    {debajo}
   </div>
 }
 
@@ -325,4 +326,28 @@ export function Pliegue({ t, v, children, abierto }) {
     </summary>
     <div style={{ padding: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: `1px solid ${C.border}` }}>{children}</div>
   </details>
+}
+
+/** Resumen del paso 5 (H06): una sola tarjeta de tres cifras que siguen la cascada del escenario elegido: Margen → Resultado → Retiros. Margen siempre en $. Cada celda abre su detalle. */
+export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onResultado, onRetiros }) {
+  const D = useIsDesktop()
+  const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '12px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Margen' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
+    <div style={{ ...LBL, color: C.accent, whiteSpace: 'nowrap' }}>{rot}</div>
+    <div style={{ fontSize: D ? 22 : 16, fontWeight: 800, letterSpacing: D ? -0.6 : -0.4, color: ult ? C.greenText : C.accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, whiteSpace: 'nowrap' }}><Val v={v} /></div>
+    {D && <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>}
+  </div>
+  return <div>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después de la reserva', onRetiros, true)}</div>
+    <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc} · elegido</div>
+  </div>
+}
+
+/** Estado vacío de un paso: título, la causa, los pasos siguientes numerados y los botones (el primero es el principal). */
+export function VacioPaso({ titulo, causa, pasos = [], acciones = [] }) {
+  return <div style={{ background: C.card, border: `1px dashed ${C.done}`, borderRadius: 12, padding: '18px 18px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+    <div style={{ fontWeight: 800, color: C.accent, fontSize: 15 }}>{titulo}</div>
+    <div style={{ color: C.muted, fontSize: 13.5 }}>{causa}</div>
+    {pasos.length > 0 && <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>{pasos.map(([n, t, s], i) => <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i ? `1px solid ${C.border}` : 'none' }}><span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${C.done}`, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: C.muted, flexShrink: 0 }}>{n}</span><div style={{ fontSize: 13.5 }}><b style={{ color: C.accent }}>{t}</b><div style={{ color: C.muted, fontSize: 12.5 }}>{s}</div></div></div>)}</div>}
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{acciones.map(([t, go, primary]) => <Btn key={t} primary={primary} onClick={go}>{t}</Btn>)}</div>
+  </div>
 }

@@ -76,3 +76,17 @@ test('parte por socio: 1, 2 y 3 socios con partes iguales; «Sin socio» no cuen
   cerca(parteMeta(S(2), 'S0', cfg) + parteMeta(S(2), 'S1', cfg), 1, 1e-12); cerca(partePorSocio(S(2), cfg), 0.5, 1e-12)
   assert.equal(partePorSocio([], undefined), 0)
 })
+
+// ── Comparar versiones: diferencias estructuradas con metas y notas ──
+import { diferenciaEstructurada, diferenciaSupuestos } from './../supabase/functions/_shared/presupuesto.js'
+test('diferencia estructurada: agrupa Supuestos, Costos, Metas y Notas; solo lo que cambió; igual da vacío', () => {
+  const f = { mm: (n) => `$${(n / 1e6).toFixed(1)}M`, pc: (n) => `${n} %` }
+  const A = estadoInicial({ costos, tasa: 12.5 }), B = JSON.parse(JSON.stringify(A))
+  assert.deepEqual(diferenciaEstructurada(A, B, f), [])
+  B.tasaIDPC = 15; B.p.base.g = 12; B.costos[0].m = 5_500_000; B.metas = { ancla: 'retiros', valor: 200_000_000, ratio: null }; B.notas = { 2: 'Revisar alza' }
+  const d = diferenciaEstructurada(A, B, f), g = (x) => d.filter((r) => r.grupo === x)
+  assert.equal(g('Supuestos').length, 2); assert.equal(g('Costos').length, 1); assert.equal(g('Metas').length, 1); assert.equal(g('Notas').length, 1)
+  assert.deepEqual(g('Costos')[0], { grupo: 'Costos', etiqueta: 'Sueldos · por mes', antes: '$5.0M', despues: '$5.5M' })
+  assert.equal(g('Notas')[0].despues, 'Revisar alza'); assert.equal(g('Notas')[0].antes, '—')
+  assert.ok(diferenciaSupuestos(A, B, f).some((x) => /Tasa de primera categoría/.test(x)))
+})
