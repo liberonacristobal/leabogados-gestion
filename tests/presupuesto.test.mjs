@@ -1,7 +1,7 @@
 // Presupuesto anual: modelo por escenario, migración, diferencias, días de cobro. Datos de ejemplo, sin cifras reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tasaIDPCLegal, tasaPPMLegal, estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS, aUF, aPesos, ufMedia, sumaConUF } from './../supabase/functions/_shared/presupuesto.js'
+import { tasaIDPCLegal, tasaPPMLegal, estadoInicial, proyectarUF, modeloPresupuesto, resumenModelo, migrarEstado, diferenciaSupuestos, ultimosCerrados, baseMensual, mesesAtipicos, diasDeCobro, concentracion, ESCENARIOS, aUF, aPesos, ufMedia, sumaConUF, mesesCerradosAnio, distribuirMensual, seguimientoMensual } from './../supabase/functions/_shared/presupuesto.js'
 
 const costos = [
   { id: 0, n: 'Sueldos', m: 5_000_000, meses: 12, t: 'fijo', alza: null },
@@ -151,4 +151,24 @@ test('moneda: UF media ignora valores inválidos y suma con la UF de cada día',
   const r = sumaConUF([{ monto: 380_000, fecha: '2026-01-10' }, { monto: 400_000, fecha: '2026-02-10' }, { monto: 390_000, fecha: '2026-03-01' }], (f) => uf[f], 39_000)
   assert.equal(r.clp, 1_170_000); assert.ok(Math.abs(r.uf - 30) < 1e-9); assert.equal(r.sinUF, 1)
   assert.deepEqual(sumaConUF([], () => 1), { clp: 0, uf: 0, sinUF: 0 })
+})
+
+test('seguimiento: meses cerrados, reparto mensual y desviación acumulada', () => {
+  assert.equal(mesesCerradosAnio('2026-11-09', 2026), 10)
+  assert.equal(mesesCerradosAnio('2026-11-09', 2027), 0)
+  assert.equal(mesesCerradosAnio('2026-11-09', 2025), 12)
+  const d = distribuirMensual(1200, [1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+  assert.ok(Math.abs(d.reduce((a, x) => a + x, 0) - 1200) < 1e-9); assert.equal(d[2], 600)
+  assert.deepEqual(distribuirMensual(1200, null), Array(12).fill(100))
+  assert.deepEqual(distribuirMensual(1200, Array(12).fill(0)), Array(12).fill(100))
+  const pres = Array(12).fill(100), real = [110, 90, 120, null, ...Array(8).fill(null)]
+  const s = seguimientoMensual({ pres, real, cerrados: 3 })
+  assert.equal(s.realAcum, 320); assert.equal(s.presAcum, 300); assert.equal(s.des, 20)
+  assert.ok(Math.abs(s.desPct - (20 / 300) * 100) < 1e-9)
+  assert.equal(s.cierre, 320 + 900)                                    // real cerrado + presupuesto de los meses que faltan
+  assert.equal(s.meses[3].estado, 'curso'); assert.equal(s.meses[4].estado, 'venir'); assert.equal(s.meses[1].des, -10)
+  const sin = seguimientoMensual({ pres: Array(12).fill(null), real, cerrados: 3 })
+  assert.equal(sin.des, null); assert.equal(sin.cierre, null); assert.equal(sin.presAcum, null)
+  const nada = seguimientoMensual({ pres, real: Array(12).fill(null), cerrados: 0 })
+  assert.equal(nada.realAcum, 0); assert.equal(nada.des, 0); assert.equal(nada.cierre, 1200)
 })

@@ -1,9 +1,9 @@
 // Presupuesto anual · paso 4: Metas 2027. Se escribe la meta de UN componente (retiros al partir) y los demás se proyectan con la misma cascada del modelo, en cualquier dirección
 // (metasDesdeComponente en _shared/presupuesto.js). Pasos 1 y 2 muestran los mismos seis componentes de solo lectura; las metas se escriben solo aquí.
 import { C } from '../lib/base.jsx'
-import { COMPONENTES, ANCLAS, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente } from '../../supabase/functions/_shared/presupuesto.js'
-import { mm, mx, mmP, pc, sgn, Tarjeta, FldDin, Titulo, Btn, Grid, tasa27 } from '../lib/presupuestoUI.jsx'
-import { Cmp, Supuestos, ReservaBloque, SociosBloque, TablaPresupuesto, motivoMeta, nivelTxt } from '../lib/presupuestoBloques.jsx'
+import { COMPONENTES, ANCLAS, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente, reservaRecomendada } from '../../supabase/functions/_shared/presupuesto.js'
+import { mm, mx, pc, sgn, Tarjeta, FldDin, Titulo, Btn, Grid, tasa27, Pliegue } from '../lib/presupuestoUI.jsx'
+import { Cmp, Supuestos, ReservaBloque, TablaPresupuesto, motivoMeta, nivelTxt } from '../lib/presupuestoBloques.jsx'
 import { CardEsc } from './presupuestoEtapas2.jsx'
 
 /** Tono e ícono de cada componente: los mismos de la app en los pasos 1, 2 y 4. */
@@ -29,27 +29,25 @@ export function Metas({ X }) {
   const tarjeta = ([k, nombre]) => {
     const [tono, ic] = TONO_COMP[k], anc = MT.ancla === k, ref = d.referencia[k], v = valorComponente(ch, k, MT.ratio)
     const editable = ANCLAS.includes(k) && v != null
-    const der = k === 'costos' ? { cap: `Presupuesto ${an}`, val: mm(v) }
-      : { cap: anc ? `Meta ${an}` : `Proyectado ${an}`, val: editable ? <FldDin sobrio grande kind='mill' suf='M' sel={anc} clp={anc ? MT.valor : v} tasa={tasa27()} onCommit={fijar(k)} label={`Meta de ${nombre}`} /> : (v != null ? mm(v) : '—') }
+    const der = k === 'costos' ? { cap: 'Presupuesto', val: mm(v) }
+      : { cap: anc ? 'Meta' : 'Proyectado', val: editable ? <FldDin sobrio grande kind='mill' suf='M' sel={anc} clp={anc ? MT.valor : v} tasa={tasa27()} onCommit={fijar(k)} label={`Meta de ${nombre}`} /> : (v != null ? mm(v) : '—') }
     const plano = PLANO[k](MT.ratio)
     const det = [...detalleReferencia(X, k), ['Plano', plano[0]], ['Cálculo', k === 'costos' ? `presupuesto ${Y} + alza ${pc(est.p.base.alza)}` : plano[1]],
       ...(k === 'retiros' ? [['Por socio', `${mm(ch.retiros / 2)} · ${mm(ch.retiros / 24)} al mes`]] : []), ...(k === 'margen' ? [['Comisiones', `${mm(ch.terc)} (${pc(est.p.base.terc)})`]] : [])]
-    const ir = k === 'costos' ? () => X.irCostos() : k === 'margen' || k === 'retiros' ? () => X.irEscTab('imp') : () => X.irBase()
-    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} izq={{ cap: k === 'retiros' ? `${Y} real` : `Cierre ${Y} est.`, val: mx(ref.cierre, d.refUF[k].cierre) }} der={der} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} det={det} onClick={ir} aria={nombre} />
+    const ir = k === 'costos' ? () => X.irCostos() : k === 'retiros' ? () => X.ir({ drill: { t: 'socios' } }) : k === 'margen' ? () => X.irEscTab('imp') : () => X.irBase()
+    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} izq={{ cap: k === 'retiros' ? 'Real' : 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={der} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} det={det} onClick={ir} aria={nombre} />
   }
+  const rr = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post) })
   const lista = escenariosContraMeta(X.M, MT.ancla, MT.valor, MT.ratio), nivel = nivelDeMeta(lista)
   const copiar = () => { const t = `Metas ${an} · ${nombreComponente(MT.ancla)} ${mm(MT.valor)}\n` + COMPONENTES.map(([k, n]) => `${n}: ${mm(valorComponente(ch, k, MT.ratio))} (cierre ${Y} est. ${mx(d.referencia[k].cierre, d.refUF[k].cierre)})`).join('\n'); try { navigator.clipboard?.writeText(t) } catch { /* sin portapapeles */ } }
   return <>
     <Titulo right={<Btn onClick={copiar}>Copiar resumen</Btn>}>Metas {an}</Titulo>
     <Grid cols={3} colsM={1}>{COMPONENTES.map(tarjeta)}</Grid>
     {!MT.ok && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>{motivoMeta(MT.motivo)} Mientras tanto se muestra el punto de partida, sin crecimiento.</div>}
-    <ReservaBloque X={X} ch={ch} irBanco={X.onOpenBanco} />
-    <Titulo>Supuestos</Titulo>
-    <Supuestos X={X} MT={MT} />
-    <Titulo right={MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> real en UF · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel)}</b></span> : null}>Escenarios contra la meta</Titulo>
-    <Grid cols={3} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid>
-    <SociosBloque X={X} alza={est.p.base.alza} retiros={ch.retiros} ir={X.onOpenSocios} />
-    <TablaPresupuesto X={X} MT={MT} irPaso={(i) => X.ir({ etapa: i })} />
+    <Pliegue t='Reserva de caja' v={`${mm(ch.reservaCierre)} al cierre${rr.mesesCierre != null ? ` · ${rr.mesesCierre.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses` : ''}`}><ReservaBloque X={X} ch={ch} irBanco={X.onOpenBanco} /></Pliegue>
+    <Pliegue t='Supuestos · 6' v={`comisiones ${pc(est.p.base.terc)} · cobro ${est.p.base.dias} días`}><Supuestos X={X} MT={MT} /></Pliegue>
+    <Pliegue t='Escenarios contra la meta' v={MT.ok ? <span>exige <b style={{ color: C.accent }}>{sgn(ch.g)}{pc(Math.abs(ch.g))}</b> real en UF · <b style={{ color: nivel ? C.greenText : C.overdueText }}>{nivelTxt(nivel)}</b></span> : null}><div style={{ padding: '10px 12px 6px' }}><Grid cols={3} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div></Pliegue>
+    <Pliegue t={`Presupuesto ${an} · estado de resultados`} v={`retiros ${mm(ch.retiros)}`}><TablaPresupuesto X={X} MT={MT} irPaso={(i) => X.ir({ etapa: i })} /></Pliegue>
   </>
 }
 

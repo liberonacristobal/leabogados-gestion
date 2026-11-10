@@ -358,6 +358,36 @@ export function sumaConUF(movs, ufDeFecha, respaldo = null) {
   return { clp, uf, sinUF }
 }
 
+// ── Seguimiento: presupuesto contra real, mes a mes ──
+/** Meses cerrados del año `anio` a la fecha `hoyISO`: el mes en curso no cuenta. @param {string} hoyISO @param {number} anio */
+export function mesesCerradosAnio(hoyISO, anio) {
+  const y = Number(hoyISO.slice(0, 4)), m = Number(hoyISO.slice(5, 7))
+  return anio < y ? 12 : anio > y ? 0 : Math.max(0, Math.min(12, m - 1))
+}
+/** Reparte un total anual en 12 meses con una estacionalidad (pesos de cada mes); sin pesos válidos, en partes iguales. Las partes suman el total. @param {number} total @param {number[]|null} [pesos] */
+export function distribuirMensual(total, pesos = null) {
+  const t = num(total), w = (pesos || []).map((x) => Math.max(0, num(x))), sw = sum(w)
+  return Array.from({ length: 12 }, (_, i) => (w.length === 12 && sw > 0 ? (t * w[i]) / sw : t / 12))
+}
+/**
+ * Presupuesto contra real mes a mes de un componente. Un mes cuenta para la desviación solo si está cerrado y tiene real; el cierre proyectado es el real de esos meses más el presupuesto de los demás.
+ * Sin presupuesto (null) en ningún mes no hay desviación ni cierre.
+ * `curso` (por defecto sí) = el mes que sigue al último cerrado está en curso; en un año futuro no hay mes en curso.
+ * @param {{ pres:(number|null)[], real:(number|null)[], cerrados:number, curso?:boolean }} o
+ */
+export function seguimientoMensual(o) {
+  const curso = o.curso !== false
+  const hayP = o.pres.some((x) => x != null)
+  let presAcum = 0, realAcum = 0, resto = 0
+  const meses = Array.from({ length: 12 }, (_, i) => {
+    const p = o.pres[i] ?? null, r = i < o.cerrados ? o.real[i] ?? null : null, cuenta = r != null
+    if (cuenta) { realAcum += r; presAcum += num(p) } else resto += num(p)
+    return { i, pres: p, real: r, des: cuenta && p != null ? r - p : null, estado: i < o.cerrados ? 'cerrado' : curso && i === o.cerrados ? 'curso' : 'venir' }
+  })
+  const des = hayP ? realAcum - presAcum : null
+  return { meses, presAcum: hayP ? presAcum : null, realAcum, des, desPct: hayP && presAcum && des != null ? (des / presAcum) * 100 : null, cierre: hayP ? realAcum + resto : null }
+}
+
 /** Resumen por escenario que se guarda con cada versión (y sus facturados mensuales, congelados: la base se mueve cada mes). @param {ReturnType<typeof modeloPresupuesto>} m */
 export function resumenModelo(m) {
   const o = /** @type {Record<string, any>} */ ({})
