@@ -141,3 +141,14 @@ test('reserva: por defecto el aumento del año es 0 %, los retiros son todo el r
   const inv = metasDesdeComponente(base, st, { componente: 'retiros', valor: 50_000_000, ratio: 66 }), ch = cadenaMeta(base, st, inv.g, 66)
   assert.ok(Math.abs(ch.retiros - 50_000_000) < 1)
 })
+
+test('reserva en cuenta corriente editable: cambia la reserva al cierre y la recomendación, no los retiros; las metas inversas siguen cuadrando', () => {
+  const st = estado({ reserva: 10 }), a = modeloPresupuesto(base, st).esc.base, st2 = { ...st, reservaIni: 60_000_000 }, b = modeloPresupuesto(base, st2).esc.base
+  assert.equal(b.retiros, a.retiros); assert.equal(b.reserva, a.reserva)
+  assert.ok(Math.abs(b.reservaCierre - a.reservaCierre - 30_000_000) < 1e-6)
+  const ra = reservaRecomendada({ costosAnio: 144_000_000, reservaIni: st.reservaIni, reservaAnio: a.reserva, post: a.post }), rb = reservaRecomendada({ costosAnio: 144_000_000, reservaIni: st2.reservaIni, reservaAnio: b.reserva, post: b.post })
+  assert.ok(rb.brecha < ra.brecha); assert.ok(rb.mesesCierre > ra.mesesCierre)
+  const inv = metasDesdeComponente(base, st2, { componente: 'retiros', valor: 50_000_000, ratio: 66 })
+  assert.ok(Math.abs(cadenaMeta(base, st2, inv.g, 66).retiros - 50_000_000) < 1)
+  assert.equal(validarConfig({ reserva: { minima: -1 } }).ok, false); assert.equal(validarConfig({ reserva: { minima: 0 } }).ok, true)
+})

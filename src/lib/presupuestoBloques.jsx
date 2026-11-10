@@ -56,7 +56,7 @@ export function Supuestos({ X, MT }) {
     ['Días de cobro', 'dias', 'int', 'días', p.dias, (v) => setPal(rk, 'dias', Math.max(0, Math.round(v))), mm(ch.dCob), 'por cobrar al cierre'],
     ['Alza de costos', 'alza', 'pct', '%', p.alza, (v) => setPal(rk, 'alza', v), mm(ch.costos), 'de costos ' + X.datos.anio],
     ['Impuesto', 'tasa', 'pct', '%', est.tasaIDPC, (v) => setGen('tasaIDPC', Math.max(0, v)), mm(ch.idpc), 'de impuesto'],
-    ['Reserva de caja', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'de aumento'],
+    ['Aumento de reserva', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'de aumento'],
     ['Facturado / vendido bruto', 'ratio', 'pct', '%', MT.ratio, (v) => parche((c) => { c.metas = { ...(c.metas || {}), ratio: v == null ? null : Math.min(100, Math.max(1, v)) } }), MT.ratio != null ? mm(ch.fact) : '—', 'facturables'],
     ['Comisión sobre ventas', 'cv', 'pct', '%', MT.cv, (v) => parche((c) => { c.metas = { ...(c.metas || {}), cv: v == null ? null : Math.min(99, Math.max(0, v)) } }), ch.comisVentas != null ? mm(ch.comisVentas) : '—', 'de comisiones de venta'],
   ]
@@ -72,7 +72,7 @@ export function Supuestos({ X, MT }) {
 }
 
 // ── Reserva de caja ──
-/** Reserva mínima + reserva del año = reserva al cierre, en meses de costos, y la recomendación (regla simple de criterio). Por confirmar contra el saldo del Banco. */
+/** Reserva en cuenta corriente + aumento del año = reserva al cierre, en meses de costos, y la recomendación (regla simple de criterio). */
 export function ReservaBloque({ X, ch, irBanco }) {
   const D = useIsDesktop(), { est } = X
   const r = reservaRecomendada({ costosAnio: ch.costos, reservaIni: est.reservaIni, reservaAnio: ch.reserva, post: Math.max(0, ch.post), cfg: CFG })

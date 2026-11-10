@@ -2,7 +2,7 @@
 // valores del tenant actual como defecto. `configPresupuesto(override)` mezcla lo que traiga el estudio (hoy `BRAND.presupuesto`, si existe) sobre el defecto; las reglas de
 // presupuesto.js reciben el resultado como `cfg` (opcional: sin él usan CONFIG_DEFECTO y reproducen exactamente las cifras de siempre; prueba en tests/presupuestoConfig.test.mjs).
 //
-// Qué es configurable: lista de componentes de las metas (clave, nombre, tono, ícono, orden), escenarios de partida y sus palancas, reserva mínima y regla de reserva, reparto
+// Qué es configurable: lista de componentes de las metas (clave, nombre, tono, ícono, orden), escenarios de partida y sus palancas, reserva en cuenta corriente y regla de reserva, reparto
 // de las metas entre socios, reglas tributarias por régimen y año (tasa de primera categoría y PPM legal), categorías de costo fijas y por persona, y la moneda reajustable (módulo país).
 // Los textos del régimen (PPM, F29, abril, IVA) salen de `tributario.textos` y la lista de socios de `socios.lista` (por defecto, los administradores de la app). Lo guardado por el estudio vive en la tabla
 // `presupuesto_config` (solo diferencias; supabase/migrations). Sigue cableada la fuente de la UF (mindicador.cl, en compartido.jsx).
@@ -40,7 +40,7 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
   /** Escenario cuyos supuestos usan las metas (si no existe, el primero de la lista). */
   escenarioMetas: 'base',
   maxEscenarios: 5,
-  /** Reserva de caja: mínima ya en caja al comenzar el año (por confirmar contra el Banco), % del resultado después de impuesto que se agrega a la reserva (0 por defecto: solo aumenta si el usuario lo fija o adopta la recomendada), y la regla recomendada (meses de costos a los que llegar, repartidos por trimestre). */
+  /** Reserva de caja: en cuenta corriente al comenzar el año (no se toca), % del resultado después de impuesto que se agrega a la reserva (0 por defecto: solo aumenta si el usuario lo fija o adopta la recomendada), y la regla recomendada (meses de costos a los que llegar, repartidos por trimestre). */
   reserva: { minima: 30_000_000, porcentaje: 0, meses: 3, trimestres: 4 },
   /** Reparto de las metas entre socios: 'iguales' o un mapa { nombre: fracción }. «Sin socio» no tiene meta. */
   socios: { reparto: 'iguales', lista: null },   // lista = nombres de los socios del estudio; null = los administradores de la app (ADMIN_NAMES)

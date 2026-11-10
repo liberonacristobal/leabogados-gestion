@@ -107,7 +107,7 @@ export function DIni({ X }) {
     <div style={{ display: 'grid', gridTemplateColumns: X.D ? 'repeat(3,minmax(0,1fr))' : '1fr', gap: 12 }}>
       <label style={{ display: 'block' }}><span style={{ ...LBL, color: C.accent, fontSize: 11 }}>Año del presupuesto</span><select value={anio} onChange={(e) => setAnio(Number(e.target.value))} style={{ display: 'block', width: '100%', height: 44, marginTop: 3, borderRadius: 8, border: `1px solid ${C.border}`, background: C.bgSoft, fontFamily: 'inherit', fontWeight: 700, padding: '0 8px' }}>{[1, 2, 3].map((n) => <option key={n} value={d.anioBase + n}>{d.anioBase + n}</option>)}</select></label>
       {modo === 'meta' && <Campo label='Meta de retiros del año ($)' num value={meta} onCommit={(v) => setMeta(Math.max(0, v))} />}
-      <Campo label='Reserva inicial en caja ($)' num value={reserva} onCommit={(v) => setReserva(Math.max(0, v))} />
+      <Campo label='Reserva en cuenta corriente ($)' num value={reserva} onCommit={(v) => setReserva(Math.max(0, v))} />
     </div>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Btn primary onClick={() => X.prepararDesdeCero({ modo, meta, reserva, anio })}>Crear borrador</Btn>{X.esAdmin && <Btn onClick={() => X.ir({ drill: { t: 'cfg' } })}>Configuración del presupuesto</Btn>}</div>
   </div>
