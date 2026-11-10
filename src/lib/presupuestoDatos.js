@@ -7,12 +7,16 @@ import { useMemo } from 'react'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
 import { resultadoMes, ufDelDia, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio } from './cifras.js'
-import { ultimosCerrados, baseMensual, diasDeCobro, concentracion } from '../../supabase/functions/_shared/presupuesto.js'
+import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026 } from '../../supabase/functions/_shared/presupuesto.js'
+import { retirosSocios } from '../vistas/SociosView.jsx'
 
 /** Categorías de costo que son fijas (el resto se trata como discrecional). */
 export const CATEGORIAS_FIJAS = ['Remuneraciones', 'Leyes sociales', 'Arriendo y espacio', 'Arriendo y GGCC', 'Contadora']
+/** Categorías cuyas filas son por persona: cada una es una partida propia (sueldo y leyes sociales de cada uno, con su reajuste). El resto de las categorías se suma en una sola partida. */
+export const CATEGORIAS_POR_PERSONA = ['Remuneraciones', 'Leyes sociales']
 
 const hoyISO = () => new Date().toLocaleDateString('en-CA')
+const ym = (/** @type {number} */ y, /** @type {number} */ m) => `${y}-${String(m).padStart(2, '0')}`
 
 /**
  * @param {{ sales:any[], billing:any[], terceros:any[], costosOfiRows:any[], expenses:any[], clients:any[], anticipos:any[], anioSel?:number|null }} p
@@ -26,13 +30,13 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Facturado propio por mes, de enero del año anterior hasta el mes en curso (el en curso va «a la fecha»). Es lo pesado: solo se recalcula si cambian las fuentes.
   const serie = useMemo(() => {
     const deps = { billing, terceros, costosOfiRows, expenses, clients, ufd: ufDias, ufFb: ufRef }
-    /** @type {Record<string,{fac:number,facUF:number}>} */
+    /** @type {Record<string,{fac:number,facUF:number,cos:number}>} */
     const o = {}
     for (let y = currentYear - 1; y <= currentYear; y++) for (let mm = 1; mm <= 12; mm++) {
       const ym = `${y}-${String(mm).padStart(2, '0')}`
       if (ym > ymHoy) break
       const r = resultadoMes(fuRes, deps, ym)
-      o[ym] = { fac: r.fac || 0, facUF: r.facUF || 0 }
+      o[ym] = { fac: r.fac || 0, facUF: r.facUF || 0, cos: r.cos || 0 }
     }
     return o
   }, [fuRes, billing, terceros, costosOfiRows, expenses, clients, ufDias, ufRef, ymHoy])
@@ -121,24 +125,64 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const rec = (sales || []).filter((s) => !s.deleted_at && esRecurrente(s) && !esSubarriendo(s))
   const recurrente = { n: rec.length, anualCLP: rec.reduce((a, s) => a + ventaCLP(s, ufRef), 0), anualUF: rec.reduce((a, s) => a + ventaUF(s, ufRef), 0) }
 
-  // Costos de oficina vigentes por categoría (sin PPM ni ingresos), con la regla de vigencia de resultadoMes; el PPM aparte.
+  // Costos de oficina: lo vigente al comenzar el año del presupuesto (un reajuste con `desde` anterior ya rige; uno posterior queda al monto previo), con la regla de vigencia de resultadoMes.
+  // Sueldos y leyes sociales van por persona (una partida por fila, con su vigencia); el resto, sumado por categoría. El PPM va aparte (lo pagado hoy).
   const eff = (/** @type {any} */ r) => (r.desde && ymHoy < String(r.desde).slice(0, 7) ? (r.monto_prev ?? r.monto) : r.monto)
-  /** @type {Record<string,number>} */
-  const porCat = {}
+  const effAnio = (/** @type {any} */ r) => (r.desde && `${anio}-01` < String(r.desde).slice(0, 7) ? (r.monto_prev ?? r.monto) : r.monto)
+  /** @type {any[]} */
+  const costos = []
+  /** @type {Record<string,any>} */
+  const agrupa = {}
   let ppmMes = 0
   ;(costosOfiRows || []).forEach((r) => {
     if (!r || r.es_ingreso) return
-    const v = Number(eff(r)) || 0
-    if (esPPMcosto(r)) { ppmMes += v; return }
-    porCat[r.categoria || 'Otros'] = (porCat[r.categoria || 'Otros'] || 0) + v
+    if (esPPMcosto(r)) { ppmMes += Number(eff(r)) || 0; return }
+    const v = Number(effAnio(r)) || 0, cat = r.categoria || 'Otros'
+    if (!(v > 0)) return
+    if (CATEGORIAS_POR_PERSONA.includes(cat)) {
+      const base = `${cat}|${r.item || ''}`, n = costos.filter((c) => String(c.id).startsWith(base)).length
+      const vig = r.desde && r.monto_prev != null && Number(r.monto_prev) > 0 ? { desde: String(r.desde).slice(0, 10), mPrev: Math.round(Number(r.monto_prev)) } : {}
+      costos.push({ id: n ? `${base}#${n}` : base, n: r.item || cat, m: Math.round(v), meses: 12, t: 'fijo', alza: /** @type {number|null} */ (null), g: cat, ...vig })
+    } else if (agrupa[cat]) agrupa[cat].m += v
+    else costos.push((agrupa[cat] = { id: cat, n: cat, m: v, meses: 12, t: CATEGORIAS_FIJAS.includes(cat) ? 'fijo' : 'discrecional', alza: /** @type {number|null} */ (null) }))
   })
-  const costos = Object.entries(porCat).filter(([, v]) => v > 0).map(([n, v], i) => ({ id: i, n, m: Math.round(v), meses: 12, t: CATEGORIAS_FIJAS.includes(n) ? 'fijo' : 'discrecional', alza: /** @type {number|null} */ (null) }))
+  costos.forEach((c) => { c.m = Math.round(c.m) })
+
+  // Presupuesto de costos del año en curso por mes (misma regla de Presupuesto vs real, en Resultado del año): vigente por mes, sin PPM ni ingresos.
+  const budMes = (/** @type {number} */ mes) => (costosOfiRows || []).filter((r) => r && r.activo !== false && !r.es_ingreso && !esPPMcosto(r)).reduce((a, r) => a + (Number(r.desde && `${currentYear}-${String(mes).padStart(2, '0')}` < String(r.desde).slice(0, 7) ? (r.monto_prev ?? r.monto) : r.monto) || 0), 0)
+  const mesHoy = Number(hoy.slice(5, 7)), cerrados = Array.from({ length: mesHoy - 1 }, (_, i) => i + 1), faltan = Array.from({ length: 12 - (mesHoy - 1) }, (_, i) => mesHoy + i)
+  const costos26 = {
+    real: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cos || 0), 0), ppto: cerrados.reduce((a, m) => a + budMes(m), 0), pptoResto: faltan.reduce((a, m) => a + budMes(m), 0),
+    desde: cerrados.length ? ym(currentYear, 1) : null, hasta: cerrados.length ? ym(currentYear, cerrados.length) : null,
+  }
+
+  // Retiros y sueldos de los socios del año: la misma fuente de la página Socios (retirosSocios).
+  const RS = useMemo(() => retirosSocios({ expenses, clients, socios: [], yr: currentYear }), [expenses, clients])
+  const retiros26 = {
+    total: RS.totalRet, n: RS.nRet, porSocio: RS.retTot, sueldos: RS.sueldos, sueldoTot: RS.sueldoTot, socios: RS.SOC,
+    desde: RS.movs.length ? RS.movs.reduce((a, x) => (x.date < a ? x.date : a), '9999-99-99') : null, hasta: RS.movs.length ? RS.movs.reduce((a, x) => (x.date > a ? x.date : a), '0000-00-00') : null,
+  }
 
   // Pagos a terceros como % de lo cobrado (comisiones pagadas del año contra cobrado propio): los mismos totales de Inicio.
   const terc = (ing?.total || 0) > 0 ? ((com?.total || 0) / ing.total) * 100 : null
 
+  // Referencia 2026: real a la fecha + lo que resta del año (promedio de los últimos 3 meses cerrados por componente; helper único referencia2026).
+  const ult3 = cerrados.slice(-3)
+  const referencia = referencia2026({
+    hoyISO: hoy,
+    aFecha: { ventas: oficiales.vend.clp, fact: oficiales.fact.clp, caja: oficiales.cob.clp, retiros: retiros26.total },
+    ultimos: {
+      ventas: ult3.map((m) => (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0)),
+      fact: ult3.map((m) => serie[ym(currentYear, m)]?.fac ?? 0),
+      caja: ult3.map((m) => cobMes[ym(currentYear, m)] ?? 0),
+    },
+    costos: { real: costos26.real, pptoResto: costos26.pptoResto }, terc: (ing?.total || 0) > 0 ? ((com?.total || 0) / ing.total) * 100 : null,
+  })
+  // Relación facturado/vendido del año a la fecha: estimación propia (aún sin ciclo completo), para llevar una meta de ventas a facturado.
+  const ratioFactVend = oficiales.vend.clp > 0 ? (oficiales.fact.clp / oficiales.vend.clp) * 100 : null
+
   return {
-    hoy, anio, anioBase: currentYear, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    hoy, anio, anioBase: currentYear, costos26, retiros26, referencia, ratioFactVend, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios,
   }
