@@ -3913,19 +3913,31 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
   return out
 }
 
-// Vendido por socio (misma definición que metricasAnio de Inicio: Activo + Terminado, sin subarriendo, renovación anual de recurrentes).
-export function vendidoPorSocio(sales=[], clients=[], ufRef=0, y=new Date().getFullYear(), ym=null){
+// Cifras gemelas BRUTO | NETO del Vendido en una sola línea y del mismo tamaño: la principal en tono normal y la otra tenue; tocar la tenue la hace principal (alterna). No agranda la tarjeta.
+export function CifrasBrutoNeto({ bruto, neto, princ='bruto', onAlt, desk }){
+  const fz=desk?17:13, cell=(k,rot,v)=>{ const on=princ===k; return (
+    <div key={k} onClick={on?undefined:e=>{ e.stopPropagation(); onAlt&&onAlt(k) }} style={{minWidth:0,cursor:on?'inherit':'pointer',opacity:on?1:.45}}>
+      <div style={{fontSize:9,fontWeight:700,letterSpacing:.4,color:C.accent,lineHeight:1.1}}>{rot}</div>
+      <div style={{fontSize:fz,fontWeight:800,letterSpacing:'-.4px',color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>
+    </div>) }
+  return <div style={{display:'flex',gap:desk?16:12,marginTop:3,minWidth:0}}>{cell('bruto','BRUTO',bruto)}{cell('neto','NETO',neto)}</div>
+}
+
+// Vendido NETO por socio (misma definición que metricasAnio de Inicio: Activo + Terminado, sin subarriendo, renovación anual de recurrentes).
+// Cada venta lleva su bruto (b), su comisión a terceros (c, comisionesVenta().anual, la de metricasAnio) y el neto (m = b − c): la comisión se descuenta al socio dueño de esa venta.
+export function vendidoPorSocio(sales=[], clients=[], ufRef=0, y=new Date().getFullYear(), ym=null, deps={}){
   const cliById={}; (clients||[]).forEach(c=>{ if(c) cliById[String(c.id)]=c })
   const items=[]
   ;(sales||[]).forEach(s=>{ if(!ventaVendidaEnAnio(s,y)) return
     const ini=inicioVentaYM(s), mes=esRecurrente(s)&&Number(s.year)<Number(y)?`${y}-${ini.slice(5,7)}`:ini
-    items.push({s, soc:socioDeVenta(s,{cliById}), m:ventaCLP(s,ufRef), ym:mes}) })
+    const b=ventaCLP(s,ufRef), c=comisionesVenta(s,deps.terceros,deps.billing,ufRef).anual
+    items.push({s, soc:socioDeVenta(s,{cliById}), m:b-c, b, c, ym:mes}) })
   return items
 }
 
 // Catálogo del Comparativo («+ Agregar indicador»). per:'flujo' = depende de Mes/Año; 'hoy' = foto viva. f: '$' | 'n' | '%' | 'd'.
 export const PS_KPIS=[
-  {g:'Ingresos',k:'vend',l:'Vendido',ls:'Vendido',f:'$',per:'flujo'},
+  {g:'Ingresos',k:'vend',l:'Vendido neto',ls:'Vend. neto',f:'$',per:'flujo'},
   {g:'Ingresos',k:'fac',l:'Facturado',ls:'Facturado',f:'$',per:'flujo'},
   {g:'Ingresos',k:'ireal',l:'Ingreso real',ls:'Ingreso real',f:'$',per:'flujo'},
   {g:'Ingresos',k:'compag',l:'Comisiones pagadas',ls:'Com. pagadas',f:'$',per:'flujo'},

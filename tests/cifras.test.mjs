@@ -64,3 +64,29 @@ test('redondeo con cifra fija: la cifra que se ve en otra tarjeta no se mueve', 
   assert.equal(r[0], 6)   // fija: redondeo normal
   assert.equal(r.reduce((a, x) => a + x, 0), 22)
 })
+
+// Vendido neto: la cascada Bruto − Comisión = Neto se lee exacta, con el neto redondeado solo (la misma cifra en Inicio y Presupuesto).
+import { cascadaVendido, kpisPorSocio } from '../src/lib/cifras.js'
+test('cascada del vendido: neto + comisión = bruto redondeado, y el neto es el mismo que se ve solo', () => {
+  const m = { bruto: 696_149_000, costo: 15_849_000, neto: 680_300_000 - 51_000 + 0, brutoUF: 17533.4, costoUF: 401.2, netoUF: 17132.2 }
+  m.neto = m.bruto - m.costo                                                        // 680.300.000 → «$680,3M»
+  const p = cascadaVendido(m, false)
+  assert.equal(p.neto, Math.round(m.neto / 1e5) * 1e5)                              // el neto no se mueve por el ajuste
+  assert.equal(p.neto + p.costo, p.bruto); assert.equal(p.bruto, Math.round(m.bruto / 1e5) * 1e5)
+  const u = cascadaVendido(m, true)
+  assert.equal(u.neto, Math.round(m.netoUF)); assert.equal(u.neto + u.costo, u.bruto); assert.equal(u.bruto, Math.round(m.brutoUF))
+  // neto con decimales .4 y comisión .5: el neto sigue siendo su propio redondeo
+  const q = cascadaVendido({ ...m, bruto: 696_140_000, costo: 15_840_000, neto: 680_300_000 }, false)
+  assert.equal(q.neto, 680_300_000)
+})
+
+test('Vendido neto por socio: cada socio descuenta la comisión de SUS ventas y Socios + Sin socio = Oficina al peso', () => {
+  const V = [
+    { soc: 'A', ym: '2026-02', m: 1000.4 - 100.2, b: 1000.4, c: 100.2 }, { soc: 'B', ym: '2026-03', m: 500.4 - 0, b: 500.4, c: 0 },
+    { soc: 'Sin socio', ym: '2026-05', m: 250.4 - 50.2, b: 250.4, c: 50.2 }, { soc: 'A', ym: '2026-06', m: 333.3 - 33.3, b: 333.3, c: 33.3 },
+  ]
+  const K = kpisPorSocio({ P: [], V, ym: '2026-11' }), of = K.vend(null, 'ytd'), suma = ['A', 'B', 'Sin socio'].reduce((a, s) => a + K.vend(s, 'ytd'), 0)
+  assert.equal(suma, of); assert.equal(of, Math.round(V.reduce((a, x) => a + x.m, 0)))
+  assert.equal(K.vend('A', 'ytd'), 1200)                                             // A: (1000,4 − 100,2) + (333,3 − 33,3), solo la comisión de sus ventas
+  assert.ok(Math.abs(K.vend('B', 'ytd') - 500.4) < 1)                                // B no tenía comisión (el peso de ajuste de redondearPartes cae en el mayor resto)
+})

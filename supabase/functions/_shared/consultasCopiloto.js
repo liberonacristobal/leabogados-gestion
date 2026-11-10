@@ -204,7 +204,7 @@ export function crearConsultas({ cargarComprasSII, comprasEnPlazoReclamo, compra
     return {
       resumen: { anio: r.anio, calculado_a_las: hora, plano: 'Mismo cálculo de Inicio › Resultado del año. Facturado = honorarios emitidos en el año (monto del DTE). Cobrado propio = depósitos conciliados por fecha del depósito, sin subarriendo ni reembolsos; las UF usan la UF del día de cada movimiento.',
         secciones: r.secs.map(x => ({ nombre: x.t, avance: x.pct == null ? null : `${x.pct}%`, uf: x.uf, pesos: x.clp, detalle: (x.lines || []).map(l => ({ concepto: l[0], uf: l[1], pesos: l[2] })) })), nota: 'Si preguntan por otro año, dilo: aquí está el año elegido en Inicio.' },
-      tarjeta: { titulo: `Resultado ${r.anio}`, lineas: r.secs.map(x => ({ n: x.t, sub: x.pct == null ? '' : `${x.pct}%${x.t === 'Ventas' ? ' de la meta' : x.t === 'Cobranza' ? ' de la meta de cobranza' : /^Facturado/.test(x.t) ? ' de lo vendido' : /^(Margen|Pérdida)/.test(x.t) ? ' sobre los ingresos' : ''}`, valor: `${x.uf} · ${x.clp}`, destino: { tab: 'dashboard' } })), total: null, fuente: `Fuente: la misma cifra de Inicio › Resultado del año, a las ${hora}. Cobrado = depósitos conciliados por fecha del depósito.` },
+      tarjeta: { titulo: `Resultado ${r.anio}`, lineas: r.secs.map(x => ({ n: x.t, sub: x.pct == null ? '' : `${x.pct}%${x.t === 'Vendido neto' ? ' de la meta' : x.t === 'Cobranza' ? ' de la meta de cobranza' : /^Facturado/.test(x.t) ? ' de lo vendido bruto' : /^(Margen|Pérdida)/.test(x.t) ? ' sobre los ingresos' : ''}`, valor: `${x.uf} · ${x.clp}`, destino: { tab: 'dashboard' } })), total: null, fuente: `Fuente: la misma cifra de Inicio › Resultado del año, a las ${hora}. Cobrado = depósitos conciliados por fecha del depósito.` },
     }
   }
 

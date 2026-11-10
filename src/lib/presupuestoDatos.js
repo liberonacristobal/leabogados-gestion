@@ -6,7 +6,7 @@
 import { useMemo } from 'react'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
 import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
-import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio } from './cifras.js'
+import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio, cascadaVendido } from './cifras.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF, pesosEstacionalidad } from '../../supabase/functions/_shared/presupuesto.js'
 import { retirosSocios, _SOCIO_SUELDO } from '../vistas/SociosView.jsx'
@@ -84,7 +84,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Facturado del año por socio con la regla única de atribución de «Por socio» (decisión guardada → subarriendo → responsable de la venta → abogado del cliente).
   const [fuSocio] = usePorSocioFuentes()
   const P = useMemo(() => partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic: fuSocio.ic, ia: fuSocio.ia, ov: fuSocio.ov, fondoExtra: {} }), [billing, sales, clients, anticipos, terceros, expenses, fuSocio])
-  const V = useMemo(() => vendidoPorSocio(sales, clients, ufRef, currentYear), [sales, clients, ufRef])
+  const V = useMemo(() => vendidoPorSocio(sales, clients, ufRef, currentYear, null, { terceros, billing }), [sales, clients, ufRef, terceros, billing])
   const { emitido } = useMemo(() => kpisPorSocio({ P, V, ym: ymHoy }), [P, V, ymHoy])
   const socios = [...ADMIN_NAMES, SIN_SOCIO].map((nombre) => ({ nombre, facturado: Math.max(0, emitido(nombre, 'ytd').f || 0) }))
 
@@ -100,6 +100,8 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     vend: { uf: m.netoUF, clp: m.neto, pct: m.meta > 0 ? ventaNetoPct : null },
     vendBruto: { uf: m.brutoUF, clp: m.bruto, pct: m.meta > 0 ? ventaPct : null },
     comisVentas: { uf: m.costoUF, clp: m.costo },
+    // Bruto − Comisión = Neto con una sola cifra de neto (la misma función de Inicio): pesos en $M y UF enteras.
+    vendCascada: { clp: cascadaVendido(m, false), uf: cascadaVendido(m, true) },
     fact: { uf: resAnio.verUF?.fac || 0, clp: resAnio.verCLP?.fac || 0, pct: m.bruto > 0 ? factPct : null },
     cob: { uf: ing?.totalUF || 0, clp: ing?.total || 0, pct: metaCobranza > 0 ? cobroPct : null },
     marg: { uf: resAnio.verUF?.res || 0, clp: resAnio.verCLP?.res || 0, pct: resAnio.pct },
@@ -110,8 +112,8 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Evolución del año: vendido acumulado por mes de inicio de cada venta y cobrado acumulado por fecha del depósito, ambos llevados al total oficial de Inicio (estimación propia: reparte el total oficial según las partidas).
   const evo = useMemo(() => {
     const Y = currentYear, H = Number(hoy.slice(5, 7)) - 1
-    // Vendido NETO por venta (bruto − comisionesVenta, la fuente única de metricasAnio): el total oficial es neto, así el reparto por mes y por área queda en el mismo plano.
-    const Vn = V.map((x) => ({ ...x, m: (x.m || 0) - comisionesVenta(x.s, terceros, billing, ufRef).anual }))
+    // V ya trae el Vendido NETO por venta (bruto − comisionesVenta, la fuente única de metricasAnio): el total oficial es neto, así el reparto por mes y por área queda en el mismo plano.
+    const Vn = V
     const sumV = Vn.reduce((a, x) => a + x.m, 0)
     const kV = sumV > 0 && oficiales.vend.clp > 0 ? oficiales.vend.clp / sumV : 1
     const porMes = Array(12).fill(0)

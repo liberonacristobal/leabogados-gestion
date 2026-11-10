@@ -56,6 +56,8 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
     etiqueta: 'Pro Pyme · circular SII 53/2025',
     anioPorDefecto: 2027,
     idpc: [{ hasta: 2027, tasa: 12.5 }, { hasta: 2028, tasa: 15 }, { tasa: 25 }],
+    // Textos del régimen que salen en pantalla (módulo país: otro estudio u otro país los cambia aquí, sin tocar las vistas).
+    textos: { pagoMensual: 'PPM', formulario: 'F29', mesAnual: 'abril', impuestoIndirecto: 'IVA', retenciones: 'boletas de honorarios' },
     ppm: { umbralUF: 50_000, tramos: [{ hasta: 2027, chica: 0.125, grande: 0.25 }, { chica: 0.25, grande: 0.5 }] },
   },
 })
