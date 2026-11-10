@@ -6,7 +6,7 @@ import { supabase, DEMO } from '../supabase'
 import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
 import { PageHeader, usePorFacturar } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
-import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario } from '../../supabase/functions/_shared/presupuesto.js'
+import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
 import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic, ResumenCascada } from '../lib/presupuestoUI.jsx'
 import { calcMetas } from '../lib/presupuestoBloques.jsx'
@@ -112,8 +112,9 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
 
   // Cotización adicional del empleador (Ley 21.735): partida automática dentro de «Leyes sociales» (estimación). Editable; si se quita, no vuelve (est.sinCotEmpleador).
   useEffect(() => {
+    if (est && cargado && !errorCarga && est.costos.some((c) => c.id === 'cot-empleador' && c.n === 'Cotización empleador (estimación)')) { setEst((e) => (e ? { ...e, costos: migrarRotuloCotEmpleador(e.costos) } : e)); return }
     if (!est || !cargado || errorCarga || est.sinCotEmpleador || !(datos.cotEmp.total > 0) || est.costos.some((c) => c.id === 'cot-empleador')) return
-    setEst((e) => (e && !e.sinCotEmpleador && !e.costos.some((c) => c.id === 'cot-empleador') ? { ...e, costos: [...e.costos, { id: 'cot-empleador', n: 'Cotización empleador (estimación)', m: Math.round(datos.cotEmp.total / 12), meses: 12, t: 'fijo', alza: 0, g: CFG.costos.grupoLeyes, auto: true, sinBase: true }] } : e))
+    setEst((e) => (e && !e.sinCotEmpleador && !e.costos.some((c) => c.id === 'cot-empleador') ? { ...e, costos: [...e.costos, { id: 'cot-empleador', n: NOMBRE_COT_EMPLEADOR, m: Math.round(datos.cotEmp.total / 12), meses: 12, t: 'fijo', alza: 0, g: CFG.costos.grupoLeyes, auto: true, sinBase: true }] } : e))
   }, [est, cargado, errorCarga, datos.cotEmp.total])  // eslint-disable-line react-hooks/exhaustive-deps
   // Un paso visitado queda marcado (sin botón de «revisado»).
   useEffect(() => { if (est && cargado && !errorCarga && !drill && !est.hecho.includes(ui.etapa)) setEst((e) => (e && !e.hecho.includes(ui.etapa) ? { ...e, hecho: [...e.hecho, ui.etapa] } : e)) }, [est, cargado, errorCarga, drill, ui.etapa])

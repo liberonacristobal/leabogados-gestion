@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
-import { VacioPaso, nf, mm, mx, m26, mp, mxP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
+import { VacioPaso, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -137,6 +137,7 @@ export function Costos({ X }) {
   const val = (c, kk) => monto27(c, est.p[kk].alza)
   const dc = difMon(e.costos, tot26), Y = d.anio
   const mats = ui.mats || []
+  const cotC = est.costos.find((c) => c.id === 'cot-empleador'), cotV = cotC ? val(cotC, k) : 0   // alza de cotización del empleador (si la partida sigue y vale algo)
   const itemsDe = (c) => (d.costos.find((x) => String(x.id) === String(c.id))?.items) || []
   // Una fila por materia (c.g si la partida es por persona; si no, su nombre), de mayor a menor monto 2027; todo cerrado al entrar.
   const mapa = {}
@@ -155,7 +156,7 @@ export function Costos({ X }) {
             {D && <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{m26(costoAnualBase(c, Yb))}</span>}
             {campos}
           </div>
-          {abierto && <div style={{ background: C.bgSoft, padding: '2px 16px 14px', display: 'grid', gridTemplateColumns: D ? 'minmax(0,1.6fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr)' : 'repeat(2,minmax(0,1fr))', gap: 10, alignItems: 'end' }}>
+          {abierto && <div style={{ background: C.bgSoft, padding: '2px 16px 14px', display: 'grid', gridTemplateColumns: D ? (c.id === 'cot-empleador' ? 'minmax(0,2.4fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr)' : 'minmax(0,1.6fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr)') : 'repeat(2,minmax(0,1fr))', gap: 10, alignItems: 'end' }}>
             <div style={{ gridColumn: D ? undefined : '1 / -1' }}><div style={eti}>Nombre</div><Fld text value={c.n} onCommit={(x) => setCosto(i, 'n', x)} /></div>
             <div><div style={eti}>Monto por mes</div><FldDin w={150} clp={c.m} tasa={tasa26()} onCommit={(x) => setCosto(i, 'm', Math.max(0, x))} /></div>
             <div><div style={eti}>Meses</div><Fld kind='int' suf='de 12' w={96} value={c.meses} onCommit={(x) => setCosto(i, 'meses', Math.min(12, Math.max(0, Math.round(x))))} /></div>
@@ -165,6 +166,16 @@ export function Costos({ X }) {
               <span>{X.ESC.map(([kk, n], j) => <span key={kk}>{j ? ' · ' : ''}{n} <b style={{ color: C.text }}>{mm(val(c, kk))}</b></span>)}</span>
               <Lnk rojo onClick={() => delCosto(i)}>Quitar partida</Lnk>
             </div>
+            {c.id === 'cot-empleador' && d.cotEmp.total > 0 && (() => {
+              const cm = d.cotEmp, tp = (/** @type {number} */ x) => Number(x).toLocaleString('es-CL', { maximumFractionDigits: 2 }) + ' %', desde = cm.meses.find((x) => x.tasa > cm.tasaBase), fila = (t, v, tot) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, ...(tot ? { borderTop: `1px solid ${C.border}`, paddingTop: 4, marginTop: 2, fontWeight: 700, color: C.accent } : { color: C.muted }) }}><span>{t}</span><span style={{ fontVariantNumeric: 'tabular-nums', color: tot ? C.accent : C.text, fontWeight: tot ? 800 : 600 }}>{v}</span></div>
+              return <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {fila('Tasa de cotización hoy', tp(cm.tasaBase))}
+                {desde && fila(`Tasa desde el ${fmtFechaDMY(desde.ym + '-01')}`, tp(desde.tasa))}
+                {fila(`Meses de ${Y} con el alza`, String(cm.meses.filter((x) => x.extra > 0).length))}
+                {fila('Remuneración imponible mensual', m26(cm.base.monto))}
+                {fila(`Alza de cotización ${Y}`, m26(cm.total), true)}
+              </div>
+            })()}
             {rj && <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.muted }}>El monto por mes ya incluye el reajuste vigente desde {fmtFechaDMY(rj.desde)}: el aumento se aplica sobre ese monto, no sobre el anterior. {c.g === 'Remuneraciones' ? 'Sus leyes sociales son costo de la oficina.' : ''}</div>}
           </div>}
         </div>
@@ -183,7 +194,7 @@ export function Costos({ X }) {
   }
   return <>
     {/* H02 / N05 / R3: una sola cifra de costos y un solo nombre; el «vigente» pasa al detalle («Cómo se calcula»); tarjetas A2 con textos breves */}
-    <Tarjeta tono='t' ic='egr' label={`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`} aria={`${nombreCorto('costos', CFG)} ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
+    <Tarjeta tono='t' ic='egr' label={`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`} aria={`${nombreCorto('costos', CFG)} ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} cmp2={cotC && cotV > 0 ? <span>de lo cual, alza de cotización +{mmP(cotV)}</span> : null} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
@@ -197,7 +208,7 @@ export function Costos({ X }) {
         </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cómo se calcula'><Lista items={[<span><b>Cotización empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cómo se calcula'><Lista items={[<span><b>Alza de cotización del empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }
