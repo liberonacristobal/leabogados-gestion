@@ -1,12 +1,13 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
+import { etiquetaRecuperado, docDeSubarriendo, recuperadoOficinaMes } from '../../supabase/functions/_shared/costosOficina.js'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado } from '../lib/compartido.jsx'
 
-// ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + subarriendo) − egresos (planilla real oficina_costos_mensual + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
+// ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
 export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[], onOpenGasto }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   // Salud de datos › Fondos de clientes: el reparto por fondo (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
@@ -42,6 +43,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const vMes=m=>(ventas||[]).filter(d=>String(d.fecha_emision||'').startsWith(pad(m)))
   // FUENTE ÚNICA: cada mes sale de resultadoMes (la misma del Estado de resultados y del Inicio); el año es la suma de sus meses.
   const bTipo=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b.billing_type||'honorarios' }); return m },[billing])
+  const bById=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b }); return m },[billing])
+  const ncPropia=d=>Number(d.tipo_dte)===61&&!docDeSubarriendo(bById[String(d.billing_id)],bById)   // igual que resultadoMes: la NC de una factura de subarriendo no resta honorarios
   const fuB=useFuentesResultado()   // quién paga con boleta (miembros), para las remuneraciones desde el banco
   const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[],boleta:fuB.boleta}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
     for(let m=1;m<=maxM;m++) o[m]=resultadoMes(fuY,deps,pad(m)); return o },[ventas,cm,fuB,billing,terceros,costosOfiRows,expenses,clients,yr,maxM])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -49,7 +52,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   // Desglose de la facturación propia (cuadra con resultadoMes.fac): emitida sin facturas de gastos ni de subarriendo − NC − externos.
   const propiaDoc=d=>!['reembolso','subarriendo'].includes(bTipo[String(d.billing_id)])
   const emitidaMes=m=>vMes(m).filter(d=>[33,34].includes(Number(d.tipo_dte))&&propiaDoc(d)).reduce((a,d)=>a+(Number(d.monto)||0),0)
-  const ncMes=m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).reduce((a,d)=>a+(Number(d.monto)||0),0)
+  const ncMes=m=>vMes(m).filter(ncPropia).reduce((a,d)=>a+(Number(d.monto)||0),0)
   const terMes=m=>vMes(m).filter(d=>[33,34].includes(Number(d.tipo_dte))&&propiaDoc(d)&&extBillIds.has(String(d.billing_id))).reduce((a,d)=>a+(Number(d.monto)||0),0)
   const S=(fn)=>months.reduce((a,m)=>a+fn(m),0)
   const emitida=S(emitidaMes), nc=S(ncMes), terc=S(terMes)
@@ -64,13 +67,13 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const egresos=costosOper+comis
   const resultado=S(m=>R(m,'res'))
   const margenV=margenPct(resultado,ingresos), margen=margenV==null?null:Math.round(margenV)
-  const ncList=months.flatMap(m=>vMes(m).filter(d=>Number(d.tipo_dte)===61).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
+  const ncList=months.flatMap(m=>vMes(m).filter(ncPropia).map(d=>({folio:d.folio,rec:d.receptor_name,monto:Number(d.monto)||0,ext:!d.billing_id})))
   const estim=months.some(m=>cmBy[m]&&cmBy[m].estimado)
   const fmtM=n=>(n<0?'−':'+')+fmtMill(Math.abs(n))
   const fmtMp=n=>fmtMill(Math.abs(n))
   const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
   const nCerrados=Array.from({length:maxM},(_,i)=>i+1).filter(m=>cmBy[m]&&cmBy[m].cerrado).length
-  const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo (ingreso)'],['comisiones','Comisiones']]
+  const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo · menor costo (informativo)'],['comisiones','Comisiones']]
   const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
   const EST_COL={cerrado:C.greenText,estimado:C.soonText,abierto:C.done,vacio:C.border}
   const abrirEditor=m=>{ const r=cmBy[m]||{}; const f={}; CAMPOS.forEach(([k])=>f[k]=r[k]!=null?Number(r[k]):0); f.nota=r.nota||''; f.estimado=!!r.estimado; f.cerrado=!!r.cerrado; setForm(f); setEditM(m) }
@@ -110,7 +113,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       {cmBy[editM]&&cmBy[editM].cerrado?<span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.greenText,background:C.greenBg,borderRadius:20,padding:'3px 9px'}}>Cerrado</span>:null}
     </div>
     <div style={card}>
-      <div style={{fontSize:11,color:C.textSoft,padding:'14px 16px 2px'}}>Montos en pesos. El subarriendo es ingreso (baja el costo neto).</div>
+      <div style={{fontSize:11,color:C.textSoft,padding:'14px 16px 2px'}}>Montos en pesos. El subarriendo no es ingreso: baja el costo de oficina (monto fijo de Costos de Oficina). La columna «Subarriendo» de la planilla es informativa.</div>
       <div style={{padding:'4px 16px 10px'}}>
         {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
           <span style={{fontSize:13,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
@@ -162,23 +165,22 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         <span style={{fontWeight:tot?800:700,minWidth:72,textAlign:'right',whiteSpace:'nowrap',color:tot?C.accent:C.text,...num}}>{v}</span></div>
       const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
       const cab=t=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{t} · {per}</span></div>
-      // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Subarriendo + Comisión de externos = Ingresos
-      const [vFac,vSub,vRex]=redondearPartes([facturacion,subarr,rex],1e5,[0])
+      // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Comisión de externos = Ingresos (el subarriendo baja el costo, no suma aquí)
+      const [vFac,vRex]=redondearPartes([facturacion,rex],1e5,[0])
       const [fFac,fNc,fTer]=redondearPartes([facturacion,nc,terc],1e5,[0])
       const detIng=<div style={card}>{cab('Ingresos')}
         {ln({k:'fac',l:'Facturación propia',v:fmtMillLR(vFac),on:e=>{e.stopPropagation();setNcOpen(!ncOpen)},open:ncOpen})}
         {ncOpen&&<>{subF('em','Emitida en el SII','sin facturas de gastos ni subarriendo',fmtMillLR(fFac+fNc+fTer))}{subF('nc','− Notas de crédito',ncList.length?`${ncList.length} nota${ncList.length!==1?'s':''}`:'',fmtMillLR(fNc))}{fTer?subF('te','− Por cuenta de terceros','se traspasa a externos',fmtMillLR(fTer)):null}</>}
-        {subarr!==0&&ln({k:'sub',sg:'+',l:'Subarriendo',v:fmtMillLR(vSub)})}
         {rex!==0&&ln({k:'rex',sg:'+',l:'Comisión de externos',v:fmtMillLR(vRex)})}
-        {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(vFac+vSub+vRex),tot:true})}</div>
+        {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(vFac+vRex),tot:true})}</div>
       // Costos: suma de las líneas de resultadoMes de los meses del período (misma fuente que Estado de resultados).
-      const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',gv:'Gastos varios'}
+      const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+' · menor costo',gv:'Gastos varios'}
       const cosAgg={}; months.forEach(m=>(rmes[m]?.cosLines||[]).forEach(x=>{ cosAgg[x.k]=(cosAgg[x.k]||0)+(Number(x.m)||0) }))
-      const cosK=['rem','cot','arr','con','otr','pre','gv'].filter(k=>cosAgg[k])
+      const cosK=['rem','cot','arr','con','otr','pre','sub','gv'].filter(k=>cosAgg[k])
       const cosV=redondearPartes(cosK.map(k=>cosAgg[k]),1e5)
       const remEst=months.some(m=>rmes[m]?.remEst&&rmes[m]?.conPlanilla)
       const detCos=<div style={card}>{cab('Costos de operación')}
-        {cosK.map((k,i)=>ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
+        {cosK.map((k,i)=>k==='sub'?ln({k,sg:'−',l:COSL[k],v:fmtMillLR(-cosV[i])}):ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
         {ln({k:'cosT',sg:'=',l:'Costos de operación',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
         {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>PPM {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
       // Comisiones pagadas: por colaborador (comList de cada mes).
@@ -220,7 +222,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       return <>
         <div style={grid4}>
           {kt('res','chart',tRes,'Resultado',sgn(resultado),`${per} · ${estadoP}${estim?' · incl. estimados':''}`)}
-          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(ingresos),'incluye subarriendo',()=>setOpen('ing'))}
+          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(ingresos),'facturación propia y externos',()=>setOpen('ing'))}
           {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>setOpen('cos'))}
           {kt('mar','tPct',[C.card,C.accent],'Margen',margenV==null?'—':`${margenV.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos')}
         </div>
@@ -230,8 +232,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     })()}
 
     {(()=>{
-      // Presupuesto vs real. Presupuesto = Costos de oficina por categoría (sin PPM ni subarriendo, vigente por mes con desde/monto_prev).
-      // Real = las mismas líneas de costo de resultadoMes (planilla + banco + gastos varios), así el total cuadra con «Costos de operación».
+      // Presupuesto vs real, en costos BRUTOS por categoría. Presupuesto = Costos de oficina (sin PPM, sin el subarriendo ni los gastos recuperados, vigente por mes con desde/monto_prev).
+      // Real = las mismas líneas de costo de resultadoMes SIN la línea de subarriendo (planilla + banco + gastos varios): cuadra con «Costos de operación» más el subarriendo (que baja ese total).
       const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
       const allM=Array.from({length:cerM},(_,i)=>i+1)
       const CATS=[['rem','Remuneraciones'],['cot','Leyes sociales'],['arr','Arriendo y GGCC'],['gv','Gastos varios'],['con','Contadora']]
@@ -309,7 +311,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const card2={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
       const secT=t=><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,margin:'16px 4px 8px'}}>{t}</div>
       return <>
-        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · {per}{cerM<12?' '+yr:''}</div>
+        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · costos brutos, sin descontar el subarriendo · {per}{cerM<12?' '+yr:''}</div>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
           {kt('pb','file',C.card,C.accent,'Presupuesto',fmtMill(bud),`costos ${per}`)}
           {kt('pr','wallet',C.azulBg,C.accent,'Real',fmtMill(real),'banco + planilla')}
@@ -338,10 +340,13 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const sldFalta=allM.filter(m=>{ const r=cmBy[m]; return !r || Number(r.sueldos)===0 })
       const pendCierre=allM.filter(m=>cierreDisponible(m)&&mesEstado(m)!=='cerrado')   // ya corresponde cerrar por fecha, pero faltan datos o está estimado
       const descF=fondosChk.desc
+      // Un mes con factura de subarriendo pero sin ítem `es_ingreso` vigente en Costos de Oficina: el subarriendo desaparece del resultado (ya no suma a ingresos).
+      const subSinItem=months.filter(m=>recuperadoOficinaMes(costosOfiRows,pad(m))===0&&(billing||[]).some(b=>b&&!b.deleted_at&&b.billing_type==='subarriendo'&&b.invoice_no&&b.status!=='Anulada'&&String(b.issued_at||'').startsWith(pad(m))))
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
         [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
         [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
+        [subSinItem.length===0,'Subarriendo en Costos de Oficina',subSinItem.length?`${subSinItem.length} mes${subSinItem.length!==1?'es':''} con factura de subarriendo y sin el ítem que baja el costo en Costos de Oficina: el subarriendo no aparece en el resultado`:'el subarriendo facturado tiene su ítem en Costos de Oficina'],
         [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${fondosChk.n} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
       ]

@@ -20,6 +20,7 @@ import { abonosPorIdentificar } from "../_shared/conciliacionReglas.js";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { comprasPorPagar } from "../_shared/comprasReglas.js";
 import { fotoCartera, respaldoPorFactura, saldoFactura, venceFactura } from "../_shared/fotoMes.js";
+import { docDeSubarriendo } from "../_shared/costosOficina.js";   // una sola regla de «factura de subarriendo» (la misma de la app)
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -68,7 +69,7 @@ serve(async (req) => {
     // ── Datos
     const { data: tasksRaw } = await sb.from("tasks").select("id,title,due,status,client_id,assignees,delegated_to,who");
     const { data: clients } = await sb.from("clients").select("id,name,abogado_responsable");
-    const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,issued_at,created_at,billing_type,dte_xml,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept").order("id"));
+    const { data: billsRaw, error: billsErr } = await selectAll(()=>sb.from("billing").select("id,sale_id,amount,paid_amount,status,invoice_no,due,issued_at,created_at,billing_type,dte_xml,dte_estado,dte_track_id,dte_emitido_at,email_sent_at,deleted_at,client_id,concept,nc_ref_billing_id").order("id"));
     if (billsErr) return json({ error: "No se pudo leer billing: " + billsErr.message }, 500);
     const { data: movs } = await selectAll(()=>sb.from("cartola_movimientos").select("id,fecha,monto,tipo,cliente_id,estado,n_operacion").eq("tipo", "abono").is("cliente_id", null).order("id"));
     // Radar "cuotas vencidas sin facturar": programadas de meses cerrados de ventas Activo, no silenciadas. Mismo criterio que el filter 'sinemitir' de la app.
@@ -109,6 +110,10 @@ serve(async (req) => {
     const porCobrarB = vivos.filter((b: any) => b.invoice_no && ["Pendiente", "Vencido"].includes(b.status) && !["reembolso", "nota_credito"].includes(b.billing_type));
     const emitidasSemanaArr = vivos.filter((b: Record<string, unknown>) => String(b.dte_emitido_at || "").slice(0, 10) >= hace7 && b.invoice_no);
     const emitidasSemana = emitidasSemanaArr.length;
+    // Documentos: la factura de subarriendo cuenta entre las emitidas; se desglosa porque en Inicio el subarriendo no es ingreso (baja el costo de oficina).
+    // deno-lint-ignore no-explicit-any
+    const vivosById = Object.fromEntries(vivos.map((x: any) => [String(x.id), x]));
+    const subSem = emitidasSemanaArr.filter((b: Record<string, unknown>) => docDeSubarriendo(b, vivosById)).reduce((a: number, b: Record<string, unknown>) => a + (Number(b.amount) || 0), 0);
     // «Por cobrar» y «Vencido»: la misma cartera que Inicio (fotoCartera = saldoBill + venceBill: total del DTE, respaldo del banco, emisión + 30 días).
     const cartera = fotoCartera({ billing: vivos, conciliacion: concRaw || [], anticipos: anticiposRaw || [], asOf: todayCL });
     const respaldo = respaldoPorFactura(concRaw || [], anticiposRaw || []);
@@ -222,7 +227,7 @@ serve(async (req) => {
       if (emitidasSemanaArr.length) {
         // deno-lint-ignore no-explicit-any
         const filas = emitidasSemanaArr.slice(0, 4).map((b: any) => rowT(`<b style="color:${A}">${esc(cname(b.client_id) || "Cliente")}</b> — factura N&deg; ${esc(String(b.invoice_no))}`, fmShort(b.amount || 0), MUT)).join("");
-        bloques.push(sec("#EAF2FB", svgIco(A, ICO_PROY), "Tus proyectos", `${emitidasSemanaArr.length} emitida${emitidasSemanaArr.length !== 1 ? "s" : ""} esta semana`, MUT, filas + cta("Ver proyectos")));
+        bloques.push(sec("#EAF2FB", svgIco(A, ICO_PROY), "Tus proyectos", `${emitidasSemanaArr.length} emitida${emitidasSemanaArr.length !== 1 ? "s" : ""} esta semana${subSem > 0 ? ` (de las cuales subarriendo ${fmShort(subSem)})` : ""}`, MUT, filas + cta("Ver proyectos")));
       }
 
       // 3) Clientes (abonos por identificar)

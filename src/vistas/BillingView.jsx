@@ -1408,11 +1408,11 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
     .sort((a,z)=> (a.est==='detectado'?0:a.est==='sinpago'?1:2)-(z.est==='detectado'?0:z.est==='sinpago'?1:2) || z.monto-a.monto)
   , [emitidasAll, mes, modo, resp, respaldoMap, abonos])   // eslint-disable-line
 
-  const tot = useMemo(()=>{ let emi=0,cob=0,pen=0,nC=0,nD=0,nS=0,mC=0,mD=0,mS=0,nV=0,mV=0
-    filas.forEach(f=>{ emi+=f.monto; cob+=f.cobrado; pen+=f.saldo
+  const tot = useMemo(()=>{ let emi=0,cob=0,pen=0,nC=0,nD=0,nS=0,mC=0,mD=0,mS=0,nV=0,mV=0,sub=0   // sub = de lo emitido, la factura de subarriendo (documento; en Inicio no es ingreso)
+    filas.forEach(f=>{ emi+=f.monto; cob+=f.cobrado; pen+=f.saldo; if(f.b.billing_type==='subarriendo') sub+=f.monto
       if(f.est==='cobrada'){nC++;mC+=f.monto} else if(f.est==='detectado'){nD++;mD+=f.saldo} else {nS++;mS+=f.saldo}
       if(f.saldo>0 && f.b.due && f.b.due<hoyISO){nV++;mV+=f.saldo} })   // Vencido = subconjunto de Por cobrar (anidado en la foto)
-    return {emi,cob,pen,tasa:emi>0?cob/emi:0,nC,nD,nS,mC,mD,mS,nV,mV} },[filas])
+    return {emi,cob,pen,sub,tasa:emi>0?cob/emi:0,nC,nD,nS,mC,mD,mS,nV,mV} },[filas])
 
   // Pagos del banco del período que no calzan con ninguna factura pendiente → plata recibida sin identificar.
   const matchedAbonos = useMemo(()=>{ const s=new Set(); emitidasAll.forEach(b=>{ if(saldoDe(b)>0){ (pagosDe?pagosDe(b):[]).forEach(({m})=>s.add(String(m.id))) } }); return s },[emitidasAll,abonos,respaldoMap])   // eslint-disable-line
@@ -1471,13 +1471,16 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
           <div style={{fontSize:isDesktop?21:17,fontWeight:800,letterSpacing:-.5,color:nC,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.15}}>{n}</div>
           <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{sub}</div>
         </div>) }
-      return (<div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(5,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?10:8,marginBottom:9}}>
+      return (<>
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(5,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?10:8,marginBottom:tot.sub>0?4:9}}>
         {card('emitido','file',C.accent,C.azulBg,modo==='mes'?'Emitido':'Emitido acum.',fmtShort(tot.emi),C.accent,`${filas.length} factura${filas.length!==1?'s':''}`)}
         {card('cobrada','check',C.greenText,C.greenBg,'Pagado',fmtShort(tot.cob),C.greenText,`${tot.nC} factura${tot.nC!==1?'s':''} · ${pct(tot.tasa)}`)}
         {card('porcobrar','file',C.accent,C.azulBg,'Por cobrar',fmtShort(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
         {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmtShort(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
         {card('vencido','alert',C.overdueText,C.overdueBg,'Vencidas',String(tot.nV),C.overdueText,`${fmtShort(tot.mV)} · recordar`)}
-      </div>)
+      </div>
+      {tot.sub>0&&<div style={{fontSize:11,color:C.textSoft,marginBottom:9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title='Facturas de subarriendo: figuran como menor costo de la oficina, no como ingreso'>{`Incluye subarriendo ${fmtShort(tot.sub)} · menor costo de la oficina`}</div>}
+      </>)
     })()}
 
     {/* Panel de "Sin identificar": abonos del banco sin cruzar (se muestra al tocar esa tarjeta) */}

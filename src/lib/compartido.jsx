@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { costoOficinaBruto, costoOficinaNeto, recuperadoOficinaMes, etiquetaRecuperado, docDeSubarriendo, costoOperacionBruto } from '../../supabase/functions/_shared/costosOficina.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -676,9 +677,9 @@ export function setSociosCfg(list){ const c=(list||[]).filter(s=>s&&s.nombre); i
 export function setEquipoCfg(list){ EQUIPO_CFG=(list||[]).filter(s=>s&&s.nombre&&s.rut) }
 
 // ── RESULTADO DEL MES — FUENTE ÚNICA (página Estado de resultados + tarjeta del Inicio). Regla acordada 2026-10-15:
-// ingresos = facturación propia del SII emitida en el mes (sin facturas de externos ni de subarriendo, − notas de crédito) + subarriendo
-//            + % retenido de las facturas de externos emitidas en el mes;
-// egresos  = costos de operación del mes (planilla real SIN PPM; sin planilla, presupuesto sin PPM) + gastos varios + comisiones PAGADAS en el mes (bruto).
+// ingresos = facturación propia del SII emitida en el mes (sin facturas de externos ni de subarriendo, − notas de crédito) + % retenido de las facturas de externos emitidas en el mes;
+// egresos  = costos de operación del mes NETOS del subarriendo y gastos recuperados (menor costo fijo; planilla real SIN PPM; sin planilla, presupuesto sin PPM) + gastos varios + comisiones PAGADAS en el mes (bruto).
+// Regla 2026-11-11: el subarriendo no es ingreso; su factura no suma a ingresos ni a honorarios.
 // El PPM va aparte (anticipo del impuesto anual). Un mes es provisorio hasta que la planilla lo cierra (15 del mes siguiente).
 export const esPPMcosto = r => String(r?.categoria||'')==='Impuestos y patentes' && /ppm/i.test(String(r?.item||''))
 
@@ -705,22 +706,22 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const u=iso=>ufDelDia(ufd, iso, ufFb||UF_FALLBACK), ufFin=u(finMesOHoy(ym))
   const bById={}; (billing||[]).forEach(b=>{ if(b) bById[String(b.id)]=b })
   const extIds=new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
-  let fac=0, subFac=0, facUF=0, subFacUF=0; const facDocs=[], sinReg=[]
+  let fac=0, facUF=0; const facDocs=[], sinReg=[]
   // Sin carga del SII (otro estudio, o demo): las facturas emitidas en la app son la fuente.
   const docsSrc = (fu?.sii||[]).length ? fu.sii : (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(esFacIngreso(b)||b.billing_type==='subarriendo')).map(b=>({tipo_dte:34,monto:montoFactura(b),fecha_emision:b.issued_at,folio:folioN(b.invoice_no),receptor_name:b.receptor_name||'',billing_id:b.id}))
   ;docsSrc.filter(d=>String(d.fecha_emision||'').startsWith(ym)).forEach(d=>{ const t=Number(d.tipo_dte), m=Number(d.monto)||0, b=bById[String(d.billing_id)]
-    if(t===61){ fac-=m; facUF-=m/u(d.fecha_emision); facDocs.push({...d,b,nc:true}); return }
+    if(t===61){ if(docDeSubarriendo(b,bById)) return   // la NC de una factura de subarriendo no resta honorarios (el subarriendo no es ingreso)
+      fac-=m; facUF-=m/u(d.fecha_emision); facDocs.push({...d,b,nc:true}); return }
     if(t!==33&&t!==34) return
     if(extIds.has(String(d.billing_id))) return
     if(b&&b.billing_type==='reembolso') return   // gasto facturado al cliente: nunca es ingreso
-    if(b&&b.billing_type==='subarriendo'){ subFac+=m; subFacUF+=m/u(d.fecha_emision); return }
+    if(docDeSubarriendo(b,bById)) return   // la factura de subarriendo no es ingreso ni honorario: su monto fijo ya baja el costo de oficina
     fac+=m; facUF+=m/u(d.fecha_emision); facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
   const [Y,Mo]=String(ym).split('-').map(Number)
   const row=(fu?.plan||[]).find(r=>Number(r.anio)===Y&&Number(r.mes)===Mo)
   const n=k=>Number(row?.[k])||0
-  // Subarriendo del mes: la planilla manda (una factura puede cubrir varios meses, p. ej. F321 marzo–abril); sin planilla, lo facturado.
-  const sub = n('subarriendo')>0 ? n('subarriendo') : subFac
-  const subUF = n('subarriendo')>0 ? n('subarriendo')/ufFin : subFacUF
+  // Subarriendo y gastos recuperados: MENOR COSTO de oficina (monto fijo mensual de costos_oficina, `es_ingreso`, con su desde/monto_prev), no ingreso ni el calendario de la factura. La columna «subarriendo» de la planilla es solo informativa.
+  const sub=recuperadoOficinaMes(costosOfiRows,ym), subUF=sub/ufFin
   const rexItems=(terceros||[]).filter(t=>t&&Number(t.comision_monto)>0&&t.billing_id).map(t=>({t,b:bById[String(t.billing_id)]})).filter(x=>x.b&&!x.b.deleted_at&&x.b.status!=='Anulada'&&String(x.b.issued_at||'').startsWith(ym))
   const rex=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0),0)
   const rexUF=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0)/u(x.b.issued_at),0)
@@ -733,16 +734,16 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const conUF = conB>0 ? conItems.reduce((a,e)=>a+(Number(e.amount)||0)/u(e.date),0) : n('contadora')/ufFin
   const pla=v=>[v, v/ufFin]   // monto mensual de la planilla → UF del cierre del mes
   let cosLines = row ? [['rem','Remuneraciones',rem,remUF],['cot','Cotizaciones',...pla(n('cotizaciones'))],['arr','Arriendo y GGCC',...pla(n('arriendo')+n('gastos_comunes'))],['con','Contadora',conB>0?conB:n('contadora'),conUF],['otr','Otros costos',...pla(n('otros_costos'))]]
-    : [['pre','Presupuesto de oficina',...pla((costosOfiRows||[]).filter(r=>!esPPMcosto(r)).reduce((a,r)=>a+(Number(eff(r))||0)*(r.es_ingreso?-1:1),0))]]
+    : [['pre','Presupuesto de oficina',...pla(costoOficinaBruto((costosOfiRows||[]).filter(r=>!esPPMcosto(r)),ym))]]
   const ppm = row ? n('ppm') : (costosOfiRows||[]).filter(esPPMcosto).reduce((a,r)=>a+(Number(eff(r))||0),0)
   const gvItems=gastosVariosOfiItems(expenses,clients,ym), gv=gvItems.reduce((a,e)=>a+(Number(e.amount)||0),0)
   const gvUF=gvItems.reduce((a,e)=>a+(Number(e.amount)||0)/u(e.date),0)
-  cosLines=[...cosLines,['gv','Gastos varios',gv,gvUF]].filter(x=>x[2]!==0).map(([k,l,m,mUF])=>({k,l,m,mUF}))
+  cosLines=[...cosLines,['sub',etiquetaRecuperado(costosOfiRows),-sub,-subUF],['gv','Gastos varios',gv,gvUF]].filter(x=>x[2]!==0).map(([k,l,m,mUF])=>({k,l,m,mUF}))
   const cos=cosLines.reduce((a,x)=>a+x.m,0), cosUF=cosLines.reduce((a,x)=>a+x.mUF,0)
   const byP={}; (terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).forEach(t=>{ const k=String(t.proveedor_id||t.proveedor||'x'); if(!byP[k]) byP[k]={pid:t.proveedor_id,nombre:t.proveedor||'Colaborador',m:0,ts:[]}; byP[k].m+=Number(t.monto)||0; byP[k].ts.push(t) })
   const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
   const comUF=comList.reduce((a,x)=>a+x.ts.reduce((s,t)=>s+(Number(t.monto)||0)/u(t.pagado_at),0),0)
-  const ing=fac+sub+rex, res=ing-cos-com, ingUF=facUF+subUF+rexUF, resUF=ingUF-cosUF-comUF
+  const ing=fac+rex, res=ing-cos-com, ingUF=facUF+rexUF, resUF=ingUF-cosUF-comUF   // ingresos = facturación propia + % de externos; el subarriendo baja el costo, no suma aquí
   return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
 }
 
@@ -3798,7 +3799,8 @@ export async function fetchUFFechas(isos){
 }
 
 // Fuente ÚNICA del total mensual de Costos de Oficina: valor vigente de cada ítem en el mes ym (desde/monto_prev), ingresos restan.
-export function costosOficinaMes(rows, ym){ ym = ym || new Date().toISOString().slice(0,7); return (rows||[]).reduce((a,r)=>{ const eff=(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; return a + (Number(eff)||0)*(r.es_ingreso?-1:1) },0) }
+export const costosOficinaMes = (rows, ym) => costoOficinaNeto(rows, ym)
+export { costoOficinaNeto, recuperadoOficinaMes, etiquetaRecuperado, costoOperacionBruto }
 
 // Flecha de las filas desplegables (Inicio y Proyección).
 export const ChevAb = ({open}) => <svg width='9' height='9' viewBox='0 0 10 10' style={{transform:open?'rotate(180deg)':'none',transition:'transform .15s',flexShrink:0}}><path d='M2 3.5 L5 6.5 L8 3.5' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round'/></svg>
@@ -3888,7 +3890,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
     const tot=ps.reduce((a,x)=>a+(st[x.id]?.m||0),0)||1
     ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
   // Oficina al costo bruto: los ingresos fijos del presupuesto (subarriendo) ya entran por su propia factura; restarlos aquí los contaba dos veces.
-  const oficinaSem=costosOficinaMes((costosOfiRows||[]).filter(r=>!r.es_ingreso))/4.3333
+  const oficinaSem=costoOficinaBruto(costosOfiRows)/4.3333
   // Con costo real: cada semana lleva el costo mensual × la parte del calendario de pago que cae en sus días, desde hoy (lo ya pagado no se cuenta).
   const ofDe=i=>{ if(!(costoOp&&costoOp.mensual>0&&costoOp.peso)) return oficinaSem; let v=0
     for(let j=0;j<7;j++){ const d=new Date(monT+(i*7+j)*DAY); if(d.getTime()<hoyT) continue; const D=d.getDate(), last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); const k=D===last?30:(D>=30?null:D); if(k) v+=costoOp.mensual*(costoOp.peso[k]||0) }
@@ -4041,14 +4043,14 @@ export const PS_RX_GASTO=/(gasto|reembols|notar|tramitaci|inscrip|conservador|cb
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const META_UF = 9800
 
-// Costo de operación REAL para proyectar (fuente única): promedio de los últimos 3 meses cerrados del resultado (costos + PPM)
+// Costo de operación REAL para proyectar (fuente única): promedio de los últimos 3 meses cerrados del resultado (costos BRUTOS del subarriendo + PPM)
 // y el calendario de pago aprendido del banco: qué parte del gasto del mes sale cada día. Sin planilla o sin pagos → null (se usa el presupuesto).
 export function costoOperacionReal(fu, deps, hoy=new Date(), meses=3){
   const ofi=(deps.clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||''))); if(!ofi) return null
   const yms=[]; for(let i=1;i<=meses;i++){ const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1); yms.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) }
   const rs=yms.map(ym=>resultadoMes(fu,deps,ym)).filter(r=>r.conPlanilla)
   if(!rs.length) return null
-  const mensual=rs.reduce((a,r)=>a+r.cos+(Number(r.ppm)||0),0)/rs.length
+  const mensual=rs.reduce((a,r)=>a+costoOperacionBruto(r),0)/rs.length   // BRUTO: el subarriendo entra al flujo por su cobro, no como menor salida
   const NO=new Set(['Retiros','Comisiones','Proveedores','Honorarios','Notaria','Notaría','CBR','Registro Civil','Archivo Judicial','Diario Oficial'])
   const peso={}; let tot=0
   ;(deps.expenses||[]).forEach(e=>{ if(!e||e.deleted_at||e.type!=='gasto'||String(e.client_id)!==String(ofi.id)||NO.has(String(e.category||''))) return

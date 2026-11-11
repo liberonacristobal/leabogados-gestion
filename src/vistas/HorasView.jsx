@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { costoOficinaNeto } from '../../supabase/functions/_shared/costosOficina.js'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
@@ -309,18 +310,18 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
   const [cargarOverhead,setCargarOverhead] = useState(true)   // por defecto el margen usa el costo CARGADO (real neto); el toggle permite ver solo-sueldo
   const ym0mes = new Date().toISOString().slice(0,7)
   useEffect(()=>{ if(DEMO){ setCostosOfi([
-      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
+      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:1080000,es_ingreso:true},
       {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Impuestos y patentes',item:'PPM',monto:800000}]); return }
     supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfi(data||[]),()=>{}) },[])
   const effCosto = r => (r.desde && ym0mes < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
-  const overheadMes = costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(r.es_ingreso?-1:1)*effCosto(r),0)
+  const overheadMes = costoOficinaNeto(costosOfi,ym0mes,{excluirCategorias:['Remuneraciones','Leyes sociales']})   // neto del subarriendo (fuente única costosOficina.js)
   // Solo el equipo CON COSTO (costo/hora definido) absorbe el overhead — excluye colaboradores externos (ej. quien no genera costo de oficina). Configurable, sin nombres cableados.
   const metasSemTot = EQUIPO.filter(n=>Number(costoHora[n])>0).reduce((a,n)=>a+(Number(metas[n])||0),0)
   const capacidadMes = metasSemTot*4.33 || (DEMO?560:0)   // horas/mes del equipo con costo (Σ metas semanales ×4,33)
   const overheadHora = capacidadMes>0 ? overheadMes/capacidadMes : 0
   const hayOverhead = overheadMes>0 && capacidadMes>0
   const [ohOpen,setOhOpen] = useState(false)   // desglose del overhead por categoría (clickeable → Costos de Oficina)
-  const overheadPorCat = useMemo(()=>{ const m={}; costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).forEach(r=>{ m[r.categoria]=(m[r.categoria]||0)+(r.es_ingreso?-1:1)*effCosto(r) }); return Object.entries(m).map(([cat,mes])=>({cat,mes,hora:capacidadMes>0?mes/capacidadMes:0})).filter(x=>x.mes!==0).sort((a,b)=>b.mes-a.mes) },[costosOfi,capacidadMes])
+  const overheadPorCat = useMemo(()=>{ const m={}; [...new Set(costosOfi.filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).map(r=>r.categoria))].forEach(c=>{ m[c]=costoOficinaNeto(costosOfi,ym0mes,{soloCategoria:c}) }); return Object.entries(m).map(([cat,mes])=>({cat,mes,hora:capacidadMes>0?mes/capacidadMes:0})).filter(x=>x.mes!==0).sort((a,b)=>b.mes-a.mes) },[costosOfi,capacidadMes])
   const margenData = useMemo(()=> permanentes.map(({sale})=> margenDeSale(sale, horas, costoHora, cargarOverhead?overheadHora:0, mesesYTD, ufHoy, ufAnioEff, anioAct, terceros, billing)),
     [permanentes, horas, costoHora, mesesYTD, ufHoy, ufAnioEff, anioAct, cargarOverhead, overheadHora, terceros, billing])
   const margenTot = margenData.filter(d=>!d.sinIng).reduce((a,d)=>({ing:a.ing+d.ingCLP,costo:a.costo+d.costoCLP,margen:a.margen+d.margen}),{ing:0,costo:0,margen:0})

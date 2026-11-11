@@ -3,6 +3,7 @@
 //  · Facturado propio por mes (pesos y UF del día de cada factura): resultadoMes (el de Resultado del año).
 //  · Cobrado por mes: conciliación a factura o anticipo por fecha del depósito (como Inicio).
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
+import { costoOficinaNeto } from '../../supabase/functions/_shared/costosOficina.js'
 import { useMemo, useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { cotizacionEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
@@ -207,8 +208,8 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   })
   costos.forEach((c) => { c.m = Math.round(c.m) })
 
-  // Presupuesto de costos del año en curso por mes (misma regla de Presupuesto vs real, en Resultado del año): vigente por mes, sin PPM ni ingresos.
-  const budMes = (/** @type {number} */ mes) => (costosOfiRows || []).filter((r) => r && r.activo !== false && !r.es_ingreso && !esPPMcosto(r)).reduce((a, r) => a + (Number(r.desde && `${currentYear}-${String(mes).padStart(2, '0')}` < String(r.desde).slice(0, 7) ? (r.monto_prev ?? r.monto) : r.monto) || 0), 0)
+  // Presupuesto de costos del año en curso por mes (misma regla de Presupuesto vs real, en Resultado del año): vigente por mes, sin PPM y neto del subarriendo y gastos recuperados.
+  const budMes = (/** @type {number} */ mes) => costoOficinaNeto((costosOfiRows || []).filter((r) => !esPPMcosto(r)), `${currentYear}-${String(mes).padStart(2, '0')}`)   // NETO del subarriendo, igual que lo real (resultadoMes.cos): el mismo helper para real y presupuesto
   const cerrados = Array.from({ length: mesHoy - 1 }, (_, i) => i + 1), faltan = Array.from({ length: 12 - (mesHoy - 1) }, (_, i) => mesHoy + i)
   const costos26 = {
     real: cerrados.reduce((a, m) => a + (serie[ym(currentYear, m)]?.cos || 0), 0), ppto: cerrados.reduce((a, m) => a + budMes(m), 0), pptoResto: faltan.reduce((a, m) => a + budMes(m), 0),

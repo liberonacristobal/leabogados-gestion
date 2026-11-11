@@ -170,7 +170,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])) }
     o.pct=margenPct(o.res,o.ing)
     // Cifras para MOSTRAR la cascada: redondeadas de modo que las partes sumen el total (UF enteras; pesos a $0,1M como fmtMill).
-    const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,sub,rex]=redondearPartes([o['fac'+sf],o['sub'+sf],o['rex'+sf]],paso,[0]), [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
+    const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,rex]=redondearPartes([o['fac'+sf],o['rex'+sf]],paso,[0]), sub=Math.round(o['sub'+sf]/paso)*paso, [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
     o.verUF=cuadra(1,'UF'); o.verCLP=cuadra(1e5,'')
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
   return { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }

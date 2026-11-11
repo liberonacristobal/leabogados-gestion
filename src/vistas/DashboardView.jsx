@@ -1,4 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
+import { costoOficinaNeto, cajaContraCosto } from '../../supabase/functions/_shared/costosOficina.js'
 import { useGuardarProyeccion } from '../lib/controlProyeccionHook.js'
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
@@ -15,8 +16,7 @@ import { PaginaSobre, CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_C
 // Overhead de oficina por hora (fuente única): costos NO-remuneración/mes ÷ horas del equipo CON costo (Σ metas ×4,33).
 export function overheadHoraDe(costosOfiRows, metas={}, costoHora={}, ym){
   ym = ym || new Date().toISOString().slice(0,7)
-  const eff=r=>(r.desde && ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-  const overheadMes=(costosOfiRows||[]).filter(r=>!['Remuneraciones','Leyes sociales'].includes(r.categoria)).reduce((a,r)=>a+(r.es_ingreso?-1:1)*(Number(eff(r))||0),0)
+  const overheadMes=costoOficinaNeto(costosOfiRows,ym,{excluirCategorias:['Remuneraciones','Leyes sociales']})   // neto del subarriendo (fuente única costosOficina.js)
   const capMes=Object.keys(metas).filter(n=>Number(costoHora[n])>0).reduce((a,n)=>a+(Number(metas[n])||0),0)*4.33
   return capMes>0 ? overheadMes/capMes : 0
 }
@@ -148,14 +148,13 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
               // MARGEN — cascada Cobrado − Comisiones − Costos de oficina = Margen
               if(t==='marg'){
                 // Cascada lineal (18-10): se lee como una suma, de arriba abajo. Cifras de resAnio.ver* = redondeadas para que las partes
-                // sumen el total visible (Facturado + Subarriendo + Comisión de externos = Ingresos; − Costos − Comisiones = Margen).
+                // sumen el total visible (Facturado + Comisión de externos = Ingresos; − Costos netos del subarriendo − Comisiones = Margen).
                 const lin=(sg,lab,val,kind,onClick,extra)=>cxR({k:lab,sg,label:lab,val,extra,onClick,kind:(kind==='res'&&resAnio.res<0)?'resNeg':kind})
                 const verL=<span style={{fontSize:10,color:C.azulInfo,fontWeight:700}}>ver <Gl n='chevron'/></span>
                 const pctL=resAnio.pct!=null&&pctX(pct1(resAnio.pct),'sobre los ingresos')
                 return (<div style={box}>
                   <div style={{padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,color:C.accent}}>Resultado del ejercicio {selYear}</div>
                   {lin('','Facturado',mRes('fac'),null,()=>setResDrill({tile:'fact',year:null}))}
-                  {resAnio.sub!==0&&lin('+','Subarriendo',mRes('sub'),null,()=>go('subarriendo'))}
                   {resAnio.rex!==0&&cxR({k:'rex',sg:'+',label:'Comisión de externos',val:mRes('rex'),onClick:()=>setResRex(v=>!v),open:resRex})}
                   {resAnio.rex!==0&&resRex&&<>
                     {rexDet.tCob>=1&&cxR({k:'rexc',label:'Cobrada · '+rexDet.cob.length+(rexDet.cob.length===1?' factura':' facturas'),val:fmt(Math.round(rexDet.tCob)),kind:'sub',onClick:()=>setResRexL(l=>l==='cob'?null:'cob'),open:resRexL==='cob'})}
@@ -165,6 +164,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
                   </>}
                   {lin('=','Ingresos',mRes('ing'),'tot',onOpenEstadoResultados||null)}
                   {lin('−','Costos de operación',mRes('cos'),'neg',()=>go('presupuestoOficina'),verL)}
+                  {resAnio.sub!==0&&lin('','Subarriendo · menor costo','−'+mRes('sub'),null,()=>go('subarriendo'))}
                   {resAnio.com!==0&&lin('−','Comisiones pagadas',mRes('com'),'neg',()=>go('proveedores'))}
                   {lin('=',resAnio.res>=0?'Margen':'Pérdida',(resAnio.res<0?'−':'')+mRes('res',true),'res',onOpenEstadoResultados||null,pctL)}
                   {onOpenEstadoResultados&&<div onClick={onOpenEstadoResultados} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver estado de resultados <Gl n='chevron'/></div>}
@@ -524,10 +524,10 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             ...yrsCob.map(y=>[yrLbl(y), fmtUFk((iv.byYearUF||{})[y]||0), pe(iv.byYear[y]||0)]) ] },
         { t:resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', pct:resAnio.pct!=null?Math.round(resAnio.pct):null, uf:uf(resAnio.verUF.res), clp:pe(resAnio.res), lines:[
             ['Facturado', fmtUFk(resAnio.verUF.fac), pe(resAnio.fac)],
-            ...(resAnio.sub?[['+ Subarriendo', fmtUFk(resAnio.verUF.sub), pe(resAnio.sub)]]:[]),
             ...(resAnio.rex?[['+ Comisión de externos', fmtUFk(resAnio.verUF.rex), pe(resAnio.rex)]]:[]),
             ['= Ingresos', fmtUFk(resAnio.verUF.ing), pe(resAnio.ing)],
             ['− Costos de operación', fmtUFk(resAnio.verUF.cos), pe(resAnio.cos)],
+            ...(resAnio.sub?[['Subarriendo · menor costo', '−'+fmtUFk(resAnio.verUF.sub), '−'+pe(resAnio.sub)]]:[]),
             ['− Comisiones pagadas', fmtUFk(resAnio.verUF.com), pe(resAnio.com)] ] },
         // Meta de cobranza (pesos) en UF con la UF promedio de lo cobrado → Cobrado − Meta = Sobre (o Meta − Cobrado = Falta) cuadra en UF.
         { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:(()=>{ const mU=ingYTD>0&&iv.totalUF>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, sobre=ingYTD>=metaCobranza
@@ -599,7 +599,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const CVu=cascadaVendido(m,true), ventasCard=card('Vendido neto', CVu.neto, m.neto, `${ventaNetoPct} % de la meta`, row('Vendido bruto',CVu.bruto,m.bruto)+row('Costos de terceros',CVu.costo,m.costo,true)+row('Meta del año',metaUF,m.meta))
     const factCard=card('Facturado', V.fac, resAnio.fac, `${m.bruto>0?factPct:0} % de lo vendido bruto`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
     const cobCard=card('Cobrado propio', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Comisiones pagadas',comU,comisYTD,true)+row('+ Comisiones percibidas',percU,percYTD)+row('Ingreso real',(iv.totalUF||0)-comU+percU,ingReal)+row('Total a caja',iv.totalCajaUF||0,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
-    const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.sub?row('+ Subarriendo',V.sub,resAnio.sub):'')+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos de operación',V.cos,resAnio.cos,true)+row('Comisiones pagadas',V.com,resAnio.com,true))
+    const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos de operación',V.cos,resAnio.cos,true)+(resAnio.sub?row('incluye subarriendo y gastos recuperados (menor costo)',V.sub,resAnio.sub,true):'')+row('Comisiones pagadas',V.com,resAnio.com,true))
     const _mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, _sob=ingYTD>=metaCobranza
     const [_a,_b]=_sob?redondearPartes([_mU,(iv.totalUF||0)-_mU],1,[]):redondearPartes([iv.totalUF||0,_mU-(iv.totalUF||0)],1,[0])
     const cobranzaCard=card('Cobranza', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Meta de cobranza',_sob?_a:_a+_b,metaCobranza)+row(_sob?'Sobre la meta':'Falta para la meta',_b,Math.abs(ingYTD-metaCobranza)))
@@ -721,12 +721,12 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const _pdLbl=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+prevYm.slice(5,7)-1]
     const abPrev=(ingAbonos||[]).filter(a=>String(a.fecha||'').startsWith(prevYm))
     const entraPrev=abPrev.reduce((s,a)=>s+(Number(a.monto)||0),0), entraPrevUF=abPrev.reduce((s,a)=>s+(Number(a.monto)||0)/ufDelDia(ufDias,a.fecha,ufRef),0)
-    const rPrev=resultadoMes(fuRes,{billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef},prevYm), cuestaPrev=rPrev.cos   // costo REAL del mes (banco + planilla + gastos varios)
+    const rPrev=resultadoMes(fuRes,{billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef},prevYm), cajaPrev=cajaContraCosto(entraPrev,rPrev), cuestaPrev=cajaPrev.cuesta   // costo BRUTO del mes (neto + subarriendo): el banco recibe los depósitos de subarriendo
     const cnA=id=>(clients.find(c=>String(c.id)===String(id))?.name)||'cliente'
     const _wk=(()=>{ const d=new Date(); const m=new Date(d); m.setDate(d.getDate()-((d.getDay()+6)%7)); return m.toLocaleDateString('en-CA') })()
     const raw=[
       vencMonto>0 && {key:'vencido',sev:'r',icon:'alert',monto:vencMonto,t:`Vencido ${fmtMon(vencMonto)}`,s:`${vencN} factura${vencN!==1?'s':''} vencida${vencN!==1?'s':''}`,goLbl:'Cobranza',go:()=>go('cobranza')},
-      (entraPrev>0 && entraPrev<cuestaPrev) && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${vMon(entraPrevUF,entraPrev)} · costó ${vMon(rPrev.cosUF,cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
+      cajaPrev.alerta && {key:'cajames',sev:'r',icon:'chart',monto:cuestaPrev-entraPrev,t:`En ${_pdLbl} entró menos de lo que costó la oficina`,s:`entró ${vMon(entraPrevUF,entraPrev)} · costó ${vMon(cajaPrev.cuestaUF,cuestaPrev)}`,goLbl:'Costos',go:()=>onOpenCostosOfi&&onOpenCostosOfi()},
       progVenc.length>0 && {key:'porfacturar',sev:'a',icon:'file',monto:progMonto,t:`${progVenc.length} por emitir vencida${progVenc.length!==1?'s':''}`,s:`${fmtMon(progMonto)} vendido sin facturar`,goLbl:'Facturar',go:()=>onAcceso&&onAcceso('facturasMes')},
       cxpTotDash>0 && {key:'cxp',sev:'a',icon:'wallet',monto:cxpTotDash,t:`Comisiones por pagar ${fmtMon(cxpTotDash)}`,s:`${cxpN} proveedor${cxpN!==1?'es':''}${cxpDias!=null?` · la más antigua cobrada hace ${nDias(cxpDias)}`:''}${comisSaldo.porDevengar>0?` · sujeto a cobro ${fmtShort(comisSaldo.porDevengar)}`:''}`,goLbl:'Ver',go:()=>navTo?navTo({tab:'proveedores'}):go('billing')},
       margenNeg.length>0 && {key:'bajocosto',sev:'a',icon:'briefcase',monto:Math.abs(margenNeg[0].margen),t:`${margenNeg.length} cliente${margenNeg.length!==1?'s':''} rinde${margenNeg.length!==1?'n':''} bajo su costo`,s:`el más crítico: ${cnA(margenNeg[0].cid)} ${margenNeg[0].pct} %`,goLbl:'Repricing',go:()=>go('repricing')},
