@@ -27,7 +27,7 @@ export function Mirada({ X }) {
     ['com', 'Comisiones', d.terc != null ? pc(d.terc) : 'sin dato', 'de lo cobrado en el año', '', 'terc'],
     ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `promedio · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
     ['egr', 'Costos al mes', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
-    ['alerta', 'Conversión', 'sin dato', 'el índice de propuestas no tiene registros', 'amb', 'conv'],
+    ['alerta', 'Conversión', d.conversion.pct != null ? pc(d.conversion.pct, 0) : 'sin dato', d.conversion.pct != null ? `${d.conversion.aceptadas} aceptadas · ${d.conversion.rechazadas} rechazadas` : 'sin propuestas rechazadas registradas', d.conversion.pct != null ? '' : 'amb', 'conv'],
   ]
   // Seis tarjetas de solo lectura, una por componente (los mismos nombres, tonos e íconos de los pasos 2 y 4). Cada cifra en la moneda elegida, con la UF de su fuente.
   const nSoc = d.retiros26.socios.length || 1, c26 = d.costos26, r26 = d.referencia, RU = d.refUF

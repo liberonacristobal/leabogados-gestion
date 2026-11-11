@@ -6,9 +6,10 @@
 import { useMemo, useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { cotizacionEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
+import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
 import { CFG_PRESUPUESTO, sociosDelEstudio } from './presupuestoCfg.js'
-import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
+import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, usePropuestasNoCuentan, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio, cascadaVendido } from './cifras.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF, pesosEstacionalidad } from '../../supabase/functions/_shared/presupuesto.js'
@@ -25,6 +26,7 @@ const ym = (/** @type {number} */ y, /** @type {number} */ m) => `${y}-${String(
  * @param {{ sales:any[], billing:any[], terceros:any[], costosOfiRows:any[], expenses:any[], clients:any[], anticipos:any[], anioSel?:number|null }} p
  */
 export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], anioSel = null }) {
+  const noCuentan = usePropuestasNoCuentan()   // propuestas marcadas «duplicada: no cuenta» (decisión guardada)
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: currentYear })
   const { fuRes, ufDias, ufRef, m, metaUF, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: com, metaCobranza, ingConc, ingAbonos, _esFactHon, extBillIds } = R
 
@@ -268,8 +270,10 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const sueldosMes = costos.filter((c) => c.g === CFG.costos.grupoSueldos).reduce((a, c) => a + (Number(c.m) || 0), 0)
   const mesPrev = (() => { const [y, mo] = ymHoy.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}` })()
   const impBase = liqImp && liqImp.monto > 0 ? { mes: liqImp.mes, monto: liqImp.monto, fuente: 'liquidaciones de la contadora' } : { mes: mesPrev, monto: sueldosMes, fuente: 'Remuneraciones de Costos' }
+  const conversion = conversionPropuestas({ sales, excluir: esSubarriendo, noCuentan })   // propuestas aceptadas / decididas en su ventana (fuente única, _shared/ventasConversion.js), sin las marcadas «duplicada»
   const cotEmp = { ...cotizacionEmpleador({ anio, imponibleMensual: impBase.monto, baseYM: impBase.mes, calendario: CFG.previsional.empleador }), base: impBase }
   return {
+    conversion,
     subarriendoAnual: (sales || []).filter((s) => s && !s.deleted_at && esSubarriendo(s) && esRecurrente(s)).reduce((a, s) => a + ventaCLP(s, ufRef), 0),
     refMeses: { ventas: ult3.map((m) => ({ m, v: (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0) })), fact: ult3.map((m) => ({ m, v: serie[ym(currentYear, m)]?.fac ?? 0 })), caja: ult3.map((m) => ({ m, v: cobMes[ym(currentYear, m)] ?? 0 })) },
     cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, origenMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,

@@ -2316,6 +2316,24 @@ export function useArrastrePresupuesto({ billing = [], sales = [], clients = [],
     return { ...a, base: B, nAsesorias: B.nAsesorias, moraEstimada: B.moraEstimada, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
   }, [B, ajustes, R0, billing, fantasmaIds, base])
 }
+// Propuestas marcadas «duplicada: no cuenta» (learnings kind 'propuesta_duplicada', key = id de la venta, value '1'): decisión guardada y reutilizable que se entrega a conversionPropuestas como `noCuentan`.
+// No da de baja ni cambia la venta: solo la saca de la cifra de conversión; se puede volver a contar.
+let _dupP=null; const _dupSubs=new Set(); const _dupDemo=new Set()
+export function usePropuestasNoCuentan(){
+  const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)
+  useEffect(()=>{ const f=()=>setN(x=>x+1); _dupSubs.add(f); return ()=>{ _dupSubs.delete(f) } },[])
+  useEffect(()=>{ let v=true
+    const base=DEMO?Promise.resolve(new Set(_dupDemo)):(_dupP||(_dupP=supabase.from('learnings').select('key,value').eq('kind','propuesta_duplicada').then(({data})=>new Set((data||[]).filter(r=>String(r.value)==='1').map(r=>String(r.key))),()=>new Set())))
+    base.then(x=>{ if(v) setS(x) })
+    return ()=>{v=false} },[n])
+  return s
+}
+export async function marcarPropuestaNoCuenta({id,noCuenta,titulo=''}){
+  const k=String(id)
+  if(DEMO){ if(noCuenta) _dupDemo.add(k); else _dupDemo.delete(k) }
+  else { await setLearningKV('propuesta_duplicada',k,noCuenta?'1':'0'); _dupP=null; logActividad('propuesta.duplicada',{tabla:'sales',id:k,detalle:{title:`${noCuenta?'No cuenta (duplicada)':'Vuelve a contar'} · ${titulo}`.slice(0,120)}}) }
+  _dupSubs.forEach(f=>f())
+}
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)
   useEffect(()=>{ const f=()=>setN(x=>x+1); _noEmitirSubs.add(f); return ()=>{ _noEmitirSubs.delete(f) } },[])
