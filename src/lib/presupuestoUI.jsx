@@ -246,7 +246,7 @@ export const Flecha = ({ sube, bueno, children }) => <span style={{ fontWeight: 
 // Escritorio: carril de ícono a la izquierda y, a su derecha, rótulo, dos cifras con su rótulo y UNA línea de comparación con flechas. Celular (dos por fila): ícono 26 px y rótulo en una línea,
 // REAL y META apiladas (rótulo a la izquierda, cifra a la derecha) y la comparación en una línea. Solo tipografía: sin pills ni barras. `izq`/`der` = { cap, val } (val puede ser un campo editable);
 // `cmp` = <Flecha/> o texto. Teclado: Enter y Espacio abren, con foco visible (clase pp-foco, ver EstilosPresupuesto).
-export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, cmp2, onClick, aria }) {
+export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, cmp2, onClick, aria, solo }) {
   const t = TONO[tono], D = useIsDesktop(), ico = D ? 36 : 26, ambos = CFG.moneda === 'ambos'
   const tecla = onClick ? (/** @type {any} */ e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(e) } } : undefined
   const flecha = onClick && <svg width={D ? 16 : 12} height={D ? 16 : 12} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' style={{ flexShrink: 0, opacity: 0.7 }}><path d='M9 6l6 6-6 6' /></svg>
@@ -262,12 +262,13 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, cmp2, onClick, a
   const cmpEl2 = cmp2 ? <div style={{ ...(D ? { gridColumn: 2 } : {}), fontSize: D ? 12 : 11, color: C.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{cmp2}</div> : null
   const caja = { background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, borderRadius: 12, minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxSizing: /** @type {'border-box'} */ ('border-box'), alignContent: /** @type {'start'} */ ('start') }
   const ar = { role: onClick ? 'button' : undefined, tabIndex: onClick ? 0 : undefined, 'aria-label': aria, className: onClick ? 'pp-foco' : undefined, onClick, onKeyDown: tecla }
+  if (solo && !D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 2 }}>{cab}{fig(izq)}</div>
   if (!D) return <div {...ar} style={{ ...caja, padding: '8px 9px', display: 'grid', gap: 4, minHeight: ambos ? 136 : 112, gridTemplateRows: cmp2 ? 'auto auto auto auto auto' : 'auto auto auto auto' }}>{cab}{fig(izq)}{der ? fig(der) : <div style={{ minHeight: ambos ? 32 : 18 }} />}{cmpEl}{cmpEl2}</div>
   return <div {...ar} style={{ ...caja, padding: '8px 14px 6px', display: 'grid', gridTemplateColumns: `${ico}px minmax(0,1fr)`, columnGap: 12, rowGap: 4, alignItems: 'start' }}>
     <span style={{ gridRow: '1 / span 3', width: ico, height: ico, borderRadius: 10, background: tono === 'w' ? C.bgSoft : C.card, display: 'grid', placeItems: 'center' }}><Ic n={ic} s={18} /></span>
     {cab}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16, alignItems: 'start', marginTop: -4 }}>{fig(izq)}{der && fig(der)}</div>
-    {cmpEl}
+    {!solo && cmpEl}
     {cmpEl2}
   </div>
 }

@@ -92,8 +92,8 @@ export function Base({ X }) {
   // Seis tarjetas de solo lectura: el cierre 2026 estimado contra la base de {Y} (últimos 12 meses cerrados, sin crecimiento, con los supuestos del escenario Base). Tocar una abre su página (filasBase).
   const ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv)
   const tarjetasBase = componentesCortosDe(CFG).map(([k, nombre]) => {
-    const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio, MT.cv), ref = d.referencia[k]
-    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} izq={{ cap: 'Cierre', val: mx(ref.cierre, d.refUF[k].cierre) }} der={{ cap: 'Base', val: v != null ? mm(v) : '—' }} cmp={<Cmp comp={k} v={v} refv={ref.cierre} refU={d.refUF[k].cierre} />} onClick={() => ir({ drill: { t: 'comp', de: 'base', k } })} />
+    const [tono, ic] = TONO_COMP[k], v = valorComponente(ch0, k, MT.ratio, MT.cv)
+    return <Tarjeta key={k} tono={tono} ic={ic} label={nombre} aria={nombre} solo izq={{ cap: 'Base', val: v != null ? mm(v) : '—' }} onClick={() => ir({ drill: { t: 'comp', de: 'base', k } })} />
   })
   const tile = (i) => <div key={i} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? 12 : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 3 : 1 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: D ? 11 : 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{MESC[i]}</span>{D && <Chip tono='z'>{origen(i)}</Chip>}</div>

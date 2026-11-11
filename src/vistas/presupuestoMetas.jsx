@@ -1,8 +1,8 @@
 // Presupuesto anual · paso 4: Metas 2027. Se escribe la meta de UN componente (retiros al partir) y los demás se proyectan con la misma cascada del modelo, en cualquier dirección
 // (metasDesdeComponente en _shared/presupuesto.js). Pasos 1 y 2 muestran los mismos seis componentes de solo lectura; las metas se escriben solo aquí.
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { componentesDe, componentesCortosDe, nombreCorto, anclasDe, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente, reservaRecomendada, escenarioMetas, resumenDistribucion, partePorSocio } from '../../supabase/functions/_shared/presupuesto.js'
-import { mm, mmP, mx, m26, pc, sgn, Tarjeta, FldDin, Titulo, Btn, Grid, tasa27, Pliegue, Panel, Fila, MESC, monedaActual } from '../lib/presupuestoUI.jsx'
+import { cadenaMeta, componentesDe, componentesCortosDe, nombreCorto, anclasDe, valorComponente, escenariosContraMeta, nivelDeMeta, nombreComponente, reservaRecomendada, escenarioMetas, resumenDistribucion, partePorSocio } from '../../supabase/functions/_shared/presupuesto.js'
+import { mm, mmP, mx, m26, pc, sgn, Tarjeta, FldDin, Titulo, Btn, Grid, tasa27, Pliegue, Panel, Fila, MESC, monedaActual, difMon } from '../lib/presupuestoUI.jsx'
 import { repartoCierre } from '../lib/cifras.js'
 import { Cmp, Supuestos, ReservaBloque, TablaPresupuesto, motivoMeta, nivelTxt } from '../lib/presupuestoBloques.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -55,7 +55,10 @@ export function ComoSeCalcula({ X, de }) {
     ['Retiros', 'lo retirado a la fecha; no se proyecta.', cierreCifras(X, 'retiros', true).c],
     de === 'base' ? ['Base', `últimos 12 meses cerrados, sin crecimiento.`, ''] : ['Proyectado', `resultado del escenario ${X.nomEsc(escenarioMetas(X.est, CFG))} con el crecimiento que lleva a la meta; Presupuesto: el presupuesto de costos ${an}.`, ''],
   ]
-  return <Pliegue t='Cómo se calcula' v='Cierre = real a la fecha + resto del año'><div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13 }}>{items.map(([t, tx, cf], i) => <div key={i}><b style={{ color: C.accent }}>{t}</b> · {tx}{cf ? <div style={{ fontSize: 12, color: C.muted }}>{cf}</div> : null}</div>)}</div></Pliegue>
+  // Paso 2: la Base de cada componente contra su cierre estimado, una línea por componente.
+  const ch0 = de === 'base' ? cadenaMeta(d.base, X.est, 0, X.MT.ratio, X.MT.cv) : null
+  const lineasBase = ch0 ? componentesCortosDe(CFG).map(([k, n]) => { const v = valorComponente(ch0, k, X.MT.ratio, X.MT.cv), ref = d.referencia[k]; if (v == null) return null; const df = difMon(v, ref.cierre, null, d.refUF[k].cierre); return <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}><span><b style={{ color: C.accent }}>{n}</b> · Base {mm(v)} · Cierre {Y} {mmP(ref.cierre)}</span><span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: C.muted }}>{df.pct != null ? `${df.sg}${pc(Math.abs(df.pct))}` : `${df.sg}${df.abs}`}</span></div> }) : null
+  return <Pliegue t='Cómo se calcula' v='Cierre = real a la fecha + resto del año'><div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13 }}>{lineasBase && <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}><b style={{ color: C.accent }}>Base contra cierre {Y}</b>{lineasBase}</div>}{items.map(([t, tx, cf], i) => <div key={i}><b style={{ color: C.accent }}>{t}</b> · {tx}{cf ? <div style={{ fontSize: 12, color: C.muted }}>{cf}</div> : null}</div>)}</div></Pliegue>
 }
 
 export function Metas({ X }) {
