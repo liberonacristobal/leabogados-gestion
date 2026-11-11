@@ -53,7 +53,7 @@ export const tasaPPMLegal = (anio, ufAnterior, cfg = CONFIG_DEFECTO) => {
 
 /** @typedef {{ k:string, n:string, t:number }} EscenarioEstado  clave interna (estable), nombre que ve el usuario y tono (índice) */
 /** @typedef {{ modo:Record<string,string>, manual:Record<string,number[]> }} Distribucion  modo por componente: 'iguales' (defecto), 'estacional' o 'manual'; manual = pesos de los 12 meses */
-/** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null, arrastre?:{ ajustes:Record<string,any>, extras:any[] } }} EstadoPresupuesto */
+/** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null, rec?:number, modo?:string, pct?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null, arrastre?:{ ajustes:Record<string,any>, extras:any[] } }} EstadoPresupuesto */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 
 // ── Escenarios: una LISTA editable en el estado (`st.escs`: clave, nombre y tono; `st.p[clave]`: sus palancas). Hasta `maxEscenarios`; mínimo uno. ──
@@ -743,6 +743,7 @@ export function diferenciaEstructurada(a, b, f) {
   const nc = f.nombreComp || ((/** @type {string} */ k) => k), ma2 = a.metas || { ancla: null, valor: null }, mb2 = b.metas || { ancla: null, valor: null }
   if (ma2.ancla !== mb2.ancla) o.push({ grupo: 'Metas', etiqueta: 'Meta escrita en', antes: ma2.ancla ? nc(ma2.ancla) : '—', despues: mb2.ancla ? nc(mb2.ancla) : '—' })
   if ((ma2.valor ?? null) !== (mb2.valor ?? null)) o.push({ grupo: 'Metas', etiqueta: `Valor de la meta${mb2.ancla ? ' · ' + nc(mb2.ancla) : ''}`, antes: ma2.valor == null ? '—' : f.mm(ma2.valor), despues: mb2.valor == null ? '—' : f.mm(mb2.valor) })
+  if ((ma2.rec || 0) !== (mb2.rec || 0)) o.push({ grupo: 'Metas', etiqueta: 'Recuperación de cartera', antes: f.mm(ma2.rec || 0), despues: f.mm(mb2.rec || 0) })
   const na = a.notas || {}, nb = b.notas || {}, paso = f.paso || ((/** @type {number} */ i) => `Paso ${i + 1}`)
   for (const i of [...new Set([...Object.keys(na), ...Object.keys(nb)])].sort()) { const x = String(na[i] || '').trim(), y = String(nb[i] || '').trim(); if (x !== y) o.push({ grupo: 'Notas', etiqueta: paso(Number(i)), antes: x || '—', despues: y || '—' }) }
   return o

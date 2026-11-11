@@ -4,6 +4,7 @@ import { C, useIsDesktop, fmtFechaDMY } from './base.jsx'
 import {
   anclasDe, nombreCorto, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
 } from '../../supabase/functions/_shared/presupuesto.js'
+import { resolverMeta, pctSobreCierre } from '../../supabase/functions/_shared/metaPresupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { mm, mx, pc, Flecha, Fld, Btn, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
 
@@ -16,12 +17,14 @@ export function calcMetas(d, est) {
   // facturado/vendido se aplica al vendido BRUTO; la comisión sobre ventas (% del bruto, la observada en el año en curso salvo que se edite) lleva el bruto al NETO de la meta de ventas.
   const ratio = est.metas?.ratio ?? d.ratioFactVend ?? null
   const cv = est.metas?.cv ?? d.comisVentaPct ?? 0
-  const ancla = anclasDe(CFG).includes(est.metas?.ancla) ? est.metas.ancla : CFG.anclaInicial
+  // Una sola cifra fijada (por defecto Vendido), en $ o en % sobre su cierre estimado de 2026, más la recuperación de cartera (metaPresupuesto.js). Con Cobrado fijada la cadena recibe la meta menos la recuperación.
+  const R = resolverMeta({ metas: est.metas, cierres: Object.fromEntries(anclasDe(CFG).map((k) => [k, d.referencia[k].cierre])), anclas: anclasDe(CFG) })
+  const ancla = R.ancla
   // Sin nada escrito parte con lo real de 2026; si no hay (p. ej. sin retiros registrados), con lo que da el escenario de referencia (Base).
-  const refAncla = d.referencia[ancla].cierre
-  const valor = est.metas?.valor != null ? est.metas.valor : refAncla > 0 ? refAncla : valorComponente(cadenaMeta(d.base, est, est.p[escenarioMetas(est, CFG)].g, ratio, cv), ancla, ratio, cv) ?? 0
+  const valorFijada = R.valor != null ? R.valor : valorComponente(cadenaMeta(d.base, est, est.p[escenarioMetas(est, CFG)].g, ratio, cv), ancla, ratio, cv) ?? 0
+  const valor = ancla === 'caja' ? valorFijada - R.rec : valorFijada
   const r = metasDesdeComponente(d.base, est, { componente: ancla, valor, ratio, cv }, CFG)
-  return { ancla, valor, ratio, cv, ok: !!r.ok, motivo: r.ok ? null : r.motivo, ch: r.ok ? r : cadenaMeta(d.base, est, 0, ratio, cv), ref: d.referencia }
+  return { ancla, valor, valorFijada, rec: R.rec, modo: R.modo, pct: R.modo === 'pct' ? R.pct : pctSobreCierre(valorFijada, R.cierre), cierre: R.cierre, porDefecto: R.porDefecto, ratio, cv, ok: !!r.ok, motivo: r.ok ? null : r.motivo, ch: r.ok ? r : cadenaMeta(d.base, est, 0, ratio, cv), ref: d.referencia }
 }
 
 /** Motivo en texto de una meta sin solución. */

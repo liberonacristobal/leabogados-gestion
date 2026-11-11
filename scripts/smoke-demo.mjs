@@ -96,8 +96,10 @@ try {
       await revisar(`pestaña ${t}`, { fn: t => { window.__demo.setModal(null); window.__demo.navTo({ tab: t }) }, arg: t })
     // Presupuesto: los seis pasos (el 4.º, Metas, es nuevo) y la pestaña Por socio del paso 5; cada uno sin error ni scroll horizontal en celular.
     if (!solo.length || solo.includes('presupuesto')) {
-      for (let i = 1; i <= 6; i++)
+      for (let i = 1; i <= 6; i++) {
         await revisar(`presupuesto paso ${i}`, { fn: async (i) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').startsWith('Paso ' + i + ':') || new RegExp('^(✓ )?' + i + ' · ').test(b.textContent.trim()))?.click(); await esp(300); if (i === 5) { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Por socio')?.click(); await esp(300) } }, arg: i })
+        if (i === 4) { const t4 = await page.evaluate(() => document.body.innerText); if (!/Calculada|Fijada/.test(t4) || !/Falta facturar/i.test(t4) || !/Distribución/i.test(t4)) fallas.push({ vista: nombre, donde: 'presupuesto paso 4', error: 'faltan la tabla de metas, «Falta facturar» o los accesos inferiores' }) }
+      }
     }
     // Presupuesto · Arrastre (paso 2): las tres páginas de líneas (por facturar, asesorías y todas) se abren desde sus filas; la demo trae cuotas con vencimiento en 2027.
     if (!solo.length || solo.includes('presupuesto')) {

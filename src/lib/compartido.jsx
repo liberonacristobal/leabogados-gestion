@@ -2307,12 +2307,12 @@ export function useArrastrePresupuesto({ billing = [], sales = [], clients = [],
     const asesorias = vivas.filter(s => esRecurrente(s) && !esSubarriendo(s)).map(s => ({ id: s.id, cid: s.client_id, concepto: ventaNombre(s), anual: ventaCLP(s, ufRef) }))
     const ventas = Object.fromEntries(vivas.map(s => [String(s.id), ventaNombre(s)]))
     const morosos = new Set(((F && F.exclMor && F.exclMor.items) || []).map(x => String((x.b && x.b.client_id) || '')))
-    return { ...lineasArrastre({ filas: R.filas, asesorias, ventas }), morosos, nAsesorias: asesorias.length }
+    return { ...lineasArrastre({ filas: R.filas, asesorias, ventas }), morosos, nAsesorias: asesorias.length, moraEstimada: (F && F.exclMor && F.exclMor.monto) || 0 }
   }, [R, F, sales, ufRef])
   return useMemo(() => {
     const a = aplicarAjustesArrastre(B, ajustes, B.morosos)
     const bills = (billing || []).filter(b => !(fantasmaIds && fantasmaIds.has(String(b.id))))
-    return { ...a, base: B, nAsesorias: B.nAsesorias, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
+    return { ...a, base: B, nAsesorias: B.nAsesorias, moraEstimada: B.moraEstimada, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
   }, [B, ajustes, R0, billing, fantasmaIds, base])
 }
 export function useNoEmitirSet(){
