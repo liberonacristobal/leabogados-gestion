@@ -1,4 +1,4 @@
-// Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Costos → Escenarios → Mes a mes → Por socio → Metas → Resumen del año).
+// Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Arrastre → Costos → Escenarios → Mes a mes → Por socio → Metas → Resumen del año).
 // Las fórmulas repiten el modelo de _shared/presupuesto.js; `evaluar` las calcula aquí mismo para guardar el valor al abrir el archivo y para probar que coinciden con el modelo.
 import { parteMeta } from '../../supabase/functions/_shared/presupuesto.js'
 
@@ -11,7 +11,7 @@ const PESOS = '#,##0', PCT = '0.0%', UF = '#,##0.00'
 
 /**
  * Hojas del libro. Una celda es texto, {v,z} (número con formato), {f,z} (fórmula con formato) o null (vacía).
- * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[], metas?:{ancla:string,valor:number}, ratio?:number|null, cv?:number|null, refK?:string, referencia?:Record<string,{cierre:number}> }} P
+ * @param {{ anio:number, anioBase:number, ufDic:number, baseCLP:number[], baseUF:number[], est:any, ESC:string[][], costos:any[], socios:{nombre:string,facturado:number}[], oficiales:any, mes26:{a:number|null,f:number|null,cob:number|null}[], metas?:{ancla:string,valor:number}, ratio?:number|null, cv?:number|null, refK?:string, referencia?:Record<string,{cierre:number}>, arrastre?:{ nombre:string, concepto:string, tipo:string, estado:string, n:number, mensual:number, meses:number, total:number, enApp:number, nota:string, porMes:number[] }[] }} P
  */
 export function hojasPresupuesto(P) {
   const { est, ESC } = P, ne = ESC.length, iBase = Math.max(0, ESC.findIndex(([k]) => k === (P.refK || 'base')))   // iBase = escenario de referencia de las metas (Base)
@@ -48,6 +48,17 @@ export function hojasPresupuesto(P) {
       ...MESES.map((m, i) => [i + 1, m, N(P.baseCLP[i]), N(P.baseUF[i], UF), F(`Supuestos!$B$5*(1+Supuestos!$B$6/100)^(A${i + 2}/12)`, UF)]),
     ],
   }
+  // Arrastre: una fila por línea (con los ajustes del borrador), sus meses y el total con fórmula; las quitadas valen 0 y dicen «quitada».
+  const nA = (P.arrastre || []).length
+  const arrastre = P.arrastre ? {
+    nombre: `Arrastre ${P.anioBase}`, anchos: [26, 30, 12, 14, 14, 8, 16, 10, 16, 28, ...MESES.map(() => 12)],
+    filas: [
+      [`Arrastre ${P.anioBase} · líneas con los ajustes del presupuesto`],
+      ['Cliente', 'Proyecto', 'Tipo', 'Estado', 'Por mes ($)', 'Meses', `Total ${P.anio} ($)`, 'Cuotas', 'En la app ($)', 'Nota', ...MESES],
+      ...P.arrastre.map((l) => [l.nombre, l.concepto, l.tipo, l.estado, l.tipo === 'Asesoría' ? N(l.mensual) : null, l.tipo === 'Asesoría' ? N(l.meses, '0') : null, N(l.total), l.tipo === 'Cuotas' ? N(l.n, '0') : null, N(l.enApp), l.nota, ...l.porMes.map((v) => N(v))]),
+      ['Total', '', '', '', null, null, F(`SUM(G3:G${nA + 2})`), null, F(`SUM(I3:I${nA + 2})`), '', ...MESES.map((_, i) => F(`SUM(${COL(10 + i)}3:${COL(10 + i)}${nA + 2})`))],
+    ],
+  } : null
   const costos = {
     nombre: 'Costos', anchos: [34, 14, 16, 8, 16, ...ESC.map(() => 18)],
     filas: [
@@ -150,7 +161,7 @@ export function hojasPresupuesto(P) {
       ...MESES.map((m, i) => { const x = P.mes26[i] || { a: null, f: null, cob: null }, f = i + 11; return [m, x.a == null ? null : N(x.a), x.f == null ? null : N(x.f), x.a && x.f != null ? F(`IF(B${f}=0,0,C${f}/B${f}-1)`, PCT) : null, x.cob == null ? null : N(x.cob)] }),
     ],
   }
-  return [supuestos, base, costos, escenarios, mes, socio, metas, resumen]
+  return [supuestos, base, ...(arrastre ? [arrastre] : []), costos, escenarios, mes, socio, metas, resumen]
 }
 
 /**

@@ -5,6 +5,7 @@ import { VacioPaso, Ic, LBL, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, 
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
+import { lineasTocadas } from '../../supabase/functions/_shared/arrastreAnio.js'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
 
@@ -107,48 +108,50 @@ export function Base({ X }) {
     ['Por facturar', 'cuotas de ventas ya vendidas · fuera de Vendido nuevo', m26(X.porFacturar || 0), X.irPorFacturar],
     ['Vendido nuevo', `meta de ventas ${Y} (neta) − recurrente`, vNuevo, () => ir({ etapa: 3 })],
   ]
-  // Paso 2 «Arrastre»: lo que el año base deja asegurado para el año siguiente (aseguradoAnio, _shared). Lo que el paso mostraba antes queda en su plegable.
-  const A = X.asegurado, rk = escenarioMetas(est, CFG), alza = est.p[rk].alza, terc = est.p[rk].terc
+  // Paso 2 «Arrastre»: lo que el año base deja facturado para el año siguiente (arrastreAnio, _shared), con los ajustes del borrador. Lo que el paso mostraba antes queda en su plegable.
+  const A = X.arrastre, rk = escenarioMetas(est, CFG), alza = est.p[rk].alza, terc = est.p[rk].terc
   const costos = costosPresupuesto(est, alza), comis = A.total * terc / 100, margen = A.total - costos - comis
   const cubre = costos > 0 ? (A.total / costos) * 100 : null
   const par = mm
   const recup = -costosBrutosNetos(est.costos, alza).subarriendo   // misma función y partida que el paso 3
   const pcT = (/** @type {number} */ n) => pc(n, Number.isInteger(n) ? 0 : 1)
   const nomMor = A.morosos.cids.slice(0, 6).map((c) => X.cliNom(c))
-  const detalle = !!ui.asegDet
+  const tocadas = lineasTocadas(est.arrastre)
+  const abrir = (/** @type {string} */ k) => () => ir({ drill: { t: 'arr', k } })
   const nota = (/** @type {any} */ t) => <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.text }}><span aria-hidden='true' style={{ width: 8, height: 8, borderRadius: '50%', background: C.done, flexShrink: 0, marginTop: 5 }} /><span style={{ minWidth: 0 }}>{t}</span></div>
   return <>
-    <Titulo>Lo que {Y - 1} deja asegurado para {Y}</Titulo>
+    <Titulo>Lo que {Y - 1} deja para {Y}</Titulo>
     <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: D ? 12 : 8, alignItems: 'start' }}>
-      <Panel hd='Ingresos asegurados'>
-        <Fila nombre='Por facturar' peq='cuotas de proyectos ya vendidos' valor={par(A.proyectos)} onClick={X.irPorFacturar} />
-        <Fila sin nombre='Asesorías permanentes' peq={`${A.nAsesorias} ventas mensuales × 12`} valor={par(A.asesorias)} />
-        <Fila tot nombre='Facturado asegurado' valor={par(A.total)} abierta={detalle} onClick={() => setUI({ asegDet: !detalle })} />
-        {detalle && <div style={{ background: C.bgSoft }}>{A.porCliente.slice(0, 12).map((c) => <Fila key={c.cid} sin nombre={X.cliNom(c.cid)} peq={c.moroso ? 'con factura morosa' : c.asesorias > 0 && c.proyectos > 0 ? 'proyectos y asesoría' : c.asesorias > 0 ? 'asesoría' : 'proyectos'} valor={par(c.total)} />)}{A.porCliente.length > 12 && <div style={{ padding: '6px 16px 10px', fontSize: 12, color: C.muted }}>y {A.porCliente.length - 12} clientes más</div>}</div>}
+      <Panel hd='Ingresos del arrastre'>
+        <Fila nombre='Por facturar' peq='cuotas de proyectos ya vendidos' valor={par(A.proyectos)} onClick={abrir('pf')} />
+        <Fila nombre='Asesorías permanentes' peq={`${A.nAsesorias} ventas mensuales × 12`} valor={par(A.asesorias)} onClick={abrir('as')} />
+        {A.nAgregadas > 0 && <Fila nombre='Agregadas a mano' peq={`${A.nAgregadas} línea${A.nAgregadas !== 1 ? 's' : ''}`} valor={par(A.agregadas)} onClick={abrir('todo')} />}
+        <Fila tot nombre='Facturado del arrastre' peq={tocadas > 0 ? `${tocadas} línea${tocadas !== 1 ? 's' : ''} ajustada${tocadas !== 1 ? 's' : ''}` : undefined} valor={par(A.total)} onClick={abrir('todo')} />
       </Panel>
       <Panel hd='Costos base'>
         <Fila nombre='Costos de la oficina' peq={`neto de subarriendo y gastos recuperados · con alza de ${pc(alza)}`} valor={par(costos)} onClick={() => ir({ etapa: 2 })} />
-        <Fila sin nombre={`Comisiones ${pcT(terc)} del asegurado`} valor={par(comis)} />
+        <Fila sin nombre={`Comisiones ${pcT(terc)} del arrastre`} valor={par(comis)} />
         <Fila tot sin nombre='Costos y comisiones' valor={par(costos + comis)} />
       </Panel>
     </div>
     <Panel pad>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: C.muted }}>{cubre != null ? `El asegurado cubre ${pc(cubre)} de los costos` : 'Sin costos'}</span>
-        <span style={{ fontSize: 13 }}>Margen asegurado <b style={{ fontSize: D ? 21 : 18, color: margen >= 0 ? C.greenText : C.overdueText, marginLeft: 8 }}><Val v={par(margen)} /></b></span>
+        <span style={{ fontSize: 13, color: C.muted }}>{cubre != null ? `El arrastre cubre ${pc(cubre)} de los costos` : 'Sin costos'}</span>
+        <span style={{ fontSize: 13 }}>Margen del arrastre <b style={{ fontSize: D ? 21 : 18, color: margen >= 0 ? C.greenText : C.overdueText, marginLeft: 8 }}><Val v={par(margen)} /></b></span>
       </div>
     </Panel>
-    <Panel hd='Aparte del asegurado'>
+    <Panel hd='Aparte del arrastre'>
       <Fila nombre='Por cobrar hoy' peq={`${A.nPorCobrar} facturas emitidas no pagadas · base de caja de ${Y}`} sin valor={par(A.porCobrarHoy)} />
       <Fila sin nombre='Subarriendo y gastos recuperados' peq={`${mm(recup / 12)} al mes · no es ingreso: rebaja el arriendo`} valor={par(recup)} />
     </Panel>
-    {A.morosos.n > 0 && nota(<><b style={{ color: C.accent }}>{par(A.morosos.monto)} del asegurado</b> ({pc(A.morosos.pct)}) está en {A.morosos.n} cliente{A.morosos.n !== 1 ? 's' : ''} con factura morosa: {nomMor.join(', ')}{A.morosos.n > nomMor.length ? ` y ${A.morosos.n - nomMor.length} más` : ''}. Se señala; no se descuenta.</>)}
+    {A.morosos.n > 0 && nota(<><b style={{ color: C.accent }}>{par(A.morosos.monto)} del arrastre</b> ({pc(A.morosos.pct)}) está en {A.morosos.n} cliente{A.morosos.n !== 1 ? 's' : ''} con factura morosa: {nomMor.join(', ')}{A.morosos.n > nomMor.length ? ` y ${A.morosos.n - nomMor.length} más` : ''}. Se señala; no se descuenta.</>)}
     {A.novDic > 0 && nota(<>Las cuotas que vencen en nov-dic de {Y - 1} (<b style={{ color: C.accent }}>{par(A.novDic)}</b> vigentes) son de {Y - 1}, no de {Y}.</>)}
-    <Pliegue t='Cómo se calcula' v='lo asegurado, sin contar dos veces'><div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-      <span>Facturado asegurado: las cuotas de proyectos que vencen en {Y} más las asesorías permanentes por 12 meses.</span>
+    <Pliegue t='Cómo se calcula' v='el arrastre, sin contar dos veces'><div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+      <span>Facturado del arrastre: las cuotas de proyectos que vencen en {Y} más las asesorías permanentes por 12 meses.</span>
       <span>No se cuentan las cuotas de las asesorías (ya van por 12 meses) ni el subarriendo y gastos recuperados, que no es ingreso.</span>
+      <span>Cada línea se puede ajustar, quitar o sumar a mano; los cambios quedan en el borrador y no tocan ventas, facturas ni cuotas.</span>
       <span>Costos: los de la oficina con el alza del escenario {X.nomEsc(rk)}, descontado el subarriendo y gastos recuperados; comisiones sobre lo facturado.</span>
-      <span>Margen asegurado: lo asegurado menos costos y comisiones, antes de vender nada nuevo.</span></div></Pliegue>
+      <span>Margen del arrastre: el arrastre menos costos y comisiones, antes de vender nada nuevo.</span></div></Pliegue>
     <Pliegue t={`Base de los últimos 12 meses cerrados`} v='lo que mostraba el paso antes'><div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: D ? 10 : 8 }}>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>

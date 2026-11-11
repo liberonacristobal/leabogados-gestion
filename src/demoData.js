@@ -128,6 +128,9 @@ export const demoData = {
     { id:'bdpg1', client_id:'c2', sale_id:'sdpg', concept:'Ampliación de giro — Cuota 1/1', amount:400000, status:'Anticipada', invoice_no:null, due:'2026-08-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'bdsp1', client_id:'c1', sale_id:'sdsp', concept:'Análisis tributario — Cuota 1/2', amount:450000, status:'Programada', invoice_no:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'bdsp2', client_id:'c1', sale_id:'sdsp', concept:'Análisis tributario — Cuota 2/2', amount:450000, status:'Programada', invoice_no:null, due:'2026-12-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdarr1', client_id:'c5', sale_id:'s5', concept:'Constitución y registro de marcas — Cuota 3/4', amount:6000000, status:'Programada', invoice_no:null, due:'2027-02-01', billing_type:'honorarios', monto_terceros:0 },   // demo del Arrastre: cuotas con vencimiento en 2027
+    { id:'bdarr2', client_id:'c5', sale_id:'s5', concept:'Constitución y registro de marcas — Cuota 4/4', amount:6000000, status:'Programada', invoice_no:null, due:'2027-05-01', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bdarr3', client_id:'c2', sale_id:'s2', concept:'Reorganización societaria — Cuota final', amount:9000000, status:'Programada', invoice_no:null, due:'2027-03-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'bsub4', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Diciembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2027-01-01', billing_type:'subarriendo', monto_terceros:0 },
     // Pagadas (cobrado 2026)
     { id:'b1',  client_id:'c1', sale_id:'s1', entity_id:'e1', concept:'Honorarios enero',        amount:3510000,  status:'Pagado',     invoice_no:'1201', issued_at:'2026-01-31', due:'2026-02-15', paid_at:'2026-02-10', billing_type:'honorarios', monto_terceros:0 },

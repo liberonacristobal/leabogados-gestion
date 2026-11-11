@@ -94,3 +94,16 @@ test('columnas dinámicas: con 5 escenarios (o con uno quitado) el libro sigue c
   assert.ok(Math.abs(valor(h2, 'Escenarios', 'C12') - m2.esc[l2[1][0]].retiros) < 1e-4)
   assert.ok(Math.abs(valor(h2, 'Por socio', 'D5') - m2.esc[l2[0][0]].fact) < 1e-4)
 })
+
+test('el libro agrega la hoja del Arrastre con una fila por línea y sus totales (las quitadas valen 0)', () => {
+  const est = estadoInicial({ costos, tasa: 15, ppmMes: 100_000 })
+  const lin = [
+    { nombre: 'Cliente A', concepto: 'Proyecto', tipo: 'Cuotas', estado: 'ajustada', n: 2, mensual: 0, meses: 0, total: 750_000, enApp: 1_500_000, nota: 'se atrasa', porMes: [500_000, 0, 250_000, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { nombre: 'Cliente B', concepto: 'Asesoría', tipo: 'Asesoría', estado: 'de la app', n: 12, mensual: 100_000, meses: 12, total: 1_200_000, enApp: 1_200_000, nota: '', porMes: Array(12).fill(100_000) },
+    { nombre: 'Cliente C', concepto: 'Asesoría', tipo: 'Asesoría', estado: 'quitada', n: 12, mensual: 50_000, meses: 12, total: 0, enApp: 600_000, nota: '', porMes: Array(12).fill(0) },
+  ]
+  const hojas = hojasPresupuesto({ ...mk(est), arrastre: lin }), h = evaluar(hojas)
+  assert.deepEqual(hojas.map((x) => x.nombre).slice(0, 3), ['Supuestos', 'Base', 'Arrastre 2026'])
+  assert.equal(valor(h, 'Arrastre 2026', 'G6'), 1_950_000); assert.equal(valor(h, 'Arrastre 2026', 'I6'), 3_300_000); assert.equal(valor(h, 'Arrastre 2026', 'K6'), 600_000)
+  assert.equal(hojasPresupuesto(mk(est)).some((x) => x.nombre === 'Arrastre 2026'), false)   // sin arrastre, el libro es el de siempre
+})
