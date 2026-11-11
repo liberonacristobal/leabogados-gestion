@@ -749,6 +749,16 @@ export const referenciaSeguimiento = ({ actual, hayOficial, anio, primerAnio = 2
  * @param {{ anio:number, imponibleMensual:number, baseYM:string, calendario:{desde:string,pct:number}[] }} o
  * @returns {{ total:number, tasaBase:number, meses:{ ym:string, tasa:number, extra:number }[] }}
  */
+/**
+ * Retiros + sueldos por socio (página Retiros): total de cada socio = sus retiros + sus sueldos, y Oficina = suma de los socios; todo en enteros, así las partes suman al peso.
+ * @param {{ socios:string[], retiros:Record<string,number>, sueldos:Record<string,number> }} o
+ * @returns {{ filas:{socio:string, retiros:number, sueldos:number, total:number}[], oficina:{retiros:number, sueldos:number, total:number} }}
+ */
+export function totalesSocios({ socios, retiros, sueldos }) {
+  const filas = (socios || []).map((s) => { const r = Math.round(num((retiros || {})[s])), w = Math.round(num((sueldos || {})[s])); return { socio: s, retiros: r, sueldos: w, total: r + w } })
+  const oficina = filas.reduce((a, f) => ({ retiros: a.retiros + f.retiros, sueldos: a.sueldos + f.sueldos, total: a.total + f.total }), { retiros: 0, sueldos: 0, total: 0 })
+  return { filas, oficina }
+}
 /** Nombre de la partida automática del alza de cotización del empleador (Ley 21.735); la identifica el id 'cot-empleador'. */
 export const NOMBRE_COT_EMPLEADOR = 'Alza de cotización del empleador (estimación)'
 /** Borradores guardados con el rótulo antiguo («Cotización empleador (estimación)»): se muestra el nuevo; un nombre escrito a mano no se toca. @param {PartidaCosto[]} costos */

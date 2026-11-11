@@ -94,3 +94,11 @@ export function kpisPorSocio({P,V,ym}){
     socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KF.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
   return {inPer,sumP,vend,KF,KC,KI,card6,emitido,nEmitidas,emitidoMeses}
 }
+
+// Resumen Por socio: cifras en $M de 1 decimal que CUADRAN (las partes suman el total redondeado) y participación % que suma 100.
+/** @param {Array<number|null|undefined>} partes pesos @returns {number[]} pesos redondeados a 0,1 M, sumando el total redondeado */
+export function partesM(partes){ return redondearPartes(partes,1e5) }
+/** Participación de cada parte en el total de las partes positivas, con 1 decimal y suma exacta 100 (si no hay nada positivo, ceros). @param {Array<number|null|undefined>} partes @returns {number[]} */
+export function partesPct(partes){ const v=partes.map(x=>Math.max(0,Number(x)||0)), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),0.1).map(x=>Math.round(x*10)/10):v.map(()=>0) }
+/** Participación entera (suma 100) para mostrar «66 %». @param {Array<number|null|undefined>} partes @returns {number[]} */
+export function partesPctEnt(partes){ const v=partes.map(x=>Math.max(0,Number(x)||0)), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),1):v.map(()=>0) }

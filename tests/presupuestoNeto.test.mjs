@@ -129,3 +129,12 @@ test('alza de cotización del empleador: rótulo nuevo; un borrador con el rótu
   assert.equal(r[2].n, 'Mi nombre')                                               // un nombre escrito a mano tampoco
   assert.deepEqual(migrarRotuloCotEmpleador(null), [])
 })
+
+import { totalesSocios } from './../supabase/functions/_shared/presupuesto.js'
+test('retiros + sueldos por socio: el total de cada socio es la suma de sus partes y Oficina suma al peso', () => {
+  const r = totalesSocios({ socios: ['A', 'B'], retiros: { A: 50_500_000.4, B: 50_499_999.6 }, sueldos: { A: 24_100_000.5, B: 23_700_000.4 } })
+  assert.deepEqual(r.filas.map((f) => f.total), r.filas.map((f) => f.retiros + f.sueldos))
+  assert.equal(r.oficina.total, r.filas[0].total + r.filas[1].total); assert.equal(r.oficina.total, r.oficina.retiros + r.oficina.sueldos)
+  assert.deepEqual(totalesSocios({ socios: [], retiros: {}, sueldos: {} }).oficina, { retiros: 0, sueldos: 0, total: 0 })
+  assert.equal(totalesSocios({ socios: ['A'], retiros: {}, sueldos: null }).oficina.total, 0)
+})
