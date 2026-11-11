@@ -26,7 +26,7 @@ import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '.
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
 import { UMBRAL_DEUDA, planReasignacionFondos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { anticiposSobreCuotas, clasificarPorFacturar, destinoCuotaFlujo } from '../../supabase/functions/_shared/porFacturar.js'
-import { aseguradoAnio, cuotasEntre } from '../../supabase/functions/_shared/aseguradoAnio.js'
+import { lineasArrastre, aplicarAjustesArrastre, cuotasEntre } from '../../supabase/functions/_shared/arrastreAnio.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -2293,21 +2293,27 @@ export function usePorFacturar({ billing = [], sales = [], clients = [], clientE
   }, [bb, sales, clients, clientEntities, anticipos, ufFechas, noEmitir, anio])
 }
 
-// «Lo que el año base deja asegurado para el año siguiente» (paso Arrastre del Presupuesto): cuotas de proyectos vigentes del año siguiente + asesorías × 12 (aseguradoAnio, _shared), con los clientes morosos del flujo señalados;
-// más lo que vence en nov-dic del año base (es del año base) y el por cobrar de hoy. Cada cifra sale de su helper de siempre (clasificarPorFacturar, flujoCajaProyectado, porCobrarBills).
-export function useAseguradoPresupuesto({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], terceros = [], costosOfiRows = [], expenses = [], fantasmaIds = null, anioBase }) {
+// «Arrastre» del año base (paso 2 del Presupuesto): cuotas de proyectos vigentes del año siguiente + asesorías × 12 (lineasArrastre, _shared), con los clientes morosos del flujo señalados, y los ajustes del borrador
+// (`ajustes` = st.arrastre) aplicados por la misma función que usan todas las vistas (aplicarAjustesArrastre). `base` = las líneas de la app, sin ajustes (para «el valor de la app» y para comparar versiones).
+// Más lo que vence en nov-dic del año base (es del año base) y el por cobrar de hoy. Cada cifra sale de su helper de siempre (clasificarPorFacturar, flujoCajaProyectado, porCobrarBills).
+export function useArrastrePresupuesto({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], terceros = [], costosOfiRows = [], expenses = [], fantasmaIds = null, anioBase, ajustes = null }) {
   const sig = String(anioBase + 1), base = String(anioBase)
   const R = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: sig })
   const R0 = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: base })
   const F = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, fantasmaIds, conMorosos: false })
   const ufRef = useUF().uf || UF_FALLBACK
-  return useMemo(() => {
-    const asesorias = (sales || []).filter(s => s && !s.deleted_at && esRecurrente(s) && !esSubarriendo(s)).map(s => ({ cid: s.client_id, anual: ventaCLP(s, ufRef) }))
+  const B = useMemo(() => {
+    const vivas = (sales || []).filter(s => s && !s.deleted_at)
+    const asesorias = vivas.filter(s => esRecurrente(s) && !esSubarriendo(s)).map(s => ({ id: s.id, cid: s.client_id, concepto: ventaNombre(s), anual: ventaCLP(s, ufRef) }))
+    const ventas = Object.fromEntries(vivas.map(s => [String(s.id), ventaNombre(s)]))
     const morosos = new Set(((F && F.exclMor && F.exclMor.items) || []).map(x => String((x.b && x.b.client_id) || '')))
-    const a = aseguradoAnio({ filas: R.filas, asesorias, morosos })
+    return { ...lineasArrastre({ filas: R.filas, asesorias, ventas }), morosos, nAsesorias: asesorias.length }
+  }, [R, F, sales, ufRef])
+  return useMemo(() => {
+    const a = aplicarAjustesArrastre(B, ajustes, B.morosos)
     const bills = (billing || []).filter(b => !(fantasmaIds && fantasmaIds.has(String(b.id))))
-    return { ...a, nAsesorias: asesorias.length, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
-  }, [R, R0, F, sales, billing, fantasmaIds, base, ufRef])
+    return { ...a, base: B, nAsesorias: B.nAsesorias, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
+  }, [B, ajustes, R0, billing, fantasmaIds, base])
 }
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)

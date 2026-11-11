@@ -1,4 +1,6 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
+import { DArrastre, tituloArrastre } from './presupuestoArrastre.jsx'
+import { aplicarAjustesArrastre } from '../../supabase/functions/_shared/arrastreAnio.js'
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, totalesSocios, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
@@ -164,6 +166,7 @@ function TabSoc({ X }) {
 export function descargarExcel(X) {
   const { est, datos: d } = X
   descargarLibroPresupuesto({
+    arrastre: X.arrastre.lineas.map((l) => ({ nombre: l.origen === 'agregada' ? l.nombre : X.cliNom(l.cid), concepto: l.origen === 'agregada' ? 'Agregada a mano' : l.concepto, tipo: l.tipo === 'cuota' ? 'Cuotas' : 'Asesoría', estado: l.quitado ? 'quitada' : l.origen === 'agregada' ? 'agregada' : l.ajustado ? 'ajustada' : 'de la app', n: l.n, mensual: l.mensual, meses: l.meses, total: l.monto, enApp: l.base.monto, nota: l.nota, porMes: l.porMes })),
     anio: d.anio, anioBase: d.anioBase, ufDic: d.ufDic, baseCLP: d.base.baseCLP, baseUF: d.base.baseUF, est, ESC: X.ESC, refK: escenarioMetas(est, CFG), costos: est.costos, socios: d.socios, oficiales: d.oficiales, metas: { ancla: X.MT.ancla, valor: X.MT.valor }, ratio: X.MT.ratio, cv: X.MT.cv, referencia: d.referencia,
     mes26: Array.from({ length: 12 }, (_, i) => { const k = (y) => `${y}-${String(i + 1).padStart(2, '0')}`; return { a: d.serie[k(d.anioBase - 1)]?.fac ?? null, f: d.serie[k(d.anioBase)]?.fac ?? null, cob: d.cobMes[k(d.anioBase)] ?? null } }),
   }, (t) => appAlert(t))
@@ -311,7 +314,7 @@ export function Seguimiento({ X }) {
     </div></div>
   </Panel>
   const ks = S[comp] ? comp : 'fact', sel = S[ks], gr = 'minmax(0,.7fr) repeat(3,minmax(0,1fr)) 12px'
-  const chips = <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>{claves.map((kk) => <button key={kk} onClick={() => setUI({ sc: kk })} aria-pressed={ks === kk} style={{ border: `1px solid ${ks === kk ? C.azulBg : C.border}`, background: ks === kk ? C.azulBg : C.card, color: ks === kk ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: ks === kk ? 800 : 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{corto(kk)}</button>)}</div>
+  const chips = <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{claves.map((kk) => <button key={kk} onClick={() => setUI({ sc: kk })} aria-pressed={ks === kk} style={{ border: `1px solid ${ks === kk ? C.azulBg : C.border}`, background: ks === kk ? C.azulBg : C.card, color: ks === kk ? C.accent : C.muted, fontFamily: 'inherit', fontSize: 12, fontWeight: ks === kk ? 800 : 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{corto(kk)}</button>)}</div>
   // N08: sin meses cerrados y con el mismo presupuesto cada mes, una sola línea en vez de doce filas iguales.
   const mismoMes = cerr === 0 && sel.c.meses.length > 0 && sel.c.meses.every((m) => m.pres === sel.c.meses[0].pres)
   const lista = mismoMes ? <Panel pad><span style={{ fontSize: 13 }}>Presupuesto mensual <b style={{ color: C.accent }}><Val v={cel(sel.c.meses[0].pres, sel.u.meses[0].pres)} /></b> por mes · el real aparece al cierre de cada mes.</span></Panel> : <Panel>
@@ -621,23 +624,24 @@ export function DCmp({ X, id }) {
   </div></Panel>
   if (!k) return <>{cab}{aviso('Las dos no comparten ningún escenario: no hay cifras que comparar.')}</>
   const eA = mA.esc[k], eB = mB.esc[k]
-  const rows = [['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], [nombreCorto('costos', CFG), 'costos', 0], [nombreComponente('margen', CFG), 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], [nombreComponente('retiros', CFG), 'retiros', 1]]
-  const cambios = diferenciaEstructurada(A, B, { mm, pc, nombreComp: (/** @type {string} */ kk) => nombreCorto(kk, CFG), paso: (/** @type {number} */ i) => `Paso ${Number(i) + 1}` })
-  const grupos = ['Supuestos', 'Costos', 'Metas', 'Notas'].map((g) => [g, cambios.filter((x) => x.grupo === g)]).filter(([, l]) => l.length)
+  const totArr = (/** @type {any} */ est) => aplicarAjustesArrastre(X.arrastre.base, est.arrastre, X.arrastre.base.morosos).total   // el arrastre de cada estado, sobre las líneas de hoy
+  const rows = [[`Arrastre ${X.datos.anioBase}`, 'arr', 1], ['Facturado', 'fact', 0], ['Comisiones', 'terc', 0], [nombreCorto('costos', CFG), 'costos', 0], [nombreComponente('margen', CFG), 'base', 1], ['Impuesto de primera categoría', 'idpc', 0], [nombreComponente('retiros', CFG), 'retiros', 1]]
+  const cambios = diferenciaEstructurada(A, B, { mm, pc, nombreComp: (/** @type {string} */ kk) => nombreCorto(kk, CFG), paso: (/** @type {number} */ i) => `Paso ${Number(i) + 1}`, totalArrastre: totArr })
+  const grupos = ['Supuestos', 'Arrastre', 'Costos', 'Metas', 'Notas'].map((g) => [g, cambios.filter((x) => x.grupo === g)]).filter(([, l]) => l.length)
   const cols = X.D ? 'minmax(0,1fr) 96px 96px 96px' : 'minmax(0,1fr) 70px 70px 74px'
   return <>
     {cab}
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><span style={{ ...LBL, color: C.muted }}>Escenario</span><Seg options={comunes.map((kk) => [kk, nombreEscenario(B, kk)])} value={k} onChange={(v) => setUI({ cmpE: v })} /></div>
     <Panel>
       <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '10px 16px', ...LBL, color: C.accent }}><span /><span style={{ textAlign: 'right' }}>Antes</span><span style={{ textAlign: 'right' }}>Después</span><span style={{ textAlign: 'right' }}>Dif.</span></div>
-      {rows.map(([t, key, bueno]) => { const dd = eB[key] - eA[key], nulo = Math.abs(dd) < 1
-        return <div key={t} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}</span><span style={{ textAlign: 'right', color: C.muted }}><Val v={mmP(eA[key])} /></span><span style={{ textAlign: 'right' }}><Val v={mmP(eB[key])} /></span><b style={{ textAlign: 'right', color: nulo ? C.muted : bueno ? (dd > 0 ? C.greenText : C.overdueText) : C.text }}>{nulo ? '—' : (dd > 0 ? '↑ ' : '↓ ') + mmP(Math.abs(dd))}</b></div> })}
+      {rows.map(([t, key, bueno]) => { const vA = key === 'arr' ? totArr(A) : eA[key], vB = key === 'arr' ? totArr(B) : eB[key], dd = vB - vA, nulo = Math.abs(dd) < 1
+        return <div key={t} style={{ display: 'grid', gridTemplateColumns: cols, gap: 8, padding: '10px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}><span>{t}</span><span style={{ textAlign: 'right', color: C.muted }}><Val v={mmP(vA)} /></span><span style={{ textAlign: 'right' }}><Val v={mmP(vB)} /></span><b style={{ textAlign: 'right', color: nulo ? C.muted : bueno ? (dd > 0 ? C.greenText : C.overdueText) : C.text }}>{nulo ? '—' : (dd > 0 ? '↑ ' : '↓ ') + mmP(Math.abs(dd))}</b></div> })}
     </Panel>
     <Titulo>Qué cambió · {cambios.length}</Titulo>
-    {grupos.length === 0 ? <Panel pad><span style={{ fontSize: 13, color: C.muted }}>Las dos son iguales: no hay supuestos, costos, metas ni notas distintos.</span></Panel>
+    {grupos.length === 0 ? <Panel pad><span style={{ fontSize: 13, color: C.muted }}>Las dos son iguales: no hay supuestos, arrastre, costos, metas ni notas distintos.</span></Panel>
       : grupos.map(([g, l]) => <Panel key={g} hd={g} small={`${l.length} cambio${l.length !== 1 ? 's' : ''}`}>{l.map((x, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderTop: i ? `1px solid ${C.border}` : 'none', fontSize: 13, flexDirection: X.D ? 'row' : 'column' }}><span>{x.etiqueta}</span><span style={{ fontWeight: 700, color: C.accent, textAlign: X.D ? 'right' : 'left' }}><span style={{ color: C.muted, fontWeight: 500 }}>{x.antes}</span> → {x.despues}</span></div>)}</Panel>)}
   </>
 }
 
-export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : d.t === 'cfg' ? 'Configuración del presupuesto' : d.t === 'ini' ? 'Preparar desde cero' : (indicadores(X)[d.k]?.tit || 'Detalle')
-export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : d.t === 'cfg' ? (X.esAdmin ? <DCfg X={X} /> : null) : d.t === 'ini' ? <DIni X={X} /> : <DInd X={X} k={d.k} />
+export const titulosDrill = (X, d) => d.t === 'mes' ? nombreMes(d.i) : d.t === 'cli' ? (X.datos.clientes.find((c) => c.id === d.n)?.name || 'Cliente') : d.t === 'soc' ? 'Socio · ' + d.n : d.t === 'socios' ? 'Sueldos y retiros de los socios' : d.t === 'ver' ? 'Versiones' : d.t === 'cmp' ? 'Comparar versión' : d.t === 'comp' ? nombreComponente(d.k, CFG) : d.t === 'arr' ? tituloArrastre(X, d) : d.t === 'cfg' ? 'Configuración del presupuesto' : d.t === 'ini' ? 'Preparar desde cero' : (indicadores(X)[d.k]?.tit || 'Detalle')
+export const vistaDrill = (X, d) => d.t === 'mes' ? <DMes X={X} i={d.i} /> : d.t === 'cli' ? <DCli X={X} id={d.n} /> : d.t === 'soc' ? <DSoc X={X} n={d.n} /> : d.t === 'socios' ? <DSocios X={X} alza={X.est.p.base.alza} retiros={X.MT.ch.retiros} ir={X.onOpenSocios} irRetiros={() => X.ir({ drill: { t: 'ind', k: 'ret26' } })} /> : d.t === 'ver' ? <DVer X={X} /> : d.t === 'cmp' ? <DCmp X={X} id={d.id} /> : d.t === 'comp' ? <DComp X={X} de={d.de} k={d.k} /> : d.t === 'arr' ? <DArrastre X={X} k={d.k} /> : d.t === 'cfg' ? (X.esAdmin ? <DCfg X={X} /> : null) : d.t === 'ini' ? <DIni X={X} /> : <DInd X={X} k={d.k} />

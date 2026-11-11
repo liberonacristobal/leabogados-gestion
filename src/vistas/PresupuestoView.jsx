@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
-import { PageHeader, usePorFacturar, useAseguradoPresupuesto } from '../lib/compartido.jsx'
+import { PageHeader, usePorFacturar, useArrastrePresupuesto } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
@@ -26,9 +26,9 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const [anioSel, setAnioSel] = useState(null)
   const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, anioSel })
   const porFacturar = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds }).grupos.vigente.m
-  const asegurado = useAseguradoPresupuesto({ billing, sales, clients, clientEntities, anticipos, terceros, costosOfiRows, expenses, fantasmaIds, anioBase: datos.anioBase })
   const anio = datos.anio
   const [est, setEst] = useState(null)
+  const arrastre = useArrastrePresupuesto({ billing, sales, clients, clientEntities, anticipos, terceros, costosOfiRows, expenses, fantasmaIds, anioBase: datos.anioBase, ajustes: est ? est.arrastre : null })   // paso 2: líneas de la app + los ajustes del borrador (una sola función, _shared/arrastreAnio.js)
   const [vers, setVers] = useState([])
   const [cargado, setCargado] = useState(false)
   const [espera, setEspera] = useState(false)
@@ -67,7 +67,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
         if (!vivo) return
         setVers(filas.map(filaAVersion))
         // Un borrador de formato anterior se migra y queda pendiente de guardar (lastJSON conserva el original para que el autoguardado lo escriba).
-        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12, CFG); lastJSON.current = borr.estado?.v === 5 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
+        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12, CFG); lastJSON.current = borr.estado?.v === 6 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
         else setGuardado({ est: DEMO ? 'local' : 'ok', t: null })
         setCargado(true)
       } catch (e) { if (vivo) { setErrorCarga(true); setGuardado({ est: 'error', t: null }) } }
@@ -147,6 +147,8 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const patchCosto = (i, o) => parche((c) => { Object.assign(c.costos[i], o) })
   const addCosto = () => { parche((c) => { c.costos.push({ id: Date.now(), n: 'Nueva partida', m: 0, meses: 12, t: 'fijo', alza: null }) }); setUI({ abierta: (est ? est.costos.length : 0), mats: [...(ui.mats || []), 'Nueva partida'] }) }
   const delCosto = (i) => { parche((c) => { if (c.costos[i] && c.costos[i].id === 'cot-empleador') c.sinCotEmpleador = true; if (c.costos[i] && c.costos[i].id === ID_SUBARRIENDO) c.sinSubarriendo = true; c.costos.splice(i, 1) }); setUI({ abierta: null }) }
+  // Ajustes del Arrastre (st.arrastre): funciones puras de _shared/arrastreAnio.js; no tocan ventas, facturas ni cuotas reales.
+  const setArrastre = (fn) => setEst((e) => (e ? { ...e, arrastre: fn(e.arrastre) } : e))
   const resetCostos = () => { parche((c) => { c.costos = datos.costos.map((x) => ({ ...x })) }); setUI({ abierta: null }) }
 
   // ── Navegación: ir y volver al lugar exacto ──
@@ -220,7 +222,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
   const MT = est ? calcMetas(datos, est) : null
   const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
-    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, asegurado, cliNom: (id) => (clients.find((c) => String(c.id) === String(id)) || {}).name || 'Sin cliente', irPorFacturar: onOpenPorFacturar }
+    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, arrastre, setArrastre, cliNom: (id) => (clients.find((c) => String(c.id) === String(id)) || {}).name || 'Sin cliente', irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Arrastre ${datos.anioBase}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
   const origen = drill && drill.t === 'cfg' ? `Presupuesto ${anio}` : pila.length ? (pila[pila.length - 1].drill ? titulosDrill(X, pila[pila.length - 1].drill) : ETAPAS[pila[pila.length - 1].etapa]) : backLabel

@@ -97,7 +97,15 @@ try {
     // Presupuesto: los seis pasos (el 4.º, Metas, es nuevo) y la pestaña Por socio del paso 5; cada uno sin error ni scroll horizontal en celular.
     if (!solo.length || solo.includes('presupuesto')) {
       for (let i = 1; i <= 6; i++)
-        await revisar(`presupuesto paso ${i}`, { fn: async (i) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => new RegExp('^(✓ )?' + i + ' · ').test(b.textContent.trim()))?.click(); await esp(300); if (i === 5) { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Por socio')?.click(); await esp(300) } }, arg: i })
+        await revisar(`presupuesto paso ${i}`, { fn: async (i) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').startsWith('Paso ' + i + ':') || new RegExp('^(✓ )?' + i + ' · ').test(b.textContent.trim()))?.click(); await esp(300); if (i === 5) { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Por socio')?.click(); await esp(300) } }, arg: i })
+    }
+    // Presupuesto · Arrastre (paso 2): las tres páginas de líneas (por facturar, asesorías y todas) se abren desde sus filas; la demo trae cuotas con vencimiento en 2027.
+    if (!solo.length || solo.includes('presupuesto')) {
+      for (const k of ['Por facturar', 'Asesorías permanentes', 'Facturado del arrastre']) {
+        await revisar(`presupuesto arrastre · ${k}`, { fn: async (k) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').startsWith('Paso 2:'))?.click(); await esp(300); [...document.querySelectorAll('[role=button]')].find(b => b.textContent.trim().startsWith(k))?.click(); await esp(300); window.__arrastreSmoke = / · (valores de la app|\d+ líneas? ajustadas?)/.test(document.body.innerText) ? '' : 'la página del Arrastre no muestra sus líneas' }, arg: k })
+        const af = await page.evaluate(() => window.__arrastreSmoke)
+        if (af) fallas.push({ vista: nombre, donde: `presupuesto · Arrastre · ${k}`, error: af })
+      }
     }
     // Procesos automáticos: los 4 chips filtran (aria-pressed) y tocarlos otra vez quitan el filtro; «Revisar ›» de Por aprobar está presente.
     if (!solo.length || solo.includes('procesos')) {

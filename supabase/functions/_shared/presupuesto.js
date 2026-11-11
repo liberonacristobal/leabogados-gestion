@@ -7,6 +7,7 @@
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
 /** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean, auto?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
+import { normalizarArrastre, arrastreVacio, lineasTocadas } from './arrastreAnio.js'
 
 /** Configuración por estudio (presupuestoConfig.js): toda regla que depende del estudio o del país la recibe como `cfg` opcional; sin ella usa el defecto del tenant actual. */
 /** @typedef {typeof CONFIG_DEFECTO} CfgPresupuesto */
@@ -52,7 +53,7 @@ export const tasaPPMLegal = (anio, ufAnterior, cfg = CONFIG_DEFECTO) => {
 
 /** @typedef {{ k:string, n:string, t:number }} EscenarioEstado  clave interna (estable), nombre que ve el usuario y tono (índice) */
 /** @typedef {{ modo:Record<string,string>, manual:Record<string,number[]> }} Distribucion  modo por componente: 'iguales' (defecto), 'estacional' o 'manual'; manual = pesos de los 12 meses */
-/** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null }} EstadoPresupuesto */
+/** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null, arrastre?:{ ajustes:Record<string,any>, extras:any[] } }} EstadoPresupuesto */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 
 // ── Escenarios: una LISTA editable en el estado (`st.escs`: clave, nombre y tono; `st.p[clave]`: sus palancas). Hasta `maxEscenarios`; mínimo uno. ──
@@ -105,9 +106,9 @@ export function estadoInicial(o = {}) {
   }
   const primero = cfg.escenarios.find((/** @type {any} */ e) => e.k === cfg.escenarioMetas) || cfg.escenarios[0]
   return {
-    v: 5, esc: primero.k, escs: cfg.escenarios.map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t })), moneda: 'clp', reajusteUF: num(o.reajusteUF, cfg.moneda.reajusteAnual), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio, cfg)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, cfg.reserva.porcentaje),
+    v: 6, esc: primero.k, escs: cfg.escenarios.map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t })), moneda: 'clp', reajusteUF: num(o.reajusteUF, cfg.moneda.reajusteAnual), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio, cfg)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, cfg.reserva.porcentaje),
     reservaIni: num(o.reservaIni, cfg.reserva.minima), metas: { ancla: cfg.anclaInicial, valor: null, ratio: null }, dist: distribucionInicial(),
-    p, costos: (o.costos || []).map((c) => ({ ...c })), hecho: [], notas: {}, basadaEn: null,
+    p, costos: (o.costos || []).map((c) => ({ ...c })), hecho: [], notas: {}, basadaEn: null, arrastre: arrastreVacio(),
   }
 }
 
@@ -574,12 +575,12 @@ export const ETAPA_ANTIGUA = /** @type {Record<number,number>} */ ({ 0: 0, 1: 1,
 
 /**
  * Lleva un estado guardado a la versión actual: etapas de 8 → 5 (v2), tasa legal de primera categoría (v3) y la etapa nueva «Metas 2027» en el lugar 4 (v4: las marcas «revisada» y las
- * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva en cuenta corriente). Idempotente.
+ * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva en cuenta corriente) y los ajustes del Arrastre (v6). Idempotente.
  * @param {any} st
  */
 export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0, cfg = CONFIG_DEFECTO) {
   const c = JSON.parse(JSON.stringify(st || {}))
-  if (c.v !== 2 && c.v !== 3 && c.v !== 4 && c.v !== 5) {
+  if (c.v !== 2 && c.v !== 3 && c.v !== 4 && c.v !== 5 && c.v !== 6) {
     const h = new Set(), n = /** @type {Record<string,string>} */ ({})
     ;(c.hecho || []).forEach((/** @type {number} */ i) => { if (ETAPA_ANTIGUA[i] != null) h.add(ETAPA_ANTIGUA[i]) })
     Object.keys(c.notas || {}).sort().forEach((k) => { const t = ETAPA_ANTIGUA[/** @type {any} */ (k)]; if (t == null || !c.notas[k]) return; n[t] = n[t] ? n[t] + ' · ' + c.notas[k] : c.notas[k] })
@@ -613,6 +614,12 @@ export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefin
     if (c.dist == null) c.dist = distribucionInicial()
     c.v = 5
   }
+  if (c.v === 5) {
+    // v6: el paso Arrastre guarda los ajustes del usuario sobre sus líneas (cuotas por venta y asesorías) y las líneas que agregó a mano.
+    c.arrastre = normalizarArrastre(c.arrastre)
+    c.v = 6
+  }
+  if (c.v === 6) c.arrastre = normalizarArrastre(c.arrastre)
   // El PPM vuelve a ser un monto anual (el pagado hoy); un borrador que alcanzó a guardarse con tasa lo recupera del PPM vigente.
   if (c.ppmAnual == null) c.ppmAnual = Math.round(num(ppmAnualRef))
   delete c.ppmTasa
@@ -700,9 +707,9 @@ export function concentracion(montosOrdenados, total, k = 5) {
 }
 
 /**
- * Diferencias entre dos estados del presupuesto en forma estructurada {grupo, etiqueta, antes, despues}: Supuestos, Costos, Metas y Notas (con las metas y las notas de los pasos).
+ * Diferencias entre dos estados del presupuesto en forma estructurada {grupo, etiqueta, antes, despues}: Supuestos, Arrastre, Costos, Metas y Notas (con las metas y las notas de los pasos).
  * `diferenciaSupuestos` (texto) queda sobre las mismas comparaciones; esta es la que alimenta la página «Comparar versiones». Solo devuelve lo que cambió.
- * @param {EstadoPresupuesto} a @param {EstadoPresupuesto} b @param {{ mm:(n:number)=>string, pc:(n:number)=>string, nombreComp?:(k:string)=>string, paso?:(i:number)=>string }} f
+ * @param {EstadoPresupuesto} a @param {EstadoPresupuesto} b @param {{ mm:(n:number)=>string, pc:(n:number)=>string, nombreComp?:(k:string)=>string, paso?:(i:number)=>string, totalArrastre?:(e:EstadoPresupuesto)=>number }} f
  * @returns {{ grupo:string, etiqueta:string, antes:string, despues:string }[]}
  */
 export function diferenciaEstructurada(a, b, f) {
@@ -719,6 +726,10 @@ export function diferenciaEstructurada(a, b, f) {
     for (const campo of Object.keys(L)) { const x = (a.p[k] || {})[/** @type {keyof Supuestos} */ (campo)], y = (b.p[k] || {})[/** @type {keyof Supuestos} */ (campo)]; if (x !== y) o.push({ grupo: 'Supuestos', etiqueta: nom + ' · ' + L[campo], antes: campo === 'dias' ? `${x} d` : f.pc(x), despues: campo === 'dias' ? `${y} d` : f.pc(y) }) }
   }
   for (const [k, nom] of la) if (!lb.some((x) => x[0] === k)) o.push({ grupo: 'Supuestos', etiqueta: 'Escenario', antes: nom, despues: '—' })
+  // Arrastre: cuántas líneas cambió el usuario (ajustadas, quitadas o agregadas) y, si se entrega `totalArrastre`, el total que resulta de cada estado sobre las líneas de hoy.
+  const la2 = lineasTocadas(a.arrastre), lb2 = lineasTocadas(b.arrastre)
+  if (la2 !== lb2) o.push({ grupo: 'Arrastre', etiqueta: 'Líneas ajustadas', antes: String(la2), despues: String(lb2) })
+  if (f.totalArrastre) { const ta = f.totalArrastre(a), tb = f.totalArrastre(b); if (Math.abs(ta - tb) >= 1) o.push({ grupo: 'Arrastre', etiqueta: 'Total del arrastre', antes: f.mm(ta), despues: f.mm(tb) }) }
   const ma = new Map(a.costos.map((c) => [c.id, c])), mb = new Map(b.costos.map((c) => [c.id, c]))
   for (const c of b.costos) {
     const x = ma.get(c.id)

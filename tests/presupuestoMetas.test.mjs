@@ -179,13 +179,18 @@ test('sueldos y retiros de los socios: el mismo dinero por socio, sin doble cont
 test('migración v3 → v4: las etapas desde la 4.ª se desplazan, se agregan metas y reserva, y es idempotente', () => {
   const v3 = { v: 3, esc: 'base', hecho: [0, 1, 2, 3, 4], notas: { 0: 'a', 3: 'escenarios', 4: 'seguimiento' }, p: {}, costos: [], tasaIDPC: 12.5, ppmAnual: 1 }
   const m = migrarEstado(v3, 2027)
-  assert.equal(m.v, 5); assert.deepEqual(m.hecho, [0, 1, 2, 4, 5])
+  assert.equal(m.v, 6); assert.deepEqual(m.hecho, [0, 1, 2, 4, 5]); assert.deepEqual(m.arrastre, { ajustes: {}, extras: [] })
   assert.deepEqual(m.notas, { 0: 'a', 4: 'escenarios', 5: 'seguimiento' })
   assert.deepEqual(m.metas, { ancla: 'retiros', valor: null, ratio: null }); assert.equal(m.reservaIni, RESERVA_MINIMA)
   assert.deepEqual(migrarEstado(m, 2027), m)
   const m4 = migrarEstado({ v: 4, hecho: [3], notas: {}, metas: { ancla: 'caja', valor: 5, ratio: 70 }, reservaIni: 10 })
-  assert.equal(m4.v, 5); assert.deepEqual(m4.hecho, [3]); assert.deepEqual(m4.metas, { ancla: 'caja', valor: 5, ratio: 70 }); assert.equal(m4.reservaIni, 10); assert.equal(m4.ppmAnual, 0)
-  assert.equal(migrarEstado(null).v, 5)
-  assert.equal(estadoInicial({ costos }).v, 5)
+  assert.equal(m4.v, 6); assert.deepEqual(m4.hecho, [3]); assert.deepEqual(m4.metas, { ancla: 'caja', valor: 5, ratio: 70 }); assert.equal(m4.reservaIni, 10); assert.equal(m4.ppmAnual, 0)
+  assert.equal(migrarEstado(null).v, 6)
+  assert.equal(estadoInicial({ costos }).v, 6); assert.deepEqual(estadoInicial({ costos }).arrastre, { ajustes: {}, extras: [] })
   assert.equal(supuestosMetas(estado()).alza, 4.5)
+  // v5 → v6: el bloque del Arrastre aparece vacío; uno con ajustes se conserva y se limpia
+  const v5 = migrarEstado({ v: 5, esc: 'base', hecho: [1], notas: {}, p: {}, costos: [], escs: [{ k: 'base', n: 'Base', t: 0 }] }, 2027)
+  assert.equal(v5.v, 6); assert.deepEqual(v5.arrastre, { ajustes: {}, extras: [] })
+  const v6 = migrarEstado({ ...v5, arrastre: { ajustes: { 'pf:s1': { monto: 5, nota: ' se cae ' }, vacio: {} }, extras: [{ id: 'n1', nombre: 'Nuevo', mensual: 10, desde: 3, meses: 4 }] } }, 2027)
+  assert.deepEqual(v6.arrastre, { ajustes: { 'pf:s1': { monto: 5, nota: 'se cae' } }, extras: [{ id: 'n1', nombre: 'Nuevo', mensual: 10, desde: 3, meses: 4 }] }); assert.deepEqual(migrarEstado(v6, 2027), v6)
 })
