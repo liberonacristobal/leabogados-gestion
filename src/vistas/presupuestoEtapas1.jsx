@@ -25,10 +25,8 @@ export function Mirada({ X }) {
     ['cal', 'Recurrente', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
     ['com', 'Comisiones', d.terc != null ? pc(d.terc) : 'sin dato', 'de lo cobrado en el año', '', 'terc'],
     ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `promedio · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
-  ]
-  const mas = [
-    ['egr', 'Presupuesto de costos', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
-    ['alerta', 'Conversión de propuestas', 'sin dato', 'el índice de propuestas no tiene registros', 'amb', 'conv'],
+    ['egr', 'Costos al mes', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
+    ['alerta', 'Conversión', 'sin dato', 'el índice de propuestas no tiene registros', 'amb', 'conv'],
   ]
   // Seis tarjetas de solo lectura, una por componente (los mismos nombres, tonos e íconos de los pasos 2 y 4). Cada cifra en la moneda elegida, con la UF de su fuente.
   const nSoc = d.retiros26.socios.length || 1, c26 = d.costos26, r26 = d.referencia, RU = d.refUF
@@ -72,9 +70,8 @@ export function Mirada({ X }) {
       : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? (dosCol ? 4 : 6) : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
       </div>
       const indB = <div key='ind' style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
-    <Titulo right={<Btn onClick={() => setUI({ mas: !ui.mas })}>{ui.mas ? 'Ver menos' : 'Ver más'}</Btn>}>Indicadores {Y}</Titulo>
-    <Grid cols={dosCol ? 2 : 4} colsM={2}>{indic.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
-    {ui.mas && <Grid cols={dosCol ? 2 : 4} colsM={2}>{mas.map(([ic, l, v, s, cl, k]) => <Mini key={k} ic={ic} label={l} value={v} sub={s} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>}
+    <Titulo>Indicadores {Y}</Titulo>
+    <Grid cols={dosCol ? 2 : 3} colsM={2} style={{ gridAutoRows: '1fr' }}>{indic.map(([ic, l, v, , cl, k]) => <Mini key={k} ic={ic} label={l} value={v} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
       </div>
       const cliB = <Panel key='cli' hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
         {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
