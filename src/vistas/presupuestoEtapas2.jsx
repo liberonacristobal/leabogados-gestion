@@ -5,6 +5,7 @@ import { TarjetaSeg, AperturaSeg, fotoVivaSeguimiento } from './presupuestoSegui
 import { realMensualAnio, presupuestoMensual, ventanaComparable, aperturaOrigen, versionTraeSeguimiento } from '../../supabase/functions/_shared/seguimientoPresupuesto.js'
 import { aplicarAjustesArrastre } from '../../supabase/functions/_shared/arrastreAnio.js'
 import { useEffect, useRef, useState } from 'react'
+import { marcarPropuestaNoCuenta } from '../lib/compartido.jsx'
 import { C, appAlert, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, totalesSocios, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -430,7 +431,7 @@ export function indicadores(X) {
     dias: { tit: 'Días de cobro', val: d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', sub: d.dias.n ? `promedio ${Y} · mediana ${d.dias.mediana}` : 'sin facturas pagadas este año', fuente: `${d.dias.n} facturas pagadas en ${Y}, de la emisión al pago`, app: 'Cobranza', rows: [{ n: 'Promedio', v: d.dias.promedio != null ? d.dias.promedio + ' días' : '—' }, { n: 'Mediana', v: d.dias.mediana != null ? d.dias.mediana + ' días' : '—' }, { n: 'Facturas pagadas', v: String(d.dias.n) }, { n: `Supuesto del escenario ${nombreEscenario(X.est, lento)}`, v: X.est.p[lento].dias + ' días', go: () => X.irEscTab('res') }] },
     terc: { tit: 'Comisiones', val: d.terc != null ? pc(d.terc) : 'sin dato', sub: 'de lo cobrado en el año', fuente: 'comisiones pagadas del año contra el cobrado propio, como en Inicio', app: 'Comisiones', rows: [{ n: 'Parte de lo cobrado', v: d.terc != null ? pc(d.terc) : '—' }, { n: `Supuesto del presupuesto ${d.anio}`, v: pc(X.est.p[escenarioMetas(X.est, CFG)].terc), go: () => X.irEscTab('res') }] },
     cost: { tit: 'Presupuesto de costos por mes', val: mx(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes, null), sub: 'presupuesto vigente, con PPM', fuente: 'costos de oficina vigentes por categoría', app: 'Oficina › Resultado del año › Presupuesto vs real', rows: d.costos.map((c) => ({ n: c.n, v: mx(c.m, null) + ' /mes', go: () => X.irCostos() })).concat([{ n: 'PPM', v: mx(d.ppmMes, null) + ' /mes', go: () => X.irEscTab('imp') }]) },
-    conv: { tit: 'Conversión de propuestas', val: 'sin dato', sub: 'el índice de propuestas no tiene registros', fuente: 'índice de propuestas (Drive)', app: 'Ventas › Propuestas', rows: [], texto: `Para estimar la cartera nueva de ${d.anio} hace falta registrar las propuestas enviadas y las aceptadas. Sin ese dato, el crecimiento de ventas sale de un criterio y no de un cálculo.` },
+    conv: (() => { const c = d.conversion, ok = c.pct != null; return { tit: 'Conversión', val: ok ? pc(c.pct, 0) : 'sin dato', sub: ok ? `${c.aceptadas} aceptadas · ${c.rechazadas} rechazadas · desde ${fmtFechaDMY(c.desde)}` : 'aún no hay propuestas rechazadas registradas', fuente: 'Ventas: rechazadas (fecha de la decisión) y propuestas activadas (fecha de activación)', app: 'Ventas › Propuestas', rows: [], texto: ok ? '' : 'Sin una propuesta rechazada registrada no hay ventana desde la cual contar.' } })(),
   }
 }
 
@@ -566,10 +567,32 @@ function DRetiros({ X }) {
   </>
 }
 
+/** Página de la conversión de propuestas: la cifra, las decisiones (aceptadas y rechazadas, cada una abre su venta) y la regla en una línea. Una propuesta se puede marcar «duplicada: no cuenta» (decisión guardada, reversible). */
+function DConversion({ X, x }) {
+  const { datos: d, D } = X, c = d.conversion, nom = (/** @type {string} */ id) => (X.cliNom ? X.cliNom(id) : '')
+  const [abierta, setAbierta] = useState(/** @type {string|null} */ (null))
+  const marca = async (/** @type {any} */ dc, /** @type {boolean} */ noCuenta) => { try { await marcarPropuestaNoCuenta({ id: dc.id, noCuenta, titulo: dc.titulo }) } catch (e) { appAlert('No se pudo guardar la decisión. Reintenta.') } }
+  return <>
+    <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>
+    {c.decisiones.length > 0 ? <Panel hd='Decisiones' small={`${c.decisiones.length}`}>
+      {c.decisiones.map((dc) => { const ab = abierta === dc.id, tit = [nom(dc.cid), dc.titulo].filter(Boolean).join(' · ') || 'Propuesta'
+        return <Fila key={dc.id} abierta={ab} nombre={<span style={{ opacity: dc.cuenta ? 1 : 0.55, textDecoration: dc.cuenta ? 'none' : 'line-through' }}>{tit}</span>} peq={fmtFechaDMY(dc.fecha) + (dc.cuenta ? '' : ' · no cuenta (duplicada)')} valor={<span style={{ color: dc.resultado === 'aceptada' ? C.greenText : C.overdueText, fontWeight: 700 }}>{dc.resultado === 'aceptada' ? 'Aceptada' : 'Rechazada'}</span>} onClick={() => setAbierta(ab ? null : dc.id)}>
+          {ab && <div style={{ background: C.bgSoft, padding: '6px 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', fontSize: 12 }}>
+            {X.onOpenSale && <Lnk onClick={() => X.onOpenSale(dc.id)}>Abrir la venta ›</Lnk>}
+            {dc.cuenta ? <Lnk rojo onClick={() => marca(dc, true)}>Duplicada: no cuenta</Lnk> : <Lnk onClick={() => marca(dc, false)}>Volver a contar</Lnk>}
+            <span style={{ color: C.muted }}>{dc.cuenta ? 'Una propuesta, un resultado: la saca de la cifra; la venta no se toca.' : 'Está fuera de la cifra; la venta no se tocó.'}</span>
+          </div>}
+        </Fila> })}
+    </Panel> : <Panel pad><span style={{ fontSize: 13, color: C.muted }}>{x.sub}.</span></Panel>}
+    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Aceptada: venta activada más de 24 horas después de crearse. Rechazada: propuesta rechazada. Se cuenta desde la primera rechazada registrada{c.desde ? ` (${fmtFechaDMY(c.desde)})` : ''}; con pocas decisiones es una referencia, no una tasa estable. En la app: {x.app}</div>
+  </>
+}
+
 export function DInd({ X, k }) {
   if (k === 'ret26') return <DRetiros X={X} />
   const x = indicadores(X)[k]
   if (!x) return null
+  if (k === 'conv') return <DConversion X={X} x={x} />
   return <>
     {k !== 'vend' && k !== 'cob26' && <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>}
     {(k === 'vend' || k === 'cob26') && <Evolucion X={X} k={k === 'vend' ? 'vend' : 'cob'} />}

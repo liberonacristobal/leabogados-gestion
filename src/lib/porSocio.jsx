@@ -2,15 +2,17 @@
 import { useState, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
+import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop } from './base.jsx'
 import { Fragment } from 'react'
 import { esRecurrente, esSubarriendo, ventaCLP, redondearPartes, kpisPorSocio, partesM, partesPctEnt } from './cifras.js'
-import { ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, flujoCajaProyectado, useEscenarioFlujo, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
+import { usePropuestasNoCuentan, ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, flujoCajaProyectado, useEscenarioFlujo, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
 
 // Vista Por socio (Facturación › Por socio e Inteligencia › Socios): Resumen · Comparativo · Datos. Render aprobado 19-10-2026 (ABU5j4gotedSVCZJkE9kG2).
 export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terceros=[],expenses=[],fantasmaIds=null,tabIni='res',datIni=null,onOpenClientFicha,onIrBanco,onIrBilling,onIrCobranza,onIrProveedores,onIrSubarriendo}){
   const isDesk=useIsDesktop()
   const [fu,setFu]=usePorSocioFuentes()
+  const noCuentan=usePropuestasNoCuentan()   // propuestas marcadas «duplicada: no cuenta»: misma cifra de conversión que el Presupuesto
   const ufState=useUF(); const ufRef=ufState.uf||UF_FALLBACK
   const noEmitir=useNoEmitirSet()
   const bill=useMemo(()=>(fantasmaIds&&fantasmaIds.size)?(billing||[]).filter(b=>!fantasmaIds.has(String(b.id))):billing,[billing,fantasmaIds])
@@ -216,7 +218,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     if(k==='tick') return its.length?its.reduce((a,x)=>a+x.b,0)/its.length:null
     if(k==='cact') return new Set(its.map(x=>String(x.s.client_id))).size
     const ss=(sales||[]).filter(s=>s&&!s.deleted_at&&!esSubarriendo(s)&&(!soc||socioDeVenta(s,{cliById})===soc))
-    if(k==='conv'){ const g=ss.filter(s=>s.activated_at).length, r=ss.filter(s=>s.status==='Rechazada').length; return (g+r)?g/(g+r)*100:null }
+    if(k==='conv') return conversionPropuestas({sales:ss,noCuentan:noCuentan}).pct   // misma regla y ventana que el Presupuesto (_shared/ventasConversion.js)
     if(k==='pipe') return ss.filter(s=>s.status==='Propuesta').length
     if(k==='mrr') return ss.filter(s=>esRecurrente(s)).reduce((a,s)=>a+ventaCLP(s,ufRef)/12,0)
     if(k==='comp') return (bill||[]).filter(b=>b&&!b.deleted_at&&b.status==='Programada'&&Number(String(b.due||'').slice(0,4))>y&&(!soc||socioDe(b,ctx)===soc)).reduce((a,b)=>a+(montoFactura(b)||b.amount||0),0)
