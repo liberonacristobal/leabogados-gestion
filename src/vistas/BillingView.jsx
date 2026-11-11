@@ -1444,7 +1444,7 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
 
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
 
-  return (<div style={{width:'100%',maxWidth:isDesktop?1100:660,margin:'0 auto'}}>
+  return (<div style={{width:'100%',maxWidth:isDesktop?1500:660,margin:'0 auto'}}>
     {/* Navegador de mes + modo */}
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
@@ -1464,25 +1464,21 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
     </div>}
 
     {/* Emitido (hero) + 4 tarjetas-acordeón: Pagado · Por cobrar · Sin identificar · Vencidas. Al tocar una se despliega SU listado abajo (estFiltro). Wording unificado: Pagado / Por cobrar (facturas del cliente = plata que entra). */}
-    <div style={{background:C.surface,border:`0.5px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:9}}>
-      <div style={{...SEC_LBL}}>{modo==='mes'?`Emitido · ${mesLabel}`:`Emitido acumulado ${mesYear} (a ${MESNOM[+mes.slice(5,7)-1].toLowerCase()})`}</div>
-      <div style={{display:'flex',alignItems:'baseline',gap:9,marginTop:4}}><div style={{fontSize:26,fontWeight:800,color:C.accent,letterSpacing:-.6}}>{fmt(tot.emi)}</div><div style={{fontSize:11,color:C.muted,fontWeight:600}}>{filas.length} factura{filas.length!==1?'s':''}</div></div>
-    </div>
+    <style>{'@container (max-width:214px){.cm-chev{display:none}}'}</style>
     {(()=>{
-      const card=(k,ic,icC,bg,lbl,n,nC,sub)=>{ const active=estFiltro===k; return (
-        <div onClick={()=>setEstFiltro(active?null:k)} style={{background:C.surface,border:`1px solid ${active?C.accent:C.border}`,boxShadow:active?`0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
-          <div style={{display:'flex',alignItems:'center',gap:7}}>
-            <span style={{width:28,height:28,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ic} s={16} c={icC}/></span>
-            <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:icC,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{lbl}</span>
-            <span style={{marginLeft:'auto',color:C.textSoft,fontSize:12,transform:active?'rotate(90deg)':'none',transition:'transform .12s'}}><Gl n='chevron'/></span>
-          </div>
-          <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,color:nC,marginTop:6,fontVariantNumeric:'tabular-nums'}}>{n}</div>
-          <div style={{fontSize:10,color:C.textSoft,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>
+      // Una sola fila de 5 tarjetas iguales (Emitido · Pagado · Por cobrar · Sin identificar · Vencidas): ícono a la izquierda, texto a su costado, cifra en $M. En móvil, Emitido a todo el ancho y las otras cuatro en 2×2.
+      const card=(k,ic,icC,bg,lbl,n,nC,sub,i)=>{ const active=estFiltro===k, emi=k==='emitido'; return (
+        <div key={k} role='button' tabIndex={0} onClick={emi?undefined:()=>setEstFiltro(active?null:k)} style={{background:C.surface,border:`1px solid ${active?C.accent:C.border}`,boxShadow:active?`0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:isDesktop?'10px 12px':'8px 10px',cursor:emi?'default':'pointer',display:'grid',gridTemplateColumns:`${isDesktop?36:30}px minmax(0,1fr)`,columnGap:isDesktop?10:8,alignItems:'center',minWidth:0,boxSizing:'border-box',gridColumn:!isDesktop&&emi?'1 / -1':undefined,containerType:'inline-size'}}>
+          <span style={{gridRow:'1 / span 3',width:isDesktop?36:30,height:isDesktop?36:30,borderRadius:10,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={ic} s={17} c={icC}/></span>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,minWidth:0}}><span style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:icC,whiteSpace:'nowrap'}}>{lbl}</span>{!emi&&<span className='cm-chev' style={{color:C.textSoft,fontSize:12,transform:active?'rotate(90deg)':'none',transition:'transform .12s',flexShrink:0}}><Gl n='chevron'/></span>}</div>
+          <div style={{fontSize:isDesktop?21:17,fontWeight:800,letterSpacing:-.5,color:nC,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.15}}>{n}</div>
+          <div style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{sub}</div>
         </div>) }
-      return (<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:9}}>
-        {card('cobrada','check',C.greenText,C.greenBg,'Pagado',fmt(tot.cob),C.greenText,`${tot.nC} factura${tot.nC!==1?'s':''} · ${pct(tot.tasa)}`)}
-        {card('porcobrar','file',C.accent,C.azulBg,'Por cobrar',fmt(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
-        {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmt(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
+      return (<div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(5,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?10:8,marginBottom:9}}>
+        {card('emitido','file',C.accent,C.azulBg,modo==='mes'?'Emitido':'Emitido acum.',fmtShort(tot.emi),C.accent,`${filas.length} factura${filas.length!==1?'s':''}`)}
+        {card('cobrada','check',C.greenText,C.greenBg,'Pagado',fmtShort(tot.cob),C.greenText,`${tot.nC} factura${tot.nC!==1?'s':''} · ${pct(tot.tasa)}`)}
+        {card('porcobrar','file',C.accent,C.azulBg,'Por cobrar',fmtShort(tot.pen),C.accent,`${tot.nD+tot.nS} facturas`)}
+        {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmtShort(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
         {card('vencido','alert',C.overdueText,C.overdueBg,'Vencidas',String(tot.nV),C.overdueText,`${fmtShort(tot.mV)} · recordar`)}
       </div>)
     })()}
@@ -1544,7 +1540,7 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
         </>)
         if(isDesktop) return (
           <div key={f.b.id} style={{borderBottom:`1px solid ${C.bgSoft}`}}>
-            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:inGroup?'1fr 96px 104px 104px 104px 92px':'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
+            <div onClick={()=>setExpand(abierto?null:f.b.id)} style={{display:'grid',gridTemplateColumns:inGroup?'minmax(0,1fr) 72px 92px 92px 92px 84px':'1fr 58px 96px 104px 104px 104px 92px',gap:10,alignItems:'center',padding:'10px 14px',cursor:'pointer'}}>
               {inGroup
                 ? <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>N° {folioN(f.b.invoice_no)||folioN(f.b.folio)}</div>{f.b.concept&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,marginTop:1}}>{f.b.concept}</div>}</div>
                 : <>
@@ -1588,17 +1584,29 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
       const grupos = Object.values(visibles.reduce((acc,f)=>{ const k=String(f.b.client_id||'sc'); if(!acc[k]) acc[k]={cid:f.b.client_id,nom:clientNom(f.b.client_id),fs:[],saldo:0,cob:0,nDet:0}; const g=acc[k]; g.fs.push(f); g.saldo+=f.saldo; g.cob+=f.cobrado; if(f.est==='detectado')g.nDet++; return acc },{})).sort((a,z)=>z.saldo-a.saldo)
       const grpEl = g=>{ const key=String(g.cid||'sc'); const solo=g.fs.length===1; const open=grpOpen[key]!==undefined?grpOpen[key]:(solo||g.nDet>0)
         return (<div key={key} style={{borderBottom:`1px solid ${C.border}`}}>
-          <div onClick={()=>setGrpOpen(p=>({...p,[key]:!open}))} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',cursor:'pointer',background:C.bgSoft}}>
+          <div onClick={()=>setGrpOpen(p=>({...p,[key]:!open}))} style={isDesktop?{display:'grid',gridTemplateColumns:'minmax(0,1fr) 72px 92px 92px 92px 84px',gap:10,alignItems:'center',padding:'11px 14px',cursor:'pointer',background:C.bgSoft}:{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',cursor:'pointer',background:C.bgSoft}}>
+            {isDesktop&&<div style={{display:'flex',alignItems:'center',gap:11,minWidth:0}}>
+              <span style={{color:C.textSoft,fontSize:12,width:10,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
+              <span style={{width:30,height:30,borderRadius:10,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
+              <div onClick={ev=>{ev.stopPropagation();g.cid&&onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{minWidth:0,flex:1,cursor:g.cid?'pointer':'default'}}><div style={{fontSize:14,fontWeight:800,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.nom}</div><div style={{fontSize:11,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div></div>
+            </div>}
+            {isDesktop&&<span/>}
+            {isDesktop&&<span style={{textAlign:'right',fontSize:13,fontWeight:600,color:C.text,fontVariantNumeric:'tabular-nums'}}>{fmtShort(g.fs.reduce((a,f)=>a+f.monto,0))}</span>}
+            {isDesktop&&<span style={{textAlign:'right',fontSize:13,fontWeight:600,color:g.cob>0?C.greenText:C.done,fontVariantNumeric:'tabular-nums'}}>{g.cob>0?fmtShort(g.cob):'—'}</span>}
+            {isDesktop&&<span style={{textAlign:'right',fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmtShort(g.saldo):'$0'}</span>}
+            {isDesktop&&<span/>}
+            {!isDesktop&&<>
             <span style={{color:C.textSoft,fontSize:12,width:10,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
             <span style={{width:30,height:30,borderRadius:10,background:C.azulBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='user' s={16} c={C.accent}/></span>
             <div onClick={ev=>{ev.stopPropagation();g.cid&&onOpenClientFicha&&onOpenClientFicha(g.cid)}} style={{minWidth:0,flex:1,cursor:g.cid?'pointer':'default'}}><div style={{fontSize:14,fontWeight:800,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{g.nom}</div></div>
-            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmt(g.saldo):'$0'}</div><div style={{fontSize:10,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div>{g.cob>0&&g.saldo>0&&<div style={{fontSize:10,color:C.greenText,fontWeight:600,marginTop:1}}>cobrado {fmt(g.cob)}</div>}</div>
+            <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:g.saldo>0?C.text:C.greenText,fontVariantNumeric:'tabular-nums'}}>{g.saldo>0?fmtShort(g.saldo):'$0'}</div><div style={{fontSize:10,color:C.muted}}>{g.nDet>0&&<span style={{color:C.greenText,fontWeight:600}}>{g.nDet} listo{g.nDet!==1?'s':''} · </span>}{g.fs.length} factura{g.fs.length!==1?'s':''}</div>{g.cob>0&&g.saldo>0&&<div style={{fontSize:10,color:C.greenText,fontWeight:600,marginTop:1}}>cobrado {fmtShort(g.cob)}</div>}</div>
+            </>}
           </div>
           {open&&g.fs.map(f=>filaEl(f,true))}
         </div>) }
       return (
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          {isDesktop&&<div style={{display:'grid',gridTemplateColumns:'1fr 96px 104px 104px 104px 92px',gap:10,padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.4}}>
+          {isDesktop&&<div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 72px 92px 92px 92px 84px',gap:10,padding:'9px 14px',borderBottom:`1px solid ${C.border}`,fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:.4}}>
             <span>Factura · glosa</span><span>Resp.</span><span style={{textAlign:'right'}}>Emitido</span><span style={{textAlign:'right'}}>Cobrado</span><span style={{textAlign:'right'}}>Saldo</span><span style={{textAlign:'right'}}>Estado</span>
           </div>}
           {grupos.map(grpEl)}
@@ -2806,7 +2814,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
                 : histPage.map(b=><CargaHistRow key={b.id} b={b}/>)}
             </div>}
           </FlujoPagina>) })() : null
-  const cierrePage = cierreOpen ? <FlujoPagina origen={origenDe('cierre','Facturación')} titulo='Cierre de mes' onBack={volverOrigen('cierre',()=>setCierreOpen(false))} maxW={1180}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>onEdit&&onEdit(b)} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></FlujoPagina> : null
+  const cierrePage = cierreOpen ? <FlujoPagina origen={origenDe('cierre','Facturación')} titulo='Cierre de mes' onBack={volverOrigen('cierre',()=>setCierreOpen(false))} maxW={1500}><CierreMesModal billing={billing} clients={clients} sales={sales} respaldoMap={respaldoMap} abonos={abonos} pagosDe={pagosDe} onConciliarPago={conciliarPago} onRecordar={recordarCobro} onRecordarTanda={recordarCobroTanda} recordadoMap={recordadoMap} diasDesde={diasDesde} onOpenClientFicha={onOpenClientFicha} onOpenFactura={b=>onEdit&&onEdit(b)} onOpenConciliacion={()=>{setCierreOpen(false);onIrConciliacion&&onIrConciliacion()}}/></FlujoPagina> : null
   // Facturas por enviar = PÁGINA (antes modal). Foto + tabla (escritorio) / lista (móvil) con la cifra a la derecha + historial de envíos (bitácora en billing: email_sent_at/sent_to/sent_by).
   const porEnviarPage = bandejaEnvio ? (()=>{ const porEnviar=(billing||[]).filter(b=>!b.deleted_at&&sinEnviar(b)); const contactoDe=b=>factToMap[String(b.client_id)]||null
     const tot=porEnviar.reduce((a,b)=>a+(montoFactura(b)||0),0)
