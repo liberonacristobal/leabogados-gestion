@@ -1,10 +1,11 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
 import { TRAMOS, enFiltroMora, estadoCompromiso, exposicionCartera, puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
+import { Menu } from '../lib/presupuestoUI.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, descargarXlsx, useSeleccion } from '../lib/seleccionLote.jsx'
 
 // Cadencia de cobranza (fuente única): ¿toca recordatorio para esta factura hoy? Escala por mora,
@@ -109,6 +110,8 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   const [recPrev,setRecPrev] = useState(null)  // vista previa del recordatorio antes de enviar
   const [qCob,setQCob] = useState('')          // buscador: cliente, N° de factura, RUT o concepto
   const [recNotaMap,setRecNotaMap] = useState({})   // client_id → nota libre del recordatorio (persistente)
+  const [concOpen,setConcOpen] = useState(false), [masAbre,setMasAbre] = useState(false), masRef=useRef(null)
+  useEffect(()=>{ if(!masAbre) return; const f=e=>{ if(masRef.current&&!masRef.current.contains(e.target)) setMasAbre(false) }, k=e=>{ if(e.key==='Escape') setMasAbre(false) }; document.addEventListener('mousedown',f); document.addEventListener('keydown',k); return ()=>{ document.removeEventListener('mousedown',f); document.removeEventListener('keydown',k) } },[masAbre])
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
   const [sortBy,setSortBy] = useState(()=>viewMemLeer('cobranza')?.sortBy||{col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
@@ -402,32 +405,42 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
             {tile('total','Por cobrar',fM(deudaTotal),`${grupos.length} cliente${grupos.length!==1?'s':''}${isDesktop&&nAlDia>0?` · ${nAlDia} al día`:''}`,C.azulBg,C.azulBd,'file',C.azulInfo,C.accent)}
             {expo.m60>0&&<div style={isDesktop?undefined:{gridColumn:'1 / -1'}}>{tile('m60','Más de 60 días',fM(expo.m60),`${pctTxt(expo.pctM60)} de la cartera`,C.soonBg,`${C.soon}55`,'clock',C.soonText,C.soonText)}</div>}
           </div>
-          {expo.mayor&&expo.mayor.pct>=0.25&&gGlobal[expo.mayor.cid]&&<div style={{background:C.soonBg,borderRadius:12,padding:'10px 13px',marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.soonText}}>{cn(expo.mayor.cid)} concentra el {pctTxt(expo.mayor.pct)} de la cartera por cobrar</div>
-            <div style={{fontSize:11,color:C.soonText,marginTop:2}}>{(()=>{ const G=gGlobal[expo.mayor.cid], pp=punt.get(String(expo.mayor.cid)); return `${G.items.length} factura${G.items.length!==1?'s':''}${!pp||pp.n===0?', sin pagos registrados':''}; mora máxima ${G.maxDias} días. Los tres mayores deudores suman ${pctTxt(expo.top3pct)}.` })()}</div></div>}
-          {grupos.length>0&&<div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
-            <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Antigüedad</span>
-            {[[null,'Todas',expo.tramos.reduce((a,t)=>a+t.n,0)],...TRAMOS.map((k,i)=>[i,k,expo.tramos[i].n])].map(([v,l,n])=>{ const on=tramoF===v; return <button key={String(v)} onClick={()=>setTramoF(on&&v!==null?null:v)} style={{fontSize:11,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted}}>{l} · {n}</button> })}
-            {tramoF==='m60'&&<button onClick={()=>setTramoF(null)} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${C.accent}`,background:C.azulBg,color:C.accent}}>Más de 60 días ×</button>}
-          </div>}
-          {grupos.length>0&&(isDesktop
-            ? <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:10}}><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{flex:1,minWidth:0,marginRight:4}}/>{porAbogado.map(chip)}</div>
-            : <><Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{marginBottom:8}}/><div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>{porAbogado.map(chip)}<span style={{marginLeft:'auto'}}><BtnSeleccionar s={selB}/></span></div></>)}
+          {expo.mayor&&expo.mayor.pct>=0.25&&gGlobal[expo.mayor.cid]&&<div style={{background:C.soonBg,borderRadius:12,padding:'0 13px',marginBottom:10}}>
+            <div onClick={()=>setConcOpen(o=>!o)} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setConcOpen(o=>!o) }} style={{minHeight:44,display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,fontWeight:700,color:C.soonText,minWidth:0}}><span style={{flex:1,minWidth:0}}>{cn(expo.mayor.cid)} · {pctTxt(expo.mayor.pct)} de la cartera</span><span style={{transform:concOpen?'rotate(90deg)':'none',transition:'transform .12s',display:'inline-flex'}}><Gl n='chevron'/></span></div>
+            {concOpen&&<div style={{fontSize:12,color:C.soonText,padding:'0 0 10px'}}>{cn(expo.mayor.cid)} concentra el {pctTxt(expo.mayor.pct)} de la cartera por cobrar. {(()=>{ const G=gGlobal[expo.mayor.cid], pp=punt.get(String(expo.mayor.cid)); return `${G.items.length} factura${G.items.length!==1?'s':''}${!pp||pp.n===0?', sin pagos registrados':''}; mora máxima ${G.maxDias} días. Los tres mayores deudores suman ${pctTxt(expo.top3pct)}.` })()}</div>}</div>}
+          {grupos.length>0&&(()=>{
+            const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]
+            const nTodas=expo.tramos.reduce((a,t)=>a+t.n,0)
+            const corto=t=>t==='Más de 90 días'?'+90 días':t==='Más de 60 días'||t==='m60'?'+60 días':t
+            const tramoTxt=tramoF==null?'Todas':tramoF==='m60'?'+60 días':corto(TRAMOS[tramoF])
+            const sortTxt=(SORTS.find(x=>x[0]===sortBy.col)||[0,({punt:'Puntualidad',cartera:'% cartera'})[sortBy.col]||'Monto'])[1]
+            const filaOp=(t,n)=><span style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'baseline'}}><span>{t}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:600}}>{n}</span></span>
+            const ctl=(aria,rot,val,activo,menu)=><span style={{border:`1px solid ${activo?C.accent:C.border}`,background:activo?C.azulBg:C.surface,borderRadius:12,minHeight:44,display:'flex',alignItems:'center',padding:'0 10px',minWidth:0,boxSizing:'border-box'}}>{<Menu aria={aria} estilo={{padding:0,minHeight:44,width:'100%'}} valor={menu.valor} opciones={menu.opciones} onChange={menu.onChange} boton={<span style={{display:'flex',flexDirection:'column',alignItems:'flex-start',lineHeight:1.2,minWidth:0}}><span style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>{rot}</span><span style={{fontSize:12.5,fontWeight:700,color:activo?C.accent:C.text,whiteSpace:'nowrap'}}>{val}</span></span>}/>}</span>
+            const vistas=<VistasLista lista='cobranza' email={currentUserEmail} estilo={{marginLeft:0}} actual={{sortBy,tramoF,aboFilter,q:qCob.trim()}} defecto={{sortBy:{col:'total',dir:'desc'}}}
+              resumen={[({punt:'Puntualidad',cartera:'% cartera'})[sortBy.col]||(SORTS.find(x=>x[0]===sortBy.col)||SORTS[0])[1],tramoF!=null?`Antigüedad ${tramoF==='m60'?'+60 días':tramoF}`:null,aboFilter?`Abogado ${aboFilter}`:null,qCob.trim()?`«${qCob.trim()}»`:null].filter(Boolean).join(' · ')}
+              onAplicar={f=>{ setSortBy(f.sortBy||{col:'total',dir:'desc'}); setTramoF(f.tramoF??null); setAboFilter(f.aboFilter??null); setQCob(f.q||'') }}/>
+            return <>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+                <Buscador value={qCob} onChange={setQCob} placeholder='Buscar cliente, N° de factura o RUT…' style={{flex:1,minWidth:0}}/>
+                <span ref={masRef} style={{position:'relative',display:'inline-flex',flexShrink:0}}>
+                  <button onClick={()=>setMasAbre(a=>!a)} aria-label='Más acciones' aria-expanded={masAbre} aria-haspopup='menu' style={{width:44,height:44,borderRadius:12,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:20,fontWeight:800,cursor:'pointer',position:'relative',fontFamily:'inherit',lineHeight:1}}>⋯{autoGlobal&&<span title='Envío automático activado' style={{position:'absolute',top:7,right:7,width:8,height:8,borderRadius:'50%',background:C.greenText}}/>}</button>
+                  {masAbre&&<div role='menu' style={{position:'absolute',top:'100%',right:0,zIndex:30,marginTop:6,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:10,minWidth:250,boxShadow:'0 8px 24px rgba(0,60,80,.14)',display:'flex',flexDirection:'column',gap:10}}>
+                    <BtnSeleccionar s={selB}/>
+                    {vistas}
+                    {gruposAccion.length>1&&<span onClick={()=>{ if(!sending){ setMasAbre(false); enviarTodos() } }} title='Enviar recordatorio a todos los clientes que corresponde' style={{fontSize:13,fontWeight:700,color:sending?C.done:C.azulInfo,cursor:sending?'default':'pointer',minHeight:34,display:'flex',alignItems:'center'}}>{sending?'Enviando…':`Enviar a todos (${gruposAccion.filter(g=>!autoCli[g.cid]).length})`}</span>}
+                    <span onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Envío automático activado — la app envía sola a los clientes que liberaste':'Envío automático desactivado — actívalo para que la app envíe sola'} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:'pointer',fontSize:13,fontWeight:600,color:C.text,minHeight:34}}><span>Envío automático <b style={{color:autoGlobal?C.greenText:C.muted}}>{autoGlobal?'Activada':'Desactivada'}</b></span><span style={{width:30,height:16,borderRadius:20,background:autoGlobal?C.greenText:C.toggleOff,position:'relative',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?16:2,width:12,height:12,borderRadius:'50%',background:C.surface,transition:'left .15s'}}/></span></span>
+                  </div>}
+                </span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginBottom:10}}>
+                {ctl('Antigüedad','Antigüedad',tramoTxt,tramoF!=null,{valor:tramoF,onChange:v=>setTramoF(v===tramoF&&v!==null?null:v),opciones:[[null,filaOp('Todas',`${nTodas} fact.`)],...TRAMOS.map((k,i)=>[i,filaOp(k,`${expo.tramos[i].n} fact.`)]),...(expo.m60>0?[['m60',filaOp('Más de 60 días',fM(expo.m60))]]:[])]})}
+                {ctl('Responsable','Responsable',aboFilter||'Todos',!!aboFilter,{valor:aboFilter,onChange:v=>setAboFilter(v),opciones:[[null,filaOp('Todos','')],...porAbogado.map(a=>[a.abo,filaOp(a.abo,`${fM(a.vencido)} venc.`)])]})}
+                {ctl('Ordenar','Ordenar',`${sortTxt} ${sortBy.dir==='desc'?'↓':'↑'}`,!(sortBy.col==='total'&&sortBy.dir==='desc'),{valor:sortBy.col,onChange:col=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'})),opciones:SORTS.map(([col,l])=>[col,filaOp(l,sortBy.col===col?(sortBy.dir==='desc'?'↓':'↑'):'')])})}
+              </div>
+            </>})()}
         </>)
       })()}
       {grupos.length===0 && <div style={{fontSize:13,color:C.textSoft,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:16,textAlign:'center'}}>Nada por cobrar hoy. {enEspera?`${enEspera} factura${enEspera!==1?'s':''} ya contactada${enEspera!==1?'s':''}, en espera de respuesta.`:'Todo al día.'}</div>}
-      {grupos.length>0 && (()=>{ const SORTS=[['cliente','Nombre'],['facturas','Facturas'],['total','Monto'],['vencido','Vencido'],['mora','Mora']]; return (
-        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:10}}>
-          <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:C.textSoft}}>Ordenar</span>
-          {SORTS.map(([col,lbl])=>{ const on=sortBy.col===col; return <button key={col} onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{fontSize:11,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?C.accent:C.border}`,background:on?C.azulBg:C.surface,color:on?C.accent:C.muted}}>{lbl}{on?(sortBy.dir==='desc'?' ↓':' ↑'):''}</button> })}
-          <VistasLista lista='cobranza' email={currentUserEmail} estilo={{marginLeft:0}} actual={{sortBy,tramoF,aboFilter,q:qCob.trim()}} defecto={{sortBy:{col:'total',dir:'desc'}}}
-            resumen={[({punt:'Puntualidad',cartera:'% cartera'})[sortBy.col]||(SORTS.find(x=>x[0]===sortBy.col)||SORTS[0])[1],tramoF!=null?`Antigüedad ${tramoF==='m60'?'+60 días':tramoF}`:null,aboFilter?`Abogado ${aboFilter}`:null,qCob.trim()?`«${qCob.trim()}»`:null].filter(Boolean).join(' · ')}
-            onAplicar={f=>{ setSortBy(f.sortBy||{col:'total',dir:'desc'}); setTramoF(f.tramoF??null); setAboFilter(f.aboFilter??null); setQCob(f.q||'') }}/>
-          <div style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:14}}>
-            {gruposAccion.length>1 && <span onClick={()=>!sending&&enviarTodos()} title="Enviar recordatorio a todos los clientes que corresponde" style={{fontSize:11,fontWeight:600,color:sending?C.done:C.azulInfo,cursor:sending?'default':'pointer'}}>{sending?'Enviando…':`Enviar a todos (${gruposAccion.filter(g=>!autoCli[g.cid]).length})`}</span>}
-            <span onClick={()=>setAutoGlob(!autoGlobal)} title={autoGlobal?'Envío automático activado — la app envía sola a los clientes que liberaste':'Envío automático desactivado — actívalo para que la app envíe sola'} style={{display:'inline-flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:11,fontWeight:600,color:C.muted}}>Automática<span style={{width:30,height:16,borderRadius:20,background:autoGlobal?C.greenText:C.toggleOff,position:'relative',flexShrink:0,transition:'background .15s'}}><span style={{position:'absolute',top:2,left:autoGlobal?16:2,width:12,height:12,borderRadius:'50%',background:C.surface,transition:'left .15s'}}/></span></span>
-          </div>
-        </div>) })()}
       {isDesktop ? (()=>{
         const thS={...TH_BAND,padding:'9px 12px',textAlign:'left',whiteSpace:'nowrap'}
         const th=(col,lbl,r)=>(<th onClick={()=>setSortBy(s=>({col,dir:s.col===col&&s.dir==='desc'?'asc':'desc'}))} style={{...thS,textAlign:r?'right':'left',cursor:'pointer',userSelect:'none'}}>{lbl}{sortBy.col===col?<span style={{color:C.muted}}> {sortBy.dir==='desc'?<Gl n='chevD'/>:<Gl n='chevU'/>}</span>:''}</th>)
