@@ -9,7 +9,7 @@ import { MEDIOS_MOV, MEDIO_CON_DETALLE, medioMovDe, glosaMovilizacion, FloatFld,
 import { clientesParecidos, _tipoDupLbl, Sel, Txt, PaginaSobre } from './lib/compartido.jsx'
 import { normRut } from './lib/compartido.jsx'
 import { META_UF, costoOperacionReal, useFlujoCaja, comisPorPagarAnteriores, _resultadoInicio } from './lib/compartido.jsx'
-import { fetchUFFechas, costosOficinaMes, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, PS_KPIS, PS_KPI_DEF, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
+import { fetchUFFechas, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, PS_KPIS, PS_KPI_DEF, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
 import { fmtUFk, inicioVentaYM, ventaCuentaEnAnio } from './lib/compartido.jsx'
 import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
 import { _adminsEstudioCache, cargarAdminsEstudio, _nRut, tituloProv, pctBHE, esBoletaProv, fechaBHE, abrirDocumento, saldoComisiones, _diasDesde, correoMarcaHtml, driveTrash, Attachments, nCuotaDe } from './lib/compartido.jsx'
@@ -1217,7 +1217,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       {id:'co1',categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000,desde:'2026-03-01',monto_prev:780000},
       {id:'co2',categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000,desde:'2026-03-01',monto_prev:240000},
       {id:'co3',categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},
-      {id:'co4',categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
+      {id:'co4',categoria:'Arriendo y espacio',item:'Subarriendo',monto:1080000,es_ingreso:true},
       {id:'co5',categoria:'Servicios y tecnología',item:'Internet',monto:34200},
       {id:'co6',categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},
       {id:'co7',categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
@@ -1227,9 +1227,8 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
     return ()=>{alive=false}
   },[])
   const eff = r => (r.desde && ym < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
-  const signo = r => (r.es_ingreso?-1:1)
-  const totalMes = costosOficinaMes(rows, ym)
-  const totalCat = cat => (rows||[]).filter(r=>r.categoria===cat).reduce((a,r)=>a+eff(r)*signo(r),0)
+  const totalMes = costosOficinaMes(rows, ym)   // neto: el subarriendo y los gastos recuperados bajan el costo (costosOficina.js)
+  const totalCat = cat => costoOficinaNeto((rows||[]).filter(r=>r.categoria===cat), ym)
   // ③ Real este mes = gastos del cliente interno (Oficina) del mes, agrupados por categoría (mapeadas). La nómina no se registra como gasto → esas categorías quedan "sin registro".
   const ofiCli = (clients||[]).find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
   const realPorCat = (()=>{ const m={}; if(!ofiCli) return m; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type!=='gasto') return; if(String(e.client_id)!==String(ofiCli.id)) return; if(String(e.date||'').slice(0,7)!==ym) return; const cat=catOficinaNueva(e.category); m[cat]=(m[cat]||0)+(Number(e.amount)||0) }); return m })()
@@ -1254,7 +1253,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
   const agregar = async cat => {
     const item=(af.item||'').trim(); const monto=Math.max(0,Math.round(parseFloat(af.monto)||0))
     if(!item){ appAlert('Ponle un nombre al ítem.'); return }
-    const es_ingreso = OFICINA_INGRESO_ITEMS.has(item)
+    const es_ingreso = af.ingreso!=null ? !!af.ingreso : OFICINA_INGRESO_ITEMS.has(item)   // lo marca la casilla del formulario; sin tocarla, el nombre «Subarriendo» lo propone
     const nuevo = {categoria:cat, item, monto, es_ingreso, activo:true}
     if(DEMO){ setRows(p=>[...p,{...nuevo,id:'co'+Math.random().toString(36).slice(2,7)}]); setAf({item:'',monto:''}); setAddCat(null); return }
     try{ const {data}=await supabase.from('costos_oficina').insert(nuevo).select().single(); setRows(p=>[...p,data||{...nuevo,id:'tmp'+Date.now()}]) }catch(e){ appAlert('No se pudo agregar: '+(e.message||e)); return }
@@ -1337,6 +1336,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
             {addCat===cat ? (
               <div style={{padding:'10px 12px',background:C.bgSoft,borderTop:`0.5px solid ${C.border}`}}>
                 <input list={`sub-${cat}`} value={af.item} onChange={e=>setAf(f=>({...f,item:e.target.value}))} placeholder='Ítem (subcategoría)' style={{...inpS,width:'100%',marginBottom:7}}/>
+                <label style={{display:'flex',alignItems:'center',gap:7,fontSize:12,color:C.textSoft,marginBottom:7,cursor:'pointer'}}><input type='checkbox' checked={af.ingreso!=null?!!af.ingreso:OFICINA_INGRESO_ITEMS.has((af.item||'').trim())} onChange={e=>setAf(f=>({...f,ingreso:e.target.checked}))}/>Menor costo (subarriendo o gasto recuperado)</label>
                 <datalist id={`sub-${cat}`}>{subs.map(s=><option key={s} value={s}/>)}</datalist>
                 <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:12,color:C.textSoft}}>$</span><input type='number' value={af.monto} onChange={e=>setAf(f=>({...f,monto:e.target.value}))} placeholder='monto/mes' style={{...inpS,flex:1,textAlign:'right'}}/>
                   <button onClick={()=>agregar(cat)} style={{padding:'8px 13px',borderRadius:8,border:'none',background:C.greenText,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Agregar</button>
@@ -1699,7 +1699,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       return <>
         <div style={grid4}>
           {kt('res','chart',tRes,'Resultado',sg(R.res),`${per} · ${estado}`,abrirRes)}
-          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'incluye subarriendo',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
+          {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'facturación propia y externos',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {kt('mar','tPct',[C.card,C.accent],'Margen',margen==null?'—':`${margen.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos',abrirRes)}
         </div>
@@ -1707,7 +1707,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
         <div style={{...grid4,gridTemplateColumns:isDesktop?'repeat(5,minmax(0,1fr))':'repeat(2,minmax(0,1fr))'}}>
           {st('fac',IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fmtMill(R.fac),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {st('rex',IC.fac,C.azulBg,C.azulInfo,'Comisión de externos',R.rex?'+'+fmtMill(R.rex):'$0',C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
-          {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo',R.sub?'+'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
+          {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo · menor costo',R.sub?'−'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
           {st('cos',IC.peop,C.overdueBg,C.overdueText,isDesktop?'Costos de operación':'Costos',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
           <div style={{gridColumn:isDesktop?undefined:'1/-1'}}>{st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}</div>
         </div>
@@ -1803,7 +1803,6 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   const cosP = k => rp.cosLines.find(x=>x.k===k)?.m||0
   const detalle = k => k==='ing' ? <>
       {ln({k:'fac',sg:'',l:'Facturación propia',v:r.fac,p:rp.fac,on:()=>setSub2(s=>s==='fac'?null:'fac'),open:sub2==='fac',children:r.facDocs.map((d,i)=>subFila('f'+i,`${d.nc?'NC':'Factura'} N° ${d.folio}`,d.receptor_name||'',d.nc?-(Number(d.monto)||0):(Number(d.monto)||0),d.b&&onOpenFactura?()=>onOpenFactura(d.b):null))})}
-      {r.sub!==0||rp.sub!==0 ? ln({k:'sub',sg:'+',l:'Subarriendo',v:r.sub,p:rp.sub,on:onOpenSubarriendo}) : null}
       {r.rex!==0||rp.rex!==0 ? ln({k:'rex',sg:'+',l:'Comisión de externos',v:r.rex,p:rp.rex,on:()=>setSub2(s=>s==='rex'?null:'rex'),open:sub2==='rex',children:r.rexItems.map((x,i)=>subFila('r'+i,`Factura N° ${folioN(x.b.invoice_no)}`,clients.find(c=>String(c.id)===String(x.b.client_id))?.name||'',Number(x.t.comision_monto)||0,onOpenFactura?()=>onOpenFactura(x.b):null))}) : null}
       {ln({k:'ingT',sg:'=',l:'Ingresos',v:r.ing,p:rp.ing,tot:true})}</>
     : k==='cos' ? <>{r.cosLines.map((x,i)=>{
@@ -1818,6 +1817,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
         if(x.k==='arr'&&r.conPlanilla) return ln({...base,on:abre,open,children:<>{subFila('a1','planilla','Arriendo',r.arriendo,null)}{subFila('a2','planilla','Gastos comunes',r.ggcc,null)}</>})
         if(x.k==='gv') return ln({...base,on:abre,open,children:r.gvItems.map((e,j)=>subFila('g'+j,fmtFechaDMY(e.date),e.concept||e.category||'',Number(e.amount)||0,gasto(e)))})
         if(x.k==='pre') return ln({...base,on:onOpenPresupuesto})
+        if(x.k==='sub') return ln({k:'sub',sg:'−',sinMenos:true,l:x.l+' · menor costo',v:-x.m,p:-(rp.cosLines.find(y=>y.k==='sub')?.m||0),on:onOpenSubarriendo})   // baja el costo; no es ingreso
         return ln(base) })}
         {ln({k:'cosT',sg:'=',sinMenos:true,l:'Costos de operación',v:r.cos,p:rp.cos,neg:true,tot:true})}</>
     : r.comList.length ? <>{r.comList.map((x,i)=>ln({k:'c'+(x.pid||x.nombre),sg:i?'+':'',sinMenos:true,l:x.nombre,v:x.m,neg:true,on:x.pid&&onOpenProveedor?()=>onOpenProveedor(x.pid):null}))}
@@ -5315,7 +5315,7 @@ function CopilotoModal({ role='admin', clients=[], clientEntities=[], sales=[], 
       const cobradoYr=(billing||[]).filter(b=>!b.deleted_at&&b.status!=='Anulada'&&b.billing_type!=='reembolso'&&String(b.paid_at||'').startsWith(String(yr))).reduce((a,b)=>a+cobradoBill(b),0)
       let costosYr=0; for(let i=1;i<=mNow;i++) costosYr+=costosOficinaMes(costosOfiRows,`${yr}-${String(i).padStart(2,'0')}`)
       const costosMes=costosOficinaMes(costosOfiRows)
-      if((costosOfiRows||[]).length) s += `\nFacturas pagadas en el año (por fecha de pago): ${fmt(cobradoYr)}.\nCostos de oficina: ${fmt(costosMes)}/mes · ${fmt(costosYr)} en el año.`
+      if((costosOfiRows||[]).length) s += `\nFacturas pagadas en el año (por fecha de pago): ${fmt(cobradoYr)}.\nCostos de oficina netos del subarriendo: ${fmt(costosMes)}/mes · ${fmt(costosYr)} en el año.`
     }
     s += `\nResponsables: CL=Cristóbal, EE=Erasmo, MC=Martín, MP=Martina, RD=Rodrigo.`
     return s
@@ -6016,7 +6016,7 @@ export default function App() {
       {categoria:'Remuneraciones',item:'Cristóbal',monto:3120321,monto_prev:2330000,desde:'2026-10-01'},{categoria:'Remuneraciones',item:'Erasmo',monto:3095407,monto_prev:2284500,desde:'2026-10-01'},{categoria:'Remuneraciones',item:'Martín',monto:1679268},{categoria:'Remuneraciones',item:'Contadora',monto:65000},{categoria:'Remuneraciones',item:'Procurador',monto:450000},
       {categoria:'Remuneraciones',item:'Asociada senior · Javiera',monto:2100000},{categoria:'Remuneraciones',item:'Asociado senior · Tomás',monto:2000000},{categoria:'Remuneraciones',item:'Asociada · Fernanda',monto:1450000},{categoria:'Remuneraciones',item:'Paralegal · Camila',monto:900000},
       {categoria:'Leyes sociales',item:'Cotizaciones',monto:2760000},{categoria:'Impuestos y patentes',item:'PPM',monto:800000},
-      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:2000000,es_ingreso:true},
+      {categoria:'Arriendo y espacio',item:'Arriendo',monto:2780000},{categoria:'Arriendo y espacio',item:'Gastos comunes',monto:890000},{categoria:'Arriendo y espacio',item:'Limpieza',monto:270000},{categoria:'Arriendo y espacio',item:'Subarriendo',monto:1080000,es_ingreso:true},
       {categoria:'Servicios y tecnología',item:'Internet',monto:34200},{categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},{categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
       {categoria:'Insumos de oficina',item:'Insumos',monto:72500},{categoria:'Desarrollo de negocio',item:'Varios',monto:363334}]); return }
     supabase.from('costos_oficina').select('categoria,item,monto,es_ingreso,desde,monto_prev').eq('activo',true).then(({data})=>setCostosOfiRows(data||[]),()=>{}) },[])
