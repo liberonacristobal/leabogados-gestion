@@ -903,7 +903,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               // Tarjeta: icono a la izquierda; título, cifra y "% · rótulo" alineados en columna (el % va BAJO la cifra, no rompe en escritorio).
               const kpiTile=(key,label,bg,bd,icoBg,icoCol,fig,pct,cap,dual)=>(
                 <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',minHeight:isDeskRes?undefined:86,boxSizing:'border-box',cursor:'pointer',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
-                  {!dual&&<span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>}
+                  <span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{...SEC_LBL,fontSize:isDeskRes?13:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>
                     {dual?<CifrasBrutoNeto desk={isDeskRes} bruto={dual.bruto} neto={dual.neto} princ={vendPrinc} onAlt={setVendPrinc}/>:<div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>}

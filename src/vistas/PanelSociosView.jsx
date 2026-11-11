@@ -30,7 +30,7 @@ const ICO_ANIO = {
 }
 const KpiAnio = ({ic,tono='nt',label,value,dual,pct,cap,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
   <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',minHeight:D?undefined:86,boxSizing:'border-box',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
-    {!dual&&<span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>}
+    <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
     <div style={{minWidth:0,flex:1}}>
       <div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>
       {dual||<div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>}
