@@ -1,6 +1,6 @@
 // Paso 4 del Presupuesto («Metas»): una sola meta con su cifra (Vendido, Facturado…) escrita en $ o en % sobre el cierre estimado del año base, lo que falta facturar contra el arrastre y el aviso
 // cuando la meta queda bajo ese cierre. Funciones puras; la cadena que lleva la meta a los demás componentes sigue siendo metasDesdeComponente (presupuesto.js).
-import { ventasDeFact } from './presupuesto.js'
+import { ventasDeFact, metasDesdeComponente, valorComponente } from './presupuesto.js'
 
 const _n = (/** @type {any} */ x) => { if (x == null || x === '') return null; const v = Number(x); return Number.isFinite(v) ? v : null }
 
@@ -63,4 +63,35 @@ export function flujoMensualMeta(factMeta, arrastreMes) {
   const m = Math.max(0, _n(factMeta) || 0) / 12, ar = Array.from({ length: 12 }, (_, i) => Number((arrastreMes || [])[i]) || 0)
   const meta = ar.map(() => m), falta = ar.map((x) => m - x), suma = (/** @type {number[]} */ l) => l.reduce((a, b) => a + b, 0)
   return { meta, arrastre: ar, falta, totales: { meta: suma(meta), arrastre: suma(ar), falta: suma(falta) } }
+}
+
+/** Sobrecumplimiento de 2026 que repite el escenario Optimista: vendido +13 % sobre la meta y cobranza 20 % sobre lo proyectado (% configurables por quien llama). */
+export const SOBRE_VENTAS = 13, SOBRE_COBRANZA = 20
+
+/**
+ * Los tres escenarios del paso 5, anclados a las metas del paso 4 (todos por la misma cadena de metasDesdeComponente):
+ * Conservador = repite el cierre estimado de la cifra fijada (+0 %, sin recuperación de cartera); Ideal = la meta 2027 tal como quedó en el paso 4 (`chIdeal`, misma cadena y misma recuperación);
+ * Optimista = la meta más el sobrecumplimiento de 2026 (+13 % en la cifra fijada; la recuperación de cartera necesaria es el 20 % del cobro del año, y avisa si supera la mora estimada).
+ * @param {{ base:any, est:any, cfg?:any, ancla:string, valorCadena:number, cierre:number, rec:number, mora:number, porCobrar?:number, ratio:number|null, cv:number, arrastre:number, ufMed?:number|null, cierreFact?:number|null, chIdeal:any, sobreVentas?:number, sobreCobranza?:number }} o
+ */
+export function escenariosMeta(o) {
+  const sv = o.sobreVentas ?? SOBRE_VENTAS, sc = o.sobreCobranza ?? SOBRE_COBRANZA
+  const cadena = (/** @type {number} */ valor) => { const r = metasDesdeComponente(o.base, o.est, { componente: o.ancla, valor, ratio: o.ratio, cv: o.cv }, o.cfg); return r && r.ok ? r : null }
+  const arma = (/** @type {string} */ k, /** @type {string} */ nombre, /** @type {any} */ ch, /** @type {number|null} */ recFija, /** @type {number} */ valorAncla) => {
+    if (!ch) return { k, nombre, ok: false, valorAncla, ch: null, ventas: null, cobranza: null, falta: null }
+    const rec = recFija != null ? recFija : Math.max(0, ch.caja) * sc / 100
+    return { k, nombre, ok: true, valorAncla, ch, ventas: valorComponente(ch, 'ventas', o.ratio, o.cv), cobranza: cobranzaAnio({ cobro: ch.caja, rec, mora: o.mora, porCobrar: o.porCobrar, cierre: null }), falta: faltaFacturar({ factMeta: ch.fact, arrastre: o.arrastre, ufMed: o.ufMed, ratio: o.ratio, cv: o.cv, cierreFact: o.cierreFact }) }
+  }
+  const vCons = o.cierre, vOpt = o.valorCadena * (1 + sv / 100)
+  return [arma('conservador', 'Conservador', o.cierre > 0 ? cadena(vCons) : null, 0, vCons), arma('ideal', 'Ideal', o.chIdeal && o.chIdeal.ok !== false ? o.chIdeal : null, o.rec, o.valorCadena), arma('optimista', 'Optimista', o.valorCadena > 0 ? cadena(vOpt) : null, null, vOpt)]
+}
+
+/**
+ * El estado con que se muestra TODO el resultado 2027 (franja del paso 5, «Cómo se llega», Costos, Impuesto, Por socio, Excel y Comparar): el escenario de referencia de las metas con el crecimiento que la meta exige
+ * (`ch.g`, de metasDesdeComponente), de modo que su margen, resultado y retiros son exactamente los del Ideal. Sin cadena válida deja los supuestos como están. No modifica `est` (el guardado sigue con lo escrito).
+ * @param {any} est @param {{ g?:number }|null|undefined} ch @param {string} k clave del escenario de referencia
+ */
+export function estConMetaIdeal(est, ch, k) {
+  const g = ch && Number.isFinite(Number(ch.g)) ? Number(ch.g) : null
+  return { ...est, esc: k, p: g == null || !est.p[k] ? est.p : { ...est.p, [k]: { ...est.p[k], g } } }
 }

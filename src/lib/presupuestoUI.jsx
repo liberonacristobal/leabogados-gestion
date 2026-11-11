@@ -359,8 +359,8 @@ export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onRe
     {D && <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>}
   </div>
   return <div>
-    <div style={{ position: 'relative', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después del aumento de reserva', onRetiros, true)}{D && <span style={{ position: 'absolute', top: 8, right: 16, fontSize: 11, color: C.muted }}>Escenario {esc} · elegido</span>}</div>
-    {!D && <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc} · elegido</div>}
+    <div style={{ position: 'relative', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después del aumento de reserva', onRetiros, true)}{D && <span style={{ position: 'absolute', top: 8, right: 16, fontSize: 11, color: C.muted }}>Escenario {esc}</span>}</div>
+    {!D && <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc}</div>}
   </div>
 }
 

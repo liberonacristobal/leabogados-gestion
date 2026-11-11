@@ -9,7 +9,7 @@ import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
 import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic, ResumenCascada } from '../lib/presupuestoUI.jsx'
-import { calcMetas } from '../lib/presupuestoBloques.jsx'
+import { vistaIdeal } from '../lib/presupuestoBloques.jsx'
 import { Mirada, Base, Costos } from './presupuestoEtapas1.jsx'
 import { Metas } from './presupuestoMetas.jsx'
 import { Escenarios, Seguimiento, vistaDrill, titulosDrill, descargarExcel } from './presupuestoEtapas2.jsx'
@@ -126,7 +126,9 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // Un paso visitado queda marcado (sin botón de «revisado»).
   useEffect(() => { if (est && cargado && !errorCarga && !drill && !est.hecho.includes(ui.etapa)) setEst((e) => (e && !e.hecho.includes(ui.etapa) ? { ...e, hecho: [...e.hecho, ui.etapa] } : e)) }, [est, cargado, errorCarga, drill, ui.etapa])
   // ── Modelo ──
-  const M = useMemo(() => (est ? modeloPresupuesto(datos.base, est) : null), [datos.base, est])
+  // El resultado 2027 se muestra con el escenario de referencia a la altura de la meta (Ideal): una sola fuente para toda la vista (vistaIdeal, presupuestoBloques.jsx).
+  const V = useMemo(() => (est ? vistaIdeal(datos, est) : null), [datos, est])
+  const M = useMemo(() => (V ? modeloPresupuesto(datos.base, V.est) : null), [datos.base, V])
   const U = M ? M.ufMed : 1
   setMoneda({ moneda: est ? est.moneda : 'clp', uf27: M ? M.ufMed : 0, uf26: datos.uf26.med, unidad: CFG.moneda.unidad })   // formateador único (presupuestoUI): todo el dinero de los pasos y detalles lo sigue
   const ESC = est ? escenariosDe(est) : []
@@ -220,8 +222,8 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     if (o.anio && o.anio !== anio) { if (guardado.est === 'pendiente') await guardarBorrador(); iniPend.current = { ...o, etapa }; setAnioSel(o.anio); return true }   // el borrador nuevo se arma al cargar el otro año
     setEst(construirInicial(o)); setDrill(null); setPila([]); setUIS((u) => ({ ...u, etapa })); return true
   }
-  const MT = est ? calcMetas(datos, est) : null
-  const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
+  const MT = V ? V.MT : null
+  const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est: V ? V.est : est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
     irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, arrastre, setArrastre, cliNom: (id) => (clients.find((c) => String(c.id) === String(id)) || {}).name || 'Sin cliente', irPorFacturar: onOpenPorFacturar }
 
   const ETAPAS = [`Resultado ${datos.anioBase}`, `Arrastre ${datos.anioBase}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
@@ -232,7 +234,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   if (errorCarga) return <div style={wrap}><PageHeader origen={backLabel} onBack={onBack} titulo={`Presupuesto ${anio}`} style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} /><div role='alert' style={{ margin: 16, background: C.overdueBg, border: `1px solid ${C.overdueBd}`, color: C.overdueText, borderRadius: 12, padding: '14px 16px', fontSize: 13 }}>No se pudo leer el borrador del presupuesto {anio}. No se guardó ni se creó nada.<div style={{ marginTop: 10 }}><Btn onClick={() => setReintento((n) => n + 1)}>Reintentar</Btn></div></div></div>
   if (!est || !M) return <div style={wrap} aria-busy='true'><PageHeader origen={backLabel} onBack={onBack} titulo={`Presupuesto ${anio}`} style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} /><div role='status' aria-label='Cargando el presupuesto' style={{ display: 'flex', flexDirection: 'column', gap: 14 }}><div style={{ height: 52, borderRadius: 12, background: C.bgSoft }} /><div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 3 : 2},minmax(0,1fr))`, gap: D ? 10 : 8 }}>{Array.from({ length: 6 }, (_, i) => <div key={i} style={{ height: D ? 174 : 112, borderRadius: 12, background: C.bgSoft, border: `1px solid ${C.border}` }} />)}</div><div style={{ fontSize: 12, color: C.muted }}>Cargando el presupuesto…</div></div></div>
 
-  const e = M.esc[est.esc], h = est.hecho.includes(ui.etapa)
+  const e = M.esc[V.k], h = est.hecho.includes(ui.etapa)
   const cuerpo = drill ? vistaDrill(X, drill)
     : ui.etapa === 0 ? <Mirada X={X} /> : ui.etapa === 1 ? <Base X={X} /> : ui.etapa === 2 ? <Costos X={X} /> : ui.etapa === 3 ? <Metas X={X} /> : ui.etapa === 4 ? <Escenarios X={X} /> : <Seguimiento X={X} />
   const irEtapa = (i) => { setDrill(null); setUI({ etapa: i }); setY(0) }
@@ -261,7 +263,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
       <span role='button' className='pp-tac' onClick={() => descargarExcel(X)} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer', padding: '8px 2px', margin: '-8px 0' }}>Excel</span></div>}
     {!drill && <Pasos nombres={ETAPAS} activa={ui.etapa} hechos={est.hecho} onIr={irEtapa} anioBase={datos.anioBase} anio={anio} acciones={accionesPaso} debajo={ui.notaAbierta ? <Fld text ph='Nota del paso' value={est.notas[ui.etapa] || ''} onCommit={(v) => parche((c) => { c.notas[ui.etapa] = v })} /> : null} />}
     {cfgDe && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}><span>Se muestra con la configuración de la versión «{cfgDe}».</span><span role='button' onClick={usarVigente} style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Usar la vigente ›</span></div>}
-    {!drill && ui.etapa === 4 && <ResumenCascada margen={mm(e.base)} resultado={mm(e.post)} retiros={mm(e.retiros)} esc={nomEsc(est.esc)} onMargen={() => ir({ etapa: 4, tab: 'imp' })} onResultado={() => ir({ etapa: 4, tab: 'imp' })} onRetiros={() => ir({ drill: { t: 'socios' } })} />}
+    {!drill && ui.etapa === 4 && <ResumenCascada margen={mm(e.base)} resultado={mm(e.post)} retiros={mm(e.retiros)} esc='Ideal' onMargen={() => ir({ etapa: 4, tab: 'imp' })} onResultado={() => ir({ etapa: 4, tab: 'imp' })} onRetiros={() => ir({ drill: { t: 'socios' } })} />}
     {cuerpo}
     {!drill && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
       <Btn disabled={ui.etapa === 0} onClick={() => irEtapa(ui.etapa - 1)}>← Anterior</Btn>
