@@ -2296,7 +2296,7 @@ export function usePorFacturar({ billing = [], sales = [], clients = [], clientE
 // «Arrastre» del año base (paso 2 del Presupuesto): cuotas de proyectos vigentes del año siguiente + asesorías × 12 (lineasArrastre, _shared), con los clientes morosos del flujo señalados, y los ajustes del borrador
 // (`ajustes` = st.arrastre) aplicados por la misma función que usan todas las vistas (aplicarAjustesArrastre). `base` = las líneas de la app, sin ajustes (para «el valor de la app» y para comparar versiones).
 // Más lo que vence en nov-dic del año base (es del año base) y el por cobrar de hoy. Cada cifra sale de su helper de siempre (clasificarPorFacturar, flujoCajaProyectado, porCobrarBills).
-export function useArrastrePresupuesto({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], terceros = [], costosOfiRows = [], expenses = [], fantasmaIds = null, anioBase, ajustes = null }) {
+export function useArrastrePresupuesto({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], terceros = [], costosOfiRows = [], expenses = [], fantasmaIds = null, anioBase, ajustes = null, ufMes = null }) {
   const sig = String(anioBase + 1), base = String(anioBase)
   const R = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: sig })
   const R0 = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: base })
@@ -2304,11 +2304,12 @@ export function useArrastrePresupuesto({ billing = [], sales = [], clients = [],
   const ufRef = useUF().uf || UF_FALLBACK
   const B = useMemo(() => {
     const vivas = (sales || []).filter(s => s && !s.deleted_at)
-    const asesorias = vivas.filter(s => esRecurrente(s) && !esSubarriendo(s)).map(s => ({ id: s.id, cid: s.client_id, concepto: ventaNombre(s), anual: ventaCLP(s, ufRef) }))
+    const asesorias = vivas.filter(s => esRecurrente(s) && !esSubarriendo(s)).map(s => ({ id: s.id, cid: s.client_id, concepto: ventaNombre(s), anual: ventaCLP(s, ufRef), mensualUF: s.moneda === 'UF' && Number(s.amount_uf) > 0 ? Number(s.amount_uf) : null }))   // vendidas en UF: se valorizan a la UF proyectada de cada mes (arrastreAnio)
+    const ventasUF = Object.fromEntries(vivas.filter(s => s.moneda === 'UF' && Number(s.uf_value) > 0).map(s => [String(s.id), Number(s.uf_value)]))
     const ventas = Object.fromEntries(vivas.map(s => [String(s.id), ventaNombre(s)]))
     const morosos = new Set(((F && F.exclMor && F.exclMor.items) || []).map(x => String((x.b && x.b.client_id) || '')))
-    return { ...lineasArrastre({ filas: R.filas, asesorias, ventas }), morosos, nAsesorias: asesorias.length, moraEstimada: (F && F.exclMor && F.exclMor.monto) || 0 }
-  }, [R, F, sales, ufRef])
+    return { ...lineasArrastre({ filas: R.filas, asesorias, ventas, ventasUF, ufMes }), morosos, nAsesorias: asesorias.length, moraEstimada: (F && F.exclMor && F.exclMor.monto) || 0 }
+  }, [R, F, sales, ufRef, ufMes])
   return useMemo(() => {
     const a = aplicarAjustesArrastre(B, ajustes, B.morosos)
     const bills = (billing || []).filter(b => !(fantasmaIds && fantasmaIds.has(String(b.id))))

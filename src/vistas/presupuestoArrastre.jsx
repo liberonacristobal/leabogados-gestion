@@ -4,6 +4,7 @@ import { C, appConfirm } from '../lib/base.jsx'
 import { ajustarLinea, restaurarArrastre, agregarExtra, editarExtra, lineasTocadas } from '../../supabase/functions/_shared/arrastreAnio.js'
 import { mm, mmP, mp, MESL, Panel, Titulo, Fld, FldDin, Lnk, Btn, Val, tasa27, LBL } from '../lib/presupuestoUI.jsx'
 
+const fUF = (/** @type {number} */ n) => n.toLocaleString('es-CL', { maximumFractionDigits: 2 })
 const bl = (/** @type {any} */ l) => ({ id: l.id, monto: l.base.monto, mensual: l.base.mensual, meses: l.base.meses })   // la línea tal como la entrega la app (los ajustes se comparan contra ella)
 const cap = { fontSize: 11, fontWeight: 600, color: C.muted }
 
@@ -54,7 +55,7 @@ export function DArrastre({ X, k }) {
 
   const filaCuota = (/** @type {any} */ l) => <div key={l.id}>
     <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 156px' : 'minmax(0,1fr) auto', gap: D ? 14 : '4px 12px', alignItems: 'center', padding: D ? '9px 16px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
-      {rotulo(l, [`${l.n} cuota${l.n !== 1 ? 's' : ''}`, l.moroso ? 'con factura morosa' : '', ajustadoTxt(l)])}
+      {rotulo(l, [`${l.n} cuota${l.n !== 1 ? 's' : ''}`, l.enUF ? `${fUF(l.uf)} UF · a UF ${Y}` : '', l.moroso ? 'con factura morosa' : '', ajustadoTxt(l)])}
       {l.quitado ? <span style={{ textAlign: 'right', gridColumn: D ? '2 / -1' : undefined }}>{volver(l)}</span>
         : <span style={{ textAlign: 'right', fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(l.monto)} tasa={tasa27()} label={`Monto ${Y} de ${nombre(l)}`} onCommit={(x) => ajusta(l, { monto: Math.max(0, x == null ? 0 : x) })} /></span>}
     </div>
@@ -65,7 +66,7 @@ export function DArrastre({ X, k }) {
   const campoMensual = (/** @type {any} */ l) => <span style={{ fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(l.mensual)} tasa={tasa27()} label={`Monto mensual de ${nombre(l)}`} onCommit={(x) => ajusta(l, { mensual: Math.max(0, x == null ? 0 : x) })} /></span>
   const filaAsesoria = (/** @type {any} */ l) => <div key={l.id}>
     <div style={{ display: 'grid', gridTemplateColumns: GR, gap: D ? 14 : '6px 12px', alignItems: 'center', padding: D ? '9px 16px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
-      {rotulo(l, [l.moroso ? 'con factura morosa' : '', ajustadoTxt(l)])}
+      {rotulo(l, [l.enUF ? `${fUF(l.uf / 12)} UF al mes · a UF ${Y}` : '', l.moroso ? 'con factura morosa' : '', ajustadoTxt(l)])}
       {l.quitado ? <span style={{ textAlign: 'right', gridColumn: D ? '2 / -1' : undefined }}>{volver(l)}</span> : <>
         {D && <span style={{ textAlign: 'right' }}>{campoMensual(l)}</span>}
         {D && <span style={{ textAlign: 'right' }}>{campoMes(l)}</span>}

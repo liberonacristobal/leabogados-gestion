@@ -6,7 +6,7 @@ import { supabase, DEMO } from '../supabase'
 import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
 import { PageHeader, usePorFacturar, useArrastrePresupuesto } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
-import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo } from '../../supabase/functions/_shared/presupuesto.js'
+import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo, proyectarUF } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
 import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic, ResumenCascada } from '../lib/presupuestoUI.jsx'
 import { vistaIdeal } from '../lib/presupuestoBloques.jsx'
@@ -29,7 +29,9 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const porFacturar = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds }).grupos.vigente.m
   const anio = datos.anio
   const [est, setEst] = useState(null)
-  const arrastre = useArrastrePresupuesto({ billing, sales, clients, clientEntities, anticipos, terceros, costosOfiRows, expenses, fantasmaIds, anioBase: datos.anioBase, ajustes: est ? est.arrastre : null })   // paso 2: líneas de la app + los ajustes del borrador (una sola función, _shared/arrastreAnio.js)
+  // UF proyectada de cada mes del año del presupuesto (la misma del modelo: UF de cierre del año base y reajuste del estado): valoriza en UF lo que se vendió en UF.
+  const ufMes = useMemo(() => (est && datos.base && datos.base.ufDic > 0 ? Array.from({ length: 12 }, (_, i) => proyectarUF(datos.base.ufDic, est.reajusteUF, i)) : null), [datos.base, est && est.reajusteUF])   // eslint-disable-line react-hooks/exhaustive-deps
+  const arrastre = useArrastrePresupuesto({ billing, sales, clients, clientEntities, anticipos, terceros, costosOfiRows, expenses, fantasmaIds, anioBase: datos.anioBase, ajustes: est ? est.arrastre : null, ufMes })   // paso 2: líneas de la app + los ajustes del borrador (una sola función, _shared/arrastreAnio.js)
   const [vers, setVers] = useState([])
   const [cargado, setCargado] = useState(false)
   const [espera, setEspera] = useState(false)
