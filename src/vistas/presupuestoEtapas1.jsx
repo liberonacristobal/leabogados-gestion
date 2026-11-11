@@ -3,7 +3,7 @@ import { C, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
-import { TONO_COMP, detalleReferencia } from './presupuestoMetas.jsx'
+import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
@@ -110,6 +110,7 @@ export function Base({ X }) {
   return <>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
+    <ComoSeCalcula X={X} de='base' />
     <Titulo>Ingreso {Y}</Titulo>
     <Panel>{ingreso.map(([n, sub, v, go], i) => <Fila key={n} nombre={n} peq={sub} valor={v} onClick={go} />)}</Panel>
     {d.sinBase && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>No hay facturas emitidas en los últimos 12 meses cerrados: la base queda en cero y el presupuesto no tiene de qué partir.</div>}
@@ -218,7 +219,7 @@ const eti2 = { fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransfo
 // Aclaraciones de las tarjetas del paso 2 (antes en el plegable de la tarjeta): se muestran en la página del componente. `ir` = a dónde llevaba la tarjeta, ahora un enlace de la página.
 export function filasBase(X, k) {
   const { datos: d, est, MT, ir } = X, ch0 = cadenaMeta(d.base, est, 0, MT.ratio, MT.cv), rk = escenarioMetas(est, CFG)
-  const rows = [['Base', 'sin crecimiento; no cambia con el escenario'], ...detalleReferencia(X, k), ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `neto de comisiones · estimación propia: facturado ÷ ${pc(MT.ratio, 0)} = bruto, menos ${pc(MT.cv)} de comisiones` : 'falta la relación facturado/vendido'], ...(ch0.ventasBruto != null ? [['Bruto', mm(ch0.ventasBruto)], ['− Comisiones de venta', mm(ch0.comisVentas)]] : [])] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p[rk].alza)}`]] : [])]
+  const rows = [['Base', 'sin crecimiento; no cambia con el escenario'], ...(k === 'ventas' ? [['Plano', MT.ratio != null ? `neto de comisiones · estimación propia: facturado ÷ ${pc(MT.ratio, 0)} = bruto, menos ${pc(MT.cv)} de comisiones` : 'falta la relación facturado/vendido'], ...(ch0.ventasBruto != null ? [['Bruto', mm(ch0.ventasBruto)], ['− Comisiones de venta', mm(ch0.comisVentas)]] : [])] : []), ...(k === 'costos' ? [['Cálculo', `presupuesto vigente + alza ${pc(est.p[rk].alza)}`]] : [])]
   const go = k === 'costos' ? ['Presupuesto de costos', () => X.irCostos()] : k === 'retiros' ? ['Sueldos y retiros de los socios', () => ir({ drill: { t: 'socios' } })] : k === 'margen' ? ['Impuesto en Escenarios', () => X.irEscTab('imp')] : ['Metas del paso 4', () => ir({ etapa: 3 })]
   return { rows, go }
 }
