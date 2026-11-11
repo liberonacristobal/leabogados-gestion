@@ -119,3 +119,33 @@ test('Comparar versiones: cuenta las líneas ajustadas y muestra el total del ar
   assert.deepEqual(r.map((x) => [x.etiqueta, x.antes, x.despues]), [['Líneas ajustadas', '0', '2'], ['Total del arrastre', '$5300000', '$4700001']])
   assert.deepEqual(diferenciaEstructurada(a, JSON.parse(JSON.stringify(a)), f).filter((x) => x.grupo === 'Arrastre'), [])   // iguales: nada que mostrar
 })
+
+// ── Ventas en UF: se valorizan a la UF proyectada de cada mes ──
+const ufMes = Array.from({ length: 12 }, (_, i) => 41_000 + i * 100)
+const fU = [f2('1', 'a', 1_600_000, '2027-01-15', 'u1'), f2('2', 'a', 800_000, '2027-03-10', 'u1'), f2('3', 'b', 2_000_000, '2027-03-20', 'p1')]   // u1 en UF (40 y 20 UF a UF 40.000 el día de la venta); p1 en pesos
+const asU = [{ cid: 'c', anual: 4_800_000, id: 'a1', concepto: 'Asesoría UF', mensualUF: 10 }, { cid: 'd', anual: 1_200_000, id: 'a2', concepto: 'Asesoría pesos' }]
+const bU = lineasArrastre({ filas: fU, asesorias: asU, ventasUF: { u1: 40_000 }, ufMes })
+test('cuotas y asesorías de ventas en UF se valorizan a la UF proyectada de cada mes; las de pesos quedan nominales', () => {
+  assert.deepEqual(bU.lineas.map((l) => [l.id, l.moneda]), [['pf:u1', 'UF'], ['pf:p1', 'CLP'], ['as:a1', 'UF'], ['as:a2', 'CLP']]); assert.ok(Math.abs(bU.lineas[0].uf - 60) < 1e-9)
+  const r = aplicarAjustesArrastre(bU); cuadra(r)
+  const cuotaUF = 40 * 41_000 + 20 * 41_200, asUF = 10 * ufMes.reduce((x, y) => x + y, 0)
+  assert.ok(Math.abs(r.lineas[0].monto - cuotaUF) < 1e-6); assert.equal(r.lineas[1].monto, 2_000_000); assert.ok(Math.abs(r.lineas[2].monto - asUF) < 1e-6); assert.equal(r.lineas[3].monto, 1_200_000)
+  assert.equal(r.lineas[0].enUF, true); assert.equal(r.lineas[1].enUF, false); assert.ok(r.total > aplicarAjustesArrastre({ ...bU, ufMes: null }).total)   // a UF 2027 vale más que el nominal congelado
+  assert.ok(Math.abs(r.porMes[2] - (20 * 41_200 + 2_000_000 + 10 * 41_200 + 100_000)) < 1e-6)   // marzo: cuota UF + cuota pesos + asesoría UF + asesoría pesos
+  assert.equal(r.lineas[0].base.monto, r.lineas[0].monto)   // «el valor de la app» ya es el valorizado
+})
+test('sin UF proyectada todo queda en pesos nominales (como antes)', () => {
+  const n = aplicarAjustesArrastre(lineasArrastre({ filas: fU, asesorias: asU, ventasUF: { u1: 40_000 } })); cuadra(n)
+  assert.equal(n.lineas[0].monto, 2_400_000); assert.equal(n.lineas[2].monto, 4_800_000); assert.equal(n.lineas[0].enUF, false); assert.equal(n.total, 2_400_000 + 2_000_000 + 4_800_000 + 1_200_000)
+})
+test('ajustes sobre líneas en UF: el monto en pesos las deja en pesos; los meses solo recortan; escribir el valor de la app no cuenta', () => {
+  const r0 = aplicarAjustesArrastre(bU), l0 = r0.lineas[0], l2 = r0.lineas[2]
+  const a1 = ajustarLinea(undefined, { id: l0.id, ...l0.base }, { monto: 1_000_000 }), r1 = aplicarAjustesArrastre(bU, a1); cuadra(r1)
+  assert.equal(r1.lineas[0].monto, 1_000_000); assert.equal(r1.lineas[0].enUF, false); assert.equal(r1.lineas[0].ajustado, true); assert.ok(Math.abs(r1.porMes[0] - (1_000_000 * 1_640_000 / 2_464_000 + 10 * 41_000 + 100_000)) < 1e-6)
+  const a2 = ajustarLinea(undefined, { id: l2.id, ...l2.base }, { meses: 6 }), r2 = aplicarAjustesArrastre(bU, a2); cuadra(r2)
+  assert.equal(r2.lineas[2].enUF, true); assert.ok(Math.abs(r2.lineas[2].monto - 10 * ufMes.slice(0, 6).reduce((x, y) => x + y, 0)) < 1e-6); assert.equal(r2.lineas[2].porMes[6], 0)
+  const a3 = ajustarLinea(undefined, { id: l2.id, ...l2.base }, { mensual: 500_000 }), r3 = aplicarAjustesArrastre(bU, a3); cuadra(r3)
+  assert.equal(r3.lineas[2].monto, 6_000_000); assert.equal(r3.lineas[2].enUF, false)
+  assert.deepEqual(ajustarLinea(undefined, { id: l0.id, ...l0.base }, { monto: Math.round(l0.base.monto) }), { ajustes: {}, extras: [] })   // el valor de la app redondeado a pesos no es un ajuste
+  assert.equal(aplicarAjustesArrastre(bU, ajustarLinea(undefined, { id: l0.id, ...l0.base }, { quitado: true })).lineas[0].monto, 0)
+})
