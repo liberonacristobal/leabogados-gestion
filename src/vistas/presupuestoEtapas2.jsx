@@ -1,6 +1,8 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { DArrastre, tituloArrastre } from './presupuestoArrastre.jsx'
 import { EscenariosMeta } from './presupuestoEscenariosMeta.jsx'
+import { TarjetaSeg, AperturaSeg, fotoVivaSeguimiento } from './presupuestoSeguimientoTarjetas.jsx'
+import { realMensualAnio, presupuestoMensual, ventanaComparable, aperturaOrigen, versionTraeSeguimiento } from '../../supabase/functions/_shared/seguimientoPresupuesto.js'
 import { aplicarAjustesArrastre } from '../../supabase/functions/_shared/arrastreAnio.js'
 import { useEffect, useRef, useState } from 'react'
 import { C, appAlert, fmtFechaDMY } from '../lib/base.jsx'
@@ -8,7 +10,7 @@ import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componen
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
-import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Pliegue, Tarjeta, Ic, difMon, monedaActual, tasa27, tasa26, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
+import { nf, mm, mx, m26, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Pliegue, Tarjeta, Ic, difMon, monedaActual, tasa27, tasa26, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios, vistaIdeal } from '../lib/presupuestoBloques.jsx'
 import { filasBase } from './presupuestoEtapas1.jsx'
 import { filasMetas, ComoSeArma } from './presupuestoMetas.jsx'
@@ -232,28 +234,28 @@ function seriesSeguimiento(X) {
   const rate = (/** @type {number} */ i) => (actual ? d.uf26.porMes[i] : M.uf27[i]) || 1
   const nul = () => Array(12).fill(null)
   const ref = referenciaSeguimiento({ actual, hayOficial: !!of, anio: Y, primerAnio: CFG.primerAnio }), modoMetas = ref === 'metas'
+  const real = (/** @type {number} */ anio) => realMensualAnio({ anio, serie: d.serie, cobMes: d.cobMes, evoVend: anio === d.anioBase ? d.evo.vend : null, retirosMes: anio === d.anioBase ? d.retiros26.mes : null, tercPct: d.terc })
+  const rr = real(Y), prev = real(Y - 1)
   if (actual) {   // el real del año en curso, mes a mes
     const costosP = d.costos26.mes
-    const cum = d.evo.vend, kU = o.vend.clp > 0 ? o.vend.uf / o.vend.clp : 0
-    const vm = (/** @type {number} */ i) => (cum[i] == null ? null : cum[i] - (i > 0 ? cum[i - 1] ?? 0 : 0))
-    R.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.fac ?? null); RU.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.facUF ?? null)
-    R.ventas = Array.from({ length: 12 }, (_, i) => vm(i)); RU.ventas = R.ventas.map((x) => (x == null ? null : x * kU))
-    R.caja = Array.from({ length: 12 }, (_, i) => d.cobMes[ymk(i)] ?? null); RU.caja = Array.from({ length: 12 }, (_, i) => d.cobMesUF[ymk(i)] ?? null)
-    R.costos = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.cos ?? null); RU.costos = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.cosUF ?? null)
-    R.margen = R.caja.map((c, i) => (c == null || R.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (R.costos[i])))
+    const kU = o.vend.clp > 0 ? o.vend.uf / o.vend.clp : 0
+    Object.assign(R, rr)   // real mes a mes en pesos (seguimientoPresupuesto.js); las series en UF siguen aquí
+    RU.fact = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.facUF ?? null)
+    RU.ventas = R.ventas.map((x) => (x == null ? null : x * kU))
+    RU.caja = Array.from({ length: 12 }, (_, i) => d.cobMesUF[ymk(i)] ?? null)
+    RU.costos = Array.from({ length: 12 }, (_, i) => d.serie[ymk(i)]?.cosUF ?? null)
     RU.margen = RU.caja.map((c, i) => (c == null || RU.costos[i] == null ? null : c * (1 - terc) - /** @type {number} */ (RU.costos[i])))
-    R.retiros = d.retiros26.mes.map((x) => x); RU.retiros = d.retiros26.mesUF.map((x) => x)
+    RU.retiros = d.retiros26.mesUF.map((x) => x)
     if (modoMetas) {   // sin oficial: metas de ventas y cobranza y presupuesto de costos del año; facturado y retiros no tienen presupuesto propio
       P.ventas = o.metaVentasCLP > 0 ? rep12(o.metaVentasCLP, 'ventas') : nul(); P.caja = o.metaCobroCLP > 0 ? rep12(o.metaCobroCLP, 'caja') : nul()
       P.costos = costosP; P.fact = nul(); P.retiros = nul()
       P.margen = P.caja.map((c, i) => (c == null ? null : c * (1 - terc) - costosP[i]))
     }
   }
-  if (!modoMetas) {   // contra la versión oficial (o el borrador): sus metas cubren los seis componentes
-    const e = of && of.resumen && of.resumen[esc] ? of.resumen[esc] : M.esc[esc] || M.esc[est.esc]
-    const vA = valorComponente(e, 'ventas', ratio, cv) ?? 0
-    P.fact = rep12(e.fact, 'fact'); P.ventas = rep12(vA, 'ventas'); P.caja = rep12(e.caja, 'caja'); P.costos = rep12(e.costos, 'costos'); P.retiros = rep12(e.retiros, 'retiros')
-    const ter = rep12(e.terc, 'caja'); P.margen = P.caja.map((c, i) => c - ter[i] - P.costos[i])   // las comisiones siguen al cobrado
+  /** @type {any} */ let fuente = null, sinFoto = false
+  if (!modoMetas) {   // contra la versión oficial (su foto guardada) o el borrador (Ideal de hoy): una sola fuente con los pasos 4 y 5
+    if (of) { if (versionTraeSeguimiento(of)) fuente = of.resumen.seg; else sinFoto = true } else fuente = fotoVivaSeguimiento(X)
+    if (fuente) { const Pm = presupuestoMensual({ rep: rep12, arrastreMes: fuente.arrastreMes, nuevoFacturar: fuente.nuevoFacturar, ventas: fuente.ventas, cobranza: fuente.cobranza, ideal: fuente.ideal }); Object.assign(P, Pm) } else for (const kk of ['ventas', 'fact', 'caja', 'costos', 'margen', 'retiros']) P[kk] = nul()
     if (!actual) for (const kk of Object.keys(P)) R[kk] = nul()
   }
   const out = /** @type {Record<string,any>} */ ({})
@@ -262,12 +264,12 @@ function seriesSeguimiento(X) {
     const pU = P[kk].map((v, i) => (v == null ? null : v / rate(i)))
     out[kk] = { c: seguimientoMensual({ pres: P[kk], real, cerrados: cerr, curso: actual && cerr < 12 }), u: seguimientoMensual({ curso: actual && cerr < 12, pres: pU, real: rU.map((x, i) => (real[i] != null && x == null ? /** @type {number} */ (real[i]) / rate(i) : x)), cerrados: cerr }) }
   }
-  return { S: out, of, esc, cerr, actual, modoMetas, estS: of ? of.estado : est }
+  return { S: out, of, esc, cerr, actual, modoMetas, estS: of ? of.estado : est, prev, fuente, sinFoto }
 }
 
 export function Seguimiento({ X }) {
   const { est, D, datos: d, ui, setUI } = X, Y = d.anio
-  const { S, of, esc, cerr, estS, modoMetas } = seriesSeguimiento(X)
+  const { S, of, esc, cerr, estS, modoMetas, prev, fuente, sinFoto } = seriesSeguimiento(X)
   const modo = ui.sg || 'p', comp = ui.sc || 'fact'
   const nombre = Object.fromEntries(componentesCortosDe(CFG)), corto = (/** @type {string} */ kk) => nombre[kk]
   const cel = (/** @type {any} */ a, /** @type {any} */ b) => mxP(a, b)
@@ -278,12 +280,26 @@ export function Seguimiento({ X }) {
     : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: tam, color: color(kk, m.des) }}>{compacto ? '' : (m.des >= 0 ? '↑ ' : '↓ ')}{modo === 'p' ? (m.pres ? `${sg2(m.des)}${compacto ? Math.round(Math.abs((m.des / m.pres) * 100)) + '%' : pc(Math.abs((m.des / m.pres) * 100), 0)}` : '—') : `${sg2(m.des)}${cel(Math.abs(m.des), Math.abs(mu.des))}`}</span>)
   const flA = (/** @type {string} */ kk, /** @type {any} */ c, /** @type {any} */ u) => (c.des == null ? <span style={{ color: C.muted }}>—</span> : <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: color(kk, c.des) }}>{c.des >= 0 ? '↑' : '↓'} {modo === 'p' ? (c.desPct != null ? `${sg2(c.des)}${pc(Math.abs(c.desPct), 0)}` : '—') : `${sg2(c.des)}${cel(Math.abs(c.des), Math.abs(u.des))}`}</span>)
   const rango = cerr > 0 ? `ene–${MESC[cerr - 1]}` : ''
+  // Seis tarjetas: Presup., Real y el mismo período del año anterior (ventana comparable de los meses cerrados), con avance y diferencia. Facturado y Cobrado abren su apertura; el resto lleva a su detalle.
+  const win = (/** @type {string} */ kk) => ventanaComparable({ pres: S[kk].c.meses.map((m) => m.pres), real: S[kk].c.meses.map((m) => m.real), previo: prev[kk], cerrados: cerr })
+  const ab = ui.segAb || null
   const tarjeta = (/** @type {string} */ kk) => {
-    const s = S[kk], [tono, ic] = TONO_SEG[kk], u = s.u, c = s.c
-    return <Tarjeta key={kk} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} izq={cerr === 0 ? { cap: 'Presup.', val: c.cierre != null ? mx(c.cierre, u.cierre) : '—' } : { cap: 'Real', val: mx(c.realAcum, u.realAcum) }} der={cerr === 0 ? undefined : { cap: 'Presup.', val: c.presAcum != null ? mx(c.presAcum, u.presAcum) : '—' }}
-      cmp={cerr === 0 ? <span> </span> : c.des != null ? <span style={{ display: 'inline-flex', gap: 12 }}><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{c.desPct != null ? pc(Math.abs(c.desPct)) : ''}</Flecha><Flecha sube={c.des >= 0} bueno={kk === 'retiros' ? null : bueno(kk, c.des)}>{sg2(c.des)}{mxP(Math.abs(c.des), Math.abs(u.des))}</Flecha></span> : <span>Sin presupuesto propio</span>}
-      onClick={() => { setUI({ sc: kk }); X.ir({ drill: { t: 'comp', de: 'seg', k: kk } }) }} />
+    const [tono, ic] = TONO_SEG[kk], w = win(kk), abre = kk === 'fact' || kk === 'caja', up = w.vsPrevio != null && w.vsPrevio >= 0
+    const filas = w.hay ? [['Presup.', w.presAcum != null ? mm(w.presAcum) : '—'], ['Real', mm(w.realAcum), true], [String(Y - 1), w.previoAcum != null ? m26(w.previoAcum) : '—']] : [['Presup. año', w.presAnio != null ? mm(w.presAnio) : '—'], ['Real', '—', true], [String(Y - 1), '—']]
+    const avance = w.hay ? (w.avance != null ? `Avance ${pc(w.avance)}` : 'Sin presupuesto') : 'Sin meses cerrados'
+    const vs = w.vsPrevio != null ? <span style={{ fontWeight: 700, color: kk === 'retiros' ? C.muted : afavor(kk, up) ? C.greenText : C.overdueText }}>{up ? '+' : '−'}{mmP(Math.abs(w.vsPrevio))} vs {Y - 1}</span> : null
+    return <TarjetaSeg key={kk} D={D} tono={tono} ic={ic} label={nombre[kk]} aria={nombre[kk]} filas={filas} avance={avance} vs={vs} abre={abre} abierta={ab === kk} onClick={() => (abre ? setUI({ segAb: ab === kk ? null : kk }) : (setUI({ sc: kk }), X.ir({ drill: { t: 'comp', de: 'seg', k: kk } })))} />
   }
+  // Apertura de Facturado (arrastre y nuevo) y de Cobrado (cartera y cobro del año): las partes suman el total real y el presupuesto.
+  const nuevoMes = d.anio === d.anioBase ? d.origenMes.nuevoFact : Array(12).fill(0), cobAnioMes = d.anio === d.anioBase ? d.origenMes.cobAnio : Array(12).fill(0)
+  const cm = (/** @type {string} */ kk) => S[kk].c.meses
+  const nuevoPres = fuente ? Array(12).fill(Math.max(0, fuente.nuevoFacturar || 0) / 12) : Array(12).fill(null)
+  const recMes = fuente ? Array(12).fill(Math.max(0, fuente.cobranza - fuente.ideal.caja) / 12) : Array(12).fill(null), cobroMes = fuente ? Array(12).fill(fuente.ideal.caja / 12) : Array(12).fill(null)
+  const apFact = aperturaOrigen({ presA: fuente ? fuente.arrastreMes : [], presB: nuevoPres, realTotal: cm('fact').map((m) => m.real), realB: nuevoMes.map((x) => Math.min(x, 1e15)), cerrados: cerr })
+  const apCaja = aperturaOrigen({ presA: recMes, presB: cobroMes, realTotal: cm('caja').map((m) => m.real), realB: cobAnioMes, cerrados: cerr })
+  const filaAp = (/** @type {string} */ t, /** @type {string} */ sub, /** @type {any} */ f, /** @type {boolean} */ tot) => [t, sub, apFact.hay || apCaja.hay ? [fuente && f.pres != null ? mm(f.pres) : '—', mm(f.real), fuente && f.avance != null ? pc(f.avance) : '—'] : ['—', '—', '—'], tot]
+  const apertura = ab === 'fact' ? <AperturaSeg D={D} titulo='Facturado · apertura' nota={rango ? `${rango}` : 'sin meses cerrados'} cols={['Presup.', 'Real', 'Avance']} filas={[filaAp(`Arrastre ${Y - 1}`, 'Cuotas por facturar y asesorías', apFact.a, false), filaAp('+ Nuevo', `Ventas aceptadas desde enero ${Y}`, apFact.b, false), filaAp('= Facturado', '', apFact.total, true)]} />
+    : ab === 'caja' ? <AperturaSeg D={D} titulo='Cobrado · apertura' nota={rango ? `${rango}` : 'sin meses cerrados'} cols={['Presup.', 'Real', 'Avance']} filas={[filaAp(`Cartera ${Y - 1}`, 'Facturas emitidas antes de enero', apCaja.a, false), filaAp(`+ Facturado ${Y}`, 'Facturas emitidas desde enero', apCaja.b, false), filaAp('= Cobrado', '', apCaja.total, true)]} /> : null
   const avisos = []
   const f = S.fact.c
   if (f.presAcum > 0 && f.realAcum < f.presAcum * 0.9) avisos.push(`Facturado acumulado ${mx(f.realAcum, S.fact.u.realAcum)} contra ${mx(f.presAcum, S.fact.u.presAcum)} presupuestados (${pc((f.realAcum / f.presAcum - 1) * 100, 0)}).`)
@@ -332,7 +348,7 @@ export function Seguimiento({ X }) {
   </Panel>
   return <>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.muted }}>{rango ? `Meses cerrados: ${rango}` : 'Sin meses cerrados'}</span>}>Presupuesto contra real · {Y}</Titulo>
-    <Pliegue t='Referencia' v={`${of ? `Oficial «${of.nombre}»` : modoMetas ? `Metas ${Y}` : 'Borrador'} · ${nombreEscenario(estS, esc)}`}>
+    <Pliegue t='Referencia' v={`${of ? `Oficial «${of.nombre}»` : modoMetas ? `Metas ${Y}` : 'Borrador'}${modoMetas ? '' : ' · Ideal'}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '10px 14px', fontSize: 12, color: C.muted }}>
         <span>{of ? <>Se mide contra la versión oficial <b style={{ color: C.accent }}>«{of.nombre}»</b></> : modoMetas ? <>Se mide contra las metas de {Y}: ventas, cobranza y costos</> : <>Sin versión oficial · se mide contra el <b style={{ color: C.accent }}>borrador</b></>} · escenario <b style={{ color: C.accent }}>{nombreEscenario(estS, esc)}</b>{cerr === 0 && <> · el real aparece al cierre de {MESL[0].toLowerCase()}</>}</span>
         <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -340,7 +356,10 @@ export function Seguimiento({ X }) {
           <span onClick={() => X.ir({ drill: { t: 'ver' } })} role='button' style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>{of ? 'Cambiar versión ›' : 'Marcar una como oficial ›'}</span></span>
       </div>
     </Pliegue>
-    <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{claves.map(tarjeta)}</Grid>
+    {sinFoto && <div style={{ fontSize: 13, color: C.muted, margin: '0 4px' }}>Guarda una versión para comparar: la oficial «{of.nombre}» no trae el presupuesto mensual. <span role='button' onClick={() => X.ir({ drill: { t: 'ver' } })} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Versiones ›</span></div>}
+    <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{['ventas', 'fact', 'caja', 'costos', 'margen', 'retiros'].filter((kk) => S[kk]).map(tarjeta)}</Grid>
+    {apertura}
+    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Margen en caja: cobrado menos comisiones y costos del mes, no devengado. Presupuesto mensual: estimación propia con la distribución elegida en Metas.</div>
     <Pliegue key={Y} abajo={!D} t={`Mes a mes · ${Y}`} v={cerr > 0 ? `Acumulado ${cel(sel.c.realAcum, sel.u.realAcum)} · ${cerr} ${cerr === 1 ? 'mes cerrado' : 'meses cerrados'}` : 'Sin meses cerrados'}>{D ? tabla : <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></div>}</Pliegue>
     <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
   </>

@@ -76,7 +76,7 @@ const P = {
 }
 export const Ic = ({ n, s = 18 }) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d={P[n] || P.doc} /></svg>
 
-const TONO = {
+export const TONO = {
   a: { bg: C.azulBg, fg: C.azulInfo, v: C.accent, bd: C.azulBd },
   y: { bg: C.soonBg, fg: C.soonText, v: C.soonText, bd: C.avisoLine },
   g: { bg: C.greenBg, fg: C.greenText, v: C.greenText, bd: C.greenDeep },

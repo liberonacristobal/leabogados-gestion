@@ -12,6 +12,7 @@ import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn,
 import { vistaIdeal } from '../lib/presupuestoBloques.jsx'
 import { Mirada, Base, Costos } from './presupuestoEtapas1.jsx'
 import { Metas } from './presupuestoMetas.jsx'
+import { fotoVivaSeguimiento } from './presupuestoSeguimientoTarjetas.jsx'
 import { Escenarios, Seguimiento, vistaDrill, titulosDrill, descargarExcel } from './presupuestoEtapas2.jsx'
 
 const scrollEl = () => (typeof document !== 'undefined' ? document.getElementById('main-scroll') : null)
@@ -171,7 +172,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // ── Versiones ──
   const MAX_VERSIONES = 6
   const guardarVersion = async (nombre, nota) => {
-    const estado = { ...JSON.parse(JSON.stringify(est)), cfgFoto: configGuardada() }, resumen = resumenModelo(M)   // la versión congela la configuración vigente (foto) y se abre con ella
+    const estado = { ...JSON.parse(JSON.stringify(est)), cfgFoto: configGuardada() }, resumen = { ...resumenModelo(M), seg: fotoVivaSeguimiento(X) }   // la foto del Seguimiento (Ideal, arrastre por mes, metas) viaja con la versión   // la versión congela la configuración vigente (foto) y se abre con ella
     if (vers.length >= MAX_VERSIONES) {
       // Tope de 6 (la oficial cuenta): se ofrece eliminar la más antigua que no sea oficial; la oficial nunca se elimina sin que se elija.
       const vieja = [...vers].filter((v) => !v.oficial).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0]
