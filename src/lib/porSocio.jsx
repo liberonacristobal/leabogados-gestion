@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop } from './base.jsx'
 import { Fragment } from 'react'
-import { esRecurrente, esSubarriendo, ventaCLP, redondearPartes, kpisPorSocio } from './cifras.js'
+import { esRecurrente, esSubarriendo, ventaCLP, redondearPartes, kpisPorSocio, partesM, partesPctEnt } from './cifras.js'
 import { ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_KPIS, PS_KPI_DEF, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, flujoCajaProyectado, useEscenarioFlujo, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, socioNorm, useNoEmitirSet, usePorSocioFuentes, useUF, useUFFechas, vendidoPorSocio } from './compartido.jsx'
 
 // Vista Por socio (Facturación › Por socio e Inteligencia › Socios): Resumen · Comparativo · Datos. Render aprobado 19-10-2026 (ABU5j4gotedSVCZJkE9kG2).
@@ -84,6 +84,30 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
         <thead><tr><th/>{hdr.map((h,i)=><th key={h} style={{fontSize:10,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',textAlign:'right',padding:'6px 0 6px 8px',color:i===6?C.done:C.muted,lineHeight:1.2,verticalAlign:'bottom'}}>{h}</th>)}</tr></thead>
         <tbody>{[[mesLbl,m,'mes'],[`Acumulado ${y}`,a,'ytd']].map(([l,v,p],r)=><tr key={p}><td style={{fontSize:13,fontWeight:600,color:C.muted,padding:'6px 0',borderTop:r?`1px solid ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</td>{v.map((x,i)=>{ const on=Math.abs(x)>=1; return <td key={i} onClick={on?()=>irDatos(null,i,p):undefined} className={on?'er-c':undefined} style={{textAlign:'right',padding:'6px 0 6px 8px',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',cursor:on?'pointer':'default',fontSize:i===5?19:13,fontWeight:i===5?800:600,color:i===6?C.done:i===5?col:i<2?C.textSoft:C.text,borderTop:r?`1px solid ${C.border}`:'none'}}>{on?P$(x):'—'}</td> })}</tr>)}</tbody></table></div> }
 
+  // ── Resumen (alternativa A): 4 tarjetas con el ingreso real en $M (cuadran con redondearPartes) y UNA tabla comparativa, Oficina primera.
+  const kv=vista, ir6=COLS.map(c=>card6(c,kv)[5]), irM=partesM(ir6), irPct=partesPctEnt(ir6), irOf=irM.reduce((a,x)=>a+x,0)
+  const iniC={[ADMIN_NAMES[0]]:'C',[ADMIN_NAMES[1]]:'E',[SIN_SOCIO]:'S'}, bgC={[ADMIN_NAMES[0]]:C.azulBg,[ADMIN_NAMES[1]]:C.tealBg,[SIN_SOCIO]:C.ambarBg}
+  const kpiTiles=()=>{ const t=(key,ini,bg,col,lab,val,sub,go)=><div key={key} {...(go?{role:'button',tabIndex:0,onClick:go,onKeyDown:e=>{ if(e.key==='Enter') go() }}:{})} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'10px 14px':'8px 10px',display:'grid',gridTemplateColumns:`${isDesk?36:28}px minmax(0,1fr)`,columnGap:isDesk?12:8,alignItems:'center',minWidth:0,cursor:'pointer',boxSizing:'border-box'}}>
+      <span style={{gridRow:'1 / span 3',width:isDesk?36:28,height:isDesk?36:28,borderRadius:'50%',background:bg,color:col,display:'grid',placeItems:'center',fontWeight:800,fontSize:isDesk?15:12}}>{ini}</span>
+      <div style={{fontSize:isDesk?11:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:col,whiteSpace:'nowrap'}}>{lab}</div>
+      <div style={{fontSize:isDesk?21:17,fontWeight:800,letterSpacing:-.6,color:col===C.done?C.done:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.15}}>{fmtMillLR(val)}</div>
+      <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{sub}</div></div>
+    return <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>
+      {t('of','▦',C.greenBg,C.greenText,'Oficina',irOf,'Socios + Sin socio',()=>irDatos(null,5,kv))}
+      {COLS.map((c,i)=>t(c,iniC[c],bgC[c],tinta[c],L(c),irM[i],`${irPct[i]} % del total`,()=>irDatos(c,5,kv)))}
+    </div> }
+  const tablaResumen=()=>{ const cs=[null,...COLS], A=cs.map(c=>card6(c,kv)), lab=['Vendido neto','Facturado','Cobrado propio','− Com. pagadas','+ Com. percibidas','= Ingreso real',isDesk?'Subarriendo · aparte':'Subarriendo']
+    const th2=(c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],background:c===null?C.greenSoft:C.bgSoft,paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c===null?'Oficina':Ls(c)}</th>
+    return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Comparativo · {perLbl(kv)}</span></div>
+      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(isDesk?['28%','18%','18%','18%','18%']:['28%','18%','18%','18%','18%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+        <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}/>{cs.map(th2)}</tr></thead>
+        <tbody>{lab.map((l,i)=>{ const fin=i===5, ap=i===6
+          return <tr key={i}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:fin?800:600,...(fin?{fontSize:isDesk?14:12.5}:{}),color:ap?C.done:fin?C.accent:C.muted,borderTop:fin?`1.5px solid ${C.accent}`:ap?`1px dashed ${C.border}`:`1px solid ${C.border}`}}>{l}</td>
+            {ap?<><td style={{...td,color:C.done,background:C.greenSoft,borderTop:`1px dashed ${C.border}`}}>{Math.abs(A[0][6])>=1?FMT(A[0][6]):'—'}</td><td colSpan={3} style={{...td,textAlign:'left',color:C.done,fontSize:11,borderTop:`1px dashed ${C.border}`,whiteSpace:'normal'}}>No es de ningún socio · no suma al ingreso real</td></>
+            :cs.map((c,j)=>{ const v=A[j][i], on=Math.abs(v)>=1; return <td key={j} onClick={on?()=>irDatos(c,i,kv):undefined} className={on?'er-c':undefined} style={{...td,cursor:on?'pointer':'default',fontWeight:fin||c===null?800:600,...(fin?{fontSize:isDesk?15:13}:{}),color:!on?C.done:fin?(c===null?C.greenText:tinta[c]):c===null?C.accent:C.text,background:c===null?C.greenSoft:undefined,borderTop:fin?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{on?FMT(v):'—'}</td> })}
+          </tr> })}</tbody></table></div> }
+
   // ── Composición (plegada) y mes a mes: escritorio en pesos; celular en $M con cada columna cuadrada (redondearPartes)
   // Fila sin clave = subtotal (suma de las filas anteriores); el subarriendo va aparte, debajo, sin sumar.
   const FF=[['emit','','Facturas emitidas','Emitidas'],['cext','+','Comisión de externos','Com. externos'],['reemb','−','Reembolsos de gastos','Reembolsos'],['nc','−','Notas de crédito','NC']]
@@ -114,15 +138,15 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{wCols(colsT.length).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
       <thead><tr><th style={{...th,textAlign:'left'}}/>{colsT.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===colsT.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
       <tbody>{seccion('f','Facturado',FF,'Facturado')}{seccion('c','Cobrado',FC,'Ingreso real','sub')}</tbody></table> }
-  const MesAMes=()=>{ const s=mm, nMes=mo
+  const MesAMes=()=>{ const csM=[...COLS,null], s=mm, nMes=mo
     const ks=s==='c'?KI:KF
-    const cv=colsT.map(soc=>{ const a=Array.from({length:nMes},(_,i)=>P.reduce((x,r)=>x+((r.s===s&&ks.includes(r.k)&&(!soc||r.soc===soc)&&String(r.d).startsWith(`${y}-${String(i+1).padStart(2,'0')}`))?r.m:0),0)); return isDesk?a:redondearPartes(a,1e5) })
-    const socIdx=colsT.map((c,j)=>c?j:-1).filter(j=>j>=0)
-    return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(colsT.length===1?['60%','40%']:colsT.length===3?['28%','24%','24%','24%']:['24%','19%','19%','19%','19%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
-      <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Mes</th>{colsT.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===colsT.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
+    const cv=csM.map(soc=>{ const a=Array.from({length:nMes},(_,i)=>P.reduce((x,r)=>x+((r.s===s&&ks.includes(r.k)&&(!soc||r.soc===soc)&&String(r.d).startsWith(`${y}-${String(i+1).padStart(2,'0')}`))?r.m:0),0)); return isDesk?a:redondearPartes(a,1e5) })
+    const socIdx=csM.map((c,j)=>c?j:-1).filter(j=>j>=0)
+    return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(csM.length===1?['60%','40%']:csM.length===3?['28%','24%','24%','24%']:['24%','19%','19%','19%','19%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+      <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Mes</th>{csM.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===csM.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
       <tbody>{Array.from({length:nMes},(_,k)=>nMes-1-k).map(i=>{ const vs=cv.map(a=>a[i]); const a0=socIdx.length>1?vs[socIdx[0]]:null, a1=socIdx.length>1?vs[socIdx[1]]:null, mx=a0==null?-1:(a0>=a1?socIdx[0]:socIdx[1]); const ymI=`${y}-${String(i+1).padStart(2,'0')}`, sel=vista==='mes'&&ym===ymI
         return <tr key={i} onClick={()=>{ setYm(ymI); setVista('mes'); setOpen(null) }} className='er-c' style={{cursor:'pointer',background:sel?C.azulBg:undefined}}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.accent,fontWeight:700}}>{isDesk?mesTitulo(new Date(y,i,15)).split(' ')[0]:MES_C[i]}</td>
-          {vs.map((v,j)=><td key={j} style={{...td,fontWeight:colsT[j]===null?800:700,color:Math.abs(v)<1?C.done:colsT[j]===null?C.accent:(j===mx?tinta[colsT[j]]:C.text),paddingRight:j===vs.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td>)}</tr> })}
+          {vs.map((v,j)=><td key={j} style={{...td,fontWeight:csM[j]===null?800:700,color:Math.abs(v)<1?C.done:csM[j]===null?C.accent:(j===mx?tinta[csM[j]]:C.text),paddingRight:j===vs.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td>)}</tr> })}
         <tr><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>{y}</td>{cv.map((a,j)=><td key={j} style={{...td,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===cv.length-1?(isDesk?16:8):undefined}}>{FMT(a.reduce((x,v)=>x+v,0))}</td>)}</tr>
       </tbody></table> }
 
@@ -161,12 +185,12 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     if(rev==='bda') return caja(isDesk?'Comisiones que nos pagan: ¿de qué socio es el cliente?':'Comisiones por asignar',revBda.length?revBda.map(b=>filaRev(b,<span style={{display:'flex',gap:6}}>{ADMIN_NAMES.map(sn=>btn(sn,()=>asignar(b,sn)))}</span>)):<div style={{padding:14,fontSize:12,color:C.muted}}>Al día: todas tienen socio.</div>)
     return null }
   const sumB=a=>a.reduce((x,b)=>x+(montoFactura(b)||b.amount||0),0)
-  const ParaRevisar=()=><><div style={{...SEC_LBL,fontWeight:800,margin:'16px 2px 8px'}}>Para revisar</div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr',gap:8}}>
-      {revTile('tram','alert',C.ambarBg,C.soonText,`Gastos dentro de honorarios · ${revTram.length}`,revTram.length?fmtMillLR(sumB(revTram)):'Al día',revTram.length?C.soonText:C.greenText)}
-      {revTile('cuo','file',C.azulBg,C.azulInfo,`Cuotas con fecha sin factura · ${revCuo.length}`,revCuo.length?fmtMillLR(sumB(revCuo)):'Al día',revCuo.length?C.azulInfo:C.greenText)}
-      {revTile('bda','users',C.greenBg,C.greenText,revBda.length?`Comisiones por asignar · ${revBda.length}`:'Comisiones por asignar',revBda.length?fmtMillLR(sumB(revBda)):'Al día',revBda.length?C.soonText:C.greenText)}
-    </div>{revDet()}</>
+  const revChip=(k,lab,n,val,col)=>{ const on=rev===k; return <button key={k} onClick={()=>setRev(r=>r===k?null:k)} style={{display:'inline-flex',alignItems:'center',gap:7,fontFamily:'inherit',fontSize:12,fontWeight:700,borderRadius:20,padding:'6px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:n?C.avisoLine:C.border}`,background:n?C.soonBg:C.card,color:n?C.soonText:C.greenText,whiteSpace:'nowrap'}}>{!n&&<span style={{width:7,height:7,borderRadius:'50%',background:C.normal}}/>}{lab}{n?` · ${n} · ${val}`:''}{n?<Gl n='chevron'/>:null}</button> }
+  const ParaRevisar=()=><div><div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}><span style={{...SEC_LBL,fontWeight:800,marginRight:4}}>Para revisar</span>
+      {revChip('tram','Gastos dentro de honorarios',revTram.length,fmtMillLR(sumB(revTram)))}
+      {revChip('cuo','Cuotas con fecha sin factura',revCuo.length,fmtMillLR(sumB(revCuo)))}
+      {revChip('bda','Comisiones por asignar',revBda.length,fmtMillLR(sumB(revBda)))}
+    </div>{revDet()}</div>
 
   // ── Comparativo («+ Agregar indicador»)
   const KV=useMemo(()=>{ const o={}; const z=()=>({[ADMIN_NAMES[0]]:0,[ADMIN_NAMES[1]]:0,[SIN_SOCIO]:0}); const add=(k,soc,v,it)=>{ (o[k]=o[k]||{v:z(),n:z(),it:[]}); o[k].v[soc]+=v; o[k].n[soc]++; if(it) o[k].it.push({...it,soc}) }
@@ -199,7 +223,8 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     if(k==='dso'){ const ps2=(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no&&inPer(b.paid_at,p)&&!['reembolso','nota_credito'].includes(b.billing_type)&&(!soc||socioDe(b,ctx)===soc)).map(b=>(new Date(b.paid_at)-new Date(b.issued_at))/864e5).filter(d=>d>=0&&d<400); return ps2.length?Math.round(ps2.reduce((a,d)=>a+d,0)/ps2.length):null }
     return null }
   const fK=(v,f)=>v==null?'—':f==='$'?(Math.abs(v)<1?'—':FMT(v)):f==='%'?`${Math.round(v)} %`:f==='d'?`${v} d`:String(Math.round(v))
-  const Comparativo=()=>{ const p=vista, cs=isDesk?[null,...COLS]:COLS, w=cs.length===3?['34%','22%','22%','22%']:['28%','18%','18%','18%','18%']
+  const Comparativo=()=>{ const p=vista, cs=[null,...COLS], w=['28%','18%','18%','18%','18%']
+    const UNI={pcob:'facturas',venc:'facturas',moro:'facturas',pfat:'cuotas',deuda:'clientes',favor:'clientes'}, UNN={nven:'ventas',cact:'clientes',pipe:'propuestas'}
     const orden=kpis.slice().sort((a,b)=>PS_KPIS.findIndex(x=>x.k===a)-PS_KPIS.findIndex(x=>x.k===b)); let g=null
     return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px 10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>{isDesk?'Comparativo entre socios':'Comparativo'} · {perLbl(p)}</span><button onClick={()=>setPick(v=>!v)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${C.azulBd}`,background:C.azulBg,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{isDesk?'+ Agregar indicador':'+ Agregar'}</button></div>
@@ -210,11 +235,13 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
         <tbody>{orden.map(k=>{ const K=PS_KPIS.find(x=>x.k===k); if(!K) return null; const cap=K.g!==g; g=K.g; const ko=kopen&&kopen.k===k
           const vals=cs.map(soc=>kpiVal(k,soc,p))
           const its=KV[k]?.it||null
+          const pcts=K.f==='$'?partesPctEnt(COLS.map((_,j)=>vals[j+1])):null   // participación de cada socio en Oficina (suma 100)
           return <Fragment key={k}>
             {cap&&<tr><td colSpan={cs.length+1} style={{padding:isDesk?'12px 16px 5px':'11px 8px 5px',...SEC_LBL,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{K.g}{K.per==='flujo'?` · ${perLbl(p)}`:''}</td></tr>}
-            <tr><td style={{...td,textAlign:'left',paddingLeft:K.sub?(isDesk?30:18):(isDesk?16:8),color:C.muted,fontWeight:K.sub?500:600}}>{isDesk?K.l:K.ls}<span onClick={()=>setKpis(kpis.filter(x=>x!==k))} style={{color:C.done,cursor:'pointer',marginLeft:6,fontWeight:700}}>×</span></td>
+            <tr><td style={{...td,textAlign:'left',paddingLeft:K.sub?(isDesk?30:18):(isDesk?16:8),color:C.muted,fontWeight:K.sub?500:600}}>{isDesk?K.l:K.ls}</td>
               {vals.map((v,j)=>{ const soc=cs[j], clic=v!=null&&(its||['fac','ireal','compag','comfac','cext','perc','reemb'].includes(k)); const sel=ko&&kopen.soc===soc
-                return <td key={j} onClick={clic?()=>{ if(its){ setVerTodo(false); setKopen(o=>(o&&o.k===k&&o.soc===soc)?null:{k,soc}) } else { setDat(d=>({...d,sec:['fac','comfac','cext','reemb'].includes(k)?'f':'c',con:{compag:'com',comfac:'com',cext:'cext',perc:'perc',reemb:'reemb'}[k]||'pre',soc,lim:40})); setTab('dat') } }:undefined} style={{...td,fontWeight:soc===null?800:700,color:soc===null?C.accent:C.text,cursor:clic?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===vals.length-1?(isDesk?16:8):undefined}}>{fK(v,K.f)}{isDesk&&its&&soc&&KV[k]?.n[soc]?<span style={{fontSize:10,color:C.textSoft,fontWeight:600,marginLeft:4}}>{KV[k].n[soc]}</span>:null}</td> })}</tr>
+                return <td key={j} onClick={clic?()=>{ if(its){ setVerTodo(false); setKopen(o=>(o&&o.k===k&&o.soc===soc)?null:{k,soc}) } else { setDat(d=>({...d,sec:['fac','comfac','cext','reemb'].includes(k)?'f':'c',con:{compag:'com',comfac:'com',cext:'cext',perc:'perc',reemb:'reemb'}[k]||'pre',soc,lim:40})); setTab('dat') } }:undefined} style={{...td,fontWeight:soc===null?800:700,color:soc===null?C.accent:C.text,cursor:clic?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===vals.length-1?(isDesk?16:8):undefined}}>{K.f==='n'&&v!=null&&UNN[k]?`${fK(v,K.f)} ${UNN[k]}`:K.f==='$'?(v==null||Math.abs(v)<1?'—':fmtMillLR(v)):fK(v,K.f)}{pcts&&v!=null&&Math.abs(v)>=1?(()=>{ const pc=soc===null?(pcts.some(x=>x>0)?100:0):pcts[j-1], nn=its?(soc===null?Object.values(KV[k]?.n||{}).reduce((a,x)=>a+x,0):KV[k]?.n[soc]):0, un=its&&UNI[k]&&nn?`${nn} ${UNI[k]}`:''
+                  return <div style={{fontSize:10,color:C.textSoft,fontWeight:600,lineHeight:1.3,whiteSpace:isDesk?'nowrap':'normal'}}>{pc} %{un&&isDesk?` · ${un}`:''}{un&&!isDesk?<div>{un}</div>:null}</div> })():null}</td> })}</tr>
             {ko&&its&&<tr><td colSpan={cs.length+1} style={{padding:0}}>{lista(its.filter(x=>!kopen.soc||x.soc===kopen.soc).sort((a,b)=>b.m-a.m),`${kopen.soc?L(kopen.soc):'Oficina'} · ${K.l}`)}</td></tr>}
           </Fragment> })}</tbody></table></div> }
 
@@ -274,24 +301,18 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       <span style={{display:'inline-flex',alignItems:'center',gap:6,marginLeft:isDesk?'auto':0}}>{nb(false,()=>shift(-1),'chevL')}<span style={{minWidth:isDesk?124:96,textAlign:'center',fontSize:13.5,fontWeight:700,color:C.text}}>{perLbl(vista)}</span>{nb(ym===curYM,()=>shift(1),'chevron')}</span>
       <button onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap',marginLeft:isDesk?0:'auto'}}>{isDesk?'Exportar ↓':'↓'}</button>
     </div>
-    <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(auto-fit,minmax(310px,1fr))':'1fr',gap:isDesk?12:8}}>
-      {isDesk?cardOficinaAncha():cardSocio(null,C.greenText)}
-      {COLS.map(c=>cardSocio(c,tinta[c]))}
-    </div>
-    {tab==='res'&&<div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(2,minmax(0,1fr))':'1fr',gap:isDesk?12:8,marginTop:16,alignItems:'start'}}>
-      <div style={{minWidth:0}}>
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Composición · {perLbl(vista)}</span><button onClick={()=>setPs(!ps)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${ps?C.azulBd:C.border}`,background:ps?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{ps?'Cerrar por socio':'Abrir por socio'}</button></div>
-          {Comp()}
-        </div>
-        {ParaRevisar()}
+    {kpiTiles()}
+    {tab==='res'&&<div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8,marginTop:isDesk?12:8}}>
+      {tablaResumen()}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Mes a mes {y}</span><span style={{marginLeft:'auto',display:'inline-flex',background:C.bgSoft,borderRadius:12,padding:2}}>{[['c','Ingreso real'],['f','Facturado']].map(([k,l])=><button key={k} onClick={()=>setMm(k)} style={{fontSize:10.5,fontWeight:700,border:0,borderRadius:10,padding:'3px 9px',cursor:'pointer',background:mm===k?C.card:'transparent',color:mm===k?C.accent:C.muted,boxShadow:mm===k?`0 0 0 1px ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</button>)}</span></div>
+        {MesAMes()}
       </div>
-      <div style={{minWidth:0}}>
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Mes a mes {y}</span><span style={{marginLeft:'auto',display:'inline-flex',background:C.bgSoft,borderRadius:12,padding:2}}>{[['c','Ingreso real'],['f','Facturado']].map(([k,l])=><button key={k} onClick={()=>setMm(k)} style={{fontSize:10.5,fontWeight:700,border:0,borderRadius:10,padding:'3px 9px',cursor:'pointer',background:mm===k?C.card:'transparent',color:mm===k?C.accent:C.muted,boxShadow:mm===k?`0 0 0 1px ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</button>)}</span></div>
-          {MesAMes()}
-        </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Composición · {perLbl(vista)}</span><button onClick={()=>setPs(!ps)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${ps?C.azulBd:C.border}`,background:ps?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{ps?'Cerrar por socio':'Abrir por socio'}</button></div>
+        {Comp()}
       </div>
+      {ParaRevisar()}
     </div>}
     {tab==='cmp'&&<div style={{marginTop:16}}>{Comparativo()}</div>}
     {tab==='dat'&&<div style={{marginTop:16}}>{Datos()}</div>}
