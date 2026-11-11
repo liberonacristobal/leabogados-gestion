@@ -75,6 +75,26 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     return o
   }, [ingConc, ingAbonos, ufDias, ufRef])
 
+  // Apertura del Seguimiento (año en curso): facturado de ventas nuevas (vendidas desde el 1 de enero; lo demás es arrastre) y cobrado de facturas emitidas en el año (lo demás es cartera del año anterior), por mes.
+  // El arrastre y la cartera son el total menos esta parte, así las dos partes suman el total real.
+  const origenMes = useMemo(() => {
+    const nuevoFact = Array(12).fill(0), cobAnio = Array(12).fill(0), desde = `${currentYear}-01-01`
+    const venta = new Map((sales || []).filter((s) => s && !s.deleted_at).map((s) => [String(s.id), s]))
+    const porId = new Map((billing || []).map((b) => [String(b.id), b]))
+    ;(billing || []).forEach((b) => {
+      if (b.deleted_at || !_esFactHon(b) || extBillIds.has(String(b.id)) || String(b.issued_at || '').slice(0, 4) !== String(currentYear)) return
+      const s = venta.get(String(b.sale_id)), cre = String((s && s.created_at) || '').slice(0, 10)
+      if (cre >= desde) nuevoFact[Number(String(b.issued_at).slice(5, 7)) - 1] += montoFactura(b)
+    })
+    /** @type {Record<string,string>} */ const fechaAbono = {}
+    ;(ingAbonos || []).forEach((a) => { fechaAbono[String(a.id)] = String(a.fecha || '').slice(0, 10) })
+    ;(ingConc || []).forEach((c) => {
+      const f = fechaAbono[String(c.movimiento_id)], b = c.tipo_destino === 'factura' ? porId.get(String(c.factura_id)) : null
+      if (f && f.slice(0, 4) === String(currentYear) && b && String(b.issued_at || '').slice(0, 4) === String(currentYear)) cobAnio[Number(f.slice(5, 7)) - 1] += Number(c.monto_aplicado) || 0
+    })
+    return { nuevoFact, cobAnio }
+  }, [billing, sales, ingConc, ingAbonos, extBillIds])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Facturado por cliente en el año (honorarios propios; sin lo facturado por cuenta de terceros), de mayor a menor.
   const clientes = useMemo(() => {
     /** @type {Record<string,{id:string,name:string,monto:number,uf:number,n:number}>} */
@@ -252,7 +272,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   return {
     subarriendoAnual: (sales || []).filter((s) => s && !s.deleted_at && esSubarriendo(s) && esRecurrente(s)).reduce((a, s) => a + ventaCLP(s, ufRef), 0),
     refMeses: { ventas: ult3.map((m) => ({ m, v: (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0) })), fact: ult3.map((m) => ({ m, v: serie[ym(currentYear, m)]?.fac ?? 0 })), caja: ult3.map((m) => ({ m, v: cobMes[ym(currentYear, m)] ?? 0 })) },
-    cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, origenMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios,
   }
