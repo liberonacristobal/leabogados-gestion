@@ -2,6 +2,7 @@
 import { clasificarPorFacturar, cuotasVencidasSinFacturar } from '../../supabase/functions/_shared/porFacturar.js'
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { Menu, Flecha } from '../lib/presupuestoUI.jsx'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
@@ -1423,15 +1424,15 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
     for(let i=5;i>=0;i--){ let yy=y, mm=m-i; while(mm<=0){mm+=12;yy--}; const k=`${yy}-${String(mm).padStart(2,'0')}`
       const fs=emitidasAll.filter(b=> emisKey(b)===k && (!resp||respDe(b)===resp))
       const emi=fs.reduce((a,b)=>a+montoDe(b),0), cob=fs.reduce((a,b)=>a+Math.max(0,montoDe(b)-saldoDe(b)),0)
-      out.push({k, mesN:MESNOM[mm-1].slice(0,3), emi, cob, pen:emi-cob, tasa:emi>0?cob/emi:0, act:k===mes}) }
+      out.push({k, mesN:MES_C[mm-1], emi, cob, pen:emi-cob, tasa:emi>0?cob/emi:0, act:k===mes}) }
     return out }, [mes,emitidasAll,resp,respaldoMap])   // eslint-disable-line
   const prev=trend[4], cur=trend[5]
+  const acumAnio=useMemo(()=>emitidasAll.filter(b=>{ const k=emisKey(b); return k.slice(0,4)===mes.slice(0,4)&&k<=mes&&(!resp||respDe(b)===resp) }).reduce((a,b)=>a+montoDe(b),0),[emitidasAll,mes,resp])   // emitido del año hasta el mes elegido
 
   const shiftMes = d => { const [y,m]=mes.split('-').map(Number); let mm=m+d, yy=y; while(mm<=0){mm+=12;yy--} while(mm>12){mm-=12;yy++}; setMes(`${yy}-${String(mm).padStart(2,'0')}`); setExpand(null) }   // mantiene la tarjeta activa (estFiltro) al cambiar de mes: sin resetearla, la lista persiste y el ancho no colapsa
   const mesLabel = `${MESNOM[+mes.slice(5,7)-1]} ${mes.slice(0,4)}`
   const pct = x => `${Math.round(x*100)} %`
-  const deltaTxt = (a,b)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return <><Gl n={d>=0?'arrowUp':'arrowDown'}/> {Math.abs(d)} %</> }
-  const deltaCol = (a,b,inv)=>{ if(a===b) return C.done; const up=a>b; return (inv?!up:up)?C.greenText:C.overdueText }
+  const deltaTxt = (a,b,inv)=>{ if(!b) return a>0?'nuevo':''; const d=Math.round((a-b)/b*100); return <Flecha sube={d>=0} bueno={inv?d<=0:d>=0}>{Math.abs(d)} %</Flecha> }
 
   const visibles = estFiltro==='porcobrar' ? filas.filter(f=>f.est==='detectado'||f.est==='sinpago')
     : estFiltro==='vencido' ? filas.filter(f=>f.saldo>0&&f.b.due&&f.b.due<hoyISO)
@@ -1445,25 +1446,21 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
   const dfmt = d => { const s=fmtDate(d); return s||'—' }
 
   return (<div style={{width:'100%',maxWidth:isDesktop?1500:660,margin:'0 auto'}}>
-    {/* Navegador de mes + modo */}
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-      <div style={{display:'flex',alignItems:'center',gap:6,flex:1}}>
-        <button onClick={()=>shiftMes(-1)} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,fontSize:16,cursor:'pointer',lineHeight:1}}><Gl n='chevL'/></button>
-        <div style={{fontSize:16,fontWeight:800,color:C.accent,minWidth:0}}>{mesLabel}</div>
-        <button onClick={()=>puedeSig&&shiftMes(1)} disabled={!puedeSig} style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:puedeSig?C.muted:C.border,fontSize:16,cursor:puedeSig?'pointer':'default',lineHeight:1}}><Gl n='chevron'/></button>
-      </div>
-      <div style={{display:'flex',background:C.bgSoft,borderRadius:10,padding:2}}>
-        {[['mes','Mes'],['acum','Acumulado']].map(([v,l])=><button key={v} onClick={()=>setModo(v)} style={{fontSize:12,fontWeight:700,padding:'5px 11px',borderRadius:8,border:'none',cursor:'pointer',background:modo===v?'#fff':'transparent',color:modo===v?C.accent:C.muted,boxShadow:modo===v?'0 1px 2px rgba(0,0,0,.06)':'none'}}>{l}</button>)}
-      </div>
-    </div>
-
-    {/* Filtro por abogado responsable */}
-    {respList.length>1&&<div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:10,paddingBottom:2}}>
+    {/* Barra: selector de mes (píldora con menú de meses y su emitido), Mes | Acumulado y filtro por responsable */}
+    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:10}}>
+      <span style={{border:`1px solid ${C.border}`,background:C.azulBg,color:C.accent,fontWeight:700,fontSize:12,minHeight:32,padding:'0 12px',borderRadius:20,display:'inline-flex',alignItems:'center'}}>
+        <Menu aria='Mes del cierre' valor={mes} boton={mesLabel}
+          opciones={trend.slice().reverse().map(t=>[t.k,<span style={{display:'flex',justifyContent:'space-between',gap:18,alignItems:'baseline'}}><span>{mesTitulo(new Date(+t.k.slice(0,4),+t.k.slice(5,7)-1,15))}</span><span style={{fontVariantNumeric:'tabular-nums',fontWeight:600}}>{t.emi>0?`${fmtShort(t.emi)} · ${pct(t.tasa)}`:'—'}</span></span>])}
+          onChange={k=>{setMes(k);setExpand(null);setEstFiltro(null)}}
+          pie={[()=>setModo('acum'),<span style={{display:'flex',justifyContent:'space-between',gap:18}}><span>Acumulado {mes.slice(0,4)}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmtShort(acumAnio)}</span></span>]}/>
+      </span>
+      <span role='group' style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{[['mes','Mes'],['acum','Acumulado']].map(([v,l])=><button key={v} aria-pressed={modo===v} onClick={()=>setModo(v)} style={{fontSize:11,fontWeight:700,padding:'7px 14px',cursor:'pointer',border:0,fontFamily:'inherit',background:modo===v?C.accent:'transparent',color:modo===v?'#fff':C.muted}}>{l}</button>)}</span>
+      {respList.length>1&&<div style={{display:'flex',gap:5,overflowX:'auto',paddingBottom:2,minWidth:0,flex:isDesktop?'0 1 auto':'1 1 100%',marginLeft:isDesktop?'auto':0}}>
       {[[null,'Todos'],...respList.map(r=>[r,r])].map(([v,l])=>{ const on=resp===v; const pc=v?personChip(v):null
         return <button key={v||'all'} onClick={()=>setResp(v)} style={{flexShrink:0,fontSize:11,fontWeight:600,borderRadius:20,padding:'4px 11px',cursor:'pointer',border:`1px solid ${on?(pc?pc.color:C.accent):C.border}`,background:on?(pc?pc.bg:C.azulBg):'#fff',color:on?(pc?pc.color:C.accent):C.muted,whiteSpace:'nowrap'}}>{l}</button> })}
-    </div>}
+      </div>}
+    </div>
 
-    {/* Emitido (hero) + 4 tarjetas-acordeón: Pagado · Por cobrar · Sin identificar · Vencidas. Al tocar una se despliega SU listado abajo (estFiltro). Wording unificado: Pagado / Por cobrar (facturas del cliente = plata que entra). */}
     <style>{'@container (max-width:214px){.cm-chev{display:none}}'}</style>
     {(()=>{
       // Una sola fila de 5 tarjetas iguales (Emitido · Pagado · Por cobrar · Sin identificar · Vencidas): ícono a la izquierda, texto a su costado, cifra en $M. En móvil, Emitido a todo el ancho y las otras cuatro en 2×2.
@@ -1622,7 +1619,7 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
           <div key={l} style={{flex:1,background:C.bgSoft,borderRadius:10,padding:'7px 9px'}}>
             <div style={{...SEC_LBL}}>{l}</div>
             <div style={{fontSize:16,fontWeight:700,color:C.text,letterSpacing:-.2}}>{fmtShort(a)}</div>
-            <div style={{fontSize:10,fontWeight:700,color:deltaCol(a,b,inv),marginTop:1}}>{deltaTxt(a,b)} <span style={{color:C.textSoft,fontWeight:600}}>vs {prev.mesN}</span></div>
+            <div style={{fontSize:10,fontWeight:700,marginTop:1}}>{deltaTxt(a,b,inv)} <span style={{color:C.textSoft,fontWeight:600}}>vs {prev.mesN}</span></div>
           </div>)}
       </div>}
       <div style={{display:'grid',gridTemplateColumns:`repeat(${trend.length||1},minmax(0,1fr))`,gap:6}}>

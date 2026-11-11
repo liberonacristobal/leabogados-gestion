@@ -274,7 +274,7 @@ export function Tarjeta({ tono = 'w', ic, label, izq, der, cmp, cmp2, onClick, a
 
 // ── Navegación del Presupuesto: menú desplegable, pasos numerados y pestañas subrayadas ──
 /** Botón con menú de opciones (año, moneda): se cierra al elegir o al tocar fuera. `boton` = contenido del botón; `opciones` = [[valor, rótulo]]. */
-export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }) {
+export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo, pie }) {
   const [abre, setAbre] = useState(false), ref = useRef(null)
   useEffect(() => {
     if (!abre) return
@@ -282,10 +282,11 @@ export function Menu({ boton, opciones, valor, onChange, derecha, aria, estilo }
     document.addEventListener('mousedown', fuera); document.addEventListener('touchstart', fuera)
     return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('touchstart', fuera) }
   }, [abre])
-  return <span ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
+  return <span ref={ref} onKeyDown={(e) => { if (e.key === 'Escape') setAbre(false) }} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
     <button aria-label={aria} aria-haspopup='menu' className='pp-tac' aria-expanded={abre} onClick={() => setAbre((a) => !a)} style={{ border: 0, background: 'transparent', fontFamily: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit', ...estilo }}>{boton}<span aria-hidden='true' style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderTop: '5px solid currentColor', display: 'inline-block' }} /></button>
     {abre && <div role='menu' style={{ position: 'absolute', top: '100%', [derecha ? 'right' : 'left']: 0, zIndex: 30, marginTop: 6, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 6, minWidth: 170, boxShadow: '0 8px 24px rgba(0,60,80,.14)' }}>
       {opciones.map(([k, n]) => <button key={String(k)} role='menuitem' onClick={() => { setAbre(false); onChange(k) }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, fontFamily: 'inherit', cursor: 'pointer', padding: '9px 10px', borderRadius: 8, whiteSpace: 'nowrap', fontSize: 13, background: valor === k ? C.azulBg : 'transparent', color: valor === k ? C.accent : C.muted, fontWeight: valor === k ? 800 : 600 }}>{n}</button>)}
+      {pie && <button key='pie' role='menuitem' onClick={() => { setAbre(false); pie[0]() }} style={{ display: 'block', width: '100%', textAlign: 'left', border: 0, borderTop: `1px solid ${C.border}`, fontFamily: 'inherit', cursor: 'pointer', padding: '9px 10px', marginTop: 4, borderRadius: 8, whiteSpace: 'nowrap', fontSize: 13, background: 'transparent', color: C.accent, fontWeight: 800 }}>{pie[1]}</button>}
     </div>}
   </span>
 }
