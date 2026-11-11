@@ -4,7 +4,7 @@ import { C, useIsDesktop, fmtFechaDMY } from './base.jsx'
 import {
   anclasDe, nombreCorto, cadenaMeta, metasDesdeComponente, valorComponente, afavor, reservaRecomendada, sueldosYRetiros, mesesTranscurridos, escenarioMetas,
 } from '../../supabase/functions/_shared/presupuesto.js'
-import { resolverMeta, pctSobreCierre } from '../../supabase/functions/_shared/metaPresupuesto.js'
+import { resolverMeta, pctSobreCierre, estConMetaIdeal } from '../../supabase/functions/_shared/metaPresupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { mm, mx, pc, Flecha, Fld, Btn, Panel, Seg, Titulo, LBL, Val, difMon, Det, Lista, Grid } from './presupuestoUI.jsx'
 
@@ -25,6 +25,12 @@ export function calcMetas(d, est) {
   const valor = ancla === 'caja' ? valorFijada - R.rec : valorFijada
   const r = metasDesdeComponente(d.base, est, { componente: ancla, valor, ratio, cv }, CFG)
   return { ancla, valor, valorFijada, rec: R.rec, modo: R.modo, pct: R.modo === 'pct' ? R.pct : pctSobreCierre(valorFijada, R.cierre), cierre: R.cierre, porDefecto: R.porDefecto, ratio, cv, ok: !!r.ok, motivo: r.ok ? null : r.motivo, ch: r.ok ? r : cadenaMeta(d.base, est, 0, ratio, cv), ref: d.referencia }
+}
+
+/** Estado y metas con que se muestra el resultado 2027: el escenario de referencia sigue a la meta del paso 4 (Ideal). Una sola fuente para la franja, «Cómo se llega», Costos, Impuesto, Por socio, Excel y Comparar versiones. */
+export function vistaIdeal(d, est) {
+  const MT = calcMetas(d, est), k = escenarioMetas(est, CFG)
+  return { est: estConMetaIdeal(est, MT.ok ? MT.ch : null, k), MT, k }
 }
 
 /** Motivo en texto de una meta sin solución. */

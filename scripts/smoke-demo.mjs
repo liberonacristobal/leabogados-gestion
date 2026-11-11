@@ -98,6 +98,7 @@ try {
     if (!solo.length || solo.includes('presupuesto')) {
       for (let i = 1; i <= 6; i++) {
         await revisar(`presupuesto paso ${i}`, { fn: async (i) => { window.__demo.setModal(null); window.__demo.navTo({ tab: 'presupuesto' }); const esp = ms => new Promise(r => setTimeout(r, ms)); await esp(900); [...document.querySelectorAll('button')].find(b => (b.getAttribute('aria-label') || '').startsWith('Paso ' + i + ':') || new RegExp('^(✓ )?' + i + ' · ').test(b.textContent.trim()))?.click(); await esp(300); if (i === 5) { [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Por socio')?.click(); await esp(300) } }, arg: i })
+        if (i === 5) { const t5 = await page.evaluate(async () => { [...document.querySelectorAll('[role=tab],button')].find(b => b.textContent.trim() === 'Resultado')?.click(); await new Promise(r => setTimeout(r, 400)); return document.body.innerText }); if (!/Conservador/.test(t5) || !/Optimista/.test(t5) || !/Cobranza/.test(t5) || !/Por facturar que se arrastra/.test(t5)) fallas.push({ vista: nombre, donde: 'presupuesto paso 5', error: 'faltan los escenarios Conservador, Ideal y Optimista, la cobranza o la apertura del arrastre' }) }
         if (i === 4) { const t4 = await page.evaluate(() => document.body.innerText); if (!/Calculada|Fijada/.test(t4) || !/Falta facturar/i.test(t4) || !/Distribución/i.test(t4)) fallas.push({ vista: nombre, donde: 'presupuesto paso 4', error: 'faltan la tabla de metas, «Falta facturar» o los accesos inferiores' }) }
       }
     }
