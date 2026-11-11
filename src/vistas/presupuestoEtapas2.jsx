@@ -1,6 +1,6 @@
 // Presupuesto anual · etapas 4 y 5 (Escenarios con resultado, impuesto y por socio; Seguimiento) y las páginas de detalle (mes, cliente, indicador, socio, versiones).
 import { useEffect, useRef, useState } from 'react'
-import { C, appAlert } from '../lib/base.jsx'
+import { C, appAlert, fmtFechaDMY } from '../lib/base.jsx'
 import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, totalesSocios, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
@@ -476,9 +476,9 @@ export function DComp({ X, de, k }) {
 function DRetiros({ X }) {
   const { datos: d, ui, setUI } = X, R = d.retiros26, uf = monedaActual() === 'uf'
   const T = totalesSocios({ socios: R.socios, retiros: uf ? R.porSocioUF : R.porSocio, sueldos: uf ? R.sueldosUF : R.sueldos })
-  const v = (n, nU) => mx(n, nU), dmy = (/** @type {string} */ x) => fmtFechaDMY(x)
-  const nU = (/** @type {number} */ n) => n   // en UF las cifras ya vienen en UF; mx recibe (pesos, uf)
+  const dmy = (/** @type {string} */ x) => fmtFechaDMY(x)
   const val = (/** @type {number} */ x) => (uf ? mx(0, x) : mx(x, null))
+  const pq = (/** @type {number} */ x) => (uf ? mx(0, x) : mmP(x))   // en las aperturas, una sola moneda (en «Pesos y UF» solo pesos)
   const abierto = !!ui.retDet
   return <>
     <Grid cols={3} colsM={2} gap={X.D ? 10 : 8}>
@@ -488,8 +488,8 @@ function DRetiros({ X }) {
     </Grid>
     {abierto && <Panel><Fila sin nombre={`${R.n} retiro${R.n !== 1 ? 's' : ''} de los socios`} peq={R.desde ? `del ${dmy(R.desde)} al ${dmy(R.hasta)}` : 'sin retiros registrados'} valor={val(T.oficina.retiros)} /></Panel>}
     <Panel hd='Por socio'>
-      {T.filas.map((f) => <Fila key={f.socio} nombre={f.socio} peq={`retiros ${val(f.retiros)} + sueldos ${val(f.sueldos)}`} valor={val(f.total)} onClick={X.onOpenSocios} />)}
-      <Fila tot sin nombre='Oficina' peq={`retiros ${val(T.oficina.retiros)} + sueldos ${val(T.oficina.sueldos)}`} valor={val(T.oficina.total)} />
+      {T.filas.map((f) => <Fila key={f.socio} nombre={f.socio} peq={`retiros ${pq(f.retiros)} + sueldos ${pq(f.sueldos)}`} valor={val(f.total)} onClick={X.onOpenSocios} />)}
+      <Fila tot sin nombre='Oficina' peq={`retiros ${pq(T.oficina.retiros)} + sueldos ${pq(T.oficina.sueldos)}`} valor={val(T.oficina.total)} />
     </Panel>
     <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {indicadores(X).ret26.fuente} · En la app: Socios</div>
   </>
