@@ -4,9 +4,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
-import { PageHeader, usePorFacturar } from '../lib/compartido.jsx'
+import { PageHeader, usePorFacturar, useAseguradoPresupuesto } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
-import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
+import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG, aplicarConfigGuardada, leerConfigGuardada, configGuardada, configVigente } from '../lib/presupuestoCfg.js'
 import { mm, pc, Btn, Fld, Titulo, EstilosPresupuesto, setMoneda, Menu, ChipBtn, Pasos, Ic, ResumenCascada } from '../lib/presupuestoUI.jsx'
 import { calcMetas } from '../lib/presupuestoBloques.jsx'
@@ -26,6 +26,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const [anioSel, setAnioSel] = useState(null)
   const datos = usePresupuestoDatos({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, anioSel })
   const porFacturar = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds }).grupos.vigente.m
+  const asegurado = useAseguradoPresupuesto({ billing, sales, clients, clientEntities, anticipos, terceros, costosOfiRows, expenses, fantasmaIds, anioBase: datos.anioBase })
   const anio = datos.anio
   const [est, setEst] = useState(null)
   const [vers, setVers] = useState([])
@@ -116,6 +117,12 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     if (!est || !cargado || errorCarga || est.sinCotEmpleador || !(datos.cotEmp.total > 0) || est.costos.some((c) => c.id === 'cot-empleador')) return
     setEst((e) => (e && !e.sinCotEmpleador && !e.costos.some((c) => c.id === 'cot-empleador') ? { ...e, costos: [...e.costos, { id: 'cot-empleador', n: NOMBRE_COT_EMPLEADOR, m: Math.round(datos.cotEmp.total / 12), meses: 12, t: 'fijo', alza: 0, g: CFG.costos.grupoLeyes, auto: true, sinBase: true }] } : e))
   }, [est, cargado, errorCarga, datos.cotEmp.total])  // eslint-disable-line react-hooks/exhaustive-deps
+  // Subarriendo (partida negativa al final de Partidas): se agrega al abrir un borrador que no la tiene y que el usuario no quitó; así costosPresupuesto y toda la cadena quedan netos. Editable.
+  useEffect(() => {
+    if (!est || !cargado || errorCarga || est.sinSubarriendo || est.costos.some((c) => c.id === ID_SUBARRIENDO)) return
+    const pa = partidaSubarriendo(datos.subarriendoAnual); if (!pa) return
+    setEst((e) => (e && !e.sinSubarriendo && !e.costos.some((c) => c.id === ID_SUBARRIENDO) ? { ...e, costos: [...e.costos, pa] } : e))
+  }, [est, cargado, errorCarga, datos.subarriendoAnual])  // eslint-disable-line react-hooks/exhaustive-deps
   // Un paso visitado queda marcado (sin botón de «revisado»).
   useEffect(() => { if (est && cargado && !errorCarga && !drill && !est.hecho.includes(ui.etapa)) setEst((e) => (e && !e.hecho.includes(ui.etapa) ? { ...e, hecho: [...e.hecho, ui.etapa] } : e)) }, [est, cargado, errorCarga, drill, ui.etapa])
   // ── Modelo ──
@@ -139,7 +146,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const setCosto = (i, f, v) => parche((c) => { c.costos[i][f] = v })
   const patchCosto = (i, o) => parche((c) => { Object.assign(c.costos[i], o) })
   const addCosto = () => { parche((c) => { c.costos.push({ id: Date.now(), n: 'Nueva partida', m: 0, meses: 12, t: 'fijo', alza: null }) }); setUI({ abierta: (est ? est.costos.length : 0), mats: [...(ui.mats || []), 'Nueva partida'] }) }
-  const delCosto = (i) => { parche((c) => { if (c.costos[i] && c.costos[i].id === 'cot-empleador') c.sinCotEmpleador = true; c.costos.splice(i, 1) }); setUI({ abierta: null }) }
+  const delCosto = (i) => { parche((c) => { if (c.costos[i] && c.costos[i].id === 'cot-empleador') c.sinCotEmpleador = true; if (c.costos[i] && c.costos[i].id === ID_SUBARRIENDO) c.sinSubarriendo = true; c.costos.splice(i, 1) }); setUI({ abierta: null }) }
   const resetCostos = () => { parche((c) => { c.costos = datos.costos.map((x) => ({ ...x })) }); setUI({ abierta: null }) }
 
   // ── Navegación: ir y volver al lugar exacto ──
@@ -213,9 +220,9 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   }
   const MT = est ? calcMetas(datos, est) : null
   const X = { irAnio: (a) => { setDrill(null); setPila([]); setAnioSel(a) }, prepararDesdeCero, user, esAdmin, usarVigente, cfgDe, tickCfg: () => setCfgTick((n) => n + 1), D, datos, est, M, MT, parche, patchCosto, onOpenSocios, onOpenBanco, U, ui, setUI, ir, irDrill, volver, nomEsc, tonoDe, cfg: CFG, ESC, duplicarEsc, renombrarEsc, eliminarEsc, moverEsc, setPal, setGen, setEsc, setCosto, addCosto, delCosto, resetCostos, vers, guardarVersion, abrirVersion, borrarVersion, marcarOficial,
-    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, irPorFacturar: onOpenPorFacturar }
+    irEscTab, irEsc: irEscTab, irCostos: () => ir({ etapa: 2 }), irBase: () => ir({ etapa: 1 }), irMirada: () => ir({ etapa: 0 }), irMetas: () => ir({ etapa: 3 }), porFacturar, asegurado, cliNom: (id) => (clients.find((c) => String(c.id) === String(id)) || {}).name || 'Sin cliente', irPorFacturar: onOpenPorFacturar }
 
-  const ETAPAS = [`Resultado ${datos.anioBase}`, `Base ${anio}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
+  const ETAPAS = [`Resultado ${datos.anioBase}`, `Arrastre ${datos.anioBase}`, 'Costos', `Metas ${anio}`, 'Escenarios', 'Seguimiento']
   const origen = drill && drill.t === 'cfg' ? `Presupuesto ${anio}` : pila.length ? (pila[pila.length - 1].drill ? titulosDrill(X, pila[pila.length - 1].drill) : ETAPAS[pila[pila.length - 1].etapa]) : backLabel
   const estadoTxt = guardado.est === 'cargando' ? 'cargando…' : guardado.est === 'pendiente' ? 'cambios sin guardar' : guardado.est === 'guardando' ? 'guardando…' : guardado.est === 'error' ? 'no se pudo guardar' : (guardado.est === 'local' ? 'guardado solo en este equipo' : 'guardado') + (guardado.t ? ' · ' + hace(guardado.t) : '')
   const wrap = D ? { maxWidth: 1180, margin: '0 auto', padding: '8px 20px 20px' } : { padding: '8px 16px 40px' }

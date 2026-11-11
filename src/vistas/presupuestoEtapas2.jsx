@@ -63,7 +63,7 @@ export function CardEsc({ X, k, editable }) {
     {!X.D && <div style={{ fontSize: 11, color: C.muted }}>{mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes</div>}
     {cu && cu.dif != null && Math.abs(cu.dif) >= 1 && <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha></div>}
     {(() => { const det = <>
-    <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr('− Comisiones', e.terc, () => X.irCostos())}{xr(`− ${nombreCorto('costos', CFG)}`, e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Aumento de reserva', e.reserva)}</div>
+    <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr(`− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, e.terc, () => X.irCostos())}{xr(`− ${nombreCorto('costos', CFG)}`, e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Aumento de reserva', e.reserva)}</div>
     <div style={{ fontSize: X.D ? 11 : 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 5 : 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
     {editable && <div style={acc} onClick={(ev) => ev.stopPropagation()}>
@@ -115,7 +115,7 @@ function PanelEsc({ X }) {
     </div>
     <div style={{ padding: '0 16px' }}>
       {fila('Cobrado', mm(e.caja), <>{ctl('Ventas', false, stp('g', '%', 1, -30, 80))}{ctl('Reajuste UF', false, <Fld kind='pct' suf='%' value={est.reajusteUF} onCommit={(v) => setGen('reajusteUF', v)} w={110} />)}{ctl('Cobro', true, stp('dias', 'd', 5, 0, 90, true))}</>)}
-      {fila('− Comisiones', mm(e.terc), <span style={{ fontSize: 12, color: C.muted }}>Real {X.datos.anioBase}, no se elige</span>)}
+      {fila(`− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, mm(e.terc), <span style={{ fontSize: 12, color: C.muted }}>Real {X.datos.anioBase}, no se elige</span>)}
       {fila(`− ${nombreCorto('costos', CFG)}`, mm(e.costos), ctl('Alza de costos', true, stp('alza', '%', 0.5, 0, 20)))}
       {fila('− Impuesto', mm(e.idpc), <>{ctl('Tasa 1ª categoría', false, <Fld kind='pct' suf='%' value={est.tasaIDPC} onCommit={(v) => setGen('tasaIDPC', v)} w={110} />)}{ctl('PPM del año', false, <FldDin clp={est.ppmAnual} tasa={tasa27()} onCommit={(v) => setGen('ppmAnual', v)} w={150} />)}</>)}
       {fila('− Aumento de reserva', mm(e.reserva), <>{ctl('Aumento', true, <Fld kind='pct' suf='%' value={est.reserva} onCommit={(v) => setGen('reserva', v)} w={110} />)}{ctl('Reserva en cuenta corriente', true, <FldDin clp={est.reservaIni} tasa={tasa26()} onCommit={(v) => setGen('reservaIni', Math.max(0, v))} w={150} />)}</>)}

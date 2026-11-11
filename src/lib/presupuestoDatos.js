@@ -250,6 +250,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   const impBase = liqImp && liqImp.monto > 0 ? { mes: liqImp.mes, monto: liqImp.monto, fuente: 'liquidaciones de la contadora' } : { mes: mesPrev, monto: sueldosMes, fuente: 'Remuneraciones de Costos' }
   const cotEmp = { ...cotizacionEmpleador({ anio, imponibleMensual: impBase.monto, baseYM: impBase.mes, calendario: CFG.previsional.empleador }), base: impBase }
   return {
+    subarriendoAnual: (sales || []).filter((s) => s && !s.deleted_at && esSubarriendo(s) && esRecurrente(s)).reduce((a, s) => a + ventaCLP(s, ufRef), 0),
     refMeses: { ventas: ult3.map((m) => ({ m, v: (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0) })), fact: ult3.map((m) => ({ m, v: serie[ym(currentYear, m)]?.fac ?? 0 })), caja: ult3.map((m) => ({ m, v: cobMes[ym(currentYear, m)] ?? 0 })) },
     cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),

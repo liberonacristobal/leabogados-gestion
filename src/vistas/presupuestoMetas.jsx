@@ -98,6 +98,6 @@ export function filasMetas(X, k) {
   const rows = [['Plano', plano[0]], ['Cálculo', k === 'costos' ? `presupuesto ${Y} + alza ${pc(est.p[rk].alza)}` : plano[1]],
     ...(k === 'ventas' && ch.ventasBruto != null ? [['Bruto', mm(ch.ventasBruto)], [`− Comisiones de venta · ${pc(MT.cv)}`, mm(ch.comisVentas)], ['Facturado / vendido', 'se aplica al vendido bruto']] : []),
     ...(k === 'retiros' ? [['Por socio', `${mm(ch.retiros * pp)} · ${mm(ch.retiros * pp / 12)} al mes`]] : []), ...(k === 'margen' ? [['Comisiones', `${mm(ch.terc)} (${pc(est.p[rk].terc)})`]] : [])]
-  const go = k === 'costos' ? ['Presupuesto de costos', () => X.irCostos()] : k === 'retiros' ? ['Sueldos y retiros de los socios', () => X.ir({ drill: { t: 'socios' } })] : k === 'margen' ? ['Impuesto en Escenarios', () => X.irEscTab('imp')] : ['Base del paso 2', () => X.irBase()]
+  const go = k === 'costos' ? ['Presupuesto de costos', () => X.irCostos()] : k === 'retiros' ? ['Sueldos y retiros de los socios', () => X.ir({ drill: { t: 'socios' } })] : k === 'margen' ? ['Impuesto en Escenarios', () => X.irEscTab('imp')] : ['Arrastre del paso 2', () => X.irBase()]
   return { rows, go }
 }
