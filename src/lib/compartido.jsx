@@ -3939,14 +3939,13 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
   return out
 }
 
-// Cifras gemelas BRUTO | NETO del Vendido en una sola línea y del mismo tamaño: la principal en tono normal y la otra tenue; tocar la tenue la hace principal (alterna). No agranda la tarjeta.
+// Vendido en la tarjeta del resultado del año (Inicio y Panel de socios): UNA cifra del tamaño de las demás y UN botón «Bruto ⇄» / «Neto ⇄» que alterna. El botón es absoluto sobre la tarjeta
+// (que debe ser position:relative): arriba a la derecha en escritorio y abajo a la derecha en el celular; no agrega alto ni empuja la cifra, así queda alineada con sus hermanas.
 export function CifrasBrutoNeto({ bruto, neto, princ='bruto', onAlt, desk }){
-  // Una sola cifra, del mismo tamaño que las demás tarjetas; Bruto | Neto elige cuál se muestra.
-  const opt=(k,rot)=>{ const on=princ===k; return (
-    <span key={k} onClick={e=>{ e.stopPropagation(); if(!on&&onAlt) onAlt(k) }} style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,cursor:on?'default':'pointer',background:on?C.accent:'transparent',color:on?'#fff':C.muted,lineHeight:1.3}}>{rot}</span>) }
+  const otra=princ==='neto'?'bruto':'neto'
   return <div style={{marginTop:3,minWidth:0}}>
     <div style={{fontSize:desk?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{princ==='neto'?neto:bruto}</div>
-    <div style={{display:'inline-flex',gap:2,marginTop:5,padding:2,borderRadius:20,background:'rgba(255,255,255,.7)'}}>{opt('bruto','Bruto')}{opt('neto','Neto')}</div>
+    <button onClick={e=>{ e.stopPropagation(); if(onAlt) onAlt(otra) }} title={`Ver el ${otra}`} aria-label={`Mostrando ${princ}; cambiar a ${otra}`} style={{position:'absolute',...(desk?{top:8}:{bottom:8}),right:8,fontSize:10,fontWeight:700,padding:'3px 7px',borderRadius:20,border:'none',background:C.accent,color:'#fff',cursor:'pointer',lineHeight:1.2,whiteSpace:'nowrap',fontFamily:'inherit'}}>{princ==='neto'?'Neto':'Bruto'} <svg viewBox='0 0 24 24' width='10' height='10' fill='none' stroke='currentColor' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round' style={{verticalAlign:-1}}><polyline points='17 1 21 5 17 9'/><path d='M3 11V9a4 4 0 0 1 4-4h14'/><polyline points='7 23 3 19 7 15'/><path d='M21 13v2a4 4 0 0 1-4 4H3'/></svg></button>
   </div>
 }
 
