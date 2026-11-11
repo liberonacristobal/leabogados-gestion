@@ -3941,12 +3941,13 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
 
 // Cifras gemelas BRUTO | NETO del Vendido en una sola línea y del mismo tamaño: la principal en tono normal y la otra tenue; tocar la tenue la hace principal (alterna). No agranda la tarjeta.
 export function CifrasBrutoNeto({ bruto, neto, princ='bruto', onAlt, desk }){
-  const fz=desk?17:13, cell=(k,rot,v)=>{ const on=princ===k; return (
-    <div key={k} onClick={on?undefined:e=>{ e.stopPropagation(); onAlt&&onAlt(k) }} style={{minWidth:0,cursor:on?'inherit':'pointer',opacity:on?1:.45}}>
-      <div style={{fontSize:9,fontWeight:700,letterSpacing:.4,color:C.accent,lineHeight:1.1}}>{rot}</div>
-      <div style={{fontSize:fz,fontWeight:800,letterSpacing:'-.4px',color:C.accent,lineHeight:1.1,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>
-    </div>) }
-  return <div style={{display:'flex',gap:desk?16:12,marginTop:3,minWidth:0}}>{cell('bruto','BRUTO',bruto)}{cell('neto','NETO',neto)}</div>
+  // Una sola cifra, del mismo tamaño que las demás tarjetas; Bruto | Neto elige cuál se muestra.
+  const opt=(k,rot)=>{ const on=princ===k; return (
+    <span key={k} onClick={e=>{ e.stopPropagation(); if(!on&&onAlt) onAlt(k) }} style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:20,cursor:on?'default':'pointer',background:on?C.accent:'transparent',color:on?'#fff':C.muted,lineHeight:1.3}}>{rot}</span>) }
+  return <div style={{marginTop:3,minWidth:0}}>
+    <div style={{fontSize:desk?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{princ==='neto'?neto:bruto}</div>
+    <div style={{display:'inline-flex',gap:2,marginTop:5,padding:2,borderRadius:20,background:'rgba(255,255,255,.7)'}}>{opt('bruto','Bruto')}{opt('neto','Neto')}</div>
+  </div>
 }
 
 // Vendido NETO por socio (misma definición que metricasAnio de Inicio: Activo + Terminado, sin subarriendo, renovación anual de recurrentes).
