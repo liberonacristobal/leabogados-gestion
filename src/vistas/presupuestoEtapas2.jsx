@@ -8,7 +8,7 @@ import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
 import { nf, mm, mx, mmP, mxP, mp, ufs, pc, sgn, MESL, MESC, Kpi, Mini, Titulo, Panel, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Det, Lista, Grid, LBL, Flecha, tonoEsc, Val, Pestanas, Pliegue, Tarjeta, Ic, difMon, monedaActual, tasa27, tasa26, aUF, unidadUF } from '../lib/presupuestoUI.jsx'
 import { nivelTxt, DSocios } from '../lib/presupuestoBloques.jsx'
 import { filasBase } from './presupuestoEtapas1.jsx'
-import { filasMetas } from './presupuestoMetas.jsx'
+import { filasMetas, ComoSeArma } from './presupuestoMetas.jsx'
 import { DCfg, DIni } from './presupuestoConfigVista.jsx'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
@@ -466,10 +466,13 @@ export function filasSeg(X, kk) {
 // Página de un componente de los pasos 2, 4 y 6: las aclaraciones que antes se abrían dentro de la tarjeta, más el enlace al lugar al que llevaba.
 export function DComp({ X, de, k }) {
   const f = de === 'base' ? filasBase(X, k) : de === 'metas' ? filasMetas(X, k) : filasSeg(X, k)
-  return <Panel hd='Detalle'>
+  return <>
+  {(de === 'base' || de === 'metas') && <ComoSeArma X={X} k={k} />}
+  <Panel hd='Detalle'>
     {f.rows.map(([t, v], i) => (String(v).length > 26 ? <Fila key={i} sin nombre={t} peq={v} valor='' /> : <Fila key={i} sin nombre={t} valor={v} />))}
     {f.go && <Fila nombre={f.go[0]} valor='' onClick={f.go[1]} />}
   </Panel>
+  </>
 }
 
 // Página «Retiros»: tres tarjetas (Retiros, Sueldos, Total) y por socio su total con la apertura retiros + sueldos; Oficina = suma al peso (totalesSocios).

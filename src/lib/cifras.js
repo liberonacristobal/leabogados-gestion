@@ -102,3 +102,6 @@ export function partesM(partes){ return redondearPartes(partes,1e5) }
 export function partesPct(partes){ const v=partes.map(x=>Math.max(0,Number(x)||0)), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),0.1).map(x=>Math.round(x*10)/10):v.map(()=>0) }
 /** Participación entera (suma 100) para mostrar «66 %». @param {Array<number|null|undefined>} partes @returns {number[]} */
 export function partesPctEnt(partes){ const v=partes.map(x=>Math.max(0,Number(x)||0)), t=v.reduce((a,x)=>a+x,0); return t>0?redondearPartes(v.map(x=>x/t*100),1):v.map(()=>0) }
+
+/** Reparto del cierre estimado: real a la fecha + resto = cierre, los tres redondeados a `paso` (1e5 = $M de 1 decimal) y cuadrando: el real se redondea normal y el ajuste cae en el resto. @param {number} aFecha @param {number} resto @param {number} [paso] */
+export function repartoCierre(aFecha, resto, paso=1e5){ const [a,r]=redondearPartes([aFecha,resto],paso,[0]); return {aFecha:a,resto:r,cierre:a+r} }

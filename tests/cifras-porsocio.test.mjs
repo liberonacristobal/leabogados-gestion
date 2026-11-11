@@ -13,3 +13,11 @@ test('partesPctEnt y partesPct: suman 100; negativos y nulos cuentan 0; sin posi
   const d = partesPct([307139309, 169875000, 0]); assert.ok(Math.abs(d.reduce((a, x) => a + x, 0) - 100) < 1e-9)
   assert.deepEqual(partesPctEnt([-5, null, 0]), [0, 0, 0]); assert.deepEqual(partesPctEnt([-140400, 450550000, 230100000]).slice(0, 1), [0])
 })
+
+import { repartoCierre } from './../src/lib/cifras.js'
+test('repartoCierre: real + resto = cierre en $M de 1 decimal (680,2 + 94,2 = 774,4 aunque 94,14 se redondee a 94,1)', () => {
+  const r = repartoCierre(680236110, 94144222.2222)
+  assert.deepEqual([r.aFecha, r.resto, r.cierre], [680200000, 94200000, 774400000]); assert.equal(r.aFecha + r.resto, r.cierre)
+  const z = repartoCierre(0, 0); assert.deepEqual([z.aFecha, z.resto, z.cierre], [0, 0, 0])
+  const u = repartoCierre(17131.43, 2279.4, 1); assert.equal(u.aFecha + u.resto, u.cierre)
+})
