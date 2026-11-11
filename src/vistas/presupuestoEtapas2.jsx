@@ -80,6 +80,51 @@ export function CardEsc({ X, k, editable }) {
 
 
 
+// Paso 5 (alternativa D): tres tarjetas simples (solo Retiros, estado contra la meta y los supuestos en una línea) y un único panel «Cómo se llega» del escenario elegido, con cada fila de la cadena y,
+// al lado, los controles de los que depende: decisión (punto lleno) o supuesto (punto vacío). Duplicar, Renombrar, Eliminar y mover viven en la cabecera del panel.
+function CardEscSimple({ X, k }) {
+  const { est, M, setEsc, MT } = X, e = M.esc[k], p = est.p[k], rk = escenarioMetas(est, CFG), b = M.esc[rk], sel = est.esc === k, tn = tonoEsc(X.tonoDe(k))
+  const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio, MT.cv).find((x) => x.k === k)
+  const fm = (/** @type {number} */ x) => Number(x).toLocaleString('es-CL', { maximumFractionDigits: 1 })
+  return <div onClick={() => setEsc(k)} role='button' tabIndex={0} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setEsc(k) } }} aria-pressed={sel} aria-label={`Escenario ${X.nomEsc(k)}`} style={{ background: C.card, border: sel ? `2px solid ${tn.bd === C.border ? C.accent : tn.bd}` : `1px solid ${tn.bd}`, borderRadius: 12, padding: X.D ? (sel ? 11 : 12) : (sel ? 9 : 10), cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: X.D ? 5 : 3, minWidth: 0, boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}><span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>{sel && <Chip>elegido</Chip>}{k !== rk && b && <Chip tono={e.retiros >= b.retiros ? 'g' : 'r'}>{sgn(e.retiros - b.retiros)}{mmP(Math.abs(e.retiros - b.retiros))} vs {X.nomEsc(rk)}</Chip>}</div>
+    <div style={{ ...LBL, color: C.muted }}>Retiros</div>
+    <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.muted, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
+    <div style={{ fontSize: 11, color: C.muted }}>{e.retiros <= 0 ? 'no alcanza para retirar' : `${mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes`}</div>
+    {cu && cu.dif != null && Math.abs(cu.dif) >= 1 ? <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha></div> : cu && cu.cubre ? <div style={{ fontSize: 12, fontWeight: 700, color: C.greenText }}>Cubre la meta</div> : null}
+    <div style={{ fontSize: 11, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 5 }}>Ventas {fm(p.g)} % · Costos {fm(p.alza)} % · Cobro {p.dias} d</div>
+  </div>
+}
+
+function PanelEsc({ X }) {
+  const { est, M, setPal, setGen, setEsc, MT, D } = X, k = est.esc, e = M.esc[k], p = est.p[k], tn = tonoEsc(X.tonoDe(k)), idx = X.ESC.findIndex((x) => x[0] === k), n = X.ESC.length
+  const [ren, setRen] = useState(false)
+  const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio, MT.cv).find((x) => x.k === k)
+  const ctl = (/** @type {string} */ t, /** @type {boolean} */ dec, /** @type {any} */ el) => <div key={t} style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ ...LBL, fontSize: 10.5, color: C.accent, whiteSpace: 'nowrap' }}>{t}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: C.grisText, background: C.bgSoft, borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', boxSizing: 'border-box', background: dec ? C.grisText : 'transparent', border: `1.5px solid ${C.grisText}` }} />{dec ? 'decisión' : 'supuesto'}</span></div>{el}</div>
+  const stp = (/** @type {string} */ f, /** @type {string} */ suf, /** @type {number} */ d, /** @type {number} */ mn, /** @type {number} */ mx2, int) => <Stp value={p[f]} suf={suf} step={d} min={mn} max={mx2} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} />
+  const fila = (/** @type {string} */ t, /** @type {any} */ v, /** @type {any} */ ctls, tot) => <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(120px,.9fr) 120px minmax(0,3fr)' : '1fr auto', gap: D ? 16 : '4px 10px', alignItems: 'center', padding: D ? '10px 0' : '9px 0', borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}` }}>
+    <span style={{ fontSize: 13, fontWeight: tot ? 800 : 600 }}>{t}</span><b style={{ textAlign: 'right', fontSize: tot ? 17 : 15, fontVariantNumeric: 'tabular-nums', color: tot ? C.greenText : C.text, whiteSpace: 'nowrap' }}><Val v={v} /></b>
+    <div style={{ gridColumn: D ? undefined : '1 / -1', display: 'flex', gap: '8px 18px', flexWrap: 'wrap', alignItems: 'flex-end', minWidth: 0 }}>{ctls}</div></div>
+  return <Panel>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
+      <span style={{ ...LBL, color: C.accent }}>Cómo se llega</span>
+      {ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {n < CFG.maxEscenarios && <Lnk onClick={() => X.duplicarEsc(k)}>Duplicar</Lnk>}<Lnk onClick={() => setRen(true)}>Renombrar</Lnk>{n > 1 && <Lnk rojo onClick={() => X.eliminarEsc(k)}>Eliminar</Lnk>}
+        {n > 1 && <span style={{ display: 'inline-flex', gap: 2 }}>{idx > 0 ? <Lnk titulo='Mover antes' onClick={() => X.moverEsc(k, -1)}>‹</Lnk> : null}{idx < n - 1 ? <Lnk titulo='Mover después' onClick={() => X.moverEsc(k, 1)}>›</Lnk> : null}</span>}</span>
+    </div>
+    <div style={{ padding: '0 16px' }}>
+      {fila('Cobrado', mm(e.caja), <>{ctl('Ventas', false, stp('g', '%', 1, -30, 80))}{ctl('Reajuste UF', false, <Fld kind='pct' suf='%' value={est.reajusteUF} onCommit={(v) => setGen('reajusteUF', v)} w={110} />)}{ctl('Cobro', true, stp('dias', 'd', 5, 0, 90, true))}</>)}
+      {fila('− Comisiones', mm(e.terc), <span style={{ fontSize: 12, color: C.muted }}>Real {X.datos.anioBase}, no se elige</span>)}
+      {fila(`− ${nombreCorto('costos', CFG)}`, mm(e.costos), ctl('Alza de costos', true, stp('alza', '%', 0.5, 0, 20)))}
+      {fila('− Impuesto', mm(e.idpc), <>{ctl('Tasa 1ª categoría', false, <Fld kind='pct' suf='%' value={est.tasaIDPC} onCommit={(v) => setGen('tasaIDPC', v)} w={110} />)}{ctl('PPM del año', false, <FldDin clp={est.ppmAnual} tasa={tasa27()} onCommit={(v) => setGen('ppmAnual', v)} w={150} />)}</>)}
+      {fila('− Aumento de reserva', mm(e.reserva), <>{ctl('Aumento', true, <Fld kind='pct' suf='%' value={est.reserva} onCommit={(v) => setGen('reserva', v)} w={110} />)}{ctl('Reserva en cuenta corriente', true, <FldDin clp={est.reservaIni} tasa={tasa26()} onCommit={(v) => setGen('reservaIni', Math.max(0, v))} w={150} />)}</>)}
+      {fila('= Retiros', mm(e.retiros), ctl('Meta', true, <span style={{ fontSize: 13 }}>{mm(MT.valor)} {cu ? <b style={{ color: cu.cubre ? C.greenText : C.overdueText }}>{cu.cubre ? 'la cubre' : 'no la cubre'}</b> : null}</span>), true)}
+      <div style={{ fontSize: 12, color: C.muted, padding: '9px 0 12px', borderTop: `1px solid ${C.border}` }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''} · punto lleno: decisión tuya; punto vacío: supuesto que estimamos.</div>
+    </div>
+  </Panel>
+}
+
 function TabImp({ X }) {
   const { est, M, setEsc } = X
   return <>
@@ -127,7 +172,7 @@ export function descargarExcel(X) {
 export function Escenarios({ X }) {
   const { est, M, D, ui, setUI, datos: d } = X
   const tabs = [['res', 'Resultado'], ['imp', 'Impuesto'], ['soc', 'Por socio']]
-  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} editable />)}</Grid>
+  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEscSimple key={k} X={X} k={k} />)}</Grid><PanelEsc X={X} /></>
   const cascada = [['', 'Vendido neto (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio, X.MT.cv) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', nombreCorto('costos', CFG), (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Aumento de reserva', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
   const e = M.esc[est.esc]
   const mensual = <div>{MESC.map((m, i) => <Fila key={m} nombre={MESL[i]} sub={monedaActual() === 'clp' ? ufs(e.ingUF[i]) : ''} valor={mx(e.ing[i], e.ingUF[i])} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
@@ -136,7 +181,7 @@ export function Escenarios({ X }) {
      gap: 10, alignItems: 'start' }
   return <>
     <Pestanas options={tabs} value={ui.tab} onChange={(v) => setUI({ tab: v })} />
-    {ui.tab !== 'soc' && <Strip X={X} />}
+    {ui.tab === 'imp' && <Strip X={X} />}
     {ui.tab === 'res' && <><Titulo right={X.MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}>exige <b style={{ color: C.accent }}>{sgn(X.MT.ch.g)}{pc(Math.abs(X.MT.ch.g))}</b> real en UF</span> : null}>Escenarios contra la meta de {nombreComponente(X.MT.ancla, CFG).toLowerCase()} · {mm(X.MT.valor)}<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}> · {nivelTxt(escenariosContraMeta(X.M, X.MT.ancla, X.MT.valor, X.MT.ratio, X.MT.cv).find((x) => x.cubre)?.k ?? null, X.ESC)}</span></Titulo></>}
     {cuerpo}
     <div className='pp-dg' style={dg}>
