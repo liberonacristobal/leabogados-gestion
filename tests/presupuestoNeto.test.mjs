@@ -138,3 +138,14 @@ test('retiros + sueldos por socio: el total de cada socio es la suma de sus part
   assert.deepEqual(totalesSocios({ socios: [], retiros: {}, sueldos: {} }).oficina, { retiros: 0, sueldos: 0, total: 0 })
   assert.equal(totalesSocios({ socios: ['A'], retiros: {}, sueldos: null }).oficina.total, 0)
 })
+
+import { partidaSubarriendo, costosBrutosNetos, ID_SUBARRIENDO } from './../supabase/functions/_shared/presupuesto.js'
+test('subarriendo como partida negativa: costosPresupuesto y toda la cadena quedan netos; sin alza propia; sin ventas no hay partida', () => {
+  const pa = partidaSubarriendo(12_960_000)
+  assert.deepEqual([pa.id, pa.m, pa.meses, pa.alza], [ID_SUBARRIENDO, -1_080_000, 12, 0])
+  assert.equal(partidaSubarriendo(0), null); assert.equal(partidaSubarriendo(null), null)
+  const costos = [{ id: 1, n: 'Arriendo', m: 3_948_900, meses: 12, t: 'fijo', alza: null }, pa]
+  const r = costosBrutosNetos(costos, 4.5)
+  assert.ok(Math.abs(r.brutos - 3_948_900 * 12 * 1.045) < 1e-6); assert.equal(r.subarriendo, -12_960_000); assert.ok(Math.abs(r.netos - (r.brutos + r.subarriendo)) < 1e-6)
+  assert.ok(Math.abs(costosPresupuesto({ costos }, 4.5) - r.netos) < 1e-6)   // el modelo usa la misma cifra neta
+})

@@ -26,6 +26,7 @@ import { coberturaVenta, cuotasCubiertasVenta as _cuotasCubiertasVenta } from '.
 import { vetoCruce, indexVentas } from '../../supabase/functions/_shared/cruceFacturas.js'
 import { UMBRAL_DEUDA, planReasignacionFondos } from '../../supabase/functions/_shared/fondosReglas.js'
 import { anticiposSobreCuotas, clasificarPorFacturar, destinoCuotaFlujo } from '../../supabase/functions/_shared/porFacturar.js'
+import { aseguradoAnio, cuotasEntre } from '../../supabase/functions/_shared/aseguradoAnio.js'
 import { ritmosDePago, EMISION_REZAGO_DIAS } from '../../supabase/functions/_shared/ritmoCobro.js'
 import { CUENTA_HONORARIOS } from './base.jsx'
 import { sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -2282,14 +2283,31 @@ export function useCompromisosCobranza(){
 // se actualizan sin recargar. En la demo no se escribe: la decisión vive solo en la sesión.
 const _noEmitirSubs=new Set(); const _noEmitirDemo=new Map()
 // «Por facturar» de la app para vistas que no son la página Por facturar (p. ej. Presupuesto): las mismas entradas que ella le da a clasificarPorFacturar; la cifra es `grupos.vigente.m`.
-export function usePorFacturar({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], fantasmaIds = null }) {
+export function usePorFacturar({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], fantasmaIds = null, anio = '' }) {
   const noEmitir = useNoEmitirSet()
   const bb = useMemo(() => (billing || []).filter(b => !b.deleted_at && !(fantasmaIds && fantasmaIds.has(String(b.id)))), [billing, fantasmaIds])
   const ufFechas = useUFFechas(bb)
   return useMemo(() => {
     const yaFacturadas = new Set(matchProgEmitidas(bb, clients, clientEntities, { sales }).map(m => String(m.prog.id)))
-    return clasificarPorFacturar({ billing: bb, sales, anticipos, uf: ufFechas || {}, noEmitir, yaFacturadas, hoy: isoLocal(Date.now()) })
-  }, [bb, sales, clients, clientEntities, anticipos, ufFechas, noEmitir])
+    return clasificarPorFacturar({ billing: bb, sales, anticipos, uf: ufFechas || {}, noEmitir, yaFacturadas, hoy: isoLocal(Date.now()), anio })
+  }, [bb, sales, clients, clientEntities, anticipos, ufFechas, noEmitir, anio])
+}
+
+// «Lo que el año base deja asegurado para el año siguiente» (paso Arrastre del Presupuesto): cuotas de proyectos vigentes del año siguiente + asesorías × 12 (aseguradoAnio, _shared), con los clientes morosos del flujo señalados;
+// más lo que vence en nov-dic del año base (es del año base) y el por cobrar de hoy. Cada cifra sale de su helper de siempre (clasificarPorFacturar, flujoCajaProyectado, porCobrarBills).
+export function useAseguradoPresupuesto({ billing = [], sales = [], clients = [], clientEntities = [], anticipos = [], terceros = [], costosOfiRows = [], expenses = [], fantasmaIds = null, anioBase }) {
+  const sig = String(anioBase + 1), base = String(anioBase)
+  const R = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: sig })
+  const R0 = usePorFacturar({ billing, sales, clients, clientEntities, anticipos, fantasmaIds, anio: base })
+  const F = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, fantasmaIds, conMorosos: false })
+  const ufRef = useUF().uf || UF_FALLBACK
+  return useMemo(() => {
+    const asesorias = (sales || []).filter(s => s && !s.deleted_at && esRecurrente(s) && !esSubarriendo(s)).map(s => ({ cid: s.client_id, anual: ventaCLP(s, ufRef) }))
+    const morosos = new Set(((F && F.exclMor && F.exclMor.items) || []).map(x => String((x.b && x.b.client_id) || '')))
+    const a = aseguradoAnio({ filas: R.filas, asesorias, morosos })
+    const bills = (billing || []).filter(b => !(fantasmaIds && fantasmaIds.has(String(b.id))))
+    return { ...a, nAsesorias: asesorias.length, novDic: cuotasEntre(R0.filas, `${base}-11-01`, `${base}-12-31`), porCobrarHoy: porCobrarBills(bills), nPorCobrar: bills.filter(b => b && !b.deleted_at && b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type) && saldoBill(b) > 0).length }
+  }, [R, R0, F, sales, billing, fantasmaIds, base, ufRef])
 }
 export function useNoEmitirSet(){
   const [s,setS]=useState(()=>new Set()); const [n,setN]=useState(0)

@@ -1,7 +1,7 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
-import { VacioPaso, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
+import { costosPresupuesto, costosBrutosNetos, ID_SUBARRIENDO, mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { VacioPaso, Ic, LBL, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
@@ -107,7 +107,49 @@ export function Base({ X }) {
     ['Por facturar', 'cuotas de ventas ya vendidas · fuera de Vendido nuevo', m26(X.porFacturar || 0), X.irPorFacturar],
     ['Vendido nuevo', `meta de ventas ${Y} (neta) − recurrente`, vNuevo, () => ir({ etapa: 3 })],
   ]
+  // Paso 2 «Arrastre»: lo que el año base deja asegurado para el año siguiente (aseguradoAnio, _shared). Lo que el paso mostraba antes queda en su plegable.
+  const A = X.asegurado, rk = escenarioMetas(est, CFG), alza = est.p[rk].alza, terc = est.p[rk].terc
+  const costos = costosPresupuesto(est, alza), comis = A.total * terc / 100, margen = A.total - costos - comis
+  const cubre = costos > 0 ? (A.total / costos) * 100 : null
+  const par = mm
+  const recup = -costosBrutosNetos(est.costos, alza).subarriendo   // misma función y partida que el paso 3
+  const pcT = (/** @type {number} */ n) => pc(n, Number.isInteger(n) ? 0 : 1)
+  const nomMor = A.morosos.cids.slice(0, 6).map((c) => X.cliNom(c))
+  const detalle = !!ui.asegDet
+  const nota = (/** @type {any} */ t) => <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: C.text }}><span aria-hidden='true' style={{ width: 8, height: 8, borderRadius: '50%', background: C.done, flexShrink: 0, marginTop: 5 }} /><span style={{ minWidth: 0 }}>{t}</span></div>
   return <>
+    <Titulo>Lo que {Y - 1} deja asegurado para {Y}</Titulo>
+    <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: D ? 12 : 8, alignItems: 'start' }}>
+      <Panel hd='Ingresos asegurados'>
+        <Fila nombre='Por facturar' peq='cuotas de proyectos ya vendidos' valor={par(A.proyectos)} onClick={X.irPorFacturar} />
+        <Fila sin nombre='Asesorías permanentes' peq={`${A.nAsesorias} ventas mensuales × 12`} valor={par(A.asesorias)} />
+        <Fila tot nombre='Facturado asegurado' valor={par(A.total)} abierta={detalle} onClick={() => setUI({ asegDet: !detalle })} />
+        {detalle && <div style={{ background: C.bgSoft }}>{A.porCliente.slice(0, 12).map((c) => <Fila key={c.cid} sin nombre={X.cliNom(c.cid)} peq={c.moroso ? 'con factura morosa' : c.asesorias > 0 && c.proyectos > 0 ? 'proyectos y asesoría' : c.asesorias > 0 ? 'asesoría' : 'proyectos'} valor={par(c.total)} />)}{A.porCliente.length > 12 && <div style={{ padding: '6px 16px 10px', fontSize: 12, color: C.muted }}>y {A.porCliente.length - 12} clientes más</div>}</div>}
+      </Panel>
+      <Panel hd='Costos base'>
+        <Fila nombre='Costos de la oficina' peq={`neto de subarriendo y gastos recuperados · con alza de ${pc(alza)}`} valor={par(costos)} onClick={() => ir({ etapa: 2 })} />
+        <Fila sin nombre={`Comisiones ${pcT(terc)} del asegurado`} valor={par(comis)} />
+        <Fila tot sin nombre='Costos y comisiones' valor={par(costos + comis)} />
+      </Panel>
+    </div>
+    <Panel pad>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: C.muted }}>{cubre != null ? `El asegurado cubre ${pc(cubre)} de los costos` : 'Sin costos'}</span>
+        <span style={{ fontSize: 13 }}>Margen asegurado <b style={{ fontSize: D ? 21 : 18, color: margen >= 0 ? C.greenText : C.overdueText, marginLeft: 8 }}><Val v={par(margen)} /></b></span>
+      </div>
+    </Panel>
+    <Panel hd='Aparte del asegurado'>
+      <Fila nombre='Por cobrar hoy' peq={`${A.nPorCobrar} facturas emitidas no pagadas · base de caja de ${Y}`} sin valor={par(A.porCobrarHoy)} />
+      <Fila sin nombre='Subarriendo y gastos recuperados' peq={`${mm(recup / 12)} al mes · no es ingreso: rebaja el arriendo`} valor={par(recup)} />
+    </Panel>
+    {A.morosos.n > 0 && nota(<><b style={{ color: C.accent }}>{par(A.morosos.monto)} del asegurado</b> ({pc(A.morosos.pct)}) está en {A.morosos.n} cliente{A.morosos.n !== 1 ? 's' : ''} con factura morosa: {nomMor.join(', ')}{A.morosos.n > nomMor.length ? ` y ${A.morosos.n - nomMor.length} más` : ''}. Se señala; no se descuenta.</>)}
+    {A.novDic > 0 && nota(<>Las cuotas que vencen en nov-dic de {Y - 1} (<b style={{ color: C.accent }}>{par(A.novDic)}</b> vigentes) son de {Y - 1}, no de {Y}.</>)}
+    <Pliegue t='Cómo se calcula' v='lo asegurado, sin contar dos veces'><div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+      <span>Facturado asegurado: las cuotas de proyectos que vencen en {Y} más las asesorías permanentes por 12 meses.</span>
+      <span>No se cuentan las cuotas de las asesorías (ya van por 12 meses) ni el subarriendo y gastos recuperados, que no es ingreso.</span>
+      <span>Costos: los de la oficina con el alza del escenario {X.nomEsc(rk)}, descontado el subarriendo y gastos recuperados; comisiones sobre lo facturado.</span>
+      <span>Margen asegurado: lo asegurado menos costos y comisiones, antes de vender nada nuevo.</span></div></Pliegue>
+    <Pliegue t={`Base de los últimos 12 meses cerrados`} v='lo que mostraba el paso antes'><div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: D ? 10 : 8 }}>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
     <ComoSeCalcula X={X} de='base' />
@@ -123,6 +165,7 @@ export function Base({ X }) {
         : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 6 : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{Array.from({ length: 12 }, (_, i) => tile(i))}</div>}
       <Fila tot sin nombre='Total base' peq='UF de cada mes' sub={monedaActual() === 'clp' ? ufs(totUF) : ''} valor={mx(tot, totUF)} />
     </Det>
+    </div></Pliegue>
   </>
 }
 
@@ -135,18 +178,20 @@ export function Costos({ X }) {
   const val = (c, kk) => monto27(c, est.p[kk].alza)
   const dc = difMon(e.costos, tot26), Y = d.anio
   const mats = ui.mats || []
+  const cb = costosBrutosNetos(est.costos, p.alza)
   const cotC = est.costos.find((c) => c.id === 'cot-empleador'), cotV = cotC ? val(cotC, k) : 0   // alza de cotización del empleador (si la partida sigue y vale algo)
   const itemsDe = (c) => (d.costos.find((x) => String(x.id) === String(c.id))?.items) || []
   // Una fila por materia (c.g si la partida es por persona; si no, su nombre), de mayor a menor monto 2027; todo cerrado al entrar.
   const mapa = {}
-  est.costos.forEach((c, i) => { const m = c.g || c.n; (mapa[m] || (mapa[m] = { m, it: [] })).it.push([c, i]) })
+  const subIt = est.costos.map((c, i) => [c, i]).find(([c]) => c.id === ID_SUBARRIENDO)   // fila propia al final de Partidas
+  est.costos.forEach((c, i) => { if (c.id === ID_SUBARRIENDO) return; const m = c.g || c.n; (mapa[m] || (mapa[m] = { m, it: [] })).it.push([c, i]) })
   const materias = Object.values(mapa).map((x) => ({ ...x, t27: x.it.reduce((a, [c]) => a + val(c, k), 0), t26: x.it.reduce((a, [c]) => a + costoAnualBase(c, Yb), 0) })).sort((a, b) => b.t27 - a.t27)
   const partida = ([c, i]) => {
         const v = val(c, k), abierto = ui.abierta === i, rj = reajusteVigente(c, Yb), efec = c.alza == null ? p.alza : c.alza
-        const peq = [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
+        const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
         const campos = <>
           <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>Aumento</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><Fld sobrio kind='pct' suf='%' value={efec} onCommit={(x) => patchCosto(i, fijarAlza(x == null ? 0 : x))} label={`Aumento de ${c.n}`} /></span></div>
-          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => patchCosto(i, fijarMonto27(c, x == null ? 0 : x))} label={`Monto ${Y} de ${c.n}`} /></span></div>
+          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => patchCosto(i, c.m < 0 ? { m: -Math.abs(x == null ? 0 : x) / Math.max(1, c.meses), alza: 0 } : fijarMonto27(c, x == null ? 0 : x))} label={`Monto ${Y} de ${c.n}`} /></span></div>
         </>
         return <div key={c.id}>
           <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 96px 84px 160px' : 'minmax(0,1fr) minmax(0,1fr)', gap: D ? 14 : '6px 18px', alignItems: 'center', padding: D ? '10px 16px 10px 30px' : '10px 16px 10px 24px', borderTop: `1px solid ${C.border}`, fontSize: 13, background: abierto ? C.bgSoft : 'transparent' }}>
@@ -156,7 +201,7 @@ export function Costos({ X }) {
           </div>
           {abierto && <div style={{ background: C.bgSoft, padding: '2px 16px 14px', display: 'grid', gridTemplateColumns: D ? (c.id === 'cot-empleador' ? 'minmax(0,2.4fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr)' : 'minmax(0,1.6fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr)') : 'repeat(2,minmax(0,1fr))', gap: 10, alignItems: 'end' }}>
             <div style={{ gridColumn: D ? undefined : '1 / -1' }}><div style={eti}>Nombre</div><Fld text value={c.n} onCommit={(x) => setCosto(i, 'n', x)} /></div>
-            <div><div style={eti}>Monto por mes</div><FldDin w={150} clp={c.m} tasa={tasa26()} onCommit={(x) => setCosto(i, 'm', Math.max(0, x))} /></div>
+            <div><div style={eti}>{c.m < 0 ? 'Rebaja por mes' : 'Monto por mes'}</div><FldDin w={150} clp={Math.abs(c.m)} tasa={tasa26()} onCommit={(x) => setCosto(i, 'm', c.m < 0 ? -Math.max(0, x) : Math.max(0, x))} /></div>
             <div><div style={eti}>Meses</div><Fld kind='int' suf='de 12' w={96} value={c.meses} onCommit={(x) => setCosto(i, 'meses', Math.min(12, Math.max(0, Math.round(x))))} /></div>
             <div><div style={eti}>Aumento propio</div><Fld kind='pct' suf='%' w={96} ph={String(p.alza).replace('.', ',')} value={c.alza} onCommit={(x) => setCosto(i, 'alza', x)} /></div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: C.muted }}>
@@ -182,7 +227,7 @@ export function Costos({ X }) {
     const abre = mats.includes(m), aum = t26 > 0 ? (t27 / t26 - 1) * 100 : null, inc = it.length === 1 ? itemsDe(it[0][0]) : []
     return <div key={m}>
       <div onClick={() => setUI({ mats: abre ? mats.filter((x) => x !== m) : [...mats, m] })} role='button' aria-expanded={abre} style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 96px 84px 160px' : 'minmax(0,1fr) auto', gap: D ? 14 : 10, alignItems: 'center', padding: D ? '13px 16px' : '10px 14px', borderTop: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 13, background: abre ? C.bgSoft : 'transparent' }}>
-        <div style={{ minWidth: 0 }}><span style={{ fontWeight: 700 }}>{m}</span>{' '}<span style={{ color: C.done, display: 'inline-block', transform: abre ? 'rotate(90deg)' : 'none' }}>›</span>{!D && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{aum != null ? `${aum >= 0 ? '+' : '−'}${pc(Math.abs(aum))} · ` : ''}{m26(t26)} en {Yb}</div>}</div>
+        <div style={{ minWidth: 0 }}><span style={{ fontWeight: 700 }}>{m}</span>{' '}<span style={{ color: C.done, display: 'inline-block', transform: abre ? 'rotate(90deg)' : 'none' }}>›</span>{subIt && m === 'Arriendo y espacio' && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>bruto</div>}{!D && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{aum != null ? `${aum >= 0 ? '+' : '−'}${pc(Math.abs(aum))} · ` : ''}{m26(t26)} en {Yb}</div>}</div>
         {D && <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{m26(t26)}</span>}
         {D && <span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{aum != null ? `${aum >= 0 ? '+' : '−'}${pc(Math.abs(aum))}` : '—'}</span>}
         <b style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.accent }}><Val v={mm(t27)} /></b>
@@ -192,21 +237,27 @@ export function Costos({ X }) {
   }
   return <>
     {/* H02 / N05 / R3: una sola cifra de costos y un solo nombre; el «vigente» pasa al detalle («Cómo se calcula»); tarjetas A2 con textos breves */}
-    <Tarjeta tono='t' ic='egr' label={`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`} aria={`${nombreCorto('costos', CFG)} ${Y}`} izq={{ cap: 'Costos', val: mm(e.costos) }} der={{ cap: 'Comisiones', val: mm(e.terc) }} cmp={<span>{dc.sg}{dc.abs} contra hoy</span>} cmp2={cotC && cotV > 0 ? <span>de lo cual, alza de cotización +{mmP(cotV)}</span> : null} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} />
+    <div role='button' tabIndex={0} aria-label={`${nombreCorto('costos', CFG)} ${Y}`} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} onKeyDown={(ev) => { if (ev.key === 'Enter') ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } }) }} style={{ background: C.tealBg, border: `1px solid ${C.tealBg}`, color: C.tealText, borderRadius: 12, padding: D ? '10px 14px' : '8px 10px', cursor: 'pointer', display: 'grid', gridTemplateColumns: `${D ? 36 : 28}px minmax(0,1fr)`, columnGap: D ? 12 : 8, rowGap: 4, alignItems: 'center', minWidth: 0 }}>
+      <span style={{ gridRow: '1 / span 3', width: D ? 36 : 28, height: D ? 36 : 28, borderRadius: 10, background: C.card, display: 'grid', placeItems: 'center' }}><Ic n='egr' s={D ? 18 : 15} /></span>
+      <div style={{ ...LBL, fontSize: D ? 13 : 12, color: C.tealText }}>{`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 4 : 2},minmax(0,1fr))`, gap: D ? 16 : '6px 10px' }}>{[['Costos brutos', cb.brutos], ['Recuperado', cb.subarriendo, 'Subarriendo y gastos recuperados'], ['Costos netos', cb.netos], ['Comisiones', e.terc]].map(([cap2, v2, full]) => <div key={cap2} title={full} aria-label={full ? `${full}: ${mm(v2)}` : undefined} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 10.5, color: C.tealText, opacity: 0.85, whiteSpace: 'nowrap' }}>{cap2}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.6, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><Val v={mm(v2)} /></div></div>)}</div>
+      <div style={{ fontSize: D ? 12 : 11, color: C.muted, display: 'flex', gap: '0 12px', flexWrap: 'wrap' }}><span>{dc.sg}{dc.abs} contra hoy</span>{cotV > 0 && <span>de lo cual, alza de cotización +{mmP(cotV)}</span>}</div>
+    </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
           <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
-          <Fila nombre='Comisiones' peq={`variable · ${pc(p.terc)} de lo cobrado · se ajusta arriba`} valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
+          <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
           <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
+          {subIt && materia({ m: subIt[0].n, it: [subIt], t27: val(subIt[0], k), t26: costoAnualBase(subIt[0], Yb) })}
           <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>
         </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cómo se calcula'><Lista items={[<span><b>Alza de cotización del empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cómo se calcula'><Lista items={[<span><b>Alza de cotización del empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Subarriendo y gastos recuperados: lo que paga el subarrendatario (mensual × 12) rebaja los costos; es una partida editable al final de Partidas, sin alza.', 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }

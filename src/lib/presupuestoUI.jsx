@@ -309,7 +309,7 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acc
         return <span key={nom} style={{ display: 'contents' }}>
           {i > 0 && <span aria-hidden='true' style={{ flex: 1, height: 2, background: hechos.includes(i - 1) ? C.normal : C.border }} />}
           <button className='pp-tac' title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', revisado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', padding: 0, width: 44, height: 44, display: 'grid', placeItems: 'center', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, margin: '0 -6px' }}>
-            <span style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}>{ok ? '✓' : i + 1}</span>
+            <span style={{ width: 32, height: 32, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700 }}>{i + 1}</span>
           </button></span> })}
     </div>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -321,11 +321,11 @@ export function Pasos({ nombres, activa, hechos, onIr, anioBase, anio, desc, acc
   // Escritorio: una sola franja (la línea de tiempo «Año base | Presupuesto» sobre los pasos, y la nota a la derecha); el paso activo ya se lee en la franja, sin segunda fila de título.
   const cols = `repeat(${n},minmax(0,1fr)) auto`
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-    <div style={{ display: 'grid', gridTemplateColumns: cols }}><span style={{ ...cap, paddingBottom: 3 }}>Año base {anioBase}</span><span style={{ ...cap, paddingBottom: 3, gridColumn: `2 / span ${n - 1}`, marginLeft: 8 }}>Presupuesto {anio}</span><span /></div>
+    <div style={{ display: 'grid', gridTemplateColumns: cols }}><span style={{ ...cap, paddingBottom: 3, gridColumn: '1 / span 2' }}>Año base {anioBase}</span><span style={{ ...cap, paddingBottom: 3, gridColumn: `3 / span ${n - 2}`, marginLeft: 8 }}>Presupuesto {anio}</span><span /></div>
     <div role='group' aria-label='Pasos del presupuesto' style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center' }}>
       {nombres.map((nom, i) => { const on = activa === i, ok = !on && hechos.includes(i)
-        return <button key={nom} className='pp-tac' title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', visitado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : C.muted, fontWeight: on ? 800 : 600, fontSize: 13 }}>
-          <span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : ok ? C.greenBg : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{ok ? '✓' : i + 1}</span>
+        return <button key={nom} className='pp-tac' title={nom} aria-current={on ? 'step' : undefined} aria-label={`Paso ${i + 1}: ${nom}${ok ? ', visitado' : ''}`} onClick={() => onIr(i)} style={{ border: 0, background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', textAlign: 'left', minWidth: 0, width: '100%', boxSizing: 'border-box', color: on ? C.accent : ok ? C.greenText : C.muted, fontWeight: on ? 800 : 600, fontSize: 13 }}>
+          <span style={{ width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${on ? C.accent : ok ? C.normal : C.done}`, background: on ? C.accent : C.card, color: on ? '#fff' : ok ? C.greenText : C.muted, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{nom}</span>
         </button> })}
       <div style={{ paddingLeft: 10 }}>{acciones}</div>

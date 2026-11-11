@@ -5,7 +5,7 @@
 // Plano: CAJA (el régimen Pro Pyme tributa lo percibido menos lo pagado). Sociedad de profesionales exenta de IVA: lo facturado es el neto.
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
-/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
+/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean, auto?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
 
 /** Configuración por estudio (presupuestoConfig.js): toda regla que depende del estudio o del país la recibe como `cfg` opcional; sin ella usa el defecto del tenant actual. */
@@ -758,6 +758,17 @@ export function totalesSocios({ socios, retiros, sueldos }) {
   const filas = (socios || []).map((s) => { const r = Math.round(num((retiros || {})[s])), w = Math.round(num((sueldos || {})[s])); return { socio: s, retiros: r, sueldos: w, total: r + w } })
   const oficina = filas.reduce((a, f) => ({ retiros: a.retiros + f.retiros, sueldos: a.sueldos + f.sueldos, total: a.total + f.total }), { retiros: 0, sueldos: 0, total: 0 })
   return { filas, oficina }
+}
+/** Partida automática del subarriendo: negativa (rebaja el arriendo; lo que paga el subarrendatario incluye otros costos prorrateados). La identifica el id 'subarriendo-oficina'. */
+export const ID_SUBARRIENDO = 'subarriendo-oficina'
+export const NOMBRE_SUBARRIENDO = 'Subarriendo y gastos recuperados'
+/** Partida del subarriendo a partir de lo anual en CLP de las ventas de subarriendo activas (monto mensual × 12, sin alza propia); null si no hay. @param {number} anual @returns {PartidaCosto|null} */
+export function partidaSubarriendo(anual) { const a = Math.round(num(anual)); return a > 0 ? { id: ID_SUBARRIENDO, n: NOMBRE_SUBARRIENDO, m: -Math.round(a / 12), meses: 12, t: 'fijo', alza: 0, auto: true } : null }
+/** Costos brutos (partidas positivas), subarriendo (negativas) y netos de un presupuesto de costos 2027 con el alza del escenario. @param {PartidaCosto[]} costos @param {number} alza */
+export function costosBrutosNetos(costos, alza) {
+  const v = (/** @type {PartidaCosto} */ c) => num(c.m) * num(c.meses) * (1 + (c.alza == null ? alza : num(c.alza)) / 100)
+  const brutos = (costos || []).filter((c) => num(c.m) >= 0).reduce((a, c) => a + v(c), 0), sub = (costos || []).filter((c) => num(c.m) < 0).reduce((a, c) => a + v(c), 0)
+  return { brutos, subarriendo: sub, netos: brutos + sub }
 }
 /** Nombre de la partida automática del alza de cotización del empleador (Ley 21.735); la identifica el id 'cot-empleador'. */
 export const NOMBRE_COT_EMPLEADOR = 'Alza de cotización del empleador (estimación)'
