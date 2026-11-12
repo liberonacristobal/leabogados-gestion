@@ -46,12 +46,16 @@ export function Mirada({ X }) {
     if (k === 'margen') return <Tarjeta key={k} {...base} izq={{ cap: 'Real', val: mx(o.marg.clp, o.marg.uf) }} der={{ cap: 'En caja', val: mx(r26.margen.aFecha, RU.margen.aFecha) }} cmp={<span>{o.marg.pct != null ? pc(o.marg.pct, 0) + ' de ingresos' : '—'}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'marg' } })} />
     return <Tarjeta key={k} {...base} izq={d.retiros26.total > 0 ? { cap: 'Real', val: mx(d.retiros26.total, d.retiros26.totalUF) } : { cap: 'Real', val: 'Sin retiros' }} der={d.retiros26.total > 0 ? { cap: 'Por socio', val: mx(d.retiros26.total / nSoc, d.retiros26.totalUF / nSoc) } : undefined} cmp={d.retiros26.total > 0 ? <span> </span> : <span>{D ? 'sin retiros registrados' : ''}{D && <> · <span role='button' onClick={(ev) => { ev.stopPropagation(); X.onOpenSocios && X.onOpenSocios() }} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer' }}>Socios ›</span></>}</span>} onClick={() => ir({ drill: { t: 'ind', k: 'ret26' } })} />
   })
+  const RH = D ? '102px' : '74px'   // alto único de las filas de Indicadores y de Mes a mes (cada fila de la izquierda mide lo mismo que la de la derecha)
   const tile = (m) => {
     const x = m.f && m.a && fv(m.a) && m.i < H ? (fv(m.f) / fv(m.a) - 1) * 100 : null, at = atip.has(m.i)   // el mes en curso no se compara (queda «a la fecha»)
-    return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? '9px 12px' : '8px 9px', cursor: 'pointer', minWidth: 0, display: 'flex', flexDirection: 'column', gap: D ? 1 : 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: C.accent }}>{D && !dosCol ? MESL[m.i] : MESC[m.i]}</span>{at ? <span style={{ fontSize: 11, fontWeight: 700, color: C.soonText }}>atípico</span> : m.i === H ? <span style={{ fontSize: 11, color: C.muted }}>a la fecha</span> : null}{x == null ? null : <Chip tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</div>
-      <div style={{ fontSize: D ? 21 : 14, fontWeight: 800, letterSpacing: -0.4, color: C.accent }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
-      <div style={{ fontSize: 11, color: C.muted }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}</div>
+    const marca = at ? <span style={{ fontSize: 10, fontWeight: 700, color: C.soonText, whiteSpace: 'nowrap' }}>atípico</span> : m.i === H ? <span style={{ fontSize: 10, color: C.muted, whiteSpace: 'nowrap' }}>a la fecha</span> : null   // escritorio: línea propia reservada; celular: en la cabecera
+    // Todas las tarjetas del mismo tamaño: alto lo fija la fila de la grilla (RH); cabecera de una línea (mes a la izquierda, variación a la derecha; «atípico» y «a la fecha» en su propia línea reservada en escritorio), cifra y cobrado siempre en el mismo lugar.
+    return <div key={m.i} onClick={() => ir({ drill: { t: 'mes', i: m.i } })} data-mes-tarjeta style={{ background: at ? C.soonBg : C.card, border: `1px solid ${at ? C.avisoLine : C.border}`, borderRadius: 12, padding: D ? '9px 10px' : '8px 10px', cursor: 'pointer', minWidth: 0, boxSizing: 'border-box', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: D ? 22 : 18, flexWrap: 'nowrap' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: C.accent, whiteSpace: 'nowrap' }}>{D && !dosCol ? MESL[m.i] : MESC[m.i]}</span>{!D && marca}<span style={{ marginLeft: 'auto', flexShrink: 0 }}>{x == null ? null : <Chip chico tono={x >= 0 ? 'g' : 'r'}>{sgn(x)}{pc(Math.abs(x), 0)}</Chip>}</span></div>
+      <div style={{ fontSize: D ? 21 : 17, fontWeight: 800, letterSpacing: -0.4, color: C.accent, lineHeight: 1.15, whiteSpace: 'nowrap' }}>{m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—'}</div>
+      <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>cobrado {m.cob != null ? mxP(m.cob, d.cobMesUF[ym(Y, m.i)]) : '—'}</div>
+      {D && <div style={{ fontSize: 10, height: 13, lineHeight: '13px' }}>{marca}</div>}
     </div>
   }
   // Primer año sin historia: no hay nada que mostrar; se parte desde cero (Costos → Metas → Escenarios).
@@ -63,17 +67,17 @@ export function Mirada({ X }) {
     {/* Escritorio: Indicadores y Mes a mes lado a lado (4 × 3) y debajo Clientes; en tabla y en el celular, uno bajo otro */}
     {(() => {
       const mesB = <div key='mes' style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
-    <Titulo right={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{atip.size > 0 && <Chip tono='y'>{atip.size} atípicos</Chip>}{D && <Seg options={[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']]} value={ui.vm} onChange={(v) => setUI({ vm: v })} />}</span>}>Mes a mes · {Y} contra {Y - 1}</Titulo>
+    <Titulo style={{ minHeight: 30 }} right={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{atip.size > 0 && <Chip tono='y'>{atip.size} atípicos</Chip>}{D && <Seg options={[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']]} value={ui.vm} onChange={(v) => setUI({ vm: v })} />}</span>}>Mes a mes · {Y} contra {Y - 1}</Titulo>
     {ui.vm === 'tabla' && D
       ? <Panel><div style={{ display: 'grid', gridTemplateColumns: '120px repeat(12,minmax(0,1fr))', fontSize: 12 }}>
         <span />{MESC.map((m, i) => <span key={m} onClick={() => ir({ drill: { t: 'mes', i } })} style={{ padding: '9px 6px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: C.accent, cursor: 'pointer' }}>{m}</span>)}
         {[['Facturado ' + (Y - 1), (m) => (m.a ? <Val v={mx(m.a.fac, m.a.facUF)} /> : '—')], ['Facturado ' + Y, (m) => (m.f ? <Val v={mx(m.f.fac, m.f.facUF)} /> : '—')], ['Cobrado ' + Y, (m) => (m.cob != null ? <Val v={mx(m.cob, d.cobMesUF[ym(Y, m.i)])} /> : '—')]].map(([t, f]) => [<span key={t} style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}` }}>{t}</span>, ...meses.map((m) => <span key={t + m.i} style={{ padding: '10px 6px', textAlign: 'right', borderTop: `1px solid ${C.border}` }}>{f(m)}</span>)])}
       </div></Panel>
-      : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? (dosCol ? 4 : 6) : 3},minmax(0,1fr))`, gap: D ? 10 : 6 }}>{meses.map(tile)}</div>}
+      : <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? (dosCol ? 4 : 6) : 2},minmax(0,1fr))`, gridAutoRows: RH, gap: D ? 10 : 8 }}>{meses.map(tile)}</div>}
       </div>
       const indB = <div key='ind' style={{ display: 'flex', flexDirection: 'column', gap: D ? 8 : 10, minWidth: 0 }}>
-    <Titulo>Indicadores {Y}</Titulo>
-    <Grid cols={dosCol ? 2 : 3} colsM={2} style={{ gridAutoRows: '1fr' }}>{indic.map(([ic, l, v, , cl, k]) => <Mini key={k} ic={ic} label={l} value={v} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
+    <Titulo style={{ minHeight: 30 }}>Indicadores {Y}</Titulo>
+    <Grid cols={dosCol ? 2 : 3} colsM={2} style={{ gridAutoRows: RH }}>{indic.map(([ic, l, v, , cl, k]) => <Mini key={k} ic={ic} label={l} value={v} cls={cl} onClick={() => ir({ drill: { t: 'ind', k } })} />)}</Grid>
       </div>
       const cliB = <Panel key='cli' hd={`Clientes que más facturaron · ${Y}`} small={`los 5 primeros suman ${pc(conc * 100, 0)}`}>
         {d.clientes.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay facturas emitidas este año.</div>
