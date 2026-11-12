@@ -9,7 +9,14 @@ const rutNorm = (/** @type {any} */ r) => String(r || '').replace(/[^0-9kK]/g, '
  * palabras son siempre las mismas, así que la clave de glosa es una sola para todas esas transferencias y no sirve para aprender.
  * @param {any} desc
  */
-export const glosaGenerica = desc => /^transferencia de (liberona|quad ases)/.test(norm(desc))
+export const glosaGenerica = desc => /^transferencia de (liberona|quad ases)/.test(norm(desc)) || esPagoTGR(desc)
+
+/**
+ * Pago a la Tesorería General de la República desde la cuenta («Cargo por Pago TGR Nro. Oper. …», «Cargo por Pago de Impuesto (TGR)»).
+ * La glosa no trae RUT ni nombre: por cuenta de un cliente, el cliente hay que elegirlo; su clave de glosa sería la misma para todos.
+ * @param {any} desc
+ */
+export function esPagoTGR(desc) { return /^cargo por pago (de impuesto )?tgr\b/.test(norm(desc)) }
 
 /**
  * Clasificación aprendida por RUT: lo que siempre se hizo con los cargos a ese RUT (gasto de oficina ya registrado).

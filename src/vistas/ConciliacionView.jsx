@@ -1,7 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { clasificacionPorRut, clientePorMensaje, glosaGenerica } from '../../supabase/functions/_shared/cargoAprendido.js'
+import { clasificacionPorRut, clientePorMensaje, esPagoTGR, glosaGenerica } from '../../supabase/functions/_shared/cargoAprendido.js'
 import { demoData } from '../demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from '../cartola.js'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../../supabase/functions/_shared/conciliacionReglas.js'
@@ -1717,6 +1717,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(provByRut[k]&&!provConComisiones(provDeCargo(m))) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}   // con comisiones → pago de comisión, no gasto
       const ap=clasifPorRut.get(k); if(ap) return {fam:'oficina',category:ap.category,sub:ap.sub,via:'RUT'}   // lo que siempre se hizo con ese RUT
     }
+    if(esPagoTGR(m.descripcion)) return {fam:'cliente',clientId:null,via:'TGR'}   // pago a la Tesorería: siempre por cuenta de un cliente (la glosa no dice cuál)
     // El mensaje de la transferencia nombra la sociedad de un cliente («Inscripción a nombre de …»): gasto de ese cliente.
     const cm=m.detalle_aviso&&clientePorMensaje(m.detalle_aviso,candCli); if(cm) return {fam:'cliente',clientId:cm,via:'mensaje'}
     const gk=glosaGenerica(m.descripcion)?null:glosaKey(m.descripcion)   // la glosa «Transferencia de LIBERONA ESCALA…» no dice a quién: su clave sería la misma para todas
@@ -2138,6 +2139,10 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
+      if(!sug.clientId) return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText}}>Gasto Cliente</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>pago a la TGR · siempre por cuenta de un cliente</div></div>
+        <button disabled={busy===m.id} onClick={()=>setCcFam(p=>({...p,[m.id]:'cliente'}))} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.coralText,color:'#fff'}}>Elegir</button>
+      </div>
       const cnm=cmap[sug.clientId]||'cliente'
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · {sug.via==='mensaje'?'del mensaje de la transferencia':'de la glosa'} · solo control</div></div>
@@ -2755,6 +2760,11 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div>)
     }
+    if(!sug.clientId) return (
+      <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText}}>Gasto Cliente</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>pago a la TGR · siempre por cuenta de un cliente</div></div>
+        <button disabled={busy===m.id} onClick={()=>{ setCcFam(p=>({...p,[m.id]:'cliente'})); setModalMov(m.id) }} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Elegir</button>
+      </div>)
     const cnm=cmap[sug.clientId]||'cliente'
     return (
       <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>

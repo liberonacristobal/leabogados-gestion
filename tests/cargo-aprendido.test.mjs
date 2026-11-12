@@ -1,7 +1,7 @@
 // Cargos del banco: el RUT de una transferencia con la glosa cortada, la clasificación aprendida por RUT y el cliente que nombra el mensaje. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { glosaGenerica, clasificacionPorRut, clientePorMensaje } from './../supabase/functions/_shared/cargoAprendido.js'
+import { glosaGenerica, esPagoTGR, clasificacionPorRut, clientePorMensaje } from './../supabase/functions/_shared/cargoAprendido.js'
 import { extraerContraparte } from './../src/cartola.js'
 
 test('transferencia entre bancos con la glosa cortada: el destino (persona) y su RUT salen igual que con «a Cuenta Corriente…»', () => {
@@ -34,4 +34,8 @@ test('el mensaje que nombra la sociedad de un cliente lo identifica; con dos cli
   assert.equal(clientePorMensaje('Aseo oficina', cands), null)
   assert.equal(clientePorMensaje('', cands), null)
   assert.equal(clientePorMensaje('Inscripción a nombre de SpA', [{ id: 'x', nombres: ['Inversiones SpA'] }]), null)   // sin palabra propia
+})
+test('pago a la TGR: se reconoce en sus dos glosas, no tiene a quién y no sirve de clave de aprendizaje', () => {
+  for (const d of ['Cargo por Pago TGR Nro. Oper. 2026000000000001, via Electronica, el 13/10/2026', 'Cargo por Pago de Impuesto (TGR)']) { assert.equal(esPagoTGR(d), true); assert.equal(glosaGenerica(d), true) }
+  for (const d of ['Cargo por Pago de Impuesto', 'Pago TGR', null, 'Transf. a terceros vía Internet a cuenta 1 B.Estado, PERSONA, Rut 1-9']) assert.equal(esPagoTGR(d), false)
 })
