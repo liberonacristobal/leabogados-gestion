@@ -117,7 +117,8 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
   const [sortBy,setSortBy] = useState(()=>viewMemLeer('cobranza')?.sortBy||{col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
-  useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli}) },[sortBy,expCli])   // escritorio: cliente con sus facturas desplegadas
+  const [propioTab,setPropioTab] = useState(()=>viewMemLeer('cobranza')?.propioTab??null), [propioCli,setPropioCli] = useState(()=>viewMemLeer('cobranza')?.propioCli??null)   // vista «Ingreso propio»: null (cerrada) | 'todo' (Por cobrar) | 'venc' (Vencido)
+  useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli,propioTab,propioCli}) },[sortBy,expCli,propioTab,propioCli])   // escritorio: cliente con sus facturas desplegadas
   const [reembOpen,setReembOpen] = useState(false)   // sección Reembolsos por cobrar: plegada por defecto
   const [tramoF,setTramoF] = useState(()=>filtroInicial==='vencido'?null:(filtroInicial??null))   // antigüedad: null (todas) | 0 a 4 (tramo) | 'm60' (más de 60 días)
   useEffect(()=>{ if(filtroInicial!=null){ if(filtroInicial==='vencido'){ setTramoF(null); setSortBy({col:'vencido',dir:'desc'}) } else setTramoF(filtroInicial); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line
@@ -125,7 +126,6 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
   const [movTab,setMovTab] = useState('fac')   // móvil, cliente desplegado: 'fac' (facturas) | 'ges' (gestión)
   const [compPage,setCompPage] = useState(null)   // client_id con la hoja «Compromiso de pago» abierta
   const [compForm,setCompForm] = useState({fecha:'',por:'',monto:''})
-  const [propioTab,setPropioTab] = useState(null)   // vista «Ingreso propio»: null (cerrada) | 'todo' (Por cobrar) | 'venc' (Vencido)
   const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -188,7 +188,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
   const punt = useMemo(()=>puntualidadPorCliente(billing,hoy),[billing,hoy])
   // Ingreso propio de la cartera (helper único _shared/cobranzaPropio.js): lo ajeno son la parte de terceros y las comisiones por pagar; ver la vista «Ingreso propio».
   const propio = useMemo(()=>{ const tb={}; (terceros||[]).forEach(t=>{ if(t&&t.billing_id) (tb[String(t.billing_id)]=tb[String(t.billing_id)]||[]).push(t) })
-    return resumenPropio(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),monto:montoFactura(x.b),mora:x.venc?x.diasVenc:0,terceros:tb[String(x.b.id)]||[],montoTerceros:x.b.monto_terceros})))) },[grupos,terceros])
+    return resumenPropio(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),monto:montoFactura(x.b),mora:x.venc?x.diasVenc:0,terceros:tb[String(x.b.id)]||[],montoTerceros:x.b.monto_terceros,ref:x.b})))) },[grupos,terceros])
   const gGlobal = useMemo(()=>Object.fromEntries(grupos.map(g=>[g.cid,g])),[grupos])
   const gruposAccion = grupos.filter(g=>g.nAccion>0)   // clientes con vencido que toca recordar hoy
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
@@ -363,7 +363,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
     </div>) }
 
   // Recordatorio de cobro = PÁGINA (antes ventana encima): mismo contenido, con '‹ Cobranza' para volver. El envío sigue con su botón y confirmación.
-  if(propioTab) return <CobranzaPropioVista resumen={propio} tab={propioTab} setTab={setPropioTab} cn={cn} onOpenClientFicha={onOpenClientFicha} onBack={()=>setPropioTab(null)}/>
+  if(propioTab) return <CobranzaPropioVista resumen={propio} tab={propioTab} setTab={setPropioTab} cli={propioCli} setCli={setPropioCli} cn={cn} onOpenClientFicha={onOpenClientFicha} onOpenFactura={onOpenFactura} onBack={()=>{ setPropioTab(null); setPropioCli(null) }}/>
   if(recPrev) return <FlujoPagina origen='Cobranza' titulo='Recordatorio de cobro' ctx={cn(recPrev.g.cid)} onBack={()=>setRecPrev(null)} maxW={1000}><RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})} asPage/></FlujoPagina>
   if(compPage!=null){ const G=gGlobal[compPage]; const inp={width:'100%',boxSizing:'border-box',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',fontSize:14,background:C.surface,fontFamily:'inherit'}; const lb={...SEC_LBL,marginBottom:5}
     const linea=(ic,t)=><div style={{display:'flex',gap:9,alignItems:'flex-start',padding:'6px 0',fontSize:12,lineHeight:1.45}}><span style={{width:20,height:20,borderRadius:'50%',background:C.bgSoft,color:C.accent,fontWeight:800,fontSize:11,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ic}</span><span>{t}</span></div>

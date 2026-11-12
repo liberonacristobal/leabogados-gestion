@@ -35,5 +35,6 @@ test('el resumen suma al peso: propio = total − terceros − comisiones, en to
   const a = r.porCliente.get('a'), b = r.porCliente.get('b')
   assert.equal(a?.todo.propio, 1_350_000); assert.equal(a?.venc.total, 3_000_000); assert.equal(b?.venc.n, 0)
   for (const g of [r.todo, r.venc, r.m60]) assert.equal(g.total - g.ext - g.com, g.propio)
+  assert.equal(a?.facturas.length, 2); assert.equal(a?.facturas.reduce((x, y) => x + y.propio, 0), a?.todo.propio)   // el detalle por factura suma el total del cliente
   assert.deepEqual(resumenPropio(/** @type {any} */ (null)).todo, { total: 0, ext: 0, com: 0, propio: 0, n: 0 })
 })
