@@ -1,7 +1,7 @@
 // Cargos del banco: el RUT de una transferencia con la glosa cortada, la clasificación aprendida por RUT y el cliente que nombra el mensaje. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { glosaGenerica, esPagoTGR, clasificacionPorRut, clientePorMensaje } from './../supabase/functions/_shared/cargoAprendido.js'
+import { glosaGenerica, esPagoTGR, gastosCandidatosCargo, clasificacionPorRut, clientePorMensaje } from './../supabase/functions/_shared/cargoAprendido.js'
 import { extraerContraparte } from './../src/cartola.js'
 
 test('transferencia entre bancos con la glosa cortada: el destino (persona) y su RUT salen igual que con «a Cuenta Corriente…»', () => {
@@ -38,4 +38,20 @@ test('el mensaje que nombra la sociedad de un cliente lo identifica; con dos cli
 test('pago a la TGR: se reconoce en sus dos glosas, no tiene a quién y no sirve de clave de aprendizaje', () => {
   for (const d of ['Cargo por Pago TGR Nro. Oper. 2026000000000001, via Electronica, el 13/10/2026', 'Cargo por Pago de Impuesto (TGR)']) { assert.equal(esPagoTGR(d), true); assert.equal(glosaGenerica(d), true) }
   for (const d of ['Cargo por Pago de Impuesto', 'Pago TGR', null, 'Transf. a terceros vía Internet a cuenta 1 B.Estado, PERSONA, Rut 1-9']) assert.equal(esPagoTGR(d), false)
+})
+test('gastos de cliente ya cargados que pueden ser el cargo: mismo monto, ±10 días, sin banco, de un cliente', () => {
+  const mov = { monto: 6900, fecha: '2026-09-15' }
+  const g = [
+    { id: 'a', amount: 6900, date: '2026-09-14', client_id: 'c1', type: 'gasto' },
+    { id: 'b', amount: 6900, date: '2026-09-05', client_id: 'c2', type: 'gasto' },          // justo a 10 días: dentro de la ventana
+    { id: 'c', amount: 6900, date: '2026-09-20', client_id: 'oficina', type: 'gasto' },       // la oficina no cuenta
+    { id: 'd', amount: 6900, date: '2026-09-15', client_id: 'c3', type: 'gasto', deleted_at: '2026-09-16' },
+    { id: 'e', amount: 6901, date: '2026-09-15', client_id: 'c4', type: 'gasto' },            // otro monto
+    { id: 'f', amount: 6900, date: '2026-09-15', client_id: 'c5', type: 'gasto' },            // ya tiene banco
+  ]
+  assert.deepEqual(gastosCandidatosCargo(mov, g, new Set(['f']), 'oficina').map(x => x.id), ['a', 'b'])
+  assert.deepEqual(gastosCandidatosCargo(mov, g, new Set(['f']), 'oficina', 5).map(x => x.id), ['a'])
+  assert.deepEqual(gastosCandidatosCargo({ monto: 0, fecha: '2026-09-15' }, g, new Set(), 'oficina'), [])
+  assert.deepEqual(gastosCandidatosCargo(mov, /** @type {any} */ (null), new Set(), 'oficina'), [])
+  assert.deepEqual(gastosCandidatosCargo({ monto: 6900, fecha: 'x' }, g, new Set(), 'oficina'), [])
 })
