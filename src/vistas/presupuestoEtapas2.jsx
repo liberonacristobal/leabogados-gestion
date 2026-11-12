@@ -86,7 +86,7 @@ export function CardEsc({ X, k, editable }) {
 
 
 
-// Paso 5 (alternativa D): tres tarjetas simples (solo Retiros, estado contra la meta y los supuestos en una línea) y un único panel «Cómo se llega» del escenario elegido, con cada fila de la cadena y,
+// Paso 5 (alternativa D): tres tarjetas simples (solo Retiros, estado contra la meta y los supuestos en una línea) y un único panel «Cálculo de retiros» del escenario elegido, con cada fila de la cadena y,
 // al lado, los controles de los que depende: decisión (punto lleno) o supuesto (punto vacío). Duplicar, Renombrar, Eliminar y mover viven en la cabecera del panel.
 function CardEscSimple({ X, k }) {
   const { est, M, setEsc, MT } = X, e = M.esc[k], p = est.p[k], rk = escenarioMetas(est, CFG), b = M.esc[rk], sel = est.esc === k, tn = tonoEsc(X.tonoDe(k))
@@ -108,25 +108,33 @@ function PanelEsc({ X }) {
   const cu = escenariosContraMeta(M, MT.ancla, MT.valor, MT.ratio, MT.cv).find((x) => x.k === k)
   const ctl = (/** @type {string} */ t, /** @type {boolean} */ dec, /** @type {any} */ el) => <div key={t} style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}><span style={{ ...LBL, fontSize: 10.5, color: C.accent, whiteSpace: 'nowrap' }}>{t}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: C.grisText, background: C.bgSoft, borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}><span style={{ width: 6, height: 6, borderRadius: '50%', boxSizing: 'border-box', background: dec ? C.grisText : 'transparent', border: `1.5px solid ${C.grisText}` }} />{dec ? 'decisión' : 'supuesto'}</span></div>{el}</div>
   const stp = (/** @type {string} */ f, /** @type {string} */ suf, /** @type {number} */ d, /** @type {number} */ mn, /** @type {number} */ mx2, int) => <Stp value={p[f]} suf={suf} step={d} min={mn} max={mx2} int={int} onChange={(v) => { setPal(k, f, v); setEsc(k) }} />
-  const fila = (/** @type {string} */ t, /** @type {any} */ v, /** @type {any} */ ctls, tot) => <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(120px,.9fr) 120px minmax(0,3fr)' : '1fr auto', gap: D ? 16 : '4px 10px', alignItems: 'center', padding: D ? '10px 0' : '9px 0', borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}` }}>
-    <span style={{ fontSize: 13, fontWeight: tot ? 800 : 600 }}>{t}</span><b style={{ textAlign: 'right', fontSize: tot ? 17 : 15, fontVariantNumeric: 'tabular-nums', color: tot ? C.greenText : C.text, whiteSpace: 'nowrap' }}><Val v={v} /></b>
-    <div style={{ gridColumn: D ? undefined : '1 / -1', display: 'flex', gap: '8px 18px', flexWrap: 'wrap', alignItems: 'flex-end', minWidth: 0 }}>{ctls}</div></div>
+  // Una línea por paso (concepto y monto) y «✎ Ajustar» por fila: despliega solo los controles de esa fila; uno abierto a la vez, cerrado por defecto.
+  const [abierta, setAbierta] = useState(/** @type {string|null} */ (null))
+  const fila = (/** @type {string} */ id, /** @type {string} */ t, /** @type {any} */ v, /** @type {any} */ ctls, tot, /** @type {string|null} */ nota) => { const on = abierta === id, hay = ctls && !nota
+    return <div key={id} style={{ borderTop: tot ? `2px solid ${C.accent}` : `1px solid ${C.border}`, background: on ? C.bgSoft : 'transparent', margin: '0 -16px', padding: '0 16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 130px 160px' : 'minmax(0,1fr) auto 82px', gap: D ? 16 : 10, alignItems: 'center', padding: D ? '11px 0' : '10px 0' }}>
+        <span style={{ fontSize: 13, fontWeight: tot ? 800 : 600, minWidth: 0 }}>{t}{nota ? <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: C.muted }}>{nota}</span> : null}</span>
+        <b style={{ textAlign: 'right', fontSize: tot ? 17 : 15, fontVariantNumeric: 'tabular-nums', color: tot ? C.greenText : C.text, whiteSpace: 'nowrap' }}><Val v={v} /></b>
+        {hay ? <button onClick={() => setAbierta(on ? null : id)} aria-expanded={on} style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: C.accent, textAlign: 'right', whiteSpace: 'nowrap' }}>{on ? 'Cerrar ▴' : '✎ Ajustar'}</button> : <span />}
+      </div>
+      {on && hay && <div style={{ display: 'flex', gap: '8px 18px', flexWrap: 'wrap', alignItems: 'flex-end', minWidth: 0, padding: '2px 0 12px' }}>{ctls}</div>}
+    </div> }
   return <Panel>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
-      <span style={{ ...LBL, color: C.accent }}>Cómo se llega</span>
+      <span style={{ ...LBL, color: C.accent }}>Cálculo de retiros</span>
       {ren ? <RenombrarEsc valor={X.nomEsc(k)} tn={tn} onFin={(v) => { setRen(false); if (v != null) X.renombrarEsc(k, v) }} /> : <span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', fontSize: 13, fontWeight: 800 }}>{X.nomEsc(k)}</span>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         {n < CFG.maxEscenarios && <Lnk onClick={() => X.duplicarEsc(k)}>Duplicar</Lnk>}<Lnk onClick={() => setRen(true)}>Renombrar</Lnk>{n > 1 && <Lnk rojo onClick={() => X.eliminarEsc(k)}>Eliminar</Lnk>}
         {n > 1 && <span style={{ display: 'inline-flex', gap: 2 }}>{idx > 0 ? <Lnk titulo='Mover antes' onClick={() => X.moverEsc(k, -1)}>‹</Lnk> : null}{idx < n - 1 ? <Lnk titulo='Mover después' onClick={() => X.moverEsc(k, 1)}>›</Lnk> : null}</span>}</span>
     </div>
     <div style={{ padding: '0 16px' }}>
-      {fila('Cobrado', mm(e.caja), <>{ctl('Ventas', false, MT.ok ? <span style={{ fontSize: 13 }}>{pc(p.g)} <span style={{ color: C.muted }}>real en UF · lo exige la meta</span></span> : stp('g', '%', 1, -30, 80))}{ctl('Reajuste UF', false, <Fld kind='pct' suf='%' value={est.reajusteUF} onCommit={(v) => setGen('reajusteUF', v)} w={110} />)}{ctl('Cobro', true, stp('dias', 'd', 5, 0, 90, true))}</>)}
-      {fila(`− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, mm(e.terc), <span style={{ fontSize: 12, color: C.muted }}>Real {X.datos.anioBase}, no se elige</span>)}
-      {fila(`− ${nombreCorto('costos', CFG)}`, mm(e.costos), ctl('Alza de costos', true, stp('alza', '%', 0.5, 0, 20)))}
-      {fila('− Impuesto', mm(e.idpc), <>{ctl('Tasa 1ª categoría', false, <Fld kind='pct' suf='%' value={est.tasaIDPC} onCommit={(v) => setGen('tasaIDPC', v)} w={110} />)}{ctl('PPM del año', false, <FldDin clp={est.ppmAnual} tasa={tasa27()} onCommit={(v) => setGen('ppmAnual', v)} w={150} />)}</>)}
-      {fila('− Aumento de reserva', mm(e.reserva), <>{ctl('Aumento', true, <Fld kind='pct' suf='%' value={est.reserva} onCommit={(v) => setGen('reserva', v)} w={110} />)}{ctl('Reserva en cuenta corriente', true, <FldDin clp={est.reservaIni} tasa={tasa26()} onCommit={(v) => setGen('reservaIni', Math.max(0, v))} w={150} />)}</>)}
-      {fila('= Retiros', mm(e.retiros), ctl('Meta', true, <span style={{ fontSize: 13 }}>{mm(MT.valor)} {cu ? <b style={{ color: cu.cubre ? C.greenText : C.overdueText }}>{cu.cubre ? 'la cubre' : 'no la cubre'}</b> : null}</span>), true)}
-      <div style={{ fontSize: 12, color: C.muted, padding: '9px 0 12px', borderTop: `1px solid ${C.border}` }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''} · punto lleno: decisión tuya; punto vacío: supuesto que estimamos.</div>
+      {fila('caja', 'Cobrado', mm(e.caja), <>{ctl('Ventas', false, MT.ok ? <span style={{ fontSize: 13 }}>{pc(p.g)} <span style={{ color: C.muted }}>real en UF · lo exige la meta</span></span> : stp('g', '%', 1, -30, 80))}{ctl('Reajuste UF', false, <Fld kind='pct' suf='%' value={est.reajusteUF} onCommit={(v) => setGen('reajusteUF', v)} w={110} />)}{ctl('Cobro', true, stp('dias', 'd', 5, 0, 90, true))}</>)}
+      {fila('terc', `− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, mm(e.terc), null, false, `Real ${X.datos.anioBase}, no se elige`)}
+      {fila('costos', `− ${nombreCorto('costos', CFG)}`, mm(e.costos), ctl('Alza de costos', true, stp('alza', '%', 0.5, 0, 20)))}
+      {fila('idpc', '− Impuesto', mm(e.idpc), <>{ctl('Tasa 1ª categoría', false, <Fld kind='pct' suf='%' value={est.tasaIDPC} onCommit={(v) => setGen('tasaIDPC', v)} w={110} />)}{ctl('PPM del año', false, <FldDin clp={est.ppmAnual} tasa={tasa27()} onCommit={(v) => setGen('ppmAnual', v)} w={150} />)}</>)}
+      {fila('reserva', '− Aumento de reserva', mm(e.reserva), <>{ctl('Aumento', true, <Fld kind='pct' suf='%' value={est.reserva} onCommit={(v) => setGen('reserva', v)} w={110} />)}{ctl('Reserva en cuenta corriente', true, <FldDin clp={est.reservaIni} tasa={tasa26()} onCommit={(v) => setGen('reservaIni', Math.max(0, v))} w={150} />)}</>)}
+      {fila('retiros', '= Retiros', mm(e.retiros), ctl('Meta', true, <span style={{ fontSize: 13 }}>{mm(MT.valor)} {cu ? <b style={{ color: cu.cubre ? C.greenText : C.overdueText }}>{cu.cubre ? 'la cubre' : 'no la cubre'}</b> : null}</span>), true)}
+      <div style={{ fontSize: 12, color: C.muted, padding: '9px 0 12px', borderTop: `1px solid ${C.border}` }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''} · ● decisión · ○ supuesto.</div>
     </div>
   </Panel>
 }
@@ -179,7 +187,7 @@ export function descargarExcel(X) {
 export function Escenarios({ X }) {
   const { est, M, D, ui, setUI, datos: d } = X
   const tabs = [['res', 'Resultado'], ['imp', 'Impuesto'], ['soc', 'Por socio']]
-  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <><EscenariosMeta X={X} /><Det t='Escenarios de supuestos · crecimiento, costos y cobro'><div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Comparación de supuestos por escenario; el resultado de este paso sigue a la meta (Ideal) y no cambia con ellos.</div><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEscSimple key={k} X={X} k={k} />)}</Grid></Det><PanelEsc X={X} /></>
+  const cuerpo = ui.tab === 'imp' ? <TabImp X={X} /> : ui.tab === 'soc' ? <TabSoc X={X} /> : <><EscenariosMeta X={X} /><Det t='Supuestos por escenario · crecimiento, costos y cobro'><div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Supuestos por escenario; el resultado sigue a la meta (Ideal).</div><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEscSimple key={k} X={X} k={k} />)}</Grid></Det><PanelEsc X={X} /></>
   const cascada = [['', 'Vendido neto (estimación propia)', (x) => mm(valorComponente(x, 'ventas', X.MT.ratio, X.MT.cv) ?? 0)], ['', 'Facturado', (x) => mm(x.fact)], ['−', 'Aumento de lo por cobrar', (x) => mm(x.dCob)], ['=', 'Cobrado', (x) => mm(x.caja), 1], ['−', 'Comisiones', (x) => mm(x.terc)], ['−', nombreCorto('costos', CFG), (x) => mm(x.costos)], ['=', 'Margen', (x) => mm(x.base), 1], ['−', 'Impuesto de primera categoría', (x) => mm(x.idpc)], ['=', 'Después de impuesto', (x) => mm(x.post), 1], ['−', 'Aumento de reserva', (x) => mm(x.reserva)], ['=', 'Retiros', (x) => mm(x.retiros), 1]]
   const e = M.esc[est.esc]
   const mensual = <div>{MESC.map((m, i) => <Fila key={m} nombre={MESL[i]} sub={monedaActual() === 'clp' ? ufs(e.ingUF[i]) : ''} valor={mx(e.ing[i], e.ingUF[i])} onClick={() => X.ir({ drill: { t: 'mes', i } })} />)}</div>
@@ -200,11 +208,11 @@ export function Escenarios({ X }) {
         <Det t={`Metas ${d.anio} · por escenario`}><MetasTabla X={X} /></Det>
         <Det t='Estado de resultados'><div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Caja, sin {TX.impuestoIndirecto} · UF media {nf.format(Math.round(M.ufMed))}</div><Filas X={X} filas={cascada} /></Det>
         <Det t={`Facturado mes a mes · ${X.nomEsc(est.esc)}`}>{mensual}</Det>
-        <Det t='Origen de los supuestos'><Lista items={[<span><b>Crecimiento real de ventas {X.ESC.map(([kk]) => fmtN(est.p[kk].g)).join(' / ')} %:</b> criterio sobre la base de {d.anioBase}, en UF; el del escenario {X.nomEsc(escenarioMetas(est, CFG))} ({pc(est.p[escenarioMetas(est, CFG)].g, 0)}) se compara con el reajuste de la UF ({pc(est.reajusteUF)}).</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; editable por escenario.</span>, <span><b>Comisiones:</b> la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ' de lo cobrado)' : ''}.</span>, <span><b>Días de cobro:</b> promedio real{d.dias.promedio != null ? ' ' + d.dias.promedio + ' días' : ''}{d.dias.mediana != null ? ', mediana ' + d.dias.mediana : ''}.</span>, <span><b>Impuesto:</b> primera categoría {pc(est.tasaIDPC)} para el año comercial {d.anio} ({CFG.tributario.etiqueta}); editable.</span>, <span><b>Reserva:</b> reserva en cuenta corriente {mm(est.reservaIni)}, no se toca; el aumento lo fijas tú.</span>]} /></Det>
+        <Det t='Fuente de los supuestos'><Lista items={[<span><b>Crecimiento real de ventas {X.ESC.map(([kk]) => fmtN(est.p[kk].g)).join(' / ')} %:</b> criterio sobre la base de {d.anioBase}, en UF; el del escenario {X.nomEsc(escenarioMetas(est, CFG))} ({pc(est.p[escenarioMetas(est, CFG)].g, 0)}) se compara con el reajuste de la UF ({pc(est.reajusteUF)}).</span>, <span><b>Alza de costos:</b> reajuste de sueldos más IPC; editable por escenario.</span>, <span><b>Comisiones:</b> la real de {d.anioBase}{d.terc != null ? ' (' + pc(d.terc) + ' de lo cobrado)' : ''}.</span>, <span><b>Días de cobro:</b> promedio real{d.dias.promedio != null ? ' ' + d.dias.promedio + ' días' : ''}{d.dias.mediana != null ? ', mediana ' + d.dias.mediana : ''}.</span>, <span><b>Impuesto:</b> primera categoría {pc(est.tasaIDPC)} para el año comercial {d.anio} ({CFG.tributario.etiqueta}); editable.</span>, <span><b>Reserva:</b> reserva en cuenta corriente {mm(est.reservaIni)}, no se toca; el aumento lo fijas tú.</span>]} /></Det>
       </>}
       {ui.tab === 'imp' && <>
-        <Det t='Qué se paga y cuándo'><Lista items={[<span><b>Cada mes:</b> {TX.pagoMensual} en el {TX.formulario} del mes siguiente (hoy {mp(d.ppmMes)} presupuestados).</span>, <span><b>{cap(TX.mesAnual)} de {d.anio + 1}:</b> declaración anual de {d.anio}; se paga el saldo o se pide la devolución.</span>, <span><b>Sin {TX.impuestoIndirecto}:</b> no hay {TX.impuestoIndirecto} que proyectar ni crédito fiscal.</span>, <span><b>{cap(TX.retenciones)}:</b> las retenciones siguen yendo al {TX.formulario}, como hoy.</span>]} /></Det>
-        <Det t='Lo que no se proyecta aquí'><Lista items={['El impuesto personal de cada socio por sus retiros.', 'Depreciación y gastos rechazados: se estiman con la contadora.', `Tasa de ${TX.pagoMensual}: se mantiene lo pagado hoy (conservador); la legal ${CFG.tributario.regimen} (${pc(tasaPPMLegal(d.anio, d.oficiales.fact.uf), 3)}) es menor, por confirmar con la contadora.`]} /></Det>
+        <Det t='Pagos y calendario'><Lista items={[<span><b>Cada mes:</b> {TX.pagoMensual} en el {TX.formulario} del mes siguiente (hoy {mp(d.ppmMes)} presupuestados).</span>, <span><b>{cap(TX.mesAnual)} de {d.anio + 1}:</b> declaración anual de {d.anio}; se paga el saldo o se pide la devolución.</span>, <span><b>Sin {TX.impuestoIndirecto}:</b> no hay {TX.impuestoIndirecto} que proyectar ni crédito fiscal.</span>, <span><b>{cap(TX.retenciones)}:</b> las retenciones siguen yendo al {TX.formulario}, como hoy.</span>]} /></Det>
+        <Det t='Exclusiones'><Lista items={['El impuesto personal de cada socio por sus retiros.', 'Depreciación y gastos rechazados: se estiman con la contadora.', `Tasa de ${TX.pagoMensual}: se mantiene lo pagado hoy (conservador); la legal ${CFG.tributario.regimen} (${pc(tasaPPMLegal(d.anio, d.oficiales.fact.uf), 3)}) es menor, por confirmar con la contadora.`]} /></Det>
       </>}
     </div>
   </>
@@ -366,7 +374,7 @@ export function Seguimiento({ X }) {
     {apertura}
     <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Margen en caja: cobrado menos comisiones y costos del mes, no devengado. Presupuesto mensual: estimación propia con la distribución elegida en Metas.</div>
     <Pliegue key={Y} abajo={!D} t={`Mes a mes · ${Y}`} v={cerr > 0 ? `Acumulado ${cel(sel.c.realAcum, sel.u.realAcum)} · ${cerr} ${cerr === 1 ? 'mes cerrado' : 'meses cerrados'}` : 'Sin meses cerrados'}>{D ? tabla : <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{chips}{lista}<div style={{ fontSize: 12, color: C.muted }}>Cierre proyectado de {corto(ks).toLowerCase()}: <b style={{ color: C.accent }}>{sel.c.cierre != null ? mx(sel.c.cierre, sel.u.cierre) : '—'}</b> · real de los meses cerrados más presupuesto de los que faltan.</div></div>}</Pliegue>
-    <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos por ahora.</div>}</Panel>
+    <Panel hd='Avisos' pad>{avisos.length ? <Lista items={avisos} /> : <div style={{ fontSize: 13, color: C.muted }}>Sin avisos.</div>}</Panel>
   </>
 }
 
@@ -406,7 +414,7 @@ export function DCli({ X, id }) {
       <Mini ic='ventas' label={`Facturado ${d.anioBase}`} value={mx(c.monto, c.uf)} sub='de enero a la fecha' cls='pos' />
       <Mini ic='gauge' label='Parte de lo facturado' value={pc((c.monto / d.totalFact) * 100)} sub='de la oficina' />
       <Mini ic='fact' label='Facturas' value={String(c.n)} sub={`emitidas en ${d.anioBase}`} />
-      <Mini ic='wal' label='Ticket promedio' value={mx(c.monto / c.n, c.uf / c.n)} sub='por factura' />
+      <Mini ic='wal' label='Monto promedio' value={mx(c.monto / c.n, c.uf / c.n)} sub='por factura' />
     </Grid>
     <Panel hd='Posición'>
       <Fila sin nombre='Lugar en el ranking' peq={`de ${d.clientes.length} clientes facturados`} valor={'#' + (i + 1)} />
@@ -425,7 +433,7 @@ export function indicadores(X) {
   const lento = [...X.ESC].sort((a, b) => X.est.p[b[0]].dias - X.est.p[a[0]].dias)[0][0]   // el escenario de cobro más lento
   return {
     vend: { tit: `Vendido ${Y}`, val: mx(o.vend.clp, o.vend.uf), sub: o.vend.pct != null ? pc(o.vend.pct, 0) + ' de la meta' : 'sin meta', fuente: 'ventas activas y terminadas del año, netas de comisiones a terceros, contra la meta anual (también neta)', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendCascada.clp.bruto, o.vendCascada.uf.bruto) }, { n: '− Comisiones de venta', c: 'costo a terceros', v: mx(o.vendCascada.clp.costo, o.vendCascada.uf.costo) }, { n: '= Vendido neto', v: mx(o.vendCascada.clp.neto, o.vendCascada.uf.neto) }, ...enUF(o.vend.clp, o.vend.uf), { n: `Meta de ventas ${Y}`, c: 'neta de comisiones a terceros', v: o.metaVentasCLP ? mx(o.metaVentasCLP, mU) : 'sin meta' }, { n: 'Avance a la fecha', c: 'neto contra la meta', v: o.vend.pct != null ? pc(o.vend.pct, 0) : '—' }, { n: 'Ya facturado', c: 'del vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—', go: () => X.ir({ drill: { t: 'ind', k: 'fact26' } }) }] },
-    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' del vendido bruto' : '', fuente: 'facturas emitidas con folio, contra el vendido bruto', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, ...enUF(o.fact.clp, o.fact.uf), { n: 'Del vendido bruto', c: 'facturado ÷ vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—' }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vendBruto.clp - o.fact.clp), Math.max(0, o.vendBruto.uf - o.fact.uf)) }], texto: 'La facturación no tiene meta propia: la app la mide contra lo vendido bruto.' },
+    fact26: { tit: `Facturado ${Y}`, val: mx(o.fact.clp, o.fact.uf), sub: o.fact.pct != null ? pc(o.fact.pct, 0) + ' del vendido bruto' : '', fuente: 'facturas emitidas con folio, contra el vendido bruto', app: 'Oficina › Resultado del año', rows: [{ n: 'Vendido bruto', v: mx(o.vendBruto.clp, o.vendBruto.uf), go: () => X.ir({ drill: { t: 'ind', k: 'vend' } }) }, { n: 'Facturado', v: mx(o.fact.clp, o.fact.uf) }, ...enUF(o.fact.clp, o.fact.uf), { n: 'Del vendido bruto', c: 'facturado ÷ vendido bruto', v: o.fact.pct != null ? pc(o.fact.pct, 0) : '—' }, { n: 'Por facturar', c: 'vendido que aún no tiene factura', v: mx(Math.max(0, o.vendBruto.clp - o.fact.clp), Math.max(0, o.vendBruto.uf - o.fact.uf)) }], texto: 'Sin meta propia: se mide contra lo vendido bruto.' },
     cob26: { tit: `Cobrado ${Y}`, val: mx(o.cob.clp, o.cob.uf), sub: o.cob.pct != null ? pc(o.cob.pct, 0) + ' de la meta' : 'sin meta', fuente: 'conciliación con el banco, contra la meta de cobranza', app: 'Oficina › Cobrado', rows: [{ n: `Meta de cobranza ${Y}`, v: o.metaCobroCLP ? mx(o.metaCobroCLP, null) : 'sin meta' }, { n: 'Avance a la fecha', v: o.cob.pct != null ? pc(o.cob.pct, 0) : '—' }, { n: 'Cobrado', c: 'plano caja', v: mx(o.cob.clp, o.cob.uf) }, ...enUF(o.cob.clp, o.cob.uf)] },
     marg: { tit: `Margen ${Y}`, val: mx(o.marg.clp, o.marg.uf), sub: o.marg.pct != null ? pc(o.marg.pct) + ' de ingresos' : '', fuente: 'ingresos menos costos de operación y comisiones', app: 'Oficina › Resultado del año', rows: [{ n: 'Margen', c: 'devengado, como en Inicio', v: mx(o.marg.clp, o.marg.uf) }, ...enUF(o.marg.clp, o.marg.uf), { n: 'Sobre los ingresos', v: o.marg.pct != null ? pc(o.marg.pct) : '—' }, { n: 'En caja', c: 'cobrado − comisiones − costos · estimación propia', v: mx(d.referencia.margen.aFecha, d.refUF.margen.aFecha) }] },
     ret26: { tit: `Retiros ${Y}`, val: mx(d.retiros26.total, d.retiros26.totalUF), sub: `${d.retiros26.n} retiro${d.retiros26.n !== 1 ? 's' : ''} de los socios`, fuente: 'transferencias a los socios (gastos «Retiros» de la oficina), como en la página Socios; por confirmar', app: 'Socios', rows: [{ n: 'Retiros', c: d.retiros26.desde ? `${dmy(d.retiros26.desde)} a ${dmy(d.retiros26.hasta)}` : '', v: String(d.retiros26.n) }].concat(d.retiros26.socios.map((n) => ({ n, c: `sueldos pagados ${mxP(d.retiros26.sueldos[n] || 0, d.retiros26.sueldosUF[n] || 0)}`, v: mx(d.retiros26.porSocio[n] || 0, d.retiros26.porSocioUF[n] || 0), go: X.onOpenSocios }))).concat([{ n: 'Sueldos de los socios', c: 'ya están en Remuneraciones', v: mx(d.retiros26.sueldoTot, Object.values(d.retiros26.sueldosUF).reduce((a, x) => a + Number(x), 0)) }]) },
@@ -525,7 +533,7 @@ function Evolucion({ X, k }) {
       {origen.map(([hd, items, vacio]) => <Panel key={hd} hd={hd}>{items.length === 0 ? <div style={{ fontSize: 13, color: C.muted, padding: '12px 16px' }}>{vacio}</div>
         : [...items].sort((x, y) => y.pct - x.pct).map((t) => <Fila key={t.n} nombre={t.n} peq={`${pc(t.pct, t.pct < 10 ? 1 : 0)} · ${t.sub}`} valor={t.monto} onClick={t.go} sin={!t.go} />)}</Panel>)}
     </div>}
-    {e.tipos[0]?.n === 'Sin tipo' && e.tipos[0].pct > 50 && <div style={{ fontSize: 11, color: C.muted, margin: '0 4px' }}>La mayoría de lo facturado sale «Sin tipo»: completar el tipo en la ficha del cliente mejora este análisis.</div>}
+    {e.tipos[0]?.n === 'Sin tipo' && e.tipos[0].pct > 50 && <div style={{ fontSize: 11, color: C.muted, margin: '0 4px' }}>La mayoría de lo facturado figura «Sin tipo».</div>}
   </>
 }
 
@@ -567,7 +575,7 @@ function DRetiros({ X }) {
       {T.filas.map((f) => <Fila key={f.socio} nombre={f.socio} peq={`retiros ${pq(f.retiros)} + sueldos ${pq(f.sueldos)}`} valor={val(f.total)} onClick={X.onOpenSocios} />)}
       <Fila tot sin nombre='Oficina' peq={`retiros ${pq(T.oficina.retiros)} + sueldos ${pq(T.oficina.sueldos)}`} valor={val(T.oficina.total)} />
     </Panel>
-    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {indicadores(X).ret26.fuente} · En la app: Socios</div>
+    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {indicadores(X).ret26.fuente} · Ver en: Socios</div>
   </>
 }
 
@@ -584,7 +592,7 @@ function DConversion({ X, x }) {
           {ab && <div style={{ background: C.bgSoft, padding: '6px 16px 12px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', fontSize: 12 }}>
             {X.onOpenSale && <Lnk onClick={() => X.onOpenSale(dc.id)}>Abrir la venta ›</Lnk>}
             {dc.cuenta ? <Lnk rojo onClick={() => marca(dc, true)}>Duplicada: no cuenta</Lnk> : <Lnk onClick={() => marca(dc, false)}>Volver a contar</Lnk>}
-            <span style={{ color: C.muted }}>{dc.cuenta ? 'Una propuesta, un resultado: la saca de la cifra; la venta no se toca.' : 'Está fuera de la cifra; la venta no se tocó.'}</span>
+            <span style={{ color: C.muted }}>{dc.cuenta ? 'La propuesta sale de la cifra; la venta no cambia.' : 'Fuera de la cifra; la venta no cambió.'}</span>
           </div>}
         </Fila> })}
     </Panel> : <Panel pad><span style={{ fontSize: 13, color: C.muted }}>{x.sub}.</span></Panel>}
@@ -600,9 +608,9 @@ export function DInd({ X, k }) {
   return <>
     {k !== 'vend' && k !== 'cob26' && <Grid cols={1} colsM={1}><Kpi tono='a' ic='doc' label={x.tit} value={x.val} sub={x.sub} /></Grid>}
     {(k === 'vend' || k === 'cob26') && <Evolucion X={X} k={k === 'vend' ? 'vend' : 'cob'} />}
-    {x.rows.length > 0 && (k === 'vend' || k === 'cob26' ? <Det t='De dónde sale'><div style={{ margin: '-8px -14px -10px' }}>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</div></Det> : <Panel hd='De dónde sale'>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</Panel>)}
+    {x.rows.length > 0 && (k === 'vend' || k === 'cob26' ? <Det t='Fuente'><div style={{ margin: '-8px -14px -10px' }}>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</div></Det> : <Panel hd='Fuente'>{x.rows.map((r, i) => <Fila key={i} nombre={r.n} peq={r.c} valor={r.v} onClick={r.go} sin={!r.go} />)}</Panel>)}
     {x.texto && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13 }}>{x.texto}</div>}
-    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {x.fuente} · En la app: {x.app}</div>
+    <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Fuente: {x.fuente} · Ver en: {x.app}</div>
   </>
 }
 
@@ -635,16 +643,16 @@ export function DVer({ X }) {
     <Panel hd='Guardar esta versión'>
       <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: X.D ? 'minmax(0,1fr) minmax(0,1.4fr)' : '1fr', gap: 12 }}>
         <div><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Nombre</div><input ref={refN} defaultValue={sug} style={campo} /></div>
-        <div><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Nota (opcional)</div><input ref={refNo} placeholder='Qué cambió o por qué' style={campo} /></div>
+        <div><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Nota (opcional)</div><input ref={refNo} placeholder='Motivo del cambio' style={campo} /></div>
       </div>
-      <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><Btn onClick={() => X.guardarVersion((refN.current?.value || '').trim() || 'Versión', (refNo.current?.value || '').trim())}>Guardar versión</Btn><span style={{ fontSize: 12, color: C.muted }}>{base ? `El borrador parte de «${base.nombre}»` : 'Se guarda la foto de todos los supuestos, costos y notas de las etapas.'}</span></div>
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><Btn onClick={() => X.guardarVersion((refN.current?.value || '').trim() || 'Versión', (refNo.current?.value || '').trim())}>Guardar versión</Btn><span style={{ fontSize: 12, color: C.muted }}>{base ? `El borrador parte de «${base.nombre}»` : 'Se guardan los supuestos, costos y notas.'}</span></div>
     </Panel>
     <Titulo right={<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: vers.length >= 6 ? C.soonText : C.muted, display: 'inline-flex', gap: 10, alignItems: 'center' }}>{vers.length >= 2 && <Btn onClick={() => { setUI({ cmpA: vers[1].id, cmpB: vers[0].id, cmpE: null }); X.ir({ drill: { t: 'cmp', id: vers[1].id } }) }}>Comparar</Btn>}{vers.length} de 6</span>}>Versiones guardadas</Titulo>
-    <Panel>{vers.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay versiones. Guarda la primera cuando termines una etapa.</div>
+    <Panel>{vers.length === 0 ? <div style={{ padding: 16, fontSize: 13, color: C.muted }}>Aún no hay versiones.</div>
       : vers.map((v) => { const abierta = ui.vx === v.id, b = v.resumen && v.resumen.base ? v.resumen.base : null, c = conf && conf.id === v.id ? conf.a : null
         return <Fila key={v.id} abierta={abierta} nombre={<>{v.nombre}{v.oficial && <span style={{ marginLeft: 8 }}><Chip>Oficial</Chip></span>}{v.id === X.est.basadaEn && <span style={{ marginLeft: 8 }}><Chip tono='y'>borrador parte de aquí</Chip></span>}</>} peq={`${fechaDMY(v.created_at)}${v.creado_por ? ' · ' + v.creado_por : ''} · ${v.nota || 'sin nota'}`} sub={b ? 'retiros ' + mm(b.retiros) : ''} valor={b ? mm(b.fact) : ''} onClick={() => setUI({ vx: abierta ? null : v.id, confirma: null })}>
           {abierta && <div style={{ background: C.bgSoft, padding: '4px 16px 14px', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-            {c === 'abrir' ? <><span>Reemplaza el borrador actual. Guárdalo antes como versión si lo necesitas.</span><span><Btn onClick={() => X.abrirVersion(v)}>Abrir</Btn> <Lnk onClick={() => setUI({ confirma: null })}>Cancelar</Lnk></span></>
+            {c === 'abrir' ? <><span>Reemplaza el borrador actual.</span><span><Btn onClick={() => X.abrirVersion(v)}>Abrir</Btn> <Lnk onClick={() => setUI({ confirma: null })}>Cancelar</Lnk></span></>
               : c === 'borrar' ? <><span>Esta versión se elimina y no se puede recuperar.</span><span><Btn onClick={() => X.borrarVersion(v)}>Eliminar</Btn> <Lnk onClick={() => setUI({ confirma: null })}>Cancelar</Lnk></span></>
                 : <><span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Btn onClick={() => setUI({ confirma: { a: 'abrir', id: v.id } })}>Abrir</Btn><Btn onClick={() => { setUI({ cmpA: v.id, cmpB: 'borrador', cmpE: null }); X.ir({ drill: { t: 'cmp', id: v.id } }) }}>Comparar con…</Btn><Btn onClick={() => X.marcarOficial(v)}>{v.oficial ? 'Quitar como oficial' : 'Marcar como oficial'}</Btn></span><Lnk rojo onClick={() => setUI({ confirma: { a: 'borrar', id: v.id } })}>Eliminar</Lnk></>}
           </div>}

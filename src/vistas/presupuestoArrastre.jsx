@@ -27,7 +27,7 @@ export function DArrastre({ X, k }) {
   const idsPagina = [...(muestraPF ? pf : []), ...(muestraAS ? as : [])].map((l) => l.id)
   const hayAjustes = idsPagina.some((id) => est.arrastre.ajustes[id])
   const restaurarPagina = async () => {
-    if (!(await appConfirm('¿Volver todas las líneas de esta página a los valores de la app?\nSe pierden los ajustes y las notas; las líneas agregadas a mano se conservan.'))) return
+    if (!(await appConfirm('¿Volver todas las líneas de esta página a los valores calculados?\nSe pierden los ajustes y las notas; las líneas agregadas a mano se conservan.'))) return
     setArrastre((a) => idsPagina.reduce((x, id) => restaurarArrastre(x, id), a))
   }
   const ajusta = (/** @type {any} */ l, /** @type {any} */ patch) => setArrastre((a) => ajustarLinea(a, bl(l), patch))
@@ -44,14 +44,14 @@ export function DArrastre({ X, k }) {
   }
   const volver = (/** @type {any} */ l) => <Lnk onClick={() => ajusta(l, { quitado: false })}>Volver a incluir</Lnk>
   const detalleAbierto = (/** @type {any} */ l, /** @type {string} */ valorApp) => <div style={{ background: C.bgSoft, padding: '8px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <div><div style={{ ...LBL, color: C.accent, fontSize: 11, marginBottom: 4 }}>Nota</div><Fld text value={l.nota} ph='Por qué se ajusta (opcional)' label={`Nota de ${nombre(l)}`} onCommit={(v) => ajusta(l, { nota: String(v || '').trim() || null })} /></div>
+    <div><div style={{ ...LBL, color: C.accent, fontSize: 11, marginBottom: 4 }}>Nota</div><Fld text value={l.nota} ph='Motivo del ajuste (opcional)' label={`Nota de ${nombre(l)}`} onCommit={(v) => ajusta(l, { nota: String(v || '').trim() || null })} /></div>
     <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, color: C.muted }}>
-      <span>En la app: <b style={{ color: C.text }}>{valorApp}</b></span>
+      <span>Calculado: <b style={{ color: C.text }}>{valorApp}</b></span>
       {l.quitado ? volver(l) : <Lnk rojo onClick={() => ajusta(l, { quitado: true })}>Quitar del arrastre</Lnk>}
-      {(l.ajustado || l.nota) && !l.quitado && <Lnk onClick={() => setArrastre((a) => restaurarArrastre(a, l.id))}>Restaurar el valor de la app</Lnk>}
+      {(l.ajustado || l.nota) && !l.quitado && <Lnk onClick={() => setArrastre((a) => restaurarArrastre(a, l.id))}>Restaurar el valor calculado</Lnk>}
     </div>
   </div>
-  const ajustadoTxt = (/** @type {any} */ l) => (l.quitado ? 'quitada' : l.ajustado ? `ajustado (app ${mmP(l.base.monto)})` : '')
+  const ajustadoTxt = (/** @type {any} */ l) => (l.quitado ? 'quitada' : l.ajustado ? `ajustado (calculado ${mmP(l.base.monto)})` : '')
 
   const filaCuota = (/** @type {any} */ l) => <div key={l.id}>
     <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 156px' : 'minmax(0,1fr) auto', gap: D ? 14 : '4px 12px', alignItems: 'center', padding: D ? '9px 16px' : '10px 14px', borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
@@ -114,10 +114,10 @@ export function DArrastre({ X, k }) {
   return <>
     <Panel pad>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: C.muted }}>{rotuloPagina(k)}{tocadas > 0 ? ` · ${tocadas} línea${tocadas !== 1 ? 's' : ''} ajustada${tocadas !== 1 ? 's' : ''}` : ' · valores de la app'}</span>
+        <span style={{ fontSize: 13, color: C.muted }}>{rotuloPagina(k)}{tocadas > 0 ? ` · ${tocadas} línea${tocadas !== 1 ? 's' : ''} ajustada${tocadas !== 1 ? 's' : ''}` : ' · valores calculados'}</span>
         <b style={{ fontSize: D ? 21 : 18, color: C.accent, fontVariantNumeric: 'tabular-nums' }}><Val v={mm(k === 'pf' ? A.proyectos : k === 'as' ? A.asesorias : A.total)} /></b>
       </div>
-      {hayAjustes && <div style={{ marginTop: 6 }}><Lnk onClick={restaurarPagina}>Restaurar los valores de la app</Lnk></div>}
+      {hayAjustes && <div style={{ marginTop: 6 }}><Lnk onClick={restaurarPagina}>Restaurar los valores calculados</Lnk></div>}
     </Panel>
     {nTot > 10 && <input value={ui.arrQ || ''} onChange={(ev) => setUI({ arrQ: ev.target.value })} placeholder='Buscar cliente o proyecto' aria-label='Buscar cliente o proyecto' style={{ width: '100%', boxSizing: 'border-box', height: 40, padding: '0 12px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, fontFamily: 'inherit', fontSize: 14, color: C.text, outline: 'none' }} />}
     {muestraPF && <>{k === 'todo' && <Titulo>Por facturar · cuotas de proyectos con vencimiento en {Y}</Titulo>}
@@ -126,7 +126,7 @@ export function DArrastre({ X, k }) {
       <Panel>{cab('Cliente y asesoría', true)}{vistasAS.length ? vistasAS.map(filaAsesoria) : sinLineas(as.length ? 'Ninguna línea coincide con la búsqueda.' : 'No hay asesorías permanentes activas.')}{pie('Asesorías permanentes', A.asesorias)}</Panel></>}
     {muestraEX && <>
       <Titulo right={<Btn onClick={alta}>+ Agregar línea</Btn>}>Agregadas a mano</Titulo>
-      <Panel>{vistasEX.length ? <>{cab('Línea', true)}{vistasEX.map(filaExtra)}{pie('Agregadas a mano', A.agregadas)}</> : sinLineas('Para un contrato que aún no está en la app: nombre, monto mensual, mes de inicio y meses.')}</Panel></>}
+      <Panel>{vistasEX.length ? <>{cab('Línea', true)}{vistasEX.map(filaExtra)}{pie('Agregadas a mano', A.agregadas)}</> : sinLineas('Contrato que aún no está registrado.')}</Panel></>}
     <div style={{ fontSize: 12, color: C.muted, margin: '0 4px' }}>Los ajustes quedan en este borrador y en sus versiones; no cambian ventas, facturas ni cuotas.</div>
   </>
 }
