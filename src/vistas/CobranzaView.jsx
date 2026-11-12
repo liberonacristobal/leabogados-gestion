@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, montoFactura, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
 import { TRAMOS, enFiltroMora, estadoCompromiso, exposicionCartera, puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
-import { resumenPropio } from '../../supabase/functions/_shared/cobranzaPropio.js'
+import { nombreCortoContacto, resumenPropio } from '../../supabase/functions/_shared/cobranzaPropio.js'
 import { CobranzaPropioVista } from './cobranzaPropioVista.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { Menu } from '../lib/presupuestoUI.jsx'
@@ -101,7 +101,7 @@ export function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sendin
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, currentUserEmail, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen, filtroInicial=null, onFiltroListo }){
+export function CobranzaView({ billing=[], terceros=[], proveedores=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, currentUserEmail, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen, filtroInicial=null, onFiltroListo }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const selB = useSeleccion('cobranza')
   const LIBERAR_UMBRAL = 3
@@ -188,8 +188,8 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
   const expo = useMemo(()=>exposicionCartera(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),mora:x.venc?x.diasVenc:0})))),[grupos])
   const punt = useMemo(()=>puntualidadPorCliente(billing,hoy),[billing,hoy])
   // Ingreso propio de la cartera (helper único _shared/cobranzaPropio.js): lo ajeno son la parte de terceros y las comisiones por pagar; ver la vista «Ingreso propio».
-  const propio = useMemo(()=>{ const tb={}; (terceros||[]).forEach(t=>{ if(t&&t.billing_id) (tb[String(t.billing_id)]=tb[String(t.billing_id)]||[]).push(t) })
-    return resumenPropio(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),monto:montoFactura(x.b),mora:x.venc?x.diasVenc:0,terceros:tb[String(x.b.id)]||[],montoTerceros:x.b.monto_terceros,ref:x.b})))) },[grupos,terceros])
+  const propio = useMemo(()=>{ const tb={}, pv=new Map((proveedores||[]).map(p=>[String(p.id),nombreCortoContacto(p.nombre)])); (terceros||[]).forEach(t=>{ if(t&&t.billing_id) (tb[String(t.billing_id)]=tb[String(t.billing_id)]||[]).push({...t,contacto:pv.get(String(t.proveedor_id))||undefined}) })
+    return resumenPropio(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),monto:montoFactura(x.b),mora:x.venc?x.diasVenc:0,terceros:tb[String(x.b.id)]||[],montoTerceros:x.b.monto_terceros,ref:x.b})))) },[grupos,terceros,proveedores])
   const gGlobal = useMemo(()=>Object.fromEntries(grupos.map(g=>[g.cid,g])),[grupos])
   const gruposAccion = grupos.filter(g=>g.nAccion>0)   // clientes con vencido que toca recordar hoy
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
