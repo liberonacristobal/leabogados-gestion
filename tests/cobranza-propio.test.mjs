@@ -1,7 +1,7 @@
 // Ingreso propio de lo por cobrar: lo ajeno (venta de terceros y comisiones por pagar) sale del por cobrar. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ajenoDeFactura, resumenPropio, nombreTercero } from './../supabase/functions/_shared/cobranzaPropio.js'
+import { ajenoDeFactura, resumenPropio, nombreTercero, nombreCortoContacto } from './../supabase/functions/_shared/cobranzaPropio.js'
 
 const ec = (/** @type {any} */ f) => { const r = ajenoDeFactura(f); return { ext: r.ext, com: r.com } }
 const externo = { saldo: 1_000_000, monto: 1_000_000, terceros: [{ monto: 850_000, comision_pct: 15, estado: 'pendiente' }] }
@@ -51,4 +51,10 @@ test('el reparto por tercero suma lo ajeno de la factura y usa el nombre corto',
   assert.equal(x.terceros.get('Alfa Abogados')?.monto, 600_000); assert.equal(x.terceros.get('Beta Asesorias')?.venc, 100_000)
   assert.equal(nombreTercero('MJ ASESORÍAS LIMITADA'), 'MJ Asesorías'); assert.equal(nombreTercero(null), 'Tercero'); assert.equal(nombreTercero('BDA Abogados Limitada'), 'BDA Abogados')
   assert.deepEqual(ajenoDeFactura({ saldo: 500_000, monto: 500_000, montoTerceros: 425_000 }).partes, [{ nombre: 'Tercero', monto: 425_000 }])
+})
+test('nombre corto del contacto: inicial y apellido, y manda sobre el nombre de la sociedad', () => {
+  assert.equal(nombreCortoContacto('Andrés Mery'), 'A. Mery'); assert.equal(nombreCortoContacto('Pedro Isla Reyes'), 'P. Isla'); assert.equal(nombreCortoContacto('María Paz Zarzar Encina'), 'M. Zarzar')
+  assert.equal(nombreCortoContacto('Sanz y Rodríguez'), 'Sanz y Rodríguez'); assert.equal(nombreCortoContacto('Gamma'), 'Gamma'); assert.equal(nombreCortoContacto(null), '')
+  const r = ajenoDeFactura({ saldo: 1_000, monto: 1_000, terceros: [{ monto: 400, comision_pct: null, estado: 'pendiente', proveedor: 'ALFA ASESORIAS LIMITADA', contacto: 'A. Mery' }] })
+  assert.deepEqual(r.partes, [{ nombre: 'A. Mery', monto: 400 }])
 })

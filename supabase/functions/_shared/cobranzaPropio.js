@@ -15,9 +15,21 @@ export const nombreTercero = p => {
 }
 
 /**
+ * Nombre corto de un contacto, como lo dice el estudio: inicial y apellido («Andrés Mery» → «A. Mery»; «Pedro Isla Reyes» → «P. Isla»;
+ * «María Paz Zarzar Encina» → «M. Zarzar»). Una sociedad con «y» o una sola palabra queda tal cual.
+ * @param {any} nombre
+ */
+export const nombreCortoContacto = nombre => {
+  const w = String(nombre || '').trim().split(/\s+/).filter(Boolean)
+  if (w.length < 2 || w.some(x => /^(y|e)$/i.test(x))) return w.join(' ')
+  const ape = w.length === 2 ? w[1] : w.length === 3 ? w[1] : w[2]
+  return `${w[0][0].toUpperCase()}. ${ape}`
+}
+
+/**
  * Parte ajena de UNA factura abierta, proporcional a su saldo (un abono baja lo ajeno en la misma proporción).
  * ext = lo que es de un tercero porque se factura por cuenta suya; com = comisiones por pagar a terceros. Para quien lee son lo mismo: lo que no queda en la oficina.
- * @param {{ saldo?: any, monto?: any, terceros?: any[], montoTerceros?: any }} f  monto = monto de la factura; terceros = filas de terceros_pagos de la factura
+ * @param {{ saldo?: any, monto?: any, terceros?: any[], montoTerceros?: any }} f  monto = monto de la factura; terceros = filas de terceros_pagos de la factura (con `contacto` = nombre corto del contacto, si se conoce)
  * @returns {{ ext: number, com: number, partes: { nombre: string, monto: number }[] }} pesos enteros; ext + com nunca pasa del saldo; partes suma ext + com
  */
 export function ajenoDeFactura(f) {
@@ -28,8 +40,8 @@ export function ajenoDeFactura(f) {
   let ext = 0, com = 0
   for (const t of f?.terceros || []) {
     if (!t) continue
-    if (t.comision_pct != null) { ext += n(t.monto); rows.push({ nombre: nombreTercero(t.proveedor), monto: n(t.monto), ext: true }) }
-    else if (t.estado !== 'pagado') { com += n(t.monto); rows.push({ nombre: nombreTercero(t.proveedor), monto: n(t.monto), ext: false }) }
+    if (t.comision_pct != null) { ext += n(t.monto); rows.push({ nombre: t.contacto ? String(t.contacto) : nombreTercero(t.proveedor), monto: n(t.monto), ext: true }) }
+    else if (t.estado !== 'pagado') { com += n(t.monto); rows.push({ nombre: t.contacto ? String(t.contacto) : nombreTercero(t.proveedor), monto: n(t.monto), ext: false }) }
   }
   if (!(ext > 0) && n(f?.montoTerceros) > 0) { ext = n(f.montoTerceros); rows.push({ nombre: 'Tercero', monto: ext, ext: true }) }
   const tot = ext + com
