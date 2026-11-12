@@ -1406,7 +1406,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
   const guardaComision = (mov, category) => {
     if(yaEsComision(mov)){ appAlert('Este cargo ya está registrado como pago de comisión a un proveedor (rebaja el ingreso de su venta). No se registra además como gasto de oficina.'); return false }
     const prov = ['Proveedores','Comisiones'].includes(category) ? provDeCargo(mov) : null
-    if(prov && comisPorPagar(prov.id).length){ appAlert(`${prov.nombre||prov.razon_social} tiene comisiones por pagar. Registra este cargo con "Pagar comisiones" para que rebaje el ingreso de su venta y no quede duplicado como gasto de oficina.`); return false }
+    if(prov && !otroServ[mov.id] && comisPorPagar(prov.id).length){ appAlert(`${prov.nombre||prov.razon_social} tiene comisiones por pagar. Registra este cargo con «Pagar comisiones», para que rebaje el ingreso de su venta y no quede duplicado como gasto de oficina; si es otro servicio, elige «Otro servicio (gasto)» en el movimiento.`); return false }
     return true
   }
   const costoOficina = async(mov, category, subcategory=null)=>{
