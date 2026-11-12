@@ -96,7 +96,7 @@ const reAbono = new RegExp(`Abono por transferencia de (.+?)\\s*Rut\\s*${RUT_RE}
 const reCCA = new RegExp(`originador Rut:?\\s*${RUT_RE}\\s*Nombre:?\\s*(.+?)\\s*(?:\\(N\\.?Ref|$)`, 'i')
 const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`, 'i')
 // Formato D — "Transferencia de ORIGEN Rut R1 desde Banco X a DESTINO Rut R2 a Cuenta Corriente de Banco Y": contraparte = DESTINO en un cargo, ORIGEN en un abono.
-const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}\\s+a\\s+Cuenta`, 'i')
+const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}`, 'i')   // lo que sigue («a Cuenta Corriente de…») puede venir cortado por el banco: no se exige
 
 function extraerContraparte(desc: string, tipo: string) {
   let m

@@ -112,7 +112,7 @@ const reCCA    = new RegExp(`originador Rut:?\\s*${RUT_RE}\\s*Nombre:?\\s*(.+?)\
 const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`, 'i')
 // Formato D — transferencia entre bancos: "Transferencia de ORIGEN Rut R1 desde Banco X a DESTINO Rut R2 a Cuenta Corriente de Banco Y, el ..."
 // La contraparte es el DESTINO en un cargo y el ORIGEN en un abono (el otro lado es nuestro).
-const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}\\s+a\\s+Cuenta`, 'i')
+const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}`, 'i')   // lo que sigue («a Cuenta Corriente de…») puede venir cortado por el banco: no se exige
 
 // Extrae {rut, nombre} de la glosa probando los formatos en orden (sirve para abonos y cargos).
 export function extraerContraparte(desc, tipo){
