@@ -5714,7 +5714,7 @@ export default function App() {
   const [novRows,setNovRows]=useState([]), [novVista,setNovVista]=useState(undefined), [novAviso,setNovAviso]=useState(false)
   useEffect(()=>{ if(!user?.email||!userRole) return; let alive=true
     if(DEMO){ setNovRows(NOV_DEMO); setNovVista(null); return }
-    Promise.all([supabase.from('novedades').select('*').eq('activo',true).order('fecha',{ascending:false}).limit(200),
+    Promise.all([supabase.from('novedades').select('*').eq('activo',true).gte('fecha',isoLocal(Date.now()-120*86400000)).order('fecha',{ascending:false}).limit(1000),   // por fecha (120 días), no por cantidad: con ~8 al día un tope de 200 filas dejaba fuera las más antiguas sin avisar
       supabase.from('learnings').select('value').eq('kind','novedades_vista').eq('key',String(user.email).toLowerCase()).order('updated_at',{ascending:false}).limit(1)])
       .then(([n,l])=>{ if(!alive) return; setNovRows(n.data||[]); setNovVista(l.data?.[0]?.value||null) }).catch(()=>{})
     return ()=>{ alive=false } },[user?.email,userRole])
