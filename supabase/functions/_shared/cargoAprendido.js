@@ -86,3 +86,35 @@ export function gastosCandidatosCargo(mov, gastos, ligados, idInterno, dias = 10
     .sort((a, b) => a.d - b.d)
     .map(x => x.g)
 }
+
+const nomKey = (/** @type {any} */ s) => String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim()
+const rutFmt = (/** @type {string} */ k) => `${k.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${k.slice(-1)}`
+
+/**
+ * Dígitos visibles del RUT del destino cuando el banco corta la glosa antes del dígito verificador
+ * («… a NOMBRE Rut 12.463.14»). null si la glosa trae el RUT completo o no es una transferencia entre bancos.
+ * @param {any} desc
+ * @returns {string | null}
+ */
+export function rutParcialDeGlosa(desc) {
+  const m = String(desc || '').match(/^\s*Transferencia de .+?\s+Rut\s*[\d.]+-?[\dkK]\s+desde\s+.+?\s+a\s+.+?\s+Rut\s*([\d.]{4,})\s*$/i)
+  return m ? rutNorm(m[1]).toUpperCase() : null
+}
+
+/**
+ * Completa el RUT cortado por el banco: solo si el nombre es idéntico (sin tildes ni mayúsculas) al de UNA persona ya conocida
+ * y los dígitos visibles son el comienzo de su RUT. Con dos RUT posibles o ninguno, no adivina.
+ * @param {{ nombre?: any, descripcion?: any }} mov
+ * @param {{ rut?: any, nombre?: any }[]} conocidos
+ * @returns {string | null} RUT completo formateado
+ */
+export function completarRutCortado(mov, conocidos) {
+  const parcial = rutParcialDeGlosa(mov?.descripcion), nk = nomKey(mov?.nombre)
+  if (!parcial || parcial.length < 5 || !nk) return null
+  const ruts = new Set()
+  for (const c of conocidos || []) {
+    const rk = rutNorm(c?.rut).toUpperCase()
+    if (rk.length >= 8 && rk.length > parcial.length && rk.startsWith(parcial) && nomKey(c?.nombre) === nk) ruts.add(rk)
+  }
+  return ruts.size === 1 ? rutFmt([...ruts][0]) : null
+}

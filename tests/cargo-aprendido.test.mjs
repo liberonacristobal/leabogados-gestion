@@ -1,7 +1,7 @@
 // Cargos del banco: el RUT de una transferencia con la glosa cortada, la clasificación aprendida por RUT y el cliente que nombra el mensaje. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { glosaGenerica, esPagoTGR, gastosCandidatosCargo, clasificacionPorRut, clientePorMensaje } from './../supabase/functions/_shared/cargoAprendido.js'
+import { glosaGenerica, esPagoTGR, gastosCandidatosCargo, clasificacionPorRut, clientePorMensaje, rutParcialDeGlosa, completarRutCortado } from './../supabase/functions/_shared/cargoAprendido.js'
 import { extraerContraparte } from './../src/cartola.js'
 
 test('transferencia entre bancos con la glosa cortada: el destino (persona) y su RUT salen igual que con «a Cuenta Corriente…»', () => {
@@ -54,4 +54,17 @@ test('gastos de cliente ya cargados que pueden ser el cargo: mismo monto, ±10 d
   assert.deepEqual(gastosCandidatosCargo({ monto: 0, fecha: '2026-09-15' }, g, new Set(), 'oficina'), [])
   assert.deepEqual(gastosCandidatosCargo(mov, /** @type {any} */ (null), new Set(), 'oficina'), [])
   assert.deepEqual(gastosCandidatosCargo({ monto: 6900, fecha: 'x' }, g, new Set(), 'oficina'), [])
+})
+
+test('RUT cortado por el banco: se completa solo con el nombre idéntico de una persona conocida y los dígitos visibles; con dudas, no', () => {
+  const g = 'Transferencia de LIBERONA ESCALA ABOGADOS LIMITADA Rut 77.700.387-9 desde Banco BICE a PERSONA UNO Rut 11.111.11'
+  assert.deepEqual(extraerContraparte(g, 'cargo'), { nombre: 'PERSONA UNO', rut: null })
+  assert.equal(rutParcialDeGlosa(g), '1111111')
+  assert.equal(rutParcialDeGlosa(g + '1-1'), null)   // RUT completo: nada que completar
+  const mov = { nombre: 'PERSONA UNO', descripcion: g }
+  assert.equal(completarRutCortado(mov, [{ rut: '11.111.111-1', nombre: 'Persona Uno' }, { rut: '11111111-1', nombre: 'PERSONA UNO' }]), '11.111.111-1')
+  assert.equal(completarRutCortado(mov, [{ rut: '11.111.119-9', nombre: 'PERSONA UNO' }, { rut: '11.111.118-8', nombre: 'PERSONA UNO' }]), null)   // dos RUT posibles
+  assert.equal(completarRutCortado(mov, [{ rut: '11.111.111-1', nombre: 'OTRA PERSONA' }]), null)   // otro nombre
+  assert.equal(completarRutCortado(mov, [{ rut: '22.222.222-2', nombre: 'PERSONA UNO' }]), null)   // dígitos distintos
+  assert.equal(completarRutCortado({ nombre: 'PERSONA UNO', descripcion: 'otra glosa' }, []), null)
 })

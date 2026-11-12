@@ -7,6 +7,7 @@
 import * as XLSX from 'npm:xlsx@0.18.5'
 import { parseCartola, normRut, huellaGlosa } from './cartola.ts'
 import { planCarga } from '../_shared/cartolaDedupe.js'
+import { completarRutCortado } from '../_shared/cargoAprendido.js'
 
 const SECRET = Deno.env.get('CARTOLA_SECRET') || ''
 const SB_URL = Deno.env.get('SUPABASE_URL') || ''
@@ -109,6 +110,15 @@ Deno.serve(async (req) => {
     let inserted = 0
     if (nuevos.length) {
       const resolver = await buildResolver()
+      // RUT cortado por el banco: se completa con el nombre idéntico de una persona ya conocida (misma regla que la carga manual).
+      // deno-lint-ignore no-explicit-any
+      for (const m of nuevos as any[]) {
+        if (m.tipo !== 'cargo' || m.es_interno || m.rut_contraparte || !m.nombre_contraparte) continue
+        const conocidos = await sbFetch(`cartola_movimientos?select=rut_contraparte,nombre_contraparte&rut_contraparte=not.is.null&nombre_contraparte=ilike.${encodeURIComponent(String(m.nombre_contraparte).replace(/[%*_]/g, '?'))}&limit=200`).catch(() => [])
+        // deno-lint-ignore no-explicit-any
+        const rut = completarRutCortado({ nombre: m.nombre_contraparte, descripcion: m.descripcion }, (conocidos || []).map((c: any) => ({ rut: c.rut_contraparte, nombre: c.nombre_contraparte })))
+        if (rut) m.rut_contraparte = rut
+      }
       const rows = nuevos.map(m => {
         const enriched = {
           ...m,
