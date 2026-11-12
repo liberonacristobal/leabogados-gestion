@@ -13,7 +13,8 @@ import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError, useDestinosBoleta} from '../lib/compartido.jsx'
+import { rutsDeDestino } from '../../supabase/functions/_shared/impuestosMensuales.js'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
@@ -266,10 +267,11 @@ export function ConciliarLoteModal({ rows=[], cmap={}, clients=[], onClose, onCo
 // para habilitar presentaciones movil/desktop sobre la MISMA logica. Traslado verbatim: no cambia ninguna formula.
 export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEntities=[],billing=[],sales=[],setRendiciones,setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,focusBuscar,onBuscarConsumed,focusVista,onVistaConsumida,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII,onFacturaPagada,onOpenProveedor}) {
   // Capa 2 — RUT conocidos para el tag "quién es"
-  // RUT conocidos para el tag "quién es" — SOCIO_RUT/EQUIPO_RUT se derivan de `miembros` (SOCIOS_CFG/EQUIPO_CFG, tenant-aware; fallback LEA). CONTADORA_RUT es externa (no es miembro): queda hardcodeada hasta tener su config.
+  // RUT conocidos para el tag "quién es" — SOCIO_RUT/EQUIPO_RUT se derivan de `miembros` (SOCIOS_CFG/EQUIPO_CFG, tenant-aware; fallback LEA). CONTADORA_RUT sale de las decisiones guardadas (boleta_destino = contabilidad), sin RUT en el código.
   const SOCIO_RUT  = useMemo(()=>{ const m={}; SOCIOS_CFG.forEach(s=>{ const k=crNormRut(s.rut); if(k) m[k]=s.nombre }); return m },[])   // eslint-disable-line
   const EQUIPO_RUT = useMemo(()=>{ const m={}; EQUIPO_CFG.forEach(s=>{ const k=crNormRut(s.rut); if(k) m[k]=s.nombre }); return m },[])   // eslint-disable-line
-  const CONTADORA_RUT = { '124631432':'Claudia (contadora)' }
+  const destinosBol = useDestinosBoleta()
+  const CONTADORA_RUT = useMemo(()=>rutsDeDestino(destinosBol,'contabilidad','Contadora'),[destinosBol])
   const [movs,setMovs] = useState([])
   const [loading,setLoading] = useState(true)
   const [importing,setImporting] = useState(false)
