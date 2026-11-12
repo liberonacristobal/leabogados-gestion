@@ -78,3 +78,14 @@ test('sin planilla, el costo neto de resultadoMes y el presupuesto de costos del
   const bud = M.costoOficinaNeto(rows.filter((x) => !M.esPPMcosto(x)), ym)   // misma expresión que budMes de presupuestoDatos.js
   assert.equal(r.cos, bud); assert.equal(bud, 2_050_000 - 500_000)
 })
+
+test('planilla sin cerrar y sin remuneraciones (solo el arriendo) es borrador: el mes usa el presupuesto neto y marca planillaIncompleta; con sueldos, aunque estimada, se usa; cerrada, siempre', () => {
+  const borrador = { anio: 2026, mes: 5, sueldos: 0, cotizaciones: 0, ppm: 0, arriendo: 2_000_000, estimado: false, cerrado: false }
+  const b = M.resultadoMes({ sii: [], plan: [borrador], boleta: new Set() }, deps, ym), s = M.resultadoMes({ sii: [], plan: [], boleta: new Set() }, deps, ym)
+  assert.equal(b.conPlanilla, false); assert.equal(b.planillaIncompleta, true); assert.equal(b.cos, s.cos); assert.equal(b.cos, 2_050_000 - 500_000)
+  const est = M.resultadoMes({ sii: [], plan: [{ ...plan, cerrado: false, estimado: true }], boleta: new Set() }, deps, ym)
+  assert.equal(est.conPlanilla, true); assert.equal(est.planillaIncompleta, false); assert.equal(est.estimado, true)
+  const cer = M.resultadoMes({ sii: [], plan: [{ ...borrador, cerrado: true }], boleta: new Set() }, deps, ym)
+  assert.equal(cer.conPlanilla, true); assert.equal(s.planillaIncompleta, false)
+  assert.equal(M.costoOperacionReal({ sii: [], plan: [3, 4, 5].map((mes) => ({ ...borrador, mes })), boleta: new Set() }, { ...deps, clients: [{ id: 'of', is_internal: true }], expenses: [{ client_id: 'of', type: 'gasto', category: 'Aseo', date: '2026-05-05', amount: 1 }] }, new Date(2026, 5, 15)), null)   // borradores no alimentan el flujo
+})

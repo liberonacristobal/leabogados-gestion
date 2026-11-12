@@ -74,8 +74,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
   const nCerrados=Array.from({length:maxM},(_,i)=>i+1).filter(m=>cmBy[m]&&cmBy[m].cerrado).length
   const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo · menor costo (informativo)'],['comisiones','Comisiones']]
-  const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
-  const EST_COL={cerrado:C.greenText,estimado:C.soonText,abierto:C.done,vacio:C.border}
+  const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&rmes[m]?.planillaIncompleta) return 'provisorio'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
+  const EST_COL={cerrado:C.greenText,estimado:C.soonText,provisorio:C.soonText,abierto:C.done,vacio:C.border}
   const abrirEditor=m=>{ const r=cmBy[m]||{}; const f={}; CAMPOS.forEach(([k])=>f[k]=r[k]!=null?Number(r[k]):0); f.nota=r.nota||''; f.estimado=!!r.estimado; f.cerrado=!!r.cerrado; setForm(f); setEditM(m) }
   // Cierre AUTOMÁTICO por criterio (sin botón): un mes se cierra solo cuando (1) ya es ≥ día 15 del mes siguiente —pasó el 13, cuando se paga la previsión (Previred), el costo que llega más tarde; margen para que cargue la cartola—, (2) tiene datos reales (sueldos+cotizaciones+PPM >0) y (3) no está marcado estimado. Verificado contra las fechas reales de la cartola 2026. El único control humano es el toggle "estimado". Reversible: marcar estimado reabre. Un barrido diario (pg_cron) lo aplica por el paso del tiempo; aquí se decide también al guardar.
   const cierreDisponible=m=> new Date() >= new Date(yr, m, 15)   // día 15 del mes SIGUIENTE a M (new Date mes es 0-based: índice m = mes m+1)
@@ -288,7 +288,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         const estP=pl?(pl.cerrado?'cerrada':pl.estimado?'estimada':'abierta'):''
         const plan=(concepto,monto)=>({fecha:'',concepto,fuente:`Planilla ${estP} de ${MESES[m-1].toLowerCase()}`,monto:nPeso(monto),planilla:m})
         const gasto=(e,fuente)=>({fecha:String(e.date||'').slice(0,10),concepto:[e.subcategory,e.concept||e.description].filter(Boolean).join(' · ')||e.category||'Gasto',fuente,monto:nPeso(e.amount),gasto:e.id})
-        if(!r.conPlanilla&&k!=='gv') rows.push({fecha:'',concepto:'Presupuesto de oficina',fuente:'Sin planilla del mes',monto:bud})
+        if(!r.conPlanilla&&k!=='gv') rows.push({fecha:'',concepto:'Presupuesto de oficina',fuente:r.planillaIncompleta?'Planilla provisoria':'Sin planilla del mes',monto:bud})
         else if(k==='rem'){ if(r.remEst) rows.push(plan('Sueldos y honorarios',nPeso(pl?.sueldos)+nPeso(pl?.honorarios))); else r.remItems.forEach(x=>rows.push({fecha:String(x.e.date||'').slice(0,10),concepto:x.persona||'Sueldo',fuente:x.boleta?'Banco · boleta, costo bruto':'Banco · líquido pagado',monto:x.costo,gasto:x.e.id})) }
         else if(k==='con'){ if((r.conItems||[]).length) r.conItems.forEach(e=>rows.push(gasto(e,'Banco · gasto'))); else rows.push(plan('Contadora',pl?.contadora)) }
         else if(k==='cot') rows.push(plan('Cotizaciones',pl?.cotizaciones))

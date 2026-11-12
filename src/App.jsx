@@ -49,7 +49,8 @@ import { liqParaCargo as _liqParaCargo, notariaPendientes, disponibleNotaria, an
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../supabase/functions/_shared/notariaDocsReglas.js'
 import { calcesCompraPago, comprasPorPagar } from '../supabase/functions/_shared/comprasReglas.js'
 import * as SD from '../supabase/functions/_shared/saludDatos.js'
-import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura } from '../supabase/functions/_shared/facturacionReglas.js'
+import { periodoDeTexto, mesScoreCandidata, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, ultimoDiaHabilMesEmision as _udhme, sugerirVentas, cuotasQueReemplaza, claveVentaFactura, esVentaSubarriendo } from '../supabase/functions/_shared/facturacionReglas.js'
+import { glosaDteSubarriendo } from '../supabase/functions/_shared/glosaSubarriendo.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, propuestaFondoRendicion } from '../supabase/functions/_shared/gastosReglas.js'
 import { pendientesPorCliente, nClientesConPendientes } from '../supabase/functions/_shared/pendientesCliente.js'   // Revisar cuentas: pendientes financieros por cliente (regla única)
 import { crearConsultas, resolverConIA } from '../supabase/functions/_shared/consultasCopiloto.js'   // saldo y rendición del cliente: regla única (la usa también el cierre de mes)
@@ -8225,11 +8226,17 @@ export default function App() {
       if(!rutValido(recRut)){ appAlert(`El RUT del receptor (${recRut}) no es válido — revisa el dígito verificador en la razón social antes de emitir.`); return }
       if(!(Math.round(bill.amount||0)>0)){ appAlert('La factura no tiene monto. No se puede emitir.'); return }
       const fecha = (bill.issued_at||'').slice(0,10) || new Date().toISOString().slice(0,10)
-      const base = { action:'emitir', tipoDte:34, billingId:bill.id, fecha, receptor:{ rut:recRut, rs:recRs }, items:[{ nombre:(bill.concept||'Honorarios profesionales').slice(0,80), monto:Math.round(bill.amount||0) }] }
+      // Subarriendo: el DTE sale con la glosa del estudio (config 'glosa_dte_subarriendo', por defecto «Servicios legales — Asesoría Laboral {mes} {año}»), no con el concepto interno. Se reconoce por el vínculo (billing_type / venta), nunca por el texto.
+      let nombreItem=(bill.concept||'Honorarios profesionales').slice(0,80)
+      if(bill.billing_type==='subarriendo'||esVentaSubarriendo((sales||[]).find(x=>String(x.id)===String(bill.sale_id)))){
+        const {data:cfg}=await supabase.from('learnings').select('value').eq('kind','config').eq('key','glosa_dte_subarriendo').order('updated_at',{ascending:false}).limit(1)
+        nombreItem=glosaDteSubarriendo(bill,cfg?.[0]?.value)
+      }
+      const base = { action:'emitir', tipoDte:34, billingId:bill.id, fecha, receptor:{ rut:recRut, rs:recRs }, items:[{ nombre:nombreItem, monto:Math.round(bill.amount||0) }] }
       const prev=await _siiFetch({...base, dryRun:true})
       setEmitirPreview({ prev, base, recRut, recRs, billId:bill.id, fecha })
     }catch(e){ appAlert('No se pudo preparar la emisión: '+e.message) }
-  },[clientEntities])
+  },[clientEntities,sales])
   // Paso 2: emite de verdad al SII (desde el modal de vista previa). El motor persiste folio + dte_* en billing.
   const confirmEmitirDTE=useCallback(async()=>{
     const ep=emitirPreview; if(!ep) return
