@@ -2,8 +2,10 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
+import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, montoFactura, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
 import { TRAMOS, enFiltroMora, estadoCompromiso, exposicionCartera, puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
+import { resumenPropio } from '../../supabase/functions/_shared/cobranzaPropio.js'
+import { CobranzaPropioVista } from './cobranzaPropioVista.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { Menu } from '../lib/presupuestoUI.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, descargarXlsx, useSeleccion } from '../lib/seleccionLote.jsx'
@@ -99,7 +101,7 @@ export function RecordatorioModal({ grupo, to, nombre, clientEntities=[], sendin
 // ─── COBRANZA AUTÓNOMA (Fase 1: cockpit con gate humano + aprendizaje "se libera") ────────────────
 // Patrón FirmDesk: la app propone el recordatorio que TOCA hoy (cadencia cobranzaAccion), tú confirmas.
 // Cada confirmación por cliente suma; al llegar al umbral, ofrece "liberar" ese cliente a automático (cron, Fase 3).
-export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, currentUserEmail, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen, filtroInicial=null, onFiltroListo }){
+export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], clientEntities=[], expenses=[], tasks=[], currentUserName, currentUserEmail, onOpenClientFicha, onOpenFactura, onIrConciliacion, onClose, origen, filtroInicial=null, onFiltroListo }){
   const isDesktop = useIsDesktop()   // Fase 3: columna más ancha en escritorio
   const selB = useSeleccion('cobranza')
   const LIBERAR_UMBRAL = 3
@@ -123,6 +125,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   const [movTab,setMovTab] = useState('fac')   // móvil, cliente desplegado: 'fac' (facturas) | 'ges' (gestión)
   const [compPage,setCompPage] = useState(null)   // client_id con la hoja «Compromiso de pago» abierta
   const [compForm,setCompForm] = useState({fecha:'',por:'',monto:''})
+  const [propioTab,setPropioTab] = useState(null)   // vista «Ingreso propio»: null (cerrada) | 'todo' (Por cobrar) | 'venc' (Vencido)
   const [aboFilter,setAboFilter] = useState(null)   // anillo de abogado seleccionado → filtra la lista de clientes (hero y anillos siguen globales)
   const hoy = new Date().toLocaleDateString('en-CA',{timeZone:'America/Santiago'})
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Cliente'
@@ -183,6 +186,9 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
   // Exposición: antigüedad, concentración y puntualidad (helpers únicos de _shared/cobranzaExposicion.js). Nada sale de «Vencido»: solo se lee.
   const expo = useMemo(()=>exposicionCartera(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),mora:x.venc?x.diasVenc:0})))),[grupos])
   const punt = useMemo(()=>puntualidadPorCliente(billing,hoy),[billing,hoy])
+  // Ingreso propio de la cartera (helper único _shared/cobranzaPropio.js): lo ajeno son la parte de terceros y las comisiones por pagar; ver la vista «Ingreso propio».
+  const propio = useMemo(()=>{ const tb={}; (terceros||[]).forEach(t=>{ if(t&&t.billing_id) (tb[String(t.billing_id)]=tb[String(t.billing_id)]||[]).push(t) })
+    return resumenPropio(grupos.flatMap(g=>g.items.map(x=>({cid:g.cid,saldo:saldoBill(x.b),monto:montoFactura(x.b),mora:x.venc?x.diasVenc:0,terceros:tb[String(x.b.id)]||[],montoTerceros:x.b.monto_terceros})))) },[grupos,terceros])
   const gGlobal = useMemo(()=>Object.fromEntries(grupos.map(g=>[g.cid,g])),[grupos])
   const gruposAccion = grupos.filter(g=>g.nAccion>0)   // clientes con vencido que toca recordar hoy
   // Orden compartido (móvil y escritorio): por nombre / N° facturas / monto (deuda total) / vencido / mora, asc o desc.
@@ -357,6 +363,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
     </div>) }
 
   // Recordatorio de cobro = PÁGINA (antes ventana encima): mismo contenido, con '‹ Cobranza' para volver. El envío sigue con su botón y confirmación.
+  if(propioTab) return <CobranzaPropioVista resumen={propio} tab={propioTab} setTab={setPropioTab} cn={cn} onOpenClientFicha={onOpenClientFicha} onBack={()=>setPropioTab(null)}/>
   if(recPrev) return <FlujoPagina origen='Cobranza' titulo='Recordatorio de cobro' ctx={cn(recPrev.g.cid)} onBack={()=>setRecPrev(null)} maxW={1000}><RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})} asPage/></FlujoPagina>
   if(compPage!=null){ const G=gGlobal[compPage]; const inp={width:'100%',boxSizing:'border-box',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',fontSize:14,background:C.surface,fontFamily:'inherit'}; const lb={...SEC_LBL,marginBottom:5}
     const linea=(ic,t)=><div style={{display:'flex',gap:9,alignItems:'flex-start',padding:'6px 0',fontSize:12,lineHeight:1.45}}><span style={{width:20,height:20,borderRadius:'50%',background:C.bgSoft,color:C.accent,fontWeight:800,fontSize:11,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ic}</span><span>{t}</span></div>
@@ -387,7 +394,7 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
       {(()=>{
         // Foto de Cobranza: dos tarjetas en tonos claros (molde del Inicio). Tocar una ordena la lista por esa cifra.
         const tile=(key,label,fig,cap,bg,bd,ico,icoCol,figCol)=>(
-          <div onClick={()=>key==='m60'?setTramoF(f=>f==='m60'?null:'m60'):setSortBy({col:key,dir:'desc'})} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+          <div onClick={()=>key==='m60'?setTramoF(f=>f==='m60'?null:'m60'):setPropioTab(key==='vencido'?'venc':'todo')} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
             <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
               <span style={{width:30,height:30,borderRadius:8,background:bd,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ico} s={16} c={icoCol}/></span>
               <div style={{minWidth:0,flex:1}}>
@@ -400,11 +407,17 @@ export function CobranzaView({ billing=[], clients=[], sales=[], clientEntities=
         const chip=a=>{ const on=aboFilter===a.abo; return (
           <button key={a.abo} onClick={()=>setAboFilter(on?null:a.abo)} title={`${a.abo} · ${fM(a.vencido)} vencido de ${fM(a.total)} · ${a.nVenc}/${a.n} vencidas`} style={pillPersonaSty(personChip(a.abo),on)}>{a.abo} · {fM(a.vencido)}</button>) }
         return (<>
-          <div style={{display:'grid',gridTemplateColumns:isDesktop&&expo.m60>0?'1fr 1fr 1fr':'1fr 1fr',gap:8,marginBottom:12,alignItems:'start'}}>
+          {(()=>{ const nT=2+(expo.m60>0?1:0)+(propio.todo.n>0?1:0)   // tarjetas visibles: Vencido, Por cobrar, Más de 60 días e Ingreso propio
+            const ajeno=propio.todo.ext+propio.todo.com
+            return (<>
+          <div style={{display:'grid',gridTemplateColumns:isDesktop?`repeat(${Math.min(nT,4)},1fr)`:'1fr 1fr',gap:8,marginBottom:ajeno>0?6:12,alignItems:'start'}}>
             {tile('vencido','Vencido',fM(vencidoTotal),`${nVencidas} factura${nVencidas!==1?'s':''}${isDesktop?` · ${gruposAccion.length} cliente${gruposAccion.length!==1?'s':''}`:''}`,C.overdueBg,C.overdueBd,'alert',C.overdueText,C.overdueText)}
             {tile('total','Por cobrar',fM(deudaTotal),`${grupos.length} cliente${grupos.length!==1?'s':''}${isDesktop&&nAlDia>0?` · ${nAlDia} al día`:''}`,C.azulBg,C.azulBd,'file',C.azulInfo,C.accent)}
-            {expo.m60>0&&<div style={isDesktop?undefined:{gridColumn:'1 / -1'}}>{tile('m60','Más de 60 días',fM(expo.m60),`${pctTxt(expo.pctM60)} de la cartera`,C.soonBg,`${C.soon}55`,'clock',C.soonText,C.soonText)}</div>}
+            {expo.m60>0&&tile('m60','Más de 60 días',fM(expo.m60),`${pctTxt(expo.pctM60)} de la cartera`,C.soonBg,`${C.soon}55`,'clock',C.soonText,C.soonText)}
+            {propio.todo.n>0&&<div style={!isDesktop&&nT%2===1?{gridColumn:'1 / -1'}:undefined}>{tile('propio','Ingreso propio',fM(propio.todo.propio),`${pctTxt(deudaTotal>0?propio.todo.propio/deudaTotal:0)} de la cartera`,C.greenBg,C.greenDeep,'wallet',C.greenText,C.greenText)}</div>}
           </div>
+          {ajeno>0&&<div onClick={()=>setPropioTab('todo')} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setPropioTab('todo') }} style={{minHeight:36,display:'flex',alignItems:'center',gap:6,fontSize:13,color:C.muted,cursor:'pointer',marginBottom:6}}>Excluye {propio.todo.ext>0&&<b style={{color:C.accent}}>terceros {fM(propio.todo.ext)}</b>}{propio.todo.ext>0&&propio.todo.com>0&&' · '}{propio.todo.com>0&&<b style={{color:C.accent}}>comisiones {fM(propio.todo.com)}</b>} <Gl n='chevron'/></div>}
+          </>) })()}
           {expo.mayor&&expo.mayor.pct>=0.25&&gGlobal[expo.mayor.cid]&&<div style={{background:C.soonBg,borderRadius:12,padding:'0 13px',marginBottom:10}}>
             <div onClick={()=>setConcOpen(o=>!o)} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setConcOpen(o=>!o) }} style={{minHeight:44,display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,fontWeight:700,color:C.soonText,minWidth:0}}><span style={{flex:1,minWidth:0}}>{cn(expo.mayor.cid)} · {pctTxt(expo.mayor.pct)} de la cartera</span><span style={{transform:concOpen?'rotate(90deg)':'none',transition:'transform .12s',display:'inline-flex'}}><Gl n='chevron'/></span></div>
             {concOpen&&<div style={{fontSize:12,color:C.soonText,padding:'0 0 10px'}}>{cn(expo.mayor.cid)} concentra el {pctTxt(expo.mayor.pct)} de la cartera por cobrar. {(()=>{ const G=gGlobal[expo.mayor.cid], pp=punt.get(String(expo.mayor.cid)); return `${G.items.length} factura${G.items.length!==1?'s':''}${!pp||pp.n===0?', sin pagos registrados':''}; mora máxima ${G.maxDias} días. Los tres mayores deudores suman ${pctTxt(expo.top3pct)}.` })()}</div>}</div>}
