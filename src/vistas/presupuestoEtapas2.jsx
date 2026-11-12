@@ -189,7 +189,11 @@ export function Escenarios({ X }) {
   return <>
     <Pestanas options={tabs} value={ui.tab} onChange={(v) => setUI({ tab: v })} />
     {ui.tab === 'imp' && <Strip X={X} />}
-    {ui.tab === 'res' && <><Titulo right={X.MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}>exige <b style={{ color: C.accent }}>{sgn(X.MT.ch.g)}{pc(Math.abs(X.MT.ch.g))}</b> real en UF</span> : null}>Escenarios contra la meta de {nombreComponente(X.MT.ancla, CFG).toLowerCase()} · {mm(X.MT.valor)}<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}> · {nivelTxt(escenariosContraMeta(X.M, X.MT.ancla, X.MT.valor, X.MT.ratio, X.MT.cv).find((x) => x.cubre)?.k ?? null, X.ESC)}</span></Titulo></>}
+    {ui.tab === 'res' && (() => {
+      // Una sola línea: el título con la meta y el escenario que la cubre, y a la derecha lo que exige en UF (en celular, sin «Escenarios contra la» ni «real en UF»).
+      const nv = nivelTxt(escenariosContraMeta(X.M, X.MT.ancla, X.MT.valor, X.MT.ratio, X.MT.cv).find((x) => x.cubre)?.k ?? null, X.ESC), nvC = String(nv).replace('el escenario ', '')
+      return <Titulo style={{ flexWrap: 'nowrap' }} right={X.MT.ok ? <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted, whiteSpace: 'nowrap' }}>exige <b style={{ color: C.accent }}>{sgn(X.MT.ch.g)}{pc(Math.abs(X.MT.ch.g))}</b>{X.D ? ' real en UF' : ''}</span> : null}><span style={{ whiteSpace: 'nowrap' }}>{X.D ? `Escenarios contra la meta de ${nombreComponente(X.MT.ancla, CFG).toLowerCase()}` : 'Meta'} · {mm(X.MT.valor)}<span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.muted }}> · {X.D ? nv : nvC}</span></span></Titulo>
+    })()}
     {cuerpo}
     <div className='pp-dg' style={dg}>
       {ui.tab === 'res' && <>
