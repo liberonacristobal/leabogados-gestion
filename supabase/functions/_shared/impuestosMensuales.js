@@ -60,6 +60,9 @@ export function mismaPersona(a, b) {
   return c.every((t) => l.includes(t))
 }
 
+/** Mapa { RUT normalizado: nombre } de los emisores con un destino dado (p. ej. 'contabilidad' → la contadora); sale de las decisiones guardadas, sin RUT escritos en código. @param {Record<string,string>} destinos @param {string} destino @param {string} nombre */
+export const rutsDeDestino = (destinos, destino, nombre) => Object.fromEntries(Object.entries(destinos || {}).filter(([k, v]) => v === destino && rutNormal(k)).map(([k]) => [rutNormal(k), nombre]))
+
 /** Cliente interno de la oficina (sus gastos «Sueldos» son los de la planilla): una sola regla para la planilla, el calendario y los lectores del servidor. @param {any[]} clients */
 export const idOficina = (clients) => { const c = (clients || []).find((x) => x && (x.is_internal || /liberona\s+escala/i.test(x.name || ''))); return c ? c.id : null }
 

@@ -758,7 +758,15 @@ const _DEMO_IMP={ docs:[{tipo_dte:34,monto:65577480,fecha_emision:'2026-10-15'},
   valores:{'2026-10':{ppm:1833004}}, pagos:[{persona:'Carla Demo',fecha:'2026-10-30',liquido:500000,origen:'sueldo'}] }
 let _impFu=null, _impFuT=0
 // Vigencia de la copia de sesión: un minuto (al volver de cargar una boleta se lee de nuevo). Un error de la base no se guarda ni se da por cargado: `ok:false` (los consumidores no sellan nada con datos vacíos).
-export const invalidarImpuestosFuentes=()=>{ _impFu=null; _impFuT=0 }
+export const invalidarImpuestosFuentes=()=>{ _impFu=null; _impFuT=0; _destBol=null }
+// Decisiones «destino de cada emisor de boleta» (learnings boleta_destino, key = RUT normalizado). Liviano: lo usa Conciliación para reconocer a la contadora sin RUT en el código. Demo: un RUT ficticio.
+let _destBol=null
+export function useDestinosBoleta(){
+  const [d,setD]=useState(()=>DEMO?{'111111111':'contabilidad'}:(_destBol||{}))
+  useEffect(()=>{ if(DEMO) return; if(_destBol){ setD(_destBol); return } let v=true
+    supabase.from('learnings').select('key,value,updated_at').eq('kind','boleta_destino').order('updated_at',{ascending:true}).then(({data,error})=>{ if(error||!data) return; const m={}; data.forEach(r=>{ if(r.key) m[String(r.key)]=r.value||'' }); _destBol=m; if(v) setD(m) },()=>{})
+    return ()=>{v=false} },[])
+  return d }
 export function useImpuestosFuentes(){
   const [f,setF]=useState(()=>DEMO?_DEMO_IMP:(_impFu&&Date.now()-_impFuT<60000?_impFu:null)), [n,setN]=useState(0)
   useEffect(()=>{ if(DEMO){ setF(_DEMO_IMP); return } if(_impFu&&n===0&&Date.now()-_impFuT<60000){ setF(_impFu); return }

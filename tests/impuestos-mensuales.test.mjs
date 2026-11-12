@@ -1,7 +1,7 @@
 // Impuestos mensuales (F29): PPM, retención de honorarios por persona e impuesto único. Casos anonimizados de octubre y septiembre de 2026 (cuadran al peso con el «Iva» del correo de la contadora).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { impuestosMensuales, boletasPorCargar, brutoDeLiquido, pagosConBoleta, listaBoletasPorCargar, boletasSinEnlace, rutNormal, destinoDeEmisor, ETIQ_DESTINO, impuestosPresupuesto, mesTrabajadoDePago, mismaPersona } from './../supabase/functions/_shared/impuestosMensuales.js'
+import { impuestosMensuales, boletasPorCargar, brutoDeLiquido, pagosConBoleta, listaBoletasPorCargar, boletasSinEnlace, rutNormal, rutsDeDestino, destinoDeEmisor, ETIQ_DESTINO, impuestosPresupuesto, mesTrabajadoDePago, mismaPersona } from './../supabase/functions/_shared/impuestosMensuales.js'
 
 const docs = [{ tipo_dte: 34, monto: 65_577_480, fecha_emision: '2026-10-15' }, { tipo_dte: 34, monto: 9_000_000, fecha_emision: '2026-09-10' }]
 const B = (folio, fecha, nombre, bruto, ret, extra = {}) => ({ id: 'b' + folio, folio, fecha, emisor_nombre: nombre, bruto, retencion: ret, liquido: bruto - ret, tasa: 0.1525, estado: 'vigente', movimiento_id: 'm' + folio, ...extra })
@@ -152,4 +152,10 @@ test('estado v7 sin sellar (fuentes incompletas) queda idéntico aunque haya dat
   const buena = migrarEstado(sin, 2027, 0, undefined, imp)
   assert.equal(buena.v, 7); assert.equal(buena.ppmAnual, 5_800_000); assert.equal(buena.costos.find((c) => c.id === 'R|1').m, brutoDeLiquido(600000, 0.16)); assert.equal(buena.costos.find((c) => c.id === 'R|2').m, 900000); assert.equal(buena.costos.length, 3)
   assert.deepEqual(migrarEstado(buena, 2027, 0, undefined, imp).costos, buena.costos)   // ya es v7: no se repite
+})
+
+test('mapa de la contadora desde las decisiones guardadas: solo los RUT con destino «contabilidad», normalizados; sin filas, vacío', () => {
+  const dest = { '111111111': 'contabilidad', '22.222.222-2': 'contabilidad', '333333333': 'gasto_oficina', '444444444': '' }
+  assert.deepEqual(rutsDeDestino(dest, 'contabilidad', 'Contadora'), { '111111111': 'Contadora', '222222222': 'Contadora' })
+  assert.deepEqual(rutsDeDestino({}, 'contabilidad', 'Contadora'), {}); assert.deepEqual(rutsDeDestino(null, 'contabilidad', 'Contadora'), {})
 })
