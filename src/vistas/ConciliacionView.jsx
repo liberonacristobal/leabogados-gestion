@@ -1,6 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
+import { clasificacionPorRut, clientePorMensaje, glosaGenerica } from '../../supabase/functions/_shared/cargoAprendido.js'
 import { demoData } from '../demoData'
 import { parseCartola, normRut as crNormRut, rutValido, esRutPropio, huellaGlosa, fechaGlosaISO } from '../cartola.js'
 import { candidatosFactura, elegirFactura, elegirCombo, folioEnTexto } from '../../supabase/functions/_shared/conciliacionReglas.js'
@@ -417,7 +418,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
   // Sugerencia de categoría aprendida (cartola_tipo) para un abono sin identificar: mismo RUT o mismo nombre.
   const tipoSugerido = m => { if(m.es_interno||m.categoria) return null; const k=crNormRut(m.rut_contraparte); if(k&&tipoAprendido[k]) return tipoAprendido[k]; const nk=m.nombre_contraparte?'n:'+_stripNom(m.nombre_contraparte):null; if(nk&&tipoAprendido[nk]) return tipoAprendido[nk]; return null }
   // Costo de oficina aprendido por glosa (el mismo arriendo/sueldo/servicio que vuelve cada mes) → categoría + subcategoría sugeridas.
-  const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaKey(m.descripcion); const l=gk&&costoOfiLearn[gk]; return (l&&!l.ambiguo)?l:null }
+  const costoOfiSugerido = m => { if(m.tipo!=='cargo'||m.es_interno||(concByMov[m.id]?.length)) return null; const gk=glosaGenerica(m.descripcion)?null:glosaKey(m.descripcion); const l=gk&&costoOfiLearn[gk]; return (l&&!l.ambiguo)?l:null }
   // Nombres de pila comunes: no alcanzan para identificar (dos "José Miguel" distintos no son el mismo cliente).
   const _NOM_COMUN = new Set(['jose','juan','maria','luis','carlos','miguel','francisco','pedro','pablo','jorge','manuel','andres','felipe','cristobal','catalina','daniel','ignacio','antonio','rodrigo','sebastian','alejandro','fernando','gonzalo','ricardo','roberto','eduardo','patricio','claudio','marcelo','rafael','victor','angel','mario','raul','sergio','hernan','ramon',
     // palabras de servicios bancarios de pago (no identifican al pagador): «NOMINA MISMO DIA PROVEEDORES», «PAGO PROVEEDORES»
@@ -1386,7 +1387,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, cliente_id:clientId }).eq('id',mov.id)
       if(me) throw me
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,cliente_id:clientId}:x))
-      const gk=glosaKey(mov.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{category:category||null}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
+      const gk=glosaGenerica(mov.descripcion)?null:glosaKey(mov.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{category:category||null}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
       setGcFor(null); setGcCli(null); setGcEnt(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); appAlert('Error al registrar el gasto: '+e.message) }
     setBusy(null)
@@ -1428,7 +1429,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id)
       if(me) throw me
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x))
-      const gko=glosaKey(mov.descripcion); if(gko&&category){ learnPut('costo_oficina',gko,category,{subcategory:subcategory||null}); setCostoOfiLearn(p=>({...p,[gko]:{category,subcategory:subcategory||null}})) }   // aprende: el mismo cargo (arriendo/sueldos) el próximo mes se auto-sugiere
+      const gko=glosaGenerica(mov.descripcion)?null:glosaKey(mov.descripcion); if(gko&&category){ learnPut('costo_oficina',gko,category,{subcategory:subcategory||null}); setCostoOfiLearn(p=>({...p,[gko]:{category,subcategory:subcategory||null}})) }   // aprende: el mismo cargo (arriendo/sueldos) el próximo mes se auto-sugiere
       setOfiFor(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(gasto) await supabase.from('expenses').delete().eq('id',gasto.id); appAlert('Error al registrar el costo de oficina: '+e.message) }
     setBusy(null)
@@ -1688,6 +1689,10 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     return [...new Set([...seed,...fromExp])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'))
   }
   // Sugerencia aprendida para un cargo: RUT (persona/socio/contadora) > glosa (costo oficina) > glosa (cliente).
+  // Lo que la app ya sabe: la clasificación que siempre se le dio a un RUT (cargos ya registrados como gasto de oficina) y los clientes con sus razones sociales (para el mensaje de la transferencia).
+  const clasifPorRut = useMemo(()=>{ if(!ofiCli) return new Map(); const exp=new Map((expenses||[]).map(e=>[String(e.id),e]))
+    return clasificacionPorRut((movs||[]).filter(x=>x.tipo==='cargo'&&x.rut_contraparte).flatMap(x=>(concByMov[x.id]||[]).filter(c=>c.tipo_destino==='gasto').map(c=>exp.get(String(c.gasto_id))).filter(e=>e&&!e.deleted_at&&String(e.client_id)===String(ofiCli.id)&&e.category).map(e=>({rut:x.rut_contraparte,category:e.category,subcategory:e.subcategory})))) },[movs,concByMov,expenses,ofiCli])
+  const candCli = useMemo(()=>(clients||[]).filter(c=>!c.is_internal&&!(ofiCli&&String(c.id)===String(ofiCli.id))).map(c=>({id:c.id,nombres:[c.name,...(clientEntities||[]).filter(e=>String(e.client_id)===String(c.id)).map(e=>e.name)]})),[clients,clientEntities,ofiCli])
   const cargoSugerencia = m => {
     if(m.tipo!=='cargo'||m.es_interno) return null
     const k=crNormRut(m.rut_contraparte)
@@ -1710,8 +1715,11 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           : {fam:'oficina',category:'Sueldos',sub:SOCIO_RUT[k],via:'RUT',motivo:'monto no redondo'} }
       if(CONTADORA_RUT[k]) return {fam:'oficina',category:'Contadora',sub:null,via:'RUT'}
       if(provByRut[k]&&!provConComisiones(provDeCargo(m))) return {fam:'oficina',category:'Proveedores',sub:provByRut[k],via:'RUT'}   // con comisiones → pago de comisión, no gasto
+      const ap=clasifPorRut.get(k); if(ap) return {fam:'oficina',category:ap.category,sub:ap.sub,via:'RUT'}   // lo que siempre se hizo con ese RUT
     }
-    const gk=glosaKey(m.descripcion)
+    // El mensaje de la transferencia nombra la sociedad de un cliente («Inscripción a nombre de …»): gasto de ese cliente.
+    const cm=m.detalle_aviso&&clientePorMensaje(m.detalle_aviso,candCli); if(cm) return {fam:'cliente',clientId:cm,via:'mensaje'}
+    const gk=glosaGenerica(m.descripcion)?null:glosaKey(m.descripcion)   // la glosa «Transferencia de LIBERONA ESCALA…» no dice a quién: su clave sería la misma para todas
     if(gk&&costoOfiLearn[gk]&&!costoOfiLearn[gk].ambiguo) return {fam:'oficina',category:costoOfiLearn[gk].category,sub:costoOfiLearn[gk].subcategory||null,via:'glosa'}
     if(gk&&cargoCliLearn[gk]) return {fam:'cliente',clientId:cargoCliLearn[gk],via:'glosa'}
     const bm=matchPresupuesto(m); if(bm) return bm   // cruce con el presupuesto de oficina: monto exacto (+ glosa)
@@ -2132,7 +2140,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         </div> }
       const cnm=cmap[sug.clientId]||'cliente'
       return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · {sug.via==='mensaje'?'del mensaje de la transferencia':'de la glosa'} · solo control</div></div>
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.coralText,color:'#fff'}}>Confirmar</button>
       </div>
     }
@@ -2750,7 +2758,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
     const cnm=cmap[sug.clientId]||'cliente'
     return (
       <div onClick={stop} style={{marginTop:8,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · de la glosa · solo control</div></div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cnm}</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>gasto de cliente · {sug.via==='mensaje'?'del mensaje de la transferencia':'de la glosa'} · solo control</div></div>
         <button disabled={busy===m.id} onClick={()=>marcarCargoCliente(m,sug.clientId)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Confirmar</button>
       </div>)
   }
