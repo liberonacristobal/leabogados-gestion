@@ -4,7 +4,7 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { C, Gl, Sk, Spin, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
 import { PROMPT_COMPROBANTE, archivoABase64, extraerJSON, normalizarLectura, reducirImagen } from '../lib/comprobante.js'
-import { CATS_DE_CLIENTE, CATS_GASTO, FloatFld, claudeCall, subirAdjuntoDrive, INICIALES_RESP, Inp, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, learnPut, logActividad, medioMovDe, saldoCliente, subOtro, subproyectosCliente, useDeQueAprendido } from '../lib/compartido.jsx'
+import { CATS_DE_CLIENTE, CATS_GASTO, FloatFld, claudeCall, subirAdjuntoDrive, INICIALES_RESP, Inp, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, learnPut, logActividad, medioMovDe, saldoCajaChica, saldoCliente, subOtro, subproyectosCliente, useDeQueAprendido } from '../lib/compartido.jsx'
 
 export const TrashIcon = ({color}) => (
   <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={color||'#537281'} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/></svg>
@@ -27,7 +27,7 @@ export const _esOfiCli = c => !!c && (c.is_internal || /liberona\s+escala/i.test
 
 export const _hoyLocal = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 
-export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,estudioId,onIrCliente,onLanding}) {
+export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,onClose,preClient,sinCabecera=false,userName,estudioId,onIrCliente,onLanding,pettyCash=[],onIrCaja}) {
   const isDesktop = useIsDesktop()
   const hoy = _hoyLocal()
   const nuevaFila = date => ({id:Date.now()+Math.random(),category:null,concept:'',amount:'',date:date||hoy,paid_by_client:false,subcategory:'',cli:null,proj:'',resp:null,picking:false,pq:'',mvMedio:'',mvDesde:'',mvHasta:'',mvMotivo:'',deQue:'',dupOk:false})
@@ -518,18 +518,23 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
         </>))}
     </>)
 
+  // Saldo de la caja chica de quien carga (misma fórmula de la pantalla Caja chica): se ve al guardar, sin ir a mirarlo. Solo si tiene caja.
+  const tieneCaja=!!userName&&(pettyCash||[]).some(p=>p.user_name===userName)
+  const saldoCaja=tieneCaja?saldoCajaChica(pettyCash,expenses,userName):0
+  const cajaLinea=tieneCaja?<>{' · '}<span onClick={onIrCaja?()=>onIrCaja():undefined} role={onIrCaja?'button':undefined} style={{cursor:onIrCaja?'pointer':'default',color:saldoCaja<0?C.overdueText:C.greenText,textDecoration:onIrCaja?'underline':'none',textUnderlineOffset:2}}>caja chica {fmt(saldoCaja)}</span></>:null
+
   return (
     <>
       {!sinCabecera&&<div style={{display:'flex',alignItems:'center',gap:9,marginBottom:14}}>
         <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
       </div>}
-      {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+      {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}{cajaLinea}</div>}
       {!selectedClient&&!personal&&landing}
 
       {(selectedClient||personal)&&(
         <>
-          {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}
+          {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}{cajaLinea}</div>}
           {foto?.file&&rows.some(r=>r.foto)&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 10px',marginBottom:8,fontWeight:600}}>
             {foto.url?<img src={foto.url} alt='' style={{width:18,height:22,objectFit:'cover',borderRadius:3}}/>:null}<span style={{flex:1,minWidth:0}}>Foto del comprobante: se adjunta al guardar</span>
             <button type='button' onClick={quitarFoto} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Quitar</button></div>}
