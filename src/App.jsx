@@ -447,7 +447,9 @@ function NovedadFila({n, isAdmin, onOpen, compact, first, acciones}){
 }
 // Aviso al entrar: ventana al centro con las novedades no vistas (lo que más sirve a cada rol). «Ver todas» abre la página Novedades;
 // «Entendido» lo cierra; en ambos casos quedan vistas.
+const NOV_AVISO_MAX = 6   // filas que muestra el aviso al entrar; el resto va tras «N novedades más · Ver todas»
 function NovedadesAviso({items, isDesktop, isAdmin, onOpen, onClose, onVerTodas}){
+  const resto = items.length - NOV_AVISO_MAX
   const sty = {position:'fixed',inset:0,background:'rgba(4,36,47,.38)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:300,padding:16}
   const panel = (<div onClick={e=>e.stopPropagation()} style={{width:isDesktop?600:'100%',maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 80px)',background:C.surface,borderRadius:16,boxShadow:'0 18px 50px rgba(0,30,40,.28)',overflow:'hidden',display:'flex',flexDirection:'column'}}>
     <div style={{display:'flex',alignItems:'center',gap:11,padding:isDesktop?'16px 18px 12px':'14px 14px 12px',borderBottom:`1px solid ${C.border}`}}>
@@ -455,9 +457,10 @@ function NovedadesAviso({items, isDesktop, isAdmin, onOpen, onClose, onVerTodas}
       <div style={{flex:1,minWidth:0}}><div style={{fontSize:17,fontWeight:700,color:C.accent}}>Novedades</div><div style={{fontSize:12,color:C.muted}}>desde tu última visita · {items.length}</div></div>
       <button onClick={onClose} aria-label='Cerrar' style={{width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}><Gl n='x'/></button>
     </div>
-    <div style={{flex:1,overflowY:'auto',minHeight:0}}>{items.map((n,i)=><NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}/>)}</div>
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
-      <button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver todas</button>
+    <div style={{flex:1,overflowY:'auto',minHeight:0}}>{items.slice(0,NOV_AVISO_MAX).map((n,i)=><NovedadFila key={n.id} n={n} isAdmin={isAdmin} onOpen={onOpen} compact={!isDesktop} first={i===0}/>)}
+      {resto>0&&<div onClick={onVerTodas} role='button' style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,minHeight:46,padding:isDesktop?'8px 18px':'8px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer',fontSize:13,fontWeight:700,color:C.azulInfo}}><span>{resto} novedad{resto!==1?'es':''} más</span><span style={{display:'inline-flex',alignItems:'center',gap:4}}>Ver todas <Gl n='chevron'/></span></div>}</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:resto>0?'flex-end':'space-between',padding:isDesktop?'12px 18px':'12px 14px 16px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+      {resto<=0&&<button onClick={onVerTodas} style={{fontSize:13,fontWeight:700,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Ver todas</button>}
       <button onClick={onClose} style={{background:C.accent,color:'#fff',fontSize:13,fontWeight:700,borderRadius:10,padding:'9px 22px',border:'none',cursor:'pointer'}}>Entendido</button>
     </div>
   </div>)
