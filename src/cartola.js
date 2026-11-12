@@ -114,6 +114,9 @@ const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`
 // La contraparte es el DESTINO en un cargo y el ORIGEN en un abono (el otro lado es nuestro).
 const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}`, 'i')   // lo que sigue («a Cuenta Corriente de…») puede venir cortado por el banco: no se exige
 
+// Transferencia entre bancos con el RUT del destino cortado por el banco («… a NOMBRE Rut 12.463.14»): se conserva el nombre; el RUT lo completa completarRutCortado.
+const reTransfDeCortada = /^\s*Transferencia de .+?\s+Rut\s*[\d.]+-?[\dkK]\s+desde\s+.+?\s+a\s+(.+?)\s+Rut\s*[\d.]{4,}\s*$/i
+
 // Extrae {rut, nombre} de la glosa probando los formatos en orden (sirve para abonos y cargos).
 export function extraerContraparte(desc, tipo){
   let m
@@ -130,6 +133,7 @@ export function extraerContraparte(desc, tipo){
     if(!lado.rut || esRutPropio(lado.rut) || /liberona escala|quad ases/.test(_norm(lado.nombre))) return { nombre:null, rut:null }
     return { nombre:lado.nombre||null, rut:lado.rut }
   }
+  if(tipo==='cargo' && (m=desc.match(reTransfDeCortada)) && !/liberona escala|quad ases/.test(_norm(m[1]))) return { nombre:_flat(m[1])||null, rut:null }
   return { rut:null, nombre:null }
 }
 

@@ -1,7 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { clasificacionPorRut, clientePorMensaje, esPagoTGR, gastosCandidatosCargo, glosaGenerica } from '../../supabase/functions/_shared/cargoAprendido.js'
+import { clasificacionPorRut, clientePorMensaje, completarRutCortado, esPagoTGR, gastosCandidatosCargo, glosaGenerica, rutParcialDeGlosa } from '../../supabase/functions/_shared/cargoAprendido.js'
 import { boletasDeCargo } from '../../supabase/functions/_shared/boletasRecibidas.js'
 import { selectAll } from '../../supabase/functions/_shared/paginar.js'
 import { CargarBoletasSII } from './boletasRecibidasCarga.jsx'
@@ -540,7 +540,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           // RUT de una persona conocida (equipo/socios/contadora) NO es cliente → cliente_id=null (evita falsos positivos de resolverNombre,
           // ej. "erasmo escala"→cliente "Liberona Escala" o "Martina…"→"Javier Vergara"); su cargo lo clasifica cargoSugerencia (sueldo/caja/retiro).
           const _esPersona = m => { const k=crNormRut(m.rut_contraparte); return !!(k&&(EQUIPO_RUT[k]||SOCIO_RUT[k]||CONTADORA_RUT[k])) }
-          const rows=res.movimientos.map(m=>({ ...m, cliente_id: (m.es_interno||_esPersona(m))?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
+          const conoc=[...(movs||[]).filter(x=>x.rut_contraparte&&x.nombre_contraparte).map(x=>({rut:x.rut_contraparte,nombre:x.nombre_contraparte})),...(proveedores||[]).map(p=>({rut:p.rut,nombre:p.nombre||p.name}))]
+          const rows=res.movimientos.map(m0=>{ const rc=m0.tipo==='cargo'&&!m0.es_interno&&!m0.rut_contraparte?completarRutCortado({nombre:m0.nombre_contraparte,descripcion:m0.descripcion},conoc):null; return rc?{...m0,rut_contraparte:rc}:m0 }).map(m=>({ ...m, cliente_id: (m.es_interno||_esPersona(m))?null:(resolver(m.rut_contraparte)||resolverNombre(m.nombre_contraparte)), estado: m.es_interno?'interno':'pendiente', monto_conciliado:0 }))
           const fechas=rows.map(r=>r.fecha).filter(Boolean).sort(); const minF=fechas[0]||null, maxF=fechas[fechas.length-1]||null
           // dedup ROBUSTO por CONTEO (NO escribe todavía — es la compuerta de confirmación). El banco entrega DISTINTO n° de operación
           // y glosa entre la cartola DIARIA y la MENSUAL (inserta espacios por corte de columna: "Rut"→"R ut", "Chile"→"Chil e", y a
@@ -2164,7 +2165,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         </div> }
       if(sug.fam==='oficina'){ const hint=cargoRachaHint(sug.category,sug.sub); const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`; const canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
         return <div style={{display:'flex',alignItems:'center',gap:9,background:'#F1FAF6',border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>sugerido · {sug.via==='RUT'?'por el RUT':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>sugerido {sug.via==='RUT'?(m.rut_contraparte&&rutParcialDeGlosa(m.descripcion)?'por el RUT · completado por nombre':'por el RUT'):sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'}{canConfirm?(hint?` · ${hint.mes} ${fmtM(hint.monto)}`:''):` · elige el ${CARGO_SUB_LABEL[sug.category]}`}</div></div>
           <button disabled={busy===m.id} onClick={canConfirm?()=>registrarCargoOficina(m,sug.category,sug.sub||null):()=>{setCcFam(p=>({...p,[m.id]:'oficina'}));setCcCat(p=>({...p,[m.id]:sug.category}));setCcQ(p=>({...p,[m.id]:''}))}} style={{fontSize:11,fontWeight:600,border:'none',borderRadius:8,padding:'6px 13px',cursor:'pointer',background:C.accent,color:'#fff'}}>{canConfirm?'Confirmar':'Elegir'}</button>
         </div> }
       if(!sug.clientId) return <div style={{display:'flex',alignItems:'center',gap:9,background:'#FBF3EF',border:'1px solid #F1DDD2',borderRadius:10,padding:'8px 10px',marginBottom:8}}>
@@ -2781,7 +2782,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       </div>)
     if(sug.fam==='oficina'){
       const path=`${sug.category}${sug.sub?` › ${sug.sub}`:''}`, canConfirm=!!sug.sub||!CARGO_SUB_LABEL[sug.category]
-      const viaTxt=sug.via==='RUT'?'por el RUT · siempre lo clasificas así':sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'
+      const viaTxt=sug.via==='RUT'?(rutParcialDeGlosa(m.descripcion)?'por el RUT · completado por nombre':'por el RUT · siempre lo clasificas así'):sug.via==='presupuesto'?'calza con tu presupuesto':'de la glosa'
       return (
         <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Gasto Oficina <Gl n='chevron'/> {path}</div><div style={{fontSize:10,color:C.greenText,marginTop:1,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><Sparkle/> {viaTxt}</div></div>

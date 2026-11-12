@@ -98,6 +98,9 @@ const reTransf = new RegExp(`a cuenta \\S+ [^,]+,\\s*(.+?),\\s*Rut\\s*${RUT_RE}`
 // Formato D — "Transferencia de ORIGEN Rut R1 desde Banco X a DESTINO Rut R2 a Cuenta Corriente de Banco Y": contraparte = DESTINO en un cargo, ORIGEN en un abono.
 const reTransfDe = new RegExp(`^\\s*Transferencia de (.+?)\\s+Rut\\s*${RUT_RE}\\s+desde\\s+.+?\\s+a\\s+(.+?)\\s+Rut\\s*${RUT_RE}`, 'i')   // lo que sigue («a Cuenta Corriente de…») puede venir cortado por el banco: no se exige
 
+// Transferencia entre bancos con el RUT del destino cortado por el banco: se conserva el nombre; el RUT lo completa completarRutCortado.
+const reTransfDeCortada = /^\s*Transferencia de .+?\s+Rut\s*[\d.]+-?[\dkK]\s+desde\s+.+?\s+a\s+(.+?)\s+Rut\s*[\d.]{4,}\s*$/i
+
 function extraerContraparte(desc: string, tipo: string) {
   let m
   if ((m = desc.match(reAbono))) return { nombre: _flat(m[1]) || null, rut: _flat(m[2]) || null }
@@ -113,6 +116,7 @@ function extraerContraparte(desc: string, tipo: string) {
     if (!lado.rut || esRutPropio(lado.rut) || /liberona escala|quad ases/.test(_norm(lado.nombre))) return { nombre: null, rut: null }
     return { nombre: lado.nombre || null, rut: lado.rut }
   }
+  if (tipo === 'cargo' && (m = desc.match(reTransfDeCortada)) && !/liberona escala|quad ases/.test(_norm(m[1]))) return { nombre: _flat(m[1]) || null, rut: null }
   return { rut: null, nombre: null }
 }
 function detectarInterno(desc: string, _rut: string | null) {
