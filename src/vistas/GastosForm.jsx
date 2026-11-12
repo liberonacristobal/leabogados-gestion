@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
-import { C, Gl, Sk, Spin, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SIcon, Sk, Spin, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
 import { PROMPT_COMPROBANTE, archivoABase64, extraerJSON, normalizarLectura, reducirImagen } from '../lib/comprobante.js'
 import { CATS_DE_CLIENTE, CATS_GASTO, FloatFld, claudeCall, subirAdjuntoDrive, INICIALES_RESP, Inp, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, learnPut, logActividad, medioMovDe, saldoCajaChica, saldoCliente, subOtro, subproyectosCliente, useDeQueAprendido } from '../lib/compartido.jsx'
 
@@ -521,7 +521,12 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
   // Saldo de la caja chica de quien carga (misma fórmula de la pantalla Caja chica): se ve al guardar, sin ir a mirarlo. Solo si tiene caja.
   const tieneCaja=!!userName&&(pettyCash||[]).some(p=>p.user_name===userName)
   const saldoCaja=tieneCaja?saldoCajaChica(pettyCash,expenses,userName):0
-  const cajaLinea=tieneCaja?<>{' · '}<span onClick={onIrCaja?()=>onIrCaja():undefined} role={onIrCaja?'button':undefined} style={{cursor:onIrCaja?'pointer':'default',color:saldoCaja<0?C.overdueText:C.greenText,textDecoration:onIrCaja?'underline':'none',textUnderlineOffset:2}}>caja chica {fmt(saldoCaja)}</span></>:null
+  const cajaCard=tieneCaja?<div onClick={onIrCaja?()=>onIrCaja():undefined} role={onIrCaja?'button':undefined} style={{display:'flex',alignItems:'center',gap:10,background:C.tileBg,border:`1px solid ${C.tileLine}`,borderRadius:12,padding:'9px 12px',marginBottom:10,cursor:onIrCaja?'pointer':'default'}}>
+    <span style={{width:26,height:26,borderRadius:8,background:saldoCaja<0?C.overdueBg:C.greenBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='wallet' s={14} c={saldoCaja<0?C.overdueText:C.greenText}/></span>
+    <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,letterSpacing:'.05em',textTransform:'uppercase',color:C.accent,whiteSpace:'nowrap'}}>Saldo en tu caja</span>
+    <span style={{fontSize:16,fontWeight:800,color:saldoCaja<0?C.overdueText:C.greenText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(saldoCaja)}</span>
+    {onIrCaja&&<span style={{color:C.textSoft,display:'flex'}}><Gl n='chevron'/></span>}
+  </div>:null
 
   return (
     <>
@@ -529,12 +534,12 @@ export function GastosForm({clients,expenses,clientEntities,tasks,sales,onSave,o
         <button className='qt-volver' onClick={onClose} aria-label='Volver' style={{display:'flex',alignItems:'center',gap:4,background:'none',border:'none',color:C.accent,fontSize:14,fontWeight:600,cursor:'pointer',padding:'2px 6px 2px 0',flexShrink:0}}><svg width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><polyline points='15 18 9 12 15 6'/></svg>Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:C.accent}}>Registrar gastos</div>
       </div>}
-      {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}{cajaLinea}</div>}
+      {saved>0&&!selectedClient&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}{saved>0&&!selectedClient&&cajaCard}
       {!selectedClient&&!personal&&landing}
 
       {(selectedClient||personal)&&(
         <>
-          {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}{cajaLinea}</div>}
+          {saved>0&&<div style={{fontSize:12,color:C.greenText,marginBottom:8,fontWeight:600}}>{saved} gasto{saved!==1?'s':''} guardado{saved!==1?'s':''}</div>}{saved>0&&cajaCard}
           {foto?.file&&rows.some(r=>r.foto)&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.greenText,background:C.greenBg,borderRadius:8,padding:'6px 10px',marginBottom:8,fontWeight:600}}>
             {foto.url?<img src={foto.url} alt='' style={{width:18,height:22,objectFit:'cover',borderRadius:3}}/>:null}<span style={{flex:1,minWidth:0}}>Foto del comprobante: se adjunta al guardar</span>
             <button type='button' onClick={quitarFoto} style={{background:'none',border:'none',color:C.muted,fontSize:12,cursor:'pointer',padding:0,fontFamily:'inherit'}}>Quitar</button></div>}
