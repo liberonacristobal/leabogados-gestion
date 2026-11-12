@@ -10,6 +10,8 @@ import { CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
+import { comisionesProyectadas } from '../../supabase/functions/_shared/proyeccionPropia.js'
+import { nombreCortoContacto } from '../../supabase/functions/_shared/cobranzaPropio.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, diaGrande, fmt, fmtFechaDMY, fmtN, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
 import { PaginaSobre, CART_DOT, ChevAb, INICIALES_RESP, MES_C, META_UF, NOMBRE_CLI, SEÑAL_COL, UF_FALLBACK, _diasDesde, _esOfiCliR, publicarResultadoInicio, _ymPrev, alertasCajaChica, bigDate, carteraMovimiento, claudeCall, cobradoBill, comisPorPagarAnteriores, comisionesVenta, costosOficinaMes, currentYear, daysLeft, daysLeftB, esFacIngreso, esRecurrente, esSubarriendo, esVencidaB, flujoCajaProyectado, fmtDate, fmtMill, fmtMillLR, fmtShort, fmtUFk, gastosPorLiquidarCaja, logEvent, margenDeSale, margenPct, mesCorto, mesTitulo, montoFactura, nDias, porCobrarBills, redondearPartes, resultadoMes, resumenCartera, saldoBill, saldoComisiones, saldoDelta, taskAssignees, ufDelDia, urgencyColor, useCalTrib, useFlujoCaja, useFuentesResultado, usePersistedState, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF } from '../lib/compartido.jsx'
 
@@ -246,9 +248,9 @@ export function proyeccionCobranza(F, hoy=new Date()){
   return {items, total:items.reduce((a,x)=>a+x.m,0), anio:hoy.getFullYear(), fin}
 }
 
-export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onOpenFlujoCaja, onOpenClientFicha}){
+export function ProyeccionDetalle({F, clients=[], sales=[], proveedores=[], isDesktop=false, onOpenFlujoCaja, onOpenClientFicha, onOpenProveedor}){
   const [anio,setAnio]=useState('todos')
-  const [open,setOpen]=useState(null)
+  const [open,setOpen]=usePersistedState('dash_proy_open',null)   // persistido: al volver desde Proveedores o la ficha el detalle queda como estaba
   const P=useMemo(()=>proyeccionCobranza(F),[F])
   const saleById=useMemo(()=>{ const m={}; (sales||[]).forEach(s=>{ if(s) m[String(s.id)]=s }); return m },[sales])
   const cliById=useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c) m[String(c.id)]=c }); return m },[clients])
@@ -272,6 +274,10 @@ export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onO
   const tiPaso=(F?.duda?.monto||0)+(F?.sinEmitir?.monto||0)>=1e6?1e5:1e4
   const [morV,pfV]=redondearPartes([F?.duda?.monto||0,F?.sinEmitir?.monto||0],tiPaso,[0])   // igual que la página del Flujo
   const tog=k=>()=>setOpen(o=>o===k?null:k)
+  // Comisiones sujetas a cobro dentro de la Proyección (mismo cálculo del Flujo, helper _shared/proyeccionPropia.js). Con un año de venta filtrado no se muestran: la resta mezclaría dos universos.
+  const com=useMemo(()=>anio==='todos'?comisionesProyectadas(F?.comCobros,P.fin,5):comisionesProyectadas([],P.fin),[F,P,anio])
+  const provById=useMemo(()=>{ const m={}; (proveedores||[]).forEach(p=>{ if(p) m[String(p.id)]=p }); return m },[proveedores])
+  const comV=Math.min(Math.round(com.total/paso)*paso,eV+pV)
   const pill=(t,tone)=><span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap',background:tone==='g'?C.greenBg:C.azulBg,color:tone==='g'?C.greenText:C.azulInfo}}>{t}</span>
   const cap=(t,line,der)=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'12px 14px 6px',...SEC_LBL,fontWeight:800,borderTop:line?`1px solid ${C.border}`:undefined}}><span>{t}</span>{der}</div>
   const lista=(k,arr)=>open===k&&[...arr].sort((a,b)=>a.t-b.t).map(x=>{ const b=x.b, cid=b.client_id; return (
@@ -292,6 +298,20 @@ export function ProyeccionDetalle({F, clients=[], sales=[], isDesktop=false, onO
       <CxRow isDesk={d} sg='+' label='Cuotas por emitir' pill={prog.length?pill(d?`${prog.length} cuota${prog.length!==1?'s':''}`:prog.length):null} val={fmtMillLR(pV)} open={prog.length?open==='prog':null} onClick={prog.length?tog('prog'):undefined}/>
       {lista('prog',prog)}
       <CxRow isDesk={d} sg='=' kind='res' label={`Proyección al 31-12`} val={fmtMillLR(eV+pV)}/>
+      {com.total>0&&<>
+        <CxRow isDesk={d} sg='−' kind='neg' label='Comisiones sujetas a cobro' pill={pill(d?`${com.n} pago${com.n!==1?'s':''}`:com.n)} val={fmtMillLR(comV)} open={open==='com'} onClick={tog('com')}/>
+        {open==='com'&&<>
+          {com.items.map((x,i)=>{ const pv=provById[String(x.provId)]; return (
+            <div key={'com'+i+String(x.billId)} onClick={()=>onOpenProveedor&&onOpenProveedor(x.provId||null)} style={{display:'flex',alignItems:'center',gap:11,padding:'8px 14px',minHeight:46,borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer'}}>
+              {diaGrande(isoDe(x.t))}
+              <div style={{flex:1,minWidth:0}}><div onClick={e=>{ if(x.cid&&onOpenClientFicha){ e.stopPropagation(); onOpenClientFicha(x.cid) } }} style={{...NOMBRE_CLI,fontSize:13}}>{cliById[String(x.cid)]?.name||'Sin cliente'}</div><div style={{fontSize:11,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pv?nombreCortoContacto(pv.nombre):(x.prov||'Colaborador')} · {x.porCuenta?'de terceros':'comisión'}</div></div>
+              <span style={{fontSize:13,fontWeight:800,color:C.overdueText,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{'−'+fmt(Math.round(x.m))}</span>
+              <span style={{color:C.textSoft}}><Gl n='chevron'/></span>
+            </div>) })}
+          {com.resto.n>0&&<div onClick={()=>onOpenProveedor&&onOpenProveedor(null)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'8px 14px',minHeight:46,borderTop:`1px solid ${C.border}`,background:C.bgSoft,cursor:'pointer'}}><div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{com.resto.n} pago{com.resto.n!==1?'s':''} más · {'−'+fmt(Math.round(com.resto.monto))}</div><div style={{fontSize:11,fontWeight:700,color:C.azulInfo}}>Ver todos en Proveedores</div></div><span style={{color:C.textSoft}}><Gl n='chevron'/></span></div>}
+        </>}
+        <CxRow isDesk={d} sg='=' kind='res' label='Ingreso propio al 31-12' val={fmtMillLR(eV+pV-comV)}/>
+      </>}
       {cap('Cuándo entra',true)}
       {meses.map(([ym,a],i)=><Fragment key={ym}><CxRow isDesk={d} kind='sub' label={mesTitulo(new Date(ym+'-15T12:00:00')).split(' ')[0]} val={fmtMillLR(mesV[i])} open={open==='m'+ym} onClick={tog('m'+ym)}/>{lista('m'+ym,a)}</Fragment>)}
       {ver8&&<CxRow isDesk={d} label='Próximas 8 semanas' pill={pill(d?'igual al Flujo':'Flujo','g')} val={fmtMillLR(F.E)} open={onOpenFlujoCaja?false:null} onClick={onOpenFlujoCaja}/>}
@@ -1141,7 +1161,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       </div>)}
       {kOpen('proyeccion')&&(
       <div style={{padding:'10px 20px 0'}}>
-        <ProyeccionDetalle F={flujoCaja} clients={clients} sales={sales} isDesktop={isDeskRes} onOpenFlujoCaja={onOpenFlujoCaja} onOpenClientFicha={onOpenClientFicha}/>
+        <ProyeccionDetalle F={flujoCaja} clients={clients} sales={sales} proveedores={proveedores} isDesktop={isDeskRes} onOpenFlujoCaja={onOpenFlujoCaja} onOpenClientFicha={onOpenClientFicha} onOpenProveedor={id=>navTo&&navTo(id?{tab:'proveedores',provId:id}:{tab:'proveedores'})}/>
       </div>)}
 
       {/* Comisiones + Oficina ahora viven en la grilla única de Indicadores (arriba). Aquí solo su detalle desplegable. */}
