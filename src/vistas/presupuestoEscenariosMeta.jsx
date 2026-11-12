@@ -69,7 +69,7 @@ export function EscenariosMeta({ X }) {
       {A0.nAgregadas > 0 && fila(e, '  Agregadas a mano', A0.agregadas, { go: verArr('todo'), suave: true })}
       {fila(e, '+ Nuevo por facturar', e.ok ? e.falta.falta : null)}
       {fila(e, '= Facturado', e.ok ? e.ch.fact : null, { tot: true })}
-      {fila(e, 'Equivale a por vender', e.ok ? e.falta.vendido : null, { suave: true })}
+      {fila(e, 'Ventas necesarias', e.ok ? e.falta.vendido : null, { suave: true })}
       {txt(`Arrastre ${Y} sobre el facturado`, { t: e.ok ? pc(e.ch.fact > 0 ? (A0.total / e.ch.fact) * 100 : 0) : '—' })}
     </div>, der = <div key='der' style={{ minWidth: 0, borderLeft: D ? `1px solid ${C.border}` : 'none' }}>
       {sec('Hasta los retiros')}
@@ -83,7 +83,7 @@ export function EscenariosMeta({ X }) {
       {fila(e, '− Aumento de reserva', e.ok ? e.ch.reserva : null)}
       {fila(e, '= Retiros', e.ok ? e.ch.retiros : null, { tot: true, color: e.ok && e.ch.retiros > 0 ? C.greenText : C.muted })}
       {fila(e, 'Por socio al mes', porSocio(e), { suave: true })}
-      {fila(e, `Sobre cierre ${Y}`, e.ok ? e.ch.retiros - refRet : null, { suave: true })}
+      {fila(e, `Variación contra el cierre ${Y}`, e.ok ? e.ch.retiros - refRet : null, { suave: true })}
     </div>
     const desc = e.k === 'conservador' ? `Repite el cierre estimado de ${Y} (${mm(e.valorAncla)} de ${nom(MT.ancla).toLowerCase()}, +0 %)` : e.k === 'ideal' ? `Cumple la meta escrita (${mm(e.valorAncla)})` : `Suma ${SOBRE_VENTAS} % a la meta (${mm(e.valorAncla)}) y una recuperación de cartera del ${SOBRE_COBRANZA} % del cobro del año, como el sobrecumplimiento de ${Y}`
     return <Panel key={'det' + e.k}>

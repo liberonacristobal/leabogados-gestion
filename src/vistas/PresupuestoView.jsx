@@ -221,7 +221,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     return base
   }
   const prepararDesdeCero = async (o) => {
-    if (!(await appConfirm('Esto reemplaza el borrador del año elegido. Guárdalo antes como versión si lo necesitas. ¿Continuar?'))) return false
+    if (!(await appConfirm('Se reemplaza el borrador del año elegido. ¿Continuar?'))) return false
     const etapa = o.modo === 'vacio' ? 2 : o.modo === 'meta' ? 3 : 0
     if (o.anio && o.anio !== anio) { if (guardado.est === 'pendiente') await guardarBorrador(); iniPend.current = { ...o, etapa }; setAnioSel(o.anio); return true }   // el borrador nuevo se arma al cargar el otro año
     setEst(construirInicial(o)); setDrill(null); setPila([]); setUIS((u) => ({ ...u, etapa })); return true

@@ -22,7 +22,7 @@ export function hojasPresupuesto(P) {
     nombre: 'Supuestos', anchos: [38, 16, 16, 16, 16, 16],
     filas: [
       [`Presupuesto ${P.anio} · supuestos`],
-      ['Los valores de las columnas B a D se pueden cambiar.'],
+      [],
       [],
       ['Año del presupuesto', N(P.anio, '0')],
       ['UF de cierre del año base', N(P.ufDic, UF)],
@@ -54,7 +54,7 @@ export function hojasPresupuesto(P) {
     nombre: `Arrastre ${P.anioBase}`, anchos: [26, 30, 12, 14, 14, 8, 16, 10, 16, 28, ...MESES.map(() => 12)],
     filas: [
       [`Arrastre ${P.anioBase} · líneas con los ajustes del presupuesto`],
-      ['Cliente', 'Proyecto', 'Tipo', 'Estado', 'Por mes ($)', 'Meses', `Total ${P.anio} ($)`, 'Cuotas', 'En la app ($)', 'Nota', ...MESES],
+      ['Cliente', 'Proyecto', 'Tipo', 'Estado', 'Por mes ($)', 'Meses', `Total ${P.anio} ($)`, 'Cuotas', 'Calculado ($)', 'Nota', ...MESES],
       ...P.arrastre.map((l) => [l.nombre, l.concepto, l.tipo, l.estado, l.tipo === 'Asesoría' ? N(l.mensual) : null, l.tipo === 'Asesoría' ? N(l.meses, '0') : null, N(l.total), l.tipo === 'Cuotas' ? N(l.n, '0') : null, N(l.enApp), l.nota, ...l.porMes.map((v) => N(v))]),
       ['Total', '', '', '', null, null, F(`SUM(G3:G${nA + 2})`), null, F(`SUM(I3:I${nA + 2})`), '', ...MESES.map((_, i) => F(`SUM(${COL(10 + i)}3:${COL(10 + i)}${nA + 2})`))],
     ],

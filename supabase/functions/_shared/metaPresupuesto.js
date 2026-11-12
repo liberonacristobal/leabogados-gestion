@@ -87,7 +87,7 @@ export function escenariosMeta(o) {
 }
 
 /**
- * El estado con que se muestra TODO el resultado 2027 (franja del paso 5, «Cómo se llega», Costos, Impuesto, Por socio, Excel y Comparar): el escenario de referencia de las metas con el crecimiento que la meta exige
+ * El estado con que se muestra TODO el resultado 2027 (franja del paso 5, «Cálculo de retiros», Costos, Impuesto, Por socio, Excel y Comparar): el escenario de referencia de las metas con el crecimiento que la meta exige
  * (`ch.g`, de metasDesdeComponente), de modo que su margen, resultado y retiros son exactamente los del Ideal. Sin cadena válida deja los supuestos como están. No modifica `est` (el guardado sigue con lo escrito).
  * @param {any} est @param {{ g?:number }|null|undefined} ch @param {string} k clave del escenario de referencia
  */

@@ -20,7 +20,7 @@ const PLANO = {
 }
 
 /**
- * Cifras de «Cómo se arma el cierre» de un componente: real a la fecha, resto y cierre repartidos con repartoCierre (real + resto = cierre en $M de 1 decimal; en UF, a 1 UF).
+ * Cifras de «Composición del cierre» de un componente: real a la fecha, resto y cierre repartidos con repartoCierre (real + resto = cierre en $M de 1 decimal; en UF, a 1 UF).
  * @returns {{ a:any, r:any, c:any }} cada una lista para mostrar (moneda de la app)
  */
 export function cierreCifras(X, k, corto = false) {
@@ -32,7 +32,7 @@ export function cierreCifras(X, k, corto = false) {
 }
 const cero = (/** @type {number} */ v) => (Math.abs(v) < 1 ? '$0' : m26(v))
 
-/** Tabla «Cómo se arma el cierre» de la página de un componente: real a la fecha, promedio mensual de 3 meses (con sus cifras), meses que faltan, resto y cierre. */
+/** Tabla «Composición del cierre» de la página de un componente: real a la fecha, promedio mensual de 3 meses (con sus cifras), meses que faltan, resto y cierre. */
 export function ComoSeArma({ X, k }) {
   const d = X.datos, r = d.referencia[k], Y = d.anioBase, c = cierreCifras(X, k), meses = (d.refMeses || {})[k]
   const hoy = fmtFechaDMY(d.hoy), fin = fmtFechaDMY(`${Y}-12-31`)
@@ -44,7 +44,7 @@ export function ComoSeArma({ X, k }) {
   }
   if (r.resto) filas.push([costos ? 'Presupuesto de los meses que faltan' : `Resto de ${Y}`, prom ? 'promedio × meses que faltan' : '', c.r])
   filas.push([`Cierre ${Y} estimado`, 'real a la fecha + resto', c.c])
-  return <Panel hd='Cómo se arma el cierre'>{filas.map(([t, s, v], i) => <Fila key={i} sin tot={i === filas.length - 1} nombre={t} peq={s || undefined} valor={v} />)}</Panel>
+  return <Panel hd='Composición del cierre'>{filas.map(([t, s, v], i) => <Fila key={i} sin tot={i === filas.length - 1} nombre={t} peq={s || undefined} valor={v} />)}</Panel>
 }
 
 /** Plegable de una línea bajo las tarjetas de los pasos 2 y 4: «Cierre = real a la fecha + resto del año»; abierto, una línea por cierre con sus cifras. */
@@ -62,7 +62,7 @@ export function ComoSeCalcula({ X, de, solo = false }) {
   const ch0 = de === 'base' ? cadenaMeta(d.base, X.est, 0, X.MT.ratio, X.MT.cv) : null
   const lineasBase = ch0 ? componentesCortosDe(CFG).map(([k, n]) => { const v = valorComponente(ch0, k, X.MT.ratio, X.MT.cv), ref = d.referencia[k]; if (v == null) return null; const df = difMon(v, ref.cierre, null, d.refUF[k].cierre); return <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12 }}><span><b style={{ color: C.accent }}>{n}</b> · Base {mm(v)} · Cierre {Y} {mmP(ref.cierre)}</span><span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: C.muted }}>{df.pct != null ? `${df.sg}${pc(Math.abs(df.pct))}` : `${df.sg}${df.abs}`}</span></div> }) : null
   const cuerpo = <div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13 }}>{de === 'metas' && <div style={{ color: C.muted, fontSize: 12 }}>Variación contra el cierre estimado de {Y}: cada meta se compara con su cierre estimado (real a la fecha + resto del año).</div>}{lineasBase && <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}><b style={{ color: C.accent }}>Base contra cierre {Y}</b>{lineasBase}</div>}{items.map(([t, tx, cf], i) => <div key={i}><b style={{ color: C.accent }}>{t}</b> · {tx}{cf ? <div style={{ fontSize: 12, color: C.muted }}>{cf}</div> : null}</div>)}</div>
-  return solo ? cuerpo : <Pliegue t='Cómo se calcula' v='Cierre = real a la fecha + resto del año'>{cuerpo}</Pliegue>
+  return solo ? cuerpo : <Pliegue t='Cálculo' v='Cierre = real a la fecha + resto del año'>{cuerpo}</Pliegue>
 }
 
 /** Candado de la fila: cerrado = cifra fijada; abierto = calculada. */
@@ -156,7 +156,7 @@ export function Metas({ X }) {
   // Seis accesos en cuadrícula (ícono a la izquierda; nombre y dato clave a la derecha); cada uno abre su contenido debajo, a todo el ancho.
   const abierto = ui.metaAb || null
   const dato = { calc: D ? `Variación contra el cierre ${Y}` : `Contra el cierre ${Y}`, res: `${mm(ch.reservaCierre)} al cierre`, sup: `comisiones ${pc(est.p[rk].terc)} · cobro ${est.p[rk].dias} días`, esc: MT.ok ? `exige ${sgn(ch.g)}${pc(Math.abs(ch.g))}${D ? ' real en UF' : ''}` : '—', dis: D ? `falta ${mmP(F.alMes)} al mes · partes iguales` : `${mmP(F.alMes)} al mes`, ret: `retiros ${mm(ch.retiros)}` }
-  const accesos = [['calc', 'doc', 'Cómo se calcula', 'Cálculo'], ['res', 'wal', 'Reserva de caja', 'Reserva'], ['sup', 'tax', 'Supuestos · 7', 'Supuestos'], ['esc', 'chart', 'Escenarios', 'Escenarios'], ['dis', 'cal', 'Distribución mensual', 'Distribución'], ['ret', 'ing', 'Estado de resultados', 'Resultados']]
+  const accesos = [['calc', 'doc', 'Cálculo', 'Cálculo'], ['res', 'wal', 'Reserva de caja', 'Reserva'], ['sup', 'tax', 'Supuestos · 7', 'Supuestos'], ['esc', 'chart', 'Escenarios', 'Escenarios'], ['dis', 'cal', 'Distribución mensual', 'Distribución'], ['ret', 'ing', 'Estado de resultados', 'Resultados']]
   const contenidos = { calc: <ComoSeCalcula X={X} de='metas' solo />, res: <ReservaBloque X={X} ch={ch} irBanco={X.onOpenBanco} />, sup: <Supuestos X={X} MT={MT} />, esc: <div style={{ padding: '10px 12px 6px' }}><Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k]) => <CardEsc key={k} X={X} k={k} />)}</Grid></div>, dis: <>{tablaMes}<Distribucion X={X} /></>, ret: <TablaPresupuesto X={X} MT={MT} irPaso={(i) => X.ir({ etapa: i })} /> }
   const acceso = ([k, ic, nombre, corto]) => { const ab = abierto === k; return <div key={k} role='button' aria-expanded={ab} tabIndex={0} onClick={() => setUI({ metaAb: ab ? null : k })} style={{ display: 'flex', alignItems: 'center', gap: D ? 12 : 8, background: C.card, border: `1px solid ${ab ? C.accent : C.border}`, borderRadius: 12, padding: D ? '10px 14px' : '8px 10px', minHeight: D ? 62 : 60, minWidth: 0, cursor: 'pointer', boxSizing: 'border-box' }}>
     <span style={{ width: D ? 36 : 30, height: D ? 36 : 30, borderRadius: 10, background: C.bgSoft, color: C.accent, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Ic n={ic} s={D ? 18 : 15} /></span>
@@ -170,7 +170,7 @@ export function Metas({ X }) {
       <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) minmax(0,2.4fr)' : '1fr', gap: D ? 20 : 10, alignItems: 'center' }}>
         <div role='button' onClick={() => X.ir({ drill: { t: 'arr', k: 'todo' } })} style={{ cursor: 'pointer' }}><div style={{ ...LBL, color: C.accent }}>Falta facturar en {an}</div><div style={{ fontSize: D ? 40 : 34, fontWeight: 800, letterSpacing: -1.2, color: C.greenText, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}><Val v={mm(F.falta)} /></div>{F.exceso > 0 && <div style={{ fontSize: 11, color: C.muted }}>el arrastre la supera en {mm(F.exceso)}</div>}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: D ? 10 : 6 }}>
-          {stat(`Sobre cierre ${Y}`, F.sobreCierre != null ? `+${pc(F.sobreCierre)}` : '—', `de ${mmP(cierreDe('fact'))}`)}{stat('Sobre arrastre', F.sobreArrastre != null ? `+${pc(F.sobreArrastre)}` : '—', `de ${mmP(F.arrastre)}`)}{stat('Por mes', mmP(F.alMes), 'partes iguales')}
+          {stat(`Contra el cierre ${Y}`, F.sobreCierre != null ? `+${pc(F.sobreCierre)}` : '—', `de ${mmP(cierreDe('fact'))}`)}{stat('Contra el arrastre', F.sobreArrastre != null ? `+${pc(F.sobreArrastre)}` : '—', `de ${mmP(F.arrastre)}`)}{stat('Por mes', mmP(F.alMes), 'partes iguales')}
         </div>
       </div>
     </Panel>

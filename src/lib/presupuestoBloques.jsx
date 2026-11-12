@@ -136,7 +136,7 @@ export function DSocios({ X, alza, retiros, ir, irRetiros }) {
       {d.retiros26.desde && irRetiros && <span onClick={irRetiros} role='button' style={{ cursor: 'pointer' }}>Ver los {d.retiros26.n} retiros ›</span>}
       {ir && <span onClick={ir} role='button' style={{ cursor: 'pointer' }}>Panel de socios ›</span>}
     </div>
-    <Det t='Cómo se calcula'><Lista items={[`Sueldo ${d.anio}: Remuneraciones de cada socio con su aumento; sus leyes sociales son costo de la oficina. No se suman a los costos: Margen y Retiros no cambian.`, 'Retiros: en partes iguales. El impuesto personal de cada socio no se proyecta.', `${d.anioBase} real: sueldos pagados y retiros de la página Socios${d.retiros26.desde ? `, ${d.retiros26.n} retiros entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}` : ''}, por confirmar.`, ...(mensual ? [`Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses; ${d.anio} ÷ 12.`] : [])]} /></Det>
+    <Det t='Cálculo'><Lista items={[`Sueldo ${d.anio}: Remuneraciones de cada socio con su aumento; sus leyes sociales son costo de la oficina. No se suman a los costos: Margen y Retiros no cambian.`, 'Retiros: en partes iguales. El impuesto personal de cada socio no se proyecta.', `${d.anioBase} real: sueldos pagados y retiros de la página Socios${d.retiros26.desde ? `, ${d.retiros26.n} retiros entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}` : ''}, por confirmar.`, ...(mensual ? [`Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses; ${d.anio} ÷ 12.`] : [])]} /></Det>
   </>
 }
 
