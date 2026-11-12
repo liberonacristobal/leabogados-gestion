@@ -65,3 +65,24 @@ export function clientePorMensaje(texto, candidatos) {
   }
   return hallados.size === 1 ? [...hallados][0] : null
 }
+
+/**
+ * Gastos de cliente ya cargados a mano (un abogado los registró) que pueden ser este cargo: mismo monto al peso, fecha del gasto
+ * dentro de la ventana del cargo, de un cliente (no la oficina), sin banco ligado y no borrados. Más cercano en fecha primero.
+ * Con más de uno por el mismo monto no hay cómo elegir: la bandeja los muestra pero no propone uno.
+ * @param {{ monto?: any, fecha?: any }} mov
+ * @param {{ id: any, amount?: any, date?: any, client_id?: any, type?: any, deleted_at?: any }[]} gastos
+ * @param {Set<string>} ligados ids de gasto que ya tienen un movimiento del banco
+ * @param {any} idInterno id del cliente interno (la oficina), que no cuenta
+ * @param {number} [dias] ventana en días
+ */
+export function gastosCandidatosCargo(mov, gastos, ligados, idInterno, dias = 10) {
+  const M = Math.round(Math.abs(Number(mov?.monto) || 0)), t = Date.parse(String(mov?.fecha || '').slice(0, 10) + 'T12:00:00Z')
+  if (!(M > 0) || !Number.isFinite(t)) return []
+  return (gastos || [])
+    .filter(g => g && !g.deleted_at && g.type === 'gasto' && g.client_id != null && String(g.client_id) !== String(idInterno) && !ligados?.has(String(g.id)) && Math.round(Number(g.amount) || 0) === M)
+    .map(g => ({ g, d: Math.abs(Date.parse(String(g.date || '').slice(0, 10) + 'T12:00:00Z') - t) / 864e5 }))
+    .filter(x => Number.isFinite(x.d) && x.d <= dias)
+    .sort((a, b) => a.d - b.d)
+    .map(x => x.g)
+}
