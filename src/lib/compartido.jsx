@@ -3904,13 +3904,13 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; c.nMor++; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
       const espC=base+ritmoCons(c.cid)*DAY, vencida=hoyT>espC
       const tC=vencida?hoyT+R.esperaRestante(c.cid,Math.round((hoyT-base)/DAY))*DAY:espC
-      const w=wIdx(tC); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
+      const w=wIdx(tC); st[b.id]={w,m,cid:c.cid,t:tC}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
     if(b.status==='Programada'&&!b.invoice_no){ const dc=destinoCuotaFlujo({b,cubierto,cubV,fuera:fueraProg,radar:radarIds,curYm}); if(dc.tipo==='fuera') return; const m=dc.m; if(cubierto[b.id]) c.antic+=cubierto[b.id]
       if(dc.tipo==='pagadaAnt'||dc.tipo==='nada'){ if(dc.tipo==='pagadaAnt') st[b.id]={pagadaAnt:true,cid:c.cid}; return }
       const due=dc.due, dYm=String(due||'').slice(0,7)
       if(dc.tipo==='porConfirmar'){ st[b.id]={fuera:'porConfirmar',m,cid:c.cid}; return }   // vencida que el radar no cuenta: queda por confirmar en Por facturar, fuera del flujo
       if(dc.tipo==='sinEmitir'){ st[b.id]={fuera:'sin',m,cid:c.cid}; c.sin+=m; sinE.n++; sinE.monto+=m; if(dYm&&dYm<`${d0.getFullYear()}-06`) sinE.previas++; return }
-      const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }  })
+      const dT=tD(due)??hoyT, emis=dT<=hoyT?hoyT+EMISION_REZAGO_DIAS*DAY:dT, tE=emis+ritmoCons(c.cid)*DAY, w=wIdx(tE); st[b.id]={w,m,cid:c.cid,t:tE}; cobros.push({b,t:tE,m,k:'prog',est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } }  })
   // Conservador: un cliente con una factura morosa (más de FLUJO_DUDA_DIAS tras su fecha esperada) no aporta ningún cobro al flujo; sus comisiones
   // quedan fuera con ellos (se pagan al cobrar). Con conMorosos=true se proyectan como cualquier otro.
   const exclMor={n:0,monto:0,items:[]}
@@ -3922,18 +3922,20 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
   let comFuera=0; const cfB={duda:0,sin:0}; const sinCuota=[]
-  const aplica=(b,monto)=>{ const s0=st[b.id], c=C_(b.client_id)
+  const comCobros=[]   // cada comisión por pagar con la fecha esperada de cobro de su factura (también más allá de las 8 semanas): alimenta la Proyección al 31-12
+  const aplica=(b,monto,tr)=>{ const s0=st[b.id], c=C_(b.client_id)
     if(b.status==='Pagado'||s0?.pagadaAnt){ weeks[0].com+=monto; c.com+=monto; return }
     if(!s0) return
     if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; cfB[s0.fuera]=(cfB[s0.fuera]||0)+monto; return }
+    if(s0.t!=null) comCobros.push({t:s0.t,m:monto,cid:String(b.client_id||''),billId:b.id,provId:tr?.proveedor_id||null,prov:tr?.proveedor||null,porCuenta:tr?.comision_pct!=null})
     if(s0.w<semanas){ weeks[s0.w].com+=monto; c.com+=monto } }
   ;(terceros||[]).forEach(t=>{ if(!t||t.estado==='pagado') return; const monto=Number(t.monto)||0; if(!(monto>0)) return
     const b=t.billing_id?bById[String(t.billing_id)]:null
-    if(t.billing_id){ if(b) aplica(b,monto); return }
+    if(t.billing_id){ if(b) aplica(b,monto,t); return }
     const ps=t.sale_id?(porVenta[String(t.sale_id)]||[]):[]
     if(!ps.length){ sinCuota.push({prov:t.proveedor||'Colaborador',monto,sale_id:t.sale_id||null}); return }
     const tot=ps.reduce((a,x)=>a+(st[x.id]?.m||0),0)||1
-    ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot)) })
+    ps.forEach(x=>aplica(x,monto*(st[x.id]?.m||0)/tot,t)) })
   // Oficina al costo bruto: los ingresos fijos del presupuesto (subarriendo) ya entran por su propia factura; restarlos aquí los contaba dos veces.
   const oficinaSem=costoOficinaBruto(costosOfiRows)/4.3333
   // Con costo real: cada semana lleva el costo mensual × la parte del calendario de pago que cae en sus días, desde hoy (lo ya pagado no se cuenta).
@@ -3946,7 +3948,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
   const partes={emitAlDia:0,emitVencida:0,cuotas:0}; cobros.forEach(x=>{ if(x.t>=monT+semanas*7*DAY) return; if(x.k==='prog') partes.cuotas+=x.m; else if(x.v) partes.emitVencida+=x.m; else partes.emitAlDia+=x.m })
   const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera&&x.fuera!=='moroso').map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
-  return {weeks,cobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,comFueraMoroso:cfB.moroso||0,sinCuota,sinCuotaTot,clientes,exclMor,conMorosos}
+  return {weeks,cobros,comCobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,comFueraMoroso:cfB.moroso||0,sinCuota,sinCuotaTot,clientes,exclMor,conMorosos}
 }
 
 // ─── POR SOCIO · motor único ────────────────────────────────────────────────
