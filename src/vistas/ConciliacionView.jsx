@@ -2719,6 +2719,13 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.coralText,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Notaría · liquidación del {fmtFechaDMY(lq.liq.created_at)} · {lq.liq.n_gastos||0} OT</div><div style={{fontSize:10,color:C.coralText,marginTop:1}}>{lq.exacto?'mismo monto':`liquidación ${fmtM(lq.liq.total)} · diferencia ${fmtM(Math.abs(lq.dif))}`}</div></div>
         <button disabled={busy===m.id} onClick={()=>enlazarNotaria(m,lq.liq)} style={{fontSize:11,fontWeight:700,color:C.surface,background:C.coralText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Enlazar</button>
       </div>)
+    // Proveedor con comisiones por pagar: el cargo es su pago de comisión (rebaja el ingreso de la venta), no un gasto de oficina; se abre el detalle con «Pago de comisión».
+    const provCom=provDeCargo(m)
+    if(provCom&&!(concByMov[m.id]||[]).length&&comisPorPagar(provCom.id).length) return (
+      <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:700,color:C.greenText}}>Pago de comisión a {provCom.nombre||provCom.razon_social}</div><div style={{fontSize:10,color:C.greenText,marginTop:1}}>{comisPorPagar(provCom.id).length} por pagar</div></div>
+        <button disabled={busy===m.id} onClick={()=>setModalMov(m.id)} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:8,padding:'5px 12px',cursor:'pointer',flexShrink:0}}>Revisar</button>
+      </div>)
     const grupo=matchGrupoPresupuesto(m), sug=cargoSugerencia(m)
     if(grupo&&(!sug||sug.fam!=='oficina')) return (
       <div onClick={stop} style={{marginTop:8,background:C.greenBg,border:'1px solid #CFE9DD',borderRadius:10,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
