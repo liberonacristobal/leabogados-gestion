@@ -2946,7 +2946,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-        <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
+        <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.123.456-0'/></Fld>
         <Fld label='Tipo' mb={8}><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -4543,7 +4543,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
             <div style={{fontSize:10,fontWeight:700,color:C.textSoft,letterSpacing:.3,padding:'6px 12px',background:C.bgPanel}}>ASÍ SE VERÁ CADA CONTACTO</div>
             <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderTop:`1px solid #F1F3F5`}}>
               <div style={{width:30,height:30,borderRadius:'50%',background:C.azulBg,color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>AF</div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Agustín Ferrada</div><div style={{fontSize:10,color:C.muted}}>agustin@cavor.cl · Gerente (IA)</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Ricardo Demo</div><div style={{fontSize:10,color:C.muted}}>gerente@empresademo.cl · Gerente (IA)</div></div>
               <span style={{fontSize:10,fontWeight:700,color:C.accent,background:C.azulBg,padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap'}}>Agregar</span>
             </div>
           </div>

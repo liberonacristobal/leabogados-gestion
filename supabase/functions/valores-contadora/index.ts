@@ -1,5 +1,5 @@
-// valores-contadora — lee el correo mensual "VALORES MM-AAAA" que manda la contadora (Claudia Saez,
-// clsvsaez6@hotmail.com) y guarda los montos a pagar para auto-clasificar los cargos del banco.
+// valores-contadora — lee el correo mensual "VALORES MM-AAAA" que manda la contadora del estudio
+// (su correo sale de la configuración learnings kind='config' key='contadora_correo') y guarda los montos a pagar para auto-clasificar los cargos del banco.
 // Líneas típicas: "Cotizaciones Sueldos $ 2.120.704.-" (previsional) · "Iva $ 605.701.-" (ella lo llama
 // IVA pero es PPM) · "Contadora $ 50.000.-" (su honorario).
 // Guarda en learnings kind='valores_contadora' key=<AAAA-MM> value=JSON {cotizaciones, ppm, contadora, subject, at, desglose}.
@@ -19,7 +19,12 @@ const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("VALORES_CONTADORA_SECRET") || Deno.env.get("CRON_SECRET") || "";
-const CONTADORA_FROM = "clsvsaez6@hotmail.com";
+// Correo de la contadora: configuración del estudio (learnings kind='config' key='contadora_correo'); sin valor, la función avisa y no busca.
+async function correoContadora(): Promise<string> {
+  const r = await fetch(`${SB_URL}/rest/v1/learnings?kind=eq.config&key=eq.contadora_correo&select=value&order=updated_at.desc&limit=1`, { headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY } });
+  const d = r.ok ? await r.json() : [];
+  return String((Array.isArray(d) && d[0]?.value) || "").trim();
+}
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -139,6 +144,8 @@ serve(async (req) => {
     const token = await getToken();
     const dryRun = !!body.dryRun;
     // Correos VALORES de la contadora de los últimos 13 meses: completa todo mes abierto de la planilla (los cerrados no se tocan).
+    const CONTADORA_FROM = await correoContadora();
+    if (!CONTADORA_FROM) return json({ ok: false, error: "Falta el correo de la contadora (configuración contadora_correo)." }, 400);
     const q = encodeURIComponent(`from:${CONTADORA_FROM} subject:VALORES newer_than:13m`);
     const rs = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=15`, { headers: { Authorization: "Bearer " + token } });
     const ds = await rs.json();

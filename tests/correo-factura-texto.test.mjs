@@ -45,7 +45,7 @@ test('período: mes y año completos de la glosa o del concepto', () => {
 })
 
 test('el trato del cuerpo sigue al saludo, también en un cuerpo ya editado', () => {
-  assert.equal(esSaludoSingular('Estimado Agustín,'), true)
+  assert.equal(esSaludoSingular('Estimado Andrés,'), true)
   assert.equal(esSaludoSingular('Estimada Carolina,'), true)
   assert.equal(esSaludoSingular('Estimados,'), false)
   assert.equal(esSaludoSingular('Estimadas,'), false)
@@ -54,18 +54,18 @@ test('el trato del cuerpo sigue al saludo, también en un cuerpo ya editado', ()
   assert.equal(ajustarTrato('Texto sin esas frases', true), 'Texto sin esas frases')
 })
 
-// Wduudjrqd: el contacto «Agustin Molinari» existía y, con una persona en copia, igual salió «Estimados,».
+// Wduudjrqd: el contacto «Andres Mora» existía y, con una persona en copia, igual salió «Estimados,».
 const personas = { generoF: n => /a$/i.test(n.split(' ')[0]) && !/^agustin$/i.test(n.split(' ')[0]), esPersona: n => n.trim().split(/\s+/).length >= 2 }
 test('el saludo se decide por el «Para», no por la copia', () => {
-  const contactos = [{ email: 'amolinari@wduudjrqd.cl', nombre: 'Agustin Molinari' }, { email: 'etienne.coqueletf@gmail.com', nombre: 'etienne.coqueletf' }, { email: 'cbatlle@wduudjrqd.cl', nombre: 'Carola Edwooh' }]
-  assert.equal(saludoPara({ para: ['amolinari@wduudjrqd.cl'], contactos, ...personas }), 'Estimado Agustin,')
-  assert.equal(saludoPara({ para: ['cbatlle@wduudjrqd.cl'], contactos, ...personas }), 'Estimada Carola,')
-  assert.equal(saludoPara({ para: ['etienne.coqueletf@gmail.com'], contactos, ...personas }), 'Estimados,')   // el «nombre» es su propio correo
-  assert.equal(saludoPara({ para: ['amolinari@wduudjrqd.cl', 'cbatlle@wduudjrqd.cl'], contactos, ...personas }), 'Estimados,')
+  const contactos = [{ email: 'amora@clientex.cl', nombre: 'Andres Mora' }, { email: 'pedro.gomezr@correo-demo.cl', nombre: 'pedro.gomezr' }, { email: 'cvera@clientex.cl', nombre: 'Camila Vera' }]
+  assert.equal(saludoPara({ para: ['amora@clientex.cl'], contactos, ...personas }), 'Estimado Andres,')
+  assert.equal(saludoPara({ para: ['cvera@clientex.cl'], contactos, ...personas }), 'Estimada Camila,')
+  assert.equal(saludoPara({ para: ['pedro.gomezr@correo-demo.cl'], contactos, ...personas }), 'Estimados,')   // el «nombre» es su propio correo
+  assert.equal(saludoPara({ para: ['amora@clientex.cl', 'cvera@clientex.cl'], contactos, ...personas }), 'Estimados,')
   assert.equal(saludoPara({ para: [], contactos, ...personas }), 'Estimados,')
   assert.equal(saludoPara({ para: ['otro@x.cl'], contactos, ...personas }), 'Estimados,')
   // Lo aprendido de un saludo escrito a mano manda
-  assert.equal(saludoPara({ para: ['etienne.coqueletf@gmail.com'], contactos, aprendido: 'Estimado Etienne,', ...personas }), 'Estimado Etienne,')
+  assert.equal(saludoPara({ para: ['pedro.gomezr@correo-demo.cl'], contactos, aprendido: 'Estimado Etienne,', ...personas }), 'Estimado Etienne,')
 })
 
 // Jhvorj 498 («Asesoria reorg», cuota 7/24) y 502 («Ases laboral octubre 26») están vinculadas a la MISMA venta en la base, pero son dos trabajos:

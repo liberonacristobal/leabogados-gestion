@@ -13,7 +13,12 @@ const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
-const CONTADORA = "clsvsaez6@hotmail.com";
+// Correo de la contadora: configuración del estudio (learnings kind='config' key='contadora_correo'); sin valor, la función avisa y no busca.
+async function correoContadora(): Promise<string> {
+  const r = await fetch(`${SB_URL}/rest/v1/learnings?kind=eq.config&key=eq.contadora_correo&select=value&order=updated_at.desc&limit=1`, { headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY } });
+  const d = r.ok ? await r.json() : [];
+  return String((Array.isArray(d) && d[0]?.value) || "").trim();
+}
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
 
 async function token(): Promise<string> {
@@ -89,6 +94,8 @@ Deno.serve(async (req) => {
     if (body.accion === "leer") {
       const H = { Authorization: `Bearer ${await token()}` };
       const meses = Math.min(Math.max(Number(body.meses) || 2, 1), 24);
+      const CONTADORA = await correoContadora();
+      if (!CONTADORA) return json({ ok: false, error: "Falta el correo de la contadora (configuración contadora_correo)." }, 400);
       const q = encodeURIComponent(`from:${CONTADORA} subject:LIQUIDACIONES has:attachment newer_than:${meses * 31 + 10}d`);
       const lista = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100`, { headers: H }).then((r) => r.json());
       const filas: Record<string, unknown>[] = [], errores: string[] = [];
@@ -172,6 +179,8 @@ Deno.serve(async (req) => {
     }
     if (body.accion === "muestra") {
       const H = { Authorization: `Bearer ${await token()}` };
+      const CONTADORA = await correoContadora();
+      if (!CONTADORA) return json({ ok: false, error: "Falta el correo de la contadora (configuración contadora_correo)." }, 400);
       const q = encodeURIComponent(`from:${CONTADORA} subject:LIQUIDACIONES has:attachment ${body.mes ? `subject:${body.mes}` : "newer_than:40d"}`);
       const lista = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=5`, { headers: H }).then((r) => r.json());
       const id = lista.messages?.[0]?.id; if (!id) return json({ ok: true, mensajes: 0 });

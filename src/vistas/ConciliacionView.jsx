@@ -63,7 +63,11 @@ export async function conciliarPagoComisiones(m, ids, sum){
 export async function leerValoresClaudia(){
   const token=await driveToken()
   if(!token){ const e=new Error('Sin token de Google'); e.code=401; throw e }
-  const q=encodeURIComponent('from:clsvsaez6@hotmail.com subject:VALORES')
+  // Correo de la contadora: configuración del estudio (learnings config · contadora_correo), sin dirección en el código.
+  const { data:cfg }=await supabase.from('learnings').select('value').eq('kind','config').eq('key','contadora_correo').order('updated_at',{ascending:false}).limit(1)
+  const desde=String(cfg?.[0]?.value||'').trim()
+  if(!desde) throw new Error('Falta el correo de la contadora (configuración contadora_correo)')
+  const q=encodeURIComponent(`from:${desde} subject:VALORES`)
   const r=await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=3`,{headers:{Authorization:'Bearer '+token}})
   if(!r.ok){ const e=new Error('Gmail '+r.status); e.code=r.status; throw e }
   const j=await r.json(); const id=(j.messages||[])[0]?.id

@@ -764,7 +764,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no nuestra · no se carga, se registra') }
   const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:false} : r)); flash('Reactivada · vuelve a la revisión') }
   // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
-  const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl'
+  const NOTA_DEST_DEFAULT=''   // los correos de la notaría salen de learnings notaria_email (abajo); sin dirección en el código
   const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
   useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
   const [notaConsultaSel,setNotaConsultaSel] = useState(()=>new Set())

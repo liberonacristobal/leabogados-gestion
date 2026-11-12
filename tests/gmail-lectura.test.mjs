@@ -69,9 +69,9 @@ test('atribución: completa quién, a quién y la fecha real solo en facturas si
 test('saludo de un correo enviado: solo singular con nombre y una dirección de afuera', () => {
   const c = (fragmento, para) => ({ fragmento, para })
   assert.deepEqual(saludoDeCorreo(c('Estimada Carolina, Espero que estés muy bien. Adjuntamos la factura N° 480', ['pagos@cliente.cl']), 'leabogados.cl'), { email: 'pagos@cliente.cl', saludo: 'Estimada Carolina,' })
-  assert.deepEqual(saludoDeCorreo(c('Estimado Agustín, Espero que estés', ['amolinari@wduudjrqd.cl', 'amolinari@wduudjrqd.cl']), ''), { email: 'amolinari@wduudjrqd.cl', saludo: 'Estimado Agustín,' })
+  assert.deepEqual(saludoDeCorreo(c('Estimado Andrés, Espero que estés', ['amora@clientex.cl', 'amora@clientex.cl']), ''), { email: 'amora@clientex.cl', saludo: 'Estimado Andrés,' })
   assert.equal(saludoDeCorreo(c('Estimados, Espero que estén muy bien', ['pagos@cliente.cl'])), null)
-  assert.equal(saludoDeCorreo(c('Estimado Agustín, Espero', ['a@x.cl', 'b@x.cl'])), null)               // dos destinatarios
-  assert.equal(saludoDeCorreo(c('Estimado Agustín, Espero', ['socio@leabogados.cl']), 'leabogados.cl'), null)   // solo interno
+  assert.equal(saludoDeCorreo(c('Estimado Andrés, Espero', ['a@x.cl', 'b@x.cl'])), null)               // dos destinatarios
+  assert.equal(saludoDeCorreo(c('Estimado Andrés, Espero', ['socio@leabogados.cl']), 'leabogados.cl'), null)   // solo interno
   assert.equal(saludoDeCorreo(c('Hola, adjunto la factura', ['pagos@cliente.cl'])), null)
 })

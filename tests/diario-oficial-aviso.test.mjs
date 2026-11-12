@@ -15,9 +15,9 @@ const entidades = [
 ]
 
 test('rut y nombre se normalizan igual que la tabla', () => {
-  assert.equal(rutClave('77.704.691-8'), '777046918')
+  assert.equal(rutClave('77.123.456-9'), '771234569')
   assert.equal(rutClave('abc'), '')
-  assert.equal(rutBonito('77704691-8'), '77.704.691-8')
+  assert.equal(rutBonito('77123456-9'), '77.123.456-9')
   assert.equal(quitarRut('ASESORÍAS LEGALES PROVIDENCIA LIMITADA 77.898.170-K*'), 'ASESORÍAS LEGALES PROVIDENCIA LIMITADA')
   assert.equal(nombreClave('Asesorías  Legales, S.A.'), 'asesorias legales s a')
 })
@@ -29,7 +29,7 @@ test('calza por RUT (ficha y razón social) y es seguro', () => {
 
 test('calza por nombre con aviso: RUT distinto, ficha sin RUT o publicación sin RUT', () => {
   const r = calzarPublicaciones([
-    { cve: '3', nombre: 'ALFA INVERSIONES LIMITADA 77.704.691-8*', nombre_norm: 'alfa inversiones limitada', rut: '77704691-8' },
+    { cve: '3', nombre: 'ALFA INVERSIONES LIMITADA 77.123.456-9*', nombre_norm: 'alfa inversiones limitada', rut: '77123456-9' },
     { cve: '4', nombre: 'GAMMA SERVICIOS LIMITADA', nombre_norm: 'gamma servicios limitada', rut: null },
     { cve: '5', nombre: 'Gamma Servicios Limitada 77.123.456-7*', nombre_norm: 'gamma servicios limitada', rut: '77123456-7' },
   ], clientes, entidades)

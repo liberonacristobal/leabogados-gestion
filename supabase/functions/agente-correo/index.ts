@@ -286,7 +286,7 @@ Deno.serve(async (req) => {
     (contactos || []).forEach((c: { email: string; client_id: string }) => addMail(c.email, c.client_id));
     (clientes || []).forEach((c: { email: string; id: string; is_internal: boolean }) => { if (!c.is_internal) String(c.email || "").split(/[,;\s]+/).forEach((e) => addMail(e, c.id)); });
     const respDe = (cid: string) => { const c = cliPorId.get(cid) as { abogado_responsable?: string } | undefined; return c?.abogado_responsable || (ventas || []).find((v: { client_id: string }) => v.client_id === cid)?.responsible || null; };
-    const dominiosNotaria = new Set<string>(["notarialascar.cl"]);
+    const dominiosNotaria = new Set<string>();
     (notaEm || []).forEach((l: { value: string }) => String(l.value || "").split(/[,;\s]+/).map(emailDe).filter(Boolean).forEach((e) => { const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) dominiosNotaria.add(d); }));
     const cartolaHasta = ultCart?.[0]?.fecha || null;
     // Pedidos de liquidación a la notaría (notaria-pedir-liquidacion): la respuesta en el mismo asunto queda en la bitácora,

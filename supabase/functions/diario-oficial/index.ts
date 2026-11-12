@@ -68,7 +68,7 @@ async function edicion(iso: string) {
     const pdf = row.match(/href="([^"]+\.pdf)"/);
     if (pdf) {
       const cve = txt.match(/CVE-(\d+)/); const nombre = txt.split("Ver PDF")[0].trim();
-      // Modificaciones y disoluciones traen el RUT pegado al nombre («GESGROUP INVERSIONES LIMITADA 77.704.691-8*»).
+      // Modificaciones y disoluciones traen el RUT pegado al nombre («GESGROUP INVERSIONES LIMITADA 77.123.456-9*»).
       const rut = nombre.match(/(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])\*?\s*$/);
       const sinRut = rut ? nombre.slice(0, rut.index).trim() : nombre;
       if (cve && nombre) out.push({ fecha: iso, edicion: m[2], nombre, nombre_norm: normRS(sinRut), rut: rut ? rut[1].replace(/\./g, "").toUpperCase() : null, categoria: cat, subtipo: sub, cve: cve[1], url: pdf[1] });

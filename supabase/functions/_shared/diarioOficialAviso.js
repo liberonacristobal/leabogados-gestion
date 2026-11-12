@@ -9,7 +9,7 @@ export const rutClave = (r) => { const k = String(r || '').replace(/[^0-9kK]/g, 
 /** Mismo criterio de la tabla (nombre_norm): minúsculas, sin acentos ni puntuación, espacios colapsados. @param {any} s */
 export const nombreClave = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9& ]/g, ' ').replace(/\s+/g, ' ').trim()
 
-/** «77704691-8» o «777046918» → «77.704.691-8». @param {any} r */
+/** «77123456-9» o «771234569» → «77.123.456-9». @param {any} r */
 export const rutBonito = (r) => { const k = rutClave(r); if (!k) return ''; const cuerpo = k.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return `${cuerpo}-${k.slice(-1)}` }
 
 /** «RAZÓN SOCIAL 77.898.170-K*» → «RAZÓN SOCIAL». @param {any} n */

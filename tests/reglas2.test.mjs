@@ -322,10 +322,10 @@ test('notaría, regla 4: solo los trámites de tarifa fija se marcan por monto s
 
 test('notaría, regla 1: el RUT de una persona del estudio nunca identifica al cliente', async () => {
   const { clienteDeLectura } = await import('../supabase/functions/_shared/notariaDocsReglas.js')
-  const lec = { comparecientes: [{ nombre: 'Persona Del Estudio', rut: '15.621.320-9', calidad: 'compareciente' }], sociedades: [{ razon_social: 'Sociedad Demo SpA', rut: '76.111.222-3' }] }
-  const porRut = { '156213209': 'c-abogado', '761112223': 'c-sociedad' }
+  const lec = { comparecientes: [{ nombre: 'Persona Del Estudio', rut: '12.345.678-5', calidad: 'compareciente' }], sociedades: [{ razon_social: 'Sociedad Demo SpA', rut: '76.111.222-3' }] }
+  const porRut = { '123456785': 'c-abogado', '761112223': 'c-sociedad' }
   assert.equal(clienteDeLectura(lec, { porRut })?.client_id, undefined, 'sin la exclusión, dos clientes distintos por RUT no se resuelven')
-  assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['156213209']) })?.client_id, 'c-sociedad')
+  assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['123456785']) })?.client_id, 'c-sociedad')
 })
 
 import { planCarga } from '../supabase/functions/_shared/cartolaDedupe.js'
@@ -383,8 +383,8 @@ import { extraerContraparte } from '../src/cartola.js'
 test('cartola: «Transferencia de X Rut … desde Banco … a Y Rut …» toma al destino en un cargo y al origen en un abono', () => {
   const g = 'Transferencia de LIBERONA ESCALA ABOGADOS LIMITADA Rut 77.700.387-9 desde Banco BICE a Martina De Los Angeles Perez Giuras Rut 21.138.928-1 a Cuenta Corriente de Banco Santander-Chile, el 2026-10-27 a las 09:33 hrs.'
   assert.deepEqual(extraerContraparte(g, 'cargo'), { nombre: 'Martina De Los Angeles Perez Giuras', rut: '21.138.928-1' })
-  const a = 'Transferencia de Persona De Prueba Rut 15.621.320-9 desde Banco BICE a Liberona Escala Abogados Limitada Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-10-19 a las 10:00 hrs.'
-  assert.deepEqual(extraerContraparte(a, 'abono'), { nombre: 'Persona De Prueba', rut: '15.621.320-9' })
+  const a = 'Transferencia de Persona De Prueba Rut 12.345.678-5 desde Banco BICE a Liberona Escala Abogados Limitada Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-10-19 a las 10:00 hrs.'
+  assert.deepEqual(extraerContraparte(a, 'abono'), { nombre: 'Persona De Prueba', rut: '12.345.678-5' })
   const i = 'Transferencia de CLIENTE Rut 77.700.387-9 desde Banco BICE a BENEFICIARIO Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-09-09 a las 18:48:00.'
   assert.deepEqual(extraerContraparte(i, 'cargo'), { nombre: null, rut: null })
 })
