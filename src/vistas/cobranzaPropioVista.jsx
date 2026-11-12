@@ -1,125 +1,124 @@
-// Vista «Ingreso propio» de Cobranza: de lo vencido o de lo por cobrar, cuánto es de la oficina y cuánto es de terceros o comisión.
-// Presentación solamente: las cifras salen de resumenPropio (_shared/cobranzaPropio.js).
-import { useState } from 'react'
-import { C, SEC_LBL, SIcon, fmtFechaDMY, folioN, useIsDesktop } from '../lib/base.jsx'
+// Vista única de la cartera por cobrar: vencido, por vencer y total, de cada cliente, y cuánto es propio y cuánto de terceros.
+// Presentación solamente: las cifras salen de resumenPropio (_shared/cobranzaPropio.js). Nada de aquí lleva a la ficha del cliente.
+import { C, SEC_LBL, fmtFechaDMY, folioN, useIsDesktop } from '../lib/base.jsx'
 import { FlujoPagina } from '../lib/compartido.jsx'
 
 const f0 = (/** @type {number} */ n) => '$' + Math.round(n || 0).toLocaleString('es-CL')
 const fM = (/** @type {number} */ n) => '$' + ((n || 0) / 1e6).toFixed(1).replace('.', ',') + 'M'
-const pc = (/** @type {number} */ a, /** @type {number} */ b) => (b > 0 ? Math.round((a / b) * 100) : 0)
+const sum = (/** @type {any[]} */ a, /** @type {(x:any)=>number} */ f) => a.reduce((s, x) => s + f(x), 0)
 
-export function CobranzaPropioVista({ resumen, tab, setTab, cli, setCli, cn, onOpenClientFicha, onOpenFactura, onBack }) {
+/** @typedef {{ ref: any, saldo: number, ext: number, com: number, propio: number, mora: number, partes: { nombre: string, monto: number }[] }} Fac */
+
+/** ¿La factura pasa el filtro? e: 'todas' | 'v' | 'p'; t: null | '*' (con terceros) | nombre del tercero. @param {Fac} f @param {{ e: string, t: string | null }} fl */
+export const pasaFiltro = (f, fl) => (fl.e === 'todas' || (fl.e === 'v' ? f.mora > 0 : f.mora <= 0)) && (!fl.t || (fl.t === '*' ? f.ext + f.com > 0 : f.partes.some(p => p.nombre === fl.t)))
+
+export function CobranzaPropioVista({ resumen, filtro, setFiltro, abiertos, setAbiertos, q, setQ, cn, onOpenFactura, onBack }) {
   const D = useIsDesktop()
-  // cli = cliente abierto: todas sus facturas abiertas, lo nuestro y lo de terceros (el estado vive en Cobranza para volver al mismo lugar desde una factura)
-  const [verResto, setVerResto] = useState(false)
-  const v = tab === 'venc', d = v ? resumen.venc : resumen.todo
-  const nombre = v ? 'Vencido' : 'Por cobrar'
-  // Clientes con parte ajena, de mayor a menor; el resto se junta en una línea.
-  const filas = [...resumen.porCliente.values()].map(c => ({ cid: c.cid, g: v ? c.venc : c.todo })).filter(x => x.g.total > 0)
-  const conAjeno = filas.filter(x => x.g.ext + x.g.com > 0).sort((a, b) => (b.g.ext + b.g.com) - (a.g.ext + a.g.com))
-  const resto = filas.filter(x => !(x.g.ext + x.g.com > 0)), restoTot = resto.reduce((a, x) => a + x.g.total, 0)
-  const tarjeta = (/** @type {'venc'|'todo'} */ k, /** @type {string} */ label, /** @type {string} */ ico, bg, bd, col) => {
-    const g = resumen[k], on = (k === 'venc') === v
-    return (
-      <button key={k} onClick={() => setTab(k === 'venc' ? 'venc' : 'todo')} aria-pressed={on} style={{ font: 'inherit', textAlign: 'left', cursor: 'pointer', background: bg, border: on ? `2px solid ${C.accent}` : `1px solid ${bd}`, borderRadius: 12, padding: on ? '11px 12px' : '12px 13px', display: 'flex', gap: 10, alignItems: 'flex-start', minWidth: 0 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 8, background: bd, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n={ico} s={16} c={col} /></span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ ...SEC_LBL, display: 'block', whiteSpace: 'nowrap' }}>{label}</span>
-          <span style={{ display: 'block', fontSize: D ? 26 : 20, fontWeight: 800, color: col, letterSpacing: '-.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', marginTop: 5 }}>{fM(g.total)}</span>
-          <span style={{ display: 'block', fontSize: 10, color: C.muted, marginTop: 5, whiteSpace: 'nowrap' }}>{fM(g.propio)} propio</span>
-        </span>
-      </button>)
-  }
-  const fila = (sg, t, sub, val, tot) => (
-    <div key={t} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0,1fr) auto', gap: 8, alignItems: 'baseline', padding: tot ? '11px 0 0' : '9px 0', borderTop: tot ? `2px solid ${C.border}` : `1px solid ${C.bgSoft}`, marginTop: tot ? 2 : 0 }}>
+  const fl = filtro || { e: 'todas', t: null }
+  const activo = fl.e !== 'todas' || !!fl.t
+  const T = resumen.todo, V = resumen.venc
+  const cols3 = [['v', 'Vencido', V.total, V.propio, V.ext + V.com], ['p', 'Por vencer', T.total - V.total, T.propio - V.propio, T.ext + T.com - V.ext - V.com], ['todas', 'Total', T.total, T.propio, T.ext + T.com]]
+  const colOn = (/** @type {string} */ k) => fl.e === k
+  // Clientes con sus facturas filtradas, de mayor a menor vencido.
+  const clientes = [...resumen.porCliente.values()].map((/** @type {any} */ c) => {
+    /** @type {Fac[]} */
+    const fs = c.facturas.filter((/** @type {Fac} */ f) => pasaFiltro(f, fl))
+    const v = fs.filter(f => f.mora > 0), p = fs.filter(f => f.mora <= 0)
+    const nombres = [...new Set(fs.flatMap(f => f.partes.map(x => x.nombre)))]
+    return { cid: c.cid, fs, v, p, tot: sum(fs, f => f.saldo), venc: sum(v, f => f.saldo), pv: sum(p, f => f.saldo), prop: sum(fs, f => f.propio), terc: sum(fs, f => f.ext + f.com), nombres }
+  }).filter(c => c.fs.length).sort((a, b) => b.venc - a.venc || b.tot - a.tot)
+  const qq = String(q || '').trim().toLowerCase()
+  const lista = qq ? clientes.filter(c => cn(c.cid).toLowerCase().includes(qq)) : clientes
+  const terc = [...resumen.terceros.entries()].sort((a, b) => b[1].monto - a[1].monto)
+  const abre = (/** @type {string} */ id) => setAbiertos((/** @type {string[]} */ a) => (a.includes(id) ? a.filter(x => x !== id) : [...a, id]))
+  const btnFiltro = (/** @type {string} */ k) => setFiltro({ ...fl, e: fl.e === k && k !== 'todas' ? 'todas' : k })
+  const cols = 'minmax(210px,1.7fr) 108px 108px 108px 108px minmax(0,.8fr)'
+  const colsF = 'minmax(0,1.2fr) minmax(0,1fr) 118px 118px 118px'
+  const mora = (/** @type {Fac} */ f) => (f.mora > 0 ? `vencida hace ${f.mora} día${f.mora !== 1 ? 's' : ''}` : `vence en ${-f.mora} día${f.mora !== -1 ? 's' : ''}`)
+  const fila = (/** @type {string} */ sg, /** @type {string} */ t, /** @type {any} */ sub, /** @type {number} */ val, /** @type {boolean} */ tot) => (
+    <div key={t + sg} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0,1fr) auto', gap: 8, alignItems: 'baseline', padding: tot ? '10px 0 0' : '8px 0', borderTop: tot ? `2px solid ${C.border}` : `1px solid ${C.bgSoft}`, marginTop: tot ? 2 : 0 }}>
       <span style={{ textAlign: 'center', color: C.muted, fontWeight: 700 }}>{sg}</span>
-      <span style={{ minWidth: 0, fontWeight: tot ? 800 : 600, fontSize: tot ? 16 : 14, color: tot ? C.greenText : C.text }}>{t}{sub && <span style={{ display: 'block', fontWeight: 400, fontSize: 12, color: C.muted }}>{sub}</span>}</span>
-      <span style={{ fontWeight: 700, fontSize: tot ? 17 : 14, color: tot ? C.greenText : C.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{f0(val)}</span>
+      <span style={{ minWidth: 0, fontWeight: tot ? 800 : 600, fontSize: tot ? 15 : 13.5, color: tot ? C.accent : C.text }}>{t}{sub && <span style={{ display: 'block', fontWeight: 400, fontSize: 12, color: C.muted }}>{sub}</span>}</span>
+      <span style={{ fontWeight: 700, fontSize: tot ? 16 : 13.5, color: tot ? C.accent : C.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{f0(val)}</span>
     </div>)
-  const cols = 'minmax(0,1.2fr) minmax(0,1.3fr) 130px 130px 130px'
-  const chip = (/** @type {string} */ t, bg, col) => <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: bg, color: col, whiteSpace: 'nowrap' }}>{t}</span>
-  const detalle = (/** @type {{ext:number,com:number}} */ g) => <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{g.ext > 0 && chip('Por cuenta de terceros', C.soonBg, C.soonText)}{g.com > 0 && chip('Comisiones', C.tealBg, C.tealText)}</span>
-  if (cli != null) {
-    const c = resumen.porCliente.get(String(cli)), g = c ? (v ? c.venc : c.todo) : null
-    const fs = (c ? c.facturas : []).filter(f => !v || f.mora > 0).sort((a, b) => String((a.ref && a.ref.issued_at) || '').localeCompare(String((b.ref && b.ref.issued_at) || '')))
-    const tags = (/** @type {any} */ f) => {
-      const t = (f.terceros || []).filter((/** @type {any} */ x) => x && (x.comision_pct != null || x.estado !== 'pagado'))
-      const out = t.map((/** @type {any} */ x) => x.comision_pct != null ? ['Por cuenta de terceros' + (x.proveedor ? ' · ' + x.proveedor : ''), C.soonBg, C.soonText] : ['Comisión' + (x.proveedor ? ' · ' + x.proveedor : ''), C.tealBg, C.tealText])
-      if (!out.length && f.ext > 0) out.push(['Por cuenta de terceros', C.soonBg, C.soonText])
-      return out
-    }
-    const colsF = 'minmax(0,1.1fr) minmax(0,1.5fr) 120px 120px 120px'
-    const nom = cn(cli)
+  const detalle = (/** @type {any} */ c) => {
+    /** @type {Map<string, number>} */
+    const porTerc = new Map()
+    c.fs.forEach((/** @type {Fac} */ f) => f.partes.forEach(p => porTerc.set(p.nombre, (porTerc.get(p.nombre) || 0) + p.monto)))
+    const grupo = (/** @type {string} */ t, /** @type {Fac[]} */ l, /** @type {string} */ col) => l.length ? (
+      <div key={t}>
+        <div style={{ ...SEC_LBL, padding: '10px 0 4px' }}>{t} · {l.length} · <b style={{ color: col }}>{f0(sum(l, f => f.saldo))}</b></div>
+        {[...l].sort((a, b) => String(a.ref?.issued_at || '').localeCompare(String(b.ref?.issued_at || ''))).map((f, i) => {
+          const b = f.ref || {}, ajeno = f.ext + f.com, nom = f.partes.map(x => x.nombre).join(' · ')
+          const quien = <><span style={{ fontWeight: 700, color: C.accent }}>Factura N° {folioN(b.invoice_no)}</span><span style={{ display: 'block', fontSize: 12, color: C.muted }}>{b.issued_at ? fmtFechaDMY(b.issued_at) + ' · ' : ''}{mora(f)}</span></>
+          return (
+            <div key={String(b.id || i)} onClick={() => onOpenFactura && b.id && onOpenFactura(b)} role='button' tabIndex={0} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && onOpenFactura && b.id) onOpenFactura(b) }} style={{ display: 'grid', gridTemplateColumns: D ? colsF : 'minmax(0,1fr) auto', gap: D ? 12 : '3px 10px', alignItems: 'center', padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, cursor: onOpenFactura ? 'pointer' : 'default', fontSize: 13 }}>
+              <span style={{ minWidth: 0 }}>{quien}</span>
+              {D ? <><span style={{ color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom ? `Terceros ${nom}` : '—'}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{f0(f.saldo)}</span><span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{ajeno > 0 ? '−' + f0(ajeno) : '—'}</span><span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{f0(f.propio)}</span></>
+                : <><span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{f0(f.propio)}</span><span style={{ fontSize: 12, color: C.muted, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nom ? `Terceros ${nom}` : 'Sin terceros'}</span><span style={{ textAlign: 'right', fontSize: 12, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{ajeno > 0 ? `de ${f0(f.saldo)}` : f0(f.saldo)}</span></>}
+            </div>)
+        })}
+      </div>) : null
     return (
-      <FlujoPagina origen={nombre} titulo={nom} onBack={() => setCli(null)} maxW={1040}>
-        {g && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12, maxWidth: D ? 520 : undefined }}>
-            <div style={{ ...SEC_LBL, marginBottom: 6 }}>{v ? 'De lo vencido' : 'De lo por cobrar'} de {nom}, cuánto es nuestro</div>
-            {fila('', nombre, `${g.n} factura${g.n !== 1 ? 's' : ''}`, g.total, false)}
-            {fila('−', 'Por cuenta de terceros', '', g.ext, false)}
-            {fila('−', 'Comisiones', 'por pagar a terceros', g.com, false)}
-            {fila('=', 'Ingreso propio', '', g.propio, true)}
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>{pc(g.propio, g.total)} % es ingreso de la oficina.{onOpenClientFicha && <> · <span role='button' tabIndex={0} onClick={() => onOpenClientFicha(cli)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpenClientFicha(cli) }} style={{ color: C.accent, fontWeight: 700, cursor: 'pointer' }}>Ver ficha ›</span></>}</div>
-          </div>)}
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ ...SEC_LBL, marginBottom: 6 }}>Facturas {v ? 'vencidas' : 'por cobrar'}</div>
-          {D && <div style={{ display: 'grid', gridTemplateColumns: colsF, gap: 12, fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.muted, padding: '2px 0 6px' }}><span>Factura</span><span>Terceros y comisiones</span><span style={{ textAlign: 'right' }}>Saldo</span><span style={{ textAlign: 'right' }}>Ajeno</span><span style={{ textAlign: 'right' }}>Propio</span></div>}
-          {fs.map((f, i) => {
-            const b = f.ref || {}, ajeno = f.ext + f.com
-            const mora = f.mora > 0 ? `vencida hace ${f.mora} día${f.mora !== 1 ? 's' : ''}` : 'al día'
-            const quien = <><span style={{ fontWeight: 700, color: C.accent }}>Factura N° {folioN(b.invoice_no)}</span><span style={{ display: 'block', fontSize: 12, color: C.muted }}>{b.issued_at ? fmtFechaDMY(b.issued_at) + ' · ' : ''}{mora}</span></>
-            const chips = <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{tags(f).map((/** @type {any} */ t, k) => <span key={k} style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: t[1], color: t[2], whiteSpace: 'nowrap' }}>{t[0]}</span>)}</span>
-            return (
-              <div key={String(b.id || i)} onClick={() => onOpenFactura && b.id && onOpenFactura(b)} role='button' tabIndex={0} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && onOpenFactura && b.id) onOpenFactura(b) }} style={{ display: 'grid', gridTemplateColumns: D ? colsF : 'minmax(0,1fr) auto', gap: D ? 12 : '4px 10px', alignItems: 'center', padding: '11px 0', borderTop: `1px solid ${C.bgSoft}`, cursor: onOpenFactura ? 'pointer' : 'default' }}>
-                <span style={{ minWidth: 0 }}>{quien}</span>
-                {D ? <>{chips}<span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{f0(f.saldo)}</span><span style={{ textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{ajeno > 0 ? '−' + f0(ajeno) : '—'}</span><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(f.propio)}</span></>
-                  : <><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(f.propio)}</span>{chips}<span style={{ textAlign: 'right', fontSize: 12.5, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{ajeno > 0 ? `−${f0(ajeno)} de ${f0(f.saldo)}` : f0(f.saldo)}</span></>}
-              </div>)
-          })}
-          {!fs.length && <div style={{ color: C.muted, padding: '10px 0' }}>Sin facturas {v ? 'vencidas' : 'por cobrar'}.</div>}
+      <div style={{ background: C.bg, borderTop: `1px solid ${C.bgSoft}`, padding: D ? '4px 16px 12px 34px' : '4px 12px 10px' }}>
+        <div style={{ maxWidth: 520, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '4px 12px', margin: '8px 0 4px' }}>
+          {fila('', 'Total', `${c.fs.length} factura${c.fs.length !== 1 ? 's' : ''} · ${c.v.length} vencida${c.v.length !== 1 ? 's' : ''}, ${c.p.length} por vencer`, c.tot, false)}
+          {fila('−', 'Terceros', null, c.terc, false)}
+          {[...porTerc].sort((a, b) => b[1] - a[1]).map(([n, m]) => <div key={n} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0,1fr) auto', gap: 8, fontSize: 12, color: C.muted, padding: '0 0 6px' }}><span /><span>{n}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{f0(m)}</span></div>)}
+          {fila('=', 'Propio', null, c.prop, true)}
         </div>
-      </FlujoPagina>)
+        {D && <div style={{ display: 'grid', gridTemplateColumns: colsF, gap: 12, fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.muted, padding: '8px 0 0' }}><span>Factura</span><span>Terceros</span><span style={{ textAlign: 'right' }}>Saldo</span><span style={{ textAlign: 'right' }}>De terceros</span><span style={{ textAlign: 'right' }}>Propio</span></div>}
+        {grupo('Vencidas', c.v, C.overdueText)}
+        {grupo('Por vencer', c.p, C.accent)}
+      </div>)
   }
+  const th = (/** @type {string} */ k, /** @type {string} */ t) => (
+    <th key={k} onClick={() => btnFiltro(k)} role='button' tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') btnFiltro(k) }} style={{ padding: '9px 10px', textAlign: 'right', fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', fontWeight: 700, cursor: 'pointer', background: colOn(k) ? C.accent : C.bgSoft, color: colOn(k) ? '#fff' : C.muted }}>{t}</th>)
+  const numCell = { padding: '9px 10px', textAlign: /** @type {'right'} */ ('right'), fontVariantNumeric: 'tabular-nums', borderTop: `1px solid ${C.bgSoft}` }
+  const lbl = { padding: '9px 10px', textAlign: /** @type {'left'} */ ('left'), fontSize: 12, fontWeight: 600, color: C.muted, borderTop: `1px solid ${C.bgSoft}`, width: '26%' }
   return (
-    <FlujoPagina origen='Cobranza' titulo={nombre} onBack={onBack} maxW={1040}>
-      <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,360px))' : '1fr 1fr', gap: 8, marginBottom: 12 }}>
-        {tarjeta('venc', 'Vencido', 'alert', C.overdueBg, C.overdueBd, C.overdueText)}
-        {tarjeta('todo', 'Por cobrar', 'file', C.azulBg, C.azulBd, C.accent)}
+    <FlujoPagina origen='Cobranza' titulo='Por cobrar' onBack={onBack} maxW={1100}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <thead><tr><th style={{ background: C.bgSoft, width: '26%' }} />{cols3.map(c => th(String(c[0]), String(c[1])))}</tr></thead>
+          <tbody>
+            <tr><td style={{ ...lbl, borderTop: 'none' }}>Total</td>{cols3.map(c => <td key={String(c[0])} onClick={() => btnFiltro(String(c[0]))} style={{ ...numCell, borderTop: 'none', fontSize: D ? 22 : 17, fontWeight: 800, cursor: 'pointer', color: c[0] === 'v' ? C.overdueText : C.text }}>{fM(Number(c[2]))}</td>)}</tr>
+            <tr><td style={lbl}>Propio</td>{cols3.map(c => <td key={String(c[0])} style={{ ...numCell, fontSize: D ? 14 : 13 }}>{fM(Number(c[3]))}</td>)}</tr>
+            <tr><td style={lbl}>Terceros</td>{cols3.map(c => <td key={String(c[0])} style={{ ...numCell, fontSize: D ? 14 : 13 }}>{fM(Number(c[4]))}</td>)}</tr>
+          </tbody>
+        </table>
       </div>
-      <div>
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', marginBottom: 12, maxWidth: D ? 520 : undefined }}>
-          <div style={{ ...SEC_LBL, marginBottom: 6 }}>{v ? 'De lo vencido' : 'De lo por cobrar'}, cuánto es nuestro</div>
-          {fila('', nombre, `${d.n} factura${d.n !== 1 ? 's' : ''}`, d.total, false)}
-          {fila('−', 'Por cuenta de terceros', '', d.ext, false)}
-          {fila('−', 'Comisiones', 'por pagar a terceros', d.com, false)}
-          {fila('=', 'Ingreso propio', '', d.propio, true)}
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>{pc(d.propio, d.total)} % {v ? 'de lo vencido' : 'de lo por cobrar'} es ingreso de la oficina.</div>
-        </div>
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', minWidth: 0 }}>
-          <div style={{ ...SEC_LBL, marginBottom: 6 }}>Por cliente</div>
-          {D && <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 12, fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.muted, padding: '2px 0 6px' }}><span>Cliente</span><span>Terceros y comisiones</span><span style={{ textAlign: 'right' }}>{nombre}</span><span style={{ textAlign: 'right' }}>Ajeno</span><span style={{ textAlign: 'right' }}>Propio</span></div>}
-          {conAjeno.map(x => {
-            const g = x.g, ajeno = g.ext + g.com
-            return (
-              <div key={x.cid} onClick={() => setCli(x.cid)} role='button' tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setCli(x.cid) }} style={{ display: 'grid', gridTemplateColumns: D ? cols : 'minmax(0,1fr) auto', gap: D ? 12 : '4px 10px', alignItems: 'center', padding: '11px 0', borderTop: `1px solid ${C.bgSoft}`, cursor: 'pointer' }}>
-                <span style={{ fontWeight: 700, color: C.accent, minWidth: 0 }}>{cn(x.cid)}</span>
-                {D ? <>{detalle(g)}<span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{f0(g.total)}</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.muted }}>−{f0(ajeno)}</span><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(g.propio)}</span></>
-                  : <><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(g.propio)}</span>{detalle(g)}<span style={{ textAlign: 'right', fontSize: 12.5, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>−{f0(ajeno)}</span></>}
-              </div>)
-          })}
-          {resto.length > 0 && (<>
-            <div onClick={() => setVerResto(o => !o)} role='button' tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setVerResto(o => !o) }} style={{ display: 'grid', gridTemplateColumns: D ? cols : 'minmax(0,1fr) auto', gap: D ? 12 : '4px 10px', alignItems: 'center', padding: '11px 0', borderTop: `1px solid ${C.bgSoft}`, color: C.muted, cursor: 'pointer' }}>
-              <span style={{ fontWeight: 600 }}>{resto.length} cliente{resto.length !== 1 ? 's' : ''} más <span style={{ display: 'inline-block', transform: verResto ? 'rotate(90deg)' : 'none' }}>›</span></span>
-              {D ? <><span>Sin terceros ni comisiones</span><span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{f0(restoTot)}</span><span style={{ textAlign: 'right' }}>—</span><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(restoTot)}</span></>
-                : <><span style={{ textAlign: 'right', fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(restoTot)}</span><span style={{ fontSize: 12.5 }}>Sin terceros ni comisiones</span></>}
-            </div>
-            {verResto && [...resto].sort((a, b) => b.g.total - a.g.total).map(x => (
-              <div key={x.cid} onClick={() => setCli(x.cid)} role='button' tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setCli(x.cid) }} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, padding: '9px 0 9px 14px', borderTop: `1px solid ${C.bgSoft}`, cursor: 'pointer' }}>
-                <span style={{ color: C.accent, fontWeight: 600, minWidth: 0 }}>{cn(x.cid)}</span><span style={{ fontWeight: 700, color: C.greenText, fontVariantNumeric: 'tabular-nums' }}>{f0(x.g.propio)}</span>
-              </div>))}
-          </>)}
-          {!conAjeno.length && !resto.length && <div style={{ color: C.muted, padding: '10px 0' }}>Sin facturas {v ? 'vencidas' : 'por cobrar'}.</div>}
-        </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+        <select aria-label='Terceros' value={fl.t || ''} onChange={e => setFiltro({ ...fl, t: e.target.value || null })} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.accent, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '0 10px', height: 34, maxWidth: '100%' }}>
+          <option value=''>Terceros: todos</option>
+          <option value='*'>Solo con terceros</option>
+          {terc.map(([n, x]) => <option key={n} value={n}>{n} · {fM(x.monto)}</option>)}
+        </select>
+        <input value={q || ''} onChange={e => setQ(e.target.value)} placeholder='Buscar cliente…' aria-label='Buscar cliente' style={{ font: 'inherit', fontSize: 12.5, flex: '1 1 140px', minWidth: 0, maxWidth: 260, height: 34, border: `1px solid ${C.border}`, borderRadius: 10, padding: '0 10px', background: C.surface, color: C.text, boxSizing: 'border-box' }} />
+        {activo && <button onClick={() => setFiltro({ e: 'todas', t: null })} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, color: C.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, minHeight: 34 }}>Quitar filtro ✕</button>}
+      </div>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+        {D && <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 12, padding: '10px 16px', background: C.bgSoft, fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.muted }}><span>Cliente</span><span style={{ textAlign: 'right' }}>Vencido</span><span style={{ textAlign: 'right' }}>Por vencer</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ textAlign: 'right' }}>Propio</span><span>Terceros</span></div>}
+        {lista.map((c, i) => {
+          const op = abiertos.includes(c.cid)
+          return (
+            <div key={c.cid} style={{ borderTop: i || D ? `1px solid ${C.bgSoft}` : 'none' }}>
+              <div onClick={() => abre(c.cid)} role='button' tabIndex={0} aria-expanded={op} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') abre(c.cid) }} style={{ display: 'grid', gridTemplateColumns: D ? cols : 'minmax(0,1fr) auto', gap: D ? 12 : '3px 10px', alignItems: 'center', padding: D ? '11px 16px' : '12px 14px', cursor: 'pointer' }}>
+                <span style={{ fontWeight: 700, color: C.accent, fontSize: D ? 15 : 15.5, minWidth: 0 }}><span style={{ display: 'inline-block', marginRight: 6, color: C.muted, transform: op ? 'rotate(90deg)' : 'none', transition: 'transform .12s' }}>›</span>{cn(c.cid)}</span>
+                {D ? <>
+                  <span style={{ textAlign: 'right', color: c.venc ? C.overdueText : C.muted, fontVariantNumeric: 'tabular-nums' }}>{c.venc ? f0(c.venc) : '—'}</span>
+                  <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{c.pv ? f0(c.pv) : '—'}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{f0(c.tot)}</span>
+                  <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{f0(c.prop)}</span>
+                  <span style={{ color: C.muted, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombres.length ? c.nombres.join(' · ') : '—'}</span></>
+                  : <>
+                    <span style={{ textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fM(c.tot)}</span>
+                    <span style={{ gridColumn: '1 / -1', fontSize: 12.5, color: C.muted }}>Vencido <b style={{ color: c.venc ? C.overdueText : C.muted }}>{fM(c.venc)}</b> · Por vencer <b style={{ color: C.text }}>{fM(c.pv)}</b>{c.nombres.length ? <> · Terceros <b style={{ color: C.text }}>{c.nombres.join(', ')}</b></> : null}</span></>}
+              </div>
+              {op && detalle(c)}
+            </div>)
+        })}
+        {!lista.length && <div style={{ color: C.muted, padding: 16 }}>Sin facturas con este filtro.</div>}
       </div>
     </FlujoPagina>)
 }

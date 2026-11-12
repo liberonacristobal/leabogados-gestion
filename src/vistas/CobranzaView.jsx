@@ -117,8 +117,9 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
   const [autoGlobal,setAutoGlobal] = useState(false)   // interruptor GLOBAL: la app envía sola los recordatorios de los clientes liberados (config cobranza_auto; lo lee el edge fn cobranza-auto). Sin esto, "En automático" queda inerte.
   const [sortBy,setSortBy] = useState(()=>viewMemLeer('cobranza')?.sortBy||{col:'total',dir:'desc'})   // orden de la lista (móvil + escritorio)
   const [expCli,setExpCli] = useState(()=>viewMemLeer('cobranza')?.expCli??null)
-  const [propioTab,setPropioTab] = useState(()=>viewMemLeer('cobranza')?.propioTab??null), [propioCli,setPropioCli] = useState(()=>viewMemLeer('cobranza')?.propioCli??null)   // vista «Ingreso propio»: null (cerrada) | 'todo' (Por cobrar) | 'venc' (Vencido)
-  useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli,propioTab,propioCli}) },[sortBy,expCli,propioTab,propioCli])   // escritorio: cliente con sus facturas desplegadas
+  const [propioFiltro,setPropioFiltro] = useState(()=>viewMemLeer('cobranza')?.propioFiltro??null), [propioAbiertos,setPropioAbiertos] = useState(()=>viewMemLeer('cobranza')?.propioAbiertos??[]), [propioQ,setPropioQ] = useState('')   // vista única «Por cobrar»: filtro {e: todas|v|p, t: tercero} (null = cerrada), clientes desplegados y búsqueda
+  const abrirCliente = cid => { setPropioFiltro({e:'todas',t:null}); setPropioAbiertos([String(cid)]) }   // el nombre de un cliente abre la vista única con ese cliente desplegado, no su ficha
+  useEffect(()=>{ viewMemGuardar('cobranza',{sortBy,expCli,propioFiltro,propioAbiertos}) },[sortBy,expCli,propioFiltro,propioAbiertos])   // escritorio: cliente con sus facturas desplegadas
   const [reembOpen,setReembOpen] = useState(false)   // sección Reembolsos por cobrar: plegada por defecto
   const [tramoF,setTramoF] = useState(()=>filtroInicial==='vencido'?null:(filtroInicial??null))   // antigüedad: null (todas) | 0 a 4 (tramo) | 'm60' (más de 60 días)
   useEffect(()=>{ if(filtroInicial!=null){ if(filtroInicial==='vencido'){ setTramoF(null); setSortBy({col:'vencido',dir:'desc'}) } else setTramoF(filtroInicial); onFiltroListo&&onFiltroListo() } },[filtroInicial])   // eslint-disable-line
@@ -363,7 +364,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
     </div>) }
 
   // Recordatorio de cobro = PÁGINA (antes ventana encima): mismo contenido, con '‹ Cobranza' para volver. El envío sigue con su botón y confirmación.
-  if(propioTab) return <CobranzaPropioVista resumen={propio} tab={propioTab} setTab={setPropioTab} cli={propioCli} setCli={setPropioCli} cn={cn} onOpenClientFicha={onOpenClientFicha} onOpenFactura={onOpenFactura} onBack={()=>{ setPropioTab(null); setPropioCli(null) }}/>
+  if(propioFiltro) return <CobranzaPropioVista resumen={propio} filtro={propioFiltro} setFiltro={setPropioFiltro} abiertos={propioAbiertos} setAbiertos={setPropioAbiertos} q={propioQ} setQ={setPropioQ} cn={cn} onOpenFactura={onOpenFactura} onBack={()=>{ setPropioFiltro(null); setPropioAbiertos([]); setPropioQ('') }}/>
   if(recPrev) return <FlujoPagina origen='Cobranza' titulo='Recordatorio de cobro' ctx={cn(recPrev.g.cid)} onBack={()=>setRecPrev(null)} maxW={1000}><RecordatorioModal grupo={recPrev.g} to={recPrev.to} nombre={recPrev.nombre} nota={recPrev.nota} clientEntities={clientEntities} sending={sending===recPrev.g.cid} onClose={()=>setRecPrev(null)} onEnviar={({bs,combinado,adjuntar,nota})=>doEnviar({g:recPrev.g, to:recPrev.to, bs, combinado, adjuntar, nota})} asPage/></FlujoPagina>
   if(compPage!=null){ const G=gGlobal[compPage]; const inp={width:'100%',boxSizing:'border-box',border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px',fontSize:14,background:C.surface,fontFamily:'inherit'}; const lb={...SEC_LBL,marginBottom:5}
     const linea=(ic,t)=><div style={{display:'flex',gap:9,alignItems:'flex-start',padding:'6px 0',fontSize:12,lineHeight:1.45}}><span style={{width:20,height:20,borderRadius:'50%',background:C.bgSoft,color:C.accent,fontWeight:800,fontSize:11,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ic}</span><span>{t}</span></div>
@@ -394,7 +395,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
       {(()=>{
         // Foto de Cobranza: dos tarjetas en tonos claros (molde del Inicio). Tocar una ordena la lista por esa cifra.
         const tile=(key,label,fig,cap,bg,bd,ico,icoCol,figCol)=>(
-          <div onClick={()=>key==='m60'?setTramoF(f=>f==='m60'?null:'m60'):setPropioTab(key==='vencido'?'venc':'todo')} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
+          <div onClick={()=>key==='m60'?setTramoF(f=>f==='m60'?null:'m60'):setPropioFiltro({e:key==='vencido'?'v':'todas',t:null})} style={{background:bg,border:`1px solid ${bd}`,borderRadius:12,padding:'12px 13px',cursor:'pointer'}}>
             <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
               <span style={{width:30,height:30,borderRadius:8,background:bd,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={ico} s={16} c={icoCol}/></span>
               <div style={{minWidth:0,flex:1}}>
@@ -416,7 +417,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
             {expo.m60>0&&tile('m60','Más de 60 días',fM(expo.m60),`${pctTxt(expo.pctM60)} de la cartera`,C.soonBg,`${C.soon}55`,'clock',C.soonText,C.soonText)}
             {propio.todo.n>0&&<div style={!isDesktop&&nT%2===1?{gridColumn:'1 / -1'}:undefined}>{tile('propio','Ingreso propio',fM(propio.todo.propio),`${pctTxt(deudaTotal>0?propio.todo.propio/deudaTotal:0)} de la cartera`,C.greenBg,C.greenDeep,'wallet',C.greenText,C.greenText)}</div>}
           </div>
-          {ajeno>0&&<div onClick={()=>setPropioTab('todo')} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setPropioTab('todo') }} style={{minHeight:36,display:'flex',alignItems:'center',gap:6,fontSize:13,color:C.muted,cursor:'pointer',marginBottom:6}}>Excluye {propio.todo.ext>0&&<b style={{color:C.accent}}>terceros {fM(propio.todo.ext)}</b>}{propio.todo.ext>0&&propio.todo.com>0&&' · '}{propio.todo.com>0&&<b style={{color:C.accent}}>comisiones {fM(propio.todo.com)}</b>} <Gl n='chevron'/></div>}
+          {ajeno>0&&<div onClick={()=>setPropioFiltro({e:'todas',t:'*'})} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setPropioFiltro({e:'todas',t:'*'}) }} style={{minHeight:36,display:'flex',alignItems:'center',gap:6,fontSize:13,color:C.muted,cursor:'pointer',marginBottom:6}}>Excluye {propio.todo.ext>0&&<b style={{color:C.accent}}>terceros {fM(propio.todo.ext)}</b>}{propio.todo.ext>0&&propio.todo.com>0&&' · '}{propio.todo.com>0&&<b style={{color:C.accent}}>comisiones {fM(propio.todo.com)}</b>} <Gl n='chevron'/></div>}
           </>) })()}
           {expo.mayor&&expo.mayor.pct>=0.25&&gGlobal[expo.mayor.cid]&&<div style={{background:C.soonBg,borderRadius:12,padding:'0 13px',marginBottom:10}}>
             <div onClick={()=>setConcOpen(o=>!o)} role='button' tabIndex={0} onKeyDown={e=>{ if(e.key==='Enter'||e.key===' ') setConcOpen(o=>!o) }} style={{minHeight:44,display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,fontWeight:700,color:C.soonText,minWidth:0}}><span style={{flex:1,minWidth:0}}>{cn(expo.mayor.cid)} · {pctTxt(expo.mayor.pct)} de la cartera</span><span style={{transform:concOpen?'rotate(90deg)':'none',transition:'transform .12s',display:'inline-flex'}}><Gl n='chevron'/></span></div>
@@ -467,7 +468,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
                   <Fragment key={g.cid}>
                   <tr data-menu={'cobranza:'+g.cid} onClick={()=>setExpCli(open?null:g.cid)} onMouseEnter={e=>e.currentTarget.style.background=C.bgSoft} onMouseLeave={e=>e.currentTarget.style.background=selB.has(g.cid)?C.azulBg:C.surface} style={{cursor:'pointer',background:selB.has(g.cid)?C.azulBg:C.surface}}>
                     <td style={{...td,width:34,padding:'10px 0 10px 12px'}}><Casilla s={selB} id={g.cid} on={selB.has(g.cid)}/></td>
-                    <td style={td}><span style={{display:'inline-flex',marginRight:7,verticalAlign:'middle',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.done}/></span><span onClick={onOpenClientFicha?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>{chipComp(g.cid)&&<span style={{marginLeft:8}}>{chipComp(g.cid)}</span>}<div style={{fontSize:11,color:C.muted,paddingLeft:19}}>{g.items.length} factura{g.items.length!==1?'s':''}</div></td>
+                    <td style={td}><span style={{display:'inline-flex',marginRight:7,verticalAlign:'middle',transform:open?'rotate(90deg)':'none',transition:'transform .15s'}}><SIcon n='chevron' s={12} c={C.done}/></span><span onClick={e=>{e.stopPropagation();abrirCliente(g.cid)}} title='Ver sus facturas, lo propio y lo de terceros' style={{fontWeight:700,color:C.accent,cursor:'pointer'}}>{cn(g.cid)}</span>{chipComp(g.cid)&&<span style={{marginLeft:8}}>{chipComp(g.cid)}</span>}<div style={{fontSize:11,color:C.muted,paddingLeft:19}}>{g.items.length} factura{g.items.length!==1?'s':''}</div></td>
                                         <td style={{...td,fontVariantNumeric:'tabular-nums',color:g.maxDias>0?C.overdueText:C.done}}>{g.maxDias>0?`${g.maxDias} d`:'—'}</td>
                     <td style={td}>{chipPunt(g.cid)}</td>
                     <td style={{...td,textAlign:'right',fontVariantNumeric:'tabular-nums',color:C.muted,fontWeight:600}}>{pctCartera(g.cid)}</td>
@@ -495,7 +496,7 @@ export function CobranzaView({ billing=[], terceros=[], clients=[], sales=[], cl
           {/* Plegada: nombre + vencido (o el total si está al día). Al tocar se abre el resto: total, estado, ficha, facturas y recordatorio. */}
           <div onClick={e=>{ if(selB.visible){ selB.toggle(g.cid,e); return } setExpCli(expCli===g.cid?null:g.cid); setMovTab('fac') }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,cursor:'pointer'}}>
             {selB.visible&&<Casilla s={selB} id={g.cid} on={selB.has(g.cid)}/>}
-            <span onClick={onOpenClientFicha&&!selB.visible?e=>{e.stopPropagation();onOpenClientFicha(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
+            <span onClick={!selB.visible?e=>{e.stopPropagation();abrirCliente(g.cid)}:undefined} style={{...NOMBRE_CLI,cursor:'pointer',minWidth:0}}>{cn(g.cid)}</span>
             <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
               <div style={{textAlign:'right',lineHeight:1.15}}>
                 {g.vencido>0
