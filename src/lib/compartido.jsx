@@ -1,5 +1,5 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
-import { costoOficinaBruto, costoOficinaNeto, recuperadoOficinaMes, etiquetaRecuperado, docDeSubarriendo, costoOperacionBruto } from '../../supabase/functions/_shared/costosOficina.js'
+import { costoOficinaBruto, costoOficinaNeto, recuperadoOficinaMes, etiquetaRecuperado, planillaUsable, docDeSubarriendo, costoOperacionBruto } from '../../supabase/functions/_shared/costosOficina.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -718,7 +718,10 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
     if(docDeSubarriendo(b,bById)) return   // la factura de subarriendo no es ingreso ni honorario: su monto fijo ya baja el costo de oficina
     fac+=m; facUF+=m/u(d.fecha_emision); facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
   const [Y,Mo]=String(ym).split('-').map(Number)
-  const row=(fu?.plan||[]).find(r=>Number(r.anio)===Y&&Number(r.mes)===Mo)
+  // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
+  const remB=remuneracionesBancoMes(expenses,clients,ym,fu?.boleta), remEst=!(remB.total>0)
+  // Una planilla sin cerrar y sin remuneraciones (solo el arriendo, p. ej.) es un borrador: el mes usa el presupuesto de oficina hasta que cierre (planillaUsable).
+  const rowRaw=(fu?.plan||[]).find(r=>Number(r.anio)===Y&&Number(r.mes)===Mo), row=planillaUsable(rowRaw,{remBanco:remB.total})?rowRaw:undefined
   const n=k=>Number(row?.[k])||0
   // Subarriendo y gastos recuperados: MENOR COSTO de oficina (monto fijo mensual de costos_oficina, `es_ingreso`, con su desde/monto_prev), no ingreso ni el calendario de la factura. La columna «subarriendo» de la planilla es solo informativa.
   const sub=recuperadoOficinaMes(costosOfiRows,ym), subUF=sub/ufFin
@@ -726,8 +729,6 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const rex=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0),0)
   const rexUF=rexItems.reduce((a,x)=>a+(Number(x.t.comision_monto)||0)/u(x.b.issued_at),0)
   const eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-  // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
-  const remB=remuneracionesBancoMes(expenses,clients,ym,fu?.boleta), remEst=!(remB.total>0)
   const rem = remB.total>0 ? remB.total : (n('sueldos')+n('honorarios'))
   const remUF = remB.total>0 ? remB.items.reduce((a,x)=>a+x.costo/u(x.e.date),0) : rem/ufFin
   const conItems=contadoraBancoItems(expenses,clients,ym), conB=conItems.reduce((a,e)=>a+(Number(e.amount)||0),0)
@@ -744,7 +745,7 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
   const comUF=comList.reduce((a,x)=>a+x.ts.reduce((s,t)=>s+(Number(t.monto)||0)/u(t.pagado_at),0),0)
   const ing=fac+rex, res=ing-cos-com, ingUF=facUF+rexUF, resUF=ingUF-cosUF-comUF   // ingresos = facturación propia + % de externos; el subarriendo baja el costo, no suma aquí
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,facDocs,sinReg}
+  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
 }
 
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.

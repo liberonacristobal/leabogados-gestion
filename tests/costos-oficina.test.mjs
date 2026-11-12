@@ -1,7 +1,7 @@
 // Costo de oficina NETO: el subarriendo y los gastos recuperados (es_ingreso) bajan el costo; no son ingreso. Planilla incompleta y notas de crédito de subarriendo. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { costoOficinaBruto, costoOficinaNeto, recuperadoOficinaMes, valorVigenteCosto, etiquetaRecuperado, docDeSubarriendo, costoOperacionBruto, TXT_RECUPERADO } from './../supabase/functions/_shared/costosOficina.js'
+import { costoOficinaBruto, costoOficinaNeto, recuperadoOficinaMes, valorVigenteCosto, etiquetaRecuperado, planillaUsable, docDeSubarriendo, costoOperacionBruto, TXT_RECUPERADO } from './../supabase/functions/_shared/costosOficina.js'
 
 const rows = [
   { categoria: 'Remuneraciones', item: 'Persona A', monto: 3_000_000, desde: '2026-10-01', monto_prev: 2_300_000 },
@@ -35,6 +35,14 @@ test('rótulo: el nombre del ítem del estudio si es uno solo; si no, el genéri
   assert.equal(etiquetaRecuperado(rows), 'Subarriendo de prueba'); assert.equal(etiquetaRecuperado([]), TXT_RECUPERADO); assert.equal(TXT_RECUPERADO, 'Subarriendo y gastos recuperados')
   assert.equal(etiquetaRecuperado([...rows, { categoria: 'Otros', item: 'Gasto recuperado', monto: 5, es_ingreso: true }]), TXT_RECUPERADO)
   assert.equal(costoOficinaNeto(null, '2026-11'), 0); assert.equal(costoOficinaNeto([null, { monto: 'x' }], '2026-11'), 0)
+})
+test('planilla incompleta: sin cerrar y sin remuneraciones es un borrador (solo el arriendo); cerrada o con sueldos se usa', () => {
+  const borrador = { cerrado: false, sueldos: 0, honorarios: 0, cotizaciones: 0, ppm: 0, arriendo: 2_558_012, subarriendo: 0 }
+  assert.equal(planillaUsable(borrador), false); assert.equal(planillaUsable(undefined), false)
+  assert.equal(planillaUsable(borrador, { remBanco: 6_000_000 }), true)                         // ya hay sueldos pagados en el banco
+  assert.equal(planillaUsable({ ...borrador, sueldos: 6_280_000 }), true)                       // estimada pero con remuneraciones
+  assert.equal(planillaUsable({ ...borrador, cerrado: true }), true)                            // cerrada: manda
+  assert.equal(planillaUsable({ cerrado: false, honorarios: 700_000 }), true)
 })
 test('nota de crédito de una factura de subarriendo no resta honorarios; la de una factura normal sí', () => {
   const bById = { s1: { id: 's1', billing_type: 'subarriendo' }, h1: { id: 'h1', billing_type: 'honorarios' } }

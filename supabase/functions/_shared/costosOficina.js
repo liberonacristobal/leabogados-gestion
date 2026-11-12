@@ -32,6 +32,16 @@ export function etiquetaRecuperado(rows) {
   return nombres.length === 1 ? nombres[0] : TXT_RECUPERADO
 }
 
+/**
+ * ¿La planilla del mes se puede usar? Una planilla cerrada siempre. Una sin cerrar solo si trae remuneraciones (sueldos u honorarios, o pagos de sueldos en el banco): sin ellas es un borrador a medio llenar
+ * (p. ej. solo el arriendo) y el mes se calcula con el presupuesto de oficina hasta que cierre. @param {any} row @param {{ remBanco?:number }} [o]
+ */
+export function planillaUsable(row, o = {}) {
+  if (!row) return false
+  if (row.cerrado) return true
+  return (Number(row.sueldos) || 0) + (Number(row.honorarios) || 0) + (Number(o.remBanco) || 0) > 0
+}
+
 /** ¿El documento es una factura de subarriendo o una nota de crédito que apunta a una? No suma ni resta honorarios: el subarriendo no es ingreso. @param {any} b @param {Record<string,any>} [bById] */
 export function docDeSubarriendo(b, bById = {}) {
   if (!b) return false
