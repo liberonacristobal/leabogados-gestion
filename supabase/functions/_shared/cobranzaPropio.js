@@ -34,10 +34,10 @@ const sumar = (a, s, ext, com) => { a.total += s; a.ext += ext; a.com += com; a.
 /**
  * Resumen del ingreso propio de la cartera: total, vencido (mora > 0) y más de 60 días, y por cliente.
  * Las partes suman al peso: propio = total − terceros − comisiones.
- * @param {{ cid?: any, saldo?: any, monto?: any, mora?: any, terceros?: any[], montoTerceros?: any }[]} filas una por factura abierta (mora = días de mora, ≤ 0 al día)
+ * @param {{ cid?: any, saldo?: any, monto?: any, mora?: any, terceros?: any[], montoTerceros?: any, ref?: any }[]} filas una por factura abierta (mora = días de mora, ≤ 0 al día; ref = la factura, para el detalle por cliente)
  */
 export function resumenPropio(filas) {
-  const r = { todo: cero(), venc: cero(), m60: cero(), /** @type {Map<string, { cid: string, todo: ReturnType<typeof cero>, venc: ReturnType<typeof cero> }>} */ porCliente: new Map() }
+  const r = { todo: cero(), venc: cero(), m60: cero(), /** @type {Map<string, { cid: string, todo: ReturnType<typeof cero>, venc: ReturnType<typeof cero>, facturas: { ref: any, saldo: number, ext: number, com: number, propio: number, mora: number, terceros: any[] }[] }>} */ porCliente: new Map() }   // porCliente[cid].facturas: el detalle de cada factura abierta del cliente
   for (const f of filas || []) {
     const s = Math.round(n(f?.saldo))
     if (!(s > 0)) continue
@@ -47,7 +47,8 @@ export function resumenPropio(filas) {
     if (mora > 0) sumar(r.venc, s, ext, com)
     if (mora > 60) sumar(r.m60, s, ext, com)
     let c = r.porCliente.get(cid)
-    if (!c) { c = { cid, todo: cero(), venc: cero() }; r.porCliente.set(cid, c) }
+    if (!c) { c = { cid, todo: cero(), venc: cero(), facturas: [] }; r.porCliente.set(cid, c) }
+    c.facturas.push({ ref: f?.ref, saldo: s, ext, com, propio: s - ext - com, mora, terceros: f?.terceros || [] })
     sumar(c.todo, s, ext, com)
     if (mora > 0) sumar(c.venc, s, ext, com)
   }
