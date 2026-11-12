@@ -1,7 +1,7 @@
 // Excel del presupuesto: las fórmulas del libro dan lo mismo que el modelo de la app. Datos de ejemplo.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { estadoInicial, modeloPresupuesto, ESCENARIOS, escenariosDe, duplicarEscenario, eliminarEscenario } from './../supabase/functions/_shared/presupuesto.js'
+import { migrarEstado, estadoInicial, modeloPresupuesto, ESCENARIOS, escenariosDe, duplicarEscenario, eliminarEscenario } from './../supabase/functions/_shared/presupuesto.js'
 import { hojasPresupuesto, evaluar } from './../src/lib/presupuestoExcel.js'
 
 const costos = [
@@ -106,4 +106,14 @@ test('el libro agrega la hoja del Arrastre con una fila por línea y sus totales
   assert.deepEqual(hojas.map((x) => x.nombre).slice(0, 3), ['Supuestos', 'Base', 'Arrastre 2026'])
   assert.equal(valor(h, 'Arrastre 2026', 'G6'), 1_950_000); assert.equal(valor(h, 'Arrastre 2026', 'I6'), 3_300_000); assert.equal(valor(h, 'Arrastre 2026', 'K6'), 600_000)
   assert.equal(hojasPresupuesto(mk(est)).some((x) => x.nombre === 'Arrastre 2026'), false)   // sin arrastre, el libro es el de siempre
+})
+
+test('con los impuestos mensuales (estado v7: PPM puro, boleta bruta e impuesto único) el libro sigue cuadrando con el modelo y lista las partidas nuevas en «Costos»', () => {
+  const base = estadoInicial({ costos: [{ id: 'Remuneraciones|Persona', n: 'Persona', m: 500_000, meses: 12, t: 'fijo', alza: null, g: 'Remuneraciones' }, ...costos], tasa: 12.5, ppmMes: 800_000, reajusteUF: 3.5 })
+  const est = migrarEstado({ ...base, v: 6 }, 2027, 0, undefined, { ppmAnual: 5_820_000, partidas: [{ id: 'Remuneraciones|Persona', m: 595_238, boleta: true, liq: 500_000 }, { id: 'impuesto-unico', n: 'Impuesto único de trabajadores', m: 298_092, meses: 12, t: 'fijo', alza: null, g: 'Remuneraciones', imp: true }] })
+  assert.equal(est.v, 7); assert.equal(est.ppmAnual, 5_820_000)
+  const m = modeloPresupuesto({ baseCLP, baseUF, ufDic }, est), h = evaluar(hojasPresupuesto(mk(est)))
+  ESCENARIOS.forEach(([k], j) => { const c = String.fromCharCode(66 + j), e = m.esc[k]; for (const [fila, campo] of [[7, 'costos'], [9, 'idpc'], [12, 'retiros'], [14, 'saldo']]) assert.ok(Math.abs(valor(h, 'Escenarios', c + fila) - e[campo]) < 1e-4, `${k} ${campo}`) })
+  const filasCostos = JSON.stringify(h.find((x) => x.nombre === 'Costos').filas)
+  assert.ok(filasCostos.includes('Impuesto único de trabajadores')); assert.ok(valor(h, 'Supuestos', 'B8') === 5_820_000)
 })

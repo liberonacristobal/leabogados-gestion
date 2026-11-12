@@ -6,6 +6,7 @@
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
 /** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean, auto?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
+import { brutoDeLiquido, mismaPersona } from './impuestosMensuales.js'
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
 import { normalizarArrastre, arrastreVacio, lineasTocadas } from './arrastreAnio.js'
 
@@ -54,6 +55,7 @@ export const tasaPPMLegal = (anio, ufAnterior, cfg = CONFIG_DEFECTO) => {
 /** @typedef {{ k:string, n:string, t:number }} EscenarioEstado  clave interna (estable), nombre que ve el usuario y tono (índice) */
 /** @typedef {{ modo:Record<string,string>, manual:Record<string,number[]> }} Distribucion  modo por componente: 'iguales' (defecto), 'estacional' o 'manual'; manual = pesos de los 12 meses */
 /** @typedef {{ v:number, esc:string, escs:EscenarioEstado[], moneda:string, reajusteUF:number, tasaIDPC:number, ppmAnual:number, reserva:number, reservaIni:number, metas:{ancla:string, valor:number|null, ratio:number|null, cv?:number|null, rec?:number, modo?:string, pct?:number|null}, dist:Distribucion, p:Record<string,Supuestos>, costos:PartidaCosto[], hecho:number[], notas:Record<string,string>, basadaEn:string|null, arrastre?:{ ajustes:Record<string,any>, extras:any[] } }} EstadoPresupuesto */
+/** @typedef {{ ppmAnual:number, partidas:any[], boletaSet?:string[], tasa?:number, grupo?:string }} ImpuestosMigracion  (las partidas de quien emite boleta traen `boleta:true` y `tasa`: el bruto se calcula con el líquido del estado)  PPM puro del año y las partidas de costos que cambian (bruto de quien emite boleta, impuesto único) para pasar un estado a la versión 7 */
 /** @typedef {{ baseCLP:number[], baseUF:number[], ufDic:number }} BasePresupuesto  base de 12 meses (enero a diciembre del año del presupuesto) en pesos y UF, y UF de cierre del año anterior */
 
 // ── Escenarios: una LISTA editable en el estado (`st.escs`: clave, nombre y tono; `st.p[clave]`: sus palancas). Hasta `maxEscenarios`; mínimo uno. ──
@@ -106,7 +108,7 @@ export function estadoInicial(o = {}) {
   }
   const primero = cfg.escenarios.find((/** @type {any} */ e) => e.k === cfg.escenarioMetas) || cfg.escenarios[0]
   return {
-    v: 6, esc: primero.k, escs: cfg.escenarios.map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t })), moneda: 'clp', reajusteUF: num(o.reajusteUF, cfg.moneda.reajusteAnual), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio, cfg)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, cfg.reserva.porcentaje),
+    v: 7, esc: primero.k, escs: cfg.escenarios.map((/** @type {any} */ e) => ({ k: e.k, n: e.n, t: e.t })), moneda: 'clp', reajusteUF: num(o.reajusteUF, cfg.moneda.reajusteAnual), tasaIDPC: num(o.tasa, tasaIDPCLegal(o.anio, cfg)), ppmAnual: Math.round(num(o.ppmMes) * 12), reserva: num(o.reserva, cfg.reserva.porcentaje),
     reservaIni: num(o.reservaIni, cfg.reserva.minima), metas: { ancla: cfg.anclaInicial, valor: null, ratio: null }, dist: distribucionInicial(),
     p, costos: (o.costos || []).map((c) => ({ ...c })), hecho: [], notas: {}, basadaEn: null, arrastre: arrastreVacio(),
   }
@@ -578,9 +580,9 @@ export const ETAPA_ANTIGUA = /** @type {Record<number,number>} */ ({ 0: 0, 1: 1,
  * notas de las etapas desde la 4.ª en adelante se desplazan una posición; se agregan las metas y la reserva en cuenta corriente) y los ajustes del Arrastre (v6). Idempotente.
  * @param {any} st
  */
-export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0, cfg = CONFIG_DEFECTO) {
+export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefined), ppmAnualRef = 0, cfg = CONFIG_DEFECTO, imp = /** @type {ImpuestosMigracion|null} */ (null), sellar = true) {
   const c = JSON.parse(JSON.stringify(st || {}))
-  if (c.v !== 2 && c.v !== 3 && c.v !== 4 && c.v !== 5 && c.v !== 6) {
+  if (c.v !== 2 && c.v !== 3 && c.v !== 4 && c.v !== 5 && c.v !== 6 && c.v !== 7) {
     const h = new Set(), n = /** @type {Record<string,string>} */ ({})
     ;(c.hecho || []).forEach((/** @type {number} */ i) => { if (ETAPA_ANTIGUA[i] != null) h.add(ETAPA_ANTIGUA[i]) })
     Object.keys(c.notas || {}).sort().forEach((k) => { const t = ETAPA_ANTIGUA[/** @type {any} */ (k)]; if (t == null || !c.notas[k]) return; n[t] = n[t] ? n[t] + ' · ' + c.notas[k] : c.notas[k] })
@@ -619,7 +621,26 @@ export function migrarEstado(st, anio = /** @type {number|undefined} */ (undefin
     c.arrastre = normalizarArrastre(c.arrastre)
     c.v = 6
   }
-  if (c.v === 6) c.arrastre = normalizarArrastre(c.arrastre)
+  if (c.v === 6) {
+    // v7: «Impuestos mensuales» desglosados. El PPM del año pasa a ser el PPM puro (promedio de los F29 declarados; antes mezclaba retención e impuesto único) y las partidas de costos suman el bruto de quien emite boleta y el impuesto único de trabajadores.
+    // Solo se corrige con datos (`imp`); sin ellos (versiones guardadas, que son fotos) el estado queda tal cual.
+    c.arrastre = normalizarArrastre(c.arrastre)
+    if (imp && sellar) {   // sin sellar (fuentes incompletas) el estado queda idéntico: lo que se escribe como v6 se corrige entero en la próxima carga buena
+      if (num(imp.ppmAnual) > 0) c.ppmAnual = Math.round(num(imp.ppmAnual))
+      c.costos = Array.isArray(c.costos) ? c.costos : []
+      // Quien emite boleta: se busca en las partidas del ESTADO (no en los datos) y su bruto sale del líquido que el usuario dejó.
+      if (num(imp.tasa) > 0 && imp.grupo) c.costos = c.costos.map((/** @type {any} */ x) => (x && x.g === imp.grupo && !x.boleta && (imp.boletaSet || []).some((/** @type {string} */ nom) => mismaPersona(nom, x.n)) ? { ...x, boleta: true, liq: num(x.m), m: brutoDeLiquido(num(x.m), num(imp.tasa)) } : x))
+      for (const p of imp.partidas || []) {
+        const i = c.costos.findIndex((/** @type {any} */ x) => x && x.id === p.id)
+        if (i < 0) { c.costos.push({ ...p }); continue }
+        // Quien emite boleta: el bruto sale del líquido que trae el ESTADO (el que el usuario dejó), no del de los datos.
+        if (p.boleta) c.costos[i] = { ...c.costos[i], boleta: true, liq: num(c.costos[i].m), m: num(p.tasa) > 0 ? brutoDeLiquido(num(c.costos[i].m), num(p.tasa)) : num(p.m) }
+        else c.costos[i] = { ...c.costos[i], ...p }
+      }
+    }
+    if (sellar) c.v = 7
+  }
+  if (c.v === 7 || (!sellar && c.v === 6)) c.arrastre = normalizarArrastre(c.arrastre)
   // El PPM vuelve a ser un monto anual (el pagado hoy); un borrador que alcanzó a guardarse con tasa lo recupera del PPM vigente.
   if (c.ppmAnual == null) c.ppmAnual = Math.round(num(ppmAnualRef))
   delete c.ppmTasa

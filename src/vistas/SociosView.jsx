@@ -100,7 +100,7 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
         {ln('','Cobrado',fMLR(genV+cosV+comV+ppmV))}
         {ln('−','Costos reales',fMLR(cosV),{menos:true})}
         {ln('−','Comisiones pagadas',fMLR(comV),{menos:true})}
-        {ln('−','PPM pagado',fMLR(ppmV),{menos:true})}
+        {ln('−','Pago al SII (F29)',fMLR(ppmV),{menos:true})}
         {ln('=','Caja generada',fMLR(genV),{tot:true})}
         {ln('−','Retirado',fMLR(retV),{menos:true})}
         {ln('=','Sin retirar del año',fMLR(sinV),{tot:true})}

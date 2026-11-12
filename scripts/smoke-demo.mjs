@@ -104,6 +104,15 @@ try {
         if (i === 4) { const t4 = await page.evaluate(() => document.body.innerText); if (!/Calculada|Fijada/.test(t4) || !/Falta facturar/i.test(t4) || !/Distribución/i.test(t4)) fallas.push({ vista: nombre, donde: 'presupuesto paso 4', error: 'faltan la tabla de metas, «Falta facturar» o los accesos inferiores' }) }
       }
     }
+    // Resultado del año · planilla de octubre con «Impuestos mensuales» y el detalle de cada tipo (PPM, retención, impuesto único): página con «← Costos de …», sin error ni scroll horizontal.
+    if (!solo.length || solo.includes('resultadoAnio')) {
+      for (const k of ['planilla', 'PPM', 'Retención de honorarios', 'Impuesto único']) {
+        await revisar(`resultado del año · impuestos mensuales · ${k}`, { fn: async (k) => { window.__demo.setModal(null); const esp = ms => new Promise(r => setTimeout(r, ms)); window.__demo.navTo({ tab: 'dashboard' }); await esp(400); window.__demo.navTo({ tab: 'resultadoAnio' }); await esp(900); const ce = [...document.querySelectorAll('td.er-c, div.er-c')]; const oct = ce.filter(x => x.tagName === 'TD')[9] || ce.find(x => /oct/i.test(x.textContent.slice(0, 12))); oct?.click(); await esp(400); if (k === 'planilla') return; [...document.querySelectorAll('[role=button]')].find(b => b.textContent.trim().startsWith(k === 'PPM' ? 'PPM' : k))?.click(); await esp(400) }, arg: k })
+        const t = await page.evaluate(() => document.body.innerText)
+        if (k === 'planilla' && (!/IMPUESTOS MENSUALES/i.test(t) || !/1\.833\.004/.test(t))) fallas.push({ vista: nombre, donde: 'planilla de octubre', error: 'falta el grupo «Impuestos mensuales» o su total no es el de octubre' })
+        if (k === 'Retención de honorarios' && !/falta/.test(t)) fallas.push({ vista: nombre, donde: 'retención de honorarios', error: 'no marca la boleta por cargar' })
+      }
+    }
     // Presupuesto · Arrastre (paso 2): las tres páginas de líneas (por facturar, asesorías y todas) se abren desde sus filas; la demo trae cuotas con vencimiento en 2027.
     if (!solo.length || solo.includes('presupuesto')) {
       for (const k of ['Por facturar', 'Asesorías permanentes', 'Facturado del arrastre']) {

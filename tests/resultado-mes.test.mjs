@@ -89,3 +89,9 @@ test('planilla sin cerrar y sin remuneraciones (solo el arriendo) es borrador: e
   assert.equal(cer.conPlanilla, true); assert.equal(s.planillaIncompleta, false)
   assert.equal(M.costoOperacionReal({ sii: [], plan: [3, 4, 5].map((mes) => ({ ...borrador, mes })), boleta: new Set() }, { ...deps, clients: [{ id: 'of', is_internal: true }], expenses: [{ client_id: 'of', type: 'gasto', category: 'Aseo', date: '2026-05-05', amount: 1 }] }, new Date(2026, 5, 15)), null)   // borradores no alimentan el flujo
 })
+
+test('remuneraciones desde el banco: quien emite boleta cuesta el bruto de la boleta (500.000 líquidos a 15,25 % = 589.970), la misma fuente que Impuestos mensuales', async () => {
+  const { brutoDeLiquido } = await import('./../supabase/functions/_shared/impuestosMensuales.js')
+  const r = M.remuneracionesBancoMes([{ client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Carla', date: '2026-10-30', amount: 500000 }], [{ id: 'of', is_internal: true }], '2026-10', new Set(['carla']))
+  assert.equal(r.items[0].costo, 589_970); assert.equal(r.items[0].costo, brutoDeLiquido(500000, 0.1525)); assert.equal(r.total, 589_970)
+})

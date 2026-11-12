@@ -2,13 +2,14 @@
 // El primer día hábil de cada mes calcula el F29 estimado del mes recién CERRADO (regla única _shared/f29Reglas.js, la misma del
 // calendario tributario de la app) y lo envía por correo a los socios desde la casilla de la oficina, para provisionar el pago:
 // PPM (tasa declarada, f29_declarados; 2% en 2026, de lo facturado menos notas de crédito, Registro de Ventas del SII) + retención de las boletas de honorarios recibidas
-// + impuesto único de trabajadores del mes anterior. Una vez por período (learnings kind f29_estimado, key AAAA-MM).
+// + impuesto único de trabajadores (liquidaciones del mes; sin ellas, el del F29 anterior). Misma regla que la planilla (_shared/impuestosMensuales.js). Una vez por período (learnings kind f29_estimado, key AAAA-MM).
 // Destinatarios: learnings config f29_avisar_a; si no hay, los miembros admin del dominio de la oficina.
 // body.per = 'AAAA-MM' (otro período), body.forzar = no exige primer día hábil ni que no se haya enviado, body.dryRun = no envía
 // ni guarda. Auth: CRON_SECRET o sesión de un usuario del dominio de la oficina. verify_jwt=false.
 
 import { SMTPClient } from "../_shared/envios.ts";
 import { f29Estimado } from "../_shared/f29Reglas.js";
+import { pagosConBoleta, idOficina } from "../_shared/impuestosMensuales.js";
 import { holaEquipo } from "../_shared/correoEquipo.js";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -67,18 +68,28 @@ Deno.serve(async (req) => {
     if (ya && !forzar) return json({ ok: true, omitido: `el F29 estimado de ${per} ya se envió`, previo: JSON.parse(ya.value) });
 
     const prev = ymMas(per, -1), desde = `${prev}-01`, hasta = `${ymMas(per, 1)}-01`;
-    const [docs, boletas, vals, miembros, decl] = await Promise.all([
+    const desdeB = `${ymMas(per, -3)}-01`;
+    const [docs, boletas, vals, miembros, decl, liquidaciones, boletaMiembros, sueldos, terceros, clientes] = await Promise.all([
       rest(`sii_cargas_docs?select=tipo_dte,fecha_emision,monto&fecha_emision=gte.${desde}&fecha_emision=lt.${hasta}`),
-      rest(`boletas_honorarios?select=fecha,retencion,estado&fecha=gte.${desde}&fecha=lt.${hasta}`),
+      rest(`boletas_honorarios?select=folio,fecha,emisor_nombre,emisor_rut,bruto,retencion,liquido,tasa,estado,movimiento_id,proveedor_id&fecha=gte.${desdeB}&fecha=lt.${hasta}`),
       rest(`learnings?kind=eq.valores_contadora&key=in.(${prev},${per})&select=key,value`),
       rest("miembros?select=email,nombre,rol"),
-      rest(`f29_declarados?select=periodo,tasa_ppm,impuesto_unico,total&periodo=lt.${per}&order=periodo.desc&limit=12`).catch(() => []),
+      rest(`f29_declarados?select=periodo,ppm,base_ppm,tasa_ppm,impuesto_unico,retencion_bhe,total&periodo=lt.${per}&order=periodo.desc&limit=12`).catch(() => []),
+      rest(`remuneraciones_tributables?select=periodo,persona,impuesto_unico&periodo=eq.${per}`).catch(() => []),
+      rest("miembros?select=nombre&paga_con_boleta=eq.true").catch(() => []),
+      rest(`expenses?select=client_id,type,category,subcategory,date,amount,deleted_at&category=eq.Sueldos&date=gte.${desdeB}`).catch(() => []),
+      rest(`terceros_pagos?select=estado,proveedor,proveedor_id,pagado_at,liquido,monto,retencion,bhe_id&liquido=not.is.null&pagado_at=gte.${desdeB}`).catch(() => []),
+      rest("clients?select=id,name,is_internal").catch(() => []),
     ]);
     const valores: Record<string, unknown> = {};
     for (const v of vals || []) { try { valores[v.key] = JSON.parse(v.value); } catch { /* fila mala */ } }
     const declarados: Record<string, unknown> = {};
     for (const d of decl || []) declarados[d.periodo] = d;
-    const e = f29Estimado({ per, docs, boletas, valores, declarados });
+    const norm = (t: string) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    // deno-lint-ignore no-explicit-any
+    const boletaSet = new Set((boletaMiembros || []).map((x: any) => norm(x.nombre)));
+    const pagos = pagosConBoleta({ expenses: sueldos || [], ofiId: idOficina(clientes || []), boletaSet, terceros: terceros || [] });
+    const e = f29Estimado({ per, docs, boletas, valores, declarados, liquidaciones, pagos });
     const vence = habilDesde(`${ymMas(per, 1)}-20`, await feriados(Number(ymMas(per, 1).slice(0, 4))));
 
     // Una dirección por socio (miembros trae alias: cl@ y cristobal.liberona@): la más corta del dominio de la oficina.
@@ -93,8 +104,8 @@ Deno.serve(async (req) => {
     const fila = (k: string, v: string, b = false) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;color:${b ? "#003C50" : "#3D3D3D"};${b ? "font-weight:700;" : ""}">${k}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;text-align:right;white-space:nowrap;${b ? "font-weight:700;color:#003C50;" : ""}">${v}</td></tr>`;
     const filas = [
       fila(`PPM (${String(Math.round(e.tasa * 1000) / 10).replace(".", ",")}% de ${fmt(e.base)} facturados)`, fmt(e.ppm)),
-      fila(`Retención de boletas de honorarios (${e.nBoletas} ${e.nBoletas === 1 ? "boleta" : "boletas"})`, fmt(e.ret)),
-      fila("Impuesto único de trabajadores (mes anterior)", e.iu != null ? fmt(e.iu) : "sin dato"),
+      fila(`Retención de boletas de honorarios (${e.nBoletas} ${e.nBoletas === 1 ? "boleta" : "boletas"}${e.nFalta ? `, ${e.nFalta} por cargar` : ""})`, fmt(e.ret)),
+      fila(e.iuDe === per ? "Impuesto único de trabajadores" : "Impuesto único de trabajadores (mes anterior)", e.iu != null ? fmt(e.iu) : "sin dato"),
       fila("Total estimado", fmt(e.total), true),
     ].join("");
     const asunto = `F29 de ${mesNom(per)} estimado: ${fmt(e.total)}`;

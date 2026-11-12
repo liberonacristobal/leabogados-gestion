@@ -2,7 +2,8 @@
 // clsvsaez6@hotmail.com) y guarda los montos a pagar para auto-clasificar los cargos del banco.
 // Líneas típicas: "Cotizaciones Sueldos $ 2.120.704.-" (previsional) · "Iva $ 605.701.-" (ella lo llama
 // IVA pero es PPM) · "Contadora $ 50.000.-" (su honorario).
-// Guarda en learnings kind='valores_contadora' key=<AAAA-MM> value=JSON {cotizaciones, ppm, contadora, subject, at}.
+// Guarda en learnings kind='valores_contadora' key=<AAAA-MM> value=JSON {cotizaciones, ppm, contadora, subject, at, desglose}.
+// `ppm` sigue siendo el monto rotulado «Iva» (el F29 completo: lo leen otros lectores); `desglose` lo separa en PPM, retención de honorarios e impuesto único con la regla única de _shared/impuestosMensuales.js.
 //
 // Auth: verify_jwt=false. Cron con secreto (body.secret === CRON_SECRET) o usuario @leabogados.cl con JWT.
 // Lee Gmail con el refresh token PERMANENTE de drive_auth (scope gmail.readonly, igual que la fn `drive`).
@@ -10,6 +11,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { esDelDominio } from "../_shared/estudio.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { impuestosMensuales, pagosConBoleta, idOficina } from "../_shared/impuestosMensuales.js";
+import { selectAll } from "../_shared/paginar.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -82,6 +85,40 @@ async function setLearning(sb: any, kind: string, key: string, value: string) {
   else await sb.from("learnings").insert({ kind, key, value });
 }
 
+// «Iva» del correo = F29 completo. Lo separa en PPM, retención de honorarios e impuesto único con los datos de la base (solo lectura). Si algo falla devuelve null y todo sigue como antes.
+// deno-lint-ignore no-explicit-any
+async function desglosarF29(sb: any, mes: string, informado: number | null) {
+  try {
+    const [y, m] = mes.split("-").map(Number);
+    const sig = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const desde = `${y - 2}-01-01`;
+    const [docs, bol, f29, liq, gas, ter, mie, cli] = await Promise.all([
+      selectAll(() => sb.from("sii_cargas_docs").select("tipo_dte,monto,fecha_emision").gte("fecha_emision", `${mes}-01`).lt("fecha_emision", sig).order("id")),
+      selectAll(() => sb.from("boletas_honorarios").select("id,folio,fecha,emisor_nombre,emisor_rut,bruto,retencion,liquido,tasa,estado,movimiento_id,proveedor_id").gte("fecha", desde).order("id")),
+      sb.from("f29_declarados").select("periodo,ppm,base_ppm,tasa_ppm,impuesto_unico,retencion_bhe,total"),
+      sb.from("remuneraciones_tributables").select("periodo,persona,impuesto_unico").eq("periodo", mes),
+      selectAll(() => sb.from("expenses").select("client_id,type,category,subcategory,date,amount,deleted_at").eq("category", "Sueldos").gte("date", desde).order("id")),
+      selectAll(() => sb.from("terceros_pagos").select("estado,proveedor,proveedor_id,pagado_at,liquido,monto,retencion,bhe_id").not("liquido", "is", null).gte("pagado_at", desde).order("id")),
+      sb.from("miembros").select("nombre").eq("paga_con_boleta", true),
+      sb.from("clients").select("id,name,is_internal"),
+    ]);
+    for (const r of [docs, bol, f29, liq, gas, ter, mie, cli]) if (r.error) throw new Error(r.error.message);
+    const norm = (t: string) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    // deno-lint-ignore no-explicit-any
+    const boletaSet = new Set((mie.data || []).map((x: any) => norm(x.nombre)));
+    const declarados: Record<string, unknown> = {};
+    // deno-lint-ignore no-explicit-any
+    (f29.data || []).forEach((r: any) => { declarados[r.periodo] = r; });
+    const pagos = pagosConBoleta({ expenses: gas.data || [], ofiId: idOficina(cli.data || []), boletaSet, terceros: ter.data || [] });
+    const r = impuestosMensuales({ per: mes, docs: docs.data || [], boletas: bol.data || [], pagos, liquidaciones: liq.data || [], declarados, informado });
+    return {
+      ppm: r.ppm.monto, retencion: r.retencion.monto, impuesto_unico: r.unico.monto, total: r.total, total_correo: informado, dif: r.dif,
+      estado: r.informado == null ? "sin total del correo" : r.cuadra ? "cuadra" : "por verificar", boletas_por_cargar: r.retencion.nFalta,
+      fuentes: { ppm: r.ppm.fuente, retencion: r.retencion.fuente, impuesto_unico: r.unico.fuente },
+    };
+  } catch (_e) { return null; }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
@@ -130,7 +167,8 @@ serve(async (req) => {
       if (cotizaciones) items.push({ item: "Cotizaciones Sueldos", categoria: "Leyes sociales", monto: cotizaciones, vence: null });
       if (ppm) items.push({ item: "PPM", categoria: "Impuestos y patentes", monto: ppm, vence: null });
       if (contadora) items.push({ item: "Contadora", categoria: "Remuneraciones", monto: contadora, vence: null });
-      const valor = { mes, subject, cotizaciones, ppm, contadora, items, leido_at: new Date().toISOString() };
+      const desglose = ppm ? await desglosarF29(sb, mes, ppm) : null;
+      const valor = { mes, subject, cotizaciones, ppm, contadora, items, desglose, leido_at: new Date().toISOString() };
       if (!dryRun) await setLearning(sb, "valores_contadora", mes, JSON.stringify(valor));
       // ① Escribe la planilla real (oficina_costos_mensual) del mes con los valores de Claudia.
       // Solo toca cotizaciones/ppm/contadora (no pisa sueldos/arriendo/etc). Si llegan los reales
@@ -142,6 +180,7 @@ serve(async (req) => {
         const yy = Number(pm[1]), mm = Number(pm[2]);
         const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
         if (cotizaciones) patch.cotizaciones = cotizaciones;
+        // La planilla guarda el pago total al SII (el «Iva» del correo, como siempre: lo leen el flujo de caja y el cierre); el desglose en PPM, retención e impuesto único se deriva al leer y queda en learnings.
         if (ppm) patch.ppm = ppm;
         if (contadora) patch.contadora = contadora;
         if (cotizaciones && ppm) patch.estimado = false;   // datos reales → deja de ser estimado
