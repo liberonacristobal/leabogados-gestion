@@ -4,13 +4,15 @@
 //  · Cobrado por mes: conciliación a factura o anticipo por fecha del depósito (como Inicio).
 // Lo que no tiene una regla única en la app (concentración por cliente, días de cobro, recurrente) se calcula aquí con helpers de cifras.js y _shared.
 import { costoOficinaNeto } from '../../supabase/functions/_shared/costosOficina.js'
+import { impuestosPresupuesto, partidasImpuestos, mismaPersona } from '../../supabase/functions/_shared/impuestosMensuales.js'
+import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { useMemo, useState, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { cotizacionEmpleador } from '../../supabase/functions/_shared/presupuesto.js'
 import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
 import { useResultadoAnio, pctsAnio } from './resultadoAnio.js'
 import { CFG_PRESUPUESTO, sociosDelEstudio } from './presupuestoCfg.js'
-import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, usePropuestasNoCuentan, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO } from './compartido.jsx'
+import { resultadoMes, comisionesVenta, ufDelDia, finMesOHoy, currentYear, esPPMcosto, montoFactura, usePorSocioFuentes, usePropuestasNoCuentan, partidasPorSocio, vendidoPorSocio, ADMIN_NAMES, SIN_SOCIO, useImpuestosFuentes } from './compartido.jsx'
 import { esRecurrente, esSubarriendo, ventaCLP, ventaUF, kpisPorSocio, cascadaVendido } from './cifras.js'
 import { CFG_PRESUPUESTO as CFG } from './presupuestoCfg.js'
 import { ultimosCerrados, baseMensual, diasDeCobro, concentracion, referencia2026, ufMedia, sumaConUF, pesosEstacionalidad } from '../../supabase/functions/_shared/presupuesto.js'
@@ -28,6 +30,7 @@ const ym = (/** @type {number} */ y, /** @type {number} */ m) => `${y}-${String(
  */
 export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], anticipos = [], anioSel = null }) {
   const noCuentan = usePropuestasNoCuentan()   // propuestas marcadas «duplicada: no cuenta» (decisión guardada)
+  const impFu = useImpuestosFuentes()   // F29 declarados, boletas de honorarios y liquidaciones (impuestos mensuales desglosados)
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: currentYear })
   const { fuRes, ufDias, ufRef, m, metaUF, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: com, metaCobranza, ingConc, ingAbonos, _esFactHon, extBillIds } = R
 
@@ -208,6 +211,19 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   })
   costos.forEach((c) => { c.m = Math.round(c.m) })
 
+  // Impuestos mensuales desglosados (impuestosPresupuesto, _shared): PPM puro = promedio de los últimos 12 F29 declarados (antes se tomaba lo pagado al mes, que mezcla retención e impuesto único);
+  // quien emite boleta cuesta el BRUTO (líquido ÷ (1 − tasa del año del presupuesto)) y el impuesto único de trabajadores entra como partida de remuneraciones. La retención de externos ya está en el bruto de Comisiones: se muestra, no se suma.
+  const boletaSet = fuRes && fuRes.boleta ? [...fuRes.boleta] : []
+  const tasaBol = tasaBHE(`${anio}-01-01`)
+  const personasBoleta = costos.filter((c) => c.g === CFG.costos.grupoSueldos && boletaSet.some((nom) => mismaPersona(nom, c.n))).map((c) => ({ persona: c.n, liquido: c.m }))
+  const impuestos = impuestosPresupuesto({ declarados: impFu.declarados, liquidaciones: impFu.liquidaciones, boletas: impFu.boletas, personasBoleta, boletaSet, terceros, destinos: impFu.destinos, anio })
+  const ppmAntes = ppmMes
+  const conF29 = impuestos.nF29 > 0
+  const partidasImp = partidasImpuestos({ costos, boletaSet, impuestos, anio, grupo: CFG.costos.grupoSueldos }).partidas
+  partidasImp.forEach((u) => { const c = costos.find((x) => x.id === u.id); if (c) Object.assign(c, { liq: u.liq, boleta: true, m: u.m }); else costos.push({ ...u }) })
+  if (conF29) ppmMes = impuestos.ppmMes
+  const impMig = conF29 || partidasImp.length ? { ppmAnual: Math.round(ppmMes * 12), partidas: partidasImp.filter((u) => u.imp), boletaSet, tasa: tasaBol, grupo: CFG.costos.grupoSueldos } : null
+
   // Presupuesto de costos del año en curso por mes (misma regla de Presupuesto vs real, en Resultado del año): vigente por mes, sin PPM y neto del subarriendo y gastos recuperados.
   const budMes = (/** @type {number} */ mes) => costoOficinaNeto((costosOfiRows || []).filter((r) => !esPPMcosto(r)), `${currentYear}-${String(mes).padStart(2, '0')}`)   // NETO del subarriendo, igual que lo real (resultadoMes.cos): el mismo helper para real y presupuesto
   const cerrados = Array.from({ length: mesHoy - 1 }, (_, i) => i + 1), faltan = Array.from({ length: 12 - (mesHoy - 1) }, (_, i) => mesHoy + i)
@@ -268,7 +284,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
   // Estacionalidad: peso de cada mes del facturado propio en UF, promedio suavizado de los años observados (el anterior completo y el en curso hasta el último mes cerrado).
   const pesosEst = pesosEstacionalidad([-1, 0].map((dy) => Array.from({ length: 12 }, (_, i) => { const k = ym(currentYear + dy, i + 1); return k < ymHoy && serie[k] ? serie[k].facUF : null })))
 
-  const sueldosMes = costos.filter((c) => c.g === CFG.costos.grupoSueldos).reduce((a, c) => a + (Number(c.m) || 0), 0)
+  const sueldosMes = costos.filter((c) => c.g === CFG.costos.grupoSueldos && !c.imp).reduce((a, c) => a + (Number(c.m) || 0), 0)
   const mesPrev = (() => { const [y, mo] = ymHoy.split('-').map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}` })()
   const impBase = liqImp && liqImp.monto > 0 ? { mes: liqImp.mes, monto: liqImp.monto, fuente: 'liquidaciones de la contadora' } : { mes: mesPrev, monto: sueldosMes, fuente: 'Remuneraciones de Costos' }
   const conversion = conversionPropuestas({ sales, excluir: esSubarriendo, noCuentan })   // propuestas aceptadas / decididas en su ventana (fuente única, _shared/ventasConversion.js), sin las marcadas «duplicada»
@@ -279,6 +295,6 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     refMeses: { ventas: ult3.map((m) => ({ m, v: (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0) })), fact: ult3.map((m) => ({ m, v: serie[ym(currentYear, m)]?.fac ?? 0 })), caja: ult3.map((m) => ({ m, v: cobMes[ym(currentYear, m)] ?? 0 })) },
     cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, origenMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
-    recurrente, costos, ppmMes, terc, dias, socios,
+    recurrente, costos, ppmMes, terc, dias, socios, impuestos, impMig, impListo: impFu.cargado && fuRes.listo !== false, impOk: impFu.ok && fuRes.ok !== false, ppmAntes, tasaBoleta: tasaBol,
   }
 }

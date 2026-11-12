@@ -10,6 +10,7 @@ import { supabase, selectAll, getDriveToken, DEMO, alFalloDeEscritura } from '..
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
+import { brutoDeLiquido, pagosConBoleta, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
 import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
@@ -695,7 +696,7 @@ export function remuneracionesBancoMes(expenses, clients, ym, boleta){
     const dia=Number(d.slice(8,10)); const mesTrab = dia<=10 ? _ymPrev(d.slice(0,7)) : d.slice(0,7)
     if(mesTrab!==ym) return
     const liq=Number(e.amount)||0, bol=boleta&&boleta.has(_normTxt(e.subcategory||''))
-    items.push({e, persona:e.subcategory||'', liquido:liq, costo:bol?Math.round(liq/(1-tasaBHE(d))):liq, boleta:!!bol}) })
+    items.push({e, persona:e.subcategory||'', liquido:liq, costo:bol?brutoDeLiquido(liq,tasaBHE(d)):liq, boleta:!!bol}) })
   return {total:items.reduce((a,x)=>a+x.costo,0), items}
 }
 
@@ -748,14 +749,44 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
 }
 
+// Fuentes de «Impuestos mensuales» (boletas de honorarios, F29 declarados, liquidaciones, «Iva» del correo de la contadora), una vez por sesión; `recargar` tras cargar una boleta. Solo administradores (RLS).
+// En demo: octubre de 2026 con los casos anonimizados del cuadre (PPM estimado, boleta de una persona y otra por cargar, tres liquidaciones).
+const _DEMO_IMP={ docs:[{tipo_dte:34,monto:65577480,fecha_emision:'2026-10-15'},{tipo_dte:34,monto:30000000,fecha_emision:'2026-09-15'}],
+  boletas:[{id:'dbh1',folio:7230,fecha:'2026-10-19',emisor_nombre:'Persona Demo Uno',emisor_rut:'11.111.111-1',bruto:874703,retencion:133392,liquido:741311,tasa:.1525,estado:'vigente',movimiento_id:null},{id:'dbh2',folio:10,fecha:'2026-09-30',emisor_nombre:'Carla Demo',emisor_rut:'22.222.222-2',bruto:589970,retencion:89970,liquido:500000,tasa:.1525,estado:'vigente',movimiento_id:'m'}],
+  declarados:{'2026-09':{periodo:'2026-09',ppm:659577,impuesto_unico:160564,retencion_bhe:215194,total:1035335,tasa_ppm:2},'2026-08':{periodo:'2026-08',ppm:416721,impuesto_unico:161063,retencion_bhe:27917,total:605701,tasa_ppm:2}},
+  liquidaciones:[{periodo:'2026-10',persona:'Socio Demo A',impuesto_unico:134873},{periodo:'2026-10',persona:'Socio Demo B',impuesto_unico:134873},{periodo:'2026-10',persona:'Colaborador Demo',impuesto_unico:28346}],
+  valores:{'2026-10':{ppm:1833004}}, pagos:[{persona:'Carla Demo',fecha:'2026-10-30',liquido:500000,origen:'sueldo'}] }
+let _impFu=null, _impFuT=0
+// Vigencia de la copia de sesión: un minuto (al volver de cargar una boleta se lee de nuevo). Un error de la base no se guarda ni se da por cargado: `ok:false` (los consumidores no sellan nada con datos vacíos).
+export const invalidarImpuestosFuentes=()=>{ _impFu=null; _impFuT=0 }
+export function useImpuestosFuentes(){
+  const [f,setF]=useState(()=>DEMO?_DEMO_IMP:(_impFu&&Date.now()-_impFuT<60000?_impFu:null)), [n,setN]=useState(0)
+  useEffect(()=>{ if(DEMO){ setF(_DEMO_IMP); return } if(_impFu&&n===0&&Date.now()-_impFuT<60000){ setF(_impFu); return }
+    const desde=`${isoLocal(Date.now()).slice(0,4)-2}-01-01`
+    let v=true
+    Promise.all([supabase.from('boletas_honorarios').select('id,folio,fecha,emisor_nombre,emisor_rut,bruto,retencion,liquido,tasa,estado,movimiento_id,proveedor_id').gte('fecha',desde),
+      supabase.from('f29_declarados').select('periodo,ppm,base_ppm,tasa_ppm,impuesto_unico,retencion_bhe,total'),
+      supabase.from('learnings').select('key,value').eq('kind','valores_contadora'),
+      supabase.from('remuneraciones_tributables').select('periodo,persona,impuesto_unico,imponible').gte('periodo',desde.slice(0,7)),
+      supabase.from('learnings').select('key,value,updated_at').eq('kind','boleta_destino').order('updated_at',{ascending:true})])
+      .then(([b,d,va,l,bd])=>{ const declarados={}, valores={}, destinos={}; (bd.data||[]).forEach(r=>{ if(r.key) destinos[String(r.key)]=r.value||'' }); (d.data||[]).forEach(r=>{ declarados[r.periodo]=r }); (va.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
+        const ok=![b,d,va,l,bd].some(r=>!r||r.error)
+        const x={boletas:b.data||[],declarados,valores,liquidaciones:l.data||[],destinos,docs:null,pagos:null,ok}
+        if(ok){ _impFu=x; _impFuT=Date.now() } else registrarError({origen:'carga',vista:'impuestos_mensuales',err:[b,d,va,l,bd].find(r=>r&&r.error)?.error})
+        return x }).catch(e=>{ registrarError({origen:'carga',vista:'impuestos_mensuales',err:e}); return {boletas:[],declarados:{},valores:{},liquidaciones:[],destinos:{},docs:null,pagos:null,ok:false} })
+      .then(x=>{ if(v) setF(x) })
+    return ()=>{v=false} },[n])
+  const recargar=useCallback(()=>{ invalidarImpuestosFuentes(); setN(x=>x+1) },[])
+  return {destinos:{},...(f||{boletas:[],declarados:{},valores:{},liquidaciones:[],docs:null,pagos:null}), ok:f?f.ok!==false:true, cargado:!!f, recargar} }
+
 // Fuentes del resultado (ventas del SII + planilla de costos reales), cargadas una vez por sesión y compartidas por la página y el Inicio.
 export let _fuentesRes=null, _fuentesResP=null
 
 export function useFuentesResultado(){
-  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[],boleta:new Set()})
+  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[],boleta:new Set(),listo:!!DEMO})
   useEffect(()=>{ if(DEMO) return; if(_fuentesRes){ setF(_fuentesRes); return }
     if(!_fuentesResP) _fuentesResP=Promise.all([selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')),supabase.from('oficina_costos_mensual').select('*'),supabase.from('miembros').select('nombre').eq('paga_con_boleta',true)])
-      .then(([a,b,c])=>{ _fuentesRes={sii:a?.data||[],plan:b?.data||[],boleta:new Set((c?.data||[]).map(x=>_normTxt(x.nombre)))}; return _fuentesRes }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[],boleta:new Set()} })
+      .then(([a,b,c])=>{ const x={sii:a?.data||[],plan:b?.data||[],boleta:new Set((c?.data||[]).map(y=>_normTxt(y.nombre))),listo:true,ok:!(a?.error||b?.error||c?.error)}; if(x.ok) _fuentesRes=x; else _fuentesResP=null; return x }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[],boleta:new Set(),listo:true,ok:false} })
     let v=true; _fuentesResP.then(x=>{ if(v) setF(x) }); return ()=>{v=false} },[])
   return f
 }
@@ -3068,7 +3099,7 @@ export const _pagoCal = (expenses, tipo, per) => { const l=tipo==='F29'?_pagosDe
 
 // Vencimiento de una DJ del estudio: la fila de la resolución cuyo detalle más se parece al de la obligación (1948 tiene una fecha por tipo de sociedad).
 
-export function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cumplidas=[], expenses=[], docs=[], boletas=[], hoy}={}){
+export function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cumplidas=[], expenses=[], docs=[], boletas=[], liquidaciones=[], boletaSet=[], terceros=[], ofiId=null, hoy}={}){
   hoy = hoy || isoLocal(Date.now())
   const ym=hoy.slice(0,7), tiene=new Set((obl||[]).filter(o=>o.activo!==false&&!o.client_id).map(o=>o.tipo))
   const cumpl=new Map((cumplidas||[]).filter(c=>!c.client_id).map(c=>[c.clave,c]))
@@ -3140,7 +3171,7 @@ export function calendarioEstudio({obl=[], dj=[], valores={}, declarados={}, cum
   const prom=f=>prev3.length?prev3.reduce((a,x)=>a+(Number(x?.[f])||0),0)/prev3.length:null
   const vp=valores[cicloProx.per]
   // F29: informado por la contadora; si no ha llegado, estimado del mes cerrado (f29Reglas); con el mes abierto, se calcula al cierre.
-  const f29E=cicloProx.per<ym?f29Estimado({per:cicloProx.per, docs, boletas, valores, declarados}):null
+  const f29E=cicloProx.per<ym?f29Estimado({per:cicloProx.per, docs, boletas, valores, declarados, liquidaciones, pagos:pagosConBoleta({expenses, ofiId, boletaSet:new Set(boletaSet), terceros})}):null   // misma regla que la planilla (impuestosMensuales)
   const f29Prox=vp?{t:'F29 · IVA/PPM', monto:vp.ppm, est:false, estF29:f29E?.completo?f29E.total:null, vence:cicloProx.f29.vence}
     :f29E?.completo?{t:'F29 · IVA/PPM', monto:f29E.total, est:'cerrado', f29:f29E, vence:cicloProx.f29.vence}
     :{t:'F29 · IVA/PPM', monto:null, est:'abierto', calcula:_habilDesde(`${_ymMas(cicloProx.per,1)}-01`), vence:cicloProx.f29.vence}
@@ -3253,11 +3284,16 @@ export function cargarCalTrib(){
       supabase.from('sii_novedades').select('url').eq('tipo','resolucion').ilike('titulo','%vencimiento%declaraciones juradas%').order('fecha',{ascending:false}).limit(1),
       // F29 estimado de mes cerrado (f29Reglas): facturas del Registro de Ventas y boletas recibidas de los últimos 4 meses.
       supabase.from('sii_cargas_docs').select('tipo_dte,fecha_emision,monto').gte('fecha_emision',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
-      supabase.from('boletas_honorarios').select('fecha,retencion,estado').gte('fecha',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
+      supabase.from('boletas_honorarios').select('folio,fecha,emisor_nombre,emisor_rut,bruto,retencion,liquido,tasa,estado,movimiento_id,proveedor_id').gte('fecha',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
       // F29 declarados (leídos del SII; solo administradores): tasa del PPM e impuesto único del mes anterior.
-      supabase.from('f29_declarados').select('periodo,tasa_ppm,impuesto_unico,total').order('periodo',{ascending:false}).limit(12)])
-      .then(([o,d,v,c,u,sd,bh,fd])=>{ const valores={}, declarados={}; (fd?.data||[]).forEach(r=>{ declarados[r.periodo]=r }); (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
-        return {obl:o.data||[], dj:d.data||[], valores, declarados, cumplidas:c.data||[], pagos:[], docs:sd.data||[], boletas:bh.data||[], urlSII:u?.data?.[0]?.url||null} })
+      supabase.from('f29_declarados').select('periodo,ppm,base_ppm,tasa_ppm,impuesto_unico,retencion_bhe,total').order('periodo',{ascending:false}).limit(12),
+      // Impuestos mensuales: liquidaciones (impuesto único), quién paga con boleta y las comisiones con retención, para que el F29 estimado sea el de la planilla.
+      supabase.from('remuneraciones_tributables').select('periodo,persona,impuesto_unico').gte('periodo',_ymMas(isoLocal(Date.now()).slice(0,7),-4)),
+      supabase.from('miembros').select('nombre').eq('paga_con_boleta',true),
+      supabase.from('terceros_pagos').select('estado,proveedor,proveedor_id,pagado_at,liquido,monto,retencion,bhe_id').not('liquido','is',null).gte('pagado_at',`${_ymMas(isoLocal(Date.now()).slice(0,7),-4)}-01`),
+      supabase.from('clients').select('id,name,is_internal')])
+      .then(([o,d,v,c,u,sd,bh,fd,lq,mb,tp,cl])=>{ const valores={}, declarados={}; (fd?.data||[]).forEach(r=>{ declarados[r.periodo]=r }); (v.data||[]).forEach(r=>{ try{ const x=JSON.parse(r.value); if(x&&/^\d{4}-\d{2}$/.test(r.key)) valores[r.key]=x }catch(_){} })
+        return {obl:o.data||[], dj:d.data||[], valores, declarados, cumplidas:c.data||[], pagos:[], docs:sd.data||[], boletas:bh.data||[], liquidaciones:lq?.data||[], boletaSet:(mb?.data||[]).map(x=>_normTxt(x.nombre)), terceros:tp?.data||[], ofiId:idOficina(cl?.data||[]), urlSII:u?.data?.[0]?.url||null} })
       .catch(()=>{ _calTribP=null; return {obl:[], dj:[], valores:{}, cumplidas:[], pagos:[], docs:[], boletas:[]} }) }
   return _calTribP }
 

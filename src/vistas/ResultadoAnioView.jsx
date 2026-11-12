@@ -3,12 +3,14 @@ import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { etiquetaRecuperado, docDeSubarriendo, recuperadoOficinaMes } from '../../supabase/functions/_shared/costosOficina.js'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
+import { impuestosMensuales, pagosConBoleta, listaBoletasPorCargar, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
+import { GrupoImpuestos, DetalleImpuestos } from './impuestosMensualesUI.jsx'
 import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
-import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado } from '../lib/compartido.jsx'
+import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
-export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[], onOpenGasto }){
+export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   // Salud de datos › Fondos de clientes: el reparto por fondo (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
   // Una sola pasada por los gastos, agrupados por cliente (ambas funciones filtran por cliente: mismo resultado); se recalcula solo si cambian.
@@ -46,6 +48,17 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const bById=useMemo(()=>{ const m={}; (billing||[]).forEach(b=>{ if(b) m[String(b.id)]=b }); return m },[billing])
   const ncPropia=d=>Number(d.tipo_dte)===61&&!docDeSubarriendo(bById[String(d.billing_id)],bById)   // igual que resultadoMes: la NC de una factura de subarriendo no resta honorarios
   const fuB=useFuentesResultado()   // quién paga con boleta (miembros), para las remuneraciones desde el banco
+  // Impuestos mensuales (PPM, retención de honorarios, impuesto único): una sola función (_shared/impuestosMensuales.js) arma las tres partes del F29 de cada mes.
+  const imps=useImpuestosFuentes(), [impDet,setImpDet]=useState(null)   // impDet = {m, tipo} o null
+  const ofiId=useMemo(()=>idOficina(clients),[clients])
+  const pagosB=useMemo(()=>DEMO?(imps.pagos||[]):pagosConBoleta({expenses,ofiId,boletaSet:fuB.boleta,terceros}),[expenses,ofiId,fuB,terceros,imps.pagos])  // eslint-disable-line react-hooks/exhaustive-deps
+  // Destino de cada emisor de boleta (decisión reutilizable por RUT, learnings boleta_destino): la app no vuelve a preguntar. En demo queda solo en pantalla.
+  const [destDemo,setDestDemo]=useState({})
+  const destinos={...(imps.destinos||{}),...destDemo}
+  const guardarDestino=async(rut,v)=>{ if(!rut) return; if(DEMO){ setDestDemo(p=>({...p,[rut]:v})); return }
+    try{ await setLearningKV('boleta_destino',rut,v||''); imps.recargar() }catch(e){ appAlert('No se pudo guardar el destino: '+(e.message||e)) } }
+  const impOf=m=>impuestosMensuales({per:pad(m),docs:(ventas&&ventas.length?ventas:imps.docs)||[],boletas:imps.boletas,pagos:pagosB,liquidaciones:imps.liquidaciones,declarados:imps.declarados,informado:imps.valores?.[pad(m)]?.ppm,destinos,terceros,boletaSet:[...fuB.boleta]})
+  const faltanOtros=m=>listaBoletasPorCargar({pagos:pagosB,boletas:imps.boletas,declarados:imps.declarados,desde:`${yr}-01`,destinos}).filter(x=>x.per!==pad(m)).map(x=>({...x,mesLbl:MESES[Number(x.per.slice(5,7))-1]}))
   const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[],boleta:fuB.boleta}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
     for(let m=1;m<=maxM;m++) o[m]=resultadoMes(fuY,deps,pad(m)); return o },[ventas,cm,fuB,billing,terceros,costosOfiRows,expenses,clients,yr,maxM])   // eslint-disable-line react-hooks/exhaustive-deps
   const R=(m,k)=>Number(rmes[m]?.[k])||0
@@ -73,7 +86,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const fmtMp=n=>fmtMill(Math.abs(n))
   const titulo=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`Enero–${MESES[maxM-1]} ${yr}`)
   const nCerrados=Array.from({length:maxM},(_,i)=>i+1).filter(m=>cmBy[m]&&cmBy[m].cerrado).length
-  const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','PPM'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo · menor costo (informativo)'],['comisiones','Comisiones']]
+  const CAMPOS=[['sueldos','Sueldos'],['cotizaciones','Cotizaciones'],['ppm','Pago al SII (F29)'],['contadora','Contadora'],['arriendo','Arriendo'],['gastos_comunes','Gastos comunes'],['honorarios','Honorarios'],['otros_costos','Otros'],['subarriendo','Subarriendo · menor costo (informativo)'],['comisiones','Comisiones']]
   const mesEstado=m=>{ const r=cmBy[m]; if(r&&r.cerrado) return 'cerrado'; if(r&&rmes[m]?.planillaIncompleta) return 'provisorio'; if(r&&r.estimado) return 'estimado'; if(r) return 'abierto'; return 'vacio' }
   const EST_COL={cerrado:C.greenText,estimado:C.soonText,provisorio:C.soonText,abierto:C.done,vacio:C.border}
   const abrirEditor=m=>{ const r=cmBy[m]||{}; const f={}; CAMPOS.forEach(([k])=>f[k]=r[k]!=null?Number(r[k]):0); f.nota=r.nota||''; f.estimado=!!r.estimado; f.cerrado=!!r.cerrado; setForm(f); setEditM(m) }
@@ -104,6 +117,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     {open===id&&<div style={{padding:'0 16px 14px'}}>{body}</div>}
   </div>
 
+  // Detalle de un impuesto mensual: PÁGINA con «← Costos del mes»; al volver queda la planilla en la misma fila.
+  if(impDet){ const m=impDet.m, i=impOf(m); return <DetalleImpuestos imp={i} tipo={impDet.tipo} setTipo={t=>setImpDet({m,tipo:t})} mesLbl={`${MESES[m-1]} ${yr}`} tituloMes={`${MESES[m-1].toLowerCase()} de ${yr}`} origen={`Costos de ${MESES[m-1]} ${yr}`} onBack={()=>{ setImpDet(null); setTimeout(()=>{ const el=document.getElementById('imp-grupo'); el&&el.scrollIntoView({block:'center'}) },50) }} isDesktop={isDesktop} onCargarBoleta={onCargarBoleta} otrosMeses={faltanOtros(m)} onDestino={guardarDestino}/> }
   // Editor de un mes como PÁGINA (no modal): reemplaza la vista con su propio "← Resultado del año".
   if(editM!=null) return (
   <div style={{maxWidth:isDesktop?720:'100%',margin:'0 auto',padding:isDesktop?'0 20px 48px':'0 16px 48px'}}>
@@ -115,10 +130,10 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     <div style={card}>
       <div style={{fontSize:11,color:C.textSoft,padding:'14px 16px 2px'}}>Montos en pesos. El subarriendo no es ingreso: baja el costo de oficina (monto fijo de Costos de Oficina). La columna «Subarriendo» de la planilla es informativa.</div>
       <div style={{padding:'4px 16px 10px'}}>
-        {CAMPOS.map(([k,l])=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
+        {CAMPOS.map(([k,l])=><Fragment key={k}><div style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderTop:`1px solid ${C.bgSoft}`}}>
           <span style={{fontSize:13,color:k==='subarriendo'?C.greenText:C.text,fontWeight:600,flex:1}}>{l}</span>
           <input type='number' value={form[k]==null?0:form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={{width:isDesktop?180:140,fontSize:14,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',color:C.accent}}/>
-        </div>)}
+        </div>{k==='cotizaciones'&&<div id='imp-grupo' style={{margin:'6px -16px'}}><GrupoImpuestos imp={impOf(editM)} onAbrir={t=>setImpDet({m:editM,tipo:t})}/></div>}</Fragment>)}
         <div style={{padding:'11px 0 4px',borderTop:`1px solid ${C.bgSoft}`}}><textarea placeholder='Nota (opcional)' value={form.nota||''} onChange={e=>setForm(f=>({...f,nota:e.target.value}))} rows={2} style={{width:'100%',fontSize:13,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',resize:'vertical',fontFamily:'inherit',color:C.text,boxSizing:'border-box'}}/></div>
         <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:C.text,fontWeight:600,padding:'8px 0 2px',cursor:'pointer'}}><input type='checkbox' checked={!!form.estimado} onChange={e=>setForm(f=>({...f,estimado:e.target.checked}))}/> Marcar como estimado (datos aún no confirmados)</label>
       </div>
@@ -126,7 +141,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     <button disabled={busy} onClick={guardar} style={{width:'100%',fontSize:14,fontWeight:700,border:'none',borderRadius:12,padding:'13px',marginTop:12,background:C.accent,color:'#fff',cursor:busy?'default':'pointer',opacity:busy?.6:1}}>Guardar</button>
     <div style={{fontSize:11,color:C.textSoft,marginTop:11,lineHeight:1.55,padding:'0 2px'}}>{cmBy[editM]&&cmBy[editM].cerrado
       ? <>Mes cerrado{cmBy[editM].cerrado_por?` · ${cmBy[editM].cerrado_por==='auto'?'automático':cmBy[editM].cerrado_por}`:''}{cmBy[editM].cerrado_at?' · '+String(cmBy[editM].cerrado_at).slice(0,10):''}. Marca "estimado" para reabrirlo.</>
-      : <>Se cierra solo cuando los datos están completos (sueldos, cotizaciones y PPM) y pasó el 15 del mes siguiente. Marca "estimado" si aún no son definitivos.</>}</div>
+      : <>Se cierra solo cuando los datos están completos (sueldos, cotizaciones y pago al SII) y pasó el 15 del mes siguiente. Marca "estimado" si aún no son definitivos.</>}</div>
   </div>)
 
   return (
@@ -182,7 +197,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const detCos=<div style={card}>{cab('Costos de operación')}
         {cosK.map((k,i)=>k==='sub'?ln({k,sg:'−',l:COSL[k],v:fmtMillLR(-cosV[i])}):ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
         {ln({k:'cosT',sg:'=',l:'Costos de operación',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
-        {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>PPM {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
+        {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>Pago al SII (F29) {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
       // Comisiones pagadas: por colaborador (comList de cada mes).
       const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
       const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearPartes(comL.map(x=>x.m),1e5)
@@ -342,10 +357,14 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const descF=fondosChk.desc
       // Un mes con factura de subarriendo pero sin ítem `es_ingreso` vigente en Costos de Oficina: el subarriendo desaparece del resultado (ya no suma a ingresos).
       const subSinItem=months.filter(m=>recuperadoOficinaMes(costosOfiRows,pad(m))===0&&(billing||[]).some(b=>b&&!b.deleted_at&&b.billing_type==='subarriendo'&&b.invoice_no&&b.status!=='Anulada'&&String(b.issued_at||'').startsWith(pad(m))))
+      // Boletas de honorarios por cargar: pagos a quien emite boleta (o comisiones con retención) sin su boleta cargada; regla única en _shared/impuestosMensuales.js.
+      const bPorCargar=listaBoletasPorCargar({pagos:pagosB,boletas:imps.boletas,declarados:imps.declarados,desde:`${yr}-01`,destinos}).filter(x=>x.per.startsWith(String(yr)))
+      const bFalta=bPorCargar.filter(x=>x.estado==='falta')
       const checks=[
         [sinEnl.length===0,'Facturas del SII',sinEnl.length?`${sinEnl.length} sin enlazar a una venta · tócalo para ver cuáles`:'todas enlazadas a una venta', sinEnl.length?{label:sinEnlOpen?'ocultar':'ver',on:()=>setSinEnlOpen(o=>!o)}:null],
         [pendCierre.length===0,'Cierre de meses',pendCierre.length?`${pendCierre.length} mes${pendCierre.length!==1?'es':''} por cerrar · faltan datos reales (completa abajo)`:`se cierran solos · ${nCerrados} cerrado${nCerrados!==1?'s':''}`, null],
-        [faltaClaudia.length===0,'Cotizaciones y PPM (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
+        [faltaClaudia.length===0,'Cotizaciones y pago al SII (Claudia)',faltaClaudia.length?`${faltaClaudia.length} mes${faltaClaudia.length!==1?'es':''} con valores pendientes o estimados`:'todos con los valores reales de Claudia', faltaClaudia.length?{label:'editar',on:()=>abrirEditor(faltaClaudia[0])}:null],
+        [bFalta.length===0,'Boletas por cargar',bFalta.length?`${bFalta.length} boleta${bFalta.length!==1?'s':''} de honorarios sin cargar${bPorCargar.length>bFalta.length?` · ${bPorCargar.length-bFalta.length} por verificar`:''}`:(bPorCargar.length?`${bPorCargar.length} por verificar`:'todas las boletas de los pagos están cargadas'), bPorCargar.length?{label:'ver',on:()=>{ const x=(bFalta[0]||bPorCargar[0]); setEditM(Number(x.per.slice(5,7))); setImpDet({m:Number(x.per.slice(5,7)),tipo:'retencion'}) }}:null],
         [subSinItem.length===0,'Subarriendo en Costos de Oficina',subSinItem.length?`${subSinItem.length} mes${subSinItem.length!==1?'es':''} con factura de subarriendo y sin el ítem que baja el costo en Costos de Oficina: el subarriendo no aparece en el resultado`:'el subarriendo facturado tiene su ítem en Costos de Oficina'],
         [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${fondosChk.n} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],

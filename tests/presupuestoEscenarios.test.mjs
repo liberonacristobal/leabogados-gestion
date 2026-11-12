@@ -14,14 +14,14 @@ test('estado nuevo: los tres escenarios de siempre, con `meta` llamado «Optimis
   const st = estadoInicial({ costos })
   assert.deepEqual(escenariosDe(st), [['prudente', 'Prudente'], ['base', 'Base'], ['meta', 'Optimista']])
   assert.deepEqual(escenariosDe(st), ESCENARIOS)
-  assert.equal(st.v, 6); assert.equal(st.esc, 'base'); assert.deepEqual(Object.keys(st.p).sort(), ['base', 'meta', 'prudente'])
+  assert.equal(st.v, 7); assert.equal(st.esc, 'base'); assert.deepEqual(Object.keys(st.p).sort(), ['base', 'meta', 'prudente'])
   assert.deepEqual(st.escs.map((e) => e.t), [0, 1, 2])
 })
 
 test('migración v4 → v5: la lista sale de los tres escenarios guardados, conserva claves y palancas, y es idempotente', () => {
   const v4 = { v: 4, esc: 'meta', hecho: [], notas: {}, p: { prudente: { g: 1, alza: 6, terc: 20, dias: 40 }, base: { g: 11, alza: 4, terc: 20, dias: 30 }, meta: { g: 26, alza: 4, terc: 20, dias: 30 } }, costos: [], metas: { ancla: 'retiros', valor: null, ratio: null }, reservaIni: 30_000_000 }
   const m = migrarEstado(v4)
-  assert.equal(m.v, 6); assert.deepEqual(claves(m), ['prudente', 'base', 'meta']); assert.equal(nombreEscenario(m, 'meta'), 'Optimista')
+  assert.equal(m.v, 7); assert.deepEqual(claves(m), ['prudente', 'base', 'meta']); assert.equal(nombreEscenario(m, 'meta'), 'Optimista')
   assert.equal(m.esc, 'meta'); assert.deepEqual(m.p, v4.p); assert.deepEqual(m.dist, { modo: {}, manual: {} })
   assert.deepEqual(migrarEstado(m), m)                                         // idempotente
   assert.deepEqual(migrarEstado(migrarEstado(v4)), m)

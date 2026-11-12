@@ -5,6 +5,7 @@ import { VacioPaso, Ic, LBL, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, 
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
+import { ETIQ_DESTINO } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { lineasTocadas } from '../../supabase/functions/_shared/arrastreAnio.js'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
@@ -191,7 +192,7 @@ export function Costos({ X }) {
   const materias = Object.values(mapa).map((x) => ({ ...x, t27: x.it.reduce((a, [c]) => a + val(c, k), 0), t26: x.it.reduce((a, [c]) => a + costoAnualBase(c, Yb), 0) })).sort((a, b) => b.t27 - a.t27)
   const partida = ([c, i]) => {
         const v = val(c, k), abierto = ui.abierta === i, rj = reajusteVigente(c, Yb), efec = c.alza == null ? p.alza : c.alza
-        const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
+        const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : c.imp ? `liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12 · costo de remuneraciones` : c.boleta ? `boleta ${mp(c.m)} · líquido ${mp(c.liq)} · retención ${mp(c.m - c.liq)} al mes` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
         const campos = <>
           <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>Aumento</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><Fld sobrio kind='pct' suf='%' value={efec} onCommit={(x) => patchCosto(i, fijarAlza(x == null ? 0 : x))} label={`Aumento de ${c.n}`} /></span></div>
           <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => patchCosto(i, c.m < 0 ? { m: -Math.abs(x == null ? 0 : x) / Math.max(1, c.meses), alza: 0 } : fijarMonto27(c, x == null ? 0 : x))} label={`Monto ${Y} de ${c.n}`} /></span></div>
@@ -253,7 +254,16 @@ export function Costos({ X }) {
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
           <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
-          <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
+          {d.impuestos && d.impuestos.nF29 > 0
+            ? <>
+              <Fila tot sin nombre='Impuestos mensuales · pago al SII' valor={mm(e.ppm + d.impuestos.retencionPropiaAnual + d.impuestos.unicoAnual)} />
+              <Fila nombre='PPM' peq={`${d.impuestos.nF29} F29 declarados, ${fmtFechaDMY(d.impuestos.desde + '-01').slice(3)} a ${fmtFechaDMY(d.impuestos.hasta + '-01').slice(3)} · descuenta el impuesto anual`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
+              <Fila nombre='Retención de honorarios' peq='costo del honorario bruto · la de externos se muestra y no se suma' valor={mm(d.impuestos.retencionPropiaAnual)}>
+                {[...d.impuestos.propias.map((x) => ({ n: x.persona, v: x.anual, t: `boleta ${mp(x.bruto)} · líquido ${mp(x.liquido)} · costo ${mp(x.retencionMes)} al mes` })), ...d.impuestos.externos.map((x) => ({ n: x.persona, v: x.anual, t: ETIQ_DESTINO[x.destino] || 'por clasificar' }))].map((x) => <div key={x.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 30px', borderTop: `1px solid ${C.border}`, fontSize: 12 }}><span style={{ minWidth: 0, flex: 1 }}><b style={{ color: C.text }}>{x.n}</b><span style={{ display: 'block', color: C.muted }}>{x.t}</span></span><b style={{ color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{mm(x.v)}</b></div>)}
+              </Fila>
+              <Fila nombre='Impuesto único de trabajadores' peq={`costo de remuneraciones · liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12`} valor={mm(d.impuestos.unicoAnual)} />
+            </>
+            : <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />}
           {subIt && materia({ m: subIt[0].n, it: [subIt], t27: val(subIt[0], k), t26: costoAnualBase(subIt[0], Yb) })}
           <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>

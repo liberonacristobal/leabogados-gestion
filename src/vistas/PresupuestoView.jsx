@@ -51,6 +51,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   // ── Carga: borrador y versiones del año ──
   useEffect(() => {
     let vivo = true
+    if (!datos.impListo) return   // espera los F29, boletas y liquidaciones: la migración a v7 los necesita
     clearTimeout(tmr.current); setCargado(false); setErrorCarga(false); setEst(null); setEspera(false); setPila([]); setDrill(null); setUI({ etapa: 0, vx: null, confirma: null })
     const t = setTimeout(() => { if (vivo) setEspera(true) }, 1500)
     ;(async () => {
@@ -70,13 +71,13 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
         if (!vivo) return
         setVers(filas.map(filaAVersion))
         // Un borrador de formato anterior se migra y queda pendiente de guardar (lastJSON conserva el original para que el autoguardado lo escriba).
-        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12, CFG); lastJSON.current = borr.estado?.v === 6 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
+        if (borr) { const e = migrarEstado(borr.estado, anio, datos.ppmMes * 12, CFG, datos.impMig, datos.impOk); lastJSON.current = borr.estado?.v === 7 ? JSON.stringify(e) : JSON.stringify(borr.estado); setEst(e); setGuardado({ est: DEMO ? 'local' : 'ok', t: borr.updated_at ? Date.parse(borr.updated_at) : null }) }
         else setGuardado({ est: DEMO ? 'local' : 'ok', t: null })
         setCargado(true)
       } catch (e) { if (vivo) { setErrorCarga(true); setGuardado({ est: 'error', t: null }) } }
     })()
     return () => { vivo = false; clearTimeout(t) }
-  }, [anio, reintento])
+  }, [anio, reintento, datos.impListo])
 
   // Sin borrador: estado inicial con los costos vigentes y los datos reales del año anterior (cuando ya cargaron, o tras una breve espera).
   useEffect(() => {
@@ -193,7 +194,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
   const abrirVersion = (v) => {
     const { cfgFoto, ...resto } = v.estado || {}
     if (esAdmin && cfgFoto) { aplicarConfigGuardada(cfgFoto, false); setCfgDe(v.nombre) } else if (cfgDe) { aplicarConfigGuardada(configVigente()); setCfgDe(null) }
-    setCfgTick((n) => n + 1); setEst({ ...migrarEstado(resto, anio, datos.ppmMes * 12, CFG), basadaEn: v.id }); setUI({ confirma: null })
+    setCfgTick((n) => n + 1); setEst({ ...migrarEstado(resto, anio, datos.ppmMes * 12, CFG, datos.impMig, datos.impOk), basadaEn: v.id })   // una versión anterior a v7 llega al borrador con los impuestos mensuales corregidos; la versión guardada no cambia; setUI({ confirma: null })
   }
   const usarVigente = () => { aplicarConfigGuardada(configVigente()); setCfgDe(null); setCfgTick((n) => n + 1) }
   const borrarVersion = async (v) => {

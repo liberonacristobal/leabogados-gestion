@@ -6,7 +6,7 @@ import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
-import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll } from '../lib/compartido.jsx'
+import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll , invalidarImpuestosFuentes} from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
 export function _simTipo(aRaw,bRaw){
@@ -687,7 +687,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
           const up=await supabase.storage.from('documentos').upload(storage_path,bol.file,{contentType:'application/pdf',upsert:true}); if(up.error){ setBusy(null); appAlert('No se pudo subir el PDF: '+up.error.message); return } }
         let bheId=null
         if(!DEMO){ const {data:bh,error}=await supabase.from('boletas_honorarios').upsert({proveedor_id:sel.id,emisor_rut:fmtRutCL(sel.rut),emisor_nombre:sel.razon_social||tituloProv(sel),folio,fecha:bol.fecha,bruto:monto,retencion:retB,liquido:liqB,tasa:tasaB,storage_path,created_by:user?.name||null},{onConflict:'emisor_rut,folio'}).select().single()
-          if(error){ setBusy(null); appAlert('No se pudo guardar la boleta: '+error.message); return } bheId=bh.id; setBhes(p=>[bh,...p.filter(x=>x.id!==bh.id)]) }
+          if(error){ setBusy(null); appAlert('No se pudo guardar la boleta: '+error.message); return } bheId=bh.id; invalidarImpuestosFuentes(); setBhes(p=>[bh,...p.filter(x=>x.id!==bh.id)]) }
         // El bruto, la retención y el líquido de la boleta se reparten entre las comisiones según lo que se le transfiere por cada una.
         let accB=0, accR=0
         elegidas.forEach((t,i)=>{ const last=i===elegidas.length-1, sh=sumPag>0?pagarT(t)/sumPag:1/elegidas.length
