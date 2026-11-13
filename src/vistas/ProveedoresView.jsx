@@ -7,7 +7,7 @@ import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 import { BRAND, C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
 import { descargarImagenComisiones } from '../lib/fotoComisiones.js'
-import { estadoComisionesHtml } from '../../supabase/functions/_shared/estadoComisiones.js'
+import { descargarEstadoComisionesPdf } from '../lib/pdfEstadoComisiones.js'
 import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll , invalidarImpuestosFuentes} from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
@@ -1048,12 +1048,9 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
         const concepto = b ? `${b.invoice_no?`F${folioN(b.invoice_no)} · `:''}${glosaFactura(b)||''}`.replace(/ · $/,'') : String(t.referencia||'Comisión')
         const detalle = e==='por_pagar' ? (pc?.fecha?`Cobrada el ${fmtFechaDMY(pc.fecha)}`:'Cobrada') : e==='por_devengar' ? (!b?'Sin factura':b.status==='Vencido'?`Vencida el ${fmtFechaDMY(b.due)}`:b.status==='Programada'?'Por facturar':b.due?`Facturada · vence ${fmtFechaDMY(b.due)}`:'Facturada') : ''
         return {estado:e, cliente:cliDe(t)?.name||'Sin cliente', concepto, fecha:e==='pagada'?t.pagado_at:(pc?.fecha||null), monto:e==='pagada'?(Number(t.monto)||0):saldoT(t), detalle} }).filter(i=>i.monto>0)
-    const imprimirEstado = () => {
-      const items = itemsEstado()
-      const html = estadoComisionesHtml({proveedor:tituloProv(sel), rut:sel.rut?fmtRutCL(sel.rut):'', items, emitido:fmtFechaDMY(new Date().toISOString().slice(0,10)), marca:{nombre:BRAND.nombre, logoUrl:location.origin+BRAND.logo.color, direccion:BRAND.direccion}})
-      const w = window.open('','_blank'); if(!w){ appAlert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir el estado.'); return }
-      w.document.write(html); w.document.close()
-      logActividad(`proveedores.${sel.id}.estado`,{tabla:'terceros_pagos',id:sel.id,detalle:{title:'Estado de comisiones',n:items.length}}) }
+    const hoyDMY = () => fmtFechaDMY(new Date().toISOString().slice(0,10))
+    const bajarPdf = () => { descargarEstadoComisionesPdf({proveedor:tituloProv(sel), rut:sel.rut?fmtRutCL(sel.rut):'', items:itemsEstado(), emitido:hoyDMY()}); logActividad(`proveedores.${sel.id}.estado`,{tabla:'terceros_pagos',id:sel.id,detalle:{title:'Descargó el estado de comisiones (PDF)'}}) }
+    const bajarImagen = () => descargarImagenComisiones(tituloProv(sel),itemsEstado(),hoyDMY())
     const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)+(mesF?` · ${mesF==='sin'?'Sin fecha':mesLbl(mesF,true)}`:'')
     const comisionesCard = <div id='pv-comisiones' style={{...card,overflow:'hidden'}}>
       {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):<span style={{display:'inline-flex',gap:10,alignItems:'center'}}>{mesF&&link('Quitar mes',()=>setMesF(null),C.accent)}{ordTog(ordC,setOrdC)}</span>)}
@@ -1096,19 +1093,25 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     const docsCard = docsY.length ? <div style={{...card,overflow:'hidden'}}>{band(`Facturas de ${tituloProv(sel)} en el SII · ${yr}`,ordTog(ordP,setOrdP))}{docsY.map(filaDoc)}</div> : null
     const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta'],['factura_tercero','Cuadró una factura del proveedor con su cuota'],['factura_tercero_no','Descartó un cuadre de factura']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
-    const btnExcel = <span onClick={exportCuotas} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
-    const btnEstado = <span onClick={imprimirEstado} title='Estado de comisiones (imprimir o PDF)' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='file' s={14} c={C.accent}/></span>
-    const btnImagen = <span onClick={()=>descargarImagenComisiones(tituloProv(sel),itemsEstado(),fmtFechaDMY(new Date().toISOString().slice(0,10)))} title='Descargar imagen de comisiones (últimas pagadas y por pagar)' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='image' s={14} c={C.accent}/></span>
     // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
     const dItem = (l,v,max) => <span style={{display:'flex',flexDirection:'column',minWidth:0,maxWidth:max||'none'}}><span style={{...kLbl,fontSize:10}}>{l}</span><span style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v}</span></span>
     const copiar = <b style={{fontSize:11,color:C.accent,marginLeft:4}}>Copiar</b>
     const relTxt = [m0.equipo?'Equipo':null,m0.les?'Le pagas comisión':null,m0.te?'Te paga comisión':null].filter(Boolean).join(' · ')||'Sin comisiones aún'
-    const datosStrip = <div style={{...card,padding:'9px 14px',display:'flex',flexWrap:'wrap',gap:'6px 22px',alignItems:'flex-end'}}>
-      {isDesktop&&sel.razon_social&&dItem('Razón social',sel.razon_social)}
-      {dItem('RUT',sel.rut?<Copyable text={sel.rut}>{fmtRutCL(sel.rut)}{copiar}</Copyable>:ro?'—':link('+ agregar',()=>abrirEditar(sel),C.accent))}
-      {dItem('Datos de pago',sel.datos_pago?.trim()?<Copyable text={sel.datos_pago}>{sel.datos_pago.trim().split(/\n+/).join(' · ')}{copiar}</Copyable>:ro?'—':link('+ agregar',()=>abrirEditar(sel),C.accent),isDesktop?300:'100%')}
-      {isDesktop&&dItem('Relación',relTxt)}
-      {!ro&&<span style={{marginLeft:'auto'}}>{link('Editar ›',()=>abrirEditar(sel),C.accent)}</span>}
+    // Cabecera de la ficha: identidad, datos para transferir (sin repetir razón social ni RUT) y «Estado de cuenta» con las tres descargas.
+    const lineasPago = (sel.datos_pago||'').split(/\n+/).map(x=>x.trim()).filter(Boolean)
+    const sinRep = lineasPago.filter(l=>_normTxt(l)!==_normTxt(sel.razon_social||'') && !(/^rut\b/i.test(l) && _nRut(l.replace(/^rut\s*:?\s*/i,''))===_nRut(sel.rut)))
+    const pagoVis = sinRep.length ? sinRep : lineasPago
+    const dlBtn = (txt,on,primario) => <span onClick={on} className='pv-c' style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 11px',border:`1px solid ${primario?C.accent:C.border}`,borderRadius:8,background:primario?C.accent:C.card,color:primario?'#fff':C.accent,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={13} c={primario?'#fff':C.accent}/>{txt}</span>
+    const estadoCuenta = <div><div style={{...kLbl,fontSize:10,marginBottom:6}}>Estado de cuenta</div><div style={{display:'flex',flexDirection:isDesktop?'column':'row',flexWrap:'wrap',gap:6,alignItems:isDesktop?'stretch':'center'}}>{dlBtn('Estado · PDF',bajarPdf,true)}{dlBtn('Resumen · imagen',bajarImagen)}{dlBtn('Detalle · Excel',exportCuotas)}</div></div>
+    const datosPagoEl = sel.datos_pago?.trim()?<Copyable text={sel.datos_pago}><span style={{lineHeight:1.5}}>{pagoVis.map((l,i)=><Fragment key={i}>{i>0&&(isDesktop?<br/>:' · ')}{l}</Fragment>)}</span>{copiar}</Copyable>:ro?'—':link('+ agregar',()=>abrirEditar(sel),C.accent)
+    const datosStrip = <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',display:isDesktop?'grid':'block',gridTemplateColumns:'1.1fr 1.5fr auto auto',gap:isDesktop?28:0,alignItems:'start'}}>
+      <div><div style={{...kLbl,fontSize:10}}>Razón social</div>
+        <div style={{fontSize:isDesktop?15:14,fontWeight:800,color:C.accent,margin:'2px 0',lineHeight:1.25}}>{sel.razon_social||tituloProv(sel)}</div>
+        <div style={{fontSize:13}}>{sel.rut?<Copyable text={sel.rut}>RUT {fmtRutCL(sel.rut)}{copiar}</Copyable>:ro?'—':link('+ agregar RUT',()=>abrirEditar(sel),C.accent)}</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:3}}>{relTxt}</div></div>
+      <div style={isDesktop?undefined:{borderTop:`1px solid ${C.bgSoft}`,marginTop:10,paddingTop:10}}><div style={{...kLbl,fontSize:10,marginBottom:3}}>Datos para transferir</div><div style={{fontSize:13}}>{datosPagoEl}</div></div>
+      <div style={isDesktop?undefined:{borderTop:`1px solid ${C.bgSoft}`,marginTop:10,paddingTop:10}}>{estadoCuenta}</div>
+      {!ro&&<span style={isDesktop?undefined:{display:'block',marginTop:8,textAlign:'right'}}>{link('Editar ›',()=>abrirEditar(sel),C.accent)}</span>}
     </div>
     // Tarjetitas: pagos del banco · facturas del SII · comisiones por cobrar · historial (cerradas; se abre una a la vez).
     const pagTot = pagosY.reduce((x,m)=>x+Math.abs(Number(m.monto)||0),0), ultPagoF = pagosY.map(m=>String(m.fecha)).sort().pop()
@@ -1139,7 +1142,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
       ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
       : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
     return (<div>{css}
-      <PageHeader origen={(ro||volverOrigen)?origen:'Proveedores'} onBack={ro?onBack:()=>{ if(volverOrigen&&onBack){ setVolverOrigen(false); onBack() } else setView('list') }} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnImagen}{btnEstado}{btnExcel}</span>}/>
+      <PageHeader origen={(ro||volverOrigen)?origen:'Proveedores'} onBack={ro?onBack:()=>{ if(volverOrigen&&onBack){ setVolverOrigen(false); onBack() } else setView('list') }} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}</span>}/>
       {wrap(isDesktop ? <>
         {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{mesCard}{cuadreCard}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resumenReciente, armarEstadoComisiones, estadoComisionesHtml, pesos, dmy, mesTitulo } from '../supabase/functions/_shared/estadoComisiones.js'
+import { resumenReciente, armarEstadoComisiones, pesos, dmy, mesTitulo } from '../supabase/functions/_shared/estadoComisiones.js'
 
 const items = [
   { estado: 'pagada', cliente: 'A', concepto: 'F1', fecha: '2026-09-22', monto: 100 },
@@ -23,10 +23,6 @@ test('las partes suman el total', () => {
 })
 test('formatos', () => {
   assert.equal(pesos(1234567), '$1.234.567'); assert.equal(dmy('2026-11-13'), '13-11-2026'); assert.equal(mesTitulo('2026-10'), 'Octubre 2026')
-})
-test('html escapa y no falla sin pagos', () => {
-  const h = estadoComisionesHtml({ proveedor: 'A <b>', items: [], emitido: '13-11-2026', marca: { nombre: 'X', logoUrl: '/l.png' }, auto: false })
-  assert.ok(h.includes('A &lt;b&gt;') && h.includes('Sin pagos aún') && !h.includes('window.print'))
 })
 
 test('resumen reciente: últimas pagadas y por pagar, sin sujeto a cobro', () => {
