@@ -4,7 +4,7 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { redondearPartes } from '../lib/cifras.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
-import { MES_C, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
+import { ChevAb, MES_C, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
 
 // Comisión del mes = terceros_pagos pagados en el mes.
 
@@ -147,11 +147,12 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
   const [busy,setBusy]=useState(null)
   const [ocultarVacios,setOcultarVacios]=useState(false)
   const [mesAbierto,setMesAbierto]=useState(null)
+  const [abMes,setAbMes]=useState(false), [abLista,setAbLista]=useState(false)   // «Retiros por mes» y «Retiros · N en total» van plegados
   const listaRef=useRef(null), porSocioRef=useRef(null)
   const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
   const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum } = retirosSocios({ expenses, clients, socios, yr })   // fuente única: la misma del Panel de socios
-  useEffect(()=>{ if(!focoSocio) return; const r=retSoc.filter(x=>x.socio===focoSocio).sort((a,b)=>String(b.d0).localeCompare(String(a.d0)))[0]; if(r) setExpRet(r.socio+'|'+r.d0) },[focoSocio])   // eslint-disable-line  — llegar desde el Panel con el último retiro de ese socio abierto
+  useEffect(()=>{ if(!focoSocio) return; const r=retSoc.filter(x=>x.socio===focoSocio).sort((a,b)=>String(b.d0).localeCompare(String(a.d0)))[0]; if(r){ setExpRet(r.socio+'|'+r.d0); setAbLista(true) } },[focoSocio])   // eslint-disable-line  — llegar desde el Panel con el último retiro de ese socio abierto
   const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
   const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
   const BG=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[1]]))
@@ -262,15 +263,17 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
 
     <div style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
-        {chTi('Retiros por mes',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}
+        <div onClick={()=>setAbMes(v=>!v)} role='button' style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer'}}>{chTi('Retiros por mes',C.soonBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/></svg>)}<span style={{color:C.textSoft}}><ChevAb open={abMes}/></span></div>
+        {abMes&&
         <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
           <span onClick={()=>setOcultarVacios(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:7,fontSize:11,fontWeight:700,color:C.muted,cursor:'pointer'}}>
             <span style={{width:30,height:17,borderRadius:10,background:ocultarVacios?C.accent:C.border,position:'relative',transition:'.15s',flexShrink:0}}><span style={{position:'absolute',top:2,left:ocultarVacios?15:2,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'.15s',boxShadow:'0 1px 2px rgba(0,0,0,.2)'}}/></span>
             Ocultar meses sin retiros
           </span>
           {seg(tablaMode,setTablaMode,[['monto','Monto'],['dif','Diferencia'],['acum','Acumulado']])}
-        </div>
+        </div>}
       </div>
+      {abMes&&<>
       {mesesDelAnio===0&&<div style={{padding:'20px 18px',textAlign:'center',color:C.textSoft,fontSize:13}}>Sin datos de {yr}.</div>}
       {mesesDelAnio>0&&<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>
@@ -306,13 +309,15 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
           })()}
         </tbody>
       </table></div>}
+      </>}
     </div>
 
     <div ref={listaRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
-        {chTi('Retiros · '+nRet+' en total',BG[A],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}
-        {seg(movVista,setMovVista,[['socio','Por socio'],['mes','Por mes'],['crono','Cronológico']])}
+        <div onClick={()=>setAbLista(v=>!v)} role='button' style={{display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer'}}>{chTi('Retiros · '+nRet+' en total',BG[A],<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#003C50' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><line x1='12' y1='2' x2='12' y2='22'/><path d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>)}<span style={{color:C.textSoft}}><ChevAb open={abLista}/></span></div>
+        {abLista&&seg(movVista,setMovVista,[['socio','Por socio'],['mes','Por mes'],['crono','Cronológico']])}
       </div>
+      {abLista&&<>
       {nRet===0&&<div style={{padding:'22px 18px',textAlign:'center',color:C.textSoft,fontSize:13}}>Sin retiros registrados en {yr}.</div>}
       {otros.map((r,oi)=>{ const sg=sugSocio(r); return <div key={'o'+oi} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 18px',background:'#FFFCF4',borderTop:`1px solid ${C.bgSoft}`,flexWrap:'wrap'}}>
         <span style={{width:30,height:30,borderRadius:10,background:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#9A6413' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v18'/><path d='m6 8 6-4 6 4'/><path d='M6 8 3 14a3.5 3.5 0 0 0 6 0Z'/><path d='m18 8-3 6a3.5 3.5 0 0 0 6 0Z'/></svg></span>
@@ -324,6 +329,7 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
         if(movVista==='mes'){ const by={}; retSoc.forEach(r=>{ const m=parseInt(r.d0.slice(5,7),10); (by[m]=by[m]||[]).push(r) }); return Object.keys(by).sort((a,b)=>a-b).map(m=><div key={m}><div style={{padding:'11px 18px',fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,color:C.muted,background:C.bgSoft,display:'flex',justifyContent:'space-between'}}><span>{MESL[m-1]}</span><span>{fmt(by[m].reduce((a,r)=>a+r.amt,0))}</span></div>{by[m].sort((a,b)=>a.d0.localeCompare(b.d0)).map(retRow)}</div>) }
         return SOC.map(s=>{ const rs=retSoc.filter(r=>r.socio===s).sort((a,b)=>a.d0.localeCompare(b.d0)); if(!rs.length) return null; return <div key={s}><div style={{padding:'11px 18px',fontSize:10.5,fontWeight:800,textTransform:'uppercase',letterSpacing:.3,background:BG[s],color:COL[s],display:'flex',justifyContent:'space-between'}}><span>{s} · {rs.length} retiro{rs.length!==1?'s':''}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{fmt(retTot[s]||0)}</span></div>{rs.map(retRow)}</div> })
       })()}
+      </>}
     </div>
   </div>)
 }
