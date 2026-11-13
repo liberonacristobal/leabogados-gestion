@@ -243,8 +243,15 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
         {chTi('Por socio · total y promedio',C.greenBg,<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#1D9E75' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'/></svg>)}
         {seg(eqMode,setEqMode,[['ambos','Retiro + sueldo'],['retiros','Solo retiros']])}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:12,padding:'2px 16px 16px'}}>
-        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0); return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:12,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr',gap:isDesktop?8:12,padding:'2px 16px 16px'}}>
+        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0)
+          // Escritorio: una fila por socio (nombre y cuatro cifras en línea) en vez de tarjeta alta; el celular conserva la tarjeta.
+          if(isDesktop){ const cel=(l,v,sub)=><div style={{minWidth:0,textAlign:'right'}}><div style={{...SEC_LBL,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:15,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>{sub&&<div style={{fontSize:10,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap'}}>{sub}</div>}</div>
+            return <div key={s} onClick={()=>verSocio(s)} role='button' style={{background:BG[s],borderRadius:12,padding:'10px 16px',cursor:'pointer',display:'grid',gridTemplateColumns:'minmax(170px,1.3fr) repeat(4,minmax(0,1fr)) 16px',columnGap:14,alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}><span style={{width:30,height:30,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:13,flexShrink:0}}>{s[0]}</span><div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:15,color:COL[s]}}>{s}</div><div style={{fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</div></div></div>
+              {cel('Total a favor · '+yr,fmtM(tot))}{cel('Retiros',fmt(retTot[s]||0))}{cel('Sueldo',fmt(sueldos[s]||0))}{cel('Promedio mensual',fmtM(promDe(s)),`÷ ${mesesComp} meses`)}
+              <span style={{color:COL[s],opacity:.5}}><Gl n='chevron'/></span></div> }
+          return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:12,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
           <span style={{position:'absolute',top:15,right:15,color:COL[s],opacity:.5,fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span><span style={{marginLeft:'auto',marginRight:16,fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</span></div>
           <div style={{fontSize:34,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div>
