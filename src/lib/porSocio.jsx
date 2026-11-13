@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { resumenDiasCobro } from '../../supabase/functions/_shared/diasCobro.js'
 import { useAnnualTargets } from './resultadoAnio.js'
+import { descargarFotoTabla } from './fotoTabla.js'
 import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop } from './base.jsx'
 import { Fragment } from 'react'
@@ -253,6 +254,9 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
         <div style={{fontSize:isDesk?22:18,fontWeight:800,letterSpacing:-.6,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.2,marginTop:3}}>{fV(v,F2.f)}</div>
         <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',minHeight:16}}>{soc===null?(F2.ext?'Suma de los socios':'Toda la oficina'):F2.ext?(v!=null&&Math.abs(v)>=1?`${pcs[j-1]} % de la oficina`:'—'):(dif&&d?<Flecha {...d}/>:'')}</div></div> }
     return <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>{[null,...COLS].map((c,j)=>card(c,j))}</div> }
+  const fotoCmp=()=>{ const cs=ofiFin?[...COLS,null]:[null,...COLS], filas=[]
+    GRUPOS.forEach(([g,gl])=>{ filas.push({t:'sec',c:[gl]}); FILAS.filter(x=>x.g===g).forEach(F2=>{ const vs=valsFila(F2); filas.push({t:'fila',c:[F2.l,...cs.map(c=>fV(vs[c===null?0:COLS.indexOf(c)+1],F2.f))]}) }) })
+    descargarFotoTabla({ titulo:'Comparativo de socios', sub:perLbl(vista), cols:['Indicador',...cs.map(c=>c===null?'Oficina':Ls(c))], filas, archivo:`COMPARATIVO-SOCIOS-${ym}.png` }) }
   const Comparativo=()=>{ const cs=ofiFin?[...COLS,null]:[null,...COLS], w=['28%','18%','18%','18%','18%']
     const seg2=(on,t,f,ic)=><button key={t} onClick={f} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,border:`1px solid ${on?C.azulBd:C.border}`,background:on?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{ic}{t}</button>
     return <div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8}}>
@@ -262,7 +266,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       {TarjetasCmp()}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>{isDesk?'Comparativo entre socios':'Comparativo'} · {perLbl(vista)}</span>
-          <span style={{marginLeft:'auto',display:'inline-flex',gap:6}}>{seg2(dif,'Diferencias',()=>setDif(!dif),<Gl n='arrowUp'/>)}{seg2(ofiFin,'Oficina al final',()=>setOfiFin(!ofiFin))}</span></div>
+          <span style={{marginLeft:'auto',display:'inline-flex',gap:6,alignItems:'center'}}><button onClick={fotoCmp} title='Descargar imagen' aria-label='Descargar imagen' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:'0 4px',cursor:'pointer',color:C.accent}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg></button>{seg2(dif,'Diferencias',()=>setDif(!dif),<Gl n='arrowUp'/>)}{seg2(ofiFin,'Oficina al final',()=>setOfiFin(!ofiFin))}</span></div>
         <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{w.map((x,i)=><col key={i} style={{width:x}}/>)}</colgroup>
           <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Indicador</th>{cs.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c?(isDesk?L(c):Ls(c)):'Oficina'}</th>)}</tr></thead>
           <tbody>{GRUPOS.map(([g,gl,gs,gbg])=>{ const rows=FILAS.filter(x=>x.g===g), ab=!gAb[g]

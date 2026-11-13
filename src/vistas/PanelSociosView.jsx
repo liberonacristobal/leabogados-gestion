@@ -5,6 +5,7 @@ import { Children, useMemo, useState } from 'react'
 import { C, Gl, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
+import { descargarFotoTabla } from '../lib/fotoTabla.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
 import { pctsAnio, useResultadoAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel, ProyeccionDetalle } from './DashboardView.jsx'
@@ -214,7 +215,9 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           <td style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,fontWeight:tot?800:600,color:tot?C.accent:C.text}}>{tot?'Oficina':s}</td>
           {[0,1,2,5].map(i=><td key={i} onClick={e=>{ e.stopPropagation(); go('porSocio',s,i) }} style={{padding:isDesktop?'8px 14px':'8px 6px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,textAlign:'right',color:tot?C.accent:undefined}}>{fmtShort(v[i])}</td>)}
         </tr>) })}</tbody>
-    </table>{cextAnio>=1&&<div style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:11,color:C.muted}}>Facturado incluye la parte nuestra de las facturas por cuenta de externos ({fmtShort(cextAnio)}); la tarjeta Facturado del año cuenta solo honorarios propios y esa comisión va en Margen.</div>}</div>)
+    </table>{cextAnio>=1&&<div style={{padding:isDesktop?'8px 14px':'8px 6px',fontSize:11,color:C.muted}}>Facturado incluye la parte nuestra de las facturas por cuenta de externos ({fmtShort(cextAnio)}); la tarjeta Facturado del año cuenta solo honorarios propios y esa comisión va en Margen.</div>}<div onClick={()=>go('porSocio',null,0)} role='button' style={{display:'flex',alignItems:'center',gap:6,padding:isDesktop?'10px 14px':'9px 6px',borderTop:`1px solid ${C.border}`,fontSize:12.5,fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Detalle <Gl n='chevron'/></div></div>)
+  const fotoPanel = () => descargarFotoTabla({ titulo:'Panel de socios', sub:`Por socio · enero–${mesActual} ${currentYear}`, cols:['Socio','Vendido neto','Facturado','Cobrado','Ingreso real'],
+    filas:sociosFilas.map(s=>{ const v=card6(s,'ytd'); return { t:s===null?'tot':'fila', c:[s===null?'Oficina':s,fmtShort(v[0]),fmtShort(v[1]),fmtShort(v[2]),fmtShort(v[5])] } }), archivo:`PANEL-DE-SOCIOS-${currentYear}.png` })
   const Mes1 = mesActual.charAt(0).toUpperCase()+mesActual.slice(1)
   const celdasEm = [...emMes.map((x,i)=>({ k:x.s, soc:x.s, v:fmtShort(emIng[i]), sub:`${x.n} factura${x.n!==1?'s':''}${emCom[i]>0?` · com. ${fmtShort(emCom[i])}`:''}` })), ...(Math.abs(emSub)>=1?[{ k:'Subarriendo', v:fmtShort(emSub), sub:'aparte, sin socio' }]:[])]
   const tablaEm = (() => { const cols = emAnio.map(x=>{ const [i,c]=isDesktop?[x.i,x.c]:redondearPartes([x.i,x.c],1e5); return { s:x.s, f:i+c, c, i } })
@@ -379,7 +382,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const resColor = rm.res>=0?C.greenText:C.overdueText
   return (
     <div style={{maxWidth:1120,margin:'0 auto',padding:isDesktop?'0 20px 40px':'0 14px 40px'}}>
-      <PageHeader origen={backLabel} onBack={onBack} titulo='Panel de socios' ctx={isDesktop?`datos al ${fecha}`:undefined} right={<ActBtn variant='ghost' onClick={exportar} title='Descargar el panel en Excel'><SIcon n='download' s={14} c={C.accent}/>{isDesktop?'Excel':''}</ActBtn>}/>
+      <PageHeader origen={backLabel} onBack={onBack} titulo='Panel de socios' ctx={isDesktop?`datos al ${fecha}`:undefined} right={<span style={{display:'inline-flex',alignItems:'center',gap:8}}><ActBtn variant='ghost' onClick={fotoPanel} title='Descargar imagen del panel' aria-label='Descargar imagen del panel'><SIcon n='download' s={14} c={C.accent}/></ActBtn><ActBtn variant='ghost' onClick={exportar} title='Descargar el panel en Excel'><SIcon n='download' s={14} c={C.accent}/>{isDesktop?'Excel':''}</ActBtn></span>}/>
       <div style={{display:'flex',flexDirection:'column',gap:isDesktop?12:10,marginTop:isDesktop?12:6}}>
         {ano}
         {isDesktop ? (<>
