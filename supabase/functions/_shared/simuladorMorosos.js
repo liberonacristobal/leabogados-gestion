@@ -66,3 +66,16 @@ export function simularMorosos(o) {
   const clientes = (o.clientes || []).map(c => porCli[c.cid] ? { ...c, entra: c.entra + porCli[c.cid].entra, com: c.com + porCli[c.cid].com, duda: Math.max(0, (c.duda || 0) - porCli[c.cid].entra) } : c)
   return { weeks, E, C, fin: run, cobros, resto, restoMonto: resto.reduce((a, x) => a + x.m, 0), simIng, simCom, anioIng, anioCom, clientes }
 }
+
+/**
+ * Reparte lo simulado entre «8 semanas» y «Después» (lo que cae más allá de las 8 semanas), redondeado a `paso` (1e5 = $M de 1 decimal) y cuadrado:
+ * 8 semanas + Después = Total en cada fila, y «Para el estudio» = Se cobra − A terceros en cada columna.
+ * @param {{ ing: number, com: number, ing8: number, com8: number, paso?: number }} o ing/com = total simulado (cobro / pago a terceros); ing8/com8 = la parte que cae dentro de las 8 semanas
+ * @returns {{ ing: number[], com: number[], neto: number[] }} cada fila es [8 semanas, Después, Total]
+ */
+export function repartoOchoSemanas(o) {
+  const paso = o.paso || 1e5, r = (/** @type {number} */ x) => Math.round((Number(x) || 0) / paso) * paso
+  const fila = (/** @type {number} */ tot, /** @type {number} */ a) => { const t = r(tot), a8 = Math.max(0, Math.min(t, r(a))); return [a8, t - a8, t] }
+  const ing = fila(o.ing, o.ing8), com = fila(o.com, o.com8)
+  return { ing, com, neto: ing.map((v, i) => v - com[i]) }
+}

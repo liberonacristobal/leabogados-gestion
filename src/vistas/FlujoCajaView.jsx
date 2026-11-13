@@ -6,7 +6,7 @@ import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert } from '../lib/base.j
 import { useFlujoCaja, useEscenarioFlujo, fmtMill, MES_C } from '../lib/compartido.jsx'
 import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
-import { simularMorosos, resumenTramos } from '../../supabase/functions/_shared/simuladorMorosos.js'
+import { simularMorosos, resumenTramos, repartoOchoSemanas } from '../../supabase/functions/_shared/simuladorMorosos.js'
 import { comisionesProyectadas } from '../../supabase/functions/_shared/proyeccionPropia.js'
 
 const SER = { alDia: ['Emitidas al día', C.serie1], venc: ['Emitidas vencidas', C.serie2], cuotas: ['Cuotas por facturar', C.serie3] }
@@ -258,7 +258,14 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
         <div style={{ minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: C.accent }}>{t.l}</div><div style={{ fontSize: 10.5, color: C.textSoft }}>{t.nCli} cliente{t.nCli !== 1 ? 's' : ''} · {fM(t.monto)}</div></div>
         {stepper(i)}<span style={{ minWidth: 52, textAlign: 'right', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>{fM(t.monto * pctSim[i] / 100)}</span></div>)}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', padding: '6px 14px', borderTop: `1px solid ${C.border}`, background: C.bgSoft, fontSize: 11, color: C.muted }}>Todos:{[0, 25, 50, 75, 100].map(p => <button key={p} onClick={() => setPctSim([p, p, p])} style={{ border: 0, borderRadius: 6, padding: '3px 7px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: todosPct === p ? C.azulBg : 'transparent', color: todosPct === p ? C.accent : C.muted }}>{p} %</button>)}</div>
-      <div style={{ padding: '9px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.text, lineHeight: 1.5 }}>Se cobra <b style={{ color: C.accent }}>{fM(simR ? simR.simIng : 0)}</b> de {fM(morTot)} ({morTot > 0 ? Math.round((simR ? simR.simIng : 0) / morTot * 100) : 0} %), cada uno en su fecha esperada. A terceros se pagan <b style={{ color: C.accent }}>{fM(simR ? simR.simCom : 0)}</b>; para el estudio quedan <b style={{ color: C.accent }}>{fM((simR ? simR.simIng - simR.simCom : 0))}</b>.</div>
+      {(() => { const R = repartoOchoSemanas({ ing: simR ? simR.simIng : 0, com: simR ? simR.simCom : 0, ing8: simR ? simR.E - F0.E : 0, com8: simR ? simR.C - F0.C : 0 })
+        const th = (/** @type {string} */ h, /** @type {number} */ k) => <span key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, textAlign: k ? 'right' : 'left' }}>{h}</span>
+        const fila = (/** @type {string} */ l, /** @type {number[]} */ v, /** @type {boolean} */ neg, /** @type {boolean} */ tot) => [<span key={l} style={{ color: tot ? C.accent : C.muted, fontWeight: tot ? 800 : 600 }}>{l}</span>, ...v.map((x, i) => <span key={l + i} style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: tot || i === 2 ? 800 : 600, color: tot ? C.accent : C.text }}>{neg && x ? '−' : ''}{fM(x)}</span>)]
+        return <div style={{ padding: '9px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.text, lineHeight: 1.5 }}>
+          <div>Se cobra <b style={{ color: C.accent }}>{fM(R.ing[2])}</b> de {fM(morTot)} ({morTot > 0 ? Math.round((simR ? simR.simIng : 0) / morTot * 100) : 0} %), cada uno en su fecha esperada.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto auto', columnGap: 14, rowGap: 5, marginTop: 8, fontVariantNumeric: 'tabular-nums', alignItems: 'baseline' }}>
+            {['', '8 semanas', 'Después', 'Total'].map(th)}
+            {fila('Se cobra', R.ing, false, false)}{fila('A terceros', R.com, true, false)}{fila('Para el estudio', R.neto, false, true)}</div></div> })()}
       <div style={{ padding: '0 14px 10px' }}><button onClick={() => setAntes(v => !v)} style={{ border: 0, background: 'none', padding: 0, fontSize: 11.5, fontWeight: 600, color: C.azulInfo, cursor: 'pointer' }}>{antes ? 'Ocultar antes y después' : 'Ver antes y después, hasta el 31-12'} ›</button></div>
       {antes && simR && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto auto', columnGap: 12, rowGap: 6, padding: '8px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, fontVariantNumeric: 'tabular-nums', alignItems: 'baseline' }}>
         {['Al 31-12', 'Hoy', 'Simulado', 'Dif.'].map((h, k) => <span key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, textAlign: k ? 'right' : 'left' }}>{h}</span>)}
@@ -274,7 +281,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
       {seg(vista, setVista, VISTAS)}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
     {simOn && simPanel}
-    <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{simOn ? 'Simulación: parte de «Sin morosos» y suma el cobro que escribas; no guarda nada.' : conMor ? 'Incluye los demás cobros de los clientes con facturas morosas; las facturas morosas no se proyectan.' : `Sin los cobros de los ${morosoDe.size} clientes con facturas morosas.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
+    <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{simOn ? 'Simulación: parte de «Sin morosos» y suma el cobro que escribas; no guarda nada. Las tarjetas muestran las próximas 8 semanas.' : conMor ? 'Incluye los demás cobros de los clientes con facturas morosas; las facturas morosas no se proyectan.' : `Sin los cobros de los ${morosoDe.size} clientes con facturas morosas.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 8 }}>
       {kpi({ fg: C.greenText, bg: C.greenBg }, 'tEntra', 'Ingresos', fM(ing8), simOn ? 'antes ' + fM(F0.E) : '8 semanas', () => { setTab('cli'); setFil('ent'); irA(tabsRef) })}
       {kpi({ fg: C.overdueText, bg: C.overdueBg }, 'tPagar', 'Egresos', egr8 ? '−' + fM(egr8) : '$0', simOn ? 'antes −' + fM(F0.O + F0.C) : '8 semanas', () => onOpenCostos ? onOpenCostos(F.costoReal) : (setTab('sem'), irA(tabsRef)))}
