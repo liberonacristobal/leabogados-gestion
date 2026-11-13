@@ -256,3 +256,23 @@ export function trabajosDetenidos({ sales = [], billing = [], expenses = [], tas
 export function anticiposDisponibles(anticipos, clienteId) {
   return (anticipos || []).filter(a => a && a.estado === 'disponible' && (clienteId == null || String(a.client_id) === String(clienteId))).reduce((s, a) => s + (Number(a.monto) || 0), 0)
 }
+
+// Venta mensual (recurrente) cuya ÚLTIMA factura emitida supera el monto mensual de la venta en más de 3 %. `coberturaVenta` excluye las recurrentes (su monto es la
+// cuota del mes, no un total), así que sin esto una subida de tarifa que no llegó a la venta pasa inadvertida (caso 2026: factura de 42,5 UF contra una venta de 30 UF).
+// uf = {fecha: valor}; sin UF de la fecha no se infiere nada. Una por venta. Solo lee.
+/** @param {{sales?:any[], billing?:any[], uf?:Record<string,number>, desde?:string}} a */
+export function mensualMayorQueVenta({ sales = [], billing = [], uf = {}, desde = APP_DESDE } = {}) {
+  const ufDe = (/** @type {any} */ d) => { const k = String(d || '').slice(0, 10); if (uf[k]) return uf[k]; const ks = Object.keys(uf).filter(x => /^\d{4}-\d\d-\d\d$/.test(x) && x <= k).sort(); return ks.length ? uf[ks[ks.length - 1]] : null }
+  const out = []
+  for (const s of sales || []) {
+    if (!s || s.deleted_at || s.status !== 'Activo' || s.cobro_type !== 'mensual') continue
+    const enUF = s.moneda === 'UF' || (!s.amount_clp && Number(s.amount_uf) > 0), mensual = enUF ? Number(s.amount_uf) || 0 : Number(s.amount_clp) || 0; if (!(mensual > 0)) continue
+    const ult = (billing || []).filter(b => b && !b.deleted_at && String(b.sale_id) === String(s.id) && b.invoice_no && b.status !== 'Anulada' && !['reembolso', 'nota_credito'].includes(b.billing_type || '') && String(b.issued_at || '').slice(0, 10) >= desde)
+      .sort((x, y) => String(y.issued_at).localeCompare(String(x.issued_at)))[0]
+    if (!ult) continue
+    const u = enUF ? ufDe(ult.issued_at) : 1; if (!u) continue
+    const fact = montoFactura(ult) / u
+    if (fact > mensual * 1.03) out.push({ venta: s, factura: ult, mensual, factura_en: fact, dif: fact - mensual, enUF })
+  }
+  return out
+}

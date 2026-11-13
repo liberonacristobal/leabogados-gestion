@@ -339,39 +339,9 @@ export function reembolsoProbable(billing, expenses) {
   return out
 }
 
-// Comisión recurrente sin registrar: una venta puede declarar en `cobro_config.comisionRecurrente` {proveedor_id, proveedor, rut, pct, linea, desde, destino_sale_id?, etiqueta?}
-// que una LÍNEA de cada factura mensual (la glosa del DTE que calza con `linea`) le pertenece en `pct` % a un colaborador (caso: asesoría laboral de 12,5 UF
-// dentro de la factura mensual de un cliente, 85 % para BDA). Devuelve las facturas emitidas desde `desde` que aún no tienen su fila en terceros_pagos.
-// Estado: factura pagada → 'por_pagar'; si no → 'pendiente'. El monto sale de la línea del DTE de la factura, no de un valor escrito a mano.
-/** @param {any} xml @param {string} linea */
-export function lineaDte(xml, linea) {
-  const re = new RegExp(linea, 'i')
-  for (const d of String(xml || '').match(/<Detalle>[\s\S]*?<\/Detalle>/g) || []) {
-    const nm = (d.match(/<NmbItem>([^<]*)<\/NmbItem>/) || [])[1] || '', mt = (d.match(/<MontoItem>\s*(\d+(?:\.\d+)?)\s*<\/MontoItem>/) || [])[1]
-    if (re.test(nm) && mt != null) return { nombre: nm, monto: Math.round(+mt) }
-  }
-  return null
-}
-/** @param {any[]} billing @param {any[]} terceros @param {any[]} sales */
-export function comisionRecurrenteFaltante(billing, terceros, sales) {
-  const out = []
-  for (const s of sales || []) {
-    const cfg = s && !s.deleted_at && s.cobro_config && s.cobro_config.comisionRecurrente; if (!cfg || !cfg.proveedor_id || !(Number(cfg.pct) > 0) || !cfg.linea) continue
-    for (const b of billing || []) {
-      if (!b || b.deleted_at || String(b.sale_id) !== String(s.id) || !String(b.invoice_no || '').trim() || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '')) continue
-      if (String(b.issued_at || '').slice(0, 10) < String(cfg.desde || APP_DESDE)) continue
-      if ((terceros || []).some(t => t && String(t.billing_id) === String(b.id) && String(t.proveedor_id) === String(cfg.proveedor_id))) continue
-      const l = lineaDte(b.dte_xml, cfg.linea); if (!l) continue
-      const monto = Math.round(l.monto * Number(cfg.pct) / 100); if (monto <= 0) continue
-      out.push({ factura: b, venta: s, cfg, base: l.monto, monto, estado: b.status === 'Pagado' ? 'por_pagar' : 'pendiente' })
-    }
-  }
-  return out
-}
-
 // Comisión por registrar desde el REPARTO de la venta (el que se edita en el formulario de la venta: «Reparto a proveedores»). El acuerdo es la fila de
 // comisión con tipo_costo 'pct' de esa venta (colaborador + %); toda factura emitida de la venta, desde la cuota más antigua con comisión de ese
-// colaborador, que no tenga SU fila se propone con el % de la factura. Una sola fuente y sin duplicar: nunca propone si ya hay una fila del colaborador
+// colaborador, que no tenga SU fila se propone (% de la factura, o UF fijas de la venta: la misma fracción del formulario). Una sola fuente y sin duplicar: nunca propone si ya hay una fila del colaborador
 // en esa factura. `omitidas` = claves `billing_id|proveedor_id` que el usuario marcó «no corresponde». No escribe.
 /** @param {any[]} billing @param {any[]} terceros @param {any[]} sales @param {Set<string>} [omitidas] */
 export function comisionPorReparto(billing, terceros, sales, omitidas = new Set()) {
@@ -379,9 +349,9 @@ export function comisionPorReparto(billing, terceros, sales, omitidas = new Set(
   const bById = new Map((billing || []).filter(Boolean).map(b => [String(b.id), b]))
   const ag = /** @type {Map<string, any>} */ (new Map())
   for (const t of terceros || []) {
-    if (!t || t.tipo_costo !== 'pct' || !t.sale_id || !t.proveedor_id || !(Number(t.valor) > 0) || !vivas.has(String(t.sale_id))) continue
-    const k = t.sale_id + '|' + t.proveedor_id, b = t.billing_id ? bById.get(String(t.billing_id)) : null, f = String((b && (b.due || b.issued_at)) || '').slice(0, 10)
-    const a = ag.get(k) || { sale_id: t.sale_id, proveedor_id: t.proveedor_id, proveedor: t.proveedor, rut: t.rut, valor: Number(t.valor), desde: f, creada: String(t.created_at || '') }
+    if (!t || !['pct', 'uf'].includes(t.tipo_costo) || !t.sale_id || !t.proveedor_id || !(Number(t.valor) > 0) || !vivas.has(String(t.sale_id))) continue
+    const k = t.sale_id + '|' + t.proveedor_id + '|' + t.tipo_costo, b = t.billing_id ? bById.get(String(t.billing_id)) : null, f = String((b && (b.due || b.issued_at)) || '').slice(0, 10)
+    const a = ag.get(k) || { tipo: t.tipo_costo, sale_id: t.sale_id, proveedor_id: t.proveedor_id, proveedor: t.proveedor, rut: t.rut, valor: Number(t.valor), desde: f, creada: String(t.created_at || '') }
     if (f && (!a.desde || f < a.desde)) a.desde = f   // sin fila fechada, el acuerdo rige desde el inicio de la app
     if (String(t.created_at || '') >= a.creada) { a.valor = Number(t.valor); a.creada = String(t.created_at || '') }   // vale el % más reciente
     ag.set(k, a)
@@ -391,14 +361,11 @@ export function comisionPorReparto(billing, terceros, sales, omitidas = new Set(
     if (!b || b.deleted_at || String(b.sale_id) !== String(a.sale_id) || !String(b.invoice_no || '').trim() || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '')) continue
     if (String(b.issued_at || '').slice(0, 10) < APP_DESDE || String(b.due || b.issued_at || '').slice(0, 10) < a.desde) continue
     if ((terceros || []).some(t => t && String(t.billing_id) === String(b.id) && String(t.proveedor_id) === String(a.proveedor_id)) || omitidas.has(b.id + '|' + a.proveedor_id)) continue
-    const base = montoFactura(b), monto = Math.round(base * a.valor / 100); if (monto <= 0) continue
-    out.push({ factura: b, base, monto, estado: b.status === 'Pagado' ? 'por_pagar' : 'pendiente', origen: 'reparto', sale_id: a.sale_id, proveedor_id: a.proveedor_id, proveedor: a.proveedor, rut: a.rut, tipo_costo: 'pct', valor: a.valor, etiqueta: `${a.valor} % de la factura` })
+    // % de la factura · UF: la misma fracción que usa el formulario de la venta (cuota × UF del reparto ÷ UF de la venta).
+    const base = montoFactura(b), venta = (sales || []).find(x => x && String(x.id) === String(a.sale_id)), ufVenta = Number(venta && venta.amount_uf) || 0
+    if (a.tipo === 'uf' && !(ufVenta > 0)) continue
+    const monto = Math.round(a.tipo === 'pct' ? base * a.valor / 100 : base * a.valor / ufVenta); if (monto <= 0) continue
+    out.push({ factura: b, base, monto, estado: b.status === 'Pagado' ? 'por_pagar' : 'pendiente', origen: 'reparto', sale_id: a.sale_id, proveedor_id: a.proveedor_id, proveedor: a.proveedor, rut: a.rut, tipo_costo: a.tipo, valor: a.valor, etiqueta: a.tipo === 'pct' ? `${a.valor} % de la factura` : `${a.valor} UF de la venta` })
   }
   return out
-}
-/** Todas las comisiones por registrar: las del reparto de la venta y la de una línea de la factura (`cobro_config.comisionRecurrente`). */
-/** @param {any[]} billing @param {any[]} terceros @param {any[]} sales @param {Set<string>} [omitidas] */
-export function comisionesPorRegistrar(billing, terceros, sales, omitidas = new Set()) {
-  const lin = comisionRecurrenteFaltante(billing, terceros, sales).filter(x => !omitidas.has(x.factura.id + '|' + x.cfg.proveedor_id)).map(x => ({ factura: x.factura, base: x.base, monto: x.monto, estado: x.estado, origen: 'linea', sale_id: x.cfg.destino_sale_id || x.factura.sale_id, proveedor_id: x.cfg.proveedor_id, proveedor: x.cfg.proveedor, rut: x.cfg.rut, tipo_costo: null, valor: null, etiqueta: `${x.cfg.pct} % de la línea «${x.cfg.linea}»` }))
-  return [...comisionPorReparto(billing, terceros, sales, omitidas), ...lin]
 }
