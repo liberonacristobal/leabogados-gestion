@@ -1810,6 +1810,16 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   const subFila = (k,a,b,m,on) => <div key={k} onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 26px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12,cursor:on?'pointer':'default'}}>
     <span style={{fontWeight:600,color:on?C.accent:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span><span style={{flex:1,minWidth:0,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</span><span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{m<0?'−'+fmt(-m):fmt(m)}</span></div>
   const cosP = k => rp.cosLines.find(x=>x.k===k)?.m||0
+  // Ingreso real por factura con comisión del mes (facturado − comisión, al emitir): las de externos entran netas (solo nuestro %), las demás restan la comisión devengada.
+  const facConCom = (()=>{ const g=new Map()
+    ;(r.comItems||[]).filter(x=>x.b&&x.base==='emision').forEach(x=>{ const k=String(x.b.id), e=g.get(k)||{b:x.b,fact:montoFactura(x.b),com:0,ts:[]}; e.com+=Number(x.t.monto)||0; e.ts.push(x.t); g.set(k,e) })
+    ;(r.rexItems||[]).forEach(x=>{ const k=String(x.b.id), e=g.get(k)||{b:x.b,fact:(Number(x.t.monto)||0)+(Number(x.t.comision_monto)||0),com:0,ts:[]}; e.com+=Number(x.t.monto)||0; e.ts.push(x.t); g.set(k,e) })
+    return [...g.values()].sort((a,b)=>b.fact-a.fact) })()
+  const estCom = ts => { const e=ts.map(t=>estadoComision(t,billing.find(b=>String(b.id)===String(t.billing_id)))); return e.every(x=>x==='pagada')?'pagada':e.some(x=>x==='por_pagar')?'por pagar':'sujeta a cobro' }
+  const ingresoRealFacturas = facConCom.length ? <>
+    <div style={{padding:'8px 14px 6px',fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft}}>Ingreso real por factura con comisión</div>
+    {facConCom.map((e,i)=>subFila('ir'+i,`Factura N° ${folioN(e.b.invoice_no)}`,`${clients.find(c=>String(c.id)===String(e.b.client_id))?.name||''} · facturado ${fmtMill(e.fact)} − comisión ${fmtMill(e.com)} · ${estCom(e.ts)}`,e.fact-e.com,onOpenFactura?()=>onOpenFactura(e.b):null))}
+    <div style={{display:'flex',justifyContent:'space-between',padding:'8px 14px',borderTop:`1.5px solid ${C.accent}`,background:C.azulTenue,fontSize:12,fontWeight:800,color:C.accent}}><span>Ingreso real de estas facturas</span><span style={num}>{fmtMill(facConCom.reduce((a,e)=>a+e.fact-e.com,0))}</span></div></> : null
   const detalle = k => k==='ing' ? <>
       {ln({k:'fac',sg:'',l:'Facturación propia',v:r.fac,p:rp.fac,on:()=>setSub2(s=>s==='fac'?null:'fac'),open:sub2==='fac',children:r.facDocs.map((d,i)=>subFila('f'+i,`${d.nc?'NC':'Factura'} N° ${d.folio}`,d.receptor_name||'',d.nc?-(Number(d.monto)||0):(Number(d.monto)||0),d.b&&onOpenFactura?()=>onOpenFactura(d.b):null))})}
       {r.rex!==0||rp.rex!==0 ? ln({k:'rex',sg:'+',l:'Comisión de externos',v:r.rex,p:rp.rex,on:()=>setSub2(s=>s==='rex'?null:'rex'),open:sub2==='rex',children:r.rexItems.map((x,i)=>subFila('r'+i,`Factura N° ${folioN(x.b.invoice_no)}`,clients.find(c=>String(c.id)===String(x.b.client_id))?.name||'',Number(x.t.comision_monto)||0,onOpenFactura?()=>onOpenFactura(x.b):null))}) : null}
@@ -1830,13 +1840,13 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
         return ln(base) })}
         {ln({k:'cosT',sg:'=',sinMenos:true,l:'Costos de operación',v:r.cos,p:rp.cos,neg:true,tot:true})}</>
     : r.comList.length ? <>{r.comList.map((x,i)=>ln({k:'c'+(x.pid||x.nombre),sg:i?'+':'',sinMenos:true,l:x.nombre,v:x.m,neg:true,on:x.pid&&onOpenProveedor?()=>onOpenProveedor(x.pid):null}))}
-        {r.comList.length>1&&ln({k:'comT',sg:'=',sinMenos:true,l:'Comisiones pagadas',v:r.com,neg:true,tot:true})}</>
-    : <div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones pagadas este mes</div>
+        {r.comList.length>1&&ln({k:'comT',sg:'=',sinMenos:true,l:'Comisiones',v:r.com,neg:true,tot:true})}{ingresoRealFacturas}</>
+    : <div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones este mes</div>
   const detCard = k => { const vsMes=k!=='com'; return <>
-    <Sec t={`${({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones pagadas'})[k]} de ${MES_L[cM-1].toLowerCase()}`}/>
+    <Sec t={`${({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones'})[k]} de ${MES_L[cM-1].toLowerCase()}`}/>
     <div style={{...card}}><div style={{display:'flex',justifyContent:'flex-end',padding:'8px 0 6px'}}>{vsMes&&<span style={{...kLbl,fontSize:10,color:C.textSoft,minWidth:isDesktop?84:60,textAlign:'right',letterSpacing:.4}}>vs {MES_L[(cM+10)%12].toLowerCase().slice(0,isDesktop?20:3)}</span>}<span style={{...kLbl,fontSize:10,color:C.textSoft,minWidth:isDesktop?110:80,textAlign:'right',paddingRight:14,letterSpacing:.4}}>{isDesktop?MES_L[cM-1].toLowerCase():mesC(ym)}</span></div>{detalle(k)}</div></> }
   const mill0 = (v,neg) => v ? (neg?'−':'')+fmtMill(v) : '$0'
-  const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:mill0(r.ing)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:mill0(r.cos,true)},{k:'com',ic:'tPct',lab:'Comisiones pagadas',val:mill0(r.com,true)}]
+  const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:mill0(r.ing)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:mill0(r.cos,true)},{k:'com',ic:'tPct',lab:'Comisiones',val:mill0(r.com,true)}]
   const bloques = isDesktop
     ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{B.map(b=>kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)}))}</div>{abierto&&detCard(abierto)}</>
     : <div style={{display:'flex',flexDirection:'column',gap:10}}>{B.map(b=><Fragment key={b.k}>{kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)})}{abierto===b.k&&detCard(b.k)}</Fragment>)}</div>
@@ -1847,7 +1857,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   const filaT = (lab,get,neg,blk) => <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:600}}>{lab}</td>,...meses.map(m=>{ const v=get(m); return <td key={m.ym} onClick={()=>{ setYm(m.ym); if(blk){ setAbierto(blk); setSub2(null) } }} className='er-c' style={{...td,...selC(m),cursor:'pointer',color:v?C.text:C.done}}>{v?(neg?'−':'')+fmtMill(v):'—'}</td> }),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{(neg?'−':'')+fM(get(tot))}</td>]}</tr>
   const tabla = <><Sec t={`Comparativa mensual · ${Y}`}/><div style={{...card}}>
     <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{meses.map(m=><th key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...th,cursor:'pointer',...(m.ym===ym?{background:C.azulBg}:{})}}>{mesC(m.ym)}</th>)}<th style={th}>{Y}</th></tr></thead>
-    <tbody>{filaT('Ingresos',m=>m.ing,false,'ing')}{filaT('Costos de operación',m=>m.cos,true,'cos')}{filaT('Comisiones pagadas',m=>m.com,true,'com')}
+    <tbody>{filaT('Ingresos',m=>m.ing,false,'ing')}{filaT('Costos de operación',m=>m.cos,true,'cos')}{filaT('Comisiones',m=>m.com,true,'com')}
       <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,borderTop:`1px solid ${C.border}`}}>Resultado</td>,...meses.map(m=>{ const [bg,fg]=tonoMargen(m.margen); return <td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1px solid ${C.border}`,outline:m.ym===ym?`1.5px solid ${C.accent}`:'none',outlineOffset:-1.5}}>{fmtMill(m.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:C.greenText,borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>{fmtMill(tot.res)}</td>]}</tr>
       <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...meses.map(m=><td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,...selC(m),fontWeight:600,fontSize:12,cursor:'pointer',color:C.muted}}>{pct(m.margen)}</td>),<td key='t' style={{...td,fontWeight:600,fontSize:12,color:C.muted,background:C.bgSoft,borderLeft:`1px solid ${C.border}`}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</td>]}</tr>
     </tbody></table></div></div></>
@@ -1865,7 +1875,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
     r.sinReg.length>0&&info('sr',C.soonText,<><b>{r.sinReg.length} factura{r.sinReg.length!==1?'s':''} del SII sin registro</b> · {isDesktop?`N° ${r.sinReg.map(d=>d.folio).join(' y ')} · `:''}{fmtMill(r.sinReg.reduce((a,d)=>a+(Number(d.monto)||0),0))}</>,<>Ver <Gl n={sub2==='sinreg'?'chevU':'chevD'}/></>,()=>setSub2(s=>s==='sinreg'?null:'sinreg'),sub2==='sinreg',r.sinReg.map((d,i)=>subFila('s'+i,`Factura N° ${d.folio}`,d.receptor_name||'',Number(d.monto)||0,null))),
     r.ppm>0&&info('ppm',<SIcon n='tPct' s={13} c={C.textSoft}/>,<>Pago al SII (F29) de {MES_L[cM-1].toLowerCase()} <b>{fmtMill(r.ppm)}</b> · va aparte</>,isDesktop?<>Planilla <Gl n='chevron'/></>:null,onOpenResultadoAnio),
   ].filter(Boolean)
-  const exportar = () => { try{ const head=['Mes','Ingresos','Costos de operación','Comisiones pagadas','Resultado','Margen %','Pago al SII F29 (aparte)']
+  const exportar = () => { try{ const head=['Mes','Ingresos','Costos de operación','Comisiones','Resultado','Margen %','Pago al SII F29 (aparte)']
     const rows=[...meses.map(m=>[mesL(m.ym),Math.round(m.ing),Math.round(m.cos),Math.round(m.com),Math.round(m.res),m.margen==null?'':m.margen.toFixed(1),Math.round(m.ppm)]),[String(Y),Math.round(tot.ing),Math.round(tot.cos),Math.round(tot.com),Math.round(tot.res),tot.ing?(tot.res/tot.ing*100).toFixed(1):'','']]
     const esc=c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+[head,...rows].map(x=>x.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`estado_resultados_${Y}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }

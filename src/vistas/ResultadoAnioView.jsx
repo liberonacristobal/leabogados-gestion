@@ -201,11 +201,11 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       // Comisiones pagadas: por colaborador (comList de cada mes).
       const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
       const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearPartes(comL.map(x=>x.m),1e5)
-      const detCom=<div style={card}>{cab('Comisiones pagadas')}
-        {comL.length?<>{comL.map((x,i)=>ln({k:'c'+i,sg:i?'+':'',l:x.nombre,v:fmtMillLR(comV[i])}))}{comL.length>1&&ln({k:'comT',sg:'=',l:'Comisiones pagadas',v:fmtMillLR(comV.reduce((a,x)=>a+x,0)),tot:true})}</>
-          :<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones pagadas en el período</div>}</div>
+      const detCom=<div style={card}>{cab('Comisiones')}
+        {comL.length?<>{comL.map((x,i)=>ln({k:'c'+i,sg:i?'+':'',l:x.nombre,v:fmtMillLR(comV[i])}))}{comL.length>1&&ln({k:'comT',sg:'=',l:'Comisiones',v:fmtMillLR(comV.reduce((a,x)=>a+x,0)),tot:true})}</>
+          :<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones en el período</div>}</div>
       const blk=open==='cos'||open==='com'?open:(open===null?null:'ing')
-      const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:fmtMill(ingresos)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:costosOper?'−'+fmtMill(costosOper):'$0'},{k:'com',ic:'tPct',lab:'Comisiones pagadas',val:comis?'−'+fmtMill(comis):'$0'}]
+      const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:fmtMill(ingresos)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:costosOper?'−'+fmtMill(costosOper):'$0'},{k:'com',ic:'tPct',lab:'Comisiones',val:comis?'−'+fmtMill(comis):'$0'}]
       const det=k=>k==='ing'?detIng:k==='cos'?detCos:detCom
       const bloques=isDesktop
         ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginTop:12}}>{B.map(b=>kt(b.k,b.ic,[C.card,C.accent],b.lab,b.val,null,()=>setOpen(blk===b.k?null:b.k),{sel:blk===b.k,chev:true,big:false}))}</div>{blk&&det(blk)}</>
@@ -222,7 +222,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const tabla=<div style={{...card,marginTop:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Comparativa mensual · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar</span></div>
         <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{cols.map(c=><th key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...th,cursor:'pointer'}}>{dot(c.m)}{MES_C[c.m-1]}</th>)}<th style={th}>{yr}</th></tr></thead>
-        <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos de operación',c=>c.cos,true)}{filaT('− Comisiones pagadas',c=>c.com,true)}
+        <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos de operación',c=>c.cos,true)}{filaT('− Comisiones',c=>c.com,true)}
           <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`}}>= Resultado</td>,...cols.map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1.5px solid ${C.accent}`}}>{sgnLR(c.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:tot.res>=0?C.greenText:C.overdueText,borderTop:`1.5px solid ${C.accent}`,borderLeft:`1px solid ${C.border}`}}>{sgnLR(tot.res)}</td>]}</tr>
           <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:12,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
         </tbody></table></div></div>

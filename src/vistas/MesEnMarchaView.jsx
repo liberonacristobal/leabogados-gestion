@@ -39,7 +39,7 @@ export function useMesEnMarcha({ ym, expenses = [], clients = [], billing = [], 
     const ofi = (clients || []).find(c => c && (c.is_internal || /liberona\s+escala/i.test(c.name || '')))
     const gastos = ofi ? (expenses || []).filter(e => e && String(e.client_id) === String(ofi.id)) : []
     const cobrado = Number(R.ingresosPorAnioVenta.byMonth?.[ym]) || 0
-    const com = Number(resultadoMes(fu, { billing, terceros, costosOfiRows, expenses, clients }, ym).com) || 0
+    const com = Number(resultadoMes(fu, { billing, terceros, costosOfiRows, expenses, clients }, ym).comPag) || 0
     const pag = gastosPagados(gastos, ym)
     const sc = sinClas.map(m => ({ k: 'sinclas', l: 'Cargo sin clasificar', fecha: String(m.fecha).slice(0, 10), monto: Number(m.monto) || 0, ids: [], n: 1, mov: m.id, sub: m.nombre_contraparte || '' }))
     const pagadosFilas = [...pag, ...sc].sort((a, b) => a.fecha.localeCompare(b.fecha))

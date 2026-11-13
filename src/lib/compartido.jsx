@@ -38,7 +38,7 @@ import { CAL_CL, CONTRIB_CUOTAS, ymMas as _ymMas, finDeMes as _finDeMes, diasA a
 import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas, conPostergadas } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
-import { estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
+import { estadoComision, comisionesDevengadas } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes } from './cifras.js'
 export { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes }
 
@@ -742,11 +742,15 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const gvUF=gvItems.reduce((a,e)=>a+(Number(e.amount)||0)/u(e.date),0)
   cosLines=[...cosLines,['sub',etiquetaRecuperado(costosOfiRows),-sub,-subUF],['gv','Gastos varios',gv,gvUF]].filter(x=>x[2]!==0).map(([k,l,m,mUF])=>({k,l,m,mUF}))
   const cos=cosLines.reduce((a,x)=>a+x.m,0), cosUF=cosLines.reduce((a,x)=>a+x.mUF,0)
-  const byP={}; (terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).forEach(t=>{ const k=String(t.proveedor_id||t.proveedor||'x'); if(!byP[k]) byP[k]={pid:t.proveedor_id,nombre:t.proveedor||'Colaborador',m:0,ts:[]}; byP[k].m+=Number(t.monto)||0; byP[k].ts.push(t) })
-  const comList=Object.values(byP).sort((a,b)=>b.m-a.m), com=comList.reduce((a,x)=>a+x.m,0)
-  const comUF=comList.reduce((a,x)=>a+x.ts.reduce((s,t)=>s+(Number(t.monto)||0)/u(t.pagado_at),0),0)
+  // Comisiones del Resultado: DEVENGADAS en el mes de la factura emitida (comisionesDevengadas); `comPag*` es lo pagado en el banco ese mes (caja: Socios, Mes en marcha).
+  const agrupa=(items,fechaDe)=>{ const g={}; items.forEach(x=>{ const t=x.t||x, k=String(t.proveedor_id||t.proveedor||'x'); if(!g[k]) g[k]={pid:t.proveedor_id,nombre:t.proveedor||'Colaborador',m:0,mUF:0,ts:[]}; g[k].m+=Number(t.monto)||0; g[k].mUF+=(Number(t.monto)||0)/u(fechaDe(x)); g[k].ts.push(t) })
+    const l=Object.values(g).sort((a,b)=>b.m-a.m); return {l,m:l.reduce((a,x)=>a+x.m,0),mUF:l.reduce((a,x)=>a+x.mUF,0)} }
+  const comItems=comisionesDevengadas(terceros,billing,ym), cD=agrupa(comItems,x=>x.fecha)
+  const comList=cD.l, com=cD.m, comUF=cD.mUF
+  const pagItems=(terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)), cP=agrupa(pagItems,t=>t.pagado_at)
+  const comPag=cP.m, comPagUF=cP.mUF, comPagList=cP.l
   const ing=fac+rex, res=ing-cos-com, ingUF=facUF+rexUF, resUF=ingUF-cosUF-comUF   // ingresos = facturación propia + % de externos; el subarriendo baja el costo, no suma aquí
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
+  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,comItems,comPag,comPagUF,comPagList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
 }
 
 // Fuentes de «Impuestos mensuales» (boletas de honorarios, F29 declarados, liquidaciones, «Iva» del correo de la contadora), una vez por sesión; `recargar` tras cargar una boleta. Solo administradores (RLS).
