@@ -53,3 +53,13 @@ test('clientes: suma lo simulado a su fila', () => {
   const r = simularMorosos({ weeks, exclItems: items, comMoroso, hoyT: hoy, pct: [100, 0, 0], clientes: [{ cid: 'c1', entra: 0, com: 0, duda: 12_000_000 }, { cid: 'c9', entra: 5, com: 1, duda: 3 }] })
   assert.deepEqual(r.clientes.map(c => [c.cid, c.entra, c.com, c.duda]), [['c1', 10_000_000, 1_000_000, 2_000_000], ['c9', 5, 1, 3]])   // lo cobrado baja su deuda en duda
 })
+
+import { repartoOchoSemanas } from './../supabase/functions/_shared/simuladorMorosos.js'
+test('reparto 8 semanas / después: cuadra por fila y por columna, y nada pasa del total', () => {
+  const r = repartoOchoSemanas({ ing: 6_040_000, com: 2_940_000, ing8: 3_080_000, com8: 840_000 })
+  assert.deepEqual(r.ing, [3_100_000, 2_900_000, 6_000_000])
+  assert.deepEqual(r.com, [800_000, 2_100_000, 2_900_000])
+  assert.deepEqual(r.neto, [2_300_000, 800_000, 3_100_000])
+  assert.deepEqual(repartoOchoSemanas({ ing: 0, com: 0, ing8: 0, com8: 0 }).neto, [0, 0, 0])
+  assert.equal(repartoOchoSemanas({ ing: 1_000_000, com: 0, ing8: 9_000_000, com8: 0 }).ing[1], 0)   // la parte de 8 semanas nunca excede el total
+})
