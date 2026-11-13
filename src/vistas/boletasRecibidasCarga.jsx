@@ -41,24 +41,25 @@ export function CargarBoletasSII({ existentes = [], onGuardadas, userEmail }) {
     } catch (e) { appAlert('No se pudieron guardar las boletas: ' + (e && /** @type {any} */ (e).message || e)) }
     setGuardando(false)
   }
-  const btn = { display: 'inline-block', padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+  const btn = { display: 'inline-block', padding: '6px 12px', whiteSpace: 'nowrap', textAlign: 'center', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer' }
   const L = leidas
   const total = L ? L.nuevas.reduce((a, b) => a + b.pagado, 0) : 0
   return (
-    <div style={{ padding: 16, borderRadius: 10, border: `2px dashed ${C.border}`, textAlign: 'center', background: C.bgSoft, marginBottom: 12 }}>
-      <div style={{ fontSize: 14, color: C.accent, fontWeight: 600, marginBottom: 8 }}>Cargar boletas recibidas del SII</div>
-      {!L && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+    <div style={{ padding: '10px 14px', borderTop: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: '1 1 220px' }}><div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>Boletas recibidas del SII</div><div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>Informe mensual · volver a cargarlo no duplica</div></div>
+        {!L && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <label style={btn}><input type='file' accept='.xlsx,.xls,.csv,.txt' onChange={e => onArchivo(e.target.files)} style={{ display: 'none' }} />Elegir planilla</label>
           <button onClick={() => setPegar(p => !p)} style={btn}>Pegar el informe</button>
-        </div>)}
+        </div>}
+      </div>
       {!L && pegar && (
         <div style={{ marginTop: 10 }}>
           <textarea value={texto} onChange={e => setTexto(e.target.value)} placeholder='Pega aquí el texto del informe mensual de boletas recibidas' rows={5} style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${C.border}`, borderRadius: 8, padding: 8, fontSize: 12, background: C.surface, color: C.text }} />
           <button onClick={() => procesa(texto)} disabled={!texto.trim()} style={{ ...btn, marginTop: 6 }}>Leer</button>
         </div>)}
       {L && (
-        <div style={{ textAlign: 'left' }}>
+        <div style={{ textAlign: 'left', marginTop: 10 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {[['Leídas', L.filas.length, C.text], ['Nuevas', L.nuevas.length, C.greenText], ['Ya cargadas', L.filas.length - L.nuevas.length, C.muted]].map(([t, v, col]) => (
               <div key={String(t)} style={{ flex: 1, background: C.surface, borderRadius: 10, padding: '7px 10px' }}><div style={{ fontSize: 10, color: C.muted }}>{t}</div><div style={{ fontSize: 16, fontWeight: 700, color: /** @type {string} */ (col) }}>{String(v)}</div></div>))}
@@ -75,6 +76,5 @@ export function CargarBoletasSII({ existentes = [], onGuardadas, userEmail }) {
             <button onClick={guardar} disabled={!L.nuevas.length || guardando} style={{ ...btn, background: C.accent, color: '#fff', border: 'none', opacity: L.nuevas.length ? 1 : .5 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>)}
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Informe mensual de boletas recibidas del SII. Volver a cargarlo no duplica.</div>
     </div>)
 }

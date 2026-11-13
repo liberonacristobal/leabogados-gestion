@@ -17,7 +17,7 @@ import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError, useDestinosBoleta} from '../lib/compartido.jsx'
+import { fmtMillLR, reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError, useDestinosBoleta} from '../lib/compartido.jsx'
 import { rutsDeDestino } from '../../supabase/functions/_shared/impuestosMensuales.js'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
@@ -2521,6 +2521,7 @@ export function CartolaGapCard({ cartolaHasta, onCargar }){
 }
 
 export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,onCajaChicaRevConsumed,clients=[],clientEntities=[],billing=[],sales=[],rendiciones=[],setRendiciones,setBilling,anticipos=[],setAnticipos,expenses=[],setExpenses,proveedores=[],pettyCash=[],setPettyCash,user,focusMovId,onFocusConsumed,focusBuscar,onBuscarConsumed,focusVista,onVistaConsumida,openProp,onPropOpened,onClose,onOpenClientFicha,onCotejarSII,onBuscarSII,onIngresarSII,onFacturaPagada,onOpenFactura,onOpenProveedor}){
+  const [repAb,setRepAb] = useState(null)   // archivo del último lote con el detalle abierto
   const { boletasSII, setBoletasSII, txtBoletaSII, vincularCargoGasto, cambiarCliente, deshacerCambioCliente, sugerenciasDe, ultimaAsig, devolucionCands, registrarDevolucion, liqParaCargo, enlazarNotaria, EQUIPO_RUT, SOCIO_RUT, CONTADORA_RUT, movs, setMovs, loading, setLoading, importing, setImporting, prog, setProg, reportes, setReportes, cargaPreview, setCargaPreview, verifRes, setVerifRes, verificando, setVerificando, aliases, setAliases, sub, setSub, cobradasOpen, setCobradasOpen, cuentaF, setCuentaF, anioF, setAnioF, mesF, setMesF, concYCol, setConcYCol, concMOpen, setConcMOpen, respF, setRespF, facChip, setFacChip, facMyc, setFacMyc, devolFor, setDevolFor, devolSel, setDevolSel, respByCid, respDisp, q, setQ, orden, setOrden, verCartolas, setVerCartolas, verCarga, setVerCarga, verFiltros, setVerFiltros, editMov, setEditMov, tagFor, setTagFor, tipoAprendido, setTipoAprendido, splitMov, setSplitMov, splitAdel, setSplitAdel, fondoFor, setFondoFor, otroFor, setOtroFor, otraFacFor, setOtraFacFor, editForm, setEditForm, conc, setConc, concView, setConcView, isDesktop, autoRun, setAutoRun, pickFor, setPickFor, revSugOpen, setRevSugOpen, revSugSel, setRevSugSel, revSugBusy, setRevSugBusy, comboFor, setComboFor, reembFor, setReembFor, detFor, setDetFor, facBuscaQ, setFacBuscaQ, rsConcOpen, setRsConcOpen, modalMov, setModalMov, otrasSet, setOtrasSet, toggleOtras, verGlosa, setVerGlosa, busy, setBusy, costosOfi, setCostosOfi, costosClaudia, setCostosClaudia, valoresBusy, setValoresBusy, valoresInfo, setValoresInfo, leerValores, poolCostos, gcFor, setGcFor, gcCli, setGcCli, gcEnt, setGcEnt, ofiFor, setOfiFor, ofiCat, setOfiCat, ofiSub, setOfiSub, cargoCliLearn, setCargoCliLearn, costoOfiLearn, setCostoOfiLearn, ccFam, setCcFam, ccCat, setCcCat, ccQ, setCcQ, abFam, setAbFam, TOL, fmtM, mesAbbr, cargar, cmap, nameByRut, provByRut, _stripNom, _toksNom, tipoSugerido, costoOfiSugerido, _NOM_COMUN, nombreIdx, sugerencias, tipoContraparte, TAG_STY, CATS_CARGO, CATS_ABONO, RESUELTAS_ABO, ESTRUCT_ABO, setCategoria, marcarNoCliente, desmarcarInterno, resolver, resolverNombre, onFiles, confirmarCarga, onVerificar, identificar, guardarRut, origenInterno, espejoInterno, traspasos, irMov, aplicadoByFactura, cartolaHasta, concByMov, saldoFactura, facturasConSaldo, facturasPorCliente, esConciliable, facturasCliente, _rutsCliente, _rutsFactura, facturasParaMov, mesDiff, candidatos, folioGlosa, mejorCandidato, candidatosMostrar, tieneCand, clientePorMonto, facturaPorMontoManual, sugeridosId, identificarLote, esDescalce, persistPagoFactura, marcaPago, marcaQuien, reconciliar, combos, comboExacto, comboExacto3, cidByMov, reembGastoByCliente, gastoPend, gastosReembolsables, facturaMasGastos, reconciliarCombo, loteOpen, setLoteOpen, loteBusy, setLoteBusy, loteProg, setLoteProg, loteConfirm, setLoteConfirm, siiBuscando, setSiiBuscando, siiResumen, setSiiResumen, siiMovBusy, setSiiMovBusy, siiMovHit, setSiiMovHit, siiMovIng, setSiiMovIng, buscarMovSII, ingresarYConciliar, buscarTodoSII, conciliarLote, grupoPago, reconciliarGrupo, reconciliarFacturaGastos, reconciliarReembolso, marcarGastosReembolsados, devolucionGastos, saldoAFavor, splitAdelantoFondo, fondoExistente, vincularFondo, anticipoExistente, vincularAnticipo, crearFondoProvision, crearFondoPersonal, gastoPorCuentaCliente, ofiCli, catsOficinaConc, costoOficina, costoOficinaSplit, ingresoOficina, comisionPorFacturar, cliPagadorCom, pagaComisiones, comisionAutoOk, cobroSubarriendo, ingFor, setIngFor, ingComFor, setIngComFor, ingProvQ, setIngProvQ, deshacer, CARGO_OFI_GRUPOS, CARGO_SUB_LABEL, cargoPersonas, cargoSugerencia, _glosaHas, matchPresupuesto, matchGrupoPresupuesto, cargoRachaHint, marcarCargoCliente, quitarCargoCliente, cajaChicaMatch, _cierraCaja, abonoCajaChica, deshacerCajaChica, marcarControlCargo, registrarCargoOficina, terc, setTerc, pagoSel, setPagoSel, provDeCargo, bDue, comisPorPagar, preselFifo, fFifoDate, conciliarComisiones, deshacerComisiones, renderPagoProveedor, renderCargoClasificar, conciliarAuto, resumenConc, G, cartolas, aniosDisp, lista, chipCounts, rolChip, estadoChip, tipoMov } = useConciliacionModel({ setTercerosRoot, clients, clientEntities, billing, sales, setRendiciones, setBilling, anticipos, setAnticipos, expenses, setExpenses, proveedores, pettyCash, setPettyCash, user, focusMovId, onFocusConsumed, focusBuscar, onBuscarConsumed, focusVista, onVistaConsumida, openProp, onPropOpened, onClose, onOpenClientFicha, onCotejarSII, onBuscarSII, onIngresarSII, onFacturaPagada, onOpenProveedor })
   // Hub de entrada (patrón del hub de Gastos): landing de tarjetas que rutea a las secciones ya existentes.
   // Pura presentación — no toca cifras (reusa resumenConc/G/cartolas y los predicados del modelo).
@@ -3616,27 +3617,30 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               <button onClick={()=>setVerCarga(true)} style={{fontSize:11,fontWeight:600,color:C.muted,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'4px 12px',cursor:'pointer'}}>+ Cargar cartolas</button>
             </div>)}
 
-        {/* Caja de importación — se despliega con "+ Cargar" */}
-        {(verCarga||importing)&&(
-          <div style={{padding:'16px',borderRadius:10,border:`2px dashed ${C.border}`,textAlign:'center',background:C.bgSoft,marginBottom:12,position:'relative'}}>
-            {!importing&&<button onClick={()=>setVerCarga(false)} style={{position:'absolute',top:8,right:10,background:'none',border:'none',color:C.muted,fontSize:16,lineHeight:1,cursor:'pointer'}}><Gl n='x'/></button>}
-            <div style={{fontSize:14,color:C.accent,fontWeight:600,marginBottom:8}}>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar cartolas BICE (.xlsx)'}</div>
-            {!importing&&(
-              <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
-                <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                  <input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                  Elegir archivos
-                </label>
-                <label style={{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,background:'#fff',color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                  <input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>
-                  Seleccionar carpeta
-                </label>
-              </div>
-            )}
-            <div style={{fontSize:11,color:C.muted,marginTop:8}}>Varios a la vez o una carpeta entera (ambas cuentas). Re-subir no duplica.</div>
-          </div>
-        )}
-        {verCarga&&!importing&&<CargarBoletasSII existentes={boletasSII} onGuardadas={filas=>setBoletasSII(p=>[...filas.map(f=>({...f,id:'n-'+f.emisor_rut+f.folio})),...p])} userEmail={user?.email}/>}
+        {/* Carga: una sola tarjeta con una fila por tipo (cartolas BICE, boletas del SII) y el último import en una línea */}
+        {(verCarga||importing||reportes)&&(()=>{ const btnC={display:'inline-block',padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',textAlign:'center',flex:isDesktop?'none':1}
+          const fila=(t,sub,btns)=><div style={{display:'flex',alignItems:isDesktop?'center':'flex-start',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}><div style={{minWidth:0,flex:'1 1 220px'}}><div style={{fontSize:13,fontWeight:700,color:C.accent}}>{t}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>{sub}</div></div><div style={{display:'flex',gap:6,flexWrap:'wrap',width:isDesktop?'auto':'100%'}}>{btns}</div></div>
+          return <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',...SEC_LBL,fontWeight:800}}><span>{importing?`Importando… ${prog?`${prog.done}/${prog.total}`:''}`:'Cargar movimientos'}</span>{!importing&&<button onClick={()=>{ setVerCarga(false); setReportes(null) }} aria-label='Cerrar' style={{marginLeft:'auto',background:'none',border:'none',color:C.muted,fontSize:16,lineHeight:1,cursor:'pointer'}}><Gl n='x'/></button>}</div>
+            {verCarga&&!importing&&<>
+              {fila('Cartolas BICE (.xlsx)','Varios archivos o una carpeta · volver a subir no duplica',<>
+                <label style={btnC}><input type='file' accept='.xlsx,.xls' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>Elegir archivos</label>
+                <label style={btnC}><input type='file' webkitdirectory='' directory='' multiple onChange={e=>onFiles(e.target.files)} style={{display:'none'}}/>Seleccionar carpeta</label></>)}
+              <CargarBoletasSII existentes={boletasSII} onGuardadas={filas=>setBoletasSII(p=>[...filas.map(f=>({...f,id:'n-'+f.emisor_rut+f.folio})),...p])} userEmail={user?.email}/></>}
+            {reportes&&reportes.map((r,i)=>{ const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0, abierto=repAb===i
+              return <div key={i} style={{borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',fontSize:12,flexWrap:'wrap'}}>
+                  <span style={{fontWeight:700,color:C.text,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:isDesktop?260:'100%'}}>{r.file}</span>
+                  {r.error?<span style={{color:C.overdue}}>Error: {r.error}</span>:<>
+                    <span style={{color:C.muted,whiteSpace:'nowrap'}}>Abonos {r.nAbonos} · <b style={{color:C.accent}}>{fmtMillLR(r.sumAbonos)}</b>{r.verA&&(okA?<span style={{color:C.greenText}}> <Gl n='tick'/></span>:<span style={{color:C.overdue,fontWeight:600}}> dif {fmtM(r.verA.diff)}</span>)}</span>
+                    <span style={{color:C.muted,whiteSpace:'nowrap'}}>Cargos {r.nCargos} · <b style={{color:C.accent}}>{fmtMillLR(r.sumCargos)}</b>{r.verC&&(okC?<span style={{color:C.greenText}}> <Gl n='tick'/></span>:<span style={{color:C.overdue,fontWeight:600}}> dif {fmtM(r.verC.diff)}</span>)}</span>
+                    <span style={{fontSize:10.5,fontWeight:700,borderRadius:20,padding:'1px 8px',background:C.greenBg,color:C.greenText,whiteSpace:'nowrap'}}>{r.nuevos} nuevos</span>
+                    {r.dup?<span style={{color:C.muted,whiteSpace:'nowrap'}}>{r.dup} ya estaban</span>:null}
+                    <button onClick={()=>setRepAb(abierto?null:i)} style={{marginLeft:isDesktop?'auto':0,fontSize:11.5,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:3}}>Detalle <Gl n={abierto?'chevU':'chevD'}/></button></>}
+                </div>
+                {abierto&&!r.error&&<div style={{padding:'0 14px 10px',fontSize:12,color:C.muted}}>{r.cuenta||'—'} · Internos {r.internos} · Sin identificar {r.sinId}</div>}
+              </div> })}
+          </div> })()}
 
         {/* Compuerta: revisar la cartola parseada ANTES de escribir (evita cargar mal sin darse cuenta) */}
         {cargaPreview&&(()=>{ const ents=cargaPreview.entries||[]; const totNuevos=ents.reduce((a,e)=>a+(e.nuevos||0),0); const rolTxt=r=>r==='gastos'?'Cta. Gastos':r==='honorarios'?'Cta. Honorarios':'la cuenta'; const dmy=f=>f?fmtFechaDMY(f):'—'; const uni=ents.length===1?ents[0]:null
@@ -3690,28 +3694,6 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               </div>
             </div>
           </div>) })()}
-
-        {/* Reporte del último lote */}
-        {reportes&&(
-          <div style={{marginBottom:14,border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}>
-            <div style={{...SEC_LBL,padding:'8px 12px',background:C.bgSoft}}>Último import · {reportes.length} archivo{reportes.length!==1?'s':''}</div>
-            {reportes.map((r,i)=>{
-              const okA=r.verA&&r.verA.diff===0, okC=r.verC&&r.verC.diff===0
-              return (
-                <div key={i} style={{padding:'10px 12px',borderTop:i?`1px solid ${C.border}`:'none',fontSize:12}}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}><span style={{fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{r.file}</span><span style={{flexShrink:0,color:C.muted}}>{r.cuenta||'—'}</span></div>
-                  {r.error
-                    ? <div style={{color:C.overdue,marginTop:3}}>Error: {r.error}</div>
-                    : <div style={{color:C.muted,marginTop:3,lineHeight:1.6}}>
-                        Abonos {r.nAbonos} · {fmtM(r.sumAbonos)} {r.verA&&<span style={{color:okA?C.greenText:C.overdue,fontWeight:600}}>({okA?<><Gl n='tick'/>{" "}cuadra</>:`dif ${fmtM(r.verA.diff)}`})</span>}<br/>
-                        Cargos {r.nCargos} · {fmtM(r.sumCargos)} {r.verC&&<span style={{color:okC?C.greenText:C.overdue,fontWeight:600}}>({okC?<><Gl n='tick'/>{" "}cuadra</>:`dif ${fmtM(r.verC.diff)}`})</span>}<br/>
-                        Internos {r.internos} · Sin identificar {r.sinId} · <b>{r.nuevos} nuevos</b>{r.dup?` · ${r.dup} ya estaban`:''}
-                      </div>}
-                </div>
-              )
-            })}
-          </div>
-        )}
 
         {/* Verificación contra cartola oficial (read-only) */}
         {(verifRes||verificando)&&(
