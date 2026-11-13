@@ -4055,34 +4055,6 @@ export function vendidoPorSocio(sales=[], clients=[], ufRef=0, y=new Date().getF
   return items
 }
 
-// Catálogo del Comparativo («+ Agregar indicador»). per:'flujo' = depende de Mes/Año; 'hoy' = foto viva. f: '$' | 'n' | '%' | 'd'.
-export const PS_KPIS=[
-  {g:'Ingresos',k:'vend',l:'Vendido neto',ls:'Vend. neto',f:'$',per:'flujo'},
-  {g:'Ingresos',k:'fac',l:'Facturado',ls:'Facturado',f:'$',per:'flujo'},
-  {g:'Ingresos',k:'ireal',l:'Ingreso real',ls:'Ingreso real',f:'$',per:'flujo'},
-  {g:'Ingresos',k:'compag',l:'Comisiones pagadas',ls:'Com. pagadas',f:'$',per:'flujo'},
-  {g:'Ingresos',k:'comfac',l:'Comisiones de lo facturado',ls:'Com. facturado',f:'$',per:'flujo',extra:1},
-  {g:'Ingresos',k:'cext',l:'Comisión de externos',ls:'Com. externos',f:'$',per:'flujo',extra:1},
-  {g:'Ingresos',k:'perc',l:'Comisiones percibidas',ls:'Percibidas',f:'$',per:'flujo',extra:1},
-  {g:'Ingresos',k:'reemb',l:'Reembolsos de gastos',ls:'Reembolsos',f:'$',per:'flujo',extra:1},
-  {g:'Cobro · hoy',k:'pcob',l:'Por cobrar',ls:'Por cobrar',f:'$',per:'hoy'},
-  {g:'Cobro · hoy',k:'venc',l:'de eso, vencido',ls:'de eso, vencido',f:'$',per:'hoy',sub:1},
-  {g:'Cobro · hoy',k:'moro',l:'de eso, cartera morosa',ls:'de eso, morosa',f:'$',per:'hoy',sub:1},
-  {g:'Cobro · hoy',k:'pfat',l:'Cuotas vencidas sin facturar',ls:'Por facturar',f:'$',per:'hoy'},
-  {g:'Gastos de clientes · hoy',k:'deuda',l:'Gastos por cobrar a clientes',ls:'Gastos por cobrar',f:'$',per:'hoy'},
-  {g:'Gastos de clientes · hoy',k:'favor',l:'Fondos a favor de clientes',ls:'A favor',f:'$',per:'hoy',extra:1},
-  {g:'Ventas',k:'nven',l:'N.º de ventas',ls:'N.º ventas',f:'n',per:'flujo',extra:1},
-  {g:'Ventas',k:'tick',l:'Ticket promedio',ls:'Ticket',f:'$',per:'flujo',extra:1},
-  {g:'Ventas',k:'cact',l:'Clientes con venta',ls:'Clientes',f:'n',per:'flujo',extra:1},
-  {g:'Ventas',k:'conv',l:'Conversión de propuestas',ls:'Conversión',f:'%',per:'hoy',extra:1},
-  {g:'Ventas',k:'pipe',l:'Propuestas abiertas',ls:'Propuestas',f:'n',per:'hoy',extra:1},
-  {g:'Ventas',k:'mrr',l:'Recurrente al mes',ls:'Recurrente',f:'$',per:'hoy',extra:1},
-  {g:'Ventas',k:'comp',l:'Comprometido próximo año',ls:'Comprometido',f:'$',per:'hoy',extra:1},
-  {g:'Ventas',k:'dso',l:'Días de cobro (DSO)',ls:'DSO',f:'d',per:'flujo',extra:1},
-]
-
-export const PS_KPI_DEF=['vend','fac','ireal','compag','pcob','venc','moro','pfat','deuda']
-
 export const _lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v) }catch(_){ return d } }
 
 export const _lsSet=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)) }catch(_){} }

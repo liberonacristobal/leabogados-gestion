@@ -8,6 +8,20 @@ import { UF_FALLBACK, comisionesVenta, currentYear, esFacIngreso, esSubarriendo,
 
 export const META_CLP = 400000000
 
+// Metas anuales (annual_targets): una sola lectura para Inicio, Panel de socios y el Comparativo. Sin fila del año en curso, la meta por defecto.
+export function useAnnualTargets(){
+  const [targets,setTargets] = useState([])
+  useEffect(()=>{
+    if(DEMO){ setTargets(demoData.annual_targets||[]); return }
+    supabase.from('annual_targets').select('*').order('year',{ascending:false}).then(({data})=>{
+      const rows = (data&&data.length)?[...data]:[]
+      if(!rows.some(t=>t.year===currentYear)) rows.unshift({year:currentYear,target_amount:META_CLP,currency:'CLP'})
+      setTargets(rows)
+    })
+  },[])
+  return targets
+}
+
 export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear }){
   const yr = currentYear
   const _mNow = new Date().getMonth()+1
@@ -28,15 +42,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   const ufDias = useUFFechas(billing)   // UF de cada día (mindicador): las cifras del año en UF se convierten con la UF del día de cada movimiento
   const ufDeVenta = s => ventaUF(s, ufRef)
   const clpDeVenta = s => ventaCLP(s, ufRef)
-  const [targets,setTargets] = useState([])
-  useEffect(()=>{
-    if(DEMO){ setTargets(demoData.annual_targets||[]); return }
-    supabase.from('annual_targets').select('*').order('year',{ascending:false}).then(({data})=>{
-      const rows = (data&&data.length)?[...data]:[]
-      if(!rows.some(t=>t.year===currentYear)) rows.unshift({year:currentYear,target_amount:META_CLP,currency:'CLP'})
-      setTargets(rows)
-    })
-  },[])
+  const targets = useAnnualTargets()
   // Métricas de un año desde sales (vendido), misma fórmula que el cálculo central
   const metricasAnio = (year) => {
     const sy = sales.filter(s=>ventaVendidaEnAnio(s,year))   // Vendido = Activo + Terminado (fuente única con SalesView; excluye Pausado, que antes divergía)

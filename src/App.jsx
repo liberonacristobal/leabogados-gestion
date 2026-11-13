@@ -9,7 +9,7 @@ import { MEDIOS_MOV, MEDIO_CON_DETALLE, medioMovDe, glosaMovilizacion, FloatFld,
 import { clientesParecidos, _tipoDupLbl, Sel, Txt, PaginaSobre } from './lib/compartido.jsx'
 import { normRut } from './lib/compartido.jsx'
 import { META_UF, costoOperacionReal, useFlujoCaja, comisPorPagarAnteriores, _resultadoInicio } from './lib/compartido.jsx'
-import { fetchUFFechas, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, PS_KPIS, PS_KPI_DEF, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
+import { fetchUFFechas, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
 import { fmtUFk, inicioVentaYM, ventaCuentaEnAnio } from './lib/compartido.jsx'
 import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
 import { _adminsEstudioCache, cargarAdminsEstudio, _nRut, tituloProv, pctBHE, esBoletaProv, fechaBHE, abrirDocumento, saldoComisiones, _diasDesde, correoMarcaHtml, driveTrash, Attachments, nCuotaDe } from './lib/compartido.jsx'
