@@ -368,3 +368,37 @@ export function comisionRecurrenteFaltante(billing, terceros, sales) {
   }
   return out
 }
+
+// Comisión por registrar desde el REPARTO de la venta (el que se edita en el formulario de la venta: «Reparto a proveedores»). El acuerdo es la fila de
+// comisión con tipo_costo 'pct' de esa venta (colaborador + %); toda factura emitida de la venta, desde la cuota más antigua con comisión de ese
+// colaborador, que no tenga SU fila se propone con el % de la factura. Una sola fuente y sin duplicar: nunca propone si ya hay una fila del colaborador
+// en esa factura. `omitidas` = claves `billing_id|proveedor_id` que el usuario marcó «no corresponde». No escribe.
+/** @param {any[]} billing @param {any[]} terceros @param {any[]} sales @param {Set<string>} [omitidas] */
+export function comisionPorReparto(billing, terceros, sales, omitidas = new Set()) {
+  const vivas = new Set((sales || []).filter(s => s && !s.deleted_at).map(s => String(s.id)))
+  const bById = new Map((billing || []).filter(Boolean).map(b => [String(b.id), b]))
+  const ag = /** @type {Map<string, any>} */ (new Map())
+  for (const t of terceros || []) {
+    if (!t || t.tipo_costo !== 'pct' || !t.sale_id || !t.proveedor_id || !(Number(t.valor) > 0) || !vivas.has(String(t.sale_id))) continue
+    const k = t.sale_id + '|' + t.proveedor_id, b = t.billing_id ? bById.get(String(t.billing_id)) : null, f = String((b && (b.due || b.issued_at)) || '').slice(0, 10)
+    const a = ag.get(k) || { sale_id: t.sale_id, proveedor_id: t.proveedor_id, proveedor: t.proveedor, rut: t.rut, valor: Number(t.valor), desde: f, creada: String(t.created_at || '') }
+    if (f && (!a.desde || f < a.desde)) a.desde = f   // sin fila fechada, el acuerdo rige desde el inicio de la app
+    if (String(t.created_at || '') >= a.creada) { a.valor = Number(t.valor); a.creada = String(t.created_at || '') }   // vale el % más reciente
+    ag.set(k, a)
+  }
+  const out = []
+  for (const a of ag.values()) for (const b of billing || []) {
+    if (!b || b.deleted_at || String(b.sale_id) !== String(a.sale_id) || !String(b.invoice_no || '').trim() || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '')) continue
+    if (String(b.issued_at || '').slice(0, 10) < APP_DESDE || String(b.due || b.issued_at || '').slice(0, 10) < a.desde) continue
+    if ((terceros || []).some(t => t && String(t.billing_id) === String(b.id) && String(t.proveedor_id) === String(a.proveedor_id)) || omitidas.has(b.id + '|' + a.proveedor_id)) continue
+    const base = montoFactura(b), monto = Math.round(base * a.valor / 100); if (monto <= 0) continue
+    out.push({ factura: b, base, monto, estado: b.status === 'Pagado' ? 'por_pagar' : 'pendiente', origen: 'reparto', sale_id: a.sale_id, proveedor_id: a.proveedor_id, proveedor: a.proveedor, rut: a.rut, tipo_costo: 'pct', valor: a.valor, etiqueta: `${a.valor} % de la factura` })
+  }
+  return out
+}
+/** Todas las comisiones por registrar: las del reparto de la venta y la de una línea de la factura (`cobro_config.comisionRecurrente`). */
+/** @param {any[]} billing @param {any[]} terceros @param {any[]} sales @param {Set<string>} [omitidas] */
+export function comisionesPorRegistrar(billing, terceros, sales, omitidas = new Set()) {
+  const lin = comisionRecurrenteFaltante(billing, terceros, sales).filter(x => !omitidas.has(x.factura.id + '|' + x.cfg.proveedor_id)).map(x => ({ factura: x.factura, base: x.base, monto: x.monto, estado: x.estado, origen: 'linea', sale_id: x.cfg.destino_sale_id || x.factura.sale_id, proveedor_id: x.cfg.proveedor_id, proveedor: x.cfg.proveedor, rut: x.cfg.rut, tipo_costo: null, valor: null, etiqueta: `${x.cfg.pct} % de la línea «${x.cfg.linea}»` }))
+  return [...comisionPorReparto(billing, terceros, sales, omitidas), ...lin]
+}
