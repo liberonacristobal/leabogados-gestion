@@ -64,3 +64,9 @@ test('reparto 8 semanas / después: cuadra por fila y por columna, y nada pasa d
   assert.deepEqual(repartoOchoSemanas({ ing: 0, com: 0, ing8: 0, com8: 0 }).neto, [0, 0, 0])
   assert.equal(repartoOchoSemanas({ ing: 1_000_000, com: 0, ing8: 9_000_000, com8: 0 }).ing[1], 0)   // la parte de 8 semanas nunca excede el total
 })
+
+test('días de mora: desde la emisión + 30 (el vencimiento de Cobranza), no desde un due anterior', () => {
+  const hoy2 = new Date('2026-11-12T12:00:00').getTime()
+  assert.equal(diasDeMora({ issued_at: '2026-10-02', due: '2026-10-01' }, hoy2), 11)   // vence el 01-11
+  assert.equal(diasDeMora({ due: '2026-10-02' }, hoy2), 41)                              // sin emisión, el due
+})

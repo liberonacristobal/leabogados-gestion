@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal } from '../lib/base.jsx'
 import { redondearPartes } from '../lib/cifras.js'
+import { EscenariosRetiro } from './EscenariosRetiro.jsx'
 import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
@@ -22,7 +23,7 @@ export const _SOCIO_RUT_DISP = new Proxy({}, { get:(_,k)=>{ const s=SOCIOS_CFG.f
 // · Caja del año (control): cobrado propio (ingresosPorAnioVenta.byMonth, por fecha del depósito) − costos reales (resultadoMes.cos) − comisiones pagadas − PPM pagado − retirado.
 export const RESERVA_CAJA_DEF = 30000000
 
-export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true, onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, onVerRetiros }){
+export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true, onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, onVerRetiros, onOpenClientFicha, onOpenFlujoCaja }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [banco,setBanco]=useState(null)        // {saldo, al} | null (sin cartola con saldo)
   const [reserva,setReserva]=useState(RESERVA_CAJA_DEF)
@@ -78,7 +79,8 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
     ? <span style={{display:'inline-flex',alignItems:'center',gap:6}}><input autoFocus onFocus={e=>e.target.select()} inputMode='numeric' value={resTxt} onChange={e=>{ const d=e.target.value.replace(/\D/g,''); setResTxt(d?Number(d).toLocaleString('es-CL'):'') }} onKeyDown={e=>{ if(e.key==='Enter') guardarReserva(); if(e.key==='Escape') setEditRes(false) }} style={{width:118,fontSize:12,fontWeight:700,textAlign:'right',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 8px',color:C.accent}}/><button onClick={guardarReserva} style={{fontSize:11,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'6px 10px',cursor:'pointer'}}>Guardar</button></span>
     : <span onClick={()=>{ setResTxt(Number(reserva).toLocaleString('es-CL')); setEditRes(true) }} style={{fontSize:11,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}}>reserva {fmtMill(reserva)} · <span style={{color:C.azulInfo,fontWeight:700}}>editar</span></span>
   const perLbl=maxM===12?String(yr):`ene–${MES_C[maxM-1]}${isDesktop?' '+yr:''}`
-  return (<div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}}>
+  return (<>
+  <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}}>
     <div style={{padding:'15px 18px 12px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
       <span style={{width:30,height:30,borderRadius:10,background:C.greenBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M3 21h18M5 21V10l7-5 7 5v11'/><path d='M9 21v-6h6v6'/></svg></span>
       <span style={{fontSize:13,fontWeight:800,color:C.accent,letterSpacing:-.2}}>¿Cuánto se puede retirar?</span>
@@ -111,7 +113,9 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
         {ln('=','Sin retirar del año',fMLR(sinV),{tot:true})}
       </div>
     </div>
-  </div>)
+  </div>
+  {esHoy&&banco&&<EscenariosRetiro billing={billing} terceros={terceros} clients={clients} disponible={disp} nSocios={nSocios} isDesktop={isDesktop} onOpenClientFicha={onOpenClientFicha} onOpenFlujoCaja={onOpenFlujoCaja} onOpenProveedores={onOpenProveedores}/>}
+  </>)
 }
 
 // Retiros de los socios en un año (FUENTE ÚNICA de la página Socios y del Panel de socios). Extraído de SociosView SIN cambiar ninguna fórmula:
@@ -142,7 +146,7 @@ export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
 }
 
-export function SociosView({ onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [eqMode,setEqMode]=useState('ambos')
@@ -241,7 +245,7 @@ export function SociosView({ onAbrirBanco, onOpenProveedores, onOpenResultado, o
         </div>)}
     </div>
 
-    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop} onAbrirBanco={onAbrirBanco} onOpenProveedores={onOpenProveedores} onOpenResultado={onOpenResultado} onOpenEstado={onOpenEstado} onVerRetiros={()=>{ setAbLista(true); setTimeout(()=>scrollA(listaRef),60) }}/>
+    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop} onAbrirBanco={onAbrirBanco} onOpenProveedores={onOpenProveedores} onOpenResultado={onOpenResultado} onOpenEstado={onOpenEstado} onOpenClientFicha={onOpenClientFicha} onOpenFlujoCaja={onOpenFlujoCaja} onVerRetiros={()=>{ setAbLista(true); setTimeout(()=>scrollA(listaRef),60) }}/>
 
     <div ref={porSocioRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
@@ -256,20 +260,14 @@ export function SociosView({ onAbrirBanco, onOpenProveedores, onOpenResultado, o
               <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}><span style={{width:30,height:30,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:13,flexShrink:0}}>{s[0]}</span><div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:15,color:COL[s]}}>{s}</div><div style={{fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</div></div></div>
               {cel('Total a favor · '+yr,fmtM(tot))}{cel('Retiros',fmt(retTot[s]||0))}{cel('Sueldo',fmt(sueldos[s]||0))}{cel('Promedio mensual',fmtM(promDe(s)),`÷ ${mesesComp} meses`)}
               <span style={{color:COL[s],opacity:.5}}><Gl n='chevron'/></span></div> }
-          return <div key={s} onClick={()=>verSocio(s)} style={{background:BG[s],borderRadius:12,padding:'17px 18px',cursor:'pointer',position:'relative'}}>
-          <span style={{position:'absolute',top:15,right:15,color:COL[s],opacity:.5,fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><span style={{width:36,height:36,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{s[0]}</span><span style={{fontWeight:800,fontSize:16,color:COL[s]}}>{s}</span><span style={{marginLeft:'auto',marginRight:16,fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</span></div>
-          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div>
-          <div style={{...SEC_LBL,marginTop:4}}>total a favor · {yr}</div>
-          <div style={{display:'flex',gap:10,marginTop:13}}>
-            <div style={{flex:1,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'9px 11px'}}><div style={{...SEC_LBL}}>Retiros</div><div style={{fontSize:14,fontWeight:800,marginTop:2,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmt(retTot[s]||0)}</div></div>
-            <div style={{flex:1,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'9px 11px'}}><div style={{...SEC_LBL}}>Sueldo</div><div style={{fontSize:14,fontWeight:800,marginTop:2,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmt(sueldos[s]||0)}</div></div>
-          </div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:10,background:'rgba(255,255,255,.65)',borderRadius:10,padding:'10px 12px'}}>
-            <div style={{...SEC_LBL,lineHeight:1.3}}>Promedio<br/>mensual</div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:18,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(promDe(s))}</div><div style={{fontSize:10,color:C.textSoft,fontWeight:600}}>÷ {mesesComp} meses{mesesComp>0?` · ene–${MC[Math.min(12,mesesComp)]}`:''}</div></div>
-          </div>
-        </div> })}
+          // Celular: tarjeta compacta de dos filas (nombre y total arriba; retiros, sueldo y promedio mensual abajo).
+          return <div key={s} onClick={()=>verSocio(s)} role='button' style={{background:BG[s],borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{width:28,height:28,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:12,flexShrink:0}}>{s[0]}</span>
+              <div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:14,color:COL[s]}}>{s}</div><div style={{fontSize:10.5,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</div></div>
+              <div style={{marginLeft:'auto',textAlign:'right'}}><div style={{fontSize:20,fontWeight:800,letterSpacing:-.5,lineHeight:1.05,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div><div style={{...SEC_LBL,fontSize:9.5}}>total a favor</div></div></div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6,marginTop:8}}>
+              {[['Retiros',fmtM(retTot[s]||0)],['Sueldo',fmtM(sueldos[s]||0)],['Prom. mensual',fmtM(promDe(s))]].map(([l,v])=><div key={l} style={{background:'rgba(255,255,255,.7)',borderRadius:8,padding:'5px 8px',minWidth:0}}><div style={{...SEC_LBL,fontSize:9,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:12.5,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div></div>)}</div>
+          </div> })}
       </div>
     </div>
 
