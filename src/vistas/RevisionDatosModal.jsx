@@ -50,9 +50,11 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   // Facturas huérfanas: emitidas (con folio, no anuladas/borradas, no reembolso/NC) SIN cliente asignado → hay que vincularlas para que cuenten en el por-cobrar del cliente.
   const huerfanas=useMemo(()=>SD.huerfanas(billing),[billing])
   // Facturas que parecen el reembolso de un gasto (mismo monto, sin venta): se propone marcarlas como reembolso y cubrir el gasto con un fondo.
-  // Comisión recurrente sin registrar (la venta declara qué línea de su factura mensual es de un colaborador): propone la fila con el monto de la línea del DTE.
-  const [crBusy,setCrBusy]=useState(null); const [crDone,setCrDone]=useState(()=>new Set())
-  const comRec=useMemo(()=>SD.comisionRecurrenteFaltante(billing,terceros,sales).filter(x=>!crDone.has(String(x.factura.id))),[billing,terceros,sales,crDone])
+  // Comisión por registrar: el acuerdo es el reparto de la venta (formulario de la venta) o, en una factura mixta, el % de una línea; la fila se propone con el
+  // monto de la factura y solo si el colaborador no tiene ya su fila en esa factura (nunca duplica). «No corresponde» se aprende y no vuelve a salir.
+  const [crBusy,setCrBusy]=useState(null); const [crDone,setCrDone]=useState(()=>new Set()); const [crNo,setCrNo]=useState(()=>new Set())
+  useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','data_health').like('key','comreg:%').then(({data})=>{ setCrNo(new Set((data||[]).filter(r=>r.value==='no').map(r=>String(r.key).replace('comreg:','')))) },()=>{}) },[])
+  const comRec=useMemo(()=>SD.comisionesPorRegistrar(billing,terceros,sales,crNo).filter(x=>!crDone.has(x.factura.id+'|'+x.proveedor_id)),[billing,terceros,sales,crDone,crNo])
   const [rbBusy,setRbBusy]=useState(null); const [rbDone,setRbDone]=useState(()=>new Set())
   const reembolsos=useMemo(()=>SD.reembolsoProbable(billing,expenses).filter(x=>!rbDone.has(String(x.factura.id))),[billing,expenses,rbDone])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
@@ -305,12 +307,13 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
         <button disabled={glBusy===key} onClick={async()=>{ if(!(await appConfirm(`Definir esta glosa como ${sel}. Cambia cómo se clasifican los próximos movimientos (y con eso el margen y las comisiones). ¿Confirmas?`))) return; setGlBusy(key); try{ await onResolverGlosa(key,sel); setGlDone(d=>new Set([...d,key])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setGlBusy(null) }} style={{marginTop:8,padding:'8px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:glBusy===key?'default':'pointer',opacity:glBusy===key?.6:1}}>{glBusy===key?'Guardando…':`Definir como ${sel}`}</button></>}
       </div> })}
     </div>}
-    {comRec.length>0&&<div style={secBox}>{sh('Comisión recurrente sin registrar',C.azulInfo,comRec.length)}
-      {comRec.map(x=><div key={x.factura.id} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
+    {comRec.length>0&&<div style={secBox}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>{sh('Comisión por registrar',C.azulInfo,comRec.length)}{onRegistrarComisionRec&&comRec.length>1&&<span onClick={async()=>{ if(crBusy) return; setCrBusy('todas'); try{ for(const x of comRec){ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,x.factura.id+'|'+x.proveedor_id])) } }catch(e){ appAlert('No se pudo registrar: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>{crBusy==='todas'?'Registrando…':`Registrar las ${comRec.length}`}</span>}</div>
+      {comRec.map(x=>{ const k=x.factura.id+'|'+x.proveedor_id; return <div key={k} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
         <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>Factura N° {folioN(x.factura.invoice_no)} · {cName(x.factura.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{x.cfg.pct}% de la línea «{x.cfg.linea}» ({fmt(x.base)}) para {x.cfg.proveedor||'el colaborador'}</div>
-          {onRegistrarComisionRec&&<div style={{marginTop:6}}><span onClick={async()=>{ if(crBusy) return; setCrBusy(x.factura.id); try{ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,String(x.factura.id)])) }catch(e){ appAlert('No se pudo registrar la comisión: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer'}}>{crBusy===x.factura.id?'Registrando…':`Registrar comisión · ${x.estado==='por_pagar'?'por pagar':'sujeta a cobro'}`}</span></div>}</div>
-        {amt(fmt(x.monto),fmtFechaDMY(x.factura.issued_at))}</div>)}
+          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{x.etiqueta} ({fmt(x.base)}) para {x.proveedor||'el colaborador'} · {x.estado==='por_pagar'?'por pagar':'sujeta a cobro'}</div>
+          {onRegistrarComisionRec&&<div style={{marginTop:6,display:'flex',gap:14}}><span onClick={async()=>{ if(crBusy) return; setCrBusy(k); try{ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,k])) }catch(e){ appAlert('No se pudo registrar la comisión: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer'}}>{crBusy===k?'Registrando…':'Registrar comisión'}</span>
+            <span onClick={async()=>{ if(crBusy) return; setCrNo(p=>new Set([...p,k])); if(!DEMO) setLearningKV('data_health','comreg:'+k,'no').catch(()=>{}) }} style={{color:C.muted,fontWeight:600,fontSize:12,cursor:'pointer'}}>No corresponde</span></div>}</div>
+        {amt(fmt(x.monto),fmtFechaDMY(x.factura.issued_at))}</div> })}
     </div>}
     {reembolsos.length>0&&<div style={secBox}>{sh('Factura que parece reembolso de gastos',C.azulInfo,reembolsos.length)}
       {reembolsos.map(({factura:b,gastos:gs})=><div key={b.id} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
