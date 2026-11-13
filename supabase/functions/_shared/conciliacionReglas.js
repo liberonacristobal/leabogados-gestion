@@ -183,3 +183,20 @@ export function abonosPorIdentificar(movs = [], { rutsPropios = new Set(), appDe
   return (movs || []).filter(m => m && m.tipo === 'abono' && !m.cliente_id && (Number(m.monto) || 0) > 0 && (m.estado || 'pendiente') === 'pendiente'
     && !m.categoria && String(m.fecha || '') >= appDesde && !(m.rut_contraparte && rutsPropios.has(nr(m.rut_contraparte))))
 }
+
+/**
+ * Facturas del mismo pagador (el pool que ya se ofrece para conciliar: con folio y saldo por pagar) emitidas ANTES de la factura elegida.
+ * Sirve para decir al conciliar «es la factura más antigua sin pago» o cuántas más antiguas hay. Reembolsos y notas de crédito no cuentan.
+ * @param {{id:any, issued_at?:string|null, invoice_no?:any, billing_type?:string|null}} sug factura que se está conciliando
+ * @param {{id:any, issued_at?:string|null, invoice_no?:any, billing_type?:string|null}[]} pool facturas con saldo por pagar del mismo pagador
+ * @returns {{id:any, issued_at?:string|null, invoice_no?:any, billing_type?:string|null}[]} más antiguas primero
+ */
+export function facturasMasAntiguasSinPago(sug, pool) {
+  const f = (/** @type {any} */ b) => String(b?.issued_at || '').slice(0, 10)
+  const n = (/** @type {any} */ b) => Number(String(b?.invoice_no || '').replace(/\D/g, '')) || 0
+  const d0 = f(sug)
+  if (!sug || !d0) return []
+  return (pool || [])
+    .filter(b => b && String(b.id) !== String(sug.id) && !['reembolso', 'nota_credito'].includes(String(b.billing_type || '')) && f(b) && (f(b) < d0 || (f(b) === d0 && n(b) < n(sug))))
+    .sort((a, b) => f(a).localeCompare(f(b)) || n(a) - n(b))
+}
