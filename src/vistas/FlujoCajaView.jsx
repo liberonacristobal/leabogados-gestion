@@ -6,6 +6,8 @@ import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert } from '../lib/base.j
 import { useFlujoCaja, useEscenarioFlujo, fmtMill, MES_C } from '../lib/compartido.jsx'
 import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
+import { simularMorosos, resumenTramos } from '../../supabase/functions/_shared/simuladorMorosos.js'
+import { comisionesProyectadas } from '../../supabase/functions/_shared/proyeccionPropia.js'
 
 const SER = { alDia: ['Emitidas al día', C.serie1], venc: ['Emitidas vencidas', C.serie2], cuotas: ['Cuotas por facturar', C.serie3] }
 const VISTAS = [['barras', 'Barras'], ['lineas', 'Líneas'], ['cascada', 'Cascada']]
@@ -26,12 +28,20 @@ function marcas(max, min) {
 
 export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], terceros = [], anticipos = [], expenses = [], clients = [], sales = [], fantasmaIds = null, isDesktop = false, onOpenClientFicha, onOpenFactura, onOpenCostos, onOpenPorFacturar }) {
   const billing = useMemo(() => (fantasmaIds && fantasmaIds.size) ? (billingTodo || []).filter(b => !fantasmaIds.has(String(b.id))) : billingTodo, [billingTodo, fantasmaIds])
-  const [conMor, setConMor] = useEscenarioFlujo()
+  const [conMorG, setConMor] = useEscenarioFlujo()
+  // Simular: no cambia el escenario guardado («Sin/Con morosos» es global); parte de «sin morosos» y le suma el cobro de lo moroso que se escriba. No guarda nada.
+  const [simOn, setSimOn] = useState(false), [pctSim, setPctSim] = useState([50, 50, 50])
+  const conMor = simOn ? false : conMorG
+  const [antes, setAntes] = useState(false)
   const [gran, setGran] = useState('sem')
   const [vista, setVistaS] = useState(() => { try { const v = localStorage.getItem('flujo_vista'); return VISTAS.some(x => x[0] === v) ? v : 'barras' } catch (_) { return 'barras' } })
   const setVista = v => { try { localStorage.setItem('flujo_vista', v) } catch (_) {} setVistaS(v) }
-  const F = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, conMorosos: conMor })
-  const control = useControlProyeccion({ F, sales, billing, terceros, costosOfiRows, expenses, clients, anticipos })
+  const F0 = useFlujoCaja({ billing, terceros, costosOfiRows, anticipos, expenses, clients, sales, conMorosos: conMor })
+  const control = useControlProyeccion({ F: F0, sales, billing, terceros, costosOfiRows, expenses, clients, anticipos })
+  const finAnio = useMemo(() => new Date(new Date(F0.hoyT || Date.now()).getFullYear(), 11, 31, 23, 59, 59).getTime(), [F0])
+  const simR = useMemo(() => simOn ? simularMorosos({ weeks: F0.weeks, exclItems: F0.dudaItems, comMoroso: F0.comMoroso, hoyT: F0.hoyT, pct: pctSim, finAnio, clientes: F0.clientes }) : null, [simOn, F0, pctSim, finAnio])
+  const tramos = useMemo(() => resumenTramos(F0.dudaItems, F0.hoyT), [F0])
+  const F = useMemo(() => simR ? { ...F0, weeks: simR.weeks, E: simR.E, C: simR.C, fin: simR.fin, cobros: F0.cobros.concat(simR.cobros), clientes: simR.clientes, duda: { ...F0.duda, monto: simR.restoMonto, n: simR.resto.length } } : F0, [F0, simR])
   const [vis, setVis] = useState({ alDia: 1, venc: 1, cuotas: 1, of: 1, com: 1, saldo: 1 })
   const [sel, setSel] = useState(null), [hov, setHov] = useState(null), [tipo, setTipo] = useState(null)
   const [tab, setTab] = useState('cli'), [fil, setFil] = useState('todos'), [q, setQ] = useState('')
@@ -48,7 +58,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
   const cobros = useMemo(() => F.cobros.concat(conMor ? [] : F.exclMor.items).map(x => ({
     b: x.b, cid: String(x.b.client_id || ''), t: isoDe(x.t), m: x.m, k: x.k === 'prog' ? 'cuotas' : (x.v ? 'venc' : 'alDia'), est: !!x.est, mor: morosoDe.has(String(x.b.client_id || '')),
     excl: !conMor && morosoDe.has(String(x.b.client_id || '')),
-    txt: x.k === 'prog' ? String(x.b.concept || 'Cuota').replace(/^.*? — /, '') : `Factura N° ${folioN(x.b.invoice_no)}` })).sort((a, b) => a.t.localeCompare(b.t)), [F, conMor, morosoDe])
+    txt: (x.k === 'prog' ? String(x.b.concept || 'Cuota').replace(/^.*? — /, '') : `Factura N° ${folioN(x.b.invoice_no)}`) + (x.sim ? ' · simulado' : '') })).sort((a, b) => a.t.localeCompare(b.t)), [F, conMor, morosoDe])
 
   const grupos = useMemo(() => {
     const incl = c => !c.excl
@@ -140,9 +150,9 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
 
   // Fila clicable operable con teclado (Enter o espacio): lo que abre con el clic se abre igual con el teclado.
   const act = (fn, rol = 'button') => ({ onClick: fn, tabIndex: 0, ...(rol ? { role: rol } : {}), onKeyDown: e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fn(e) } } })
-  const chip = (on, label, onClick, dot, off) => <button key={label} onClick={onClick} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${on && !dot ? C.accent : C.border}`, background: on && !dot ? C.selBg : C.surface, color: on && !dot ? C.accent : C.muted, borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: off ? .45 : 1, textDecoration: off ? 'line-through' : 'none' }}>{dot && <i style={{ width: 9, height: 9, borderRadius: 3, background: dot, display: 'inline-block' }} />}{label}</button>
-  const seg = (v, set, opts) => <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, background: C.surface, borderRadius: 10, overflow: 'hidden' }}>{opts.map(([k, l]) => <button key={String(k)} onClick={() => set(k)} style={{ border: 0, padding: isDesktop ? '7px 12px' : '7px 9px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: v === k ? C.accent : 'transparent', color: v === k ? C.surface : C.muted }}>{l}</button>)}</div>
-  const btn = (label, onClick, ic) => <button onClick={onClick} aria-label={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: '7px 12px', fontSize: 12.5, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>{ic && <SIcon n={ic} s={13} c={C.accent} />}{ic && !isDesktop ? null : label}</button>
+  const chip = (on, label, onClick, dot, off) => <button key={label} onClick={onClick} aria-pressed={on} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, background: on && !dot ? C.azulBg : C.bgSoft, color: on && !dot ? C.accent : C.muted, borderRadius: 20, padding: '3px 9px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', opacity: off ? .45 : 1, textDecoration: off ? 'line-through' : 'none' }}>{dot && <i style={{ width: 8, height: 8, borderRadius: 3, background: dot, display: 'inline-block' }} />}{label}</button>
+  const seg = (v, set, opts) => <div style={{ display: 'inline-flex', background: C.bgSoft, borderRadius: 10, padding: 2, gap: 1 }}>{opts.map(([k, l]) => <button key={String(k)} onClick={() => set(k)} style={{ border: 0, borderRadius: 8, padding: isDesktop ? '5px 11px' : '5px 9px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: v === k ? C.surface : 'transparent', color: v === k ? C.accent : C.muted, boxShadow: v === k ? `0 0 0 1px ${C.border}` : 'none' }}>{l}</button>)}</div>
+  const btn = (label, onClick, ic) => <button onClick={onClick} aria-label={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, background: C.bgSoft, borderRadius: 10, padding: '6px 11px', fontSize: 12, fontWeight: 600, color: C.accent, cursor: 'pointer' }}>{ic && <SIcon n={ic} s={13} c={C.accent} />}{ic && !isDesktop ? null : label}</button>
   const kLbl = { fontSize: isDesktop ? 10.5 : 10, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.accent }
 
   // ── KPIs (cada uno abre su lista)
@@ -229,21 +239,47 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
             : <div key={f.ini} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', rowGap: 2, alignItems: 'baseline', padding: '8px 14px', borderTop: `1px solid ${C.bgSoft}`, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{fecha}{pct}<span style={{ color: C.muted, gridColumn: '1 / -1' }}>proyectado {fM(f.proyectado)} · <b style={{ color: C.text, fontWeight: 600 }}>cobrado {fM(f.cobrado)}</b></span></div> })}
         <div style={{ padding: '8px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}>Diferencia de las últimas {control.filas.length} semanas: <b style={{ color: C.accent }}>{control.error == null ? '—' : `${control.error > 0 ? '+' : ''}${Math.round(control.error * 100)} %`}</b> · cobrado por fecha del depósito: honorarios, anticipos, subarriendo, reembolsos y externos</div></div>}</div>
 
+  // Panel «Simular»: un porcentaje por tramo de mora, escrito libre (0 a 100). Controles livianos: campo pequeño con − y +, atajos como texto.
+  const setPct = (i, n) => setPctSim(p => p.map((x, j) => (j === i ? Math.max(0, Math.min(100, Math.round(Number(n)) || 0)) : x)))
+  const paso = { width: 22, height: 26, border: 0, background: 'transparent', color: C.muted, fontSize: 15, cursor: 'pointer', padding: 0 }
+  const stepper = i => <span style={{ display: 'inline-flex', alignItems: 'center', background: C.bgSoft, borderRadius: 20, height: 26 }}>
+    <button aria-label='Menos' onClick={() => setPct(i, pctSim[i] - 1)} style={paso}>−</button>
+    <input aria-label={`Porcentaje de ${tramos[i].l}`} inputMode='numeric' value={pctSim[i]} onChange={e => setPct(i, String(e.target.value).replace(/\D/g, ''))} onFocus={e => e.target.select()} style={{ width: 30, border: 0, background: 'transparent', textAlign: 'center', fontSize: 13, fontWeight: 700, color: C.accent, outline: 'none', padding: 0, fontFamily: 'inherit' }} />
+    <span style={{ fontSize: 12, fontWeight: 600, color: C.muted, paddingRight: 2 }}>%</span>
+    <button aria-label='Más' onClick={() => setPct(i, pctSim[i] + 1)} style={paso}>+</button></span>
+  const morTot = tramos.reduce((a, t) => a + t.monto, 0)
+  const todosPct = pctSim.every(v => v === pctSim[0]) ? pctSim[0] : null
+  const baseAnio = F0.cobros.filter(x => x.t <= finAnio).reduce((a, x) => a + x.m, 0), comAnio = comisionesProyectadas(F0.comCobros, finAnio, 0).total
+  const simPanel = <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+    <div style={{ padding: '10px 14px 4px', ...kLbl }}>Simular · cobranza de la cartera morosa</div>
+    {morTot <= 0 ? <div style={{ padding: '4px 14px 14px', fontSize: 12.5, color: C.muted }}>No hay cobros de clientes morosos que simular.</div> : <>
+      <div style={{ padding: '0 14px 6px', fontSize: 11.5, color: C.muted }}>Escribe qué porcentaje de cada tramo de mora se cobra.</div>
+      {tramos.map((t, i) => <div key={t.k} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto', gap: 10, alignItems: 'center', minHeight: 42, padding: '4px 14px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: C.accent }}>{t.l}</div><div style={{ fontSize: 10.5, color: C.textSoft }}>{t.nCli} cliente{t.nCli !== 1 ? 's' : ''} · {fM(t.monto)}</div></div>
+        {stepper(i)}<span style={{ minWidth: 52, textAlign: 'right', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: C.text }}>{fM(t.monto * pctSim[i] / 100)}</span></div>)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', padding: '6px 14px', borderTop: `1px solid ${C.border}`, background: C.bgSoft, fontSize: 11, color: C.muted }}>Todos:{[0, 25, 50, 75, 100].map(p => <button key={p} onClick={() => setPctSim([p, p, p])} style={{ border: 0, borderRadius: 6, padding: '3px 7px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: todosPct === p ? C.azulBg : 'transparent', color: todosPct === p ? C.accent : C.muted }}>{p} %</button>)}</div>
+      <div style={{ padding: '9px 14px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.text, lineHeight: 1.5 }}>Se cobra <b style={{ color: C.accent }}>{fM(simR ? simR.simIng : 0)}</b> de {fM(morTot)} ({morTot > 0 ? Math.round((simR ? simR.simIng : 0) / morTot * 100) : 0} %), cada uno en su fecha esperada. A terceros se pagan <b style={{ color: C.accent }}>{fM(simR ? simR.simCom : 0)}</b>; para el estudio quedan <b style={{ color: C.accent }}>{fM((simR ? simR.simIng - simR.simCom : 0))}</b>.</div>
+      <div style={{ padding: '0 14px 10px' }}><button onClick={() => setAntes(v => !v)} style={{ border: 0, background: 'none', padding: 0, fontSize: 11.5, fontWeight: 600, color: C.azulInfo, cursor: 'pointer' }}>{antes ? 'Ocultar antes y después' : 'Ver antes y después, hasta el 31-12'} ›</button></div>
+      {antes && simR && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto auto auto', columnGap: 12, rowGap: 6, padding: '8px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, fontVariantNumeric: 'tabular-nums', alignItems: 'baseline' }}>
+        {['Al 31-12', 'Hoy', 'Simulado', 'Dif.'].map((h, k) => <span key={h} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.muted, textAlign: k ? 'right' : 'left' }}>{h}</span>)}
+        {[['Proyección · cobranza', baseAnio, baseAnio + simR.anioIng], ['Ingreso propio', baseAnio - comAnio, baseAnio - comAnio + simR.anioIng - simR.anioCom]].map(([l, a, b]) => [<span key={l} style={{ color: C.muted, fontWeight: 600 }}>{l}</span>, <span key={l + 'a'} style={{ textAlign: 'right' }}>{fM(a)}</span>, <span key={l + 'b'} style={{ textAlign: 'right', fontWeight: 800, color: C.accent }}>{fM(b)}</span>, <span key={l + 'c'} style={{ textAlign: 'right', fontWeight: 700, color: b - a > 0 ? C.greenText : C.muted }}>{b - a === 0 ? '—' : (b - a > 0 ? '+' : '') + fM(b - a)}</span>])}</div>}</>}</div>
+
   const TABS = [['cli', 'Por cliente'], ['sem', 'Semana a semana'], ['excl', 'Excluidas'], ['ctrl', 'Control de la proyección']]
   const exclTot = F.exclMor.monto + F.duda.monto + F.sinEmitir.monto
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-      {seg(conMor ? 'todo' : 'cons', v => setConMor(v === 'todo'), [['cons', 'Sin morosos'], ['todo', 'Con morosos']])}
+      {seg(simOn ? 'sim' : conMorG ? 'todo' : 'cons', v => { if (v === 'sim') setSimOn(true); else { setSimOn(false); setConMor(v === 'todo') } }, [['cons', 'Sin morosos'], ['todo', 'Con morosos'], ['sim', 'Simular']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
       {seg(vista, setVista, VISTAS)}
       <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
-    <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{conMor ? 'Incluye los demás cobros de los clientes con facturas morosas; las facturas morosas no se proyectan.' : `Sin los cobros de los ${morosoDe.size} clientes con facturas morosas.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
+    {simOn && simPanel}
+    <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{simOn ? 'Simulación: parte de «Sin morosos» y suma el cobro que escribas; no guarda nada.' : conMor ? 'Incluye los demás cobros de los clientes con facturas morosas; las facturas morosas no se proyectan.' : `Sin los cobros de los ${morosoDe.size} clientes con facturas morosas.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 8 }}>
-      {kpi({ fg: C.greenText, bg: C.greenBg }, 'tEntra', 'Ingresos', fM(ing8), '8 semanas', () => { setTab('cli'); setFil('ent'); irA(tabsRef) })}
-      {kpi({ fg: C.overdueText, bg: C.overdueBg }, 'tPagar', 'Egresos', egr8 ? '−' + fM(egr8) : '$0', '8 semanas', () => onOpenCostos ? onOpenCostos(F.costoReal) : (setTab('sem'), irA(tabsRef)))}
-      {kpi(F.fin >= 0 ? { fg: C.greenText, bg: C.greenBg } : { fg: C.overdueText, bg: C.overdueBg }, 'exchange', 'Flujo neto', (F.fin >= 0 ? '+' : '') + fM(F.fin), '8 semanas', () => { setTab('sem'); irA(tabsRef) })}
-      {kpi(minSaldo.s < 0 ? { fg: C.soonText, bg: C.soonBg } : { fg: C.accent, bg: C.azulBg }, 'wallet', 'Saldo mínimo', fM(minSaldo.s === Infinity ? 0 : minSaldo.s), minSaldo.w ? fmtFechaDMY(minSaldo.w.ini) : '', () => { if (minSaldo.w) irSemana(F.weeks.indexOf(minSaldo.w)) })}</div>
+      {kpi({ fg: C.greenText, bg: C.greenBg }, 'tEntra', 'Ingresos', fM(ing8), simOn ? 'antes ' + fM(F0.E) : '8 semanas', () => { setTab('cli'); setFil('ent'); irA(tabsRef) })}
+      {kpi({ fg: C.overdueText, bg: C.overdueBg }, 'tPagar', 'Egresos', egr8 ? '−' + fM(egr8) : '$0', simOn ? 'antes −' + fM(F0.O + F0.C) : '8 semanas', () => onOpenCostos ? onOpenCostos(F.costoReal) : (setTab('sem'), irA(tabsRef)))}
+      {kpi(F.fin >= 0 ? { fg: C.greenText, bg: C.greenBg } : { fg: C.overdueText, bg: C.overdueBg }, 'exchange', 'Flujo neto', (F.fin >= 0 ? '+' : '') + fM(F.fin), simOn ? 'antes ' + (F0.fin >= 0 ? '+' : '') + fM(F0.fin) : '8 semanas', () => { setTab('sem'); irA(tabsRef) })}
+      {kpi(minSaldo.s < 0 ? { fg: C.soonText, bg: C.soonBg } : { fg: C.accent, bg: C.azulBg }, 'wallet', 'Saldo mínimo', fM(minSaldo.s === Infinity ? 0 : minSaldo.s), simOn ? 'antes ' + fM(Math.min(...F0.weeks.map(w => w.run))) : minSaldo.w ? fmtFechaDMY(minSaldo.w.ini) : '', () => { if (minSaldo.w) irSemana(F.weeks.indexOf(minSaldo.w)) })}</div>
     {F.sinCuota.length > 0 && <div style={{ borderRadius: 10, padding: '9px 12px', background: C.soonBg, color: C.soonText, fontSize: 12.5, fontWeight: 700 }}>Comisión sin cuota · {F.sinCuota.length} · {[...new Set(F.sinCuota.map(x => x.prov))].slice(0, 2).join(', ')} · {fM(F.sinCuotaTot)}</div>}
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '14px 16px 4px' }}><span style={kLbl}>{vista === 'cascada' ? (sem ? 'Variación del saldo por semana' : 'Ingresos acumulados por mes') : sem ? 'Ingresos y egresos por semana' : 'Ingresos esperados por mes'}</span><span style={{ flex: 1 }} />

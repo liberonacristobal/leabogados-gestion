@@ -3881,6 +3881,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const ritmo=c=>Math.round(R.mediano(c)), ritmoCons=c=>Math.round(R.conservador(c))
   const weeks=Array.from({length:semanas},(_,i)=>{ const ws=new Date(monT+i*7*DAY); return {ini:`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,'0')}-${String(ws.getDate()).padStart(2,'0')}`,entra:0,com:0} })
   const cli={}; const C_=c=>{ const k=String(c||''); return cli[k]||(cli[k]={cid:k,entra:0,duda:0,sin:0,com:0,comFuera:0,antic:0,nVenc:0,nMor:0,ritmo:ritmo(k),hist:histDe[k]||0}) }
+  const dudaItems=[]   // facturas morosas (la «cartera morosa»): no se proyectan; el simulador de Flujo de caja prueba cobrar una parte con la fecha en que se cobrarían
   const st={}; const duda={n:0,monto:0,cli:new Set()}, sinE={n:0,monto:0,previas:0}
   const cobros=[]   // cada cobro esperado con su fecha (t), también los que caen después de las 8 semanas → Proyección al 31-12
   // Pagos ya recibidos sin factura (anticipo disponible): esa plata ya entró, así que rebaja las cuotas programadas más antiguas
@@ -3901,7 +3902,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
       if(b.status==='Vencido') c.nVenc++
       const base=tD(b.issued_at)??tD(b.due); if(base==null) return
       const esp=base+c.ritmo*DAY
-      if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; c.nMor++; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
+      if(hoyT-esp>FLUJO_DUDA_DIAS*DAY){ dudaItems.push({b,m,cid:c.cid,t:hoyT+R.esperaRestante(c.cid,Math.round((hoyT-base)/DAY))*DAY}); st[b.id]={fuera:'duda',m,cid:c.cid}; c.duda+=m; c.nMor++; duda.n++; duda.monto+=m; duda.cli.add(c.cid); return }
       const espC=base+ritmoCons(c.cid)*DAY, vencida=hoyT>espC
       const tC=vencida?hoyT+R.esperaRestante(c.cid,Math.round((hoyT-base)/DAY))*DAY:espC
       const w=wIdx(tC); st[b.id]={w,m,cid:c.cid,t:tC}; cobros.push({b,t:tC,m,k:'emit',v:vencida,est:!R.propio(c.cid)}); if(w<semanas){ weeks[w].entra+=m; c.entra+=m } return }
@@ -3922,11 +3923,12 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const bById={}; vivas.forEach(b=>{ bById[String(b.id)]=b })
   const porVenta={}; vivas.forEach(b=>{ if(b.sale_id&&st[b.id]) (porVenta[String(b.sale_id)]=porVenta[String(b.sale_id)]||[]).push(b) })
   let comFuera=0; const cfB={duda:0,sin:0}; const sinCuota=[]
+  const comMoroso=[]   // lo que se paga a terceros de las facturas de clientes morosos (queda fuera del flujo con ellas): lo usa el simulador de cobro de la cartera morosa
   const comCobros=[]   // cada comisión por pagar con la fecha esperada de cobro de su factura (también más allá de las 8 semanas): alimenta la Proyección al 31-12
   const aplica=(b,monto,tr)=>{ const s0=st[b.id], c=C_(b.client_id)
     if(b.status==='Pagado'||s0?.pagadaAnt){ weeks[0].com+=monto; c.com+=monto; return }
     if(!s0) return
-    if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; cfB[s0.fuera]=(cfB[s0.fuera]||0)+monto; return }
+    if(s0.fuera){ comFuera+=monto; c.comFuera+=monto; cfB[s0.fuera]=(cfB[s0.fuera]||0)+monto; if(s0.fuera==='moroso'||s0.fuera==='duda') comMoroso.push({billId:b.id,monto}); return }
     if(s0.t!=null) comCobros.push({t:s0.t,m:monto,cid:String(b.client_id||''),billId:b.id,provId:tr?.proveedor_id||null,prov:tr?.proveedor||null,porCuenta:tr?.comision_pct!=null})
     if(s0.w<semanas){ weeks[s0.w].com+=monto; c.com+=monto } }
   ;(terceros||[]).forEach(t=>{ if(!t||t.estado==='pagado') return; const monto=Number(t.monto)||0; if(!(monto>0)) return
@@ -3948,7 +3950,7 @@ export function flujoCajaProyectado({ billing=[], terceros=[], costosOfiRows=[],
   const clientes=Object.values(cli).filter(c=>c.entra||c.duda||c.sin||c.com||c.comFuera).sort((a,b)=>(b.entra-b.com)-(a.entra-a.com)||b.duda-a.duda||b.sin-a.sin)
   const partes={emitAlDia:0,emitVencida:0,cuotas:0}; cobros.forEach(x=>{ if(x.t>=monT+semanas*7*DAY) return; if(x.k==='prog') partes.cuotas+=x.m; else if(x.v) partes.emitVencida+=x.m; else partes.emitAlDia+=x.m })
   const fuera=Object.entries(st).filter(([,x])=>x&&x.fuera&&x.fuera!=='moroso').map(([id,x])=>({id,tipo:x.fuera,m:x.m}))   // morosas (duda) y por facturar atrasado (sin), por factura
-  return {weeks,cobros,comCobros,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,comFueraMoroso:cfB.moroso||0,sinCuota,sinCuotaTot,clientes,exclMor,conMorosos}
+  return {weeks,cobros,comCobros,comMoroso,dudaItems,hoyT,fuera,partes,E,C:Cm,O,costoReal:!!(costoOp&&costoOp.mensual>0&&costoOp.peso),fin:run,ritmoEstudio,antTot,duda:{n:duda.n,monto:duda.monto,nCli:duda.cli.size},sinEmitir:sinE,comFuera,comFueraDuda:cfB.duda,comFueraSin:cfB.sin,comFueraMoroso:cfB.moroso||0,sinCuota,sinCuotaTot,clientes,exclMor,conMorosos}
 }
 
 // ─── POR SOCIO · motor único ────────────────────────────────────────────────
