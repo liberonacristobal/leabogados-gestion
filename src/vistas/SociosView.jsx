@@ -1,10 +1,11 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
-import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal } from '../lib/base.jsx'
 import { redondearPartes } from '../lib/cifras.js'
+import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
-import { ChevAb, MES_C, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
+import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
 
 // Comisión del mes = terceros_pagos pagados en el mes.
 
@@ -21,11 +22,13 @@ export const _SOCIO_RUT_DISP = new Proxy({}, { get:(_,k)=>{ const s=SOCIOS_CFG.f
 // · Caja del año (control): cobrado propio (ingresosPorAnioVenta.byMonth, por fecha del depósito) − costos reales (resultadoMes.cos) − comisiones pagadas − PPM pagado − retirado.
 export const RESERVA_CAJA_DEF = 30000000
 
-export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true }){
+export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], nSocios=2, totalRet=0, yr, isDesktop=true, onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, onVerRetiros }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [banco,setBanco]=useState(null)        // {saldo, al} | null (sin cartola con saldo)
   const [reserva,setReserva]=useState(RESERVA_CAJA_DEF)
   const [editRes,setEditRes]=useState(false)
+  const [f29Ab,setF29Ab]=useState(false)   // desglose del pago al SII (F29)
+  const imp=useImpuestosFuentes()
   const [resTxt,setResTxt]=useState('')
   useEffect(()=>{ if(DEMO){ setBanco({saldo:42500000,al:new Date().toISOString().slice(0,10)}); return } let v=true
     ;(async()=>{ try{
@@ -51,9 +54,10 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
   const caja=useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients}; let cob=0,cos=0,com=0
     for(let m=1;m<=maxM;m++){ const ym=`${yr}-${String(m).padStart(2,'0')}`; cob+=Number(cobMes[ym])||0; cos+=Number(resultadoMes(fu,deps,ym).cos)||0; com+=comisionMesTerc(terceros,ym) }
     const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
-    const ppm=ofi?(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.date||'').slice(0,4)===String(yr)&&String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))).reduce((a,e)=>a+(Number(e.amount)||0),0):0
+    const gF29=ofi?(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))):[]
+    const f29=f29CajaDelAnio(gF29,imp.declarados||{},yr,maxM), ppm=f29.total   // PPM + impuesto único del F29 declarado por fecha de pago; la retención ya está en el honorario bruto de Costos reales (_shared/f29Caja.js)
     const gen=cob-cos-com-ppm
-    return {cob,cos,com,ppm,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet,cobMes])   // eslint-disable-line react-hooks/exhaustive-deps
+    return {cob,cos,com,ppm,f29,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet,cobMes,imp.declarados])   // eslint-disable-line react-hooks/exhaustive-deps
   const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(Number(n)||0))
   const neg=n=>Math.abs(Number(n)||0)<1?'$0':'−'+fmtMill(Math.abs(Number(n)||0))
   const esHoy=yr===curY
@@ -64,10 +68,10 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
   const [genV,cosV,comV,ppmV]=redondearPartes([caja.gen,caja.cos,caja.com,caja.ppm],1e5,[0])
   const [sinV,retV]=redondearPartes([caja.sin,totalRet],1e5,[0])
   const fMLR=n=>fmtMillLR(n)
-  const ln=(sg,l,v,{tot,menos}={})=><div style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:13}}>
+  const ln=(sg,l,v,{tot,menos,on,open,sub}={})=><div onClick={on} role={on?'button':undefined} style={{display:'grid',gridTemplateColumns:'14px minmax(0,1fr) auto',columnGap:7,alignItems:'center',padding:sub?'5px 0 5px 14px':'7px 0',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,fontSize:sub?12:13,cursor:on?'pointer':'default'}}>
     <span style={{textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
-    <span style={{color:tot?C.accent:C.text,fontWeight:tot?800:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{l}</span>
-    <span style={{fontWeight:tot?800:700,color:tot?C.accent:(menos?(v==='$0'?C.done:C.overdueText):C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
+    <span style={{color:tot?C.accent:sub?C.muted:C.text,fontWeight:tot?800:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{l}{on&&<span style={{color:C.textSoft,marginLeft:5}}>{open===undefined?<Gl n='chevron'/>:<ChevAb open={open}/>}</span>}</span>
+    <span style={{fontWeight:tot?800:700,color:tot?C.accent:sub?C.muted:(menos?(v==='$0'?C.done:C.overdueText):C.text),fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</span></div>
   const colH=(t,sub)=><div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}}><span style={{...SEC_LBL,whiteSpace:'nowrap'}}>{t}</span><span style={{marginLeft:'auto',fontSize:11,color:C.done,whiteSpace:'nowrap'}}>{sub}</span></div>
   const colSt={border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 14px 9px',minWidth:0}
   const resLbl=editRes
@@ -84,9 +88,9 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
       {esHoy&&<div style={{...colSt,background:C.bgSoft}}>
         {colH('En el banco hoy',banco?`${isDesktop?'cuenta honorarios · ':''}${fmtFechaDMY(banco.al)}`:'')}
         {banco ? <>
-          {ln('','Saldo en la cuenta',fMLR(dispV+resV+ppV))}
+          {ln('','Saldo en la cuenta',fMLR(dispV+resV+ppV),{on:onAbrirBanco})}
           {ln('−','Reserva',fMLR(resV),{menos:true})}
-          {ln('−',isDesktop?'Comisiones por pagar (ya cobradas)':'Comisiones por pagar',fMLR(ppV),{menos:true})}
+          {ln('−',isDesktop?'Comisiones por pagar (ya cobradas)':'Comisiones por pagar',fMLR(ppV),{menos:true,on:onOpenProveedores})}
           <div style={{display:'flex',alignItems:'flex-end',gap:10,marginTop:6,padding:'12px',borderRadius:12,background:disp>=0?C.greenBg:C.overdueBg}}>
             <span style={{fontSize:14,fontWeight:800,color:disp>=0?C.greenText:C.overdueText,alignSelf:'center',width:14,textAlign:'center',flexShrink:0}}>=</span>
             <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:.4,color:disp>=0?C.greenText:C.overdueText,whiteSpace:'nowrap'}}>{disp>=0?(isDesktop?'Disponible para retirar':'Disponible'):'Bajo la reserva'}
@@ -97,12 +101,13 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
       </div>}
       <div style={colSt}>
         {colH('Caja del año',perLbl)}
-        {ln('','Cobrado',fMLR(genV+cosV+comV+ppmV))}
-        {ln('−','Costos reales',fMLR(cosV),{menos:true})}
-        {ln('−','Comisiones pagadas',fMLR(comV),{menos:true})}
-        {ln('−','Pago al SII (F29)',fMLR(ppmV),{menos:true})}
+        {ln('','Cobrado',fMLR(genV+cosV+comV+ppmV),{on:onOpenResultado})}
+        {ln('−','Costos reales',fMLR(cosV),{menos:true,on:onOpenEstado&&(()=>onOpenEstado(isoLocal(Date.now()).slice(0,7)))})}
+        {ln('−','Comisiones pagadas',fMLR(comV),{menos:true,on:onOpenProveedores})}
+        {ln('−','Pago al SII (F29)',fMLR(ppmV),{menos:true,on:()=>setF29Ab(v=>!v),open:f29Ab})}
+        {f29Ab&&<>{ln('','PPM',fMLR(caja.f29.ppm),{sub:true})}{ln('','Impuesto único de trabajadores',fMLR(caja.f29.unico),{sub:true})}{ln('','Retención de honorarios (ya está en Costos reales)',fMLR(caja.f29.ret),{sub:true})}{caja.f29.sinDeclarar>0&&ln('','Sin F29 declarado (monto pagado)',fMLR(caja.f29.sinDeclarar),{sub:true})}</>}
         {ln('=','Caja generada',fMLR(genV),{tot:true})}
-        {ln('−','Retirado',fMLR(retV),{menos:true})}
+        {ln('−','Retirado',fMLR(retV),{menos:true,on:onVerRetiros})}
         {ln('=','Sin retirar del año',fMLR(sinV),{tot:true})}
       </div>
     </div>
@@ -137,7 +142,7 @@ export function retirosSocios({ expenses=[], clients=[], socios=[], yr }){
   return { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum }
 }
 
-export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
+export function SociosView({ onAbrirBanco, onOpenProveedores, onOpenResultado, onOpenEstado, backLabel='Oficina', focoSocio=null, expenses=[], clients=[], billing=[], sales=[], anticipos=[], terceros=[], costosOfiRows=[], socios=[], isDesktop=true, onBack, onIrBanco, setExpenses }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   const [yr,setYr]=useState(curY)
   const [eqMode,setEqMode]=useState('ambos')
@@ -236,7 +241,7 @@ export function SociosView({ backLabel='Oficina', focoSocio=null, expenses=[], c
         </div>)}
     </div>
 
-    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop}/>
+    <DisponibleRetiroCard expenses={expenses} clients={clients} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} costosOfiRows={costosOfiRows} nSocios={SOC.length} totalRet={totalRet} yr={yr} isDesktop={isDesktop} onAbrirBanco={onAbrirBanco} onOpenProveedores={onOpenProveedores} onOpenResultado={onOpenResultado} onOpenEstado={onOpenEstado} onVerRetiros={()=>{ setAbLista(true); setTimeout(()=>scrollA(listaRef),60) }}/>
 
     <div ref={porSocioRef} style={card}>
       <div style={{padding:'15px 18px 13px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
