@@ -315,3 +315,26 @@ export const DETECTOR_LBL = {
   venta_duplicada: 'Ventas posiblemente duplicadas', cuota_tramo: 'Cuotas que superan la venta', glosa_conflicto: 'Glosa con dos categorías', factura_sin_cliente: 'Factura sin cliente',
   vencimiento_incoherente: 'Vencimiento anterior a la emisión', anticipo_duplicado: 'Saldo a favor duplicado', venta_borrador_facturada: 'Venta en borrador con facturas', honorario_descuadrado: 'Honorario descuadrado', anticipo_por_aplicar: 'Anticipo por imputar', subarriendo_por_facturar: 'Subarriendo por facturar', compra_plazo_reclamo: 'Factura recibida en plazo de reclamo',
 }
+
+// Facturas que parecen el reembolso de un gasto: emitidas en la vida de la app, sin venta, que no son reembolso ni nota de crédito, y cuyo monto es
+// IGUAL (±$1) al de 1 a 3 gastos pendientes del mismo cliente (sin rendir, sin fondo que los cubra, que descuentan saldo). Caso real 13-11-2026: F519
+// por la tasación Colliers, pagada por transferencia y conciliada como honorario; el gasto siguió en el saldo del cliente. No escribe: propone.
+/** @param {any[]} billing @param {any[]} expenses @returns {{factura:any, gastos:any[]}[]} */
+export function reembolsoProbable(billing, expenses) {
+  const pend = (/** @type {any} */ e) => e && e.type === 'gasto' && !e.deleted_at && !e.no_descuenta_saldo && !e.client_rendered_at && !e.reembolso_fondo_id && !e.apertura_id && (Number(e.amount) || 0) > 0
+  const porCli = /** @type {Map<string, any[]>} */ (new Map())
+  for (const e of expenses || []) if (pend(e)) { const k = String(e.client_id); (porCli.get(k) || porCli.set(k, []).get(k))?.push(e) }
+  const out = []
+  for (const b of billing || []) {
+    if (!b || b.deleted_at || !String(b.invoice_no || '').trim() || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '') || b.sale_id) continue
+    if (String(b.issued_at || '').slice(0, 10) < APP_DESDE) continue
+    const m = Math.round(Number(b.amount) || 0); if (m <= 0) continue
+    const gs = (porCli.get(String(b.client_id)) || []).slice().sort((x, y) => String(y.date).localeCompare(String(x.date))).slice(0, 40)
+    let hit = null
+    for (let i = 0; i < gs.length && !hit; i++) { if (Math.abs(gs[i].amount - m) <= 1) hit = [gs[i]] }
+    for (let i = 0; i < gs.length && !hit; i++) for (let j = i + 1; j < gs.length && !hit; j++) { if (Math.abs(gs[i].amount + gs[j].amount - m) <= 1) hit = [gs[i], gs[j]] }
+    for (let i = 0; i < gs.length && !hit; i++) for (let j = i + 1; j < gs.length && !hit; j++) for (let k = j + 1; k < gs.length && !hit; k++) { if (Math.abs(gs[i].amount + gs[j].amount + gs[k].amount - m) <= 1) hit = [gs[i], gs[j], gs[k]] }
+    if (hit) out.push({ factura: b, gastos: hit })
+  }
+  return out
+}
