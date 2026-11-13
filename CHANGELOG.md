@@ -1,3 +1,4 @@
+- 2026-11-13 · Banco: la «Bitácora del banco» queda plegada por defecto (título con la cantidad de registros y flecha); `BitacoraLista` acepta `plegable`
 - 2026-11-13 · Banco › Cargar: las dos cajas punteadas (cartolas BICE y boletas del SII) y el «Último import» pasan a UNA tarjeta «Cargar movimientos» con una fila por tipo de carga (título, nota de una línea y botones a la derecha) y el último import en una línea por archivo (Abonos · Cargos · «N nuevos» · «N ya estaban»); la cuenta, los internos y los sin identificar quedan tras «Detalle». La X cierra la tarjeta. Mismas acciones y avisos que antes
 - 2026-11-13 · Oficina › Gestión de la oficina: «Presupuesto» pasa a ser la primera tarjeta de la fila
 - 2026-11-13 · Inteligencia: la tarjeta «Socios · la foto» pasa a «Socios» (mismo subtítulo)

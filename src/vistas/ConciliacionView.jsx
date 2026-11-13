@@ -3565,7 +3565,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               </div>
             </div>) })()
            : <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:12,padding:30,textAlign:'center',fontSize:12,color:C.muted}}>{lista.length?'Elige un movimiento de la lista.':'Nada por resolver con estos filtros.'}</div>}
-          <BitacoraLista prefijo='banco.' titulo='Bitácora del banco' limite={6} vacio='Aún no hay registros del banco.' etiquetas={{'banco.conciliado':'Conciliado','banco.deshecho':'Conciliación deshecha','banco.cliente_asignado':'Cliente asignado','banco.ingreso_oficina':'Ingreso de oficina','banco.fondo_equipo':'Fondo del equipo','banco.conciliar_varias':'Conciliar varias'}}/>
+          <BitacoraLista prefijo='banco.' titulo='Bitácora del banco' plegable limite={6} vacio='Aún no hay registros del banco.' etiquetas={{'banco.conciliado':'Conciliado','banco.deshecho':'Conciliación deshecha','banco.cliente_asignado':'Cliente asignado','banco.ingreso_oficina':'Ingreso de oficina','banco.fondo_equipo':'Fondo del equipo','banco.conciliar_varias':'Conciliar varias'}}/>
         </div>
       </div>)
   })() : null
