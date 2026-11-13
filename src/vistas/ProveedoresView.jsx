@@ -1101,8 +1101,11 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     const lineasPago = (sel.datos_pago||'').split(/\n+/).map(x=>x.trim()).filter(Boolean)
     const sinRep = lineasPago.filter(l=>_normTxt(l)!==_normTxt(sel.razon_social||'') && !(/^rut\b/i.test(l) && _nRut(l.replace(/^rut\s*:?\s*/i,''))===_nRut(sel.rut)))
     const pagoVis = sinRep.length ? sinRep : lineasPago
-    const dlBtn = (txt,on,primario) => <span onClick={on} className='pv-c' style={{display:'inline-flex',alignItems:'center',gap:6,height:30,padding:'0 11px',border:`1px solid ${primario?C.accent:C.border}`,borderRadius:8,background:primario?C.accent:C.card,color:primario?'#fff':C.accent,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={13} c={primario?'#fff':C.accent}/>{txt}</span>
-    const estadoCuenta = <div><div style={{...kLbl,fontSize:10,marginBottom:6}}>Estado de cuenta</div><div style={{display:'flex',flexDirection:isDesktop?'column':'row',flexWrap:'wrap',gap:6,alignItems:isDesktop?'stretch':'center'}}>{dlBtn('Estado · PDF',bajarPdf,true)}{dlBtn('Resumen · imagen',bajarImagen)}{dlBtn('Detalle · Excel',exportCuotas)}</div></div>
+    const dlBase = {display:'inline-flex',alignItems:'center',justifyContent:'center',height:30,border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer',flexShrink:0}
+    const dlIco = (ic,tit,on) => <span onClick={on} title={tit} aria-label={tit} className='pv-c' style={{...dlBase,width:32}}><SIcon n={ic} s={15} c={C.accent}/></span>
+    const estadoCuenta = <div><div style={{...kLbl,fontSize:10,marginBottom:6}}>Estado de cuenta</div><div style={{display:'flex',flexWrap:'nowrap',gap:6,alignItems:'center'}}>
+      <span onClick={bajarPdf} title='Descargar estado de cuenta en PDF' className='pv-c' style={{...dlBase,gap:6,padding:'0 11px',background:C.accent,borderColor:C.accent,color:'#fff',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}><SIcon n='download' s={13} c='#fff'/>Estado · PDF</span>
+      {dlIco('image','Descargar imagen de las últimas pagadas y por pagar',bajarImagen)}{dlIco('sheet','Descargar detalle en Excel',exportCuotas)}</div></div>
     const datosPagoEl = sel.datos_pago?.trim()?<Copyable text={sel.datos_pago}><span style={{lineHeight:1.5}}>{pagoVis.map((l,i)=><Fragment key={i}>{i>0&&(isDesktop?<br/>:' · ')}{l}</Fragment>)}</span>{copiar}</Copyable>:ro?'—':link('+ agregar',()=>abrirEditar(sel),C.accent)
     const datosStrip = <div style={{...card,padding:isDesktop?'14px 18px':'12px 14px',display:isDesktop?'grid':'block',gridTemplateColumns:'1.1fr 1.5fr auto auto',gap:isDesktop?28:0,alignItems:'start'}}>
       <div><div style={{...kLbl,fontSize:10}}>Razón social</div>
