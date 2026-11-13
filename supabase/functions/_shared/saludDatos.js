@@ -338,3 +338,33 @@ export function reembolsoProbable(billing, expenses) {
   }
   return out
 }
+
+// Comisión recurrente sin registrar: una venta puede declarar en `cobro_config.comisionRecurrente` {proveedor_id, proveedor, rut, pct, linea, desde, destino_sale_id?, etiqueta?}
+// que una LÍNEA de cada factura mensual (la glosa del DTE que calza con `linea`) le pertenece en `pct` % a un colaborador (caso: asesoría laboral de 12,5 UF
+// dentro de la factura mensual de un cliente, 85 % para BDA). Devuelve las facturas emitidas desde `desde` que aún no tienen su fila en terceros_pagos.
+// Estado: factura pagada → 'por_pagar'; si no → 'pendiente'. El monto sale de la línea del DTE de la factura, no de un valor escrito a mano.
+/** @param {any} xml @param {string} linea */
+export function lineaDte(xml, linea) {
+  const re = new RegExp(linea, 'i')
+  for (const d of String(xml || '').match(/<Detalle>[\s\S]*?<\/Detalle>/g) || []) {
+    const nm = (d.match(/<NmbItem>([^<]*)<\/NmbItem>/) || [])[1] || '', mt = (d.match(/<MontoItem>\s*(\d+(?:\.\d+)?)\s*<\/MontoItem>/) || [])[1]
+    if (re.test(nm) && mt != null) return { nombre: nm, monto: Math.round(+mt) }
+  }
+  return null
+}
+/** @param {any[]} billing @param {any[]} terceros @param {any[]} sales */
+export function comisionRecurrenteFaltante(billing, terceros, sales) {
+  const out = []
+  for (const s of sales || []) {
+    const cfg = s && !s.deleted_at && s.cobro_config && s.cobro_config.comisionRecurrente; if (!cfg || !cfg.proveedor_id || !(Number(cfg.pct) > 0) || !cfg.linea) continue
+    for (const b of billing || []) {
+      if (!b || b.deleted_at || String(b.sale_id) !== String(s.id) || !String(b.invoice_no || '').trim() || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '')) continue
+      if (String(b.issued_at || '').slice(0, 10) < String(cfg.desde || APP_DESDE)) continue
+      if ((terceros || []).some(t => t && String(t.billing_id) === String(b.id) && String(t.proveedor_id) === String(cfg.proveedor_id))) continue
+      const l = lineaDte(b.dte_xml, cfg.linea); if (!l) continue
+      const monto = Math.round(l.monto * Number(cfg.pct) / 100); if (monto <= 0) continue
+      out.push({ factura: b, venta: s, cfg, base: l.monto, monto, estado: b.status === 'Pagado' ? 'por_pagar' : 'pendiente' })
+    }
+  }
+  return out
+}
