@@ -113,3 +113,28 @@ export function documentosPorPedir({ terceros = [], proveedores = [], sinDocumen
   }
   return out
 }
+
+// ── Comisión devengada (Resultado) ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// La comisión de un colaborador pertenece al mes de la factura que la origina (ingreso y comisión en el mismo mes), no al mes en que se le paga
+// (eso es caja: Banco y flujo). Solo cuentan facturas EMITIDAS (con folio, no anuladas) desde `desde` (inicio de la facturación en la app); una cuota
+// programada no devenga nada hasta emitirse. Las filas de externos (`comision_pct`) ya entran netas (solo nuestro %) y no se tocan aquí. Una comisión
+// sin factura emitida de la vida de la app (histórica, sin factura o ligada a una cuota que no se emitió) sigue contándose al pagarse. Funciones puras.
+/** @typedef {{t:any, b:any, fecha:string, base:'emision'|'pago'}} ComDev */
+/** Mes (AAAA-MM-DD) al que pertenece la comisión, o null si todavía no cuenta. @param {any} t @param {any} b @param {string} desde */
+export function fechaComisionDevengada(t, b, desde) {
+  if (!t || t.comision_pct != null) return null
+  const emitida = b && !b.deleted_at && String(b.invoice_no || '').trim() && b.status !== 'Anulada' && !['Programada', 'Pausada'].includes(b.status || '')
+  if (emitida && String(b.issued_at || '').slice(0, 10) >= desde) return { fecha: String(b.issued_at).slice(0, 10), base: /** @type {'emision'} */ ('emision') }
+  if (t.estado === 'pagado' && t.pagado_at) return { fecha: String(t.pagado_at).slice(0, 10), base: /** @type {'pago'} */ ('pago') }
+  return null
+}
+/** Comisiones devengadas en el mes `ym`. @param {any[]} terceros @param {any[]} billing @param {string} ym @param {string} [desde] @returns {ComDev[]} */
+export function comisionesDevengadas(terceros, billing, ym, desde = '2026-06-06') {
+  const bById = /** @type {Map<string, any>} */ (new Map()); for (const b of billing || []) if (b) bById.set(String(b.id), b)
+  const out = []
+  for (const t of terceros || []) {
+    const b = t && t.billing_id ? bById.get(String(t.billing_id)) : null, r = fechaComisionDevengada(t, b, desde)
+    if (r && r.fecha.startsWith(ym)) out.push({ t, b, fecha: r.fecha, base: r.base })
+  }
+  return out
+}

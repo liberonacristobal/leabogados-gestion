@@ -167,7 +167,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
                   {lin('=','Ingresos',mRes('ing'),'tot',onOpenEstadoResultados||null)}
                   {lin('−','Costos de operación',mRes('cos'),'neg',()=>go('presupuestoOficina'),verL)}
                   {resAnio.sub!==0&&lin('','Subarriendo · menor costo','−'+mRes('sub'),null,()=>go('subarriendo'))}
-                  {resAnio.com!==0&&lin('−','Comisiones pagadas',mRes('com'),'neg',()=>go('proveedores'))}
+                  {resAnio.com!==0&&lin('−','Comisiones',mRes('com'),'neg',()=>go('proveedores'))}
                   {lin('=',resAnio.res>=0?'Margen':'Pérdida',(resAnio.res<0?'−':'')+mRes('res',true),'res',onOpenEstadoResultados||null,pctL)}
                   {onOpenEstadoResultados&&<div onClick={onOpenEstadoResultados} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver estado de resultados <Gl n='chevron'/></div>}
                 </div>)
@@ -548,7 +548,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             ['= Ingresos', fmtUFk(resAnio.verUF.ing), pe(resAnio.ing)],
             ['− Costos de operación', fmtUFk(resAnio.verUF.cos), pe(resAnio.cos)],
             ...(resAnio.sub?[['Subarriendo · menor costo', '−'+fmtUFk(resAnio.verUF.sub), '−'+pe(resAnio.sub)]]:[]),
-            ['− Comisiones pagadas', fmtUFk(resAnio.verUF.com), pe(resAnio.com)] ] },
+            ['− Comisiones', fmtUFk(resAnio.verUF.com), pe(resAnio.com)] ] },
         // Meta de cobranza (pesos) en UF con la UF promedio de lo cobrado → Cobrado − Meta = Sobre (o Meta − Cobrado = Falta) cuadra en UF.
         { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:(()=>{ const mU=ingYTD>0&&iv.totalUF>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, sobre=ingYTD>=metaCobranza
             const [a,b]=sobre?redondearPartes([mU,iv.totalUF-mU],1,[]):redondearPartes([iv.totalUF,mU-iv.totalUF],1,[0])
