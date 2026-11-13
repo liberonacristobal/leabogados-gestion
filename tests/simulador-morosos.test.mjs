@@ -15,8 +15,9 @@ const items = [
 ]
 const comMoroso = [{ billId: 'f1', monto: 1_000_000 }, { billId: 'f2', monto: 600_000 }]
 
-test('tramos: hasta 60, 61 a 120 y más de 120 días de mora', () => {
-  assert.deepEqual([0, 60, 61, 120, 121, 400].map(tramoDeMora), [0, 0, 1, 1, 2, 2])
+test('tramos: 30 a 59, 60 a 89 y 90 días y más de mora', () => {
+  assert.deepEqual([0, 30, 59, 60, 89, 90, 400].map(tramoDeMora), [0, 0, 0, 1, 1, 2, 2])
+  assert.deepEqual(TRAMOS_MORA.map(t => t.l), ['30 a 59 días', '60 a 89 días', '90 días y más'])
   assert.equal(TRAMOS_MORA.length, 3)
   assert.equal(diasDeMora({ due: '2026-10-02' }, hoy), 41)
   assert.equal(diasDeMora({}, hoy), 0)

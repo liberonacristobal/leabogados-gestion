@@ -4,15 +4,15 @@
 
 const DAY = 86400000
 
-/** Tramos de mora (días desde el vencimiento). */
+/** Tramos de mora (días desde el vencimiento): los que mide el estudio; parten en 30 porque desde ahí la cartera se considera morosa (FLUJO_DUDA_DIAS). Los usan el simulador del Flujo de caja y los escenarios de retiros. */
 export const TRAMOS_MORA = [
-  { k: 't1', l: 'Hasta 60 días', desde: 0, hasta: 60 },
-  { k: 't2', l: '61 a 120 días', desde: 61, hasta: 120 },
-  { k: 't3', l: 'Más de 120 días', desde: 121, hasta: Infinity },
+  { k: 't1', l: '30 a 59 días', desde: 30, hasta: 59 },
+  { k: 't2', l: '60 a 89 días', desde: 60, hasta: 89 },
+  { k: 't3', l: '90 días y más', desde: 90, hasta: Infinity },
 ]
 
 /** Índice del tramo (0, 1, 2) para unos días de mora. @param {number} dias */
-export const tramoDeMora = dias => (dias <= 60 ? 0 : dias <= 120 ? 1 : 2)
+export const tramoDeMora = dias => (dias <= 59 ? 0 : dias <= 89 ? 1 : 2)
 
 const tMs = (/** @type {any} */ s) => { const t = new Date(String(s || '').slice(0, 10) + 'T12:00:00').getTime(); return Number.isNaN(t) ? null : t }
 
