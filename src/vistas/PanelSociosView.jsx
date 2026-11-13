@@ -2,7 +2,7 @@
 // su pantalla de origen (hook del resultado del año de Inicio, Por socio, ciclo de Facturación, cartera, Socios, Estado de resultados, comisiones, flujo de caja…),
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
 import { Children, useMemo, useState } from 'react'
-import { C, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -153,7 +153,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const rmAnt = useMemo(()=>resultadoMes(fuRes, deps, ymAnt),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymAnt])
   const cobAnt = ymAnt.slice(0,4)===String(currentYear) ? (ing.byMonth?.[ymAnt]||0) : null
   // Variación contra el mes anterior (misma función del Estado de resultados): una alza de costo va en rojo; una de ingreso, en verde.
-  const dl = (v,p,costo) => { if(p==null) return undefined; const d=v-p; if(Math.abs(d)<1) return `= vs ${mesAnt}`; const bueno = costo ? d<0 : d>0; return <span><b style={{color:bueno?C.greenText:C.overdueText}}>{d>0?'▲':'▼'} {fmtShort(Math.abs(d))}</b> vs {mesAnt}</span> }
+  const dl = (v,p,costo) => { if(p==null) return undefined; const d=v-p; if(Math.abs(d)<1) return `= vs ${mesAnt}`; const bueno = costo ? d<0 : d>0; return <span><b style={{color:bueno?C.greenText:C.overdueText}}><Gl n={d>0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(d))}</b> vs {mesAnt}</span> }
   const noEmitir = useNoEmitirSet()
   const ciclo = useMemo(()=>cicloFacturacionMes({ billing, sales, anticipos, fantasmaIds:fantasmaIds||new Set(), noEmitir:noEmitir||new Set(), respaldoMap, uf:ufFechaCache()||{}, now:new Date() }),[billing,sales,anticipos,fantasmaIds,noEmitir,respaldoMap])
 
