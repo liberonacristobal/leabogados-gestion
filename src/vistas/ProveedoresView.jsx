@@ -5,7 +5,8 @@ import { demoData } from '../demoData'
 import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
-import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
+import { estadoComisionesHtml } from '../../supabase/functions/_shared/estadoComisiones.js'
 import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll , invalidarImpuestosFuentes} from '../lib/compartido.jsx'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
@@ -1041,6 +1042,16 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
         {enlP?.tid===t.id&&panelEnlace()}</Fragment> }
     const exportCuotas = () => exportCSV(`comisiones_${tituloProv(sel).replace(/\s+/g,'_')}.csv`,['Emitida','Cliente','Tu factura','Glosa','Cliente pagó','Factura del proveedor','Comisión','Le pagaste','Estado'],
       tsF.map(t=>{ const b=facDe(t); return [dmy(fEmi(t)),cliDe(t)?.name||'',b?.invoice_no?`N° ${folioN(b.invoice_no)}`:'',b?glosaFactura(b):'',pagoCli(t)?.fecha?dmy(pagoCli(t).fecha):'',t.factura_numero||'',Math.round(Number(t.monto)||0),t.pagado_at?dmy(t.pagado_at):'',estLbl(t)[0]] }))
+    // Estado de comisiones (carta): mismos montos y estados que la lista; el detalle de «Por pagar» y «Sujeto a cobro» sale de la factura del cliente.
+    const imprimirEstado = () => {
+      const items = tercDe(sel.id).map(t=>{ const b=facDe(t), e=est(t), pc=pagoCli(t)
+        const concepto = b ? `${b.invoice_no?`F${folioN(b.invoice_no)} · `:''}${glosaFactura(b)||''}`.replace(/ · $/,'') : String(t.referencia||'Comisión')
+        const detalle = e==='por_pagar' ? (pc?.fecha?`Cobrada el ${fmtFechaDMY(pc.fecha)}`:'Cobrada') : e==='por_devengar' ? (!b?'Sin factura':b.status==='Vencido'?`Vencida el ${fmtFechaDMY(b.due)}`:b.status==='Programada'?'Por facturar':b.due?`Facturada · vence ${fmtFechaDMY(b.due)}`:'Facturada') : ''
+        return {estado:e, cliente:cliDe(t)?.name||'Sin cliente', concepto, fecha:e==='pagada'?t.pagado_at:(pc?.fecha||null), monto:e==='pagada'?(Number(t.monto)||0):saldoT(t), detalle} }).filter(i=>i.monto>0)
+      const html = estadoComisionesHtml({proveedor:tituloProv(sel), rut:sel.rut?fmtRutCL(sel.rut):'', items, emitido:fmtFechaDMY(new Date().toISOString().slice(0,10)), marca:{nombre:BRAND.nombre, logoUrl:location.origin+BRAND.logo.color, direccion:BRAND.direccion}})
+      const w = window.open('','_blank'); if(!w){ appAlert('El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir el estado.'); return }
+      w.document.write(html); w.document.close()
+      logActividad(`proveedores.${sel.id}.estado`,{tabla:'terceros_pagos',id:sel.id,detalle:{title:'Estado de comisiones',n:items.length}}) }
     const tituloLista = (cliF?(porCliente.find(x=>x.k===String(cliF))?.cli?.name||'Sin cliente'):'Comisiones por factura')+(cf==='todas'?'':` · ${({pagada:'Pagadas',por_pagar:'Por pagar',por_devengar:'Sujeto a cobro',sinfac:'Sin factura del proveedor'})[cf]||''}`)+(mesF?` · ${mesF==='sin'?'Sin fecha':mesLbl(mesF,true)}`:'')
     const comisionesCard = <div id='pv-comisiones' style={{...card,overflow:'hidden'}}>
       {band(asgOpen?'Agregar comisión a una factura tuya':tituloLista,asgOpen?link('Cerrar',()=>setAsgOpen(false),C.accent):<span style={{display:'inline-flex',gap:10,alignItems:'center'}}>{mesF&&link('Quitar mes',()=>setMesF(null),C.accent)}{ordTog(ordC,setOrdC)}</span>)}
@@ -1084,6 +1095,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta'],['factura_tercero','Cuadró una factura del proveedor con su cuota'],['factura_tercero_no','Descartó un cuadre de factura']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
     const btnExcel = <span onClick={exportCuotas} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
+    const btnEstado = <span onClick={imprimirEstado} title='Estado de comisiones (imprimir o PDF)' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='file' s={14} c={C.accent}/></span>
     // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
     const dItem = (l,v,max) => <span style={{display:'flex',flexDirection:'column',minWidth:0,maxWidth:max||'none'}}><span style={{...kLbl,fontSize:10}}>{l}</span><span style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v}</span></span>
     const copiar = <b style={{fontSize:11,color:C.accent,marginLeft:4}}>Copiar</b>
@@ -1124,7 +1136,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
       ? <div style={{display:'grid',gridTemplateColumns:`repeat(${secs.length},minmax(0,1fr))`,gap:8}}>{secs.map(mini)}</div>
       : <div style={{...card,overflow:'hidden'}}>{secs.map((x,i)=><Fragment key={x.k}>{i===0?<div style={{marginTop:-1}}>{mini(x)}</div>:mini(x)}{secAb===x.k&&<div style={{padding:'0 0 8px'}}>{x.el}</div>}</Fragment>)}</div>
     return (<div>{css}
-      <PageHeader origen={(ro||volverOrigen)?origen:'Proveedores'} onBack={ro?onBack:()=>{ if(volverOrigen&&onBack){ setVolverOrigen(false); onBack() } else setView('list') }} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnExcel}</span>}/>
+      <PageHeader origen={(ro||volverOrigen)?origen:'Proveedores'} onBack={ro?onBack:()=>{ if(volverOrigen&&onBack){ setVolverOrigen(false); onBack() } else setView('list') }} titulo={ro?(isDesktop?'Mis comisiones':'Comisiones'):tituloProv(sel)} right={<span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{selAnio}{btnEstado}{btnExcel}</span>}/>
       {wrap(isDesktop ? <>
         {datosStrip}{tiles}{bolStrip}{acciones}{revPanel}{mesCard}{cuadreCard}
         <div style={{display:'grid',gridTemplateColumns:conBolF?'minmax(0,1fr) minmax(0,2.8fr)':'minmax(0,1fr) minmax(0,1.9fr)',gap:12,alignItems:'start'}}>{porClienteCard||<span/>}{comisionesCard}</div>
