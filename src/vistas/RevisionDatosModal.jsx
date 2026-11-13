@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { coberturaVenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { coberturaVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuadreVenta } from '../../supabase/functions/_shared/porFacturar.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
@@ -54,7 +54,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   // monto de la factura y solo si el colaborador no tiene ya su fila en esa factura (nunca duplica). «No corresponde» se aprende y no vuelve a salir.
   const [crBusy,setCrBusy]=useState(null); const [crDone,setCrDone]=useState(()=>new Set()); const [crNo,setCrNo]=useState(()=>new Set())
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key,value').eq('kind','data_health').like('key','comreg:%').then(({data})=>{ setCrNo(new Set((data||[]).filter(r=>r.value==='no').map(r=>String(r.key).replace('comreg:','')))) },()=>{}) },[])
-  const comRec=useMemo(()=>SD.comisionesPorRegistrar(billing,terceros,sales,crNo).filter(x=>!crDone.has(x.factura.id+'|'+x.proveedor_id)),[billing,terceros,sales,crDone,crNo])
+  const comRec=useMemo(()=>SD.comisionPorReparto(billing,terceros,sales,crNo).filter(x=>!crDone.has(x.factura.id+'|'+x.proveedor_id)),[billing,terceros,sales,crDone,crNo])
   const [rbBusy,setRbBusy]=useState(null); const [rbDone,setRbDone]=useState(()=>new Set())
   const reembolsos=useMemo(()=>SD.reembolsoProbable(billing,expenses).filter(x=>!rbDone.has(String(x.factura.id))),[billing,expenses,rbDone])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
@@ -65,6 +65,8 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   // Cuotas fantasma: Programadas ya SALDADAS (emitidas) que siguen figurando por facturar — motor de conciliación (read-only, Fase 1).
   const [ufMapFechas,setUfMapFechas]=useState({})   // UF por fecha (mindicador) para el calce por monto de la señal 8
   useEffect(()=>{ if(DEMO) return; const ds=[]; (billing||[]).forEach(b=>{ if(b.issued_at)ds.push(b.issued_at); if(b.due)ds.push(b.due) }); (anticipos||[]).forEach(a=>{ if(a.fecha)ds.push(a.fecha) }); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapFechas(m||{}) }).catch(()=>{}); return ()=>{alive=false} },[billing,anticipos])
+  // Venta mensual cuya última factura la supera (una subida de tarifa que no llegó a la venta): coberturaVenta no revisa las recurrentes. Misma UF por fecha del calce por monto.
+  const mensualMayor=useMemo(()=>mensualMayorQueVenta({sales,billing,uf:ufMapFechas}),[sales,billing,ufMapFechas])
   const [fantasmaNo,setFantasmaNo]=useState(()=>new Set())   // programadas marcadas "es pendiente, no fantasma" (aprendido)
   useEffect(()=>{ if(DEMO) return; supabase.from('learnings').select('key').eq('kind','fantasma_no').then(({data})=>{ if(data) setFantasmaNo(new Set(data.map(r=>String(r.key)))) },()=>{}) },[])
   const [cfRetiradas,setCfRetiradas]=useState(()=>new Set())   // retiradas en esta sesión (para ocultarlas al toque)
@@ -226,7 +228,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+cuotaNeDte.length+montoNeDte.length+ventasDup.length+huerfanas.length+reembolsos.length+comRec.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+cuotaNeDte.length+montoNeDte.length+ventasDup.length+huerfanas.length+reembolsos.length+comRec.length+mensualMayor.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:10,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -306,6 +308,12 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
         {onResolverGlosa&&<><div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>{['Retiros','Sueldos','Otros'].map(cat=><button key={cat} onClick={()=>setGlPick(p=>({...p,[key]:cat}))} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 12px',cursor:'pointer',border:`1px solid ${sel===cat?C.accent:C.border}`,background:sel===cat?C.azulBg:'#fff',color:sel===cat?C.accent:C.muted}}>{cat}</button>)}</div>
         <button disabled={glBusy===key} onClick={async()=>{ if(!(await appConfirm(`Definir esta glosa como ${sel}. Cambia cómo se clasifican los próximos movimientos (y con eso el margen y las comisiones). ¿Confirmas?`))) return; setGlBusy(key); try{ await onResolverGlosa(key,sel); setGlDone(d=>new Set([...d,key])) }catch(e){ appAlert('No se pudo: '+(e.message||e)) }; setGlBusy(null) }} style={{marginTop:8,padding:'8px 14px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:glBusy===key?'default':'pointer',opacity:glBusy===key?.6:1}}>{glBusy===key?'Guardando…':`Definir como ${sel}`}</button></>}
       </div> })}
+    </div>}
+    {mensualMayor.length>0&&<div style={secBox}>{sh('Factura mayor que la venta mensual',C.soonText,mensualMayor.length)}
+      {mensualMayor.map(x=><div key={x.venta.id} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
+        <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>Factura N° {folioN(x.factura.invoice_no)} · {cName(x.venta.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{x.venta.title} · la venta dice {x.enUF?`${x.mensual.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.mensual)} al mes y la factura trae {x.enUF?`${x.factura_en.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.factura_en)}. ¿Cambió la tarifa?</div></div>
+        {amt(x.enUF?`+${x.dif.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.dif),fmtFechaDMY(x.factura.issued_at),C.soonText)}</div>)}
     </div>}
     {comRec.length>0&&<div style={secBox}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>{sh('Comisión por registrar',C.azulInfo,comRec.length)}{onRegistrarComisionRec&&comRec.length>1&&<span onClick={async()=>{ if(crBusy) return; setCrBusy('todas'); try{ for(const x of comRec){ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,x.factura.id+'|'+x.proveedor_id])) } }catch(e){ appAlert('No se pudo registrar: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>{crBusy==='todas'?'Registrando…':`Registrar las ${comRec.length}`}</span>}</div>
       {comRec.map(x=>{ const k=x.factura.id+'|'+x.proveedor_id; return <div key={k} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
