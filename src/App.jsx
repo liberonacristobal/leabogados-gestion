@@ -595,7 +595,7 @@ function BottomNav({tab,setTab,overdueN,userRole}) {
     clock:<svg width="21" height="21" viewBox="0 0 24 24" {...sp}><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>,
   }
   return (
-    <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
+    <div className='bottomnav' style={{position:'fixed',bottom:0,left:0,right:0,transform:'translateZ(0)',WebkitTransform:'translateZ(0)',background:C.surface,borderTop:`1px solid ${C.border}`,display:'flex',zIndex:50,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       <style>{`
         @media(min-width:768px){
           .bottomnav { border-radius: 0; max-width: none; }
