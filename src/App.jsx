@@ -1739,10 +1739,10 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
         </div>
         {L('Gestión de la oficina')}
         {(()=>{ const nA=calTrib?calTrib.alertas.length:0, a0=nA&&calTrib.alertas[0].sev===0
-          const g=[st('gv',IC.doc,C.bgWarm,C.muted,isDesktop?'Gastos varios · parte de costos':'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios()),
+          const g=[onOpenPresupuesto&&st('ppto',IC.flujo,C.azulBg,C.accent,isDesktop?`Presupuesto ${currentYear+1}`:'Presupuesto','por etapas',C.accent,()=>onOpenPresupuesto()),
+            st('gv',IC.doc,C.bgWarm,C.muted,isDesktop?'Gastos varios · parte de costos':'Gastos varios',fmtMill(R.gv),C.accent,()=>onOpenVarios&&onOpenVarios()),
             st('iva',IC.iva,C.azulBg,C.azulInfo,'Compras · IVA',fmtMill(ivaPeriodo),C.azulInfo,()=>setSub('compras')),
             calTrib&&st('cal',IC.cal,C.azulBg,C.accent,isDesktop?'Calendario tributario':'Calendario',nA?`${nA} aviso${nA===1?'':'s'}`:'al día',nA?(a0?C.overdueText:C.soonText):C.greenText,()=>onOpenCalTrib&&onOpenCalTrib()),
-            onOpenPresupuesto&&st('ppto',IC.flujo,C.azulBg,C.accent,isDesktop?`Presupuesto ${currentYear+1}`:'Presupuesto','por etapas',C.accent,()=>onOpenPresupuesto()),
             procsN!=null&&st('pro',IC.gear,C.azulBg,C.accent,isDesktop?'Procesos automáticos':'Procesos',procsN.falla?`${procsN.falla} con falla`:`${procsN.total} procesos`,procsN.falla?C.overdueText:C.accent,()=>onOpenProcesos&&onOpenProcesos()),
             bandN!=null&&st('ban',IC.inbox,C.azulBg,C.accent,isDesktop?'Bandeja del agente':'Bandeja',bandN?`${bandN} pendiente${bandN===1?'':'s'}`:'al día',bandN?C.soonText:C.greenText,()=>onOpenBandeja&&onOpenBandeja())].filter(Boolean)
           // Celular: 2 por fila; si quedan impares, la última ocupa la fila entera.
