@@ -16,7 +16,7 @@ if (!CHROME) { console.error('No encontré Chrome: define CHROME_PATH.'); proces
 // Pestañas que se abren solas (sin un registro elegido). Las de detalle (tarea, gasto, factura, flujo) necesitan datos y se prueban por su lista.
 const TABS = ['dashboard', 'sales', 'billing', 'expenses', 'clients', 'tasks', 'conciliacion', 'inteligencia', 'cajachica', 'cobranza', 'horas',
   'repricing', 'cartera', 'presupuestoOficina', 'presupuesto', 'socios', 'panelSocios', 'informeMes', 'proveedores', 'subarriendo', 'resultadoAnio', 'facturasDelMes', 'cobradoMes', 'porFacturar', 'estadoResultados',
-  'flujoCaja', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'pdfSinOficial', 'misComisiones', 'porCobrarMios', 'migmail']
+  'flujoCaja', 'mesEnMarcha', 'procesos', 'calendarioTrib', 'bandeja', 'miCarga', 'contactos', 'causas', 'novedades', 'pdfSinOficial', 'misComisiones', 'porCobrarMios', 'migmail']
 // Páginas y ventanas que se abren sin datos (desde menú o tarjetas).
 const MODALES = ['ajustes', 'revisionDatos', 'notificaciones', 'aprendizaje', 'modulos', 'papelera', 'porSocio', 'roles', 'users', 'coberturaSII', 'redProfesional', 'pdfupload', 'drive', 'importExcel', 'gmailContactos', 'gmailTareas', 'conciliaHub']
 // Detalles con datos: los tres primeros de cada tipo (ficha del cliente, venta, factura, gasto, tarea).
