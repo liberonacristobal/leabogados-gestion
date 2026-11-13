@@ -16,9 +16,10 @@ export const tramoDeMora = dias => (dias <= 59 ? 0 : dias <= 89 ? 1 : 2)
 
 const tMs = (/** @type {any} */ s) => { const t = new Date(String(s || '').slice(0, 10) + 'T12:00:00').getTime(); return Number.isNaN(t) ? null : t }
 
-/** Días de mora de un cobro moroso: desde el vencimiento (o la emisión) hasta hoy. @param {any} b @param {number} hoyT */
+/** Días de mora de un cobro moroso: desde el vencimiento hasta hoy. El vencimiento es el de Cobranza y el de toda la app (`venceBill`): la emisión + 30 días; sin emisión, el `due`. @param {any} b @param {number} hoyT */
 export function diasDeMora(b, hoyT) {
-  const t = tMs(b && (b.due || b.issued_at)); if (t == null) return 0
+  const e = b && b.issued_at ? tMs(b.issued_at) : null
+  const t = e != null ? e + 30 * DAY : tMs(b && b.due); if (t == null) return 0
   return Math.max(0, Math.round((hoyT - t) / DAY))
 }
 
