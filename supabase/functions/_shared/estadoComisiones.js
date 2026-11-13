@@ -64,3 +64,13 @@ ${e.sujeto.length ? `<h2>3. Sujetas a cobro <i>${pesos(T.sujeto)}</i></h2>${tabl
 ${e.porPagar.length || e.sujeto.length ? `<div class="tot">Total comprometido (2 + 3) <b>${pesos(T.porPagar + T.sujeto)}</b></div>` : ''}
 ${pie}${auto ? '<script>window.onload=()=>{window.print()}<\/script>' : ''}</body></html>`
 }
+
+/** Resumen corto para la imagen: las últimas `n` pagadas (por fecha de pago) y todas las por pagar. No incluye «sujeto a cobro».
+ *  @param {ItemComision[]} items @param {number} [n] */
+export function resumenReciente(items, n = 6) {
+  const pagadas = items.filter(i => i.estado === 'pagada').sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || ''))).slice(0, n)
+  const porPagar = items.filter(i => i.estado === 'por_pagar').sort((a, b) => String(a.fecha || '9').localeCompare(String(b.fecha || '9')))
+  const suma = (/** @type {ItemComision[]} */ a) => a.reduce((s, i) => s + n_(i.monto), 0)
+  return { pagadas, porPagar, totalPagadas: suma(pagadas), totalPorPagar: suma(porPagar) }
+}
+const n_ = n

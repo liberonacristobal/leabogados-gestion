@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { armarEstadoComisiones, estadoComisionesHtml, pesos, dmy, mesTitulo } from '../supabase/functions/_shared/estadoComisiones.js'
+import { resumenReciente, armarEstadoComisiones, estadoComisionesHtml, pesos, dmy, mesTitulo } from '../supabase/functions/_shared/estadoComisiones.js'
 
 const items = [
   { estado: 'pagada', cliente: 'A', concepto: 'F1', fecha: '2026-09-22', monto: 100 },
@@ -27,4 +27,10 @@ test('formatos', () => {
 test('html escapa y no falla sin pagos', () => {
   const h = estadoComisionesHtml({ proveedor: 'A <b>', items: [], emitido: '13-11-2026', marca: { nombre: 'X', logoUrl: '/l.png' }, auto: false })
   assert.ok(h.includes('A &lt;b&gt;') && h.includes('Sin pagos aún') && !h.includes('window.print'))
+})
+
+test('resumen reciente: últimas pagadas y por pagar, sin sujeto a cobro', () => {
+  const r = resumenReciente(items, 2)
+  assert.deepEqual(r.pagadas.map(i => i.cliente), ['C', 'B'])
+  assert.equal(r.totalPagadas, 500); assert.equal(r.totalPorPagar, 50); assert.equal(r.porPagar.length, 1)
 })

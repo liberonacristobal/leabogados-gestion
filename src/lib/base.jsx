@@ -120,6 +120,7 @@ export const _ICON_PATHS = {
   chart:'M3 3v18h18M18 9l-5 5-3-3-3 3',
   chevron:'M9 6l6 6-6 6',
   search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.35-4.35',
+  image:'M4 5h16v14H4zM8.5 10.5a1 1 0 1 0 0-.01M20 16l-5-5-9 8',
   download:'M12 3v12m0 0-4-4m4 4 4-4M4 20h16',
   arrowUp:'M12 19V5M6 11l6-6 6 6',
   arrowDown:'M12 5v14M6 13l6 6 6-6',
