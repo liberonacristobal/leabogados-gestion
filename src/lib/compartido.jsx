@@ -445,7 +445,7 @@ export function nombresMiembros(){
 
 // Lista de la bitácora para un área (prefijo de action). Cada fila: qué · detalle · quién · cuándo.
 // plano: modo "Historial" al pie de una lista (plegado, texto completo, autor neutro, sin monto; si no hay registros no se muestra).
-export function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.', plano=false, autor=null}){
+export function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite=20, vacio='Aún no hay registros.', plano=false, autor=null, plegable=false}){
   const [rows,setRows]=useState(null)
   const [abierto,setAbierto]=useState(false)
   useEffect(()=>{ let vivo=true; if(DEMO){ setRows((demoData.historial||[]).filter(r=>String(r.action).startsWith(prefijo))); return }
@@ -470,8 +470,8 @@ export function BitacoraLista({prefijo, titulo='Historial', etiquetas={}, limite
       </div>) }
   return (
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 14px 6px'}}>
-      <div style={{...SEC_LBL,marginBottom:2}}>{titulo}</div>
-      {rows===null?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Cargando…</div>
+      <div onClick={plegable?()=>setAbierto(v=>!v):undefined} style={{...SEC_LBL,marginBottom:2,...(plegable?{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',paddingBottom:4}:{})}}><span>{titulo}{plegable&&rows&&rows.length?` · ${rows.length}`:''}</span>{plegable&&<span style={{color:C.textSoft}}><ChevAb open={abierto}/></span>}</div>
+      {plegable&&!abierto?null:rows===null?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>Cargando…</div>
        :rows.length===0?<div style={{fontSize:12,color:C.muted,padding:'8px 0'}}>{vacio}</div>
        :rows.map((r,i)=><div key={r.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop:i?`0.5px solid ${C.bgSoft}`:'none'}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{etiquetas[r.action]||r.action}</div>{det(r.detail)&&<div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{det(r.detail)}</div>}</div>
