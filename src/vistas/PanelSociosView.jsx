@@ -4,7 +4,7 @@
 import { Children, useMemo, useState } from 'react'
 import { C, Gl, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
-import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
+import { kpisPorSocio, redondearPartes, redondearA, cascadaResultado } from '../lib/cifras.js'
 import { descargarFotoTabla } from '../lib/fotoTabla.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
 import { pctsAnio, useResultadoAnio, ingresoRealAnio } from '../lib/resultadoAnio.js'
@@ -153,6 +153,8 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const deps = { billing, terceros, costosOfiRows, expenses, clients }
   const cobMes = ymPrev.slice(0,4)===String(currentYear) ? (ing.byMonth?.[ymPrev]||0) : null   // caja del mes pasado (fecha del depósito); «—» si cae en el año anterior
   const rm = useMemo(()=>resultadoMes(fuRes, deps, ymPrev),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymPrev])
+  const Qm = useMemo(()=>cascadaResultado(rm),[rm])   // redondeo que cuadra: Ingreso − Costos − Comisiones = Resultado
+  const cosQ = useMemo(()=>redondearA((rm.cosLines||[]).map(l=>l.m),Qm.cos,1e5),[rm,Qm])
   const ymAnt = _ymPrev(ymPrev), mesAnt = MESES[Number(ymAnt.slice(5,7))-1].slice(0,3)
   const rmAnt = useMemo(()=>resultadoMes(fuRes, deps, ymAnt),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymAnt])
   const cobAnt = ymAnt.slice(0,4)===String(currentYear) ? (ing.byMonth?.[ymAnt]||0) : null
@@ -243,17 +245,17 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     ing: { titulo:`Ingreso emitido · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Ingreso emitido · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((a,i)=><span key={a}>{i?' · ':''}{isDesktop?a:a.slice(0,1)} <b>{fmtShort(emitido(a,'ytd').i)}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaEm },
     mm: { titulo:'Ingreso emitido mes a mes', hl:<>{emPrev?<>{MESES[Number(emPrev.ym.slice(5,7))-1].slice(0,3)} <b>{fmtShort(emPrev.a+emPrev.b)}</b> · </>:null}{mesActual.slice(0,3)} <b>{fmtShort(emUlt.a+emUlt.b)}</b></>, tono:'az', link:'Informe y comparación', dest:'informeMes',
       body:<div style={{padding:'8px 10px 4px'}}><BarrasMes datos={emMeses} corto={!isDesktop} onMes={ym=>go('facturasMes',ym,null)}/><div style={{display:'flex',gap:14,fontSize:11,color:C.muted,flexWrap:'wrap'}}><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.accent,marginRight:5}}/>{ADMIN_NAMES[0]}</span><span><i style={{display:'inline-block',width:10,height:10,borderRadius:3,background:C.done,marginRight:5}}/>{ADMIN_NAMES[1]}</span><span>no incluye {SIN_SOCIO}{Math.abs(emSin)>=1&&<>: <b style={{color:C.accent}}>{fmtShort(emSin)}</b> en el año ({emSinMeses.map(x=>MESES[Number(x.ym.slice(5,7))-1].slice(0,3)+' '+fmtShort(x.s)).join(' · ')})</>}</span></div></div> },
-    mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(rm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
+    mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(Qm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>{`Emitido en ${mesPasado}`}</div>
         <Fila ic='file' tono='am' label='Emitido bruto' sub={`${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
-        <Fila ic='tEntra' tono='az' label='Ingreso' sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} value={fmtShort(rm.ing)} raw={rm.ing} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>
+        <Fila ic='tEntra' tono='az' label='Ingreso' sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} value={fmtShort(Qm.ing)} raw={Qm.ing} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Entró a caja</div>
         <Fila ic='check' tono='gr' label='Cobrado' sub={cobMes!=null?dl(cobMes,cobAnt):undefined} value={cobMes==null?'—':fmtShort(cobMes)} raw={cobMes??''} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Resultado devengado</div>
-        <Fila ic='building' tono='gy' label='Costos' sub={dl(rm.cos,rmAnt.cos,true)} value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
-        <Fila ic='tPct' tono='am' label='Comisiones' sub={dl(rm.com,rmAnt.com,true)} value={fmtShort(rm.com)} raw={rm.com} onClick={()=>go('estadoResultados',ymPrev,{bloque:'com'})}/>
-        <Fila ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(rm.res)} vcol={rm.res<0?C.overdueText:C.accent} raw={rm.res} onClick={()=>go('estadoResultados',ymPrev)}/>
+        <Fila ic='building' tono='gy' label='Costos' sub={dl(rm.cos,rmAnt.cos,true)} value={fmtShort(Qm.cos)} raw={Qm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
+        <Fila ic='tPct' tono='am' label='Comisiones' sub={dl(rm.com,rmAnt.com,true)} value={fmtShort(Qm.com)} raw={Qm.com} onClick={()=>go('estadoResultados',ymPrev,{bloque:'com'})}/>
+        <Fila ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} value={(rm.res>0?'+':'')+fmtShort(Qm.res)} vcol={rm.res<0?C.overdueText:C.accent} raw={Qm.res} onClick={()=>go('estadoResultados',ymPrev)}/>
       </> },
     soc: { cap:'Resultado', titulo:`Por socio · ${mesActual==='enero'?'enero':'enero–'+mesActual}`, tM:`Por socio · ${mesActual==='enero'?'ene':'ene–'+mesActual.slice(0,3)}`, hl:<>{ADMIN_NAMES.map((s,i)=><span key={s}>{i?' · ':''}{isDesktop?s:s.slice(0,1)} <b>{fmtShort(card6(s,'ytd')[5])}</b></span>)}</>, tono:'az', link:'Por socio', dest:'porSocio', body:tablaSocios },
     ret: { cap:'Resultado', titulo:'Retiros de socios', hl:<><b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.A]||0)}</b> · <b style={{color:C.tealText}}>{fmtShort(ret.retTot[ret.B]||0)}</b></>, tono:'te', link:'Socios', dest:'socios',
@@ -275,10 +277,10 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} raw={cart.expo.mayor.saldo} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
         <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastosDeben')}/>
       </> },
-    cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
+    cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(Qm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
       body:<>
-        <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
-        {(rm.cosLines||[]).map(l=><Fila key={l.k} tono='az' label={l.k==='sub'?l.l+' · menor costo':l.l} value={fmtShort(l.m)} raw={l.m} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos',sub:l.k})}/>)}
+        <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(Qm.cos)} raw={Qm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
+        {(rm.cosLines||[]).map((l,i)=><Fila key={l.k} tono='az' label={l.k==='sub'?l.l+' · menor costo':l.l} value={fmtShort(cosQ[i])} raw={cosQ[i]} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos',sub:l.k})}/>)}
         {rm.ppm>0&&<Fila tono='az' label='Pago al SII (F29)' sub='aparte de los costos' value={fmtShort(rm.ppm)} raw={rm.ppm} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>}
       </> },
     com: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Comisiones', hl:<>Pagadas {currentYear} <b style={{color:C.greenText}}>{fmtShort(comP.total||0)}</b></>, tono:'gr', link:'Comisiones', dest:'proveedores',
@@ -393,12 +395,12 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           <CierreGrid grupos={[
             {t:`Emitido en ${mesPasado}`,k:[
               <KpiMes key='f' ic='file' tono='am' label='Emitido bruto' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>,
-              <KpiMes key='i' ic='tEntra' tono='az' label='Ingreso' value={fmtShort(rm.ing)} sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>]},
+              <KpiMes key='i' ic='tEntra' tono='az' label='Ingreso' value={fmtShort(Qm.ing)} sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>]},
             {t:'Entró a caja',k:[<KpiMes key='c' ic='check' tono='gr' label='Cobrado' value={cobMes==null?'—':fmtShort(cobMes)} sub={cobMes!=null?dl(cobMes,cobAnt):undefined} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>]},
             {t:'Resultado devengado',k:[
-              <KpiMes key='o' ic='building' tono='gy' label='Costos' value={fmtShort(rm.cos)} sub={dl(rm.cos,rmAnt.cos,true)} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>,
-              <KpiMes key='m' ic='tPct' tono='am' label='Comisiones' value={fmtShort(rm.com)} sub={dl(rm.com,rmAnt.com,true)} onClick={()=>go('estadoResultados',ymPrev,{bloque:'com'})}/>,
-              <KpiMes key='r' ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' value={(rm.res>0?'+':'')+fmtShort(rm.res)} vcol={rm.res<0?C.overdueText:undefined} sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} onClick={()=>go('estadoResultados',ymPrev)}/>]}]}/>
+              <KpiMes key='o' ic='building' tono='gy' label='Costos' value={fmtShort(Qm.cos)} sub={dl(rm.cos,rmAnt.cos,true)} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>,
+              <KpiMes key='m' ic='tPct' tono='am' label='Comisiones' value={fmtShort(Qm.com)} sub={dl(rm.com,rmAnt.com,true)} onClick={()=>go('estadoResultados',ymPrev,{bloque:'com'})}/>,
+              <KpiMes key='r' ic='chart' tono={rm.res>=0?'gr':'ro'} label='Resultado' value={(rm.res>0?'+':'')+fmtShort(Qm.res)} vcol={rm.res<0?C.overdueText:undefined} sub={rm.margen!=null?`margen ${pct1(rm.margen)} %`:undefined} onClick={()=>go('estadoResultados',ymPrev)}/>]}]}/>
           <Sec t='Detalle' extra={btnTodos(['ret','fac','cob','cos','com','deb','caj','rev'])}/>
           <div className='ps-g4' style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:12}}>{['ret','fac','cob','cos','com','deb','caj','rev'].map(id=>tarjeta(id,true))}</div>
           {['ret','fac','cob','cos','com','deb','caj','rev'].filter(id=>lista.includes(id)).map(cuerpo)}

@@ -2,7 +2,7 @@
 // Casos de situaciones reales, sin nombres de clientes. Correr: npm test.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes } from '../src/lib/cifras.js'
+import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado } from '../src/lib/cifras.js'
 
 test('venta recurrente activa se proyecta x12; inactiva o única, tal cual', () => {
   const base = { moneda: 'UF', amount_uf: 10, uf_value: 38000 }
@@ -89,4 +89,19 @@ test('Vendido neto por socio: cada socio descuenta la comisión de SUS ventas y 
   assert.equal(suma, of); assert.equal(of, Math.round(V.reduce((a, x) => a + x.m, 0)))
   assert.equal(K.vend('A', 'ytd'), 1200)                                             // A: (1000,4 − 100,2) + (333,3 − 33,3), solo la comisión de sus ventas
   assert.ok(Math.abs(K.vend('B', 'ytd') - 500.4) < 1)                                // B no tenía comisión (el peso de ajuste de redondearPartes cae en el mayor resto)
+})
+
+test('redondearA: las partes suman el total dado, no su propia suma', () => {
+  const p = redondearA([10_040_000, 20_040_000, 30_040_000], 60_100_000, 1e5)
+  assert.equal(p.reduce((a, x) => a + x, 0), 60_100_000)
+  assert.deepEqual(redondearA([0, 0], 5e5, 1e5), [0, 0])   // sin partes con valor, nadie absorbe el ajuste
+})
+
+test('cascadaResultado: Ingresos − Costos − Comisiones = Resultado y Facturado + Comisión de externos = Ingresos, en pesos con 0,1 M', () => {
+  const x = { fac: 459_449_000, rex: 164_000, cos: 217_340_000, com: 2_470_000, res: 239_800_000 }
+  const q = cascadaResultado(x)
+  assert.equal(q.ing - q.cos - q.com, q.res)
+  assert.equal(q.fac + q.rex, q.ing)
+  assert.equal(q.egr, q.cos + q.com)
+  assert.equal(q.res, 239_800_000)   // el Resultado se redondea solo: es la cifra que se ve en todas las vistas
 })
