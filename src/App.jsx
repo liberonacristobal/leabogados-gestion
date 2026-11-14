@@ -2610,12 +2610,15 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
   const grupos = Object.values(com.filas.reduce((g,t)=>{ const k=`${t.proveedor_id||t.proveedor}|${t.naturaleza||'comision'}|${t.estado}|${t.estado==='pagado'?t.pagado_at:''}`; (g[k]=g[k]||{t,monto:0}).monto+=Number(t.monto)||0; return g },{}))
   return (<>
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',marginBottom:10}}>
-      <div style={{...SEC_LBL,marginBottom:4}}>Cobro de la venta</div>
+      <div style={{...SEC_LBL,marginBottom:8}}>Cobro de la venta</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        {[[esRecurrente(sale)?'Honorario del año':'Honorario', hon||(sale.cobro_type==='hora'?'por horas':'—'), hon?C.accent:C.muted, null],
+          ['Facturado', facturado>0?fmtMill(facturado):'—', C.accent, emit.length?`${emit.length} factura${emit.length!==1?'s':''}`:null],
+          ['Cobrado', facturado>0?fmtMill(cobrado):'—', facturado>0?C.greenText:C.muted, null],
+          ['Por cobrar', facturado>0?fmtMill(porCobrar):'—', porCobrar>0?C.overdueText:C.muted, null]].map(([l,v,col,sub],i)=>
+          <div key={i} style={{background:C.bgSoft,borderRadius:10,padding:'8px 11px',minWidth:0}}><div style={{fontSize:10,fontWeight:800,letterSpacing:.06,textTransform:'uppercase',color:C.accent,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{l}</div><div style={{fontSize:17,fontWeight:800,color:col,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{v}</div>{sub&&<div style={{fontSize:11,color:C.textSoft}}>{sub}</div>}</div>)}
+      </div>
       {com.clp>0&&baseNeto>0&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'2px 0 8px'}}><span style={{fontSize:13,color:C.muted,fontWeight:600}}>Queda para la oficina</span><span style={{fontSize:20,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',letterSpacing:-.3}}>{fmt(Math.round(baseNeto-com.clp))}</span></div>}
-      {ln(esRecurrente(sale)?'Honorario del año':'Honorario', hon||(sale.cobro_type==='hora'?'por horas':'—'), hon?C.accent:C.muted)}
-      {ln(`Facturado${emit.length?` (${emit.length} factura${emit.length!==1?'s':''})`:''}`, fmt(Math.round(facturado)), null, {top:true,bold:true})}
-      {facturado>0&&ln('Cobrado', fmt(Math.round(cobrado)), C.greenText, {sub:true})}
-      {facturado>0&&ln('Por cobrar', fmt(Math.round(porCobrar)), porCobrar>0?C.overdueText:C.muted, {sub:true})}
       {com.clp>0&&<>{ln(com.real?'Costos de terceros':'Costos de terceros (pactados)', `−${fmt(Math.round(com.clp))}`, null, {top:true})}
         {grupos.map(({t,monto},i)=><div key={i} onClick={onOpenProveedor&&t.proveedor_id?()=>onOpenProveedor(t.proveedor_id):undefined} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10,padding:'3px 0 3px 12px',fontSize:12,cursor:onOpenProveedor&&t.proveedor_id?'pointer':'default'}}><span style={{color:C.muted,minWidth:0,overflowWrap:'anywhere'}}>{t.proveedor||'Proveedor'} · {t.naturaleza==='complementario'?'servicio complementario':'comisión'} · {estLbl(t)}</span><span style={{fontVariantNumeric:'tabular-nums',color:C.muted,flexShrink:0}}>{fmt(Math.round(monto))}</span></div>)}</>}
       {onAddCostoTerceros&&(!addOpen
@@ -2643,7 +2646,7 @@ function CobroVentaCard({sale, billing=[], clientEntities=[], terceros=[], prove
                 <button onClick={()=>setAddOpen(false)} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
               </div>
             </div> })())}
-      {ln(`Por facturar${pend.length?` (${pend.length} cuota${pend.length!==1?'s':''}${nPaus?` · ${nPaus} pausada${nPaus!==1?'s':''}`:''})`:''}`, pend.length?fmt(Math.round(porFacturar)):'—', pend.length?C.text:C.muted, {top:true})}
+      {ln(`Por facturar${pend.length?` (${pend.length} cuota${pend.length!==1?'s':''}${nPaus?`, ${nPaus} pausada${nPaus!==1?'s':''}`:''})`:''}`, pend.length?fmt(Math.round(porFacturar)):'—', pend.length?C.text:C.muted, {top:true})}
       {cuad&&cuad.estado==='Exceso'&&ln('Cuadre', `Exceso ${cuad.enUF?fmtUF(cuad.diferencia):fmt(Math.round(cuad.diferencia))}`, C.overdueText, {sub:true})}   {/* solo «Exceso»: «Saldo» ya lo cubre «Trabajos sin facturar», que respeta las decisiones guardadas */}
     </div>
     {bills.length>0&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 12px',marginBottom:10}}>

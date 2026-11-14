@@ -883,9 +883,13 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}{cobroType==='mensual'&&base>0&&<span style={{fontSize:16,fontWeight:700,opacity:.75,letterSpacing:0}}> /mes</span>}</div>
           <div style={{fontSize:12,opacity:.72,fontWeight:600,marginTop:4}}>{honSub}</div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-            {[f.area||'Corporativo', (f.responsible||'sin responsable'), `${f.status||'Activo'} · ${f.year||currentYear}`].map((t,i)=>(
+            {[f.area||'Corporativo', (f.responsible||'sin responsable')].map((t,i)=>(
               <span key={i} style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{t}</span>
             ))}
+            {sale?.id&&['Activo','Pausado','Terminado'].includes(f.status||'Activo')
+              ? <select value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} title='Cambiar el estado de la venta (se guarda con Guardar)' style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',border:'none',color:'#fff',borderRadius:20,padding:'2px 6px',cursor:'pointer',outline:'none',appearance:'auto'}}>{['Activo','Pausado','Terminado'].map(o=><option key={o} value={o} style={{color:C.text}}>{o}</option>)}</select>
+              : <span style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{f.status||'Activo'}</span>}
+            <span style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{f.year||currentYear}</span>
           </div>
           {costHero>0&&base>0&&(
             <div style={{marginTop:13,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.18)'}}>
@@ -1226,22 +1230,22 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         )
         return (
           <>
-            <div style={{...SEC_LBL,marginTop:8,marginBottom:6}}>Condiciones registradas</div>
+            <div style={{...SEC_LBL,marginTop:8,marginBottom:6}}>Condiciones</div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
               {row('Honorarios',curHon,'honorarios',false)}
               {openCondicion==='honorarios'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Honorario</span><span style={{fontWeight:400,color:C.text}}>{curHon}</span></div>
                   {curCost!=='—'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Costo</span><span style={{fontWeight:400,color:C.text}}>{curCost}</span></div>}
-                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('ajustar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Ajustar honorario</button>
+                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('ajustar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Editar honorario</button>
                 </div>
               )}
               <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
-                <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Costos de proveedores</div>
+                <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Colaboradores</div>
                 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontSize:13,fontWeight:400,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
                   {provLabel
-                    ? <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>· {provLabel}</span>
+                    ? <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{provLabel}</span>
                     : (costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
                 </div>
                 <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion==='costos'?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}><Gl n='chevron'/></span>
@@ -1257,11 +1261,11 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                 return (
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Forma</span><span style={{fontWeight:400,color:C.text}}>{curCobro}</span></div>
-                  {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:400,color:C.text}}>{mesLbl(mensualInicio)} · 12 meses</span></div>}
+                  {cobroType==='mensual'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Inicio mensual</span><span style={{fontWeight:400,color:C.text}}>{mesLbl(mensualInicio)}, 12 meses</span></div>}
                   {cobroType==='cuotas'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Cuotas</span><span style={{fontWeight:400,color:C.text}}>{nCuotas} desde {mesLbl(cobroInicio)}</span></div>}
                   {cobroType==='hora'&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:C.muted}}>Por hora</span><span style={{fontWeight:400,color:C.text}}>{(parseFloat(String(tarifaHoraUF).replace(',','.'))||3)} UF/h · tope {topeHoras||'—'} h/{topePeriodo==='total'?'total':'mes'}</span></div>}
                   <div style={{fontSize:11,color:C.muted,marginTop:6,lineHeight:1.4}}>Para cambiar el formato o el inicio se regeneran las cuotas programadas (las emitidas/pagadas no se tocan).</div>
-                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Cambiar forma de cobro</button>
+                  <button type='button' onClick={()=>{ setModCobro(true); setModMode('cambiar'); setOpenCondicion(null) }} style={{...chipBtn('soft'),marginTop:8}}>Editar forma de cobro</button>
                 </div>
                 )
               })()}
@@ -1313,7 +1317,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   setSavingCuotas(true); await onUpdateCuotas?.(ups); setCuotaEdits({}); setSavingCuotas(false)
                 }
                 return (<>
-                  {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}${paus.length?` · ${paus.length} pausada${paus.length!==1?'s':''}`:''}`,'cuotasprog',false)}
+                  {row('Cuotas programadas',`${prog.length} pendiente${prog.length!==1?'s':''}${paus.length?`, ${paus.length} pausada${paus.length!==1?'s':''}`:''}`,'cuotasprog',false)}
                   {openCondicion==='cuotasprog'&&(
                     <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
@@ -1346,7 +1350,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                       )}
                       {paus.length>0&&(
                         <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-                          <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Pausadas · {paus.length}</div>
+                          <div style={{fontSize:11,fontWeight:700,color:C.soonText,marginBottom:6}}>Pausadas ({paus.length})</div>
                           {paus.map(b=>(<div key={b.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:C.muted,padding:'2px 0'}}><span>{cuotaLbl(b)} · {mesCuota((b.due||'').slice(0,7))}</span><span>{fmt(b.amount||0)}</span></div>))}
                           {!reactOpen
                             ? <button type='button' onClick={()=>{setReactOpen(true);setReactFromId(paus[0]?.id||'');setReactMonth('')}} style={{...chipBtn('soft'),marginTop:8}}>Reactivar…</button>
@@ -1407,10 +1411,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
       {/* 10. Actualizar honorarios (solo ventas activas guardadas) */}
       {sale?.id&&!propBorr&&(
         <div style={{marginTop:6,marginBottom:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:modCobro?10:0}}>
-            <span style={{fontSize:13,fontWeight:600,color:C.text}}>Actualizar honorarios</span>
-            <Switch on={modCobro} onToggle={()=>{ modCobro ? resetMod() : setModCobro(true) }}/>
-          </div>
+          {modCobro&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{modMode==='ajustar'?'Editar honorario':'Editar forma de cobro'}</span>
+            <span onClick={resetMod} style={{fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}>Cerrar</span>
+          </div>}
           {modCobro&&(
             <div>
               <div style={{fontSize:12,color:C.muted,background:C.bgSoft,borderRadius:8,padding:'8px 10px',marginBottom:10,lineHeight:1.4}}>Reemplaza las programadas; las emitidas/pagadas no se tocan.</div>
@@ -1525,7 +1529,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           {/* 10. Historial de honorarios */}
           <div style={{marginTop:modCobro?14:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
             <div onClick={()=>setHistAbierto(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
-              <Lbl>Historial de honorarios</Lbl>{tariffs.length>0&&<span style={{fontSize:11,color:C.muted}}>· {tariffs.length}</span>}
+              <Lbl>Historial de honorarios</Lbl>{tariffs.length>0&&<span style={{fontSize:11,color:C.muted}}>({tariffs.length})</span>}
               <span style={{marginLeft:'auto',fontSize:12,color:C.muted}}>{histAbierto?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
             </div>
             {histAbierto&&<>
@@ -1563,12 +1567,12 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         <div style={{display:'flex',gap:8}}>
           {(!asPage||modCobro)&&<button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
           {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
-          {sale?.id&&<button onClick={()=>onDelete(sale.id)} style={{flex:1,padding:'11px 0',borderRadius:10,border:`1px solid ${C.overdue}`,background:'transparent',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer'}}>Eliminar</button>}
         </div>
         <button disabled={saving||savingTariff||!f.client_id||!f.title} onClick={modCobro?confirmAndSave:()=>handleSave()}
           style={{width:'100%',padding:13,borderRadius:10,border:'none',background:_activandoPropuesta?C.normal:C.accent,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,opacity:(!f.client_id||!f.title)?.6:1}}>
           {(saving||savingTariff)?<Spin/>:null}{(saving||savingTariff)?'Guardando...':modCobro?'Confirmar y guardar':_activandoPropuesta?'Activar propuesta':'Guardar'}
         </button>
+        {sale?.id&&!modCobro&&<div style={{textAlign:'center',marginTop:6}}><span onClick={()=>onDelete(sale.id)} style={{fontSize:12,fontWeight:600,color:C.overdueText,cursor:'pointer',textDecoration:'underline',textUnderlineOffset:3}}>Eliminar venta</span></div>}
       </div>
     </>
   )
