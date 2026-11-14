@@ -1,3 +1,4 @@
+- 2026-11-14 · Ventas › tarjetas Vendido y Propuestas en celular: etiqueta y cifra al costado del icono y el detalle debajo, a todo el ancho (más bajas); escritorio igual.
 - 2026-11-14 · Inicio y Panel de socios › tarjetas del año: cuando se pasa de la meta se muestra solo el exceso, «+13 % neto de la meta», en verde (antes «113 % …»); Mis tareas muestra un solo número («7 pendientes», en ámbar si hay carga esta semana, con el detalle al mantener el cursor). La demo trae una meta de cobranza que se supera.
 - 2026-11-14 · Inicio › Mi trabajo en celular: «activos» y «N esta semana» van en la línea de la cifra, el icono queda centrado en la altura y las tarjetas pierden una fila (60 px de alto); escritorio igual.
 - 2026-11-14 · Inicio y Panel de socios › pastilla «Bruto»/«Neto» de la tarjeta Vendido un 20 % más pequeña (letra de 9 px, borde de 1,2 px) y un 20 % más transparente (opacidad 0,8).
