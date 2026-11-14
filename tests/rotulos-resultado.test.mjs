@@ -1,5 +1,5 @@
 // Rótulos de la cascada del resultado (devengado): una palabra por concepto y cada plano con su nombre.
-// «Comisiones pagadas» es de caja (Cobrado, Ingreso real); la cascada Ingresos − Costos − Comisiones = Margen lleva las devengadas
+// «Comisiones pagadas» es de caja (Cobrado, Ingreso real); la cascada Ingresos − Costos − Comisiones = Resultado lleva las devengadas
 // y se llama «Comisiones». «Costos» ya incluye el subarriendo como menor costo, nunca como fila aparte. Lectura estática de las vistas.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -20,7 +20,7 @@ test('una cifra devengada del resultado nunca se rotula «pagadas»', () => {
 
 test('el informe del mes rotula el resultado con las mismas palabras que las vistas', () => {
   const et = Object.fromEntries(INDICADORES.map((x) => [x[1], x[2]]))
-  assert.equal(et.cos, 'Costos'); assert.equal(et.com, 'Comisiones'); assert.equal(et.res, 'Margen'); assert.equal(et.margen, 'Margen %')
+  assert.equal(et.cos, 'Costos'); assert.equal(et.com, 'Comisiones'); assert.equal(et.res, 'Resultado'); assert.equal(et.margen, 'Margen')
 })
 
 test('Costos es una palabra y no hay fila de subarriendo aparte en las cascadas', () => {
@@ -32,9 +32,9 @@ test('Costos es una palabra y no hay fila de subarriendo aparte en las cascadas'
   assert.equal(hub.length, 0)
 })
 
-test('la cifra del Margen no se rotula «Resultado» y «Pagadas en» lleva la cifra de caja', () => {
+test('la cifra en pesos es «Resultado» y «Margen» solo el porcentaje y «Pagadas en» lleva la cifra de caja', () => {
   for (const f of ['src/vistas/DashboardView.jsx', 'src/vistas/PanelSociosView.jsx']) {
-    const mal = leer(f).filter((x) => (/label='Resultado'|'Resultado del mes'|hl:<>Resultado /.test(x.t) && /rm\.res|resMes/.test(x.t)) || (/Pagadas en/.test(x.t) && /rm\.com\b/.test(x.t) && !/comPag/.test(x.t)))
+    const mal = leer(f).filter((x) => (/label='Margen'|'Margen del mes'|hl:<>Margen /.test(x.t) && /rm\.res|resMes/.test(x.t)) || (/Pagadas en/.test(x.t) && /rm\.com\b/.test(x.t) && !/comPag/.test(x.t)))
     assert.deepEqual(mal.map((x) => `${f}:${x.n}`), [])
   }
   assert.equal(leer('src/App.jsx').filter((x) => /filaT\('Subarriendo/.test(x.t)).length, 0)

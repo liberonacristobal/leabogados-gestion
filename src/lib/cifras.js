@@ -60,6 +60,15 @@ export function redondearPartes(partes, paso=1, fijos=[]){
   return out.map(x=>x*paso)
 }
 
+// Cascada del Resultado a mostrar en una unidad (0,1 M por defecto): Facturado + Comisión de externos = Ingresos; − Costos − Comisiones = Margen.
+// El Margen se redondea solo (es la cifra que se ve en todas las vistas); Costos y Comisiones absorben el resto, así que Ingresos − Costos − Comisiones = Margen
+// y Egresos = Costos + Comisiones se leen exactos. x = {fac,rex,cos,com,res} en pesos (o UF con paso 1); fuente única de Oficina, Resultado del año y Estado de resultados.
+/** @param {{fac:number,rex:number,cos:number,com:number,res:number}} x @param {number} [paso] @returns {{fac:number,rex:number,ing:number,cos:number,com:number,egr:number,res:number}} */
+export function cascadaResultado(x, paso=1e5){
+  const [res,cos,com]=redondearPartes([x.res,x.cos,x.com],paso,[0]), [fac,rex]=redondearPartes([x.fac,x.rex],paso,[0])
+  return { fac, rex, ing:res+cos+com, cos, com, egr:cos+com, res }
+}
+
 // Cascada del Vendido del año: Bruto − Comisiones de venta = NETO, con una sola cifra de neto en Inicio, Panel de socios, imágenes y Presupuesto.
 // El neto (el plano de la meta) se redondea solo, sin ajuste; la comisión absorbe el resto, así que bruto − comisión = neto se lee exacto. m = metricasAnio(); paso = 1 (UF) o 1e5 (pesos en $M).
 /** @param {{bruto:number,costo:number,neto:number,brutoUF:number,costoUF:number,netoUF:number}} m @param {boolean} enUF @returns {{bruto:number,costo:number,neto:number}} */

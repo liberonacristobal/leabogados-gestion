@@ -350,16 +350,16 @@ export function Pliegue({ t, v, children, abierto, abajo }) {
   </details>
 }
 
-/** Resumen del paso 5 (H06): una sola tarjeta de tres cifras que siguen la cascada del escenario elegido: Margen → Resultado → Retiros. Margen siempre en $. Cada celda abre su detalle. */
+/** Resumen del paso 5 (H06): una sola tarjeta de tres cifras que siguen la cascada del escenario elegido: Resultado → Utilidad → Retiros. Resultado siempre en $. Cada celda abre su detalle. */
 export function ResumenCascada({ margen, resultado, retiros, esc, onMargen, onResultado, onRetiros }) {
   const D = useIsDesktop()
-  const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '8px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Margen' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
+  const celda = (/** @type {string} */ rot, /** @type {any} */ v, /** @type {string} */ sub, /** @type {any} */ go, /** @type {boolean} */ ult) => <div {...tocable(go)} style={{ padding: D ? '8px 16px' : '9px 10px', minWidth: 0, borderLeft: rot === 'Resultado' ? 'none' : `1px solid ${C.border}`, cursor: 'pointer' }}>
     <div style={{ ...LBL, color: C.accent, whiteSpace: 'nowrap' }}>{rot}</div>
     <div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: D ? -0.6 : -0.4, color: ult ? C.greenText : C.accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, whiteSpace: 'nowrap' }}><Val v={v} /></div>
     {D && <div style={{ fontSize: 11, color: C.muted }}>{sub}</div>}
   </div>
   return <div>
-    <div style={{ position: 'relative', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Margen', margen, 'antes de impuesto', onMargen, false)}{celda('Resultado', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después del aumento de reserva', onRetiros, true)}{D && <span style={{ position: 'absolute', top: 8, right: 16, fontSize: 11, color: C.muted }}>Escenario {esc}</span>}</div>
+    <div style={{ position: 'relative', background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', overflow: 'hidden' }}>{celda('Resultado', margen, 'antes de impuesto', onMargen, false)}{celda('Utilidad', resultado, 'después de impuesto', onResultado, false)}{celda('Retiros', retiros, 'después del aumento de reserva', onRetiros, true)}{D && <span style={{ position: 'absolute', top: 8, right: 16, fontSize: 11, color: C.muted }}>Escenario {esc}</span>}</div>
     {!D && <div style={{ fontSize: 12, color: C.muted, margin: '4px 4px 0' }}>Escenario {esc}</div>}
   </div>
 }

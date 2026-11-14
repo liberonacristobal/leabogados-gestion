@@ -47,7 +47,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
   const [resComis,setResComis] = useState(false)
   const [resPerc,setResPerc] = useState(false)
   const [resRex,setResRex] = useState(false)
-  const [resCos,setResCos] = useState(false)   // expandir «Costos» (Margen): sus líneas
+  const [resCos,setResCos] = useState(false)   // expandir «Costos» (Resultado): sus líneas
   const [resRexL,setResRexL] = useState('pend')
   const rexDet = useMemo(()=>{ const cobF={}; (ingConc||[]).forEach(c=>{ if(c&&c.tipo_destino==='factura'&&c.factura_id) cobF[String(c.factura_id)]=(cobF[String(c.factura_id)]||0)+(Number(c.monto_aplicado)||0) })
     const it=(resAnio.rexItems||[]).map(({t,b})=>{ const com=Number(t.comision_monto)||0, base=com+(Number(t.monto)||0), c=base>0?Math.min(com,(cobF[String(b.id)]||0)*com/base):0; return {b,com,cob:c,pend:com-c} })
@@ -148,7 +148,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
                   {verlink('Ver todo en Ventas','sales')}
                 </div>)
               }
-              // MARGEN (devengado) — Facturado + Comisión de externos = Ingresos; − Costos (netos del subarriendo) − Comisiones = Margen
+              // RESULTADO (devengado) — Facturado + Comisión de externos = Ingresos; − Costos (netos del subarriendo) − Comisiones = Resultado
               if(t==='marg'){
                 // Cascada lineal (18-10): se lee como una suma, de arriba abajo. Cifras de resAnio.ver* = redondeadas para que las partes
                 // sumen el total visible (Facturado + Comisión de externos = Ingresos; − Costos netos del subarriendo − Comisiones = Margen).
@@ -172,7 +172,7 @@ export function ResDrillPanel({datos,clients=[],terceros=[],tile:t,year,setDrill
                     return <>{L.map((x,i)=>cxR({k:'cl'+x.k,sg:x.k==='sub'?'−':(i?'+':''),label:x.k==='sub'?x.l+', menor costo':x.l,val:fm(V[i]),kind:'sub',onClick:x.k==='sub'?()=>go('subarriendo'):null}))}
                       {cxR({k:'clv',label:'Ver costos de oficina',val:'',kind:'sub',onClick:()=>go('presupuestoOficina')})}</> })()}
                   {resAnio.com!==0&&lin('−','Comisiones',mRes('com'),'neg',()=>go('proveedores'))}
-                  {lin('=',resAnio.res>=0?'Margen':'Pérdida',(resAnio.res<0?'−':'')+mRes('res',true),'res',onOpenEstadoResultados||null,pctL)}
+                  {lin('=',resAnio.res>=0?'Resultado':'Pérdida',(resAnio.res<0?'−':'')+mRes('res',true),'res',onOpenEstadoResultados||null,pctL)}
                   {onOpenEstadoResultados&&<div onClick={onOpenEstadoResultados} style={{...RC,justifyContent:'center',color:C.azulInfo,fontWeight:700,fontSize:12}}>Ver estado de resultados <Gl n='chevron'/></div>}
                 </div>)
               }
@@ -512,7 +512,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const [resSeeAll,setResSeeAll] = useState({})                          // {`${tile}-${y}`:true} → ver TODOS los cobros de ese año (si no, tope 6)
   const [resComis,setResComis] = useState(false)                        // expandir la lista de comisiones pagadas dentro del panel
   const [resPerc,setResPerc] = useState(false)                          // expandir la lista de comisiones percibidas (Cobrado)
-  const [resRex,setResRex] = useState(false)                            // expandir «Comisión de externos» (Margen): cobrada / por cobrar
+  const [resRex,setResRex] = useState(false)                            // expandir «Comisión de externos» (Resultado): cobrada / por cobrar
   const [resRexL,setResRexL] = useState('pend')                         // lista abierta dentro de Comisión de externos: 'cob' | 'pend' | null
   const [resFTer,setResFTer] = useState(false)                          // expandir el desglose del total emitido (Facturado)
   const [resCaja,setResCaja] = useState(false)                          // expandir el desglose del total a caja (Cobrado)
@@ -547,7 +547,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             ['Ingreso real', fmtUFk(iv.totalUF-comisPagadasAnioVenta.totalUF+iv.percibidasUF), pe(ingReal)],
             ['Total a caja', fmtUFk(iv.totalCajaUF||0), pe(iv.totalCaja||0)],
             ...yrsCob.map(y=>[yrLbl(y), fmtUFk((iv.byYearUF||{})[y]||0), pe(iv.byYear[y]||0)]) ] },
-        { t:resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', pct:resAnio.pct!=null?Math.round(resAnio.pct):null, uf:uf(resAnio.verUF.res), clp:pe(resAnio.res), lines:[
+        { t:resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio', pct:resAnio.pct!=null?Math.round(resAnio.pct):null, uf:uf(resAnio.verUF.res), clp:pe(resAnio.res), lines:[
             ['Facturado', fmtUFk(resAnio.verUF.fac), pe(resAnio.fac)],
             ...(resAnio.rex?[['+ Comisión de externos', fmtUFk(resAnio.verUF.rex), pe(resAnio.rex)]]:[]),
             ['= Ingresos', fmtUFk(resAnio.verUF.ing), pe(resAnio.ing)],
@@ -624,7 +624,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
     const CVu=cascadaVendido(m,true), ventasCard=card('Vendido neto', CVu.neto, m.neto, `${ventaNetoPct} % de la meta`, row('Vendido bruto',CVu.bruto,m.bruto)+row('Costos de terceros',CVu.costo,m.costo,true)+row('Meta del año',metaUF,m.meta))
     const factCard=card('Facturado', V.fac, resAnio.fac, `${m.bruto>0?factPct:0} % de lo vendido bruto`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
     const cobCard=card('Cobrado propio', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Comisiones pagadas',comU,comisYTD,true)+row('+ Comisiones percibidas',percU,percYTD)+row('Ingreso real',(iv.totalUF||0)-comU+percU,ingReal)+row('Total a caja',iv.totalCajaUF||0,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
-    const margCard=card(resAnio.res>=0?'Margen del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos',V.cos,resAnio.cos,true)+(resAnio.sub?row('incluye subarriendo y gastos recuperados (menor costo)',V.sub,resAnio.sub,true):'')+row('Comisiones',V.com,resAnio.com,true))
+    const margCard=card(resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % sobre los ingresos`:'— sobre los ingresos'), row('Facturado',V.fac,resAnio.fac)+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos',V.cos,resAnio.cos,true)+(resAnio.sub?row('incluye subarriendo y gastos recuperados (menor costo)',V.sub,resAnio.sub,true):'')+row('Comisiones',V.com,resAnio.com,true))
     const _mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, _sob=ingYTD>=metaCobranza
     const [_a,_b]=_sob?redondearPartes([_mU,(iv.totalUF||0)-_mU],1,[]):redondearPartes([iv.totalUF||0,_mU-(iv.totalUF||0)],1,[0])
     const cobranzaCard=card('Cobranza', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Meta de cobranza',_sob?_a:_a+_b,metaCobranza)+row(_sob?'Sobre la meta':'Falta para la meta',_b,Math.abs(ingYTD-metaCobranza)))
@@ -942,7 +942,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                 {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?(vendPrinc==='neto'?ventaNetoPct:ventaPct):null,<><span className='kpi-neto'>{vendPrinc==='neto'?'neto ':'bruto '}</span>de la meta</>, {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
                 {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'del bruto')}
                 {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, cobPrinc==='real'?vMon(ingRealUF,ingReal):vMon(ingYTDUF,ingYTD), metaCobranza>0?(cobPrinc==='real'?cobroRealPct:cobroPct):null,'de la meta',undefined,{etiqueta:cobPrinc==='real'?'Real':'Propio',otra:cobPrinc==='real'?'propio':'real',onAlt:setCobPrinc})}
-                {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
+                {resAnio.ing>0 && kpiTile('marg','Resultado',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
               </div>)
             })()}
             {resDrill&&<ResDrillPanel datos={resData} clients={clients} terceros={terceros} tile={resDrill.tile} year={resDrill.year} setDrill={setResDrill} moneda={dashMoneda} go={go} isDesk={isDeskRes} selYear={selYear} onOpenClientFicha={onOpenClientFicha} onOpenEstadoResultados={onOpenEstadoResultados}/>}
@@ -1055,7 +1055,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           {/* Señales financieras — todas clickeables a su fuente. Resultado del mes y Flujo de caja abren su página; el resto navega o despliega. */}
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
             {/* Orden por pares (2026-10-17): el mes (Resultado · Emitido) → la caja (Flujo · Por cobrar) → el año (Proyección · Comisiones). Ícono propio por tarjeta; verde solo para lo bueno con signo. */}
-            {kTile('resmes','Margen del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
+            {kTile('resmes','Resultado del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
             {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct} % pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},`neto, 8 sem., ${flujoCaja.conMorosos?'con morosos':'sin morosos'}`,onOpenFlujoCaja)}
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{isDeskRes&&expoCob.pctM60>0?`, ${Math.round(expoCob.pctM60*100)} % con más de 60 días`:''}</span>:'a la fecha',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}

@@ -20,7 +20,7 @@ const estado = () => estadoInicial({ costos, tasa: 12.5, ppmMes: 100_000 })
 const cerca = (a, b, tol = 1) => assert.ok(Math.abs(a - b) <= tol, `${a} ≠ ${b}`)
 
 test('los seis componentes tienen un solo nombre y las escenarios se renombran sin tocar la clave', () => {
-  assert.deepEqual(COMPONENTES.map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Margen', 'Retiros'])
+  assert.deepEqual(COMPONENTES.map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Resultado', 'Retiros'])
   assert.deepEqual([...ANCLAS].sort(), ['caja', 'fact', 'margen', 'retiros', 'ventas'])   // el presupuesto de costos se arma en su paso, no se fija como meta
   assert.deepEqual(ESCENARIOS.map((x) => x[0]), ['prudente', 'base', 'meta'])
 })

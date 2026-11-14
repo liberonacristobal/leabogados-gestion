@@ -113,7 +113,7 @@ export function repartoSocios26UF(X) {
 
 /**
  * Sueldos y retiros de los socios (página): una tarjeta por socio y la de la oficina, 2026 real contra 2027 meta, anual o mensual. Es el mismo dinero del presupuesto visto por socio
- * (no se suma a los costos; Margen y Retiros no cambian). `ir` = enlace a la página Socios; `irRetiros` = lista de los retiros del año.
+ * (no se suma a los costos; Resultado y Retiros no cambian). `ir` = enlace a la página Socios; `irRetiros` = lista de los retiros del año.
  */
 export function DSocios({ X, alza, retiros, ir, irRetiros }) {
   const D = useIsDesktop(), { ui, setUI, datos: d } = X, mensual = ui.sm === 'm'
@@ -136,7 +136,7 @@ export function DSocios({ X, alza, retiros, ir, irRetiros }) {
       {d.retiros26.desde && irRetiros && <span onClick={irRetiros} role='button' style={{ cursor: 'pointer' }}>Ver los {d.retiros26.n} retiros ›</span>}
       {ir && <span onClick={ir} role='button' style={{ cursor: 'pointer' }}>Panel de socios ›</span>}
     </div>
-    <Det t='Cálculo'><Lista items={[`Sueldo ${d.anio}: Remuneraciones de cada socio con su aumento; sus leyes sociales son costo de la oficina. No se suman a los costos: Margen y Retiros no cambian.`, 'Retiros: en partes iguales. El impuesto personal de cada socio no se proyecta.', `${d.anioBase} real: sueldos pagados y retiros de la página Socios${d.retiros26.desde ? `, ${d.retiros26.n} retiros entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}` : ''}, por confirmar.`, ...(mensual ? [`Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses; ${d.anio} ÷ 12.`] : [])]} /></Det>
+    <Det t='Cálculo'><Lista items={[`Sueldo ${d.anio}: Remuneraciones de cada socio con su aumento; sus leyes sociales son costo de la oficina. No se suman a los costos: Resultado y Retiros no cambian.`, 'Retiros: en partes iguales. El impuesto personal de cada socio no se proyecta.', `${d.anioBase} real: sueldos pagados y retiros de la página Socios${d.retiros26.desde ? `, ${d.retiros26.n} retiros entre ${fmtFechaDMY(d.retiros26.desde)} y ${fmtFechaDMY(d.retiros26.hasta)}` : ''}, por confirmar.`, ...(mensual ? [`Por mes: ${d.anioBase} ÷ ${mesesTranscurridos(d.hoy).toLocaleString('es-CL', { maximumFractionDigits: 1 })} meses; ${d.anio} ÷ 12.`] : [])]} /></Det>
   </>
 }
 
@@ -145,7 +145,7 @@ export function TablaPresupuesto({ X, MT, irPaso }) {
   const D = useIsDesktop(), ch = MT.ch, ref = MT.ref, an = X.datos.anio
   const L = [
     ['', 'Vendido', ch.ventas, ref.ventas.cierre, 'ventas', 0], ['', 'Facturado', ch.fact, ref.fact.cierre, 'fact', 0], ['−', 'Aumento de lo por cobrar', ch.dCob, null, null, 0], ['=', 'Cobrado', ch.caja, ref.caja.cierre, 'caja', 1],
-    ['−', 'Comisiones', ch.terc, null, null, 0], ['−', nombreCorto('costos', CFG), ch.costos, ref.costos.cierre, 'costos', 0, () => irPaso(2)], ['=', 'Margen', ch.margen, ref.margen.cierre, 'margen', 1],
+    ['−', 'Comisiones', ch.terc, null, null, 0], ['−', nombreCorto('costos', CFG), ch.costos, ref.costos.cierre, 'costos', 0, () => irPaso(2)], ['=', 'Resultado', ch.margen, ref.margen.cierre, 'margen', 1],
     ['−', 'Impuesto de primera categoría', ch.idpc, null, null, 0], ['=', 'Después de impuesto', ch.post, null, null, 1], ['−', 'Aumento de reserva', ch.reserva, null, null, 0], ['=', 'Retiros', ch.retiros, ref.retiros.cierre, 'retiros', 1],
   ]
   const g = D ? 'minmax(0,1fr) 110px 110px 150px' : 'minmax(0,1fr) 88px 88px'

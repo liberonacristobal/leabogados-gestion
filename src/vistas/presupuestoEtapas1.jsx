@@ -142,7 +142,7 @@ export function Base({ X }) {
     <Panel pad>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: C.muted }}>{cubre != null ? `El arrastre cubre ${pc(cubre)} de los costos` : 'Sin costos'}</span>
-        <span style={{ fontSize: 13 }}>Margen del arrastre <b style={{ fontSize: D ? 21 : 18, color: margen >= 0 ? C.greenText : C.overdueText, marginLeft: 8 }}><Val v={par(margen)} /></b></span>
+        <span style={{ fontSize: 13 }}>Resultado del arrastre <b style={{ fontSize: D ? 21 : 18, color: margen >= 0 ? C.greenText : C.overdueText, marginLeft: 8 }}><Val v={par(margen)} /></b></span>
       </div>
     </Panel>
     <Panel hd='Aparte del arrastre'>
@@ -156,7 +156,7 @@ export function Base({ X }) {
       <span>No se cuentan las cuotas de las asesorías (ya van por 12 meses) ni el subarriendo y gastos recuperados, que no es ingreso.</span>
       <span>Los cambios quedan en el borrador y no tocan ventas, facturas ni cuotas.</span>
       <span>Costos: los de la oficina con el alza del escenario {X.nomEsc(rk)}, descontado el subarriendo y gastos recuperados; comisiones sobre lo facturado.</span>
-      <span>Margen del arrastre: el arrastre menos costos y comisiones, antes de vender nada nuevo.</span></div></Pliegue>
+      <span>Resultado del arrastre: el arrastre menos costos y comisiones, antes de vender nada nuevo.</span></div></Pliegue>
     <Pliegue t={`Base de los últimos 12 meses cerrados`} v='lo que mostraba el paso antes'><div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: D ? 10 : 8 }}>
     <Titulo>Base {Y} · últimos 12 meses cerrados</Titulo>
     <Grid cols={3} colsM={2} gap={D ? 12 : 8}>{tarjetasBase}</Grid>
