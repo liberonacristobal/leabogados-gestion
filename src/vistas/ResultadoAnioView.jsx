@@ -181,13 +181,13 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
       const cab=t=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{t} · {per}</span></div>
       // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Comisión de externos = Ingresos (el subarriendo baja el costo, no suma aquí)
-      const [vFac,vRex]=redondearA([facturacion,rex],Q.ing,1e5,[0])
+      const vFac=Q.fac, vRex=Q.rex   // las mismas partes de Oficina: el Facturado al redondeo normal y la comisión de externos chica, exacta
       const [fFac,fNc,fTer]=redondearPartes([facturacion,nc,terc],1e5,[0])
       const detIng=<div style={card}>{cab('Ingresos')}
         {ln({k:'fac',l:'Facturación propia',v:fmtMillLR(vFac),on:e=>{e.stopPropagation();setNcOpen(!ncOpen)},open:ncOpen})}
         {ncOpen&&<>{subF('em','Emitida en el SII','sin facturas de gastos ni subarriendo',fmtMillLR(fFac+fNc+fTer))}{subF('nc','− Notas de crédito',ncList.length?`${ncList.length} nota${ncList.length!==1?'s':''}`:'',fmtMillLR(fNc))}{fTer?subF('te','− Por cuenta de terceros','se traspasa a externos',fmtMillLR(fTer)):null}</>}
         {rex!==0&&ln({k:'rex',sg:'+',l:'Comisión de externos',v:fmtMillLR(vRex)})}
-        {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(vFac+vRex),tot:true})}</div>
+        {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(Q.ing),tot:true})}</div>
       // Costos: suma de las líneas de resultadoMes de los meses del período (misma fuente que Estado de resultados).
       const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+', menor costo',gv:'Gastos varios'}
       const cosAgg={}; months.forEach(m=>(rmes[m]?.cosLines||[]).forEach(x=>{ cosAgg[x.k]=(cosAgg[x.k]||0)+(Number(x.m)||0) }))

@@ -97,11 +97,22 @@ test('redondearA: las partes suman el total dado, no su propia suma', () => {
   assert.deepEqual(redondearA([0, 0], 5e5, 1e5), [0, 0])   // sin partes con valor, nadie absorbe el ajuste
 })
 
-test('cascadaResultado: Ingresos − Costos − Comisiones = Resultado y Facturado + Comisión de externos = Ingresos, en pesos con 0,1 M', () => {
+test('cascadaResultado: Ingresos − Costos − Comisiones = Resultado, con el Facturado redondeado solo (0,1 M) y la comisión de externos chica exacta', () => {
   const x = { fac: 459_449_000, rex: 164_000, cos: 217_340_000, com: 2_470_000, res: 239_800_000 }
   const q = cascadaResultado(x)
   assert.equal(q.ing - q.cos - q.com, q.res)
-  assert.equal(q.fac + q.rex, q.ing)
   assert.equal(q.egr, q.cos + q.com)
-  assert.equal(q.res, 239_800_000)   // el Resultado se redondea solo: es la cifra que se ve en todas las vistas
+  assert.equal(q.res, 239_800_000)      // el Resultado se redondea solo: es la cifra que se ve en todas las vistas
+  assert.equal(q.fac, 459_400_000)      // el Facturado también: igual que Inicio
+  assert.equal(q.rex, 164_000)          // menor a $1 M: exacta
+  assert.ok(Math.abs(q.fac + q.rex - q.ing) <= 50_000)
+})
+
+test('cascadaResultado: una cifra menor a $1 M no se redondea a 0,1 M (caso real $150.000 que salía como $200.000)', () => {
+  const q = cascadaResultado({ fac: 150_000, rex: 0, cos: 21_050_000, com: 0, res: -20_900_000 })
+  assert.equal(q.fac, 150_000)
+  assert.equal(q.ing, 150_000)
+  assert.equal(q.rex, 0)
+  assert.equal(q.res, -20_900_000)
+  assert.equal(q.cos + q.com, q.egr)
 })

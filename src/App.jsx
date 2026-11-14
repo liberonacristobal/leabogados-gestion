@@ -1780,7 +1780,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   const dif = r.res-rp.res
   // Redondeo que cuadra (0,1 M): Ingresos − Costos − Comisiones = Resultado, y cada partida suma su total (cascadaResultado / redondearA).
   const Q=cascadaResultado(r), cosR=redondearA(r.cosLines.map(x=>x.m),Q.cos,1e5), comR=redondearA(r.comList.map(x=>x.m),Q.com,1e5)
-  const qm=new Map(meses.map(m=>[m.ym,cascadaResultado(m)])), qt=cascadaResultado(tot), QQ=m=>m===tot?qt:qm.get(m.ym)
+  const qm=new Map(meses.map(m=>[m.ym,cascadaResultado(m)])), qt=cascadaResultado({fac:tot.ing,rex:0,cos:tot.cos,com:tot.com,res:tot.res}), QQ=m=>m===tot?qt:qm.get(m.ym)
   const [cY,cM]=ym.split('-').map(Number), cierre=fmtFechaDMY(`${cM===12?cY+1:cY}-${String(cM===12?1:cM+1).padStart(2,'0')}-15`)
   const nav = d => { const [a,m]=ym.split('-').map(Number); const x=new Date(a,m-1+d,1); setYm(`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`); setSub2(null) }
   const togBloque = k => { setAbierto(a=>a===k?null:k); setSub2(null) }

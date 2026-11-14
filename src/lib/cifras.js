@@ -64,13 +64,21 @@ export function redondearA(partes, total, paso=1, fijos=[]){
   return out.map(x=>x*paso)
 }
 
-// Cascada del Resultado a mostrar en una unidad (0,1 M por defecto): Facturado + Comisión de externos = Ingresos; − Costos − Comisiones = Margen.
-// El Margen se redondea solo (es la cifra que se ve en todas las vistas); Costos y Comisiones absorben el resto, así que Ingresos − Costos − Comisiones = Margen
-// y Egresos = Costos + Comisiones se leen exactos. x = {fac,rex,cos,com,res} en pesos (o UF con paso 1); fuente única de Oficina, Resultado del año y Estado de resultados.
+// Cascada del Resultado a mostrar en una unidad (0,1 M por defecto): Facturado + Comisión de externos = Ingresos; − Costos − Comisiones = Resultado.
+// El Resultado y el Facturado se redondean solos (son las cifras que se ven igual en todas las vistas); Costos y Comisiones absorben el resto, así que
+// Ingresos − Costos − Comisiones = Resultado y Egresos = Costos + Comisiones se leen exactos. Una cifra menor a $1 M queda EXACTA (la app la muestra con
+// dos decimales): redondear $150.000 a 0,1 M la dejaba en $200.000. x = {fac,rex,cos,com,res} en pesos (o UF con paso 1); fuente única de Oficina,
+// Resultado del año, Estado de resultados y Panel de socios.
 /** @param {{fac:number,rex:number,cos:number,com:number,res:number}} x @param {number} [paso] @returns {{fac:number,rex:number,ing:number,cos:number,com:number,egr:number,res:number}} */
 export function cascadaResultado(x, paso=1e5){
-  const [res,cos,com]=redondearPartes([x.res,x.cos,x.com],paso,[0]), ing=res+cos+com, [fac,rex]=redondearA([x.fac,x.rex],ing,paso,[0])   // Facturado y Comisión de externos suman el Ingreso mostrado
-  return { fac, rex, ing, cos, com, egr:cos+com, res }
+  const umbral = paso * 10   // 1 M con el paso por defecto
+  /** @param {number} v */
+  const r = v => { const n = Number(v) || 0; return Math.abs(n) < umbral ? n : Math.round(n / paso) * paso }
+  const res = r(x.res), ing = r((Number(x.fac) || 0) + (Number(x.rex) || 0))
+  const fac = r(x.fac), rex = Math.abs(Number(x.rex) || 0) < umbral ? (Number(x.rex) || 0) : r(x.rex)
+  const egr = r(ing - res)
+  const [cos, com] = redondearA([x.cos, x.com], egr, paso)
+  return { fac, rex, ing, cos, com, egr: cos + com, res }
 }
 
 // Cascada del Vendido del año: Bruto − Comisiones de venta = NETO, con una sola cifra de neto en Inicio, Panel de socios, imágenes y Presupuesto.
