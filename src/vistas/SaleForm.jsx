@@ -2,9 +2,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, DEMO } from '../supabase'
-import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { estadoPagoVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
+import { avisoTarifa } from '../../supabase/functions/_shared/textosAvisos.js'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
+import { fetchUFFechas, fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
 
 export const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 
@@ -241,6 +242,10 @@ export function SaleForm({asPage=false,afterHero=null,heroEl=undefined,sale,clie
   const [histAbierto,setHistAbierto] = useState(false)   // Historial de honorarios colapsado por defecto (form más corto al reabrir)
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
   const fmtMesAno = d => d ? d.slice(5,7)+'/'+d.slice(0,4) : '—'
+  // Aviso de tarifa: la última factura mensual supera el monto mensual de la venta (misma regla que Revisión de datos; la UF de cada fecha viene de la misma fuente).
+  const [ufMapV,setUfMapV] = useState({})
+  useEffect(()=>{ if(DEMO||!sale?.id) return; const ds=(billing||[]).filter(b=>String(b.sale_id)===String(sale.id)&&b.invoice_no&&b.issued_at).map(b=>b.issued_at); if(!ds.length) return; let alive=true; fetchUFFechas(ds).then(m=>{ if(alive) setUfMapV(m||{}) }).catch(()=>{}); return ()=>{ alive=false } },[sale?.id,billing])
+  const avTarifa = useMemo(()=>{ if(!sale?.id) return null; const vivo=(sales||[]).find(x=>String(x.id)===String(sale.id))||sale; return mensualMayorQueVenta({sales:[vivo],billing,uf:ufMapV})[0]||null },[sale,sales,billing,ufMapV])
   const [modCobro,setModCobro] = useState(false)
   const [modMode,setModMode] = useState('ajustar')
   const [newHon,setNewHon] = useState('')
@@ -1225,6 +1230,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
           <>
             <div style={{...SEC_LBL,marginTop:8,marginBottom:6}}>Condiciones</div>
             <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:10}}>
+              {avTarifa&&<div onClick={()=>{ setModCobro(true); setModMode('ajustar'); setOpenCondicion(null) }} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 12px',background:C.avisoBg,borderBottom:`1px solid ${C.avisoLine}`,color:C.avisoText,fontSize:13,cursor:'pointer'}}><span style={{minWidth:0,lineHeight:1.3}}>{avisoTarifa(avTarifa)}</span><span style={{fontSize:16,flexShrink:0}}><Gl n='chevron'/></span></div>}
               {row('Honorarios',curHon,'honorarios',false)}
               {openCondicion==='honorarios'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`,background:C.bgSoft}}>
