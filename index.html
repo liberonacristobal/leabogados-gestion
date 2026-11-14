@@ -23,6 +23,8 @@
   <title>FirmDesk</title>
   <style>
     html, body { margin:0; padding:0; background:#0F0F0F; }
+    /* La página nunca se corre hacia los lados: lo que se salga del ancho se recorta en vez de abrir un desplazamiento horizontal (iPhone) */
+    html, body, #root { overflow-x:clip; max-width:100%; }
     /* Filas clickeables de la ficha del cliente (affordance: hover/active + chevron) */
     .lf-row { cursor:pointer; transition:background .12s; }
     .lf-row:hover { background:#F5F7F9; }
