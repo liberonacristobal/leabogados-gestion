@@ -189,23 +189,23 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         {rex!==0&&ln({k:'rex',sg:'+',l:'Comisión de externos',v:fmtMillLR(vRex)})}
         {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(vFac+vRex),tot:true})}</div>
       // Costos: suma de las líneas de resultadoMes de los meses del período (misma fuente que Estado de resultados).
-      const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+' · menor costo',gv:'Gastos varios'}
+      const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+', menor costo',gv:'Gastos varios'}
       const cosAgg={}; months.forEach(m=>(rmes[m]?.cosLines||[]).forEach(x=>{ cosAgg[x.k]=(cosAgg[x.k]||0)+(Number(x.m)||0) }))
       const cosK=['rem','cot','arr','con','otr','pre','sub','gv'].filter(k=>cosAgg[k])
       const cosV=redondearPartes(cosK.map(k=>cosAgg[k]),1e5)
       const remEst=months.some(m=>rmes[m]?.remEst&&rmes[m]?.conPlanilla)
-      const detCos=<div style={card}>{cab('Costos de operación')}
+      const detCos=<div style={card}>{cab('Costos')}
         {cosK.map((k,i)=>k==='sub'?ln({k,sg:'−',l:COSL[k],v:fmtMillLR(-cosV[i])}):ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
-        {ln({k:'cosT',sg:'=',l:'Costos de operación',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
+        {ln({k:'cosT',sg:'=',l:'Costos',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
         {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>Pago al SII (F29) {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
-      // Comisiones pagadas: por colaborador (comList de cada mes).
+      // Comisiones (devengadas): por colaborador (comList de cada mes).
       const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
       const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearPartes(comL.map(x=>x.m),1e5)
       const detCom=<div style={card}>{cab('Comisiones')}
         {comL.length?<>{comL.map((x,i)=>ln({k:'c'+i,sg:i?'+':'',l:x.nombre,v:fmtMillLR(comV[i])}))}{comL.length>1&&ln({k:'comT',sg:'=',l:'Comisiones',v:fmtMillLR(comV.reduce((a,x)=>a+x,0)),tot:true})}</>
           :<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones en el período</div>}</div>
       const blk=open==='cos'||open==='com'?open:(open===null?null:'ing')
-      const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:fmtMill(ingresos)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:costosOper?'−'+fmtMill(costosOper):'$0'},{k:'com',ic:'tPct',lab:'Comisiones',val:comis?'−'+fmtMill(comis):'$0'}]
+      const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:fmtMill(ingresos)},{k:'cos',ic:'wallet',lab:'Costos',val:costosOper?'−'+fmtMill(costosOper):'$0'},{k:'com',ic:'tPct',lab:'Comisiones',val:comis?'−'+fmtMill(comis):'$0'}]
       const det=k=>k==='ing'?detIng:k==='cos'?detCos:detCom
       const bloques=isDesktop
         ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginTop:12}}>{B.map(b=>kt(b.k,b.ic,[C.card,C.accent],b.lab,b.val,null,()=>setOpen(blk===b.k?null:b.k),{sel:blk===b.k,chev:true,big:false}))}</div>{blk&&det(blk)}</>
@@ -222,9 +222,9 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const tabla=<div style={{...card,marginTop:0}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Comparativa mensual · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar</span></div>
         <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{cols.map(c=><th key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...th,cursor:'pointer'}}>{dot(c.m)}{MES_C[c.m-1]}</th>)}<th style={th}>{yr}</th></tr></thead>
-        <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos de operación',c=>c.cos,true)}{filaT('− Comisiones',c=>c.com,true)}
-          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`}}>= Resultado</td>,...cols.map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1.5px solid ${C.accent}`}}>{sgnLR(c.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:tot.res>=0?C.greenText:C.overdueText,borderTop:`1.5px solid ${C.accent}`,borderLeft:`1px solid ${C.border}`}}>{sgnLR(tot.res)}</td>]}</tr>
-          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:12,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
+        <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos',c=>c.cos,true)}{filaT('− Comisiones',c=>c.com,true)}
+          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`}}>= Margen</td>,...cols.map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1.5px solid ${C.accent}`}}>{sgnLR(c.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:tot.res>=0?C.greenText:C.overdueText,borderTop:`1.5px solid ${C.accent}`,borderLeft:`1px solid ${C.border}`}}>{sgnLR(tot.res)}</td>]}</tr>
+          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen %</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:12,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
         </tbody></table></div></div>
       // Celular (como el Estado de resultados): un mes por línea, del más nuevo al más antiguo; tocar abre su planilla.
       const lista=<div style={{...card,marginTop:0}}>
@@ -236,10 +236,10 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{flex:1,fontSize:13,fontWeight:800,color:C.accent}}>{yr}</span><span style={{fontSize:11,fontWeight:700,color:C.accent,...num}}>{pctM(tot.margen)}</span><span style={{fontSize:13,fontWeight:800,minWidth:70,textAlign:'right',color:tot.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(tot.res)}</span></div></div>
       return <>
         <div style={grid4}>
-          {kt('res','chart',tRes,'Resultado',sgn(resultado),`${per} · ${estadoP}${estim?' · incl. estimados':''}`)}
+          {kt('res','chart',tRes,'Margen',sgn(resultado),`${per} · ${estadoP}${estim?' · incl. estimados':''}`)}
           {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(ingresos),'facturación propia y externos',()=>setOpen('ing'))}
           {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>setOpen('cos'))}
-          {kt('mar','tPct',[C.card,C.accent],'Margen',margenV==null?'—':`${margenV.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos')}
+          {kt('mar','tPct',[C.card,C.accent],'Margen %',margenV==null?'—':`${margenV.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos')}
         </div>
         {bloques}
         <div style={{marginTop:14}}>{isDesktop?tabla:lista}</div>

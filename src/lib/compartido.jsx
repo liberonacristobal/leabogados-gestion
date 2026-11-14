@@ -690,7 +690,7 @@ export function setEquipoCfg(list){ EQUIPO_CFG=(list||[]).filter(s=>s&&s.nombre&
 
 // ── RESULTADO DEL MES — FUENTE ÚNICA (página Estado de resultados + tarjeta del Inicio). Regla acordada 2026-10-15:
 // ingresos = facturación propia del SII emitida en el mes (sin facturas de externos ni de subarriendo, − notas de crédito) + % retenido de las facturas de externos emitidas en el mes;
-// egresos  = costos de operación del mes NETOS del subarriendo y gastos recuperados (menor costo fijo; planilla real SIN PPM; sin planilla, presupuesto sin PPM) + gastos varios + comisiones PAGADAS en el mes (bruto).
+// egresos  = costos de operación del mes NETOS del subarriendo y gastos recuperados (menor costo fijo; planilla real SIN PPM; sin planilla, presupuesto sin PPM) + gastos varios + comisiones DEVENGADAS del mes (las de lo facturado; las pagadas son de caja y van en Cobrado, Ingreso real).
 // Regla 2026-11-11: el subarriendo no es ingreso; su factura no suma a ingresos ni a honorarios.
 // El PPM va aparte (anticipo del impuesto anual). Un mes es provisorio hasta que la planilla lo cierra (15 del mes siguiente).
 export const esPPMcosto = r => String(r?.categoria||'')==='Impuestos y patentes' && /ppm/i.test(String(r?.item||''))
