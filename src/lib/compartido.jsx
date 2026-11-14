@@ -560,6 +560,17 @@ if(typeof window!=='undefined' && !window.__errHook){ window.__errHook=true
 // Comisiones a terceros de UNA venta — FUENTE ÚNICA. Si la venta tiene comisiones registradas (terceros_pagos, sin las de
 // facturas anuladas/borradas) son la verdad; si no tiene ninguna, se usa el "Costo prov." pactado como proyección.
 // Devuelve {clp, real, filas}. "Queda para la oficina" = honorario (o lo facturado) − clp.
+// Cifras del cobro de UNA venta (fuente única de la tarjeta «Cobro de la venta» y de la cabecera de la venta): lo facturado, cobrado y por cobrar de sus
+// facturas emitidas, lo que falta por facturar, el honorario y lo que queda para la oficina (facturado, o el honorario si aún no hay facturas, menos las comisiones).
+export const cifrasCobroVenta = (sale, billing=[], terceros=[], ufRef=0) => {
+  const bills=(billing||[]).filter(b=>b && String(b.sale_id)===String(sale?.id) && !b.deleted_at && b.status!=='Anulada' && !['reembolso','nota_credito'].includes(b.billing_type))
+  const emit=bills.filter(b=>!!b.invoice_no), pend=bills.filter(b=>!b.invoice_no)
+  const facturado=emit.reduce((a,b)=>a+montoFactura(b),0), cobrado=emit.reduce((a,b)=>a+cobradoBill(b),0), porCobrar=emit.reduce((a,b)=>a+saldoBill(b),0)
+  const porFacturar=pend.reduce((a,b)=>a+(b.amount||0),0), nPaus=pend.filter(b=>b.status==='Pausada').length
+  const hUF=ventaUF(sale,ufRef), hCLP=ventaCLP(sale,ufRef), com=comisionesVenta(sale,terceros,billing,ufRef)
+  const baseNeto=facturado>0?facturado:hCLP
+  return {bills,emit,pend,facturado,cobrado,porCobrar,porFacturar,nPaus,hUF,hCLP,com,baseNeto,queda:(com.clp>0&&baseNeto>0)?Math.round(baseNeto-com.clp):null}
+}
 export const comisionesVenta = (s, terceros=[], billing=[], ufRef=0) => {
   const fuera = new Set((billing||[]).filter(b=>b&&(b.status==='Anulada'||b.deleted_at)).map(b=>String(b.id)))
   const filas = (terceros||[]).filter(t=>t&&s&&String(t.sale_id)===String(s.id)&&!(t.billing_id&&fuera.has(String(t.billing_id))))
