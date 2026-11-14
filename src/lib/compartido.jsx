@@ -4050,9 +4050,9 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
 
 // Vendido en la tarjeta del resultado del año (Inicio y Panel de socios): UNA cifra del tamaño de las demás y UNA pastilla «Bruto» / «Neto» (transparente, solo borde, sin icono) que alterna.
 // Escritorio: la pastilla es absoluta arriba a la derecha de la tarjeta (position:relative). Celular: va en la fila de la etiqueta «Vendido» (la pone la tarjeta con BrutoNetoPill); no agrega alto.
-export function BrutoNetoPill({ princ='bruto', onAlt, style }){
-  const otra=princ==='neto'?'bruto':'neto'
-  return <button onClick={e=>{ e.stopPropagation(); if(onAlt) onAlt(otra) }} title={`Ver el ${otra}`} aria-label={`Mostrando ${princ}; cambiar a ${otra}`} style={{fontSize:9,fontWeight:700,padding:'0 6px',borderRadius:10,border:`1.2px solid ${C.accent}`,background:'transparent',color:C.accent,opacity:.8,cursor:'pointer',lineHeight:1.3,whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0,textTransform:'none',letterSpacing:0,...style}}>{princ==='neto'?'Neto':'Bruto'}</button>
+export function BrutoNetoPill({ princ='bruto', onAlt, style, etiqueta, otra: otraP }){
+  const otra=otraP||(princ==='neto'?'bruto':'neto')
+  return <button onClick={e=>{ e.stopPropagation(); if(onAlt) onAlt(otra) }} title={`Ver el ${otra}`} aria-label={`Mostrando ${princ}; cambiar a ${otra}`} style={{fontSize:9,fontWeight:700,padding:'0 6px',borderRadius:10,border:`1.2px solid ${C.accent}`,background:'transparent',color:C.accent,opacity:.8,cursor:'pointer',lineHeight:1.3,whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0,textTransform:'none',letterSpacing:0,...style}}>{etiqueta||(princ==='neto'?'Neto':'Bruto')}</button>
 }
 export function CifrasBrutoNeto({ bruto, neto, princ='bruto', onAlt, desk }){
   return <div style={{marginTop:3,minWidth:0}}>

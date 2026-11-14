@@ -183,10 +183,16 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
 }
 
 // Porcentajes del «Resultado del año» (Vendido contra meta, Facturado contra lo vendido, Cobrado contra meta de cobranza): una sola fórmula para Inicio y el Panel de socios.
-export function pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza }){
+// Ingreso real del año = cobrado propio − comisiones pagadas + comisiones percibidas (UF con la UF del día de cada movimiento).
+export function ingresoRealAnio(ing, comP){
+  const g=(o,k)=>Number(o&&o[k])||0
+  return { clp:g(ing,'total')-g(comP,'total')+g(ing,'percibidas'), uf:g(ing,'totalUF')-g(comP,'totalUF')+g(ing,'percibidasUF') }
+}
+export function pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza, ingReal }){
   const ventaPct=metaUF>0?Math.round(m.brutoUF/metaUF*100):0   // sin tope: si supera la meta muestra el sobrecumplimiento (ej. 103%)
   const ventaNetoPct=metaUF>0?Math.round(m.netoUF/metaUF*100):0   // venta NETA (neto de comisiones) vs la MISMA meta
   const factPct=m.bruto>0?Math.min(100,Math.round(resAnio.fac/m.bruto*100)):0
   const cobroPct=metaCobranza>0?Math.round(ingYTD/metaCobranza*100):0   // sin tope: igual que ventaPct
-  return { ventaPct, ventaNetoPct, factPct, cobroPct }
+  const cobroRealPct=metaCobranza>0&&ingReal!=null?Math.round(ingReal/metaCobranza*100):0   // ingreso real contra la misma meta de cobranza
+  return { ventaPct, ventaNetoPct, factPct, cobroPct, cobroRealPct }
 }
