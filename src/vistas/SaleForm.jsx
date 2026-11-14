@@ -1,9 +1,10 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
+import { fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
 
 export const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 
@@ -176,7 +177,7 @@ function PreguntaFactura({sale,billing,anticipos}){
     </div>)
 }
 
-export function SaleForm({asPage=false,afterHero=null,sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,onPrimerasTareas,saving,user,onExposeUpload,onExposeDrive,onExposeReasign}) {
+export function SaleForm({asPage=false,afterHero=null,heroEl=undefined,sale,clients:initialClients,clientEntities,billing,sales=[],proveedores=[],terceros=[],anticipos=[],onCubrirCuotas,onDescubrirCuotas,onFacturarBloque,onSaveTariff,onCambiarFormato,onUpdateCuotas,onSave,onClose,onDelete,onPrimerasTareas,saving,user,onExposeUpload,onExposeDrive,onExposeReasign}) {
   const [cubrirAnt,setCubrirAnt] = useState(null)
   const [facturarAntS,setFacturarAntS] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -865,44 +866,36 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
         const honSub = base>0
           ? (moneda==='UF' ? `≈ ${fmt(Math.round(amountUF*ufVal))}${ufVal>0?` · UF $${Math.round(ufVal).toLocaleString('es-CL')}`:''}` : (ufVal>0?`≈ ${(+(montoCLP/ufVal).toFixed(1)).toLocaleString('es-CL')} UF`:' '))
           : 'Ingresa el honorario abajo'
-        // Si la venta ya tiene comisiones registradas, el margen usa esas (fuente única comisionesVenta); si no, el costo pactado.
-        const comR = sale?.id ? comisionesVenta(sale, terceros, billing, ufVal) : {real:false,clp:0}
-        const costHero = comR.real ? (moneda==='UF' ? (ufVal>0?comR.anual/ufVal:0) : comR.anual) : costVal   // honorario del año vs costo del año (mensuales: incluye lo proyectado)
-        const margen = base - costHero
-        const pct = base>0 ? Math.max(0,Math.min(100,Math.round(margen/base*100))) : 0
-        const fmtU = v => moneda==='UF' ? `${(+v.toFixed(1)).toLocaleString('es-CL')} UF` : fmt(Math.round(v))
-        return (
+        const queda = sale?.id ? cifrasCobroVenta(sale,billing,terceros,ufVal).queda : null
+        const pill = {fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}
+        const heroJsx = (
         <div style={{background:'linear-gradient(135deg,#003C50,#0A5168)',color:'#fff',borderRadius:12,padding:'16px 16px 15px',marginBottom:14}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
             <span style={{fontSize:12,fontWeight:700,opacity:.92,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{selectedClient?.name||'Sin cliente'}</span>
             {cobroType!=='hora'&&<span style={{display:'inline-flex',border:'1.5px solid rgba(255,255,255,.35)',borderRadius:8,overflow:'hidden',flexShrink:0}}>
-              {['UF','CLP'].map(mo=><span key={mo} onClick={()=>up('moneda',mo)} style={{fontSize:11,fontWeight:700,padding:'4px 11px',cursor:'pointer',background:moneda===mo?'#fff':'transparent',color:moneda===mo?C.accent:'rgba(255,255,255,.7)'}}>{mo}</span>)}
+              {['UF','CLP'].map(mo=><span key={mo} onClick={()=>up('moneda',mo)} style={{fontSize:11,fontWeight:700,padding:'4px 11px',cursor:'pointer',background:moneda===mo?'#fff':'transparent',color:moneda===mo?C.accent:'rgba(255,255,255,.8)'}}>{mo}</span>)}
             </span>}
           </div>
-          <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,lineHeight:1.25,margin:'9px 0 11px'}}>{(f.title||'').trim()||'Nueva venta'}</div>
-          <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}{cobroType==='mensual'&&base>0&&<span style={{fontSize:16,fontWeight:700,opacity:.75,letterSpacing:0}}> /mes</span>}</div>
-          <div style={{fontSize:12,opacity:.72,fontWeight:600,marginTop:4}}>{honSub}</div>
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:17,fontWeight:800,letterSpacing:-.3,lineHeight:1.25,margin:'9px 0 11px'}}>{(f.title||'').trim()||'Nueva venta'}</div>
+              <div style={{fontSize:34,fontWeight:800,letterSpacing:-1,lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{hon}{cobroType==='mensual'&&base>0&&<span style={{fontSize:16,fontWeight:700,opacity:.75,letterSpacing:0}}> /mes</span>}</div>
+              <div style={{fontSize:12,opacity:.72,fontWeight:600,marginTop:4}}>{honSub}</div>
+            </div>
+            {isDesktop&&queda!=null&&<div style={{textAlign:'right'}}><div style={{fontSize:10,fontWeight:800,letterSpacing:.06,textTransform:'uppercase',color:C.onNavyLabel}}>Queda para la oficina</div><div style={{fontSize:30,fontWeight:800,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmtMill(queda)}</div></div>}
+          </div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
             {[f.area||'Corporativo', (f.responsible||'sin responsable')].map((t,i)=>(
-              <span key={i} style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{t}</span>
+              <span key={i} style={pill}>{t}</span>
             ))}
             {sale?.id&&['Activo','Pausado','Terminado'].includes(f.status||'Activo')
-              ? <select value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} title='Cambiar el estado de la venta (se guarda con Guardar)' style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',border:'none',color:'#fff',borderRadius:20,padding:'2px 6px',cursor:'pointer',outline:'none',appearance:'auto'}}>{['Activo','Pausado','Terminado'].map(o=><option key={o} value={o} style={{color:C.text}}>{o}</option>)}</select>
-              : <span style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{f.status||'Activo'}</span>}
-            <span style={{fontSize:10,fontWeight:700,background:'rgba(255,255,255,.14)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{f.year||currentYear}</span>
+              ? <select value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} title='Cambiar el estado de la venta (se guarda con Guardar)' style={{...pill,border:'none',color:'#fff',padding:'2px 6px',cursor:'pointer',outline:'none',appearance:'auto'}}>{['Activo','Pausado','Terminado'].map(o=><option key={o} value={o} style={{color:C.text}}>{o}</option>)}</select>
+              : <span style={pill}>{f.status||'Activo'}</span>}
+            <span style={pill}>{f.year||currentYear}</span>
           </div>
-          {costHero>0&&base>0&&(
-            <div style={{marginTop:13,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.18)'}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:10,fontWeight:700,opacity:.8,marginBottom:6}}><span>Margen {pct} %</span><span>Costo {100-pct}%</span></div>
-              <div style={{height:9,borderRadius:8,overflow:'hidden',display:'flex',background:'rgba(255,255,255,.15)'}}><span style={{width:pct+'%',background:'#2BD49E'}}/><span style={{width:(100-pct)+'%',background:'#E8B873'}}/></div>
-              <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
-                <span style={{fontSize:11,opacity:.85}}>Margen<b style={{fontSize:14,fontWeight:800,display:'block',color:'#8FE3C4'}}>{fmtU(margen)}</b></span>
-                <span style={{fontSize:11,opacity:.85,textAlign:'right'}}>{comR.real?'Costos de terceros':'Costo proveedores'}<b style={{fontSize:14,fontWeight:800,display:'block'}}>{fmtU(costHero)}</b></span>
-              </div>
-            </div>
-          )}
         </div>
         )
+        return heroEl===undefined ? heroJsx : (heroEl ? createPortal(heroJsx,heroEl) : null)
       })()}
       {afterHero}
       {sale?.id&&<PreguntaFactura sale={sale} billing={billing} anticipos={anticipos}/>}
@@ -1243,10 +1236,9 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               <div onClick={()=>setOpenCondicion(openCondicion==='costos'?null:'costos')} style={{display:'flex',alignItems:'center',padding:'10px 12px',borderBottom:`1px solid ${C.border}`,cursor:'pointer',userSelect:'none'}}>
                 <div style={{fontSize:12,color:C.muted,width:118,flexShrink:0}}>Colaboradores</div>
                 <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontSize:13,fontWeight:400,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>
                   {provLabel
-                    ? <span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{provLabel}</span>
-                    : (costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}
+                    ? <span style={{fontSize:13,color:C.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{curCost!=='—'?`${provLabel}, ${curCost}`:provLabel}</span>
+                    : <><span style={{fontSize:13,fontWeight:400,color:curCost==='—'?C.muted:C.text,flexShrink:0}}>{curCost}</span>{(costVal>0&&openCondicion!=='costos')&&<button onClick={e=>{e.stopPropagation();addReparto()}} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'3px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>+ Agregar proveedor</button>}</>}
                 </div>
                 <span style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:6,transform:openCondicion==='costos'?'rotate(90deg)':'rotate(0)',transition:'transform .15s'}}><Gl n='chevron'/></span>
               </div>
@@ -1372,6 +1364,10 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
                   <Txt value={f.notes||''} onChange={e=>up('notes',e.target.value)} placeholder='Observaciones...'/>
                 </div>
               )}
+        {sale?.id&&sale?.status==='Activo'&&!_activandoPropuesta&&!modCobro&&onPrimerasTareas&&<div style={{padding:'0 12px 12px'}}>
+          <button type='button' disabled={saving} onClick={()=>handleSave({_thenPrimerasTareas:true})} title='Guarda la venta y abre la generación de tareas con IA' style={{width:'100%',padding:'9px 14px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:C.azulBg,color:C.azulInfo,fontSize:13,fontWeight:600,cursor:saving?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Primeras tareas con IA
+          </button></div>}
             </div>
             {(()=>{
               const antVenta = (anticipos||[]).filter(a=>String(a.sale_id)===String(sale.id))
@@ -1560,10 +1556,6 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
 
       {/* 11. Botones — CTA principal full-width abajo, acciones secundarias arriba (responsive móvil) */}
       <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:6}}>
-        {sale?.id&&sale?.status==='Activo'&&!_activandoPropuesta&&!modCobro&&onPrimerasTareas&&
-          <button type='button' disabled={saving} onClick={()=>handleSave({_thenPrimerasTareas:true})} title='Guarda la venta y abre la generación de tareas con IA' style={{width:'100%',padding:'9px 14px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:C.azulBg,color:C.azulInfo,fontSize:13,fontWeight:600,cursor:saving?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7}}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8z"/></svg>Primeras tareas con IA
-          </button>}
         <div style={{display:'flex',gap:8}}>
           {(!asPage||modCobro)&&<button onClick={modCobro?resetMod:onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
           {!sale?.id&&!modCobro&&<button disabled={saving} onClick={handleSaveDraft} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.accent}`,background:'transparent',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer'}}>Borrador</button>}
