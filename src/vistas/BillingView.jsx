@@ -3591,7 +3591,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
                       <span style={{width:30,height:30,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={t.ic} s={17} c={t.col}/></span>
                       <span style={{color:t.col,opacity:.55,fontSize:13}}><Gl n='chevron'/></span>
                     </div>:<div style={{display:'flex',alignItems:'center',gap:5,minWidth:0,minHeight:24}}>
-                      <span style={{width:22,height:22,borderRadius:7,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={t.ic} s={13} c={t.col}/></span>
+                      <span style={{width:26,height:26,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={t.ic} s={15} c={t.col}/></span>
                       <div style={{fontSize:10,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',color:t.col,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.2,minWidth:0}}>{t.k}</div>
                     </div>}
                     <div>
