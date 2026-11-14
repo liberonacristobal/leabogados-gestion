@@ -1,3 +1,4 @@
+- 2026-11-14 · Inicio › Mi trabajo en celular: «activos» y «N esta semana» van en la línea de la cifra, el icono queda centrado en la altura y las tarjetas pierden una fila (60 px de alto); escritorio igual.
 - 2026-11-14 · Inicio y Panel de socios › pastilla «Bruto»/«Neto» de la tarjeta Vendido un 20 % más pequeña (letra de 9 px, borde de 1,2 px) y un 20 % más transparente (opacidad 0,8).
 - 2026-11-14 · Demo › se agrega la meta de cobranza de 2025 y 2026 a los datos de ejemplo, para que la tarjeta Cobrado muestre su «% de la meta» como en la app real.
 - 2026-11-14 · Inicio y Panel de socios › tarjeta Vendido: el botón «Bruto»/«Neto» es una pastilla transparente con borde y sin icono, a la altura de «Vendido» (antes abajo a la derecha, con icono); sin la reserva de espacio que partía «neto de la meta», las cuatro tarjetas del año quedan de la misma altura (86 px en celular) y, en pantallas angostas, la frase se acorta a «de la meta».

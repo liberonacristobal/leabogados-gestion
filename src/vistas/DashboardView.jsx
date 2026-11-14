@@ -403,14 +403,14 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const kOpen = id => Array.isArray(kpiOpen) && kpiOpen.includes(id)
   const kToggle = id => setKpiOpen(p=>{ const a=Array.isArray(p)?p:[]; return a.includes(id)?a.filter(x=>x!==id):[...a,id] })
   // Tile compacto de KPI para el grid de 2 columnas del Inicio (icono + etiqueta + cifra + sub). Al tocar abre su detalle (kToggle) o navega (onClick). Reusa kOpen/kToggle.
-  const kTile = (id,title,value,valCol,icon,tint,sub,onClick) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg, op=!onClick&&kOpen(id); return (
-    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:C.tileBg,border:`1px solid ${op?C.tileLineOn:C.tileLine}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:'flex-start'}}>
-      {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1}}><SIcon n={icon} s={14} c={fg}/></span>}
+  const kTile = (id,title,value,valCol,icon,tint,sub,onClick,enLinea) => { const fg=tint?.fg||C.accent, bg=tint?.bg||C.azulBg, op=!onClick&&kOpen(id), lin=!!enLinea&&!isDeskRes&&!!sub; return (
+    <div key={id} onClick={onClick||(()=>kToggle(id))} style={{background:C.tileBg,border:`1px solid ${op?C.tileLineOn:C.tileLine}`,borderRadius:12,padding:'10px 12px',cursor:'pointer',position:'relative',minWidth:0,display:'flex',gap:9,alignItems:lin?'center':'flex-start'}}>
+      {icon&&<span style={{width:26,height:26,borderRadius:8,background:bg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:lin?0:1}}><SIcon n={icon} s={14} c={fg}/></span>}
       <div style={{minWidth:0,flex:1}}>
         {/* Label, cifra y sub en una columna → todos alineados al mismo margen (a la derecha del icono), no bajo el icono. */}
         <div style={{...(isDeskRes?{...SEC_LBL,fontSize:11}:{fontSize:10,fontWeight:600,color:C.accent}),display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,paddingRight:12}}>{title}</div>
-        <div style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>
-        {sub&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}
+        {lin?<div style={{display:'flex',alignItems:'baseline',gap:7,marginTop:4,minWidth:0}}><span style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',flexShrink:0}}>{value||'—'}</span><span style={{fontSize:10,color:C.muted,lineHeight:1.25,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{sub}</span></div>:<div style={{fontSize:(value&&String(value).length>8)?16:20,fontWeight:800,color:valCol||fg,lineHeight:1.05,letterSpacing:'-.3px',fontVariantNumeric:'tabular-nums',marginTop:4}}>{value||'—'}</div>}
+        {sub&&!lin&&<div style={{fontSize:isDeskRes?11:10,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}
       </div>
       <span style={{position:'absolute',top:11,right:11,color:C.textSoft,fontSize:11,transform:op?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>{onClick?<Gl n='chevron'/>:<Gl n='chevD'/>}</span>
     </div>
@@ -1069,8 +1069,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         {lvlLabel('Mi trabajo')}
         <div style={{padding:'6px 20px 0'}}>
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
-            {kTile('misproy','Mis proyectos',String(mineProyN),C.accent,'briefcase',{fg:C.accent,bg:C.azulBg},'activos',()=>go('cartera'))}
-            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'check',{fg:C.accent,bg:C.azulBg},cargaSemN>0?<>{isDeskRes?'pendientes · ':''}<span style={{color:C.soonText,fontWeight:700}}>{cargaSemN} esta semana</span></>:'pendientes',()=>go('tasks'))}
+            {kTile('misproy','Mis proyectos',String(mineProyN),C.accent,'briefcase',{fg:C.accent,bg:C.azulBg},'activos',()=>go('cartera'),true)}
+            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'check',{fg:C.accent,bg:C.azulBg},cargaSemN>0?<>{isDeskRes?'pendientes · ':''}<span style={{color:C.soonText,fontWeight:700}}>{cargaSemN} esta semana</span></>:'pendientes',()=>go('tasks'),true)}
           </div>
         </div>
       </div>
