@@ -275,7 +275,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
         {cart.expo.mayor&&<Fila tono='az' label='Mayor deudor' sub={mayorCli?.name} value={fmtShort(cart.expo.mayor.saldo)} raw={cart.expo.mayor.saldo} onClick={()=>mayorCli&&go('cliente',mayorCli.id)}/>}
         <Fila tono='am' label='Gastos por cobrar a clientes' sub={`${fondos.nDeben} cliente${fondos.nDeben!==1?'s':''} · pagados por la oficina, sin fondos`} value={fmtShort(fondos.porReponer)} raw={fondos.porReponer} onClick={()=>go('gastosDeben')}/>
       </> },
-    cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos de oficina', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
+    cos: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Costos', hl:<>{mesPasado.slice(0,3)} <b>{fmtShort(rm.cos)}</b></>, tono:'az', link:'Estado de resultados', dest:'estadoResultados',
       body:<>
         <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(rm.cos)} raw={rm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
         {(rm.cosLines||[]).map(l=><Fila key={l.k} tono='az' label={l.k==='sub'?l.l+' · menor costo':l.l} value={fmtShort(l.m)} raw={l.m} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos',sub:l.k})}/>)}
@@ -331,8 +331,8 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       {v:[`Cierre de ${mesPasado}`,'','',''],s:'sec'},
       {v:['Facturado',`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`,ciclo.tEmi,''],z:[null,null,PESOS]},
       {v:['Ingreso','propio',rm.ing,''],z:[null,null,PESOS]}, {v:['Cobrado en el mes','',cobMes??'',''],z:[null,null,PESOS]},
-      {v:['Costos','de oficina',rm.cos,''],z:[null,null,PESOS]}, {v:['Comisiones','pagadas',rm.com,''],z:[null,null,PESOS]},
-      {v:['Resultado',rm.margen!=null?`margen ${pct1(rm.margen)} %`:'',rm.res,''],z:[null,null,PESOS]} ]
+      {v:['Costos','',rm.cos,''],z:[null,null,PESOS]}, {v:['Comisiones','',rm.com,''],z:[null,null,PESOS]},
+      {v:['Margen',rm.margen!=null?`${pct1(rm.margen)} % de ingresos`:'',rm.res,''],z:[null,null,PESOS]} ]
     R.push({v:['Detalle','','',''],s:'sec'})
     for(const id of ['ret','fac','cob','cos','com','deb','caj','rev']){ const b=bloques[id]; R.push({v:[b.titulo,'','',''],s:'sec'})
       filasDe(b.body).forEach(f=>{ if(f.k==='sub') R.push({v:[f.t,'','','']}); else { const num=typeof f.raw==='number'&&isFinite(f.raw)

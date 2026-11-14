@@ -172,8 +172,9 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   // MARGEN del año = el MISMO resultado del Estado de resultados / Oficina / Resultado del año (devengado): Σ resultadoMes del año elegido.
   const resAnio = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef}, ult=selYear===currentYear?_mNow:12
     const K=['fac','sub','rex','ing','cos','com','res'], o={}; K.forEach(k=>{ o[k]=0; o[k+'UF']=0 })
-    o.rexItems=[]
-    for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])) }
+    o.rexItems=[]; const cosAgg={}   // líneas de Costos de operación del año (misma fuente que Resultado del año)
+    for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])); (r.cosLines||[]).forEach(x=>{ const c=cosAgg[x.k]||(cosAgg[x.k]={k:x.k,l:x.l,m:0,mUF:0}); c.m+=x.m; c.mUF+=x.mUF }) }
+    o.cosLines=Object.values(cosAgg)
     o.pct=margenPct(o.res,o.ing)
     // Cifras para MOSTRAR la cascada: redondeadas de modo que las partes sumen el total (UF enteras; pesos a $0,1M como fmtMill).
     const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,rex]=redondearPartes([o['fac'+sf],o['rex'+sf]],paso,[0]), sub=Math.round(o['sub'+sf]/paso)*paso, [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }

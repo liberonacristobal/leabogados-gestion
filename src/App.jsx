@@ -1644,7 +1644,7 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
   const MESCAP=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   // Filtro Año / Por mes: el selector de mes ofrece SOLO meses cerrados (los abiertos no tienen número final).
   // FUENTE ÚNICA con el Inicio y el Estado de resultados (2026-10-16): resultadoMes por mes (ingresos = facturación propia SII + subarriendo
-  // + comisión de externos; costos = planilla sin PPM + gastos varios; comisiones PAGADAS). Año = enero..mes actual; Por mes = el mes elegido.
+  // + comisión de externos; costos = planilla sin PPM + gastos varios; comisiones devengadas). Año = enero..mes actual; Por mes = el mes elegido.
   const fuR = useFuentesResultado()
   const depsR = {billing,terceros,costosOfiRows,expenses,clients}
   const mesesR = Array.from({length:_curM},(_,i)=>resultadoMes(fuR,depsR,`${year}-${String(i+1).padStart(2,'0')}`))
@@ -1707,18 +1707,17 @@ function OficinaHub({ onOpenBandeja, onOpenProcesos, onOpenCalTrib, expenses=[],
       const abrirRes=()=>scope==='mes'?(onOpenEstadoResultados&&onOpenEstadoResultados()):(onOpenResultadoAnio&&onOpenResultadoAnio())
       return <>
         <div style={grid4}>
-          {kt('res','chart',tRes,'Resultado',sg(R.res),`${per} · ${estado}`,abrirRes)}
+          {kt('res','chart',tRes,'Margen',sg(R.res),`${per} · ${estado}`,abrirRes)}
           {kt('ing','tEntra',[C.azulBg,C.accent],'Ingresos',fmtMill(R.ing),'facturación propia y externos',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {kt('egr','wallet',[C.soonBg,C.soonText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
-          {kt('mar','tPct',[C.card,C.accent],'Margen',margen==null?'—':`${margen.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos',abrirRes)}
+          {kt('mar','tPct',[C.card,C.accent],'Margen %',margen==null?'—':`${margen.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos',abrirRes)}
         </div>
         {L('Composición')}
-        <div style={{...grid4,gridTemplateColumns:isDesktop?'repeat(5,minmax(0,1fr))':'repeat(2,minmax(0,1fr))'}}>
+        <div style={{...grid4,gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))'}}>
           {st('fac',IC.fac,C.azulBg,C.azulInfo,'Facturación propia',fmtMill(R.fac),C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
           {st('rex',IC.fac,C.azulBg,C.azulInfo,'Comisión de externos',R.rex?'+'+fmtMill(R.rex):'$0',C.azulInfo,()=>onOpenEstadoResultados&&onOpenEstadoResultados())}
-          {st('sub',IC.bld,C.greenBg,C.greenText,'Subarriendo · menor costo',R.sub?'−'+fmtMill(R.sub):'$0',C.greenText,()=>onOpenSubarriendo&&onOpenSubarriendo())}
-          {st('cos',IC.peop,C.overdueBg,C.overdueText,isDesktop?'Costos de operación':'Costos',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
-          <div style={{gridColumn:isDesktop?undefined:'1/-1'}}>{st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}</div>
+          {st('cos',IC.peop,C.overdueBg,C.overdueText,'Costos',R.cos?'−'+fmtMill(R.cos):'$0',C.overdueText,()=>setSub('costos'))}
+          {st('com',IC.com,C.soonBg,C.soonText,'Comisiones',R.com?'−'+fmtMill(R.com):'$0',C.soonText,()=>onOpenProveedores&&onOpenProveedores())}
         </div>
       </> })()}
 
@@ -1791,7 +1790,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
     <div style={{minWidth:0,flex:1}}><div style={{...kLbl,fontSize:big&&isDesktop?10.5:kLbl.fontSize,color:fg}}>{lab}</div><div style={{fontSize:big?(isDesktop?26:20):(isDesktop?22:18),fontWeight:800,color:fg,letterSpacing:big?-.6:-.4,marginTop:big?2:1,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}</div>
     {chev&&<span style={{color:C.done,fontSize:13}}>{sel?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</div> }
   const tResultado=r.res>=0?[C.greenBg,C.greenText]:[C.overdueBg,C.overdueText]
-  const kpiRes = kt({k:'res',big:true,ic:'chart',tone:tResultado,lab:'Resultado del mes',val:fmtMill(r.res),sub:`margen ${pct(r.margen)}`,on:()=>togBloque(abierto?null:'ing')})
+  const kpiRes = kt({k:'res',big:true,ic:'chart',tone:tResultado,lab:'Margen del mes',val:fmtMill(r.res),sub:`margen ${pct(r.margen)}`,on:()=>togBloque(abierto?null:'ing')})
   const kpis = <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
     {kpiRes}
     {kt({k:'vs',big:true,ic:dif<0?'arrowDown':'arrowUp',tone:[C.azulBg,C.accent],lab:`Vs ${MES_L[(cM+10)%12].toLowerCase()}`,val:(dif>0?'+':dif<0?'−':'')+fmtMill(Math.abs(dif)),sub:`${MES_L[(cM+10)%12].toLowerCase()} ${fmtMill(rp.res)}`,on:()=>nav(-1)})}
@@ -1838,17 +1837,17 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
         if(x.k==='arr'&&r.conPlanilla) return ln({...base,on:abre,open,children:<>{subFila('a1','planilla','Arriendo',r.arriendo,null)}{subFila('a2','planilla','Gastos comunes',r.ggcc,null)}</>})
         if(x.k==='gv') return ln({...base,on:abre,open,children:r.gvItems.map((e,j)=>subFila('g'+j,fmtFechaDMY(e.date),e.concept||e.category||'',Number(e.amount)||0,gasto(e)))})
         if(x.k==='pre') return ln({...base,on:onOpenPresupuesto})
-        if(x.k==='sub') return ln({k:'sub',sg:'−',sinMenos:true,l:x.l+' · menor costo',v:-x.m,p:-(rp.cosLines.find(y=>y.k==='sub')?.m||0),on:onOpenSubarriendo})   // baja el costo; no es ingreso
+        if(x.k==='sub') return ln({k:'sub',sg:'−',sinMenos:true,l:x.l+', menor costo',v:-x.m,p:-(rp.cosLines.find(y=>y.k==='sub')?.m||0),on:onOpenSubarriendo})   // baja el costo; no es ingreso
         return ln(base) })}
-        {ln({k:'cosT',sg:'=',sinMenos:true,l:'Costos de operación',v:r.cos,p:rp.cos,neg:true,tot:true})}</>
+        {ln({k:'cosT',sg:'=',sinMenos:true,l:'Costos',v:r.cos,p:rp.cos,neg:true,tot:true})}</>
     : r.comList.length ? <>{r.comList.map((x,i)=>ln({k:'c'+(x.pid||x.nombre),sg:i?'+':'',sinMenos:true,l:x.nombre,v:x.m,neg:true,on:x.pid&&onOpenProveedor?()=>onOpenProveedor(x.pid):null}))}
         {r.comList.length>1&&ln({k:'comT',sg:'=',sinMenos:true,l:'Comisiones',v:r.com,neg:true,tot:true})}{ingresoRealFacturas}</>
     : <div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones este mes</div>
   const detCard = k => { const vsMes=k!=='com'; return <>
-    <Sec t={`${({ing:'Ingresos',cos:'Costos de operación',com:'Comisiones'})[k]} de ${MES_L[cM-1].toLowerCase()}`}/>
+    <Sec t={`${({ing:'Ingresos',cos:'Costos',com:'Comisiones'})[k]} de ${MES_L[cM-1].toLowerCase()}`}/>
     <div style={{...card}}><div style={{display:'flex',justifyContent:'flex-end',padding:'8px 0 6px'}}>{vsMes&&<span style={{...kLbl,fontSize:10,color:C.textSoft,minWidth:isDesktop?84:60,textAlign:'right',letterSpacing:.4}}>vs {MES_L[(cM+10)%12].toLowerCase().slice(0,isDesktop?20:3)}</span>}<span style={{...kLbl,fontSize:10,color:C.textSoft,minWidth:isDesktop?110:80,textAlign:'right',paddingRight:14,letterSpacing:.4}}>{isDesktop?MES_L[cM-1].toLowerCase():mesC(ym)}</span></div>{detalle(k)}</div></> }
   const mill0 = (v,neg) => v ? (neg?'−':'')+fmtMill(v) : '$0'
-  const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:mill0(r.ing)},{k:'cos',ic:'wallet',lab:'Costos de operación',val:mill0(r.cos,true)},{k:'com',ic:'tPct',lab:'Comisiones',val:mill0(r.com,true)}]
+  const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:mill0(r.ing)},{k:'cos',ic:'wallet',lab:'Costos',val:mill0(r.cos,true)},{k:'com',ic:'tPct',lab:'Comisiones',val:mill0(r.com,true)}]
   const bloques = isDesktop
     ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{B.map(b=>kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)}))}</div>{abierto&&detCard(abierto)}</>
     : <div style={{display:'flex',flexDirection:'column',gap:10}}>{B.map(b=><Fragment key={b.k}>{kt({...b,tone:[C.card,C.accent],sel:abierto===b.k,chev:true,on:()=>togBloque(b.k)})}{abierto===b.k&&detCard(b.k)}</Fragment>)}</div>
@@ -1859,9 +1858,9 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   const filaT = (lab,get,neg,blk) => <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:600}}>{lab}</td>,...meses.map(m=>{ const v=get(m); return <td key={m.ym} onClick={()=>{ setYm(m.ym); if(blk){ setAbierto(blk); setSub2(null) } }} className='er-c' style={{...td,...selC(m),cursor:'pointer',color:v?C.text:C.done}}>{v?(neg?'−':'')+fmtMill(v):'—'}</td> }),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{(neg?'−':'')+fM(get(tot))}</td>]}</tr>
   const tabla = <><Sec t={`Comparativa mensual · ${Y}`}/><div style={{...card}}>
     <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{meses.map(m=><th key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...th,cursor:'pointer',...(m.ym===ym?{background:C.azulBg}:{})}}>{mesC(m.ym)}</th>)}<th style={th}>{Y}</th></tr></thead>
-    <tbody>{filaT('Ingresos',m=>m.ing,false,'ing')}{filaT('Costos de operación',m=>m.cos,true,'cos')}{filaT('Comisiones',m=>m.com,true,'com')}
-      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,borderTop:`1px solid ${C.border}`}}>Resultado</td>,...meses.map(m=>{ const [bg,fg]=tonoMargen(m.margen); return <td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1px solid ${C.border}`,outline:m.ym===ym?`1.5px solid ${C.accent}`:'none',outlineOffset:-1.5}}>{fmtMill(m.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:C.greenText,borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>{fmtMill(tot.res)}</td>]}</tr>
-      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...meses.map(m=><td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,...selC(m),fontWeight:600,fontSize:12,cursor:'pointer',color:C.muted}}>{pct(m.margen)}</td>),<td key='t' style={{...td,fontWeight:600,fontSize:12,color:C.muted,background:C.bgSoft,borderLeft:`1px solid ${C.border}`}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</td>]}</tr>
+    <tbody>{filaT('Ingresos',m=>m.ing,false,'ing')}{filaT('Costos',m=>m.cos,true,'cos')}{filaT('Comisiones',m=>m.com,true,'com')}
+      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,borderTop:`1px solid ${C.border}`}}>Margen</td>,...meses.map(m=>{ const [bg,fg]=tonoMargen(m.margen); return <td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1px solid ${C.border}`,outline:m.ym===ym?`1.5px solid ${C.accent}`:'none',outlineOffset:-1.5}}>{fmtMill(m.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:C.greenText,borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>{fmtMill(tot.res)}</td>]}</tr>
+      <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen %</td>,...meses.map(m=><td key={m.ym} onClick={()=>setYm(m.ym)} className='er-c' style={{...td,...selC(m),fontWeight:600,fontSize:12,cursor:'pointer',color:C.muted}}>{pct(m.margen)}</td>),<td key='t' style={{...td,fontWeight:600,fontSize:12,color:C.muted,background:C.bgSoft,borderLeft:`1px solid ${C.border}`}}>{pct(tot.ing?tot.res/tot.ing*100:null)}</td>]}</tr>
     </tbody></table></div></div></>
   // Celular: cada mes en una línea (margen · vs mes anterior · resultado), del más nuevo al más antiguo.
   const listaMeses = <><Sec t={`Mes a mes · ${Y}`} extra={<span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>vs mes anterior</span>}/><div style={{...card}}>
@@ -1877,7 +1876,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
     r.sinReg.length>0&&info('sr',C.soonText,<><b>{r.sinReg.length} factura{r.sinReg.length!==1?'s':''} del SII sin registro</b> · {isDesktop?`N° ${r.sinReg.map(d=>d.folio).join(' y ')} · `:''}{fmtMill(r.sinReg.reduce((a,d)=>a+(Number(d.monto)||0),0))}</>,<>Ver <Gl n={sub2==='sinreg'?'chevU':'chevD'}/></>,()=>setSub2(s=>s==='sinreg'?null:'sinreg'),sub2==='sinreg',r.sinReg.map((d,i)=>subFila('s'+i,`Factura N° ${d.folio}`,d.receptor_name||'',Number(d.monto)||0,null))),
     r.ppm>0&&info('ppm',<SIcon n='tPct' s={13} c={C.textSoft}/>,<>Pago al SII (F29) de {MES_L[cM-1].toLowerCase()} <b>{fmtMill(r.ppm)}</b> · va aparte</>,isDesktop?<>Planilla <Gl n='chevron'/></>:null,onOpenResultadoAnio),
   ].filter(Boolean)
-  const exportar = () => { try{ const head=['Mes','Ingresos','Costos de operación','Comisiones','Resultado','Margen %','Pago al SII F29 (aparte)']
+  const exportar = () => { try{ const head=['Mes','Ingresos','Costos','Comisiones','Margen','Margen %','Pago al SII F29 (aparte)']
     const rows=[...meses.map(m=>[mesL(m.ym),Math.round(m.ing),Math.round(m.cos),Math.round(m.com),Math.round(m.res),m.margen==null?'':m.margen.toFixed(1),Math.round(m.ppm)]),[String(Y),Math.round(tot.ing),Math.round(tot.cos),Math.round(tot.com),Math.round(tot.res),tot.ing?(tot.res/tot.ing*100).toFixed(1):'','']]
     const esc=c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+[head,...rows].map(x=>x.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`estado_resultados_${Y}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }

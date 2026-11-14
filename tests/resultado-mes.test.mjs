@@ -39,7 +39,7 @@ test('ingresos = facturación propia (sin la factura de subarriendo ni su nota d
 test('sin planilla: el costo es el presupuesto bruto y una línea negativa de subarriendo; el resultado cuadra', () => {
   const r = M.resultadoMes({ sii, plan: [], boleta: new Set() }, deps, ym)
   assert.equal(r.sub, 500_000); assert.equal(r.cosLines.find((x) => x.k === 'sub').m, -500_000); assert.equal(r.cosLines.find((x) => x.k === 'pre').m, 2_050_000)
-  assert.equal(r.cos, 2_050_000 - 500_000); assert.equal(r.res, r.ing - r.cos - r.com)
+  assert.equal(r.cos, 2_050_000 - 500_000); assert.equal(r.res, r.ing - r.cos - r.com); assert.equal(r.cos, r.cosLines.reduce((t, x) => t + x.m, 0))   // Costos = suma de sus líneas, con el subarriendo (negativo) dentro
 })
 test('con planilla: mismo tratamiento; la columna «subarriendo» de la planilla es solo informativa', () => {
   const a = M.resultadoMes({ sii, plan: [plan], boleta: new Set() }, deps, ym), b = M.resultadoMes({ sii, plan: [{ ...plan, subarriendo: 0 }], boleta: new Set() }, deps, ym)
