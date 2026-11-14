@@ -141,7 +141,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear:currentYear })
   const { m, resAnio, ingresosPorAnioVenta:ing, comisPagadasAnioVenta:comP, metaCobranza, metaUF, ufRef, ufDias, fuRes } = R
   const ingYTD = ing.total||0, ingYTDUF = ing.totalUF||0
-  const { ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
+  const { ventaPct, ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
   const vMon = (uf,clp) => moneda==='UF' ? fmtUFk(Math.round(uf||0)) : fmtShort(clp)
   const mRes = (k,abs) => { const v=(moneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return moneda==='UF'?fmtUFk(x):fmtShort(x) }
   const pct1 = v => v==null?null:v.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})
@@ -370,7 +370,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const ano = (<>
     <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
-      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?ventaNetoPct:null} cap={<><style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style><span className='kpi-neto'>neto </span>de la meta</>} activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
+      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?(vendPrinc==='neto'?ventaNetoPct:ventaPct):null} cap={<><style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style><span className='kpi-neto'>{vendPrinc==='neto'?'neto ':'bruto '}</span>de la meta</>} activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
       <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='del bruto' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>
       <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' activo={drill?.tile==='cob'} onClick={()=>setDrill(d=>d&&d.tile==='cob'?null:{tile:'cob',year:null})}/>
       {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='ingresos' activo={drill?.tile==='marg'} onClick={()=>setDrill(d=>d&&d.tile==='marg'?null:{tile:'marg',year:null})}/>}
