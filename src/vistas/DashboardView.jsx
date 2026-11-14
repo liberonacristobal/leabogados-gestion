@@ -6,7 +6,7 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { useResultadoAnio, pctsAnio } from '../lib/resultadoAnio.js'
 import { cascadaVendido } from '../lib/cifras.js'
-import { CifrasBrutoNeto } from '../lib/compartido.jsx'
+import { CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -924,15 +924,16 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               const kpiTile=(key,label,bg,bd,icoBg,icoCol,fig,pct,cap,dual)=>(
                 <div key={key} onClick={()=>setResDrill(d=>d&&d.tile===key?null:{tile:key,year:null})} style={{background:bg,border:`1px solid ${resDrill?.tile===key?C.accent:bd}`,borderRadius:12,padding:isDeskRes?'14px':'12px 10px',minHeight:isDeskRes?undefined:86,boxSizing:'border-box',cursor:'pointer',position:'relative',display:'flex',gap:isDeskRes?12:9,alignItems:'center',boxShadow:resDrill?.tile===key?`0 0 0 1px ${C.accent} inset`:'none'}}>
                   <span style={{width:isDeskRes?34:30,height:isDeskRes?34:30,borderRadius:8,background:icoBg,color:icoCol,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO[key]}</span>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{...SEC_LBL,fontSize:isDeskRes?13:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>
+                  <div className='kpi-col' style={{minWidth:0,flex:1,containerType:'inline-size'}}>
+                    {dual&&!isDeskRes?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}><span style={{...SEC_LBL,fontSize:12,lineHeight:1.25}}>{label}</span><BrutoNetoPill princ={vendPrinc} onAlt={setVendPrinc}/></div>:<div style={{...SEC_LBL,fontSize:isDeskRes?13:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>}
                     {dual?<CifrasBrutoNeto desk={isDeskRes} bruto={dual.bruto} neto={dual.neto} princ={vendPrinc} onAlt={setVendPrinc}/>:<div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>}
-                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,paddingRight:dual&&!isDeskRes?50:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
+                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
                   </div>
                 </div>
               )
               return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
-                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?ventaNetoPct:null,'neto de la meta', {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
+                <style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style>
+                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?ventaNetoPct:null,<><span className='kpi-neto'>neto </span>de la meta</>, {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
                 {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'del bruto')}
                 {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, vMon(ingYTDUF,ingYTD), metaCobranza>0?cobroPct:null,'de la meta')}
                 {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}

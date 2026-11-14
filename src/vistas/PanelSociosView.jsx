@@ -3,7 +3,7 @@
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
 import { Children, useMemo, useState } from 'react'
 import { C, Gl, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto } from '../lib/compartido.jsx'
+import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes } from '../lib/cifras.js'
 import { descargarFotoTabla } from '../lib/fotoTabla.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -32,10 +32,10 @@ const ICO_ANIO = {
 const KpiAnio = ({ic,tono='nt',label,value,dual,pct,cap,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
   <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',minHeight:D?undefined:86,boxSizing:'border-box',position:'relative',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
     <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
-    <div style={{minWidth:0,flex:1}}>
-      <div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>
+    <div className='kpi-col' style={{minWidth:0,flex:1,containerType:'inline-size'}}>
+      {dual&&!D?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}><span style={{...SEC_LBL,fontSize:12,lineHeight:1.25}}>{label}</span><BrutoNetoPill princ={dual.props.princ} onAlt={dual.props.onAlt}/></div>:<div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>}
       {dual||<div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>}
-      {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,paddingRight:dual&&!D?50:0,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
+      {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
     </div>
   </div>) }
 const Fila = ({tono='az',ic='file',label,sub,value,vcol,onClick,det,detEl,detLink}) => { const [bg,fg]=TONO[tono]||TONO.az; const [op,setOp]=useState(false); const desp=!!(det||detEl); return (<>
@@ -370,7 +370,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const ano = (<>
     <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
-      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?ventaNetoPct:null} cap='neto de la meta' activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
+      <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?ventaNetoPct:null} cap={<><style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style><span className='kpi-neto'>neto </span>de la meta</>} activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
       <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='del bruto' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>
       <KpiAnio D={isDesktop} ic='check' tono='gr' label='Cobrado' value={vMon(ingYTDUF,ingYTD)} pct={metaCobranza>0?cobroPct:null} cap='de la meta' activo={drill?.tile==='cob'} onClick={()=>setDrill(d=>d&&d.tile==='cob'?null:{tile:'cob',year:null})}/>
       {resAnio.ing>0&&<KpiAnio D={isDesktop} ic='tPct' tono='nt' label='Margen' value={(resAnio.res<0?'−':'')+mRes('res',true)} pct={resAnio.pct!=null?pct1(resAnio.pct):null} cap='ingresos' activo={drill?.tile==='marg'} onClick={()=>setDrill(d=>d&&d.tile==='marg'?null:{tile:'marg',year:null})}/>}
