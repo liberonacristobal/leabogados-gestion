@@ -31,3 +31,11 @@ test('Costos es una palabra y no hay fila de subarriendo aparte en las cascadas'
   const hub = leer('src/App.jsx').filter((x) => /st\('sub'/.test(x.t))
   assert.equal(hub.length, 0)
 })
+
+test('la cifra del Margen no se rotula «Resultado» y «Pagadas en» lleva la cifra de caja', () => {
+  for (const f of ['src/vistas/DashboardView.jsx', 'src/vistas/PanelSociosView.jsx']) {
+    const mal = leer(f).filter((x) => (/label='Resultado'|'Resultado del mes'|hl:<>Resultado /.test(x.t) && /rm\.res|resMes/.test(x.t)) || (/Pagadas en/.test(x.t) && /rm\.com\b/.test(x.t) && !/comPag/.test(x.t)))
+    assert.deepEqual(mal.map((x) => `${f}:${x.n}`), [])
+  }
+  assert.equal(leer('src/App.jsx').filter((x) => /filaT\('Subarriendo/.test(x.t)).length, 0)
+})

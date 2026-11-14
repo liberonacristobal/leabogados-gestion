@@ -172,7 +172,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   // MARGEN del año = el MISMO resultado del Estado de resultados / Oficina / Resultado del año (devengado): Σ resultadoMes del año elegido.
   const resAnio = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef}, ult=selYear===currentYear?_mNow:12
     const K=['fac','sub','rex','ing','cos','com','res'], o={}; K.forEach(k=>{ o[k]=0; o[k+'UF']=0 })
-    o.rexItems=[]; const cosAgg={}   // líneas de Costos de operación del año (misma fuente que Resultado del año)
+    o.rexItems=[]; const cosAgg={}   // líneas de Costos del año (misma fuente que Resultado del año)
     for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])); (r.cosLines||[]).forEach(x=>{ const c=cosAgg[x.k]||(cosAgg[x.k]={k:x.k,l:x.l,m:0,mUF:0}); c.m+=x.m; c.mUF+=x.mUF }) }
     o.cosLines=Object.values(cosAgg)
     o.pct=margenPct(o.res,o.ing)
