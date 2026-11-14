@@ -880,7 +880,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         const comisYTD=comisPagadasAnioVenta.total||0                    // comisiones PAGADAS del año por ventas propias (base caja) — se restan
         const percYTD=ingresosPorAnioVenta.percibidas||0                  // comisiones PERCIBIDAS (nuestro % de facturas por cuenta de terceros) — se suman
         const ingReal=ingYTD-comisYTD+percYTD                             // Ingreso real = cobrado propio − comisiones pagadas + comisiones percibidas
-        const {ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})   // % de meta y de lo vendido: fuente única (lib/resultadoAnio.js), la misma del Panel de socios
+        const {ventaPct,ventaNetoPct,factPct,cobroPct}=pctsAnio({m,resAnio,metaUF,ingYTD,metaCobranza})   // % de meta y de lo vendido: fuente única (lib/resultadoAnio.js), la misma del Panel de socios
         // Cifras del año en UF con la UF del DÍA de cada movimiento (ufDelDia); en CLP, los pesos tal cual. mRes = cifras de la cascada del resultado.
         const mRes=(k,abs)=>{ const v=(dashMoneda==='UF'?resAnio.verUF:resAnio.verCLP)[k]||0, x=abs?Math.abs(v):v; return dashMoneda==='UF'?fmtUFk(x):fmtShort(x) }
         const ingYTDUF=ingresosPorAnioVenta.totalUF||0, comisYTDUF=comisPagadasAnioVenta.totalUF||0, percYTDUF=ingresosPorAnioVenta.percibidasUF||0, ingRealUF=ingYTDUF-comisYTDUF+percYTDUF
@@ -933,7 +933,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               )
               return (<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
                 <style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style>
-                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?ventaNetoPct:null,<><span className='kpi-neto'>neto </span>de la meta</>, {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
+                {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?(vendPrinc==='neto'?ventaNetoPct:ventaPct):null,<><span className='kpi-neto'>{vendPrinc==='neto'?'neto ':'bruto '}</span>de la meta</>, {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
                 {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'del bruto')}
                 {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, vMon(ingYTDUF,ingYTD), metaCobranza>0?cobroPct:null,'de la meta')}
                 {resAnio.ing>0 && kpiTile('marg','Margen',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
