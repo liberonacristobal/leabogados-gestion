@@ -16,8 +16,8 @@ export const demoData = {
            gastos:{ banco:'Banco Demo', cuenta:'00445566', cuentaFmt:'004455-6', email:'gastos@estudiodemo.cl' } },
   },
   annual_targets: [
-    { year:2026, target_amount:800000000, currency:'CLP' },
-    { year:2025, target_amount:600000000, currency:'CLP' },
+    { year:2026, target_amount:800000000, collection_target:600000000, currency:'CLP' },
+    { year:2025, target_amount:600000000, collection_target:450000000, currency:'CLP' },
   ],
   clients: [
     { id:'c1', name:'Comercial Andes SpA',        rut:'76.111.222-3', status:'Activo',    type:'Empresa', abogado_responsable:'Cristóbal', is_internal:false },
