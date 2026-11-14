@@ -11,6 +11,8 @@ import { sinPisarRegistradas } from '../../supabase/functions/_shared/cargasSii.
 import { periodoDeTexto, candidatasProgramadas, unaSerie, serieYaFacturadaEnMes, propuestaDelDia, explicarAsignacion, instantaneaCuota, parcheRegistroCuota, parcheDeshacerRegistro } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { cuotaSaltada, conPostergadas, noEmitirDeFilas, trabajosSinFacturar, anticiposDisponibles, cuotasSinPrimeraFactura, cuotasPorEmitirMes, facturaSinEnviar, recibidoACuenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuotasDeDte } from '../../supabase/functions/_shared/saludDatos.js'
+import { ncPorRegistrar } from '../../supabase/functions/_shared/notasCredito.js'
+import { registrarNotaCredito } from '../lib/notasCreditoRegistro.js'
 import { ajustarTrato, cuerpoVariasFacturas, lineasTrabajos, esSaludoSingular, saludoPara, tratoDeTexto, notaPagadas } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { cuotaDe, cuotaIncoherente, destokenizar, limpiarEspacios, partesMes, quitarDespedida, tokenizar } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
@@ -1922,21 +1924,14 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     setNcBusy(true)
     try{
       await ensureBatch()   // registrar una NC también cuenta como commit de la carga (trazabilidad)
-      const now=new Date().toISOString()
       const facCli=(billing||[]).find(x=>x.id===item.facId)
-      if(item.facId){
-        const patch={ status:'Anulada', anulada_at:now, anulada_por:`Nota de crédito N° ${item.ncFolio}`, updated_at:now, ...(vincular&&item.replId?{reemplazada_por_billing_id:item.replId}:{}) }
-        const { error:e1 } = await supabase.from('billing').update(patch).eq('id',item.facId)
-        if(e1) throw e1
-        setBilling&&setBilling(p=>p.map(x=>x.id===item.facId?{...x,...patch}:x))
+      let r=null
+      if(facCli){
+        r = await registrarNotaCredito(supabase,{ nc:{ id:item.siiId, folio:item.ncFolio, fecha_emision:item.ncFecha, monto:item.monto, receptor_name:item.receptor, receptor_rut:item.rut }, fac:facCli, replId:item.replId, vincular, dteXml:item.doc||null })
+        setBilling&&setBilling(p=>[...p.map(x=>x.id===item.facId?{...x,...r.patch}:x), r.ncRow])
+        if(r.anticipoLiberado) appAlert(`La factura N° ${item.facFolio} quedó anulada y el anticipo con que se pagó volvió a estar disponible.`)
       }
-      const ncRow={ client_id:facCli?.client_id||null, concept:`Nota de crédito — anula Factura N° ${item.facFolio}`, receptor_name:item.receptor||null, receptor_rut:item.rut||null, amount:Math.round(item.monto||0), status:'Anulada', invoice_no:String(item.ncFolio), issued_at:item.ncFecha||null, billing_type:'nota_credito', sii_tipo_dte:61, dte_xml:item.doc||null, nc_ref_billing_id:item.facId||null, sii_synced_at:now }
-      const { data:ins, error:e2 } = await supabase.from('billing').insert(ncRow).select().single()
-      if(e2) throw e2
-      if(setBilling&&ins) setBilling(p=>[...p, ins])
-      // Enlaza el DTE de la NC (sii_cargas_docs) a su fila recién creada → deja de figurar "sin enlazar".
-      if(item.siiId&&ins?.id){ try{ await supabase.from('sii_cargas_docs').update({billing_id:ins.id}).eq('id',item.siiId) }catch(e){registrarError({origen:'accion',vista:'sii_cargas_docs',err:e})} }
-      setRespaldoRes(p=>(p||[]).map(r=>r===item?{...r,estado:'nc_hecha'}:r))
+      setRespaldoRes(p=>(p||[]).map(x=>x===item?{...x,estado:'nc_hecha'}:x))
       setNcConfirm(null); onRefresh&&onRefresh()
     }catch(e){ appAlert('No se pudo anular / registrar la nota de crédito: '+(e.message||e)) }
     setNcBusy(false)
@@ -2109,25 +2104,10 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     try{
       const { data, error } = await supabase.from('sii_cargas_docs').select('id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_name,monto,doc_json,billing_id').eq('tipo_dte','61')
       if(error) throw error
-      const norm=r=>String(r||'').replace(/\D/g,'')
-      const out=[]
-      for(const d of (data||[])){
-        if(d.billing_id) continue   // ya enlazada
-        const ref = d.doc_json?.detFolioDocRef || (Array.isArray(d.doc_json?.referencias)&&d.doc_json.referencias[0]?.folioRef) || null
-        let fac=null, inferido=false
-        if(ref){ const fn=norm(ref); fac=(billing||[]).find(b=>!b.deleted_at && b.billing_type!=='nota_credito' && norm(b.invoice_no)===fn) }
-        if(!fac){
-          // Fallback: el RCV no trae la referencia → calce por RUT + monto EXACTO. Solo si hay UN candidato vivo (nunca ambiguo).
-          const rn=norm(d.receptor_rut), mn=Math.round(Number(d.monto)||0)
-          const cand = (rn&&mn) ? (billing||[]).filter(b=>!b.deleted_at && b.billing_type!=='nota_credito' && b.invoice_no && b.status!=='Anulada' && norm(b.receptor_rut)===rn && Math.round(Number(b.amount)||0)===mn) : []
-          if(cand.length===1){ fac=cand[0]; inferido=true }
-        }
-        if(!fac || fac.status==='Anulada') continue   // sin factura viva referida → nada que resolver
-        if((billing||[]).some(b=>b.billing_type==='nota_credito' && !b.deleted_at && norm(b.invoice_no)===norm(d.folio))) continue   // ya registrada
-        const cli=clients.find(c=>String(c.id)===String(fac.client_id))
-        out.push({ ncFolio:d.folio, ncFecha:d.fecha_emision, monto:d.monto, receptor:d.receptor_name, rut:d.receptor_rut, siiId:d.id, inferido,
-          facId:fac.id, facFolio:folioN(fac.invoice_no)||fac.invoice_no, facStatus:fac.status, facCliente:cli?.name||fac.receptor_name||null, replId:null, replFolio:null, replCliente:null, doc:null })
-      }
+      // Regla única (_shared/notasCredito.js): la misma de la Revisión de datos y del auditor nocturno.
+      const out=ncPorRegistrar(data||[], billing||[]).map(({d,fac,inferido})=>{ const cli=clients.find(c=>String(c.id)===String(fac.client_id))
+        return { ncFolio:d.folio, ncFecha:d.fecha_emision, monto:d.monto, receptor:d.receptor_name, rut:d.receptor_rut, siiId:d.id, inferido,
+          facId:fac.id, facFolio:folioN(fac.invoice_no)||fac.invoice_no, facStatus:fac.status, facCliente:cli?.name||fac.receptor_name||null, replId:null, replFolio:null, replCliente:null, doc:null } })
       setNcResolver(out)
     }catch(_){ setNcResolver([]) }
   }

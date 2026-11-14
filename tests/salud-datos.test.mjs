@@ -82,3 +82,14 @@ test('honorario descuadrado: no se marca una venta terminada cuya última factur
   const bs = [{ sale_id: 1, issued_at: '2026-01-10' }, { sale_id: 2, issued_at: '2026-08-10' }]
   assert.deepEqual(honorarioDescuadrado(rows, bs, sales).map(v => v.id), [2])
 })
+
+test('hallazgos: una nota de crédito del SII sin registrar aparece como nc_sin_registrar con su factura', async () => {
+  const { hallazgos } = await import('../supabase/functions/_shared/saludDatos.js')
+  const billing = [{ id: 'f1', invoice_no: '520', status: 'Pagado', billing_type: 'honorarios', amount: 2054908, receptor_rut: '76111222-3', client_id: 'c1' }]
+  const siiNC = [{ id: 'n1', folio: '13', tipo_dte: 61, monto: 2054908, receptor_rut: '76.111.222-3', billing_id: null, doc_json: null }]
+  const r = hallazgos({ billing, siiNC, clientName: () => 'Cliente Uno' }).filter(h => h.detector === 'nc_sin_registrar')
+  assert.equal(r.length, 1)
+  assert.equal(r[0].monto, 2054908)
+  assert.match(r[0].titulo, /Nota de crédito N° 13/)
+  assert.equal(hallazgos({ billing, siiNC: [] , clientName: () => '' }).filter(h => h.detector === 'nc_sin_registrar').length, 0)
+})
