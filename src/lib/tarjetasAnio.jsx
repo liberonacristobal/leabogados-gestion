@@ -12,8 +12,18 @@ const ICO_ANIO = {
   check:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>,
   tPct:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
 }
-export const KpiAnio = ({ic,tono='nt',label,value,dual,chip,pct,cap,sub,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
-  <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',minHeight:D?undefined:86,boxSizing:'border-box',position:'relative',display:'flex',alignItems:'center',gap:D?12:9,cursor:onClick?'pointer':'default',minWidth:0}}>
+// Filas de desglose bajo la cifra (las partes que suman el total): [rótulo, valor, {neg, tot}]. `neg` = rojo; `tot` = línea de total con filete arriba.
+export const FilasKpi = ({rows,D}) => (
+  <div style={{marginTop:D?12:8,borderTop:`1px solid ${C.border}`,paddingTop:4}}>
+    {rows.map(([l,v,o],i)=>{ o=o||{}; return (
+      <div key={l+i} onClick={o.onClick?e=>{e.stopPropagation();o.onClick()}:undefined} style={{display:'flex',justifyContent:'space-between',gap:6,padding:D?'4px 0':'3px 0',fontSize:D?12.5:10.5,color:o.tot?C.accent:C.muted,fontWeight:o.tot?700:400,borderTop:o.tot?`1px solid ${C.border}`:'none',marginTop:o.tot?2:0,whiteSpace:'nowrap',cursor:o.onClick?'pointer':'inherit'}}>
+        <span style={{overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span><b style={{color:o.neg?C.overdueText:C.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</b>
+      </div>) })}
+  </div>)
+
+export const KpiAnio = ({ic,tono='nt',label,value,dual,chip,pct,cap,sub,rows,onClick,D,activo}) => { const [bg,bd,icoBg,fg]=TONO_ANIO[tono]; return (
+  <div onClick={onClick} style={{background:bg,border:`1px solid ${activo?C.accent:bd}`,boxShadow:activo?`0 0 0 1px ${C.accent} inset`:'none',borderRadius:12,padding:D?'14px':'12px 10px',minHeight:D?undefined:86,boxSizing:'border-box',position:'relative',display:'flex',flexDirection:'column',justifyContent:'center',cursor:onClick?'pointer':'default',minWidth:0}}>
+   <div style={{display:'flex',alignItems:'center',gap:D?12:9,minWidth:0}}>
     <span style={{width:D?34:30,height:D?34:30,borderRadius:8,background:icoBg,color:fg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ICO_ANIO[ic]}</span>
     <div className='kpi-col' style={{minWidth:0,flex:1,containerType:'inline-size'}}>
       {(dual||chip)&&!D?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}><span style={{...SEC_LBL,fontSize:12,lineHeight:1.25}}>{label}</span>{dual?<BrutoNetoPill princ={dual.props.princ} onAlt={dual.props.onAlt}/>:<BrutoNetoPill etiqueta={chip.etiqueta} otra={chip.otra} onAlt={chip.onAlt}/>}</div>:<div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>}
@@ -22,4 +32,6 @@ export const KpiAnio = ({ic,tono='nt',label,value,dual,chip,pct,cap,sub,onClick,
       {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:Number(pct)>100?C.greenText:C.accent,fontWeight:800}}>{Number(pct)>100?`+${Number(pct)-100}`:pct} %</b> {cap}</div>}
       {sub!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}>{sub}</div>}
     </div>
+   </div>
+   {rows&&rows.length>0&&<FilasKpi rows={rows} D={D}/>}
   </div>) }

@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SEC_LBL, SIcon, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, SIN_SOCIO, _ymPrev, currentYear, cargarProcesos, cobradoBill, esSubarriendo, estadoProceso, fmtMill, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, useCalTrib, useFlujoCaja, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaCLP, ventaUF, _DEMO_BANDEJA, CifrasBrutoNeto } from '../lib/compartido.jsx'
-import { kpisPorSocio } from '../lib/cifras.js'
-import { KpiAnio } from '../lib/tarjetasAnio.jsx'
+import { kpisPorSocio, cascadaVendido } from '../lib/cifras.js'
+import { KpiAnio, FilasKpi } from '../lib/tarjetasAnio.jsx'
 import { pctsAnio, useResultadoAnio, ingresoRealAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
 import { useMesEnMarcha } from './MesEnMarchaView.jsx'
@@ -20,11 +20,26 @@ const margenPct = (res, ing) => ing > 0 ? res / ing * 100 : null
 const pct1 = v => v == null ? null : v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 // Tarjeta chica (la misma forma para todas las hermanas): etiqueta, cifra y una línea de apoyo. `er` = gris suave (Estado de resultados).
-const Tl = ({ label, value, sub, vcol, tag, er, onClick }) => (
+const Tl = ({ label, value, sub, vcol, er, onClick }) => (
   <div onClick={onClick} className='pv-c' style={{ background: er ? C.border : C.card, border: `1px solid ${er ? C.border : C.border}`, borderRadius: 12, padding: '10px 12px', minWidth: 0, boxSizing: 'border-box', cursor: onClick ? 'pointer' : 'default' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...SEC_LBL, fontSize: 10, letterSpacing: .5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}{tag && <span style={{ fontSize: 8.5, fontWeight: 700, border: `1px solid ${C.muted}`, color: C.muted, borderRadius: 8, padding: '0 6px', textTransform: 'none', letterSpacing: 0 }}>{tag}</span>}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...SEC_LBL, fontSize: 10, letterSpacing: .5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
     <div style={{ fontSize: 17, fontWeight: 800, color: vcol || C.accent, letterSpacing: -.4, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{value}</div>
     <div style={{ fontSize: 10.5, color: C.textSoft, minHeight: 14, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</div>
+  </div>)
+
+// Tarjeta de sección de la portada: ícono a la izquierda, rótulo, cifra y apoyo a su derecha; debajo, las partidas que la forman. Misma forma para las cuatro hermanas.
+const SecCard = ({ ic, tint, col, t, v, vcol, s, rows, onClick, D }) => (
+  <div onClick={onClick} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '14px' : '12px 10px', cursor: 'pointer', minWidth: 0, boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0 }}>
+      <span style={{ width: D ? 34 : 30, height: D ? 34 : 30, borderRadius: 8, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n={ic} s={16} c={col} /></span>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ ...SEC_LBL, fontSize: D ? 13 : 12 }}>{t}</div>
+        <div style={{ fontSize: D ? 26 : 20, fontWeight: 800, color: vcol || C.accent, letterSpacing: -.6, lineHeight: 1.05, marginTop: 3, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+        {s && <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>{s}</div>}
+      </div>
+      <span style={{ color: C.muted, fontSize: 16, alignSelf: 'flex-start' }}>›</span>
+    </div>
+    {rows && rows.length > 0 && <FilasKpi rows={rows} D={D} />}
   </div>)
 
 export function OficinaView({ sales = [], billing = [], clients = [], terceros = [], expenses = [], anticipos = [], costosOfiRows = [], fantasmaIds = null, nPendCuentas = 0, onGo }) {
@@ -107,34 +122,48 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
 
   // ── Presentación ──
   const D = isDesktop
+  const [sec, setSec] = useState(null)   // null = portada; 'fin' | 'ges' | 'soc' | 'res' = página de la sección (las cuatro tarjetas siguen fijas arriba)
   // La tira queda fija bajo la cabecera de la app; en celular (donde ocupa mucho alto) se contrae a una fila de cuatro mini tarjetas al salir de la pantalla.
   // El cuerpo de escritorio va con zoom: las medidas de la copia fija se pasan a su escala.
   const [hh, setHh] = useState(0), tiraRef = useRef(null), [fuera, setFuera] = useState(false), [box, setBox] = useState({ l: 0, w: 0 })
-  useEffect(() => { const f = () => { const el = document.querySelector('.apphead'); const z = parseFloat(getComputedStyle(document.body).zoom) || 1; setHh(el ? Math.round(el.getBoundingClientRect().height / z) : 0); const t = tiraRef.current; if (t) { const r = t.getBoundingClientRect(); setBox({ l: r.left / z, w: r.width / z }) } }; f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [esMes, drill])
+  useEffect(() => { const f = () => { const el = document.querySelector('.apphead'); const z = parseFloat(getComputedStyle(document.body).zoom) || 1; setHh(el ? Math.round(el.getBoundingClientRect().height / z) : 0); const t = tiraRef.current; if (t) { const r = t.getBoundingClientRect(); setBox({ l: r.left / z, w: r.width / z }) } }; f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [esMes, drill, sec])
   useEffect(() => { const el = tiraRef.current; if (!el || typeof IntersectionObserver === 'undefined') return
-    const io = new IntersectionObserver(([e]) => setFuera(!e.isIntersecting && e.boundingClientRect.top < hh), { rootMargin: `-${hh}px 0px 0px 0px`, threshold: 0 }); io.observe(el); return () => io.disconnect() }, [hh, esMes, drill])
+    const io = new IntersectionObserver(([e]) => setFuera(!e.isIntersecting && e.boundingClientRect.top < hh), { rootMargin: `-${hh}px 0px 0px 0px`, threshold: 0 }); io.observe(el); return () => io.disconnect() }, [hh, esMes, drill, sec])
   const grid = { display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 10 }
-  const Part = ({ t }) => <div style={{ fontSize: 15, fontWeight: 800, color: C.accent, margin: '26px 2px 0', paddingBottom: 6, borderBottom: `1.5px solid ${C.accent}` }}>{t}</div>
+  const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8, marginTop: D ? 12 : 8 }
   const Lbl = ({ t, foto, link, onLink }) => <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 2px 8px' }}><span style={{ ...SEC_LBL, flex: 1 }}>{t}</span>{foto && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{foto}</span>}{link && <span onClick={onLink} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>{link} ›</span>}</div>
-  const pill = (on, txt, fn) => <span key={txt} onClick={fn} style={{ fontSize: 12, fontWeight: 700, padding: '4px 13px', borderRadius: 16, cursor: 'pointer', background: on ? C.accent : 'transparent', color: on ? '#fff' : C.muted }}>{txt}</span>
-  const seg = (a, b) => <span style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 18, overflow: 'hidden', background: C.card }}>{a}{b}</span>
-  const hdrPill = { fontSize: 12, fontWeight: 700, color: C.accent, background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, padding: '4px 12px', fontFamily: 'inherit', cursor: 'pointer' }
+  const selSt = { fontSize: 12, fontWeight: 700, color: C.accent, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 8px', fontFamily: 'inherit', cursor: 'pointer' }
+  const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1)
+  const enUF = moneda === 'UF', CLP = !enUF
 
-  // La tira de cuatro tarjetas, fija arriba.
+  // Desglose de cada tarjeta: las partes que suman la cifra (solo en pesos donde la parte no existe en UF).
+  const raAnio = useMemo(() => { let te = 0; for (let i = 1; i <= curM; i++) te += resultadoMes(fuRes, deps, `${year}-${pad(i)}`).totalEmitido; return te }, [fuRes, billing, terceros, costosOfiRows, expenses, clients, curM, year])
+  const ajR = x => Math.abs(x) < 1e6 ? Math.round(x) : Math.round(x / 1e5) * 1e5
+  const facAnioV = resAnio.verCLP.fac || 0, ajAnio = ajR(raAnio - (resAnio.fac || 0))
+  const CV = cascadaVendido(m, enUF), fV = x => enUF ? fmtUFk(x) : fmtShort(x)
+  const rVend = [['Bruto', fV(CV.bruto)], ['Costos de terceros', '−' + fV(CV.costo), { neg: true }], ['Neto', fV(CV.neto), { tot: true }]]
+  const rFac = !esMes
+    ? (CLP ? [['Total emitido', fmtShort(facAnioV + ajAnio)], ['Menos ajustes', '−' + fmtShort(ajAnio), { neg: true }], ['Facturado', fmtShort(facAnioV), { tot: true }]] : undefined)
+    : (CLP ? [['Total emitido', fmtShort(rm.totalEmitido)], ['Menos ajustes', '−' + fmtShort(rm.totalEmitido - rm.fac), { neg: true }], ['Facturado', fmtShort(rm.fac), { tot: true }]] : undefined)
+  const rCob = !esMes ? [['Propio', vMon(ingYTDUF, ingYTD)], ['Real', vMon(ingRealA.uf, ingRealA.clp)], ...(CLP ? [['Por cobrar', fmtShort(totPorCobrar)]] : [])] : undefined
+  const rRes = !esMes ? [['Ingresos', mRes('ing')], ['Costos', '−' + mRes('cos', true), { neg: true }], ['Comisiones', '−' + mRes('com', true), { neg: true }]]
+    : (CLP ? [['Ingresos', fmtShort(rm.ing)], ['Costos', '−' + fmtShort(rm.cos), { neg: true }], ['Comisiones', '−' + fmtShort(rm.com), { neg: true }]] : undefined)
+
+  // Las cuatro tarjetas, fijas arriba: mismas reglas de Inicio (tono por tarjeta, % de la meta en negrita, verde y «+N %» sobre 100).
   const sel = drill?.tile
   const tira = (() => {
     if (!esMes) return (<div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8 }}>
       <KpiAnio D={D} ic='chart' tono='az' label='Vendido' activo={sel === 'vend'} onClick={() => setDrill(d => d && d.tile === 'vend' ? null : { tile: 'vend' })}
-        dual={<CifrasBrutoNeto desk={D} bruto={vMon(m.brutoUF, m.bruto)} neto={vMon(m.netoUF, m.neto)} princ={vendPrinc} onAlt={setVendPrinc} />} pct={m.meta > 0 ? (vendPrinc === 'neto' ? ventaNetoPct : ventaPct) : null} cap={<>{vendPrinc === 'neto' ? 'neto ' : 'bruto '}de la meta</>} />
-      <KpiAnio D={D} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto > 0 ? factPct : null} cap='del bruto' activo={sel === 'fact'} onClick={() => setDrill(d => d && d.tile === 'fact' ? null : { tile: 'fact' })} />
-      <KpiAnio D={D} ic='check' tono='gr' label='Cobrado' value={cobPrinc === 'real' ? vMon(ingRealA.uf, ingRealA.clp) : vMon(ingYTDUF, ingYTD)} chip={{ etiqueta: cobPrinc === 'real' ? 'Real' : 'Propio', otra: cobPrinc === 'real' ? 'propio' : 'real', onAlt: setCobPrinc }} pct={metaCobranza > 0 ? (cobPrinc === 'real' ? cobroRealPct : cobroPct) : null} cap='de la meta' activo={sel === 'cob'} onClick={() => setDrill(d => d && d.tile === 'cob' ? null : { tile: 'cob' })} />
-      {resAnio.ing > 0 && <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(resAnio.res < 0 ? '−' : '') + mRes('res', true)} pct={resAnio.pct != null ? pct1(resAnio.pct) : null} cap='ingresos' activo={sel === 'marg'} onClick={() => setDrill(d => d && d.tile === 'marg' ? null : { tile: 'marg' })} />}
+        value={vendPrinc === 'neto' ? vMon(m.netoUF, m.neto) : vMon(m.brutoUF, m.bruto)} rows={rVend} pct={m.meta > 0 ? (vendPrinc === 'neto' ? ventaNetoPct : ventaPct) : null} cap={<>{vendPrinc === 'neto' ? 'neto ' : 'bruto '}de la meta</>} />
+      <KpiAnio D={D} ic='file' tono='am' label='Facturado' value={mRes('fac')} rows={rFac} pct={m.bruto > 0 ? factPct : null} cap='del bruto' activo={sel === 'fact'} onClick={() => setDrill(d => d && d.tile === 'fact' ? null : { tile: 'fact' })} />
+      <KpiAnio D={D} ic='check' tono='gr' label='Cobrado' value={cobPrinc === 'real' ? vMon(ingRealA.uf, ingRealA.clp) : vMon(ingYTDUF, ingYTD)} rows={rCob} pct={metaCobranza > 0 ? (cobPrinc === 'real' ? cobroRealPct : cobroPct) : null} cap='de la meta' activo={sel === 'cob'} onClick={() => setDrill(d => d && d.tile === 'cob' ? null : { tile: 'cob' })} />
+      {resAnio.ing > 0 && <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(resAnio.res < 0 ? '−' : '') + mRes('res', true)} rows={rRes} pct={resAnio.pct != null ? pct1(resAnio.pct) : null} cap='ingresos' activo={sel === 'marg'} onClick={() => setDrill(d => d && d.tile === 'marg' ? null : { tile: 'marg' })} />}
     </div>)
     return (<div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8 }}>
       <KpiAnio D={D} ic='chart' tono='az' label='Vendido' value={fMon(vM.clp, vM.uf)} sub={dMon(vM.clp, vP.clp, vM.uf, vP.uf)} onClick={() => go('ventas')} />
-      <KpiAnio D={D} ic='file' tono='am' label='Facturado' value={fMon(rm.fac, rm.facUF)} sub={dMon(rm.fac, rp.fac, rm.facUF, rp.facUF)} onClick={() => go('estadoResultados', ymSel, { bloque: 'ing', sub: 'fac' })} />
+      <KpiAnio D={D} ic='file' tono='am' label='Facturado' value={fMon(rm.fac, rm.facUF)} sub={dMon(rm.fac, rp.fac, rm.facUF, rp.facUF)} rows={rFac} onClick={() => go('estadoResultados', ymSel, { bloque: 'ing', sub: 'fac' })} />
       <KpiAnio D={D} ic='check' tono='gr' label='Cobrado' value={fMon(cobM.clp, cobM.uf)} sub={cobP ? dMon(cobM.clp, cobP.clp, cobM.uf, cobP.uf) : undefined} onClick={() => go('cobradoMes', ymSel)} />
-      <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(rm.res < 0 ? '−' : '') + fMon(Math.abs(rm.res), Math.abs(rm.resUF))} sub={dMon(rm.res, rp.res, rm.resUF, rp.resUF)} onClick={() => go('estadoResultados', ymSel)} />
+      <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(rm.res < 0 ? '−' : '') + fMon(Math.abs(rm.res), Math.abs(rm.resUF))} sub={dMon(rm.res, rp.res, rm.resUF, rp.resUF)} rows={rRes} onClick={() => go('estadoResultados', ymSel)} />
     </div>)
   })()
 
@@ -145,24 +174,89 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const res = esMes ? rm.res : resAnio.res, ingr = esMes ? rm.ing : resAnio.ing
   const mg = margenPct(res, ingr)
   const costoTxt = esMes ? fmtMill(rm.cos) : mRes('cos', true), comTxt = esMes ? fmtMill(rm.com) : mRes('com', true)
-  const pptoTxt = !ppto ? '' : !ppto.borrador ? 'Sin empezar' : (ppto.oficial ? ppto.oficial.nombre : 'Sin versión oficial') + (ppto.actualizado ? '. Actualizado\u00A0' + fmtFechaDMY(ppto.actualizado).replace(/-/g, '\u2011') : '')
+  const pptoTxt = !ppto ? '' : !ppto.borrador ? 'Sin empezar' : (ppto.oficial ? ppto.oficial.nombre : 'Sin versión oficial') + (ppto.actualizado ? '. Actualizado ' + fmtFechaDMY(ppto.actualizado).replace(/-/g, '‑') : '')
+  const resTxt = (res < 0 ? '−' : '') + fmtMill(Math.abs(res))
+  const nResolver = (procsN ? procsN.falla : 0) + (bandN || 0) + nA + (nPendCuentas || 0)
+  const partesRes = [procsN && procsN.falla ? `${procsN.falla} proceso${procsN.falla === 1 ? '' : 's'} con falla` : null, bandN ? `${bandN} en la bandeja` : null, nA ? `${nA} aviso${nA === 1 ? '' : 's'} tributario${nA === 1 ? '' : 's'}` : null, nPendCuentas ? `${nPendCuentas} por revisar` : null].filter(Boolean)
+  const socIng = s => fmtShort(card6(s, 'ytd')[5] || 0)
+
+  // Portada: cuatro tarjetas de sección y Por resolver, todas clickeables.
+  const portada = (<>
+    <div style={grid2}>
+      <SecCard D={D} ic='chart' tint={C.azulBg} col={C.azulInfo} t='Finanzas' v={resTxt} vcol={res < 0 ? C.overdueText : undefined} s={esMes ? `resultado de ${MESES[selM - 1]}` : 'resultado del año'} onClick={() => setSec('fin')}
+        rows={[['Costos', '−' + costoTxt, { neg: true }], ['Comisiones', '−' + comTxt, { neg: true }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), fin < 0 ? { neg: true } : undefined], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día']]} />
+      <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
+        rows={[['Vencido', fmtMill(venc), venc > 0 ? { neg: true } : undefined], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), cart.expo.m60 > 0 ? { neg: true } : undefined], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—']]} />
+      <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={socIng(null)} s={`ingreso real, enero a ${MESES[curM - 1]}`} onClick={() => setSec('soc')}
+        rows={[...ADMIN_NAMES.map(s => [s, socIng(s)]), ['Retiros', fmtShort(retAnio)]]} />
+      <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
+        rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
+    </div>
+    <div style={{ marginTop: D ? 12 : 8 }}>
+      <SecCard D={D} ic='alert' tint={C.overdueBg} col={C.overdueText} t='Por resolver' v={nResolver ? String(nResolver) : 'Al día'} vcol={nResolver ? undefined : C.greenText} s={partesRes.join(', ')} onClick={() => setSec('res')} />
+    </div>
+  </>)
+
+  const pagina = {
+    res: (<><Lbl t='Por resolver' foto='foto de hoy' /><div style={grid}>
+      <Tl label='Calendario tributario' value={nA ? `${nA} aviso${nA === 1 ? '' : 's'}` : 'al día'} vcol={nA ? (calTrib.alertas[0].sev === 0 ? C.overdueText : C.soonText) : C.greenText} onClick={() => go('calendarioTrib')} />
+      <Tl label='Procesos automáticos' value={procsN == null ? '…' : procsN.falla ? `${procsN.falla} con falla` : `${procsN.total} procesos`} vcol={procsN && procsN.falla ? C.overdueText : C.accent} onClick={() => go('procesos')} />
+      <Tl label='Bandeja' value={bandN == null ? '…' : bandN ? String(bandN) : 'al día'} sub={bandN ? 'pendientes' : ''} vcol={bandN ? C.accent : C.greenText} onClick={() => go('bandeja')} />
+      <Tl label='Por revisar' value={String(nPendCuentas)} sub='clientes con pendientes' onClick={() => go('revisarCuentas')} />
+    </div></>),
+    fin: (<>
+      <Lbl t={esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`} />
+      <div style={grid}>
+        <Tl er label='Estado de resultados' value={resTxt} vcol={res < 0 ? C.overdueText : C.accent} sub={esMes ? `${mesPrev} ${rp.res < 0 ? '−' : ''}${fmtMill(Math.abs(rp.res))}` : (mg == null ? '' : `margen ${pct1(mg)} %`)} onClick={() => esMes ? go('estadoResultados', ymSel) : go('resultadoAnio')} />
+        <Tl label={esMes && !rm.cerrado ? 'Costos, estimado' : 'Costos'} value={'−' + costoTxt} vcol={C.overdueText} sub={esMes ? dl(rm.cos, rp.cos, fmtMill, true) : 'incluye subarriendo y gastos varios'} onClick={() => go('costos')} />
+        <Tl label='Comisiones' value={rm.com || !esMes ? '−' + comTxt : '$0'} vcol={C.overdueText} sub={esMes ? dl(rm.com, rp.com, fmtMill, true) : 'devengadas'} onClick={() => go('proveedores')} />
+        <Tl label='Compras · IVA' value='Ver' sub='facturas recibidas' onClick={() => go('compras')} />
+      </div>
+      <Lbl t='Caja' foto='foto de hoy' />
+      <div style={grid}>
+        <Tl label='Flujo de caja' value={(fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin))} vcol={fin >= 0 ? C.greenText : C.overdueText} sub={`8 semanas, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
+        <Tl label='Proyección' value={fmtMill(proy)} sub={`cobranza al ${fmtFechaDMY(`${year}-12-31`)}, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
+        <Tl label='Comisiones por pagar' value={sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día'} vcol={sc.porPagar > 0 ? C.accent : C.greenText} sub={diasCom != null && sc.porPagar > 0 ? `la más antigua, hace ${diasCom} días` : ''} onClick={() => go('proveedores')} />
+        <Tl label='Mes en marcha' value={memTxt} vcol={memCol} sub={`al ${fmtFechaDMY(hoy).slice(0, 5)}`} onClick={() => go('mesEnMarcha')} />
+      </div></>),
+    ges: (<><Lbl t='Cobranza' foto='foto de hoy' /><div style={grid}>
+      <Tl label='Por cobrar' value={fmtMill(totPorCobrar)} sub={totPorCobrar > 0 ? `${Math.round(venc / totPorCobrar * 100)} % vencido` : ''} onClick={() => go('cobranza')} />
+      <Tl label='Vencido' value={fmtMill(venc)} vcol={venc > 0 ? C.overdueText : C.accent} sub={`${new Set(cart.vencidoBills.map(b => String(b.client_id))).size} clientes`} onClick={() => go('cobranzaVencido')} />
+      <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
+      <Tl label='Días de cobro' value={dCobro.pond != null ? `${dCobro.pond} días` : '—'} sub='ponderado por monto' onClick={() => go('presupuesto')} />
+    </div></>),
+    soc: (<><Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: D ? 12.5 : 12, fontVariantNumeric: 'tabular-nums' }}>
+          <thead><tr>{['Socio', 'Vendido neto', 'Cobrado', 'Ingreso real'].map((h, i) => <th key={h} style={{ padding: D ? '8px 14px' : '8px 6px', fontSize: D ? 10 : 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, color: C.accent, background: C.bgSoft, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+          <tbody>{sociosFilas.map(s => { const v = card6(s, 'ytd'), tot = s === null; return (
+            <tr key={s || 'ofi'} onClick={() => go('porSocio')} style={{ cursor: 'pointer', background: tot ? C.bgSoft : undefined }}>
+              <td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, fontWeight: tot ? 800 : 600, color: tot ? C.accent : C.text }}>{tot ? 'Oficina' : s}</td>
+              {[0, 2, 5].map(i => <td key={i} onClick={e => { e.stopPropagation(); go('porSocio', s, i) }} style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, textAlign: 'right', fontWeight: tot ? 800 : 400, color: tot ? C.accent : undefined }}>{fmtShort(v[i] || 0)}</td>)}
+            </tr>) })}
+            <tr onClick={() => go('socios')} style={{ cursor: 'pointer' }}><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, fontWeight: 600 }}>Retiros de socios</td><td /><td /><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right' }}>{fmtShort(retAnio)}</td></tr>
+          </tbody></table></div>
+      </div></>),
+  }
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      {/* Cabecera: Año | Mes, mes elegido, estado del mes, moneda y exportación */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>{seg(pill(!esMes, 'Año', () => { setModo('anio') }), pill(esMes, 'Mes', () => { setModo('mes'); setDrill(null) }))}</span>
-        {esMes ? <>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...hdrPill }}><span onClick={() => setSelM(x => Math.max(1, x - 1))} style={{ cursor: 'pointer', padding: '0 4px' }}>‹</span>{MESES[selM - 1].charAt(0).toUpperCase() + MESES[selM - 1].slice(1)} {year}<span onClick={() => setSelM(x => Math.min(curM, x + 1))} style={{ cursor: 'pointer', padding: '0 4px' }}>›</span></span>
-          <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '3px 10px', background: rm.cerrado ? C.greenBg : C.soonBg, color: rm.cerrado ? C.greenText : C.soonText, whiteSpace: 'nowrap' }}>{rm.cerrado ? 'Cerrado' : `Provisorio, cierre ${cierre}`}</span>
-        </> : <span style={{ ...hdrPill, cursor: 'default' }}>{year}</span>}
-        {seg(pill(moneda === 'UF', 'UF', () => setMoneda('UF')), pill(moneda === 'CLP', 'CLP', () => setMoneda('CLP')))}
-        {esMes && <span onClick={() => go('informeMes')} style={hdrPill}>Informe del mes ›</span>}
+      {/* Cabecera: período (año o mes) y moneda en selectores simples; estado del mes e Informe en texto */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {esMes && <span style={{ fontSize: 11.5, fontWeight: 700, color: rm.cerrado ? C.greenText : C.soonText, whiteSpace: 'nowrap' }}>{rm.cerrado ? 'Cerrado' : `Provisorio, cierre ${cierre}`}</span>}
+          {esMes && <span onClick={() => go('informeMes')} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Informe del mes ›</span>}
+          <select value={esMes ? 'm' + selM : 'a'} onChange={e => { const v = e.target.value; if (v === 'a') { setModo('anio') } else { setModo('mes'); setSelM(Number(v.slice(1))); setDrill(null) } }} style={selSt}>
+            <option value='a'>Año {year}</option>
+            {MESES.slice(0, curM).map((n, i) => <option key={n} value={'m' + (i + 1)}>{cap1(n)} {year}</option>)}
+          </select>
+          <select value={moneda} onChange={e => setMoneda(e.target.value)} style={selSt}><option value='CLP'>CLP</option><option value='UF'>UF</option></select>
+        </span>
       </div>
 
       {/* Las cuatro tarjetas, fijas arriba */}
       <div ref={tiraRef} style={{ padding: '6px 0 8px' }}>{tira}</div>
-      {/* El contenedor de la app tiene desplazamiento propio y anula «sticky»: al salir la tira de la pantalla aparece una copia fija bajo la cabecera (completa en escritorio; en celular, una fila de cuatro mini tarjetas). */}
+      {/* El contenedor de la app tiene desplazamiento propio y anula «sticky»: al salir la tira de la pantalla aparece una copia fija bajo la cabecera (en celular, una fila de cuatro mini tarjetas). */}
       {fuera && <div style={{ position: 'fixed', top: hh, left: box.l, width: box.w, zIndex: 15, background: C.bg, padding: D ? '6px 0 8px' : '5px 0', boxSizing: 'border-box' }}>
         {D ? tira : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 5 }}>
           {mini.map(([l, v, bg, fg]) => <div key={l} style={{ background: bg, border: `1px solid ${bg === C.card ? C.border : 'transparent'}`, borderRadius: 9, padding: '3px 6px', minWidth: 0 }}><div style={{ fontSize: 8, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: fg }}>{l}</div><div style={{ fontSize: 12.5, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div></div>)}</div>}
@@ -172,59 +266,9 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
         <div onClick={() => setDrill(null)} style={{ fontSize: 12, fontWeight: 700, color: C.accent, cursor: 'pointer', margin: '2px 2px 8px' }}>← Oficina</div>
         <ResDrillPanel datos={R} clients={clients} terceros={terceros} tile={drill.tile} year={drill.year} setDrill={setDrill} moneda={moneda} isDesk={D} selYear={year}
           go={t => go(({ sales: 'ventas', billing: 'facturacion', expenses: 'gastos', presupuestoOficina: 'oficina' })[t] || t)} onOpenClientFicha={id => go('cliente', id)} onOpenEstadoResultados={() => go('resultadoAnio')} />
-      </div>) : (<>
-        <Lbl t='Por resolver' foto='foto de hoy' />
-        <div style={grid}>
-          <Tl label='Calendario tributario' value={nA ? `${nA} aviso${nA === 1 ? '' : 's'}` : 'al día'} vcol={nA ? (calTrib.alertas[0].sev === 0 ? C.overdueText : C.soonText) : C.greenText} onClick={() => go('calendarioTrib')} />
-          <Tl label='Procesos automáticos' value={procsN == null ? '…' : procsN.falla ? `${procsN.falla} con falla` : `${procsN.total} procesos`} vcol={procsN && procsN.falla ? C.overdueText : C.accent} onClick={() => go('procesos')} />
-          <Tl label='Bandeja' value={bandN == null ? '…' : bandN ? String(bandN) : 'al día'} sub={bandN ? 'pendientes' : ''} vcol={bandN ? C.accent : C.greenText} onClick={() => go('bandeja')} />
-          <Tl label='Por revisar' value={String(nPendCuentas)} sub='clientes con pendientes' onClick={() => go('revisarCuentas')} />
-        </div>
-
-        <Part t='Finanzas' />
-        <Lbl t={esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`} />
-        <div style={grid}>
-          <Tl er label='Estado de resultados' value={(res < 0 ? '−' : '') + fmtMill(Math.abs(res))} vcol={res < 0 ? C.overdueText : C.accent} sub={esMes ? `${mesPrev} ${rp.res < 0 ? '−' : ''}${fmtMill(Math.abs(rp.res))}` : (mg == null ? '' : `margen ${pct1(mg)} %`)} onClick={() => esMes ? go('estadoResultados', ymSel) : go('resultadoAnio')} />
-          <Tl label='Costos' value={'−' + costoTxt} vcol={C.overdueText} tag={esMes && !rm.cerrado ? 'Estimado' : undefined} sub={esMes ? dl(rm.cos, rp.cos, fmtMill, true) : 'incluye subarriendo y gastos varios'} onClick={() => go('costos')} />
-          <Tl label='Comisiones' value={rm.com || !esMes ? '−' + comTxt : '$0'} vcol={C.overdueText} sub={esMes ? dl(rm.com, rp.com, fmtMill, true) : 'devengadas'} onClick={() => go('proveedores')} />
-          <Tl label='Compras · IVA' value='Ver' sub='facturas recibidas' onClick={() => go('compras')} />
-        </div>
-        <Lbl t='Caja' foto='foto de hoy' />
-        <div style={grid}>
-          <Tl label='Flujo de caja' value={(fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin))} vcol={fin >= 0 ? C.greenText : C.overdueText} sub={`8 semanas, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
-          <Tl label='Proyección' value={fmtMill(proy)} sub={`cobranza al ${fmtFechaDMY(`${year}-12-31`)}, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
-          <Tl label='Comisiones por pagar' value={sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día'} vcol={sc.porPagar > 0 ? C.accent : C.greenText} sub={diasCom != null && sc.porPagar > 0 ? `la más antigua, hace ${diasCom} días` : ''} onClick={() => go('proveedores')} />
-          <Tl label='Mes en marcha' value={memTxt} vcol={memCol} sub={`al ${fmtFechaDMY(hoy).slice(0, 5)}`} onClick={() => go('mesEnMarcha')} />
-        </div>
-        <Lbl t={`Presupuesto ${year + 1}`} />
-        <div onClick={() => go('presupuesto')} style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.accent, borderRadius: 12, padding: '13px 16px', cursor: 'pointer' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(255,255,255,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='chart' s={17} c='#fff' /></span>
-          <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>{`Presupuesto ${year + 1}${ppto && ppto.borrador ? ', borrador' : ''}`}</div><div style={{ fontSize: 12, color: '#BFD8E0' }}>{pptoTxt}</div></div>
-          <span style={{ border: '1.5px solid #fff', color: '#fff', borderRadius: 14, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>Abrir</span>
-        </div>
-
-        <Part t='Gestión' />
-        <Lbl t='Cobranza' foto='foto de hoy' />
-        <div style={grid}>
-          <Tl label='Por cobrar' value={fmtMill(totPorCobrar)} sub={totPorCobrar > 0 ? `${Math.round(venc / totPorCobrar * 100)} % vencido` : ''} onClick={() => go('cobranza')} />
-          <Tl label='Vencido' value={fmtMill(venc)} vcol={venc > 0 ? C.overdueText : C.accent} sub={`${new Set(cart.vencidoBills.map(b => String(b.client_id))).size} clientes`} onClick={() => go('cobranzaVencido')} />
-          <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
-          <Tl label='Días de cobro' value={dCobro.pond != null ? `${dCobro.pond} días` : '—'} sub='ponderado por monto' onClick={() => go('presupuesto')} />
-        </div>
-
-        <Part t='Socios' />
-        <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: D ? 12.5 : 12, fontVariantNumeric: 'tabular-nums' }}>
-            <thead><tr>{['Socio', 'Vendido neto', 'Cobrado', 'Ingreso real'].map((h, i) => <th key={h} style={{ padding: D ? '8px 14px' : '8px 6px', fontSize: D ? 10 : 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, color: C.accent, background: C.bgSoft, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
-            <tbody>{sociosFilas.map(s => { const v = card6(s, 'ytd'), tot = s === null; return (
-              <tr key={s || 'ofi'} onClick={() => go('porSocio')} style={{ cursor: 'pointer', background: tot ? C.bgSoft : undefined }}>
-                <td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, fontWeight: tot ? 800 : 600, color: tot ? C.accent : C.text }}>{tot ? 'Oficina' : s}</td>
-                {[0, 2, 5].map(i => <td key={i} onClick={e => { e.stopPropagation(); go('porSocio', s, i) }} style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, textAlign: 'right', fontWeight: tot ? 800 : 400, color: tot ? C.accent : undefined }}>{fmtShort(v[i] || 0)}</td>)}
-              </tr>) })}
-              <tr onClick={() => go('socios')} style={{ cursor: 'pointer' }}><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, fontWeight: 600 }}>Retiros de socios</td><td /><td /><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right' }}>{fmtShort(retAnio)}</td></tr>
-            </tbody></table></div>
-        </div>
-      </>)}
+      </div>) : sec ? (<div style={{ marginTop: 6 }}>
+        <div onClick={() => setSec(null)} style={{ fontSize: 12, fontWeight: 700, color: C.accent, cursor: 'pointer', margin: '2px 2px 0' }}>← Oficina</div>
+        {pagina[sec]}
+      </div>) : portada}
     </div>)
 }
