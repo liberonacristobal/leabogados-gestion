@@ -39,8 +39,8 @@ import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosRegla
 import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas, conPostergadas } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
 import { estadoComision, comisionesDevengadas } from '../../supabase/functions/_shared/comisionesReglas.js'
-import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, cascadaResultado } from './cifras.js'
-export { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, cascadaResultado }
+import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado } from './cifras.js'
+export { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado }
 
 export const { dteMontoTotal, montoFactura } = SD
 

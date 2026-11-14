@@ -51,8 +51,12 @@ export const costoVentaUF = (s, ufRef) => { const u=(parseFloat(s?.uf_value)>0?p
 // (Facturado + Subarriendo + … = Ingresos) sin que la suma visible falle por 1. paso = unidad de redondeo (1 UF, 0,1 M…).
 // fijos = índices que se redondean normal (la cifra que también se ve en otra tarjeta, p. ej. Facturado o Margen): el ajuste cae en las demás.
 /** @param {Array<number|null|undefined>} partes @param {number} [paso] @param {number[]} [fijos] @returns {number[]} */
-export function redondearPartes(partes, paso=1, fijos=[]){
-  const v=partes.map(x=>(Number(x)||0)/paso), tot=Math.round(v.reduce((a,x)=>a+x,0))
+export function redondearPartes(partes, paso=1, fijos=[]){ return redondearA(partes, partes.reduce((/** @type {number} */ a,x)=>a+(Number(x)||0),0), paso, fijos) }
+
+// Igual que redondearPartes, pero las partes suman un total dado (ya redondeado en otra parte, p. ej. el Costos de la cascada) en vez de su propia suma.
+/** @param {Array<number|null|undefined>} partes @param {number} total @param {number} [paso] @param {number[]} [fijos] @returns {number[]} */
+export function redondearA(partes, total, paso=1, fijos=[]){
+  const v=partes.map(x=>(Number(x)||0)/paso), tot=Math.round((Number(total)||0)/paso)
   const fx=new Set(fijos.filter(i=>v.some((_,j)=>j!==i&&!fijos.includes(j)&&v[j]!==0)))   // si no hay a quién cargarle el ajuste, nadie queda fijo
   const out=v.map((x,i)=>fx.has(i)?Math.round(x):Math.floor(x)); let falta=tot-out.reduce((a,x)=>a+x,0)
   const ord=v.map((x,i)=>[x-Math.floor(x),i]).filter(([,i])=>!fx.has(i)&&v[i]!==0).sort((a,b)=>b[0]-a[0])
@@ -65,8 +69,8 @@ export function redondearPartes(partes, paso=1, fijos=[]){
 // y Egresos = Costos + Comisiones se leen exactos. x = {fac,rex,cos,com,res} en pesos (o UF con paso 1); fuente única de Oficina, Resultado del año y Estado de resultados.
 /** @param {{fac:number,rex:number,cos:number,com:number,res:number}} x @param {number} [paso] @returns {{fac:number,rex:number,ing:number,cos:number,com:number,egr:number,res:number}} */
 export function cascadaResultado(x, paso=1e5){
-  const [res,cos,com]=redondearPartes([x.res,x.cos,x.com],paso,[0]), [fac,rex]=redondearPartes([x.fac,x.rex],paso,[0])
-  return { fac, rex, ing:res+cos+com, cos, com, egr:cos+com, res }
+  const [res,cos,com]=redondearPartes([x.res,x.cos,x.com],paso,[0]), ing=res+cos+com, [fac,rex]=redondearA([x.fac,x.rex],ing,paso,[0])   // Facturado y Comisión de externos suman el Ingreso mostrado
+  return { fac, rex, ing, cos, com, egr:cos+com, res }
 }
 
 // Cascada del Vendido del año: Bruto − Comisiones de venta = NETO, con una sola cifra de neto en Inicio, Panel de socios, imágenes y Presupuesto.

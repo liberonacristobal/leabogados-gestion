@@ -7,7 +7,7 @@ import { impuestosMensuales, pagosConBoleta, listaBoletasPorCargar, idOficina } 
 import { GrupoImpuestos, DetalleImpuestos } from './impuestosMensualesUI.jsx'
 import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
-import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, cascadaResultado, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
+import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
 export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
@@ -181,7 +181,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
       const cab=t=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{t} · {per}</span></div>
       // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Comisión de externos = Ingresos (el subarriendo baja el costo, no suma aquí)
-      const [vFac,vRex]=redondearPartes([facturacion,rex],1e5,[0])
+      const [vFac,vRex]=redondearA([facturacion,rex],Q.ing,1e5,[0])
       const [fFac,fNc,fTer]=redondearPartes([facturacion,nc,terc],1e5,[0])
       const detIng=<div style={card}>{cab('Ingresos')}
         {ln({k:'fac',l:'Facturación propia',v:fmtMillLR(vFac),on:e=>{e.stopPropagation();setNcOpen(!ncOpen)},open:ncOpen})}
@@ -192,7 +192,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+', menor costo',gv:'Gastos varios'}
       const cosAgg={}; months.forEach(m=>(rmes[m]?.cosLines||[]).forEach(x=>{ cosAgg[x.k]=(cosAgg[x.k]||0)+(Number(x.m)||0) }))
       const cosK=['rem','cot','arr','con','otr','pre','sub','gv'].filter(k=>cosAgg[k])
-      const cosV=redondearPartes(cosK.map(k=>cosAgg[k]),1e5)
+      const cosV=redondearA(cosK.map(k=>cosAgg[k]),Q.cos,1e5)
       const remEst=months.some(m=>rmes[m]?.remEst&&rmes[m]?.conPlanilla)
       const detCos=<div style={card}>{cab('Costos')}
         {cosK.map((k,i)=>k==='sub'?ln({k,sg:'−',l:COSL[k],v:fmtMillLR(-cosV[i])}):ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
@@ -200,7 +200,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>Pago al SII (F29) {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
       // Comisiones (devengadas): por colaborador (comList de cada mes).
       const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
-      const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearPartes(comL.map(x=>x.m),1e5)
+      const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearA(comL.map(x=>x.m),Q.com,1e5)
       const detCom=<div style={card}>{cab('Comisiones')}
         {comL.length?<>{comL.map((x,i)=>ln({k:'c'+i,sg:i?'+':'',l:x.nombre,v:fmtMillLR(comV[i])}))}{comL.length>1&&ln({k:'comT',sg:'=',l:'Comisiones',v:fmtMillLR(comV.reduce((a,x)=>a+x,0)),tot:true})}</>
           :<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones en el período</div>}</div>
