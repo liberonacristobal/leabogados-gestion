@@ -5,11 +5,12 @@ import { demoData } from '../demoData'
 import { coberturaVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuadreVenta } from '../../supabase/functions/_shared/porFacturar.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
+import { ncPorRegistrar } from '../../supabase/functions/_shared/notasCredito.js'
 import { avisoTarifa, avisoComision } from '../../supabase/functions/_shared/textosAvisos.js'
 import { C, Gl, SEC_LBL, SIcon, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { TAB_LABELS, conciliarVentasSaldadas, esSubarriendo, fechaHoraCL, fetchUFFechas, learnPut, logActividad, mesTitulo, pillPersonaSty, registrarError, setLearningKV, titleCase, ufDelDia, ufFechaCache, useTrabajosDetenidos, ventaUF } from '../lib/compartido.jsx'
 
-export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], expenses=[], tasks=[], onCerrarTrabajo, onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut, onCubrirCuotas, onQuitarRsGasto, onReabrirTrabajo, onMarcarReembolso, onRegistrarComisionRec}){
+export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], conciliacion=[], terceros=[], expenses=[], tasks=[], onCerrarTrabajo, onOpenMov, onResolverDupAnticipo, onOpenClientFicha, onOpenFactura, onFixVencimiento, onResolverCuotaTramo, onResolverGlosa, onRetirarFantasmas, onDismissFantasma, onPasarTerminado, onActualizarHonorario, onGuardarClientRut, onCubrirCuotas, onQuitarRsGasto, onReabrirTrabajo, onMarcarReembolso, onRegistrarComisionRec, onRegistrarNC}){
   const [ptBusy,setPtBusy]=useState(null)        // sale_id en proceso de "pasar a Terminado"
   const [ptDone,setPtDone]=useState(()=>new Set()) // ventas ya pasadas en esta sesión
   const [ahBusy,setAhBusy]=useState(null)        // sale_id en proceso de "actualizar honorario"
@@ -60,6 +61,10 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   const reembolsos=useMemo(()=>SD.reembolsoProbable(billing,expenses).filter(x=>!rbDone.has(String(x.factura.id))),[billing,expenses,rbDone])
   // Vencimiento incoherente: factura emitida cuyo due quedó ANTERIOR a su emisión (típico de emitir tarde por match de DTE sin recalcular el plazo) → se ve "vencida" recién emitida. Auto-corregible (due = emisión + plazo).
   const vencIncoh=useMemo(()=>SD.vencIncoh(billing),[billing])
+  // Notas de crédito del SII sin registrar (regla única notasCredito.js, la del auditor): la factura que anulan sigue viva en la app.
+  const [siiNC,setSiiNC]=useState([]), [ncBusy,setNcBusy]=useState(null)
+  useEffect(()=>{ if(DEMO){ setSiiNC(demoData.sii_nc_demo||[]); return } supabase.from('sii_cargas_docs').select('id,folio,tipo_dte,fecha_emision,receptor_rut,receptor_name,monto,doc_json,billing_id').eq('tipo_dte',61).is('billing_id',null).then(({data})=>setSiiNC(data||[]),()=>{}) },[billing])
+  const ncPend=useMemo(()=>ncPorRegistrar(siiNC,billing),[siiNC,billing])
   // Anticipos posibles duplicados: uno cargado a MANO (sin respaldo bancario, no marcado 'revisado') cuyo monto
   // CALZA con los depósitos del banco del mismo cliente (la suma, o uno exacto). Caso Gabriela/Eugenia.
   const antDup=useMemo(()=>SD.antDup(anticipos,conciliacion),[anticipos,conciliacion])
@@ -229,7 +234,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     })
     return out.sort((a,b)=>b.nFact-a.nFact)
   },[clients,clientEntities,billing,sales,movsRut,rutNo,rutDone])
-  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+cuotaNeDte.length+montoNeDte.length+ventasDup.length+huerfanas.length+reembolsos.length+comRec.length+mensualMayor.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length
+  const total=rsAjena.length+termGastos.length+errGrupos.length+observadas.length+detTerm.length+detSaldo.length+enReclamo.length+antSub.length+rutMulti.length+folioDup.length+facDup.length+cuotaNeDte.length+montoNeDte.length+ventasDup.length+huerfanas.length+reembolsos.length+comRec.length+mensualMayor.length+antDup.length+vencIncoh.length+cuotaTramo.length+glosaConflict.filter(x=>!glDone.has(x.key)).length+cuotasFantasma.length+cuotasSinGen.length+anticipoCubre.length+honorarioDesc.length+siiRows.length+ventasBorradorCobrado.length+bancoRut.length+ncPend.length
   if(total===0) return <div style={{padding:'26px 0',textAlign:'center'}}>{audLinea}<div style={{display:'flex',justifyContent:'center',marginBottom:4}}><SIcon n='check' s={30} c={C.greenText}/></div><div style={{fontSize:13,fontWeight:600,color:C.greenText}}>Todo cuadra</div><div style={{fontSize:11,color:C.muted,marginTop:3}}>Sin duplicados de ficha ni de folio, y todos los montos cuadran con el DTE.</div></div>
   const sh=(t,color,n)=><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.4,color,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>{t}<span style={{background:color,color:'#fff',borderRadius:20,fontSize:10,padding:'2px 8px',fontWeight:700,whiteSpace:'nowrap'}}>{n}</span></div>
   const lk=onClick=><span onClick={onClick} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Abrir →</span>
@@ -334,6 +339,15 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     {huerfanas.length>0&&<div style={secBox}>{sh('Facturas sin cliente',C.azulInfo,huerfanas.length)}
       {huerfanas.slice(0,30).map(b=><div key={b.id} onClick={()=>onOpenFactura&&onOpenFactura(b)} style={{...fila,fontSize:11,color:C.muted,marginTop:3,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,cursor:'pointer'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Factura N° {folioN(b.invoice_no)} · {b.receptor_name||b.concept||'—'} {lk(()=>onOpenFactura&&onOpenFactura(b))}</span>{amt(fmt(b.amount||0))}</div>)}
       {huerfanas.length>30&&<div style={{fontSize:10,color:C.muted,marginTop:5}}>y {huerfanas.length-30} más…</div>}
+    </div>}
+    {ncPend.length>0&&<div style={secBox}>{sh('Notas de crédito sin registrar',C.overdueText,ncPend.length)}
+      <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>el SII ya emitió la nota y la factura sigue viva en la app</div>
+      {ncPend.map(x=><div key={x.d.id} style={{borderTop:`1px solid ${C.bgSoft}`,padding:'9px 0',display:'flex',alignItems:'center',gap:8,justifyContent:'space-between'}}>
+        <div style={{minWidth:0,flex:1}}>
+          <div onClick={()=>onOpenFactura&&onOpenFactura(x.fac)} style={{fontSize:12,fontWeight:600,color:C.accent,cursor:'pointer',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Nota de crédito N° {x.d.folio} anula la Factura N° {folioN(x.fac.invoice_no)}, {x.fac.receptor_name||cName(x.fac.client_id)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:1}}>Emitida {fmtFechaDMY(x.d.fecha_emision)}, {fmt(x.d.monto)}{x.inferido&&<span style={{color:C.soonText}}> (calzada por RUT y monto)</span>}</div>
+        </div>
+        {onRegistrarNC&&<button onClick={async()=>{ setNcBusy(x.d.id); try{ await onRegistrarNC(x) }catch(_){}; setNcBusy(null) }} disabled={ncBusy===x.d.id} style={{flexShrink:0,background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:ncBusy===x.d.id?'default':'pointer',opacity:ncBusy===x.d.id?.6:1}}>{ncBusy===x.d.id?'Registrando…':'Registrar'}</button>}</div>)}
     </div>}
     {vencIncoh.length>0&&<div style={secBox}>{sh('Vencimiento anterior a la emisión',C.soonText,vencIncoh.length)}
       <div style={{fontSize:10,color:C.textSoft,marginBottom:2}}>emitida hoy pero con vencimiento en el pasado (se ve "vencida" sin serlo) · el plazo debe correr desde la emisión</div>

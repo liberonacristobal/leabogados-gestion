@@ -2,6 +2,7 @@
 // Una sola fuente: funciones puras sobre las filas; ninguna escribe. Cada detector devuelve casos con las filas que lo prueban.
 
 import { numerosEscritos } from './correoFacturaPlantilla.js'
+import { ncPorRegistrar } from './notasCredito.js'
 
 const normRut = r => String(r || '').toUpperCase().replace(/[^0-9K]/g, '')
 const folioN = no => String(no || '').replace(/^factura\s*/i, '').trim()
@@ -300,12 +301,15 @@ export function hallazgos(d) {
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
   honorarioDescuadrado(d.saludRows, d.billing, d.sales).forEach(v => add('honorario_descuadrado', v.id, `Honorario distinto de la suma de sus cuotas · ${nom(v.client_id)} · ${v.title || ''}`.trim(), (Number(v.amount_clp) || 0) - (Number(v.suma_cuotas) || 0), { venta: v.id, honorario: v.amount_clp, cuotas: v.suma_cuotas }))
+  // Notas de crédito del SII sin registrar (regla única notasCredito.js): la factura que anulan sigue viva en la app.
+  ncPorRegistrar(d.siiNC, d.billing).forEach(x => add('nc_sin_registrar', x.d.id, `Nota de crédito N° ${x.d.folio} del SII sin registrar, anula la Factura N° ${folioN(x.fac.invoice_no) || x.fac.invoice_no}, ${nom(x.fac.client_id)}`, x.d.monto, { nc: x.d.folio, factura: x.fac.id, inferida: x.inferido }))
   plantillasConNumeros(d.plantillas).forEach(x => add('plantilla_con_numeros', `${x.kind}:${x.key}`, `Plantilla de correo de ${nom(x.key.split(':')[0])} con ${x.numeros[0]} escrito a mano`, null, { clave: x.key, numeros: x.numeros }))
   return out
 }
 
 export const DETECTOR_LBL = {
   plantilla_con_numeros: 'Plantillas de correo con números escritos a mano',
+  nc_sin_registrar: 'Notas de crédito del SII sin registrar',
   permiso_sin_sesion: 'Permisos de la base fuera de la regla',
   gasto_rs_ajena: 'Gasto con razón social de otro cliente', terminada_con_gastos: 'Trabajo terminado que sigue recibiendo gastos',
   compra_observada_sii: 'Compras de proveedores observados por el SII',

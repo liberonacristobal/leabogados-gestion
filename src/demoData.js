@@ -2,6 +2,8 @@
 // Empresas, RUTs, montos y personas inventados. El modo demo nunca toca la base real.
 
 export const demoData = {
+  // Nota de crédito del SII sin registrar (la Revisión de datos la propone; la factura 1430 sigue viva).
+  sii_nc_demo: [{ id:'nc-demo-15', folio:'15', tipo_dte:61, fecha_emision:'2026-11-12', receptor_rut:null, receptor_name:'Servicio con proveedor', monto:1820000, doc_json:{ detFolioDocRef:'1430' }, billing_id:null }],
   // Identidad del estudio en modo demo: un estudio FICTICIO neutro (no expone al tenant real en una demo a prospectos).
   // Mismo shape que la tabla `estudios`; se aplica sobre BRAND al cargar (applyEstudioToBrand). logos vacíos → header con monograma.
   estudio: {
