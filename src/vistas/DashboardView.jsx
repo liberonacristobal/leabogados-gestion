@@ -767,9 +767,12 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   // Aparte: "otras pagadas" = cobros de este mes de facturas de meses anteriores. Total ingresado = suma de ambos. Fuente única montoFactura/cobradoBill.
   const _ymNow = new Date().toISOString().slice(0,7)
   const _MES_NOM = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const emFacList = (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.status!=='Programada' && b.billing_type!=='reembolso' && String(b.issued_at||'').startsWith(_ymNow))
+  // Facturado del mes = resultadoMes.fac (documentos del SII, honorarios propios, netos de notas de crédito): la MISMA cifra del Resultado, Oficina y Estado de resultados.
+  // «Total emitido» (con reembolsos, subarriendo y facturas por cuenta de externos) es la línea de arriba de su cascada, no otra cifra del mismo concepto.
+  const rmNow = resultadoMes(fuRes, {billing,terceros,costosOfiRows,expenses,clients}, _ymNow)
+  const emFacList = rmNow.facDocs.filter(d=>!d.nc && d.b && !d.b.deleted_at && d.b.status!=='Anulada').map(d=>d.b)
     .slice().sort((a,b)=> String(b.issued_at||'').localeCompare(String(a.issued_at||'')))
-  const emFacTot = emFacList.reduce((a,b)=>a+montoFactura(b),0)          // emitido del mes (DTE)
+  const emFacTot = rmNow.fac                                            // facturado del mes
   const emFacPagTot = emFacList.reduce((a,b)=>a+cobradoBill(b),0)        // pagado DE LO EMITIDO del mes (conversión)
   const emFacPagN = emFacList.filter(b=>cobradoBill(b)>0).length
   const emOtrasList = (billing||[]).filter(b=> b && !b.deleted_at && b.status!=='Anulada' && b.billing_type!=='reembolso' && String(b.paid_at||'').startsWith(_ymNow) && !String(b.issued_at||'').startsWith(_ymNow))
@@ -780,7 +783,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   const emCliName = b => (clients.find(c=>String(c.id)===String(b.client_id))?.name)||b.receptor_name||'—'
 
   // Resultado del mes — FUENTE ÚNICA (resultadoMes), idéntico al de la página Estado de resultados.
-  const resMes = resultadoMes(fuRes, {billing,terceros,costosOfiRows,expenses,clients}, _ymNow).res
+  const resMes = rmNow.res
   const resMesDif = resMes - resultadoMes(fuRes, {billing,terceros,costosOfiRows,expenses,clients}, _ymPrev(_ymNow)).res
   // Counsel AI responde el resultado del año con la MISMA cifra que muestra Inicio: se publica aquí lo que Inicio acaba de calcular (no hay otra fórmula).
   useEffect(()=>{ try{ publicarResultadoInicio({ anio:selYear, secs:armarSecciones().secs, at:Date.now() }) }catch(_){} })
@@ -1056,7 +1059,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
             {/* Orden por pares (2026-10-17): el mes (Resultado · Emitido) → la caja (Flujo · Por cobrar) → el año (Proyección · Comisiones). Ícono propio por tarjeta; verde solo para lo bueno con signo. */}
             {kTile('resmes','Resultado del mes',(resMes>0?'+':'')+fmtShort(resMes),resMes>=0?C.greenText:C.overdueText,'chart',resMes>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},<><Gl n={resMesDif>=0?'arrowUp':'arrowDown'}/> {fmtShort(Math.abs(resMesDif))} vs {isDeskRes?'mes previo':MES_C[+_ymPrev(_ymNow).slice(5,7)-1]}</>,onOpenEstadoResultados)}
-            {kTile('emitido','Emitido del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct} % pagado`:'sin emitir aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
+            {kTile('emitido','Facturado del mes',fmtShort(emFacTot),C.accent,'file',{fg:C.accent,bg:C.azulBg},emFacTot>0?`${emPct} % pagado`:'sin facturar aún',()=>onOpenEmitidoMes&&onOpenEmitidoMes())}
             {kTile('flujo','Flujo de caja',(flujoNeto8>0?'+':'')+fmtShort(flujoNeto8),flujoNeto8>=0?C.greenText:C.overdueText,'exchange',flujoNeto8>=0?{fg:C.greenText,bg:C.greenBg}:{fg:C.overdueText,bg:C.overdueBg},`neto, 8 sem., ${flujoCaja.conMorosos?'con morosos':'sin morosos'}`,onOpenFlujoCaja)}
             {kTile('cobranza','Por cobrar',fmtShort(totalPorCobrar),C.accent,'tCobrar',{fg:C.accent,bg:C.azulBg},vencMes>0?<span style={{color:C.overdueText,fontWeight:700}}>vencido {fmtShort(vencMes)}{isDeskRes&&expoCob.pctM60>0?`, ${Math.round(expoCob.pctM60*100)} % con más de 60 días`:''}</span>:'a la fecha',()=>expoCob.m60>0&&navTo?navTo({tab:'cobranza',cobFiltro:'m60'}):go('cobranza'))}
             {kTile('proyeccion','Proyección',fmtShort(proyCobranza),C.accent,'clock',{fg:C.accent,bg:C.azulBg},`${isDeskRes?'cobranza ':''}al ${fmtFechaDMY(`${new Date().getFullYear()}-12-31`)}, ${flujoCaja.conMorosos?'con morosos':'sin morosos'}`)}
@@ -1086,7 +1089,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
           {/* Categoría "Emitido" — se despliega a sus sub-totales Pagadas / Por cobrar (categorías, no listados). */}
           <div onClick={()=>kToggle('estemes_emit')} style={{padding:'11px 12px',cursor:'pointer'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{display:'flex',alignItems:'center',gap:7,fontSize:13,fontWeight:700,color:C.text}}><span style={{color:C.accent,fontSize:11,transform:opE?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}><Gl n='chevD'/></span>Emitido este mes</span>
+              <span style={{display:'flex',alignItems:'center',gap:7,fontSize:13,fontWeight:700,color:C.text}}><span style={{color:C.accent,fontSize:11,transform:opE?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}><Gl n='chevD'/></span>Facturado este mes</span>
               <span style={{fontSize:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{fmtShort(emFacTot)}</span>
             </div>
             {opE&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'10px 0 3px 20px'}}>

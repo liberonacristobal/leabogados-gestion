@@ -3,7 +3,7 @@
 // de modo que coincide con ellas. Cada cifra y cada tarjeta es tocable y lleva a su detalle; «‹» vuelve al mismo punto (navTo/goBack del App).
 import { Children, useMemo, useState } from 'react'
 import { C, Gl, SEC_LBL, SIcon, appAlert, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
+import { ADMIN_NAMES, ActBtn, PageHeader, loadXLSXStyle, SIN_SOCIO, _ymPrev, currentYear, cobradoBill, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, saldosPorCliente, totalesFondos, ufFechaCache, useFlujoCaja, useNoEmitirSet, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaUF, CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
 import { kpisPorSocio, redondearPartes, redondearA, cascadaResultado } from '../lib/cifras.js'
 import { descargarFotoTabla } from '../lib/fotoTabla.js'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -153,7 +153,9 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
   const deps = { billing, terceros, costosOfiRows, expenses, clients }
   const cobMes = ymPrev.slice(0,4)===String(currentYear) ? (ing.byMonth?.[ymPrev]||0) : null   // caja del mes pasado (fecha del depósito); «—» si cae en el año anterior
   const rm = useMemo(()=>resultadoMes(fuRes, deps, ymPrev),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymPrev])
-  const Qm = useMemo(()=>cascadaResultado(rm),[rm])   // redondeo que cuadra: Ingreso − Costos − Comisiones = Resultado
+  const Qm = useMemo(()=>cascadaResultado(rm),[rm])
+  // Facturado del mes = resultadoMes.fac (la misma cifra de Inicio, Oficina y Estado de resultados); «% pagado» sobre las facturas que lo forman.
+  const facPag = useMemo(()=>{ const bs=rm.facDocs.filter(d=>!d.nc&&d.b&&!d.b.deleted_at&&d.b.status!=='Anulada').map(d=>d.b); const pag=bs.reduce((a,b)=>a+cobradoBill(b),0); return { n:bs.length, pct:rm.fac>0?Math.round(pag/rm.fac*100):0 } },[rm])   // redondeo que cuadra: Ingreso − Costos − Comisiones = Resultado
   const cosQ = useMemo(()=>redondearA((rm.cosLines||[]).map(l=>l.m),Qm.cos,1e5),[rm,Qm])
   const ymAnt = _ymPrev(ymPrev), mesAnt = MESES[Number(ymAnt.slice(5,7))-1].slice(0,3)
   const rmAnt = useMemo(()=>resultadoMes(fuRes, deps, ymAnt),[fuRes,billing,terceros,costosOfiRows,expenses,clients,ymAnt])
@@ -248,7 +250,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     mes: { cap:'Resultado', titulo:`Cierre de ${mesPasado}`, hl:<>Resultado <b style={{color:rm.res>=0?C.greenText:C.overdueText}}>{(rm.res>0?'+':'')+fmtShort(Qm.res)}</b></>, tono:'gr', link:'Informe y comparación', dest:'informeMes',
       body:<>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>{`Emitido en ${mesPasado}`}</div>
-        <Fila ic='file' tono='am' label='Emitido bruto' sub={`${ciclo.tasa} % pagado`} value={fmtShort(ciclo.tEmi)} raw={ciclo.tEmi} onClick={()=>go('cierreMes')}/>
+        <Fila ic='file' tono='am' label='Facturado' sub={`${facPag.pct} % pagado`} value={fmtShort(Qm.fac)} raw={Qm.fac} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>
         <Fila ic='tEntra' tono='az' label='Ingreso' sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} value={fmtShort(Qm.ing)} raw={Qm.ing} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>
         <div style={{...SEC_LBL,fontSize:10,padding:"8px 12px 4px"}}>Entró a caja</div>
         <Fila ic='check' tono='gr' label='Cobrado' sub={cobMes!=null?dl(cobMes,cobAnt):undefined} value={cobMes==null?'—':fmtShort(cobMes)} raw={cobMes??''} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>
@@ -331,7 +333,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       {v:['Cobrado',metaCobranza>0?`${cobroPct} % de la meta`:'',ingYTD,ingYTDUF],z:[null,null,PESOS,UF_F]},
       {v:['Resultado',resAnio.pct!=null?`${pct1(resAnio.pct)} % de margen`:'',resAnio.verCLP.res,resAnio.verUF.res],z:[null,null,PESOS,UF_F]},
       {v:[`Cierre de ${mesPasado}`,'','',''],s:'sec'},
-      {v:['Facturado',`${ciclo.emi.length} emitidas · ${ciclo.tasa} % pagado`,ciclo.tEmi,''],z:[null,null,PESOS]},
+      {v:['Facturado',`${facPag.n} facturas, ${facPag.pct} % pagado`,rm.fac,''],z:[null,null,PESOS]},
       {v:['Ingreso','propio',rm.ing,''],z:[null,null,PESOS]}, {v:['Cobrado en el mes','',cobMes??'',''],z:[null,null,PESOS]},
       {v:['Costos','',rm.cos,''],z:[null,null,PESOS]}, {v:['Comisiones','',rm.com,''],z:[null,null,PESOS]},
       {v:['Resultado',rm.margen!=null?`${pct1(rm.margen)} % de margen`:'',rm.res,''],z:[null,null,PESOS]} ]
@@ -394,7 +396,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
           <Sec t={bloques.mes.titulo} link={bloques.mes.link} onLink={()=>go(bloques.mes.dest)}/>
           <CierreGrid grupos={[
             {t:`Emitido en ${mesPasado}`,k:[
-              <KpiMes key='f' ic='file' tono='am' label='Emitido bruto' value={fmtShort(ciclo.tEmi)} sub={`${ciclo.tasa} % pagado`} onClick={()=>go('cierreMes')}/>,
+              <KpiMes key='f' ic='file' tono='am' label='Facturado' value={fmtShort(Qm.fac)} sub={`${facPag.pct} % pagado`} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>,
               <KpiMes key='i' ic='tEntra' tono='az' label='Ingreso' value={fmtShort(Qm.ing)} sub={<span>propio · {dl(rm.ing,rmAnt.ing)}</span>} onClick={()=>go('estadoResultados',ymPrev,{bloque:'ing',sub:'fac'})}/>]},
             {t:'Entró a caja',k:[<KpiMes key='c' ic='check' tono='gr' label='Cobrado' value={cobMes==null?'—':fmtShort(cobMes)} sub={cobMes!=null?dl(cobMes,cobAnt):undefined} onClick={()=>cobMes!=null&&go('cobradoMes',ymPrev)}/>]},
             {t:'Resultado devengado',k:[

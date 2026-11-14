@@ -798,7 +798,10 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
   const ymMin = useMemo(()=>{ let mn=ymHoy; (billing||[]).forEach(b=>{ if(b&&!b.deleted_at&&b.invoice_no&&b.issued_at){ const k=String(b.issued_at).slice(0,7); if(k<mn) mn=k } }); return mn },[billing,ymHoy])
   const moverMes = d => { const dt=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1+d,1); const n=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; if(n>=ymMin&&n<=ymHoy) setYm(n) }
   const mesLbl = (()=>{ const m=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1,1).toLocaleDateString('es-CL',{month:'long'}); return m.charAt(0).toUpperCase()+m.slice(1)+(ym.slice(0,4)!==ymHoy.slice(0,4)?' '+ym.slice(0,4):'') })()
-  const emFac = (billing||[]).filter(b=> b && !b.deleted_at && b.invoice_no && b.status!=='Anulada' && b.status!=='Programada' && b.billing_type!=='reembolso' && String(b.issued_at||'').startsWith(ym))
+  // Las facturas que forman el Facturado del mes: la misma función del Resultado, Inicio y Oficina (honorarios propios del SII, netos de notas de crédito).
+  const fuMes = useFuentesResultado()
+  const rmMes = useMemo(()=>resultadoMes(fuMes,{billing,terceros,costosOfiRows:[],expenses,clients},ym),[fuMes,billing,terceros,expenses,clients,ym])
+  const emFac = rmMes.facDocs.filter(d=>!d.nc && d.b && !d.b.deleted_at && d.b.status!=='Anulada').map(d=>d.b)
   const pagadas = emFac.filter(b=>cobradoBill(b)>0).sort((a,b)=>String(b.paid_at||b.issued_at||'').localeCompare(String(a.paid_at||a.issued_at||'')))
   const porCobrar = emFac.filter(b=>saldoBill(b)>0).sort((a,b)=>String(venceBill(a)||'').localeCompare(String(venceBill(b)||'')))
   const emTot = emFac.reduce((a,b)=>a+montoFactura(b),0)
@@ -839,7 +842,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
   ]}/>
   const chipsSoc=[[null,'Todos',emFac.length]].concat(colsSoc.concat([SIN_SOCIO]).filter((x,i,a)=>a.indexOf(x)===i).map(x=>[x,x,nSoc(x)]).filter(x=>x[2]>0))
   const FM=ancho?fmt:fmtMillLR, rows=ancho?casc:rcasc, tt=ancho?{f:tFac,c:tCom,i:tFac-tCom}:rTot
-  // Pagadas + Por cobrar = Emitido (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
+  // Pagadas + Por cobrar = Facturado (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
   const [pagV,pcV]=redondearPartes([pagTot,pcTot],emTot>=1e6?1e5:1e4,[0]), fSeg=emTot>=1e6?fmtMillLR:fmtShort
   const segBtn=(k,lbl,val,n,t)=>(
     <button onClick={()=>setTab(k)} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${tab===k?t.bd:C.border}`,background:tab===k?t.bg:'#fff'}}>
@@ -883,7 +886,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
           {segBtn('porcobrar','Por cobrar',pcV,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
           <span style={opS}>=</span>
           <div onClick={()=>setTab('todas')} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`${tab==='todas'?1.5:1}px solid ${tab==='todas'?C.accent:C.border}`,background:tab==='todas'?'#EDF1F4':'#fff'}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Emitido</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Facturado</div>
             <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(emTot)}</div>
             <div style={{fontSize:10,color:C.muted}}>{emFac.length} factura{emFac.length!==1?'s':''}</div>
           </div>
@@ -1826,7 +1829,7 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
     {facConCom.map((e,i)=>subFila('ir'+i,`Factura N° ${folioN(e.b.invoice_no)}`,`${clients.find(c=>String(c.id)===String(e.b.client_id))?.name||''} · facturado ${fmtMill(e.fact)} − comisión ${fmtMill(e.com)} · ${estCom(e.ts)}`,e.fact-e.com,onOpenFactura?()=>onOpenFactura(e.b):null))}
     <div style={{display:'flex',justifyContent:'space-between',padding:'8px 14px',borderTop:`1.5px solid ${C.accent}`,background:C.azulTenue,fontSize:12,fontWeight:800,color:C.accent}}><span>Ingreso real de estas facturas</span><span style={num}>{fmtMill(facConCom.reduce((a,e)=>a+e.fact-e.com,0))}</span></div></> : null
   const detalle = k => k==='ing' ? <>
-      {ln({k:'fac',sg:'',l:'Facturación propia',v:Q.fac,p:rp.fac,on:()=>setSub2(s=>s==='fac'?null:'fac'),open:sub2==='fac',children:r.facDocs.map((d,i)=>subFila('f'+i,`${d.nc?'NC':'Factura'} N° ${d.folio}`,d.receptor_name||'',d.nc?-(Number(d.monto)||0):(Number(d.monto)||0),d.b&&onOpenFactura?()=>onOpenFactura(d.b):null))})}
+      {ln({k:'fac',sg:'',l:'Facturación propia',v:Q.fac,p:rp.fac,on:()=>setSub2(s=>s==='fac'?null:'fac'),open:sub2==='fac',children:<>{[['te','Total emitido','documentos del SII del mes',r.totalEmitido],['xr','Reembolsos de gastos','gasto facturado al cliente',-r.facExc.reemb],['xs','Subarriendo','baja el costo de la oficina',-r.facExc.subarr],['xe','Por cuenta de externos','la comisión va en Ingresos',-r.facExc.ext],['xn','Notas de crédito','',-r.facExc.nc]].filter(x=>x[0]==='te'||x[3]!==0).map(x=>subFila(x[0],x[1],x[2],x[3],null))}{r.facDocs.map((d,i)=>subFila('f'+i,`${d.nc?'NC':'Factura'} N° ${d.folio}`,d.receptor_name||'',d.nc?-(Number(d.monto)||0):(Number(d.monto)||0),d.b&&onOpenFactura?()=>onOpenFactura(d.b):null))}</>})}
       {r.rex!==0||rp.rex!==0 ? ln({k:'rex',sg:'+',l:'Comisión de externos',v:Q.rex,p:rp.rex,on:()=>setSub2(s=>s==='rex'?null:'rex'),open:sub2==='rex',children:r.rexItems.map((x,i)=>subFila('r'+i,`Factura N° ${folioN(x.b.invoice_no)}`,clients.find(c=>String(c.id)===String(x.b.client_id))?.name||'',Number(x.t.comision_monto)||0,onOpenFactura?()=>onOpenFactura(x.b):null))}) : null}
       {ln({k:'ingT',sg:'=',l:'Ingresos',v:Q.ing,p:rp.ing,tot:true})}</>
     : k==='cos' ? <>{r.cosLines.map((x,i)=>{

@@ -719,15 +719,17 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const bById={}; (billing||[]).forEach(b=>{ if(b) bById[String(b.id)]=b })
   const extIds=new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
   let fac=0, facUF=0; const facDocs=[], sinReg=[]
+  // De lo emitido a lo facturado: lo que se excluye del Facturado propio (se muestra como cascada «Total emitido − … = Facturado»).
+  const facExc={reemb:0,subarr:0,ext:0,nc:0}
   // Sin carga del SII (otro estudio, o demo): las facturas emitidas en la app son la fuente.
   const docsSrc = (fu?.sii||[]).length ? fu.sii : (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.status!=='Anulada'&&(esFacIngreso(b)||b.billing_type==='subarriendo')).map(b=>({tipo_dte:34,monto:montoFactura(b),fecha_emision:b.issued_at,folio:folioN(b.invoice_no),receptor_name:b.receptor_name||'',billing_id:b.id}))
   ;docsSrc.filter(d=>String(d.fecha_emision||'').startsWith(ym)).forEach(d=>{ const t=Number(d.tipo_dte), m=Number(d.monto)||0, b=bById[String(d.billing_id)]
     if(t===61){ if(docDeSubarriendo(b,bById)) return   // la NC de una factura de subarriendo no resta honorarios (el subarriendo no es ingreso)
-      fac-=m; facUF-=m/u(d.fecha_emision); facDocs.push({...d,b,nc:true}); return }
+      fac-=m; facExc.nc+=m; facUF-=m/u(d.fecha_emision); facDocs.push({...d,b,nc:true}); return }
     if(t!==33&&t!==34) return
-    if(extIds.has(String(d.billing_id))) return
-    if(b&&b.billing_type==='reembolso') return   // gasto facturado al cliente: nunca es ingreso
-    if(docDeSubarriendo(b,bById)) return   // la factura de subarriendo no es ingreso ni honorario: su monto fijo ya baja el costo de oficina
+    if(extIds.has(String(d.billing_id))){ facExc.ext+=m; return }
+    if(b&&b.billing_type==='reembolso'){ facExc.reemb+=m; return }   // gasto facturado al cliente: nunca es ingreso
+    if(docDeSubarriendo(b,bById)){ facExc.subarr+=m; return }   // la factura de subarriendo no es ingreso ni honorario: su monto fijo ya baja el costo de oficina
     fac+=m; facUF+=m/u(d.fecha_emision); facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
   const [Y,Mo]=String(ym).split('-').map(Number)
   // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
@@ -761,7 +763,7 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const pagItems=(terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)), cP=agrupa(pagItems,t=>t.pagado_at)
   const comPag=cP.m, comPagUF=cP.mUF, comPagList=cP.l
   const ing=fac+rex, res=ing-cos-com, ingUF=facUF+rexUF, resUF=ingUF-cosUF-comUF   // ingresos = facturación propia + % de externos; el subarriendo baja el costo, no suma aquí
-  return {ym,fac,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,comItems,comPag,comPagUF,comPagList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
+  return {ym,fac,facExc,totalEmitido:fac+facExc.nc+facExc.reemb+facExc.subarr+facExc.ext,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,comItems,comPag,comPagUF,comPagList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
 }
 
 // Fuentes de «Impuestos mensuales» (boletas de honorarios, F29 declarados, liquidaciones, «Iva» del correo de la contadora), una vez por sesión; `recargar` tras cargar una boleta. Solo administradores (RLS).

@@ -95,3 +95,28 @@ test('remuneraciones desde el banco: quien emite boleta cuesta el bruto de la bo
   const r = M.remuneracionesBancoMes([{ client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Carla', date: '2026-10-30', amount: 500000 }], [{ id: 'of', is_internal: true }], '2026-10', new Set(['carla']))
   assert.equal(r.items[0].costo, 589_970); assert.equal(r.items[0].costo, brutoDeLiquido(500000, 0.1525)); assert.equal(r.total, 589_970)
 })
+
+test('de lo emitido a lo facturado: Total emitido − reembolsos − subarriendo − por cuenta de externos − notas de crédito = Facturado (caso real de noviembre anonimizado)', () => {
+  const ym = '2026-11'
+  const billing = [
+    { id: 'h1', billing_type: 'honorarios', invoice_no: '1', status: 'Pagado' },
+    { id: 'h2', billing_type: 'honorarios', invoice_no: '2', status: 'Anulada' },
+    { id: 'r1', billing_type: 'reembolso', invoice_no: '3', status: 'Pendiente' },
+    { id: 's1', billing_type: 'subarriendo', invoice_no: '4', status: 'Pagado' },
+    { id: 'e1', billing_type: 'honorarios', invoice_no: '5', status: 'Pagado' },
+  ]
+  const terceros = [{ billing_id: 'e1', comision_pct: 15, comision_monto: 60_000, monto: 340_000 }]
+  const sii = [
+    { tipo_dte: 34, monto: 1_000_000, fecha_emision: '2026-11-03', folio: '1', billing_id: 'h1' },
+    { tipo_dte: 34, monto: 500_000, fecha_emision: '2026-11-13', folio: '2', billing_id: 'h2' },
+    { tipo_dte: 61, monto: 500_000, fecha_emision: '2026-11-13', folio: '9', billing_id: null },
+    { tipo_dte: 34, monto: 200_000, fecha_emision: '2026-11-05', folio: '3', billing_id: 'r1' },
+    { tipo_dte: 34, monto: 300_000, fecha_emision: '2026-11-06', folio: '4', billing_id: 's1' },
+    { tipo_dte: 34, monto: 400_000, fecha_emision: '2026-11-07', folio: '5', billing_id: 'e1' },
+  ]
+  const r = M.resultadoMes({ sii, plan: [], boleta: new Set() }, { billing, terceros, costosOfiRows: [], expenses: [], clients: [] }, ym)
+  assert.equal(r.fac, 1_000_000)                       // honorarios propios: 1.000.000 + 500.000 − la NC de 500.000
+  assert.deepEqual(r.facExc, { reemb: 200_000, subarr: 300_000, ext: 400_000, nc: 500_000 })
+  assert.equal(r.totalEmitido, 2_400_000)               // todos los documentos tipo 33/34 del mes
+  assert.equal(r.totalEmitido - r.facExc.reemb - r.facExc.subarr - r.facExc.ext - r.facExc.nc, r.fac)
+})
