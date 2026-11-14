@@ -16,7 +16,7 @@ export const demoData = {
            gastos:{ banco:'Banco Demo', cuenta:'00445566', cuentaFmt:'004455-6', email:'gastos@estudiodemo.cl' } },
   },
   annual_targets: [
-    { year:2026, target_amount:800000000, collection_target:600000000, currency:'CLP' },
+    { year:2026, target_amount:800000000, collection_target:260000000, currency:'CLP' },
     { year:2025, target_amount:600000000, collection_target:450000000, currency:'CLP' },
   ],
   clients: [

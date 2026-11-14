@@ -35,7 +35,7 @@ const KpiAnio = ({ic,tono='nt',label,value,dual,pct,cap,onClick,D,activo}) => { 
     <div className='kpi-col' style={{minWidth:0,flex:1,containerType:'inline-size'}}>
       {dual&&!D?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}><span style={{...SEC_LBL,fontSize:12,lineHeight:1.25}}>{label}</span><BrutoNetoPill princ={dual.props.princ} onAlt={dual.props.onAlt}/></div>:<div style={{...SEC_LBL,fontSize:D?13:12,...DOS_LINEAS}}>{label}</div>}
       {dual||<div style={{fontSize:D?26:20,fontWeight:800,letterSpacing:'-.6px',lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{value}</div>}
-      {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
+      {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,...DOS_LINEAS}}><b style={{color:Number(pct)>100?C.greenText:C.accent,fontWeight:800}}>{Number(pct)>100?`+${Number(pct)-100}`:pct} %</b> {cap}</div>}
     </div>
   </div>) }
 const Fila = ({tono='az',ic='file',label,sub,value,vcol,onClick,det,detEl,detLink}) => { const [bg,fg]=TONO[tono]||TONO.az; const [op,setOp]=useState(false); const desp=!!(det||detEl); return (<>

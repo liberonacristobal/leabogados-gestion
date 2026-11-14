@@ -927,7 +927,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                   <div className='kpi-col' style={{minWidth:0,flex:1,containerType:'inline-size'}}>
                     {dual&&!isDeskRes?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}><span style={{...SEC_LBL,fontSize:12,lineHeight:1.25}}>{label}</span><BrutoNetoPill princ={vendPrinc} onAlt={setVendPrinc}/></div>:<div style={{...SEC_LBL,fontSize:isDeskRes?13:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{label}</div>}
                     {dual?<CifrasBrutoNeto desk={isDeskRes} bruto={dual.bruto} neto={dual.neto} princ={vendPrinc} onAlt={setVendPrinc}/>:<div style={{fontSize:isDeskRes?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',marginTop:3}}>{fig}</div>}
-                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:C.accent,fontWeight:800}}>{pct} %</b> {cap}</div>}
+                    {pct!=null&&<div style={{fontSize:11,color:C.muted,marginTop:3,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}><b style={{color:Number(pct)>100?C.greenText:C.accent,fontWeight:800}}>{Number(pct)>100?`+${Number(pct)-100}`:pct} %</b> {cap}</div>}
                   </div>
                 </div>
               )
@@ -1070,7 +1070,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
         <div style={{padding:'6px 20px 0'}}>
           <div className='dash-fin' style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8,alignItems:'stretch'}}>
             {kTile('misproy','Mis proyectos',String(mineProyN),C.accent,'briefcase',{fg:C.accent,bg:C.azulBg},'activos',()=>go('cartera'),true)}
-            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'check',{fg:C.accent,bg:C.azulBg},cargaSemN>0?<>{isDeskRes?'pendientes · ':''}<span style={{color:C.soonText,fontWeight:700}}>{cargaSemN} esta semana</span></>:'pendientes',()=>go('tasks'),true)}
+            {kTile('mistareas','Mis tareas',String(tareasPendN),C.accent,'check',{fg:C.accent,bg:C.azulBg},<span style={cargaSemN>0?{color:C.soonText,fontWeight:700}:undefined} title={cargaSemN>0?`${cargaSemN} esta semana`:undefined}>pendientes</span>,()=>go('tasks'),true)}
           </div>
         </div>
       </div>
