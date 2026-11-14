@@ -4052,12 +4052,12 @@ export function partidasPorSocio({billing=[],sales=[],clients=[],anticipos=[],te
 // Escritorio: la pastilla es absoluta arriba a la derecha de la tarjeta (position:relative). Celular: va en la fila de la etiqueta «Vendido» (la pone la tarjeta con BrutoNetoPill); no agrega alto.
 export function BrutoNetoPill({ princ='bruto', onAlt, style }){
   const otra=princ==='neto'?'bruto':'neto'
-  return <button onClick={e=>{ e.stopPropagation(); if(onAlt) onAlt(otra) }} title={`Ver el ${otra}`} aria-label={`Mostrando ${princ}; cambiar a ${otra}`} style={{fontSize:11,fontWeight:700,padding:'0 7px',borderRadius:12,border:`1.5px solid ${C.accent}`,background:'transparent',color:C.accent,cursor:'pointer',lineHeight:1.3,whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0,textTransform:'none',letterSpacing:0,...style}}>{princ==='neto'?'Neto':'Bruto'}</button>
+  return <button onClick={e=>{ e.stopPropagation(); if(onAlt) onAlt(otra) }} title={`Ver el ${otra}`} aria-label={`Mostrando ${princ}; cambiar a ${otra}`} style={{fontSize:9,fontWeight:700,padding:'0 6px',borderRadius:10,border:`1.2px solid ${C.accent}`,background:'transparent',color:C.accent,opacity:.8,cursor:'pointer',lineHeight:1.3,whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0,textTransform:'none',letterSpacing:0,...style}}>{princ==='neto'?'Neto':'Bruto'}</button>
 }
 export function CifrasBrutoNeto({ bruto, neto, princ='bruto', onAlt, desk }){
   return <div style={{marginTop:3,minWidth:0}}>
     <div style={{fontSize:desk?26:20,fontWeight:800,color:C.accent,letterSpacing:'-.6px',lineHeight:1.05,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{princ==='neto'?neto:bruto}</div>
-    {desk&&<BrutoNetoPill princ={princ} onAlt={onAlt} style={{position:'absolute',top:8,right:8,padding:'1px 9px'}}/>}
+    {desk&&<BrutoNetoPill princ={princ} onAlt={onAlt} style={{position:'absolute',top:8,right:8,padding:'1px 7px'}}/>}
   </div>
 }
 
