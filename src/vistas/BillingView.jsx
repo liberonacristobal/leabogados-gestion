@@ -3586,14 +3586,17 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
                     {k:'Por facturar', v:porFacturarRealTot, ic:'clock', col:C.muted, bg:C.surface, bd:C.border, sq:C.bgSoft, on:()=>onOpenPorFacturar?onOpenPorFacturar(fYear,null):irAEstado('programadas')},
                     {k:'Por cobrar', v:porCobrar, ic:'file', col:C.accent, bg:C.azulBg, bd:C.azulBd, sq:'#fff', on:()=>irAEstado('emitidas')},
                     {k:'Pagado', v:cobAll, ic:'check', col:C.greenText, bg:C.greenBg, bd:C.greenDeep, sq:'#fff', on:()=>irAEstado('pagado')},
-                  ].map(t=><div key={t.k} onClick={t.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t.on()}}} style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:12,padding:isDesktop?'14px 16px':'11px 11px',cursor:'pointer',minHeight:isDesktop?112:98,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:'space-between',minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                      <span style={{width:isDesktop?30:26,height:isDesktop?30:26,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={t.ic} s={isDesktop?17:15} c={t.col}/></span>
+                  ].map(t=><div key={t.k} onClick={t.on} role='button' tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();t.on()}}} style={{background:t.bg,border:`1px solid ${t.bd}`,borderRadius:12,padding:isDesktop?'14px 16px':'10px 9px',cursor:'pointer',minHeight:isDesktop?112:undefined,boxSizing:'border-box',display:'flex',flexDirection:'column',justifyContent:isDesktop?'space-between':'flex-start',gap:isDesktop?0:7,minWidth:0}}>
+                    {isDesktop?<div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{width:30,height:30,borderRadius:8,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><SIcon n={t.ic} s={17} c={t.col}/></span>
                       <span style={{color:t.col,opacity:.55,fontSize:13}}><Gl n='chevron'/></span>
-                    </div>
+                    </div>:<div style={{display:'flex',alignItems:'center',gap:5,minWidth:0,minHeight:24}}>
+                      <span style={{width:22,height:22,borderRadius:7,background:t.sq,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n={t.ic} s={13} c={t.col}/></span>
+                      <div style={{fontSize:10,fontWeight:700,letterSpacing:.2,textTransform:'uppercase',color:t.col,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.2,minWidth:0}}>{t.k}</div>
+                    </div>}
                     <div>
-                      <div style={{fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t.k}</div>
-                      <div style={{fontSize:isDesktop?26:19,fontWeight:800,letterSpacing:-.6,color:t.col,marginTop:3,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtShort(t.v)}</div>
+                      {isDesktop&&<div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:t.col,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{t.k}</div>}
+                      <div style={{fontSize:isDesktop?26:19,fontWeight:800,letterSpacing:-.6,color:t.col,marginTop:isDesktop?3:0,fontVariantNumeric:'tabular-nums',lineHeight:1.05}}>{fmtShort(t.v)}</div>
                     </div>
                   </div>)}
                 </div>
