@@ -86,6 +86,7 @@ export const demoData = {
   ],
   // Vendido 2026 ≈ $527M (≈63% de la meta de $800M)
   sales: [
+    { id:'shor', client_id:'c2', title:'Asesoría laboral por horas', moneda:'CLP', amount_clp:0, area:'Laboral', year:2026, month:10, status:'Activo', cobro_type:'personalizada', cobro_config:{cuotasCustom:[{id:1,fecha:'',monto:''}]}, responsible:'Erasmo', created_at:'2026-10-01' },
     { id:'ssub', client_id:'c4', title:'Subarrendamiento oficina', moneda:'CLP', amount_clp:1080000, year:2026, month:3, status:'Activo', cobro_type:'mensual', cobro_config:{subarriendo:true}, responsible:'Cristóbal', created_at:'2026-03-01' },
     { id:'sdpa', client_id:'c3', title:'Posesión efectiva (demo anticipo)', area:'Otro', moneda:'CLP', amount_clp:1200000, year:2026, month:8, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-08-01' },
     { id:'sdpg', client_id:'c2', title:'Ampliación de giro (demo pagada)', area:'Corporativo', moneda:'CLP', amount_clp:400000, year:2026, month:7, status:'Activo', cobro_type:'cuotas', responsible:'Erasmo', created_at:'2026-07-01' },
@@ -122,6 +123,8 @@ export const demoData = {
   ],
   // Facturado 2026 ≈ $271M · Cobrado ≈ $143M · Por cobrar ≈ $128M · Programado ≈ $65M
   billing: [
+    { id:'bhor1', client_id:'c2', sale_id:'shor', concept:'Honorarios', amount:200000, status:'Pagado', invoice_no:'1501', issued_at:'2026-10-05', due:'2026-11-04', paid_at:'2026-10-20', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bhor2', client_id:'c2', sale_id:'shor', concept:'Honorarios', amount:150000, status:'Pendiente', invoice_no:'1522', issued_at:'2026-11-03', due:'2026-12-03', paid_at:null, billing_type:'honorarios', monto_terceros:0 },
     { id:'bsub1', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina (marzo–abril 2026)', amount:2160000, status:'Pagado', invoice_no:'321', issued_at:'2026-04-13', due:'2026-05-13', paid_at:'2026-04-07', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
     { id:'bsub2', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Octubre 2026', amount:1080000, status:'Pagado', invoice_no:'487', issued_at:'2026-10-07', due:'2026-11-06', paid_at:'2026-10-06', billing_type:'subarriendo', receptor_name:'TECH ARAUCANÍA SPA', receptor_rut:'77.777.888-9', monto_terceros:0 },
     { id:'bsub3', client_id:'c4', sale_id:'ssub', concept:'Subarrendamiento oficina — Mensual Noviembre 2026', amount:1080000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-12-01', billing_type:'subarriendo', monto_terceros:0 },
@@ -334,6 +337,7 @@ export const demoData = {
     { id:'tp2', billing_id:'b10', proveedor_id:'pv2', proveedor:'María José Soto', monto:3000000, estado:'pendiente', tipo_costo:'clp', sale_id:'s6', created_at:'2026-05-28' },
     { id:'tp3', billing_id:'b5',  proveedor_id:'pv1', proveedor:'Andrés Rojas',    monto:1500000, estado:'pagado', pagado_at:'2026-05-10', movimiento_id:'movpv2', tipo_costo:'clp', comision_pct:15, comision_monto:264706, created_at:'2026-04-05' },
     { id:'tp4', billing_id:'b5',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:176991, liquido:150000, retencion:26991, bhe_id:'bh1', factura_numero:'12', factura_fecha:'2026-08-01', estado:'pagado', pagado_at:'2026-08-06', tipo_costo:'pct', valor:10, created_at:'2026-04-05' },
+    { id:'thor1', billing_id:'bhor1', sale_id:'shor', proveedor_id:'pv4', proveedor:'Proveedor A', monto:170000, estado:'por_pagar', tipo_costo:'pct', valor:85, naturaleza:'comision', created_at:'2026-10-05' },
     { id:'tpa1', billing_id:'bpa1', proveedor_id:'pv4', proveedor:'Proveedor A', monto:720000, factura_numero:'2001', factura_fecha:'2026-08-31', estado:'por_pagar', tipo_costo:'clp', created_at:'2026-08-03' },
     { id:'tpa2', billing_id:'bpa2', proveedor_id:'pv4', proveedor:'Proveedor A', monto:724000, estado:'pendiente', tipo_costo:'clp', created_at:'2026-09-01' },
     { id:'tpa3', billing_id:'bpa3', proveedor_id:'pv4', proveedor:'Proveedor A', monto:740000, estado:'pendiente', tipo_costo:'clp', created_at:'2026-10-02' },

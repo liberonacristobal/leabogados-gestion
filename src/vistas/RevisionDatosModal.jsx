@@ -5,6 +5,7 @@ import { demoData } from '../demoData'
 import { coberturaVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { cuadreVenta } from '../../supabase/functions/_shared/porFacturar.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
+import { avisoTarifa, avisoComision } from '../../supabase/functions/_shared/textosAvisos.js'
 import { C, Gl, SEC_LBL, SIcon, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { TAB_LABELS, conciliarVentasSaldadas, esSubarriendo, fechaHoraCL, fetchUFFechas, learnPut, logActividad, mesTitulo, pillPersonaSty, registrarError, setLearningKV, titleCase, ufDelDia, ufFechaCache, useTrabajosDetenidos, ventaUF } from '../lib/compartido.jsx'
 
@@ -311,14 +312,14 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
     </div>}
     {mensualMayor.length>0&&<div style={secBox}>{sh('Factura mayor que la venta mensual',C.soonText,mensualMayor.length)}
       {mensualMayor.map(x=><div key={x.venta.id} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
-        <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>Factura N° {folioN(x.factura.invoice_no)} · {cName(x.venta.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{x.venta.title} · la venta dice {x.enUF?`${x.mensual.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.mensual)} al mes y la factura trae {x.enUF?`${x.factura_en.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.factura_en)}. ¿Cambió la tarifa?</div></div>
-        {amt(x.enUF?`+${x.dif.toLocaleString('es-CL',{maximumFractionDigits:2})} UF`:fmt(x.dif),fmtFechaDMY(x.factura.issued_at),C.soonText)}</div>)}
+        <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>{avisoTarifa(x)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{cName(x.venta.client_id)}, {x.venta.title}</div></div>
+        {amt(x.enUF?`+${String(Number(x.dif.toFixed(2))).replace('.',',')} UF`:fmt(x.dif),fmtFechaDMY(x.factura.issued_at),C.soonText)}</div>)}
     </div>}
     {comRec.length>0&&<div style={secBox}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>{sh('Comisión por registrar',C.azulInfo,comRec.length)}{onRegistrarComisionRec&&comRec.length>1&&<span onClick={async()=>{ if(crBusy) return; setCrBusy('todas'); try{ for(const x of comRec){ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,x.factura.id+'|'+x.proveedor_id])) } }catch(e){ appAlert('No se pudo registrar: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>{crBusy==='todas'?'Registrando…':`Registrar las ${comRec.length}`}</span>}</div>
       {comRec.map(x=>{ const k=x.factura.id+'|'+x.proveedor_id; return <div key={k} style={{...fila,borderTop:`1px solid ${C.bgSoft}`,paddingTop:9,marginTop:3}}>
-        <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>Factura N° {folioN(x.factura.invoice_no)} · {cName(x.factura.client_id)}</div>
-          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{x.etiqueta} ({fmt(x.base)}) para {x.proveedor||'el colaborador'} · {x.estado==='por_pagar'?'por pagar':'sujeta a cobro'}</div>
+        <div style={{minWidth:0,flex:1}}><div onClick={()=>onOpenFactura&&onOpenFactura(x.factura)} style={{fontSize:13,fontWeight:600,cursor:onOpenFactura?'pointer':'default'}}>{avisoComision(x)}</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:1}}>{cName(x.factura.client_id)}, {x.etiqueta}, {x.estado==='por_pagar'?'por pagar':'sujeta a cobro'}</div>
           {onRegistrarComisionRec&&<div style={{marginTop:6,display:'flex',gap:14}}><span onClick={async()=>{ if(crBusy) return; setCrBusy(k); try{ await onRegistrarComisionRec(x); setCrDone(p=>new Set([...p,k])) }catch(e){ appAlert('No se pudo registrar la comisión: '+(e?.message||e)) } setCrBusy(null) }} style={{color:C.azulInfo,fontWeight:700,fontSize:12,cursor:'pointer'}}>{crBusy===k?'Registrando…':'Registrar comisión'}</span>
             <span onClick={async()=>{ if(crBusy) return; setCrNo(p=>new Set([...p,k])); if(!DEMO) setLearningKV('data_health','comreg:'+k,'no').catch(()=>{}) }} style={{color:C.muted,fontWeight:600,fontSize:12,cursor:'pointer'}}>No corresponde</span></div>}</div>
         {amt(fmt(x.monto),fmtFechaDMY(x.factura.issued_at))}</div> })}
