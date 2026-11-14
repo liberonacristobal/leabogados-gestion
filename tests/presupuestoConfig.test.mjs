@@ -31,7 +31,7 @@ test('regresión: con un 15 % de reserva fijado (borradores guardados), el model
   assert.deepEqual([r0(rr.objetivo), r0(rr.porTrimestre), rr.mesesCierre], [18810000, 0, 6.025770404962991])
   assert.deepEqual(st.p, { prudente: { g: 0, alza: 6, terc: 24.4, dias: 40 }, base: { g: 10, alza: 4.5, terc: 24.4, dias: 30 }, meta: { g: 25, alza: 4.5, terc: 24.4, dias: 30 } })
   assert.deepEqual([st.reservaIni, st.tasaIDPC, st.ppmAnual, st.reserva, st.reajusteUF], [30_000_000, 12.5, 1_200_000, 15, 3.5])
-  assert.deepEqual(componentesDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Margen', 'Retiros'])
+  assert.deepEqual(componentesDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Resultado', 'Retiros'])
   assert.deepEqual(estado({ cfg: configPresupuesto(), reserva: 15 }), st)                              // pasar la configuración por defecto explícita no cambia nada
 })
 
@@ -155,7 +155,7 @@ test('reserva en cuenta corriente editable: cambia la reserva al cierre y la rec
 
 test('nombre corto de los componentes: «Presupuesto» para las tarjetas, el largo sigue siendo el de la app y sirve de respaldo; la validación lo acota', () => {
   assert.equal(nombreCorto('costos'), 'Presupuesto'); assert.equal(nombreCorto('ventas'), 'Vendido'); assert.equal(nombreCorto('x'), 'x')
-  assert.deepEqual(componentesCortosDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto', 'Margen', 'Retiros'])
+  assert.deepEqual(componentesCortosDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto', 'Resultado', 'Retiros'])
   assert.deepEqual(componentesDe().map((x) => x[1])[3], 'Presupuesto de costos')
   const otra = configPresupuesto({ componentes: CONFIG_DEFECTO.componentes.map((c) => (c.k === 'costos' ? { ...c, corto: undefined } : c)) })
   assert.equal(nombreCorto('costos', otra), 'Presupuesto de costos')   // sin corto, respaldo en el largo

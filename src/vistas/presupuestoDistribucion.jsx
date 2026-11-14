@@ -44,7 +44,7 @@ export function Distribucion({ X }) {
     <div style={{ padding: D ? '10px 16px' : '10px 14px', fontSize: 12, color: C.muted }}>Sin estacionalidad estable: entre 2025 y 2026 los meses cambian de peso (pocas facturas grandes los mueven), por eso parte en partes iguales. Estimación propia; el Seguimiento usa esta misma distribución.</div>
     {COMPONENTES_DIST.map(fila)}
     <div style={{ padding: D ? '10px 16px 12px' : '10px 14px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.muted, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-      <span>El Margen se calcula cada mes con Cobrado, comisiones y Presupuesto de costos.</span>
+      <span>El Resultado se calcula cada mes con Cobrado, comisiones y Presupuesto de costos.</span>
       <Lnk onClick={() => { parche((c) => { c.dist = { modo: {}, manual: {} } }); setUI({ distAbierta: null }) }}>Volver a partes iguales</Lnk>
     </div>
   </>

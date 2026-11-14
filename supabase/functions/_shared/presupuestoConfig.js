@@ -20,13 +20,13 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
   previsional: { empleador: [{ desde: '2025-08', pct: 1 }, { desde: '2026-08', pct: 3.5 }, { desde: '2027-08', pct: 4.25 }, { desde: '2028-08', pct: 5 }] },
   /** Primer año con presupuesto en la app: desde ese año el Seguimiento se mide contra la versión oficial (o el borrador); antes, contra las metas del año. */
   primerAnio: 2027,
-  /** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Margen → Retiros, con el nombre único de toda la app (`n`) y, opcional, uno corto (`corto`) para las tarjetas del módulo Presupuesto; sin `corto` se usa `n`. */
+  /** Los seis componentes de la cadena Vendido → Facturado → Cobrado → Presupuesto de costos → Resultado → Retiros, con el nombre único de toda la app (`n`) y, opcional, uno corto (`corto`) para las tarjetas del módulo Presupuesto; sin `corto` se usa `n`. */
   componentes: [
     { k: 'ventas', n: 'Vendido', tono: 'a', ic: 'ventas', ancla: true },
     { k: 'fact', n: 'Facturado', tono: 'y', ic: 'fact', ancla: true },
     { k: 'caja', n: 'Cobrado', tono: 'g', ic: 'wal', ancla: true },
     { k: 'costos', n: 'Presupuesto de costos', corto: 'Presupuesto', tono: 't', ic: 'egr', ancla: false },
-    { k: 'margen', n: 'Margen', tono: 'w', ic: 'tax', ancla: true },
+    { k: 'margen', n: 'Resultado', tono: 'w', ic: 'tax', ancla: true },
     { k: 'retiros', n: 'Retiros', tono: 'r', ic: 'ing', ancla: true },
   ],
   /** Componente cuya meta se escribe al partir. */

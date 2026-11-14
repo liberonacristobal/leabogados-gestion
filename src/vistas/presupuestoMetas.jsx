@@ -54,7 +54,7 @@ export function ComoSeCalcula({ X, de, solo = false }) {
   const items = [
     [`Cierre ${Y}`, `Vendido, Facturado y Cobrado: lo real a la fecha más el promedio mensual de los últimos 3 meses cerrados × los meses que faltan (${d.referencia.ventas.faltan.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`, `Vendido ${par('ventas')} · Facturado ${par('fact')} · Cobrado ${par('caja')}`],
     ['Presupuesto', 'lo real de los meses cerrados más el presupuesto de los que faltan.', par('costos')],
-    ['Margen', 'cobrado, menos comisiones, menos costos, todo del cierre.', cierreCifras(X, 'margen', true).c],
+    ['Resultado', 'cobrado, menos comisiones, menos costos, todo del cierre.', cierreCifras(X, 'margen', true).c],
     ['Retiros', 'lo retirado a la fecha; no se proyecta.', cierreCifras(X, 'retiros', true).c],
     de === 'base' ? ['Base', `últimos 12 meses cerrados, sin crecimiento.`, ''] : ['Proyectado', `resultado del escenario ${X.nomEsc(escenarioMetas(X.est, CFG))} con el crecimiento que lleva a la meta; Presupuesto: el presupuesto de costos ${an}.`, ''],
   ]
