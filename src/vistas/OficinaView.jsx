@@ -137,14 +137,14 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const enUF = moneda === 'UF', CLP = !enUF
 
   // Desglose de cada tarjeta: las partes que suman la cifra (solo en pesos donde la parte no existe en UF).
-  const raAnio = useMemo(() => { let te = 0; for (let i = 1; i <= curM; i++) te += resultadoMes(fuRes, deps, `${year}-${pad(i)}`).totalEmitido; return te }, [fuRes, billing, terceros, costosOfiRows, expenses, clients, curM, year])
+  const raAnio = useMemo(() => { let te = 0, teUF = 0; for (let i = 1; i <= curM; i++) { const r = resultadoMes(fuRes, deps, `${year}-${pad(i)}`); te += r.totalEmitido; teUF += r.totalEmitidoUF } return { te, teUF } }, [fuRes, billing, terceros, costosOfiRows, expenses, clients, curM, year])
   const ajR = x => Math.abs(x) < 1e6 ? Math.round(x) : Math.round(x / 1e5) * 1e5
-  const facAnioV = resAnio.verCLP.fac || 0, ajAnio = ajR(raAnio - (resAnio.fac || 0))
+  const facAnioV = resAnio.verCLP.fac || 0, ajAnio = ajR(raAnio.te - (resAnio.fac || 0)), facAnioUF = resAnio.verUF.fac || 0, ajAnioUF = Math.round(raAnio.teUF - (resAnio.facUF || 0))
   const CV = cascadaVendido(m, enUF), fV = x => enUF ? fmtUFk(x) : fmtShort(x)
   const rVend = [['Bruto', fV(CV.bruto)], ['Costos de terceros', '−' + fV(CV.costo), { neg: true }], ['Neto', fV(CV.neto), { tot: true }]]
   const rFac = !esMes
-    ? (CLP ? [['Total emitido', fmtShort(facAnioV + ajAnio)], ['Menos ajustes', '−' + fmtShort(ajAnio), { neg: true }], ['Facturado', fmtShort(facAnioV), { tot: true }]] : undefined)
-    : (CLP ? [['Total emitido', fmtShort(rm.totalEmitido)], ['Menos ajustes', '−' + fmtShort(rm.totalEmitido - rm.fac), { neg: true }], ['Facturado', fmtShort(rm.fac), { tot: true }]] : undefined)
+    ? (CLP ? [['Total emitido', fmtShort(facAnioV + ajAnio)], ['Menos ajustes', '−' + fmtShort(ajAnio), { neg: true }], ['Facturado', fmtShort(facAnioV), { tot: true }]] : [['Total emitido', fmtUFk(facAnioUF + ajAnioUF)], ['Menos ajustes', '−' + fmtUFk(ajAnioUF), { neg: true }], ['Facturado', fmtUFk(facAnioUF), { tot: true }]])
+    : (CLP ? [['Total emitido', fmtShort(rm.totalEmitido)], ['Menos ajustes', '−' + fmtShort(rm.totalEmitido - rm.fac), { neg: true }], ['Facturado', fmtShort(rm.fac), { tot: true }]] : [['Total emitido', fmtUFk(Math.round(rm.totalEmitidoUF))], ['Menos ajustes', '−' + fmtUFk(Math.round(rm.totalEmitidoUF - rm.facUF)), { neg: true }], ['Facturado', fmtUFk(Math.round(rm.facUF)), { tot: true }]])
   const rCob = !esMes ? [['Propio', vMon(ingYTDUF, ingYTD)], ['Real', vMon(ingRealA.uf, ingRealA.clp)], ...(CLP ? [['Por cobrar', fmtShort(totPorCobrar)]] : [])] : undefined
   const rRes = !esMes ? [['Ingresos', mRes('ing')], ['Costos', '−' + mRes('cos', true), { neg: true }], ['Comisiones', '−' + mRes('com', true), { neg: true }]]
     : (CLP ? [['Ingresos', fmtShort(rm.ing)], ['Costos', '−' + fmtShort(rm.cos), { neg: true }], ['Comisiones', '−' + fmtShort(rm.com), { neg: true }]] : undefined)
@@ -173,7 +173,8 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   // Año o mes: las cifras de Finanzas
   const res = esMes ? rm.res : resAnio.res, ingr = esMes ? rm.ing : resAnio.ing
   const mg = margenPct(res, ingr)
-  const costoTxt = esMes ? fmtMill(rm.cos) : mRes('cos', true), comTxt = esMes ? fmtMill(rm.com) : mRes('com', true)
+  // Las tarjetas de sección y sus páginas van siempre en pesos (saldos vivos como el flujo y la cobranza no existen en UF); la moneda elegida rige las cuatro tarjetas de arriba.
+  const costoTxt = esMes ? fmtMill(rm.cos) : fmtShort(Math.abs(resAnio.verCLP.cos || 0)), comTxt = esMes ? fmtMill(rm.com) : fmtShort(Math.abs(resAnio.verCLP.com || 0))
   const pptoTxt = !ppto ? '' : !ppto.borrador ? 'Sin empezar' : (ppto.oficial ? ppto.oficial.nombre : 'Sin versión oficial') + (ppto.actualizado ? '. Actualizado ' + fmtFechaDMY(ppto.actualizado).replace(/-/g, '‑') : '')
   const resTxt = (res < 0 ? '−' : '') + fmtMill(Math.abs(res))
   const nResolver = (procsN ? procsN.falla : 0) + (bandN || 0) + nA + (nPendCuentas || 0)
@@ -184,11 +185,11 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const portada = (<>
     <div style={grid2}>
       <SecCard D={D} ic='chart' tint={C.azulBg} col={C.azulInfo} t='Finanzas' v={resTxt} vcol={res < 0 ? C.overdueText : undefined} s={esMes ? `resultado de ${MESES[selM - 1]}` : 'resultado del año'} onClick={() => setSec('fin')}
-        rows={[['Costos', '−' + costoTxt, { neg: true }], ['Comisiones', '−' + comTxt, { neg: true }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), fin < 0 ? { neg: true } : undefined], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día']]} />
+        rows={[['Costos', '−' + costoTxt, { neg: true, onClick: () => go('costos') }], ['Comisiones', '−' + comTxt, { neg: true, onClick: () => go('proveedores') }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), { neg: fin < 0, onClick: () => go('flujoCaja') }], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
-        rows={[['Vencido', fmtMill(venc), venc > 0 ? { neg: true } : undefined], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), cart.expo.m60 > 0 ? { neg: true } : undefined], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—']]} />
+        rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—', { onClick: () => go('presupuesto') }]]} />
       <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={socIng(null)} s={`ingreso real, enero a ${MESES[curM - 1]}`} onClick={() => setSec('soc')}
-        rows={[...ADMIN_NAMES.map(s => [s, socIng(s)]), ['Retiros', fmtShort(retAnio)]]} />
+        rows={[...ADMIN_NAMES.map(s => [s, socIng(s), { onClick: () => go('porSocio', s) }]), ['Retiros y sueldos', fmtShort(retAnio), { onClick: () => go('socios') }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
         rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
     </div>
@@ -225,7 +226,8 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
       <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
       <Tl label='Días de cobro' value={dCobro.pond != null ? `${dCobro.pond} días` : '—'} sub='ponderado por monto' onClick={() => go('presupuesto')} />
     </div></>),
-    soc: (<><Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
+    soc: (<><Lbl t='Retiros y sueldos' /><div style={grid}><Tl label='Retiros y sueldos' value={fmtShort(retAnio)} sub='retiros del año, sueldos y simulador de retiros' onClick={() => go('socios')} /></div>
+      <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: D ? 12.5 : 12, fontVariantNumeric: 'tabular-nums' }}>
           <thead><tr>{['Socio', 'Vendido neto', 'Cobrado', 'Ingreso real'].map((h, i) => <th key={h} style={{ padding: D ? '8px 14px' : '8px 6px', fontSize: D ? 10 : 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, color: C.accent, background: C.bgSoft, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
