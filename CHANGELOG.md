@@ -1,3 +1,4 @@
+- 2026-11-15 · Oficina › Gestión: el Excel suma las filas «Comisiones por pagar» y «Comisiones por percibir» (misma hoja, mismas cifras de la página).
 - 2026-11-15 · Oficina › Finanzas: ícono de descarga Excel en el bloque Resultado (resultado, ingresos, costos, comisiones devengadas, flujo de caja, proyección y comisiones por pagar, con las mismas cifras de la página).
 - 2026-11-15 · Descargas › los botones «PDF ›» y «Excel ›» (Estado de resultados formal y Oficina) pasan a ser íconos sin texto, como en Inicio: componente único `BtnDescarga` en `base.jsx` con título y aria-label.
 - 2026-11-15 · Estado de resultados formal › botón «PDF ›» junto a «Excel ›»: carta horizontal con todos los meses, total, año anterior, variación y % de ingresos, en la moneda elegida (`pdfEstadoResultados.js`; dibuja las mismas celdas de la tabla, sin calcular).
