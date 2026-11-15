@@ -102,6 +102,7 @@ const ProveedoresView = lazyVista(() => import('./vistas/ProveedoresView.jsx'), 
 const TasksOnlyView = lazyVista(() => import('./vistas/TasksOnlyView.jsx'), 'TasksOnlyView')
 const CobradoMesView = lazyVista(() => import('./vistas/CobradoMesView.jsx'), 'CobradoMesView')
 import { MesEnMarchaView, useMesEnMarcha } from './vistas/MesEnMarchaView.jsx'
+import { guardarLibro, cargarXlsx } from './lib/archivos.js'
 const FlujoCajaView = lazyVista(() => import('./vistas/FlujoCajaView.jsx'), 'FlujoCajaView')
 const PorFacturarView = lazyVista(() => import('./vistas/PorFacturarView.jsx'), 'PorFacturarView')
 const ClientsView = lazyVista(() => import('./vistas/ClientsView.jsx'), 'ClientsView')
@@ -1570,7 +1571,7 @@ function CalendarioTributarioView({isDesktop, onBack, origen, expenses=[], user}
     const data=anio.filas.map(f=>[f.t,...f.celdas.map(c=>c.k==='na'?'':[c.t,c.s].filter(Boolean).join(' '))])
     const ws=XLSX.utils.aoa_to_sheet([[`Calendario tributario · ${BRAND.nombre}`],[],['Obligación',...anio.cols.map(_mesAA)],...data])
     ws['!cols']=[{wch:24},...anio.cols.map(()=>({wch:16}))]
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Calendario'); XLSX.writeFile(wb,`Calendario tributario ${fmtFechaDMY(hoy)}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Calendario'); await guardarLibro(XLSX, wb, `Calendario tributario ${fmtFechaDMY(hoy)}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const btnLink={fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',padding:0,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}
   // ── Detalle de la celda abierta.
   const marcar=async(items,on)=>{ if(busy) return; if(DEMO){ appAlert('En la demo no se guarda.'); return } setBusy(true)

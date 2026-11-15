@@ -8,6 +8,7 @@ import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib
 import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
 import { VistasGuardadas, useVistasGuardadas } from '../lib/vistasGuardadas.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // Texto de cada tipo de pendiente en la lista de escritorio («2 cuotas por emitir»).
 const TXT_PEND = {banco:['pago por imputar','pagos por imputar'], fondos:['fondos por solicitar','fondos por solicitar'], sinfactura:['pagada sin factura','pagadas sin factura'], cuotas:['cuota por emitir','cuotas por emitir'], vencidas:['factura vencida','facturas vencidas'], datos:['dato por corregir','datos por corregir']}
@@ -288,12 +289,12 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   const exportarExcel = async(src) => {
     const base=Array.isArray(src)?src:filas
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const head=['Cliente','Razones sociales','RUT','Responsable','Estado','Tareas abiertas','Por cobrar','Fondos']
       const rows=base.map(c=>{ const ents=entsDe[c.id]||[]; const ruts=[c.rut,...ents.map(e=>e.rut)].filter(Boolean).filter((v,i,arr)=>arr.indexOf(v)===i); return [c.name||'', ents.map(e=>e.name).filter(Boolean).join('; '), ruts.join('; '), responsableDe[c.id]||'', c.status||'Activo', tareasDe[c.id]||0, Math.round(porCobrarDe[c.id]||0), Math.round(balances[c.id]||0)] })
       const ws=XLSX.utils.aoa_to_sheet([head,...rows]); ws['!cols']=[{wch:34},{wch:40},{wch:26},{wch:14},{wch:11},{wch:10},{wch:14},{wch:14}]; ws['!autofilter']={ref:`A1:H${rows.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]
       for(let r=1;r<=rows.length;r++){ [6,7].forEach(cc=>{ const cell=ws[XLSX.utils.encode_cell({r,c:cc})]; if(cell&&cell.t==='n') cell.z='#,##0' }) }
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Clientes'); XLSX.writeFile(wb,`Clientes_${new Date().toISOString().slice(0,10)}.xlsx`)
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Clientes'); await guardarLibro(XLSX, wb, `Clientes_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Selección en lote: Excel, copiar nombres y asignar abogado (única acción que escribe; confirma y deja bitácora en cada cliente).

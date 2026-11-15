@@ -28,6 +28,7 @@ import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
 import { PaginaSobre, generoF, equipoPorNombre, mesTitulo, driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // Facturas ya registradas con XML guardado y sin ningún PDF adjunto (ni oficial ni copia): lo que falta respaldar en Drive. Fuente única de la tarjeta de la entrada, la página de pendientes y el respaldo masivo.
 export const facturasSinRespaldo = (billing, attIds) => (billing||[]).filter(b=>b&&!b.deleted_at&&b.invoice_no&&b.dte_xml&&b.status!=='Anulada'&&!(attIds&&attIds.has(String(b.id))))
@@ -291,7 +292,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
     if(porEmitir.length===0 && atrasadas.length===0){ appAlert('No hay facturas por emitir ni arrastre de meses anteriores.'); return }
     setDesc(true)
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const ufHoy = ufState.uf || null
       const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')} al ${fmtFechaDMY(new Date().toLocaleDateString('en-CA'))}` : 'Monto hoy ($)'
       const header=['Responsable','Cliente','Razón social','RUT','Concepto','Cuota','UF',ufNota,'Devengo de la cuota']
@@ -318,7 +319,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
       const vigentes = porEmitir.filter(esMesB)   // hoja "Facturar" = solo lo de este mes; lo atrasado va en la 2ª hoja
       if(vigentes.length) XLSX.utils.book_append_sheet(wb,fmtSheet(vigentes),'Facturar')
       if(atrasadas.length) XLSX.utils.book_append_sheet(wb,fmtSheet(atrasadas),'No facturadas (meses ant.)')
-      XLSX.writeFile(wb,`Facturar_${mesKey}.xlsx`)
+      await guardarLibro(XLSX, wb, `Facturar_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDesc(false)
   }
@@ -327,7 +328,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   const descargarSel = async() => {
     const sel = porEmitir.filter(b=>emitSel.has(b.id)); if(!sel.length) return
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const ufHoy = ufState.uf || null
       const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')} al ${fmtFechaDMY(new Date().toLocaleDateString('en-CA'))}` : 'Monto hoy ($)'
       const header=['Cliente','Razón social','RUT','Concepto','UF (original)',ufNota,'Devengo']
@@ -344,7 +345,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
       const ws=XLSX.utils.aoa_to_sheet([header,...rows]); ws['!cols']=[{wch:26},{wch:30},{wch:14},{wch:38},{wch:12},{wch:20},{wch:14}]
       ws['!autofilter']={ref:`A1:G${rows.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]
       { const rng=XLSX.utils.decode_range(ws['!ref']); for(let r=1;r<=rng.e.r;r++){ const u=ws[XLSX.utils.encode_cell({r,c:4})]; if(u&&u.t==='n')u.z='0.00'; const m=ws[XLSX.utils.encode_cell({r,c:5})]; if(m&&m.t==='n')m.z='#,##0' } }
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Seleccionadas'); XLSX.writeFile(wb,`Facturar_seleccionadas_${mesKey}.xlsx`)
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Seleccionadas'); await guardarLibro(XLSX, wb, `Facturar_seleccionadas_${mesKey}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
   }
   const years=[...new Set(billing.map(b=>b.due?.slice(0,4)).filter(Boolean))]
@@ -2509,7 +2510,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       const ufInfo = await fetchUF()
       const ufHoy = ufInfo.value
       const ufNota = ufHoy!=null ? `Monto hoy ($) · UF ${Math.round(ufHoy).toLocaleString('es-CL')}${ufInfo.isToday?'':' (no actualizada)'}` : 'Monto hoy ($)'
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const header = ['Cliente','Razón social','RUT','Proyecto','UF','Monto guardado ($)', ufNota,'Vencimiento']
       const rows = filtered.map(b=>{
         const c = clients.find(x=>x.id===b.client_id)
@@ -2547,7 +2548,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       XLSX.utils.book_append_sheet(wb, ws, 'Programadas')
       const mesLbl = fMonth ? `_${MONTHS[parseInt(fMonth)-1]}` : ''
       const anioLbl = fYear ? `_${fYear}` : ''
-      XLSX.writeFile(wb, `Programadas${mesLbl}${anioLbl}_${new Date().toISOString().slice(0,10)}.xlsx`)
+      await guardarLibro(XLSX, wb, `Programadas${mesLbl}${anioLbl}_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDescargando(false)
   }
@@ -2590,7 +2591,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
     if(!sel.length){ appAlert('Marca al menos una fila para exportar.'); return }
     setDescExcel(true)
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const ufInfo = await fetchUF()
       const ufActual = ufInfo.value
       const header=['Cliente','Razón social','RUT receptor','Concepto/glosa','Monto neto','Monto UF','Fecha vencimiento','N° cuota']
@@ -2608,7 +2609,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       const ws=XLSX.utils.aoa_to_sheet([header,...rows])
       ws['!cols']=[{wch:24},{wch:26},{wch:14},{wch:32},{wch:14},{wch:10},{wch:14},{wch:9}]
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Por facturar')
-      XLSX.writeFile(wb,`Por_facturar_${mesKey}_${new Date().toISOString().slice(0,10)}.xlsx`)
+      await guardarLibro(XLSX, wb, `Por_facturar_${mesKey}_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('Error al generar Excel: '+e.message) }
     setDescExcel(false)
   }

@@ -17,6 +17,7 @@ import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -260,7 +261,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
     const data=reg.map(d=>[fmtFechaDMY(_fechaDoc(d)), nom(d.cliente_id), d.razon_social||'', _tipoDoc(d), _DOC_CLASE[_claseDoc(d)][0], d.repertorio||'', d.ot_number||'', abogDe(d.cliente_id), d.drive_url||''])
     const ws=XLSX.utils.aoa_to_sheet([['Documentos de la notaría'],[],['Fecha','Cliente','Razón social','Documento','Clase','Repertorio','OT','Abogado','Drive'],...data])
     ws['!cols']=[{wch:11},{wch:26},{wch:32},{wch:48},{wch:18},{wch:11},{wch:9},{wch:14},{wch:50}]
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Documentos'); XLSX.writeFile(wb,`Documentos de la notaria${mes?` ${mes}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Documentos'); await guardarLibro(XLSX, wb, `Documentos de la notaria${mes?` ${mes}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12}
   const chip=k=>{ const [l,c,b]=_DOC_CLASE[k]; return <span key={k} style={{fontSize:11,fontWeight:600,color:c,background:b,borderRadius:12,padding:'2px 8px',whiteSpace:'nowrap'}}>{l}</span> }
   const abrir=d=>d.drive_url?<a href={d.drive_url} target='_blank' rel='noreferrer' onClick={ev=>ev.stopPropagation()} style={{fontSize:13,fontWeight:600,color:C.azulInfo,textDecoration:'none',flexShrink:0,whiteSpace:'nowrap'}}>Abrir</a>:<span style={{fontSize:12,color:C.textSoft,whiteSpace:'nowrap',flexShrink:0}}>{D?'Se guarda en Drive en la próxima revisión':'Por guardar'}</span>
@@ -1316,7 +1317,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       const XLSX=await loadXLSXStyle()
       const ws=buildLiquidacionExcelWS(XLSX,{gastos:gs,clients,titulo:`Liquidación ${BRAND.notaria} al ${fecha}`,sub:`${gs.length} OT · Total $${total.toLocaleString('es-CL')}`})
       const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Notaría')
-      XLSX.writeFile(wb,`Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fecha}.xlsx`.replace(/[^\w .-]/g,''))
+      await guardarLibro(XLSX, wb, `Liquidacion ${BRAND.notaria.normalize('NFD').replace(/[\u0300-\u036f]/g,'')} al ${fecha}.xlsx`.replace(/[^\w .-]/g,''))
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Añadir gastos pendientes a una liquidación ya creada (corrección): los enlaza y suma al total/n_gastos/OT.
@@ -1863,13 +1864,13 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   const tileSub=k=>{ const a=vivos.filter(f=>f.grp===k&&enAbg(f)); const sum=k==='pedir'||k==='dep'?a.reduce((s,f)=>s+Math.max(0,-f.s),0):a.reduce((s,f)=>s+f.m,0)
     if(k==='envd'){ const d30=isoLocal(Date.now()-30*86400000); return `${enviadas.filter(x=>enAbg(x)&&String(x.r.sent_at).slice(0,10)>=d30).length} en 30 días` }
     return k==='env'?`${a.length} por enviar`:k==='pedir'||k==='dep'?`${a.length} · falta ${fmtMill(sum)}`:`${a.length} · ${fmtMill(sum)}` }
-  const exportar=async()=>{ try{ const XLSX=await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+  const exportar=async()=>{ try{ const XLSX=await cargarXlsx()
     const head=['Cliente','Abogado','Grupo','Gastos por rendir','Desde','Por rendir','Saldo','Seguimiento']
     const gl=k=>(_RENDIR_G.find(x=>x.k===k)||{}).t||'Al día'
     const data=rows.map(f=>[f.c.name,f.abg,verTerm?'Terminado':gl(f.grp),f.n,f.desde?fmtFechaDMY(f.desde):'',Math.round(f.m),Math.round(f.s),f.pedido?`Pedido ${fmtFechaDMY(isoLocal(f.pedido.req.enviada_at))} (${f.pedido.dias} d)`:f.armada?'Armada sin enviar':''])
     const ws=XLSX.utils.aoa_to_sheet([head,...data]); ws['!cols']=[{wch:30},{wch:12},{wch:24},{wch:10},{wch:12},{wch:14},{wch:14},{wch:26}]
     for(let r=1;r<=data.length;r++){ [5,6].forEach(cc=>{ const cell=ws[XLSX.utils.encode_cell({r,c:cc})]; if(cell&&cell.t==='n') cell.z='#,##0' }) }
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Rendir a cliente'); XLSX.writeFile(wb,`Rendir_a_cliente_${isoLocal(Date.now())}.xlsx`)
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Rendir a cliente'); await guardarLibro(XLSX, wb, `Rendir_a_cliente_${isoLocal(Date.now())}.xlsx`)
   }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   // Tabla de escritorio de Por rendir: orden por columna (la lista y «Siguiente» siguen el orden de siempre).
   const { filas:rowsOrd, th:thRows } = useOrden(rows, {

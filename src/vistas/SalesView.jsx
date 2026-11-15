@@ -6,6 +6,7 @@ import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtR
 import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // Reconoce a qué cliente EXISTENTE apunta una propuesta (por el nombre del archivo de Drive). SOLO enlaza, NUNCA crea
 // (anti-duplicados / "no inventar datos"). Mira nombres de clientes y razones sociales (client_entities). Match conservador:
@@ -256,12 +257,12 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const ordenarVentas = rows => [...rows].sort((a,b)=>{ const va=valV(a,ordV.k), vb=valV(b,ordV.k); const r=typeof va==='string'?va.localeCompare(vb,'es'):(va-vb); return (r*ordV.dir)||(a.title||'').localeCompare(b.title||'','es') })
   const exportarVentas = async rows => {
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const head=['Venta','Cliente','Razón social','RUT','Responsable','Área','Año','Mes','Estado','Forma de cobro','UF','$']
       const data=rows.map(s=>{ const cli=clients.find(c=>String(c.id)===String(s.client_id)); const rs=rsLabel(s.client_id,clients,clientEntities,s.entity_id); return [s.title||'', cli?.name||'', rs.name||'', rs.rut||cli?.rut||'', respVenta(s), s.area||'', s.year||'', s.month||'', s.status||'', porHoras(s)?'por horas':(esRecurrente(s)?'mensual':(s.cobro_type||'')), Math.round(ventaUF(s,ufRef)*100)/100, Math.round(ventaCLP(s,ufRef))] })
       const ws=XLSX.utils.aoa_to_sheet([head,...data]); ws['!cols']=[{wch:38},{wch:30},{wch:30},{wch:14},{wch:13},{wch:13},{wch:6},{wch:5},{wch:10},{wch:13},{wch:10},{wch:14}]; ws['!autofilter']={ref:`A1:L${data.length+1}`}; ws['!views']=[{state:'frozen',ySplit:1}]
       for(let r=1;r<=data.length;r++){ const u=ws[XLSX.utils.encode_cell({r,c:10})]; if(u&&u.t==='n') u.z='#,##0.00'; const m=ws[XLSX.utils.encode_cell({r,c:11})]; if(m&&m.t==='n') m.z='#,##0' }
-      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Ventas'); XLSX.writeFile(wb,`Ventas_${fYear||'todas'}_${new Date().toISOString().slice(0,10)}.xlsx`)
+      const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Ventas'); await guardarLibro(XLSX, wb, `Ventas_${fYear||'todas'}_${new Date().toISOString().slice(0,10)}.xlsx`)
     }catch(e){ appAlert('No se pudo generar el Excel: '+e.message) }
   }
   // Selección en lote: Excel, copiar y cambiar responsable (única que escribe; mueve el vendido entre socios en Por socio e Inteligencia).

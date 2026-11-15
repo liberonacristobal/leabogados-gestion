@@ -8,6 +8,7 @@ import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
 import { simularMorosos, resumenTramos, repartoOchoSemanas } from '../../supabase/functions/_shared/simuladorMorosos.js'
 import { comisionesProyectadas } from '../../supabase/functions/_shared/proyeccionPropia.js'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 const SER = { alDia: ['Emitidas al día', C.serie1], venc: ['Emitidas vencidas', C.serie2], cuotas: ['Cuotas por facturar', C.serie3] }
 const VISTAS = [['barras', 'Barras'], ['lineas', 'Líneas'], ['cascada', 'Cascada']]
@@ -188,12 +189,12 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
   const lista = F.clientes.filter(c => fil === 'todos' || (fil === 'ent' && c.entra) || (fil === 'mor' && c.duda) || (fil === 'pf' && c.sin)).filter(c => !q || nom(c.cid).toLowerCase().includes(q.toLowerCase()))
   const { filas: ord, th: thO } = useOrden(lista, { Cliente: c => nom(c.cid), Cobranza: c => c.entra, Comisiones: c => c.com, Morosa: c => c.duda, 'Por facturar': c => c.sin })
   const descargar = async () => { try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const head = ['Cliente', 'Plazo de pago (días)', 'Facturas pagadas usadas', 'Cobranza proyectada 8 sem.', 'Comisiones proyectadas 8 sem.', 'Flujo neto', 'Cartera morosa', 'Cuotas vencidas sin facturar', 'Comisiones sujetas a ese cobro', 'Facturas vencidas']
       const data = F.clientes.map(c => [nom(c.cid), c.ritmo, c.hist, Math.round(c.entra), Math.round(c.com), Math.round(c.entra - c.com), Math.round(c.duda), Math.round(c.sin), Math.round(c.comFuera), c.nVenc])
       const semanas = [['Semana del', 'Cobranza', 'Gastos de operación', 'Comisiones', 'Saldo acumulado'], ...F.weeks.map(w => [fmtFechaDMY(w.ini), Math.round(w.entra), Math.round(w.of), Math.round(w.com), Math.round(w.run)])]
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...data]), 'Por cliente'); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(semanas), 'Por semana')
-      XLSX.writeFile(wb, `Flujo_de_caja_${isoLocal(Date.now())}.xlsx`)
+      await guardarLibro(XLSX, wb, `Flujo_de_caja_${isoLocal(Date.now())}.xlsx`)
     } catch (e) { appAlert('No se pudo generar el Excel: ' + (e.message || e)) } }
 
   const tabla = <div>

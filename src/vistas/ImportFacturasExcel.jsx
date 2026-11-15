@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
 import { C, SEC_LBL, Spin, appAlert, fmt, fmtRutCL, folioN } from '../lib/base.jsx'
 import { aprenderRS, claudeCall, dueFromIssued, normRut, ultimoDiaHabilMesEmision } from '../lib/compartido.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // ─── IMPORTAR FACTURAS DESDE EXCEL (antiguas, con fecha de pago) — con preview y pre-confirmación ──
 export function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onImported,onClose}) {
@@ -39,12 +40,12 @@ export function ImportFacturasExcel({clients=[],clientEntities=[],billing=[],onI
   const mapEstado = raw => { const k=norm(raw); if(!k) return null; if(/(pagad|cobrad)/.test(k)) return 'Pagado'; if(/(anulad)/.test(k)) return 'Anulada'; if(/(vencid)/.test(k)) return 'Vencido'; if(/(pendiente|por cobrar|emitid)/.test(k)) return 'Pendiente'; return null }
   const descargarPlantilla = async()=>{
     try{
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const XLSX = await cargarXlsx()
       const header=['Cliente','RUT','N° factura','Monto','Fecha emisión','Fecha pago','Estado','Concepto']
       const ej=[['Ejemplo S.A.','76.123.456-7','1234','1500000','01-03-2026','15-03-2026','Pagada','Asesoría tributaria'],
                 ['Otro Cliente SpA','77.987.654-3','1235','800000','05-03-2026','','Pendiente','Honorarios']]
       const ws=XLSX.utils.aoa_to_sheet([header,...ej]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Facturas')
-      XLSX.writeFile(wb,'Plantilla_facturas.xlsx')
+      await guardarLibro(XLSX, wb, 'Plantilla_facturas.xlsx', { estilo: false })
     }catch(e){ appAlert('No se pudo generar la plantilla: '+e.message) }
   }
   const matchClient = (nombre,rut) => {

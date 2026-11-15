@@ -14,6 +14,7 @@ import { retirosSocios } from './SociosView.jsx'
 import { cicloFacturacionMes } from '../../supabase/functions/_shared/facturacionMes.js'
 import { notariaPorLiquidar } from '../../supabase/functions/_shared/notariaReglas.js'
 import { nClientesConPendientes } from '../../supabase/functions/_shared/pendientesCliente.js'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const TONO = { az:[C.azulBg,C.azulInfo], am:[C.soonBg,C.soonText], gr:[C.greenBg,C.greenText], ro:[C.overdueBg,C.overdueText], te:[C.tealBg,C.tealText], gy:[C.bgSoft,C.muted] }
@@ -340,7 +341,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
     XLSX.utils.book_append_sheet(wb,hojaDe(R,[42,34,18,18]),'Resumen')
     XLSX.utils.book_append_sheet(wb,hojaDe(S,[16,16,16,16,16]),'Por socio')
     XLSX.utils.book_append_sheet(wb,hojaDe(E,[34,16,16,18,16]),'Ingreso emitido')
-    XLSX.writeFile(wb,`Panel de socios ${fmtFechaDMY(hoy)}.xlsx`)
+    await guardarLibro(XLSX, wb, `Panel de socios ${fmtFechaDMY(hoy)}.xlsx`)
   } catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const CAPS = [['Resultado',['mes','soc','ret','emi','ing','mm']],['Facturación y cobranza',['fac','cob']],['Costos y pagos',['cos','com','deb']],['Caja y revisión',['caj','rev']]]
   const tarjeta = (id,D) => { const b=bloques[id], [bg,fg]=TONO[b.tono], open=lista.includes(id); return (

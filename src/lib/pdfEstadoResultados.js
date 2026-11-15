@@ -1,6 +1,7 @@
 // PDF directo (sin ventana de impresión) del «Estado de resultados» formal: carta horizontal, mismas líneas, cifras y orden que la vista.
 // No calcula nada: recibe las celdas ya formateadas por la vista (una sola fuente de cifras) y solo las dibuja (jsPDF, helvetica).
 import { BRAND, appAlert } from './base.jsx'
+import { entregarArchivo } from './archivos.js'
 
 const AZ = [0, 60, 80], MU = [83, 114, 129], TX = [61, 61, 61], LN = [228, 232, 235], BG = [245, 247, 249], RJ = [162, 45, 45]
 
@@ -63,6 +64,6 @@ export async function descargarEstadoResultadosPdf(d, nombreArchivo) {
     let logo = null
     try { const r = await fetch(BRAND.logo.color); const bl = await r.blob(); logo = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(bl) }) } catch (_) { logo = null }
     dibujarEstadoResultados(doc, d, /** @type {string|null} */ (logo), BRAND.nombre || '')
-    doc.save(nombreArchivo)
+    await entregarArchivo(doc.output('blob'), nombreArchivo)
   } catch (e) { appAlert('No se pudo generar el PDF: ' + (e && /** @type {any} */ (e).message || e)) }
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { C, SIcon, appAlert, useIsDesktop } from './base.jsx'
 import { alternarSel, selAttrs } from './orden.jsx'
+import { guardarLibro, cargarXlsx } from './archivos.js'
 
 // Selección en lote (Clientes, Ventas, Cobranza, Facturas): un solo molde. useSeleccion lleva el estado (con Shift marca un rango, Esc limpia),
 // Casilla es la casilla de cada fila y BarraSeleccion la barra con total, Limpiar y las acciones. Una acción que escribe datos pide confirmación en la
@@ -102,13 +103,13 @@ export async function copiarTexto(txt, aviso = 'Copiado') {
 // Excel de lo elegido: head = encabezados, filas = arreglo de arreglos, numCols = índices con formato de pesos.
 export async function descargarXlsx({ nombre, hoja, head, filas, anchos = [], numCols = [], fmtNum = '#,##0' }) {
   try {
-    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+    const XLSX = await cargarXlsx()
     const ws = XLSX.utils.aoa_to_sheet([head, ...filas])
     ws['!cols'] = head.map((_, i) => ({ wch: anchos[i] || 14 }))
     ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(head.length - 1)}${filas.length + 1}` }; ws['!views'] = [{ state: 'frozen', ySplit: 1 }]
     for (let r = 1; r <= filas.length; r++) numCols.forEach(cc => { const cell = ws[XLSX.utils.encode_cell({ r, c: cc })]; if (cell && cell.t === 'n') cell.z = fmtNum })
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, hoja)
-    XLSX.writeFile(wb, `${nombre}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    await guardarLibro(XLSX, wb, `${nombre}_${new Date().toISOString().slice(0, 10)}.xlsx`)
     return 'Excel descargado'
   } catch (e) { appAlert('No se pudo generar el Excel: ' + e.message); return false }
 }

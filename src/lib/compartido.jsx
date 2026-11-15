@@ -40,6 +40,7 @@ import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas, conPostergadas 
 import { connectDrive } from '../supabase'
 import { estadoComision, comisionesDevengadas } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado } from './cifras.js'
+import { guardarLibro, cargarXlsx } from './archivos.js'
 export { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado }
 
 export const { dteMontoTotal, montoFactura } = SD
@@ -1056,7 +1057,7 @@ export function splitSetDTE(xml){ const s=String(xml||''), car=(s.match(/<Caratu
   const docs=[...s.matchAll(/<Documento[\s\S]*?<\/Documento>/g)].map(m=>m[0]); if(nro!=null&&anio) docs.forEach(d=>_resolDoc.set(d,{nro,anio})); return docs }
 
 // xlsx-js-style: fork de SheetJS que SÍ escribe estilos de celda (colores, bordes, moneda). El xlsx plano no.
-export async function loadXLSXStyle(){ const m=await import('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/+esm'); return m.utils?m:(m.default||m) }
+export const loadXLSXStyle = cargarXlsx
 
 // REGLA (usuario): los correos SIEMPRE salen desde el correo del usuario. Si su acceso a Gmail venció o no tiene el permiso,
 // NO se manda a escondidas desde otra cuenta: se pregunta y se explica cómo dejarlo saliendo desde el suyo (reingresar).
@@ -1847,7 +1848,7 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
     const ws=XLSX.utils.aoa_to_sheet([[`Movilización ${anio}${per?` · ${per}`:''}`],[],['Fecha','Persona','Medio','Glosa','Cliente','Proyecto','Cargado a','Monto','Pendiente'],...rows,[],['Total','','','','','','',d.tot.tot]])
     ws['!cols']=[{wch:11},{wch:12},{wch:13},{wch:60},{wch:26},{wch:28},{wch:11},{wch:11},{wch:16}]
     Object.keys(ws).forEach(k=>{ if(/^H\d+$/.test(k)&&typeof ws[k].v==='number'){ ws[k].z='"$"#,##0' } })
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movilización'); XLSX.writeFile(wb,`Movilizacion ${anio}${per?` ${per}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movilización'); await guardarLibro(XLSX, wb, `Movilizacion ${anio}${per?` ${per}`:''}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const fila=e=>(<div key={e.id} onClick={()=>editable(e)&&onEdit(e)} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.track}`,cursor:editable(e)?'pointer':'default'}}>
     {diaGrande(e.date)}
     <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||'—'}</div>

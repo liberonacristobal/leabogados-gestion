@@ -5,6 +5,7 @@ import { demoData } from '../demoData'
 import { C, Gl, SIcon, _normTxt, appAlert, fmt, fmtFechaDMY, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
 import { esSubarriendo } from '../lib/cifras.js'
 import { ActBtn, KpiIco, PageHeader, esFacIngreso, fmtMill, loadXLSXStyle } from '../lib/compartido.jsx'
+import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
 // ── SUBARRIENDO (página propia, en Oficina): ingreso por arriendo, NO honorarios ni comisiones. No se mezcla con Proveedores.
 // Fuente única: la venta marcada esSubarriendo + sus facturas (billing_type='subarriendo') + sus anticipos (pago sin factura) + el banco
@@ -158,7 +159,7 @@ export function SubarriendoView({sales=[],billing=[],anticipos=[],clients=[],onO
     const ws=XLSX.utils.aoa_to_sheet([[`Subarriendo ${cli?.name||''} · ${yr}`],[],['Mes','Fecha de pago','Factura','Estado','Monto'],...rows,[],['Cobrado','','','',cobrado],['Factura pendiente','','','',sumG(G('pf'))],['Sin pago','','','',sumG(G('sp'))]])
     ws['!cols']=[{wch:18},{wch:14},{wch:12},{wch:20},{wch:14}]
     Object.keys(ws).forEach(k=>{ if(/^E\d+$/.test(k)&&typeof ws[k].v==='number'){ ws[k].z='"$"#,##0' } })
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Subarriendo'); XLSX.writeFile(wb,`Subarriendo ${yr}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Subarriendo'); await guardarLibro(XLSX, wb, `Subarriendo ${yr}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const selAnio = <select value={yr} onChange={e=>{setYr(Number(e.target.value));setLf(null);setAbierto(null)}} style={{fontSize:12.5,fontWeight:700,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 8px',background:C.card,outline:'none',cursor:'pointer'}}>{anios.map(y=><option key={y} value={y}>{y}</option>)}</select>
   const btnExcel = <span onClick={exportar} title='Descargar Excel' style={{height:30,width:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.card,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/></span>
   const segModo = <div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',flexShrink:0}}>{[['mes','Por mes'],['fac','Por factura']].map(([k,l])=><span key={k} onClick={()=>{setModo(k);setAbierto(null)}} style={{fontSize:12,fontWeight:700,padding:'6px 12px',cursor:'pointer',background:modo===k?C.accent:C.card,color:modo===k?'#fff':C.muted}}>{l}</span>)}</div>

@@ -14,6 +14,7 @@ import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosRegla
 import { esSubarriendo, ventaUF } from './cifras.js'
 import { puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { verFacturaPdf as verFacturaPdfCentral, ActBtn, AsignarVentaFactura, BitacoraLista, CAL_CLI_DIAS, CORTES_PJUD, CheckMini, Copyable, DestinatarioFacturasCard, ESTADO_COBRO, EstadoFacturaChip, IconSection, LIBROS_PJUD, OBL_CLIENTE, Sparkle, TH_BAND, UF_FALLBACK, _GRUPO_DESTINO, _MES_AB, _corteCorta, _estadoCausa, _libroLegible, _nomProp, _ordRol, _rolTxt, bigDate, calendarioCliente, catSinClienteVenta, cobradoBill, concPeriodoOf, cuotaNMof, cuotasOlvidadas, daysLeft, descargarPdfU8, driveCall, esFacturada, esPermanente, esVencidaB, estadoCobro, estadoFacturaLabel, facturaDtePdfBase64, facturaNombreArchivo, fmtSaldoG, fmtShort, fmtUF, huecoFIFO, loadXLSXStyle, logActividad, montoFactura, otConSello, planDeVenta, porCobrarBills, recordarCobroFactura, recorridoGasto, registrarError, rolledDueMap, rsDisplay, saldoBill, serieKey, splitSetDTE, subproyectosCliente, taskAssignees, tipoFacturaLbl, urgencyColor, useAprendidosVenta, useArrastre, useCalCliente, useCausas, useIaVenta, usePropiedades, useUF, verFacturaPdf } from './compartido.jsx'
+import { guardarLibro, cargarXlsx } from './archivos.js'
 
 // Tab "Contacto" de la ficha (reutilizado admin/limited): identificación + datos de
 // contacto (edición inline en clients) + personas de contacto (CRUD en tabla contacts)
@@ -1374,7 +1375,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
     const data=lista.slice().sort((a,b)=>a.comuna.localeCompare(b.comuna,'es')||_ordRol(a,b)).map(p=>[p.comuna,p.rol,p.lote||'',p.nombre||p.direccion||'',p.destino||(p.estado_sii?'Sin propiedad en el SII':''),_nomProp(p.propietario),_nomProp(p.propietario_actual),p.inscripcion_fojas?`Fs ${p.inscripcion_fojas} N° ${p.inscripcion_numero||''} ${p.inscripcion_anio||''}`:'',Number(p.superficie_m2)||'',Number(p.avaluo_fiscal)||'',Number(p.deuda_contribuciones)||'',p.arrendado?'Sí':''])
     const ws=XLSX.utils.aoa_to_sheet([[`Roles · ${client.name} · ${sale.title}`],[],['Comuna','Rol','Lote','Nombre o dirección','Destino','Propietario','Propietario actual','Inscripción','Superficie m²','Avalúo fiscal','Deuda informada','Arrendado'],...data])
     ws['!cols']=[{wch:12},{wch:10},{wch:6},{wch:34},{wch:22},{wch:34},{wch:30},{wch:22},{wch:12},{wch:15},{wch:15},{wch:10}]
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Roles'); XLSX.writeFile(wb,`Roles ${client.name}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Roles'); await guardarLibro(XLSX, wb, `Roles ${client.name}.xlsx`) }catch(e){ appAlert('No se pudo exportar: '+e.message) } }
   const listo=f.comuna.trim()&&/^\d+-\d+$/.test(f.rol.trim())
   const guardar=async()=>{ if(!listo||busy) return; setBusy(true)
     try{ const row={client_id:client.id,sale_id:sale.id,comuna:f.comuna.trim(),rol:f.rol.trim(),nombre:f.nombre.trim()||null,propietario:f.propietario.trim()||null,fuente:`Agregado a mano · ${isoLocal(new Date().toISOString())}`}

@@ -1,6 +1,7 @@
 // PDF directo (sin ventana de impresión) del «Estado de comisiones»: carta, mismo contenido y orden que estadoComisionesHtml.
 // Datos y agrupación salen de _shared/estadoComisiones.js; aquí solo se dibuja (jsPDF, helvetica).
 import { BRAND, appAlert } from './base.jsx'
+import { entregarArchivo } from './archivos.js'
 import { armarEstadoComisiones, mesTitulo, pesos, dmy } from '../../supabase/functions/_shared/estadoComisiones.js'
 
 const AZ = [0, 60, 80], MU = [83, 114, 129], TX = [61, 61, 61], LN = [228, 232, 235], LN2 = [153, 171, 180]
@@ -76,6 +77,6 @@ export async function descargarEstadoComisionesPdf({ proveedor, rut, items, emit
     const n = doc.getNumberOfPages()
     for (let p = 1; p <= n; p++) { doc.setPage(p); draw(LN); doc.setLineWidth(0.6); doc.line(M, H - 40, R, H - 40)
       txt(`${BRAND.nombre || ''}${BRAND.direccion ? ' · ' + BRAND.direccion : ''}`, M, H - 28, 7.5, false, MU); txt(`Página ${p} de ${n}`, R, H - 28, 7.5, false, MU, 'right') }
-    doc.save(`estado_comisiones_${String(proveedor).replace(/[^\w]+/g, '_')}.pdf`)
+    await entregarArchivo(doc.output('blob'), `estado_comisiones_${String(proveedor).replace(/[^\w]+/g, '_')}.pdf`)
   } catch (err) { appAlert('No se pudo generar el PDF: ' + ((err && /** @type {any} */ (err).message) || err)) }
 }

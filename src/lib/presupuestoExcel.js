@@ -1,5 +1,6 @@
 // Excel del Presupuesto anual: hojas con fórmulas vivas (Supuestos → Base → Arrastre → Costos → Escenarios → Mes a mes → Por socio → Metas → Resumen del año).
 // Las fórmulas repiten el modelo de _shared/presupuesto.js; `evaluar` las calcula aquí mismo para guardar el valor al abrir el archivo y para probar que coinciden con el modelo.
+import { guardarLibro } from './archivos.js'
 import { parteMeta } from '../../supabase/functions/_shared/presupuesto.js'
 
 const COL = (/** @type {number} */ i) => String.fromCharCode(65 + i)
@@ -227,7 +228,7 @@ export async function descargarLibroPresupuesto(/** @type {Parameters<typeof hoj
       ws['!cols'] = ((hojasPresupuesto(P)[i] || {}).anchos || []).map((/** @type {number} */ w) => ({ wch: w }))
       XLSX.utils.book_append_sheet(wb, ws, h.nombre)
     })
-    XLSX.writeFile(wb, `Presupuesto_${P.anio}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    await guardarLibro(XLSX, wb, `Presupuesto_${P.anio}_${new Date().toISOString().slice(0, 10)}.xlsx`, { estilo: false })
     return 'Excel descargado'
   } catch (e) { avisar('No se pudo generar el Excel: ' + (/** @type {any} */ (e)?.message || e)); return false }
 }
