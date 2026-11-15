@@ -221,6 +221,9 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
     descargarXlsx({ nombre: `Socios_${year}`, hoja: 'Socios', head: ['Socio', 'Retiros', 'Sueldo', `Retribución ${year}`, 'Promedio mensual', 'Vendido neto', 'Cobrado', 'Ingreso real', '% de la retribución', '% del ingreso real'], filas, anchos: [16, 14, 14, 16, 16, 14, 14, 14, 18, 18], numCols: [1, 2, 3, 4, 5, 6, 7] }) }
   const xlGestion = () => descargarXlsx({ nombre: `Gestion_${hoy}`, hoja: 'Cobranza', head: ['Concepto', 'Valor'], anchos: [30, 18], numCols: [1],
     filas: [['Por cobrar', Math.round(totPorCobrar)], ['Vencido', Math.round(venc)], ['Más de 60 días', Math.round(cart.expo.m60 || 0)], ['Días de cobro, ponderado por monto', dCobro.pond ?? '']] })
+  const xlFinanzas = () => { const f = x => Math.round(x || 0), cos = esMes ? rm.cos : (resAnio.verCLP.cos || 0), com = esMes ? rm.com : (resAnio.verCLP.com || 0)
+    descargarXlsx({ nombre: `Finanzas_${hoy}`, hoja: 'Finanzas', head: ['Concepto', 'Valor'], anchos: [38, 18], numCols: [1],
+      filas: [[esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`, f(res)], ['Ingresos', f(ingr)], ['Costos', -Math.abs(f(cos))], ['Comisiones devengadas', -Math.abs(f(com))], ['Flujo de caja, 8 semanas', f(fin)], [`Proyección de cobranza al ${fmtFechaDMY(`${year}-12-31`)}`, f(proy)], ['Comisiones por pagar', f(sc.porPagar)]] }) }
   const pagina = {
     res: (<><Lbl t='Por resolver' foto='foto de hoy' /><div style={grid}>
       <Tl label='Calendario tributario' value={nA ? `${nA} aviso${nA === 1 ? '' : 's'}` : 'al día'} vcol={nA ? (calTrib.alertas[0].sev === 0 ? C.overdueText : C.soonText) : C.greenText} onClick={() => go('calendarioTrib')} />
@@ -229,7 +232,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <Tl label='Por revisar' value={String(nPendCuentas)} sub='clientes con pendientes' onClick={() => go('revisarCuentas')} />
     </div></>),
     fin: (<>
-      <Lbl t={esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`} />
+      <Lbl t={esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`} xl={xlFinanzas} />
       <div style={grid}>
         <Tl er label='Estado de resultados' value={resTxt} vcol={res < 0 ? C.overdueText : C.accent} sub={esMes ? `${mesPrev} ${rp.res < 0 ? '−' : ''}${fmtMill(Math.abs(rp.res))}` : (mg == null ? '' : `margen ${pct1(mg)} %`)} onClick={() => esMes ? go('estadoResultados', ymSel) : go('estadoFormal')} />
         <Tl label={esMes && !rm.cerrado ? 'Costos, estimado' : 'Costos'} value={'−' + costoTxt} vcol={C.overdueText} sub={esMes ? dl(rm.cos, rp.cos, fmtMill, true) : 'incluye subarriendo y gastos varios'} onClick={() => go('costos')} />
