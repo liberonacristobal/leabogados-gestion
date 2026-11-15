@@ -64,3 +64,14 @@ export async function guardarLibro(XLSX, wb, nombre, op = {}) {
   if (op.estilo !== false) { try { out = await vistaLEA(out) } catch (_) { /* queda sin zoom, el archivo sigue válido */ } }
   await entregarArchivo(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombre)
 }
+
+/** Descarga una tabla simple (primera fila = encabezado) como Excel con el estándar LEA. Reemplaza a los CSV. @param {string} nombre sin extensión @param {any[][]} filas @param {{ hoja?: string, anchos?: number[] }} [op] */
+export async function descargarTabla(nombre, filas, op = {}) {
+  const XLSX = await cargarXlsx(), base = String(nombre).replace(/\.(csv|xlsx)$/i, '')
+  const ancho = (/** @type {number} */ c) => Math.min(48, Math.max(10, ...filas.map(r => String((r && r[c]) == null ? '' : r[c]).length + 2)))
+  const ws = XLSX.utils.aoa_to_sheet(filas), n = Math.max(0, ...filas.map(r => (r || []).length))
+  ws['!cols'] = Array.from({ length: n }, (_, c) => ({ wch: (op.anchos && op.anchos[c]) || ancho(c) }))
+  filas.forEach((r, i) => (r || []).forEach((v, c) => { if (i > 0 && typeof v === 'number') { const cel = ws[XLSX.utils.encode_cell({ r: i, c })]; if (cel) cel.z = '#,##0.##' } }))
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, (op.hoja || base).slice(0, 31).replace(/[\\/?*[\]:]/g, ' '))
+  await guardarLibro(XLSX, wb, `${base}.xlsx`)
+}

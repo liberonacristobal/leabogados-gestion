@@ -9,6 +9,7 @@ import { BRAND, C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGran
 import { descargarImagenComisiones } from '../lib/fotoComisiones.js'
 import { descargarEstadoComisionesPdf } from '../lib/pdfEstadoComisiones.js'
 import { esVencidaB, ActBtn, Attachments, BitacoraLista, Buscador, Copyable, KpiIco, MES_C, NOMBRE_CLI, PageHeader, TH_BAND, _diasDesde, _diasEntre, _lev, _nRut, abrirDocumento, cargarAdminsEstudio, claudeCall, correoMarcaHtml, enviarComoUsuario, esBoletaProv, fechaBHE, firmaDefault, fmtMill, fmtShort, glosaFactura, logActividad, mesTitulo, montoFactura, nCuotaDe, nDias, pctBHE, periodoF29, saldoBill, saldoComisiones, setLearningKV, tipoFactura, tituloProv, txtEnviado, venceBill, viewMemGuardar, viewMemLeer, registrarError, restoreScroll , invalidarImpuestosFuentes} from '../lib/compartido.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 
 // Tipo de parecido entre dos textos (nombre o razón social), MISMA regla que clientesParecidos (exacto/contenido/typo).
 export function _simTipo(aRaw,bRaw){
@@ -615,8 +616,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const wrap = ch => <div style={{padding:isDesktop?'16px 26px 48px':'12px 14px 40px',maxWidth:isDesktop?1180:640,margin:'0 auto',display:'flex',flexDirection:'column',gap:12}}>{ch}</div>
   const chips = (opts,val,set) => <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{opts.map(([k,l])=><span key={k} onClick={()=>set(k)} style={{fontSize:12,fontWeight:600,padding:'4px 10px',borderRadius:20,cursor:'pointer',border:`1px solid ${val===k?C.accent:C.border}`,background:val===k?C.azulBg:C.card,color:val===k?C.accent:C.muted,whiteSpace:'nowrap'}}>{l}</span>)}</div>
   const css = <style>{`.pv-c:hover{background:${C.azulBg};box-shadow:0 0 0 2px ${C.azulBg}}`}</style>
-  const exportCSV = (nombre, head, rows) => { try{ const esc=c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
-    const csv=[head,...rows].map(r=>r.map(esc).join(';')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'})); a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
+  const exportCSV = (nombre, head, rows) => { try{ descargarTabla(nombre,[head,...rows]) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
 
   // ── FORMULARIO ──
   if(view==='form'){

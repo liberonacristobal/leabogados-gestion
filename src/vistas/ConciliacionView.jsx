@@ -19,6 +19,7 @@ import * as SD from '../../supabase/functions/_shared/saludDatos.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
 import { ChevAb, fmtMillLR, reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError, useDestinosBoleta} from '../lib/compartido.jsx'
 import { rutsDeDestino } from '../../supabase/functions/_shared/impuestosMensuales.js'
+import { descargarTabla } from '../lib/archivos.js'
 
 // Días hábiles (no feriados) SIN cartola entre la última cargada y ayer, cuya cartola ya debió llegar. cov = Set de fechas 'YYYY-MM-DD' ya cubiertas
 // por cartola_cargas (días con carga registrada, aunque vinieran vacíos). Fuente de la alerta "faltan cartolas".
@@ -2681,8 +2682,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       movs.filter(m=>m.tipo==='abono'&&!m.es_interno).sort((a,b)=>(a.fecha||'')<(b.fecha||'')?1:-1).forEach(m=>{ const cc=concByMov[m.id]||[]; const fac=cc.find(c=>c.tipo_destino==='factura'); const fb=fac&&billing.find(b=>String(b.id)===String(fac.factura_id))
         const est=cc.length?(fac?'Conciliado':'Imputado'):(m.cliente_id?'Por conciliar':'Sin identificar')
         rows.push([fmtFechaDMY(m.fecha),m.rol_cuenta==='gastos'?'Gastos':'Honorarios',m.nombre_contraparte||'',m.rut_contraparte||'',cmap[m.cliente_id]||'',m.monto||0,est,fb?`N° ${folioN(fb.invoice_no)||''}`:'']) })
-      const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
-      const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`conciliacion_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+      descargarTabla(`conciliacion_${new Date().toISOString().slice(0,10)}`,rows)
     }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const concHub = hubOpen ? (()=>{
     const D=isDesktop

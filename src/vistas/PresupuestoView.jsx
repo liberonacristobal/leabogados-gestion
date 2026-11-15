@@ -3,7 +3,7 @@
 // Reglas puras en supabase/functions/_shared/presupuesto.js; datos de partida en lib/presupuestoDatos.js (cada cifra de su fuente única).
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, useIsDesktop, appConfirm } from '../lib/base.jsx'
+import { C, useIsDesktop, appConfirm, BtnDescarga } from '../lib/base.jsx'
 import { PageHeader, usePorFacturar, useArrastrePresupuesto } from '../lib/compartido.jsx'
 import { usePresupuestoDatos } from '../lib/presupuestoDatos.js'
 import { escenariosDe, nombreEscenario, estadoInicial, modeloPresupuesto, resumenModelo, migrarEstado, desglosarCostos, duplicarEscenario, renombrarEscenario, eliminarEscenario, moverEscenario, NOMBRE_COT_EMPLEADOR, migrarRotuloCotEmpleador, ID_SUBARRIENDO, partidaSubarriendo, proyectarUF } from '../../supabase/functions/_shared/presupuesto.js'
@@ -264,7 +264,7 @@ export function PresupuestoView({ sales = [], billing = [], terceros = [], costo
     {!D && !drill && <div style={{ fontSize: 12.5, color: guardado.est === 'error' ? C.overdueText : C.muted, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 6px', marginTop: -6 }}>
       <span title={estadoTxt}>{{ cargando: 'Cargando…', pendiente: 'Sin guardar', guardando: 'Guardando…', error: 'No se guardó', local: 'Guardado en este equipo', ok: 'Guardado' }[guardado.est] || 'Guardado'}</span>·
       <span role='button' className='pp-tac' onClick={() => ir({ drill: { t: 'ver' } })} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer', padding: '8px 2px', margin: '-8px 0' }}>Versiones ›</span>·
-      <span role='button' className='pp-tac' onClick={() => descargarExcel(X)} style={{ fontWeight: 700, color: C.accent, cursor: 'pointer', padding: '8px 2px', margin: '-8px 0' }}>Excel</span></div>}
+      <BtnDescarga onClick={() => descargarExcel(X)} titulo='Descargar Excel' n='sheet' /></div>}
     {!drill && <Pasos nombres={ETAPAS} activa={ui.etapa} hechos={est.hecho} onIr={irEtapa} anioBase={datos.anioBase} anio={anio} acciones={accionesPaso} debajo={ui.notaAbierta ? <Fld text ph='Nota del paso' value={est.notas[ui.etapa] || ''} onCommit={(v) => parche((c) => { c.notas[ui.etapa] = v })} /> : null} />}
     {cfgDe && <div style={{ background: C.avisoBg, border: `1px solid ${C.avisoLine}`, color: C.avisoText, borderRadius: 12, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}><span>Se muestra con la configuración de la versión «{cfgDe}».</span><span role='button' onClick={usarVigente} style={{ cursor: 'pointer', fontWeight: 700, color: C.accent }}>Usar la vigente ›</span></div>}
     {!drill && ui.etapa === 4 && <ResumenCascada margen={mm(e.base)} resultado={mm(e.post)} retiros={mm(e.retiros)} esc='Ideal' onMargen={() => ir({ etapa: 4, tab: 'imp' })} onResultado={() => ir({ etapa: 4, tab: 'imp' })} onRetiros={() => ir({ drill: { t: 'socios' } })} />}

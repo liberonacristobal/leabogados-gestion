@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
-import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
@@ -359,7 +359,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:8}}>
           <div style={{fontSize:20,fontWeight:600,color:C.text,fontFamily:"'DM Sans',sans-serif",letterSpacing:-.4}}>Ventas</div>
           <span style={{display:'flex',gap:8,alignItems:'center'}}>
-          {isDesktop&&<ActBtn onClick={()=>exportarVentas(ordenarVentas(selGroup?(grupos.find(g=>g.key===selGroup)?.rows||[]):listaVendido))} title='Descargar las ventas del filtro (Vendido)'><SIcon n='download' s={14} c={C.accent}/>Excel</ActBtn>}
+          {isDesktop&&<BtnDescarga onClick={()=>exportarVentas(ordenarVentas(selGroup?(grupos.find(g=>g.key===selGroup)?.rows||[]):listaVendido))} titulo='Descargar las ventas del filtro (Vendido)' n='sheet' />}
           <span onClick={()=>setMontoUF(v=>!v)} title='Alternar UF / pesos' style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,padding:2,cursor:'pointer',flexShrink:0}}>
             <span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:20,background:montoUF?C.accent:'transparent',color:montoUF?'#fff':C.done,lineHeight:1}}>UF</span>
             <span style={{fontSize:11,fontWeight:700,padding:'3px 12px',borderRadius:20,background:!montoUF?C.accent:'transparent',color:!montoUF?'#fff':C.done,lineHeight:1}}>$</span>
@@ -642,7 +642,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
               {isDesktop ? tablaVentas(rows,tUF,tCLP) : (<>
                 {(verTodasV?rows:rows.slice(0,8)).map(s=>saleRow(s,true))}
                 {rows.length>8&&<div onClick={()=>setVerTodasV(v=>!v)} style={{textAlign:'center',padding:'7px 0',fontSize:11,color:C.accent,fontWeight:600,cursor:'pointer'}}>{verTodasV?'Ver menos':`+ ${rows.length-8} más · ver todas`}</div>}
-                <div style={{marginTop:8}}><ActBtn full onClick={()=>exportarVentas(rows)}><SIcon n='download' s={14} c={C.accent}/>Descargar Excel</ActBtn></div>
+                <div style={{marginTop:8}}><BtnDescarga onClick={()=>exportarVentas(rows)} titulo='Descargar Excel' n='sheet' /></div>
                 {barraV}
               </>)}
             </div>

@@ -1,7 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtFechaDMY, folioN, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, saldosPorCliente, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
@@ -463,7 +463,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
                 {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L=>{ const has=!!byLetter[L]; return <span key={L} onClick={has?()=>{const el=document.getElementById(idFor(L));el&&el.scrollIntoView({behavior:'smooth',block:'start'})}:undefined} style={{fontSize:11,fontWeight:has?700:400,color:has?C.accent:C.toggleOff,cursor:has?'pointer':'default',padding:'1px 3px',lineHeight:1.15}}>{L}</span> })}
               </div>
             </div>
-            <div style={{marginTop:10}}><ActBtn full onClick={exportarExcel}><SIcon n='download' s={14} c={C.accent}/>Descargar Excel</ActBtn></div>
+            <div style={{marginTop:10}}><BtnDescarga onClick={exportarExcel} titulo='Descargar Excel' n='sheet' /></div>
             {barraC}
           </>)
         })()}

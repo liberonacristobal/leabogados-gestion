@@ -3,8 +3,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
-import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { AsignarClienteInline, Modal, NOTA_DIRIGIDO, _fechaISO, canonOtNN, cargarAdminsEstudio, claudeCall, driveCall, enviarComoUsuario, learnPut, normRut, pillPersonaSty, proyectoSeguro, saldoCliente, setLearningKV, txtEnviado, useAprendidosVenta, registrarError } from '../lib/compartido.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 
 // Compareciente vacío o de relleno ("N/A", "S/N", "-"): no identifica a nadie → no se propaga ni se aprende como alias.
 export const sinNombreReal = s => !String(s||'').replace(/^\s*(n\/?a\.?|s\/?n|sin (nombre|datos)|-+)\s*$/i,'').trim()
@@ -1293,11 +1294,9 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const exportarCargaCSV = () => {
     const cn=r=>r.client_id?(clients.find(c=>String(c.id)===String(r.client_id))?.name||r.clientName||''):(r.personal_de?`Personal · ${r.personal_de}`:'')
     const estadoRow=r=> r.error?(/de registro/i.test(r.error)?'De registro':'Anulada') : (dupInfo[r.id]?.otState||dupInfo[r.id]?.sinNum)?'Ya en la app' : (r.client_id?'A cliente':(r.suggestion?'Sugerida':'Sin cliente'))
-    const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
     const head=['OT','Fecha','Compareciente','Tramite','Cliente','Monto','Estado']
     const body=(rows||[]).map(r=>[otDe(r), r.fecha||'', r.nombre||r.requirente||'', r.materia||'', cn(r), r.monto||0, estadoRow(r)])
-    const csv=[head,...body].map(row=>row.map(esc).join(',')).join('\n')
-    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`carga_notaria_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    descargarTabla(`carga_notaria_${new Date().toISOString().slice(0,10)}`,[head,...body])
   }
 
   // Conciliación: calza cada fila con un gasto existente (por OT, si no por fecha+monto+glosa). Lo que calza se ACTUALIZA; el resto se IMPORTA.
@@ -1459,7 +1458,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       {resultado.importarDone&&!resultado.corregirDone&&resultado.actualizarPend>0&&<button disabled={guardando} onClick={aplicarCorregir} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.azulInfo,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginBottom:9,opacity:guardando?.6:1}}>{guardando?'…':`Ahora corrige las ${resultado.actualizarPend} →`}</button>}
       {notaria&&<div style={{display:'flex',gap:8,marginBottom:9}}>
         <button onClick={avisarSocios} disabled={avisadoSocios} style={{flex:1,padding:12,borderRadius:10,border:'none',background:avisadoSocios?C.done:C.normal,color:'#fff',fontSize:13,fontWeight:700,cursor:avisadoSocios?'default':'pointer'}}>{avisadoSocios?'Socios avisados':'Avisar a los socios'}</button>
-        <button onClick={exportarCargaCSV} title='Exporta la carga a CSV' style={{flexShrink:0,padding:'12px 16px',borderRadius:10,border:`1px solid ${C.azulInfo}`,background:'#fff',color:C.azulInfo,fontSize:13,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke={C.azulInfo} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>CSV</button>
+        <BtnDescarga onClick={exportarCargaCSV} titulo='Descargar Excel' n='sheet' />
       </div>}
       <button onClick={onClose} style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.accent,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Listo</button>
       {resultado.concil&&concilBefore&&concilBefore.length>0&&<button onClick={async()=>{ if(await appConfirm('¿Revertir las correcciones de cliente/categoría a como estaban antes?')){ const ok=await onUndoConciliar(concilBefore); if(ok){ setConcilBefore(null); onClose() } } }} style={{width:'100%',padding:12,borderRadius:10,border:`0.5px solid ${C.overdue}`,background:'#fff',color:C.overdue,fontSize:13,fontWeight:600,cursor:'pointer',marginBottom:9}}>Revertir correcciones ({concilBefore.length})</button>}

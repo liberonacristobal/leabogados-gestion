@@ -29,7 +29,7 @@ import { useOrden } from './lib/orden.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, descargarXlsx, useSeleccion } from './lib/seleccionLote.jsx'
 import { marcarEnviadaManual } from './lib/enviosCorreo.jsx'
 import { ClientePreview } from './lib/clientePreview.jsx'
-import { lazyVista, EsqueletoInicio, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost } from './lib/base.jsx'
+import { lazyVista, EsqueletoInicio, C, BRAND, MODULOS, MODULOS_CORE, MODULOS_OFF, moduloOn, fmt, fmtFechaDMY, fmtN, SEC_LBL, fmtRutCL, isoLocal, diaGrande, _ICON_PATHS, Gl, SIcon, _normTxt, folioN, PERSON_CHIP, personChip, Spin, appConfirm, appAlert, appPrompt, DESKTOP_MQ, useIsDesktop, CUENTA_HONORARIOS, setDialogHost, BtnDescarga } from './lib/base.jsx'
 import { LOGO_FACTURA_B64 } from './assets/logoFacturaB64'
 import {
   supabase, signInWithGoogle, signInWithMagicLink, signOut, onAuthChange, getSession,
@@ -103,6 +103,7 @@ const TasksOnlyView = lazyVista(() => import('./vistas/TasksOnlyView.jsx'), 'Tas
 const CobradoMesView = lazyVista(() => import('./vistas/CobradoMesView.jsx'), 'CobradoMesView')
 import { MesEnMarchaView, useMesEnMarcha } from './vistas/MesEnMarchaView.jsx'
 import { guardarLibro, cargarXlsx } from './lib/archivos.js'
+import { descargarTabla } from './lib/archivos.js'
 const FlujoCajaView = lazyVista(() => import('./vistas/FlujoCajaView.jsx'), 'FlujoCajaView')
 const PorFacturarView = lazyVista(() => import('./vistas/PorFacturarView.jsx'), 'PorFacturarView')
 const ClientsView = lazyVista(() => import('./vistas/ClientsView.jsx'), 'ClientsView')
@@ -1433,7 +1434,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
   else gs.sort((a,b)=>{ const fa=a.docs[0]?.fecha_emision||''; const fb=b.docs[0]?.fecha_emision||''; return String(fb).localeCompare(String(fa)) })
   const crearProv=async(g)=>{ if(!onSaveProveedor) return; if(!(await appConfirm(`Crear el proveedor "${titleCase(g.name||'')}" (RUT ${g.rut||'—'}) y vincular sus ${g.docs.length} documento${g.docs.length!==1?'s':''}. Es reversible. ¿Confirmas?`))) return; setBusy('p:'+g.rut); try{ const np=await onSaveProveedor({razon_social:g.name,rut:g.rut}); if(np){ const ids=g.docs.map(d=>d.id); await supabase.from('sii_compras_docs').update({proveedor_id:np.id}).in('id',ids); setRows(p=>p.map(x=>ids.includes(x.id)?{...x,proveedor_id:np.id}:x)) } }catch(e){ appAlert('No se pudo crear el proveedor: '+(e.message||e)) } setBusy(null) }
   const enlazarPago=async(d,m)=>{ if(!(await appConfirm(`Enlazar la factura N° ${d.folio} (${fmt(Math.round(Math.abs(d.monto)||0))}) con el cargo del banco del ${dmy(m.fecha)}. Es reversible. ¿Confirmas?`))) return; setBusy('m:'+d.id); try{ await supabase.from('sii_compras_docs').update({movimiento_id:m.id}).eq('id',d.id); setRows(p=>p.map(x=>x.id===d.id?{...x,movimiento_id:m.id}:x)) }catch(e){ appAlert('No se pudo enlazar: '+(e.message||e)) } setBusy(null) }
-  const exportar=()=>{ const H=['Folio','Fecha','Emisor','RUT','Tipo','Neto','IVA','Total','Proveedor','Pago']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=fil.map(d=>[d.folio,d.fecha_emision,d.emisor_name,d.emisor_rut,tipoLbl(d.tipo_dte),Math.round(sign(d)*(Number(d.neto)||0)),Math.round(sign(d)*(Number(d.iva)||0)),Math.round(sign(d)*(Number(d.monto)||0)),d.proveedor_id?'si':'no',d.movimiento_id?'enlazado':''].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`compras_iva${yr?'_'+yr:''}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
+  const exportar=()=>{ const H=['Folio','Fecha','Emisor','RUT','Tipo','Neto','IVA','Total','Proveedor','Pago']; const lines=fil.map(d=>[d.folio,d.fecha_emision,d.emisor_name,d.emisor_rut,tipoLbl(d.tipo_dte),Math.round(sign(d)*(Number(d.neto)||0)),Math.round(sign(d)*(Number(d.iva)||0)),Math.round(sign(d)*(Number(d.monto)||0)),d.proveedor_id?'si':'no',d.movimiento_id?'enlazado':'']); descargarTabla(`compras_iva${yr?'_'+yr:''}`,[H,...lines]) }
   const selSt={fontSize:12,fontWeight:600,border:`1px solid ${C.border}`,borderRadius:10,padding:'8px 10px',background:C.bgSoft,color:C.accent,cursor:'pointer'}
   const pillSt=(bg,fg)=>({fontSize:10,fontWeight:700,borderRadius:8,padding:'2px 6px',background:bg,color:fg,whiteSpace:'nowrap',flexShrink:0})
   return (<div>
@@ -1596,14 +1597,14 @@ function CalendarioTributarioView({isDesktop, onBack, origen, expenses=[], user}
     return <div style={{...card,overflow:'hidden'}}>{hd(d.titulo,<span onClick={()=>setSel(null)} style={{cursor:'pointer',color:C.accent,fontWeight:600}}>Cerrar</span>)}
       <div style={{marginTop:-1}}>{cuerpo}</div>
       {pend.length>1&&<div style={{padding:'9px 14px',borderTop:`1px solid ${C.track}`,display:'flex',justifyContent:'flex-end'}}>{btn(`Marcar las ${pend.length} presentadas`,()=>marcar(pend,true),true)}</div>}</div> })()
-  const anioCard=<div style={{...card,overflow:'hidden'}}>{hd('El año',<span style={{display:'inline-flex',gap:12,alignItems:'center'}}>{isDesktop&&<span>toca una celda para ver el detalle</span>}<button onClick={exportar} style={btnLink}>Exportar Excel</button></span>)}{tabla}</div>
+  const anioCard=<div style={{...card,overflow:'hidden'}}>{hd('El año',<span style={{display:'inline-flex',gap:12,alignItems:'center'}}>{isDesktop&&<span>toca una celda para ver el detalle</span>}<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' /></span>)}{tabla}</div>
   // ── Celular: próximos vencimientos (la tabla del año se despliega).
   const chip=(t,k)=><span style={{fontSize:12,fontWeight:600,borderRadius:12,padding:'3px 9px',whiteSpace:'nowrap',background:k==='pr'?C.soonBg:C.track,color:k==='pr'?C.soonText:C.muted}}>{t}</span>
   const filaDe={COT:'COT',F29:'F29',DJ:'DJ',F22:'F22',PATENTE:'PATENTE'}
   const listaCard=<div style={{...card,overflow:'hidden'}}>{hd('Próximos vencimientos',<span onClick={()=>setVerAnio(v=>!v)} style={{cursor:'pointer',color:C.azulInfo,fontWeight:600}}>{verAnio?'Ocultar el año':'Ver el año ›'}</span>)}
     {vencimientos.map((x,i)=>{ const d=_diasA(hoy,x.fecha); return <div key={i} onClick={()=>abrir(filaDe[x.k],colDe(x.fecha.slice(0,7)))} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderTop:i?`1px solid ${C.track}`:'none',cursor:'pointer'}}>
       {diaGrande(x.fecha)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{x.t}</div>{x.s&&<div style={{fontSize:12,color:C.textSoft,marginTop:1}}>{x.s}</div>}</div>{chip(d<=31?(d===0?'Hoy':`En ${d} días`):'Pendiente',d<=31?'pr':'pe')}</div> })}
-    {verAnio&&<div style={{borderTop:`1px solid ${C.track}`}}>{tabla}<div style={{padding:'9px 14px',textAlign:'right'}}><button onClick={exportar} style={btnLink}>Exportar Excel</button></div></div>}</div>
+    {verAnio&&<div style={{borderTop:`1px solid ${C.track}`}}>{tabla}<div style={{padding:'9px 14px',textAlign:'right'}}><BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' /></div></div>}</div>
   if(isDesktop) return wrap(<>{head}
     <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.5fr) minmax(0,1fr)',gap:14,alignItems:'start'}}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>{ciclosVer.map(cicloCard)}</div>
@@ -1892,15 +1893,14 @@ function EstadoResultadosModal({ ymInicial=null, foco=null, onOpenGasto=null, on
   ].filter(Boolean)
   const exportar = () => { try{ const head=['Mes','Ingresos','Costos','Comisiones','Resultado','Margen','Pago al SII F29 (aparte)']
     const rows=[...meses.map(m=>[mesL(m.ym),Math.round(m.ing),Math.round(m.cos),Math.round(m.com),Math.round(m.res),m.margen==null?'':m.margen.toFixed(1),Math.round(m.ppm)]),[String(Y),Math.round(tot.ing),Math.round(tot.cos),Math.round(tot.com),Math.round(tot.res),tot.ing?(tot.res/tot.ing*100).toFixed(1):'','']]
-    const esc=c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
-    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+[head,...rows].map(x=>x.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`estado_resultados_${Y}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
+    descargarTabla(`estado_resultados_${Y}`,[head,...rows]) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
   const navBtn = d => <button onClick={()=>nav(d)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:'pointer',color:C.muted,fontSize:13,display:'inline-flex',alignItems:'center',justifyContent:'center'}}><Gl n={d<0?'chevL':'chevron'}/></button>
   return (
     <div style={{display:'flex',flexDirection:'column',gap:isDesktop?12:10}}>
       <style>{`.er-c:hover{filter:brightness(.985)}`}</style>
       <div style={{display:'flex',alignItems:'center',justifyContent:isDesktop?'space-between':'center',gap:10}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>{navBtn(-1)}<span style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>{mesL(ym)}</span>{navBtn(1)}{isDesktop&&estadoChip}</div>
-        {isDesktop&&<button onClick={exportar} style={{fontSize:12,fontWeight:700,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><SIcon n='download' s={13} c={C.accent}/>Excel</button>}
+        {isDesktop&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
       </div>
       {!isDesktop&&<div style={{display:'flex',justifyContent:'center'}}>{estadoChip}</div>}
       {kpis}
@@ -5037,9 +5037,9 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
   const [abiertoSF,setAbiertoSF] = useState(()=>new Set())
   const cliDe = id => (clients||[]).find(c=>String(c.id)===String(id))
   const ventaDe = b => (sales||[]).find(s=>String(s.id)===String(b.sale_id))
-  const exportar = () => { const esc=c=>{ const x=String(c==null?'':c); return /[",\n;]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x }
+  const exportar = () => {
     const rows=[['Tipo','Cliente','Trabajo','Factura','Emitida','Vence','Monto']].concat(d.bills.map(b=>['Honorarios',cliDe(b.client_id)?.name||'',ventaDe(b)?.title||b.concept||'',`N° ${folioN(b.invoice_no)}`,fmtFechaDMY(String(b.issued_at||'').slice(0,10)),fmtFechaDMY(venceBill(b)),Math.round(saldoBill(b))]),d.gastos.map(x=>['Gastos por reembolsar',x.c.name,'','','','',Math.round(-x.saldo)]),d.sinFac.flatMap(g=>g.pagos.map(p=>['Pago sin factura',cliDe(g.client_id)?.name||'',g.venta?.title||'',p.aplicado?(p.nc?`Imputado a cuota ${p.nc.n}${p.nc.de?'/'+p.nc.de:''}`:'Imputado a cuotas'):'Pendiente de imputación',fmtFechaDMY(String(p.a.fecha||'').slice(0,10)),'',Math.round(Number(p.a.monto)||0)])))
-    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')],{type:'text/csv;charset=utf-8'})); a.download='por_cobrar_mis_clientes.csv'; document.body.appendChild(a); a.click(); a.remove() }
+    descargarTabla('por_cobrar_mis_clientes',rows) }
   const card = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
   const num = {fontVariantNumeric:'tabular-nums'}
   // Recordar cobro: el mismo correo de la ficha (recordarCobroFactura), desde su cuenta y con copia a los administradores.
@@ -5047,7 +5047,7 @@ function PorCobrarMiosPage({clients=[], sales=[], billing=[], expenses=[], antic
   const lk = (txt,col,on) => <span onClick={e=>{e.stopPropagation();on()}} style={{color:col,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>{txt} <Gl n='chevron'/></span>
   const fila = (key,left,mid,right,onClick) => <div key={key} onClick={onClick} className={onClick?'lf-row':undefined} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:onClick?'pointer':'default',minWidth:0}}>{left}<div style={{flex:1,minWidth:0}}>{mid}</div>{right}</div>
   return (<div>
-    <PageHeader origen={origen} onBack={onBack} titulo='Cuentas por cobrar' ctx={isDesktop?`${d.clis.length} cliente${d.clis.length!==1?'s':''}`:null} right={<ActBtn variant='ghost' onClick={exportar} title='Descargar Excel'><SIcon n='download' s={14} c={C.accent}/>{isDesktop?'Excel':''}</ActBtn>}/>
+    <PageHeader origen={origen} onBack={onBack} titulo='Cuentas por cobrar' ctx={isDesktop?`${d.clis.length} cliente${d.clis.length!==1?'s':''}`:null} right={<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}/>
     <div style={{padding:isDesktop?'14px 24px 40px':'12px 14px 40px',maxWidth:960,margin:'0 auto',display:'flex',flexDirection:'column',gap:12}}>
       <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.4fr 1fr':'1fr',gap:10}}>
         <div style={{...card,padding:'14px 16px'}}>

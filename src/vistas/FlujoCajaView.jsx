@@ -2,7 +2,7 @@
 // No calcula nada propio: lee useFlujoCaja (flujoCajaProyectado, la misma cifra de Inicio, Oficina y Panel). El escenario «Sin morosos» deja fuera a los
 // clientes con facturas morosas; «Con morosos» los proyecta como a cualquier otro.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert } from '../lib/base.jsx'
+import { C, SIcon, isoLocal, fmtFechaDMY, folioN, appAlert, BtnDescarga } from '../lib/base.jsx'
 import { useFlujoCaja, useEscenarioFlujo, fmtMill, MES_C } from '../lib/compartido.jsx'
 import { useControlProyeccion } from '../lib/controlProyeccionHook.js'
 import { useOrden } from '../lib/orden.jsx'
@@ -280,7 +280,7 @@ export function FlujoCajaView({ billing: billingTodo = [], costosOfiRows = [], t
       {seg(simOn ? 'sim' : conMorG ? 'todo' : 'cons', v => { if (v === 'sim') setSimOn(true); else { setSimOn(false); setConMor(v === 'todo') } }, [['cons', 'Sin morosos'], ['todo', 'Con morosos'], ['sim', 'Simular']])}
       {seg(gran, setGran, [['sem', '8 semanas'], ['mes', 'Meses']])}
       {seg(vista, setVista, VISTAS)}
-      <span style={{ flex: 1 }} />{btn('Excel', descargar, 'download')}</div>
+      <span style={{ flex: 1 }} /><BtnDescarga onClick={descargar} titulo='Descargar Excel' n='sheet' /></div>
     {simOn && simPanel}
     <div style={{ fontSize: 12, color: C.textSoft, marginTop: -4 }}>{simOn ? 'Simulación: parte de «Sin morosos» y suma el cobro que escribas; no guarda nada. Las tarjetas muestran las próximas 8 semanas.' : conMor ? 'Incluye los demás cobros de los clientes con facturas morosas; las facturas morosas no se proyectan.' : `Sin los cobros de los ${morosoDe.size} clientes con facturas morosas.`}{gran === 'mes' ? ' Los egresos se proyectan a 8 semanas.' : ''}</div>
     <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 8 }}>

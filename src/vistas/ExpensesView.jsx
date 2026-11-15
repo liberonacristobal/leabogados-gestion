@@ -9,7 +9,7 @@ import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGast
 import { AsignarProyectoRS } from '../lib/fichaCliente.jsx'
 import { subproyectosCliente, useAprendidosVenta, useIaVenta } from '../lib/compartido.jsx'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
-import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
@@ -17,7 +17,7 @@ import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
-import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
+import { guardarLibro, cargarXlsx, descargarTabla } from '../lib/archivos.js'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -372,7 +372,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
       {conRegistro&&<div style={{display:'inline-flex',border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',background:C.surface}}>
         {[['cliente','Cliente'],['mes','Mes'],['tipo','Tipo']].map(([k,l])=><button key={k} onClick={()=>setAgrupar(k)} style={{fontSize:12,fontWeight:600,padding:'6px 11px',border:'none',cursor:'pointer',background:agrupar===k?C.accent:'transparent',color:agrupar===k?'#fff':C.muted}}>{l}</button>)}
       </div>}
-      {conRegistro&&D&&<button onClick={exportar} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Exportar Excel</button>}
+      {conRegistro&&D&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
     </div>
   // Hub: una tarjeta por subcategoría; las cifras siguen al buscador y al mes. «Por asignar» se abre desde la foto (no se repite).
   if(!sub){
@@ -1667,8 +1667,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       name='historial_notaria'
     }
     if(!rows.length){ appAlert('No hay registros para exportar con estos filtros.'); return }
-    const csv=[headers,...rows].map(r=>r.map(esc).join(';')).join('\n')
-    try{ const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=`${name}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),1000) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) }
+    try{ descargarTabla(name,[headers,...rows]) }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) }
   }
   // Sección de historial dentro de la ficha del cliente (solo rendiciones del cliente actual)
   const selStyle = {padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bgSoft,fontSize:12,boxSizing:'border-box',outline:'none',width:'100%'}
@@ -2152,7 +2151,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       <div style={{display:'flex',gap:6,flexWrap:D?'wrap':'nowrap',overflowX:D?'visible':'auto',minWidth:0,flex:D?'0 1 auto':'1 1 auto'}}>{abgs.map(pillBtn)}</div>
       {verBorr&&autores.length>0&&<select value={autorDef} onChange={e=>setAutor(e.target.value)} style={sel}><option value='Todos'>Hechos por todos</option>{autores.map(a=><option key={a} value={a}>{a===currentUserName?'Hechos por mí':`Hechos por ${a}`}</option>)}</select>}
       {!verLista&&<select value={ord} onChange={e=>setOrd(e.target.value)} style={sel}><option value='ant'>Más antiguo primero</option><option value='rec'>Más reciente primero</option><option value='monto'>Mayor monto</option><option value='az'>A–Z</option></select>}
-      {D&&!verLista&&<button onClick={exportar} style={{...sel,display:'inline-flex',alignItems:'center',gap:6,cursor:'pointer'}}><SIcon n='download' s={14} c={C.accent}/>Excel</button>}
+      {D&&!verLista&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
       {D&&verBorr&&selArm.length>0&&<button onClick={()=>setConfEnv(true)} style={{fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'8px 16px',cursor:'pointer',background:C.normal,color:'#fff',whiteSpace:'nowrap',marginLeft:'auto'}}>{txtEnviar()}</button>}
     </div>
     {verBorr ? borrTable : verLista ? envTable : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
@@ -2451,7 +2450,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       await noNUpdate(item,{estado:item.consultadaAt?'consultada':'pendiente',resolucion:null,resuelta_at:null,resuelta_por:null},{accion:'reabierta',detalle:'Volvió a la revisión'})
     }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) }
   }
-  const csvDownload = (name, rows2d) => { try{ const csv=rows2d.map(r=>r.map(c=>{ const s=String(c==null?'':c); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href) }catch(err){ appAlert('Error al exportar: '+err.message) } }
+  const csvDownload = (name, rows2d) => { try{ descargarTabla(name,rows2d) }catch(err){ appAlert('Error al exportar: '+err.message) } }
   // Parte B (desktop 2-panel): ↑/↓ recorren la lista de clientes (misma que el panel izq), Esc vuelve al dashboard. No dispara si escribes o hay un modal.
   useEffect(()=>{ if(!isDesktop) return
     const h=e=>{
@@ -2593,9 +2592,9 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
               const castPorSocio = Object.entries(castigos.reduce((m,x)=>{ const o=(m[x.socio]=m[x.socio]||{tot:0,cli:new Set(),n:0}); o.tot+=x.monto; o.cli.add(String(x.e.client_id)); o.n++; return m },{})).sort((a,b)=>b[1].tot-a[1].tot)
               const castVis = castSocio ? castigos.filter(x=>x.socio===castSocio) : castigos
               const castTot = castVis.reduce((a,x)=>a+x.monto,0)
-              const exportCast = ()=>{ const esc=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`; const H=['Fecha gasto','Fecha castigo','Socio','Cliente','Gasto','Monto','Castigó']
-                const lines=castVis.map(x=>[x.fGasto?fmtFechaDMY(x.fGasto):'',fmtFechaDMY(x.fecha),x.socio,(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'',x.e.concept||'',Math.round(x.monto),x.quien].map(esc).join(';'))
-                const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+[H.map(esc).join(';'),...lines].join('\n')],{type:'text/csv;charset=utf-8'})); a.download=`castigos${castSocio?'_'+castSocio:''}.csv`; document.body.appendChild(a); a.click(); a.remove() }
+              const exportCast = ()=>{ const H=['Fecha gasto','Fecha castigo','Socio','Cliente','Gasto','Monto','Castigó']
+                const lines=castVis.map(x=>[x.fGasto?fmtFechaDMY(x.fGasto):'',fmtFechaDMY(x.fecha),x.socio,(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'',x.e.concept||'',Math.round(x.monto),x.quien])
+                descargarTabla(`castigos${castSocio?'_'+castSocio:''}`,[H,...lines]) }
               const castBlock = castigos.length>0&&(
                 <div style={{marginBottom:12}}>
                   <div style={{...SEC_LBL,margin:'0 2px 6px'}}>Castigos · a cargo de la oficina</div>
@@ -2924,7 +2923,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             c.gs.forEach(e=>{ const [lbl]=estOf(e); body.push([fmtOt(e.ot_number)||'s/OT', e.concept||'', cnOf(e), e.amount||0, c.status==='undone'?'Deshecha':lbl, '', c.filename||'', fch]) })
             ;(c.resumen?.erroresDet||[]).forEach(er=> body.push([er.ot||'s/OT', er.nombre||'', '', '', 'Con error · no cargada', er.motivo||'', c.filename||'', fch]))
             ;(c.resumen?.noNuestras||[]).forEach(nn=> body.push([nn.ot||'s/OT', nn.motivo||nn.nombre||'', '', nn.monto||'', 'No es nuestra · no cargada', 'avisar a la notaría', c.filename||'', fch])) })
-          const csv=[head,...body].map(r=>r.map(esc).join(';')).join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`historial_cargas_notaria_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href) }
+          descargarTabla(`historial_cargas_notaria_${new Date().toISOString().slice(0,10)}`,[head,...body]) }
         return (
           <div style={{padding:D?'8px 20px 60px':'6px 12px 40px',maxWidth:D?820:undefined,margin:'0 auto'}}>
             <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
@@ -3440,7 +3439,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <span style={{fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',color:C.text}}>{fmt(e.amount)}</span>
                 </div>) })}
               <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
-                <button onClick={()=>descargarExcelNota(r)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>↓ Excel</button>
+                <BtnDescarga onClick={()=>descargarExcelNota(r)} titulo='Descargar Excel' n='sheet' />
                 {est==='por_enviar'&&<button onClick={()=>{abrirEnvioNotaria(r)}} style={{fontSize:10,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>Enviar</button>}
                 {est==='enviada'&&<button onClick={()=>reenviarNotaria(r)} disabled={reenviando===r.id} style={{fontSize:10,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 10px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'Reenviar'}</button>}
                 {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' style={{fontSize:10,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px'}}>Ver comprobante</a>}
@@ -3902,7 +3901,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div style={{padding:'2px 0 0'}}>
               {/* Pestañas: separa rendiciones a CLIENTES de liquidaciones a NOTARÍA */}
               {(()=>{ const tab=(id,lbl)=>{ const on=histTab===id; return <button onClick={()=>setHistTab(id)} style={{fontSize:13,fontWeight:600,background:on?C.accent:'#fff',color:on?'#fff':C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>{lbl}</button> }
-                void tab; return <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}><button onClick={()=>exportHist()} title='Exportar a CSV' style={{marginLeft:'auto',fontSize:11,fontWeight:600,background:'none',border:'none',color:C.azulInfo,cursor:'pointer',padding:'2px 4px'}}>Exportar ↓</button><button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:14,fontWeight:600,background:'none',border:'none',color:C.muted,cursor:'pointer',padding:'2px 4px',lineHeight:1}}>{histOrden==='nuevo'?'↓':'↑'}</button></div> })()}
+                void tab; return <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center'}}><BtnDescarga onClick={()=>exportHist()} titulo='Descargar Excel' n='sheet' /><button onClick={()=>setHistOrden(o=>o==='nuevo'?'antiguo':'nuevo')} title='Ordenar por fecha' style={{fontSize:14,fontWeight:600,background:'none',border:'none',color:C.muted,cursor:'pointer',padding:'2px 4px',lineHeight:1}}>{histOrden==='nuevo'?'↓':'↑'}</button></div> })()}
               {/* Foto: protagonista "Rendido en el año" + alertas de acción anidadas (canon de la foto). Cero recálculo: sale de rendiciones/rendirPend/notaPendTotal. */}
               {(()=>{
                 const yr = hAnio || String(new Date().getFullYear())
@@ -3986,7 +3985,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                     {open&&<div style={{padding:'6px 2px 10px 54px',borderBottom:`0.5px solid ${C.border}`}}>
                       {r.ot_numbers&&<div style={{fontSize:10,color:C.azulInfo,fontWeight:600,marginBottom:7}}>OT: {r.ot_numbers}</div>}
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        <button onClick={e=>{e.stopPropagation();descargarExcelNota(r)}} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>↓ Excel</button>
+                        <BtnDescarga onClick={e=>{e.stopPropagation();descargarExcelNota(r)}} titulo='Descargar Excel' n='sheet' />
                         {est==='por_enviar'&&<button onClick={e=>{e.stopPropagation();abrirEnvioNotaria(r)}} style={{fontSize:11,fontWeight:600,color:'#fff',background:C.accent,border:'none',borderRadius:8,padding:'4px 10px',cursor:'pointer'}}>Enviar</button>}
                         {est==='enviada'&&<button onClick={e=>{e.stopPropagation();reenviarNotaria(r)}} disabled={reenviando===r.id} style={{fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 10px',cursor:reenviando===r.id?'default':'pointer',opacity:reenviando===r.id?.6:1}}>{reenviando===r.id?'Reenviando…':'Reenviar'}</button>}
                         {r.comprobante_url&&<a href={r.comprobante_url} target='_blank' rel='noreferrer' onClick={e=>e.stopPropagation()} style={{fontSize:11,fontWeight:600,color:C.azulInfo,textDecoration:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 10px'}}>Ver comprobante</a>}

@@ -9,6 +9,7 @@ import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY,
 import { Fragment } from 'react'
 import { esSubarriendo, redondearPartes, kpisPorSocio, partesM, partesPctEnt } from './cifras.js'
 import { usePropuestasNoCuentan, ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, usePorSocioFuentes, useUF, vendidoPorSocio } from './compartido.jsx'
+import { descargarTabla } from './archivos.js'
 
 // Última posición de la vista (pestaña, período y fila abierta): al volver desde una ficha se regresa al mismo lugar.
 let _psMem=null
@@ -326,8 +327,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const exportar=()=>{ try{
     const rows=[['Fecha','Socio','Sección','Concepto','Cliente','Folio','Detalle','Monto']]
     P.filter(r=>inPer(r.d,'ytd')).sort((a,b)=>String(a.d).localeCompare(String(b.d))).forEach(r=>rows.push([fmtFechaDMY(r.d),L(r.soc),SECL[r.s],CON[r.s][r.k],nm(r.cid),r.doc,r.det,Math.round(r.m)]))
-    const csv=rows.map(r=>r.map(c=>{const s=String(c==null?'':c);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(';')).join('\n')
-    const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`por_socio_${ym}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+    descargarTabla(`por_socio_${ym}`,rows)
   }catch(e){ appAlert('No se pudo exportar: '+(e.message||e)) } }
 
   const seg=(opts,val,set)=><span style={{display:'inline-flex',background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:2,flex:isDesk?'none':(opts.length>2?'1 1 100%':'none')}}>{opts.map(([k,l])=><button key={k} onClick={()=>set(k)} style={{flex:isDesk?'none':1,fontSize:12,fontWeight:700,border:0,borderRadius:14,padding:'5px 13px',cursor:'pointer',background:val===k?C.accent:'transparent',color:val===k?'#fff':C.muted}}>{l}</button>)}</span>

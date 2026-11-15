@@ -3,9 +3,10 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, getDriveToken, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
-import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, Gl, PERSON_CHIP, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { PaginaSobre, CART_DOT, DriveAuthError, INICIALES_RESP, Modal, PREC_FOLDERS, SEÑAL_COL, _norm, cargarMammoth, cargarPdfjs, cartDias, cartDiasPlazo, carteraMovimiento, claudeCall, promptConCache, costoVentaUF, daysLeft, driveCall, driveToken, esPermanente, esRecurrente, facturaEmitida, leerDriveTextoSA, mesCorto, nDias, readUFCache, setLearningKV, taskAssignees, useArrastre, usePersistedState, ventaCLP, registrarError } from '../lib/compartido.jsx'
 import { DocumentosDrive } from '../lib/fichaCliente.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 
 export async function driveFetchBufAuth(url){   // como driveGetAuth pero devuelve el ArrayBuffer (para leer el contenido del archivo)
   let token=await driveToken()
@@ -879,8 +880,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       const rows=[['Tipo','Detalle','Plazo','Fecha real','Estado']]
       _pasosOrd().forEach(h=>{ rows.push(['Paso',h.titulo,h.plazo||'',h.fecha||'',h.hecho?'Hecho':'Pendiente']); ents.filter(e=>String(e.hito_id||'')===String(h.id)).forEach(e=>rows.push(['· etapa',e.texto,'','',e.hecho?'Hecha':'Pendiente'])) })
       tks.forEach(t=>rows.push(['Tarea',t.title||'',t.due||'','',t.status||'Abierta']))
-      const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
-      const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`cronograma_${(p.nombre_proyecto||'proyecto').replace(/[^\w]+/g,'_')}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
+      descargarTabla(`cronograma_${(p.nombre_proyecto||'proyecto').replace(/[^\w]+/g,'_')}`,rows)
     }
     // Carta Gantt descargable (imprimible → PDF): un paso por fila, con PLANIFICADO (plazo, rombo contorno) vs REAL (fecha hecha, rombo verde) sobre un eje de meses. Para reunión/cliente. (Barras/marcadores van en el PDF, no en la UI — regla "no barras" es para pantalla.)
     const descargarGantt = () => {
@@ -1425,12 +1425,10 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
       <div style={{ fontSize:11, fontWeight:700, color:C.muted, flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{avanceDe(p)}</div><span style={{ color:C.textSoft, fontSize:13, flexShrink:0 }}><Gl n='chevron'/></span>
     </div>
     const exportar = () => {
-      const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`
       const rows=[['Operación','Proyectos','Pasos hechos','Pasos totales','Pasos con fecha','A tiempo','% a tiempo']]
       opRows.forEach(o=>rows.push([o.nombre,o.nProy,o.done,o.total,o.conFecha,o.aTiempo,o.conFecha?Math.round(o.aTiempo/o.conFecha*100)+'%':'—']))
       rows.push([]); rows.push(['Cumplimiento global',cumpl!=null?cumpl+'%':'—']); rows.push(['Pasos a tiempo',aTiempo]); rows.push(['Pasos tarde',tarde]); rows.push(['Pasos pendientes vencidos',pendVenc])
-      const csv='﻿'+rows.map(r=>r.map(esc).join(';')).join('\n')
-      const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='metricas_pmo.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),500)
+      descargarTabla('metricas_pmo',rows)
     }
     const stat = (n,l,col,onClick) => <div onClick={onClick} style={{ flex:1, padding:'10px 8px', textAlign:'center', cursor:onClick?'pointer':'default' }}><div style={{ fontSize:19, fontWeight:800, color:n>0?col:C.muted, letterSpacing:'-.02em' }}>{n}</div><div style={{...SEC_LBL,marginTop:1}}>{l}</div></div>
     return (
@@ -1439,7 +1437,7 @@ export function CarteraView({ proyectos=[], setProyectos, proyEquipo=[], proySeg
           <button onClick={()=>setMetOpen(false)} style={{ background:'none', border:'none', color:C.muted, fontSize:13, fontWeight:600, cursor:'pointer', padding:0, marginBottom:9 }}><Gl n='chevL'/> Mis proyectos</button>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ fontSize:19, fontWeight:700, color:C.accent, letterSpacing:'-.01em' }}>Cumplimiento</div>
-            {conPlan.length>0 && <span onClick={exportar} style={{ marginLeft:'auto', fontSize:11, fontWeight:600, color:C.azulInfo, cursor:'pointer', border:`1px solid ${C.border}`, borderRadius:8, padding:'4px 10px', whiteSpace:'nowrap' }}>Exportar CSV ↓</span>}
+            {conPlan.length>0 && <span style={{ marginLeft:'auto' }}><BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' /></span>}
           </div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{selPer&&selPer!=='all'?(NOMBRE_DE_INI[selPer]||selPer):'Toda la oficina'} · {conPlan.length} proyecto{conPlan.length!==1?'s':''} con plan</div>
         </div>

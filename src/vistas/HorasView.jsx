@@ -7,6 +7,7 @@ import { demoData } from '../demoData'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop } from '../lib/base.jsx'
 import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
 import { RendicionModal } from '../lib/rendiciones.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 
 // FUENTE ÚNICA del documento de rendición (HTML imprimible). La usan el historial ("Ver PDF")
 // y RendicionModal (al enviar), para que ambos PDFs sean idénticos. Recibe datos ya normalizados.
@@ -153,12 +154,9 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
   useEffect(()=>{ if(undoH){ const t=setTimeout(()=>setUndoH(null),6000); return ()=>clearTimeout(t) } },[undoH])
   // F4 — Exportar mis horas a CSV (separador ';' y coma decimal para Excel es-CL; BOM para acentos).
   const exportarCSV = () => {
-    const esc = v => { const s=String(v==null?'':v); return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s }
-    const head = ['fecha','cliente','horas','glosa','facturable','abogado','fuente']
-    const body = misHoras.map(h=>[h.fecha, cn(h.client_id), String(Number(h.horas)||0).replace('.',','), h.glosa||'', h.billable===false?'no':'si', h.user_name||'', h.source||''].map(esc).join(';'))
-    const csv = '﻿'+[head.join(';'),...body].join('\n')
-    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
-    const a=document.createElement('a'); a.href=url; a.download='horas_'+hoy+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500)
+    const head = ['Fecha','Cliente','Horas','Glosa','Facturable','Abogado','Fuente']
+    const body = misHoras.map(h=>[h.fecha, cn(h.client_id), Number(h.horas)||0, h.glosa||'', h.billable===false?'no':'si', h.user_name||'', h.source||''])
+    descargarTabla('horas_'+hoy,[head,...body])
   }
   // Read-back del calendario (Fase 3): lee la agenda del día y propone entradas (duración = duración del evento).
   const [agenda,setAgenda] = useState([]); const [agLoading,setAgLoading]=useState(false); const [agDone,setAgDone]=useState(false); const [agq,setAgq]=useState({})

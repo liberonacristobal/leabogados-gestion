@@ -17,7 +17,7 @@ import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.j
 import { partesMes } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { FACTURACION_ROOT } from '../../supabase/functions/_shared/pdfOficialReglas.js'
 import { desescaparXml } from '../../supabase/functions/_shared/xmlTexto.js'
-import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
+import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop, BtnDescarga } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { Fragment } from 'react'
 import { cuentaEnSaldo } from '../../supabase/functions/_shared/gastosReglas.js'
@@ -1865,7 +1865,7 @@ export function MovilizacionView({expenses, clients, persona=null, isAdmin=false
     <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
       <select value={anio} onChange={e=>{setAnio(e.target.value);setAbierto(null)}} style={{...pill(true),outline:'none'}}>{(anios.length?anios:[anio]).map(y=><option key={y} value={y}>{y}</option>)}</select>
       {todos.length>1&&<>{[null,...todos].map(p=><span key={p||'todos'} onClick={()=>{setPer(p);setAbierto(null)}} style={pill(per===p)}>{p||'Todos'}</span>)}</>}
-      <span onClick={exportar} title='Descargar Excel' style={{marginLeft:'auto',...pill(false),display:'inline-flex',alignItems:'center',gap:5}}><SIcon n='download' s={13} c={C.accent}/>Excel</span>
+      <BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />
     </div>
     <div style={{...card,padding:'14px 16px'}}>
       <div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>Movilización {anio}</div>

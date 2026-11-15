@@ -7,6 +7,7 @@ import { EscenariosRetiro } from './EscenariosRetiro.jsx'
 import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 
 // Comisión del mes = terceros_pagos pagados en el mes.
 
@@ -182,7 +183,7 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
   const mesTot=m=>{ const rs=rondasByMes[m]||[]; return {a:rs.reduce((x,r)=>x+(r[A]||0),0),b:rs.reduce((x,r)=>x+(r[B]||0),0)} }
   const sugSocio=r=>{ let a=0,b=0; rondas.forEach(x=>{ a+=(x[A]||0); b+=(x[B]||0) }); return a<=b?A:B }
   const asignar=async(r,soc)=>{ if(!(await appConfirm(`Asignar este retiro de ${fmt(r.amt)} (${fechaLbl(r.d0,r.d1)}) a ${soc}. Es reversible. ¿Confirmas?`))) return; setBusy(r.socio+'|'+r.d0); try{ const ids=r.movs.map(x=>x.e.id); await supabase.from('expenses').update({subcategory:soc,updated_at:new Date().toISOString()}).in('id',ids); setExpenses&&setExpenses(p=>p.map(x=>ids.includes(x.id)?{...x,subcategory:soc}:x)) }catch(err){ appAlert('No se pudo asignar: '+(err.message||err)) } setBusy(null) }
-  const exportar=()=>{ const H=['Socio','Fecha','Monto','Transferencias']; const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`; const lines=[...retSoc].sort((a,b)=>a.socio.localeCompare(b.socio)||a.d0.localeCompare(b.d0)).map(r=>[r.socio,r.d0,Math.round(r.amt),r.movs.length].map(esc).join(',')); const csv=[H.map(esc).join(','),...lines].join('\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`retiros_socios_${yr}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000) }
+  const exportar=()=>{ const H=['Socio','Fecha','Monto','Transferencias']; const lines=[...retSoc].sort((a,b)=>a.socio.localeCompare(b.socio)||a.d0.localeCompare(b.d0)).map(r=>[r.socio,r.d0,Math.round(r.amt),r.movs.length]); descargarTabla(`retiros_socios_${yr}`,[H,...lines]) }
   const seg=(val,set,opts)=><span style={{display:'inline-flex',background:C.bgSoft,border:`1px solid ${C.border}`,borderRadius:20,overflow:'hidden'}}>{opts.map(([v,l])=><span key={v} onClick={()=>set(v)} style={{fontSize:11,fontWeight:700,padding:'6px 13px',cursor:'pointer',background:val===v?C.accent:'transparent',color:val===v?'#fff':C.muted}}>{l}</span>)}</span>
   const card={background:'#fff',border:`1px solid ${C.border}`,borderRadius:18,overflow:'hidden',marginBottom:16}
   const _thB=`1px solid ${C.border}`

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
-import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, useIsDesktop } from './base.jsx'
+import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, useIsDesktop, BtnDescarga } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { Fragment } from 'react'
 import { anticiposDisponibles } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -1403,7 +1403,7 @@ export function PropiedadesVenta({client, sale, isDesktop, props}){
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder={D?'Buscar rol, lote, dirección o propietario':'Buscar rol o propietario'} style={{border:'none',background:'none',outline:'none',fontSize:13,color:C.text,width:'100%',minWidth:0}}/>
         </div>
         {propietarios.length>1&&<select value={prop} onChange={e=>setProp(e.target.value)} style={selSty}><option value=''>Todos los propietarios</option>{propietarios.map(x=><option key={x} value={x}>{_nomProp(x)}</option>)}</select>}
-        {D&&<button onClick={exportar} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Excel</button>}
+        {D&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
         {!D&&<button onClick={()=>setNuevo(v=>!v)} style={{fontSize:13,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Rol</button>}
       </div>
       {nuevo&&<div style={{borderTop:`1px solid ${C.track}`,padding:'10px 12px',display:'grid',gridTemplateColumns:D?'minmax(0,1fr) minmax(0,.7fr) minmax(0,1.3fr) minmax(0,1.3fr) auto':'1fr 1fr',gap:8,alignItems:'stretch'}}>
