@@ -42,6 +42,11 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   const ufDias = useUFFechas(billing)   // UF de cada día (mindicador): las cifras del año en UF se convierten con la UF del día de cada movimiento
   const ufDeVenta = s => ventaUF(s, ufRef)
   const clpDeVenta = s => ventaCLP(s, ufRef)
+  // Vendido de un MES (ventas activadas en el mes, la regla del Informe del mes): bruto, costos de terceros (comisionesVenta) y neto, en pesos y en UF nominales; la misma fórmula del año.
+  const vendidoMes = (ymX) => { const l = sales.filter(s=>s&&!s.deleted_at&&['Activo','Terminado'].includes(s.status)&&!esSubarriendo(s)&&String(s.activated_at||'').slice(0,7)===ymX)
+    const bruto=Math.round(l.reduce((a,s)=>a+clpDeVenta(s),0)), costo=Math.round(l.reduce((a,s)=>a+comisionesVenta(s,terceros,billing,ufRef).anual,0))
+    const brutoUF=l.reduce((a,s)=>a+ufDeVenta(s),0), costoUF=l.reduce((a,s)=>{ const u=parseFloat(s.uf_value)||ufRef; return a+(u>0?comisionesVenta(s,terceros,billing,ufRef).anual/u:0) },0)
+    return {bruto,costo,neto:bruto-costo,brutoUF,costoUF,netoUF:brutoUF-costoUF} }
   const targets = useAnnualTargets()
   // Métricas de un año desde sales (vendido), misma fórmula que el cálculo central
   const metricasAnio = (year) => {
@@ -85,7 +90,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       // Antes esto caía a "sin año" aunque el documento SÍ tuviera fecha (facturas emitidas y anticipos/pagos conciliados).
       return yrDe(docFecha)
     }
-    const byMonth={}, byMonthUF={}
+    const byMonth={}, byMonthUF={}, percByMonth={}, percByMonthUF={}
     let total=0, totalUF=0, sinMontoUF=0, percibidasUF=0, cajaSubarrUF=0, cajaReembUF=0, cajaExtUF=0, sinMonto=0, sinN=0, percibidas=0, cajaSubarr=0, cajaReemb=0, cajaExt=0; const byYear={}, byYearUF={}; const listByYear={}; const sinList=[]; const percList=[]; const cajaList=[]   // depósitos que no son cobrado propio (subarriendo, reembolsos, externos), con su fecha: el control de la proyección los suma
     ingConc.forEach(c=>{
       const m=abonoById[String(c.movimiento_id)]; if(!m) return
@@ -97,7 +102,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
         const b=billById[String(c.factura_id)]
         if(b&&b.billing_type==='reembolso'){ cajaList.push({ id:'cr-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaReemb+=monto; cajaReembUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); return } // reembolso de gastos: devuelve plata, no son honorarios
         const ex=extByBill[String(c.factura_id)]
-        if(ex){ cajaList.push({ id:'ce-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaExt+=monto; cajaExtUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percibidasUF+=p/ufDelDia(ufDias,m.fecha,ufRef); percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
+        if(ex){ cajaList.push({ id:'ce-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:monto }); cajaExt+=monto; cajaExtUF+=monto/ufDelDia(ufDias,m.fecha,ufRef); const base=ex.com+ex.mto; const p=base>0?monto*ex.com/base:0; percibidas+=p; percibidasUF+=p/ufDelDia(ufDias,m.fecha,ufRef); { const ymP=String(m.fecha||'').slice(0,7); percByMonth[ymP]=(percByMonth[ymP]||0)+p; percByMonthUF[ymP]=(percByMonthUF[ymP]||0)+p/ufDelDia(ufDias,m.fecha,ufRef) } percList.push({ id:'cp-'+c.movimiento_id+'-'+String(c.factura_id), client_id:b?.client_id||m.cliente_id, folio:b?.invoice_no, paid_at:m.fecha, _cobrado:p }); return }
         const fo=b&&fondoEnFac[String(b.id)]
         if(fo){ const mf=montoFactura(b)||monto, r=monto*Math.min(1,fo/mf); cajaList.push({ id:'cr-'+c.movimiento_id+'-'+String(c.factura_id), paid_at:m.fecha, _cobrado:r }); cajaReemb+=r; cajaReembUF+=r/ufDelDia(ufDias,m.fecha,ufRef); monto-=r; if(monto<1) return }
       }
@@ -116,7 +121,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     const anteriores = Math.max(0, total - delAnio - sinMonto)
     const prioYears = Object.keys(byYear).map(Number).filter(y=>y<selYear).sort((a,b)=>b-a)
     const allYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a)
-    return {byMonth,byMonthUF,total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
+    return {byMonth,byMonthUF,percByMonth,percByMonthUF,total,totalUF,sinMontoUF,percibidasUF,byYear,byYearUF,delAnio,anteriores,sinMonto,sinN,prioYears,allYears,listByYear,sinList,porIdentificar,percibidas,percList,cajaList,cajaSubarr,cajaReemb,cajaExt,totalCaja:total+cajaSubarr+cajaReemb+cajaExt,totalCajaUF:totalUF+cajaSubarrUF+cajaReembUF+cajaExtUF,cajaSubarrUF,cajaReembUF,cajaExtUF}
   },[ingConc,ingAbonos,billing,anticipos,sales,terceros,expenses,selYear,ufDias,ufRef])
   // Comisiones PAGADAS del año (base caja, por pagado_at) atribuidas al AÑO DE LA VENTA — espejo de ingresosPorAnioVenta.
   // Año de venta = terceros.sale_id → sales.year; si no, vía la factura (billing.sale_id → sales.year); si no, el año del documento. Así "sin año" no aparece cuando la factura tiene venta.
@@ -130,7 +135,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       if(b){ if(b.sale_id!=null && saleYrById[String(b.sale_id)]!=null) return saleYrById[String(b.sale_id)]; return yrDe(b.issued_at||b.due) }
       return null
     }
-    let total=0, totalUF=0, totalTodo=0, sinAnio=0; const byYear={}
+    let total=0, totalUF=0, totalTodo=0, sinAnio=0; const byYear={}, byMonth={}, byMonthUF={}
     ;(terceros||[]).forEach(t=>{
       if(t.estado!=='pagado') return
       if(!String(t.pagado_at||'').startsWith(String(selYear))) return   // AÑO DE SALIDA = fecha del pago
@@ -138,11 +143,12 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
       totalTodo+=monto
       if(t.comision_pct!=null) return   // traspaso a un externo (factura por su cuenta): no es costo nuestro; lo nuestro entra como comisión percibida
       total+=monto; totalUF+=monto/ufDelDia(ufDias,t.pagado_at,ufRef)
+      { const ymC=String(t.pagado_at).slice(0,7); byMonth[ymC]=(byMonth[ymC]||0)+monto; byMonthUF[ymC]=(byMonthUF[ymC]||0)+monto/ufDelDia(ufDias,t.pagado_at,ufRef) }
       const ay=anioVentaDe(t)
       if(ay==null){ sinAnio+=monto; return }
       byYear[ay]=(byYear[ay]||0)+monto
     })
-    return {total,totalUF,totalTodo,byYear,sinAnio}
+    return {total,totalUF,totalTodo,byYear,byMonth,byMonthUF,sinAnio}
   },[terceros,billing,sales,selYear,ufDias,ufRef])
   // Meta de cobranza del año (annual_targets.collection_target). % y faltante para la foto de ingresos.
   const metaCobranza = Number(targets.find(t=>t.year===selYear)?.collection_target) || 0
@@ -180,7 +186,7 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
     const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,rex]=redondearPartes([o['fac'+sf],o['rex'+sf]],paso,[0]), sub=Math.round(o['sub'+sf]/paso)*paso, [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
     o.verUF=cuadra(1,'UF'); o.verCLP=cuadra(1e5,'')
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
-  return { salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }
+  return { vendidoMes, salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }
 }
 
 // Porcentajes del «Resultado del año» (Vendido contra meta, Facturado contra lo vendido, Cobrado contra meta de cobranza): una sola fórmula para Inicio y el Panel de socios.

@@ -26,7 +26,7 @@ export function Mirada({ X }) {
     ['pers', 'Concentración', pc(conc * 100, 0), `5 de ${d.clientes.length} · ene–${MESC[H]}`, 'amb', 'conc'],
     ['cal', 'Recurrente', mx(recMes, rec.anualUF / 12), `${rec.n} ventas mensuales activas`, '', 'rec'],
     ['com', 'Comisiones', d.terc != null ? pc(d.terc) : 'sin dato', 'de lo cobrado en el año', '', 'terc'],
-    ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `promedio · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
+    ['horas', 'Días de cobro', d.dias.promedio != null ? d.dias.promedio + ' días' : 'sin dato', d.dias.n ? `ponderado por monto · mediana ${d.dias.mediana}` : 'sin facturas pagadas', '', 'dias'],
     ['egr', 'Costos al mes', m26(d.costos.reduce((a, c) => a + c.m, 0) + d.ppmMes), 'por mes vigente, con PPM', '', 'cost'],
     ['alerta', 'Conversión', d.conversion.pct != null ? pc(d.conversion.pct, 0) : 'sin dato', d.conversion.pct != null ? `${d.conversion.aceptadas} aceptadas · ${d.conversion.rechazadas} rechazadas` : 'sin propuestas rechazadas registradas', d.conversion.pct != null ? '' : 'amb', 'conv'],
   ]

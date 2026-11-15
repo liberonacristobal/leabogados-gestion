@@ -9,6 +9,7 @@
 import { brutoDeLiquido, mismaPersona } from './impuestosMensuales.js'
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
 import { normalizarArrastre, arrastreVacio, lineasTocadas } from './arrastreAnio.js'
+import { diasDeCobroFacturas } from './diasCobro.js'
 
 /** Configuración por estudio (presupuestoConfig.js): toda regla que depende del estudio o del país la recibe como `cfg` opcional; sin ella usa el defecto del tenant actual. */
 /** @typedef {typeof CONFIG_DEFECTO} CfgPresupuesto */
@@ -709,17 +710,12 @@ export function mesesAtipicos(montos) {
 }
 
 /**
- * Días de cobro de las facturas pagadas emitidas en el año (de la emisión al pago). Sin reembolsos ni notas de crédito.
- * @param {{ status?:string, issued_at?:string|null, paid_at?:string|null, billing_type?:string|null, deleted_at?:string|null }[]} billing @param {number} anio
+ * Días de cobro de las facturas pagadas emitidas en el año: ponderados por monto, la misma cifra que Oficina (`diasDeCobroFacturas`, diasCobro.js). `promedio` = ponderado.
+ * @param {any[]} billing @param {number} anio
  */
 export function diasDeCobro(billing, anio) {
-  const d = (/** @type {any} */ x) => Date.parse(String(x || '').slice(0, 10) + 'T00:00:00Z')
-  const v = (billing || [])
-    .filter((b) => b && !b.deleted_at && b.status === 'Pagado' && b.issued_at && b.paid_at && String(b.issued_at).slice(0, 4) === String(anio) && !['reembolso', 'nota_credito'].includes(String(b.billing_type || '')))
-    .map((b) => Math.round((d(b.paid_at) - d(b.issued_at)) / 86400000)).filter((x) => Number.isFinite(x) && x >= 0).sort((a, b) => a - b)
-  if (!v.length) return { n: 0, promedio: null, mediana: null }
-  const h = v.length >> 1
-  return { n: v.length, promedio: Math.round(sum(v) / v.length), mediana: v.length % 2 ? v[h] : Math.round((v[h - 1] + v[h]) / 2) }
+  const r = diasDeCobroFacturas(billing, anio)
+  return r.n ? { n: r.n, promedio: r.pond, mediana: r.mediana } : { n: 0, promedio: null, mediana: null }
 }
 
 /** Concentración: parte de lo facturado que suman los `k` primeros clientes. @param {number[]} montosOrdenados de mayor a menor @param {number} total @param {number} [k] */

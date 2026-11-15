@@ -11,8 +11,9 @@ import { KpiAnio, FilasKpi } from '../lib/tarjetasAnio.jsx'
 import { pctsAnio, useResultadoAnio, ingresoRealAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
+import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { useMesEnMarcha } from './MesEnMarchaView.jsx'
-import { resumenDiasCobro } from '../../supabase/functions/_shared/diasCobro.js'
+import { diasDeCobroFacturas } from '../../supabase/functions/_shared/diasCobro.js'
 
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const MCORTO = MESES.map(m => m.slice(0, 3))
@@ -46,7 +47,7 @@ const SecCard = ({ ic, tint, col, t, v, vcol, s, rows, onClick, D }) => (
     {rows && rows.length > 0 && <FilasKpi rows={rows} D={D} />}
   </div>)
 
-export function OficinaView({ sales = [], billing = [], clients = [], terceros = [], expenses = [], anticipos = [], costosOfiRows = [], fantasmaIds = null, nPendCuentas = 0, onGo }) {
+export function OficinaView({ backRef, sales = [], billing = [], clients = [], terceros = [], expenses = [], anticipos = [], costosOfiRows = [], fantasmaIds = null, nPendCuentas = 0, onGo }) {
   const isDesktop = useIsDesktop()
   const go = (d, x, y) => onGo && onGo(d, x, y)
   const hoy = new Date().toISOString().slice(0, 10), ymNow = hoy.slice(0, 7), year = currentYear, curM = Number(ymNow.slice(5, 7))
@@ -61,7 +62,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
 
   // ── Año: el MISMO hook de Inicio y del Panel (lib/resultadoAnio.js) ──
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: year })
-  const { m, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: comP, metaCobranza, metaUF, ufRef, fuRes } = R
+  const { m, resAnio, ingresosPorAnioVenta: ing, comisPagadasAnioVenta: comP, metaCobranza, metaUF, ufRef, fuRes, vendidoMes } = R
   const ingYTD = ing.total || 0, ingYTDUF = ing.totalUF || 0
   const ingRealA = ingresoRealAnio(ing, comP)
   const { ventaPct, ventaNetoPct, factPct, cobroPct, cobroRealPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza, ingReal: ingRealA.clp })
@@ -72,8 +73,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const deps = { billing, terceros, costosOfiRows, expenses, clients }
   const rm = useMemo(() => resultadoMes(fuRes, deps, ymSel), [fuRes, billing, terceros, costosOfiRows, expenses, clients, ymSel])
   const rp = useMemo(() => resultadoMes(fuRes, deps, ymP), [fuRes, billing, terceros, costosOfiRows, expenses, clients, ymP])
-  const cierran = ymX => (sales || []).filter(s => s && !s.deleted_at && ['Activo', 'Terminado'].includes(s.status) && !esSubarriendo(s) && String(s.activated_at || '').slice(0, 7) === ymX)   // la misma regla del Informe del mes
-  const vend = ymX => { const l = cierran(ymX); return { uf: l.reduce((a, s) => a + ventaUF(s, ufRef), 0), clp: l.reduce((a, s) => a + ventaCLP(s, ufRef), 0) } }
+  const vend = ymX => { const v = vendidoMes(ymX); return { uf: v.brutoUF, clp: v.bruto, v } }   // Vendido bruto del mes y sus partes (costos de terceros y neto) de la misma función del año
   const vM = vend(ymSel), vP = vend(ymP)
   const cobM = { clp: ing.byMonth?.[ymSel] || 0, uf: ing.byMonthUF?.[ymSel] || 0 }
   const cobP = ymP.slice(0, 4) === String(year) ? { clp: ing.byMonth?.[ymP] || 0, uf: ing.byMonthUF?.[ymP] || 0 } : null
@@ -101,10 +101,8 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const cart = useMemo(() => resumenCartera(billing), [billing])
   const totPorCobrar = porCobrar, venc = cart.vencidoTot
   const fin = flujo.fin
-  // Días de cobro PONDERADOS por monto (diasCobro.js): facturas pagadas del año, sin reembolsos, notas de crédito ni subarriendo.
-  const dCobro = useMemo(() => { const d = x => Date.parse(String(x).slice(0, 10) + 'T00:00:00Z')
-    return resumenDiasCobro((billing || []).filter(b => b && !b.deleted_at && b.status === 'Pagado' && b.issued_at && b.paid_at && String(b.issued_at).slice(0, 4) === String(year) && !['reembolso', 'nota_credito', 'subarriendo'].includes(b.billing_type))
-      .map(b => ({ monto: Number(b.paid_amount) || Number(b.amount) || 0, dias: Math.round((d(b.paid_at) - d(b.issued_at)) / 86400000) }))) }, [billing, year])
+  // Días de cobro PONDERADOS por monto: la misma función del Presupuesto (diasDeCobroFacturas, diasCobro.js).
+  const dCobro = useMemo(() => diasDeCobroFacturas(billing, year), [billing, year])
   const sinMov = !(mesM.cobrado || mesM.pagado || mesM.porPagar)
   const memTxt = sinMov ? 'Sin movimientos' : (mesM.actual && mesM.cas.falta > 0 ? 'Faltan ' + fmtMill(mesM.cas.falta) : mesM.cas.cubrePagados ? 'Cubierto' : 'Sin cubrir')
   const memCol = sinMov ? C.accent : (mesM.actual && mesM.cas.falta > 0 ? C.soonText : mesM.cas.cubrePagados ? C.greenText : C.overdueText)
@@ -129,7 +127,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
 
   // ── Presentación ──
   const D = isDesktop
-  const [sec, setSec] = useState(null)   // null = portada; 'fin' | 'ges' | 'soc' | 'res' = página de la sección (las cuatro tarjetas siguen fijas arriba)
+  const [sec, setSec] = usePersistedState('oficina_sec', null)   // null = portada; 'fin' | 'ges' | 'soc' | 'res' = página de la sección (las cuatro tarjetas siguen fijas arriba)
   // La tira queda fija bajo la cabecera de la app; en celular (donde ocupa mucho alto) se contrae a una fila de cuatro mini tarjetas al salir de la pantalla.
   // El cuerpo de escritorio va con zoom: las medidas de la copia fija se pasan a su escala.
   const [hh, setHh] = useState(0), tiraRef = useRef(null), [fuera, setFuera] = useState(false), [box, setBox] = useState({ l: 0, w: 0 })
@@ -138,7 +136,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
     const io = new IntersectionObserver(([e]) => setFuera(!e.isIntersecting && e.boundingClientRect.top < hh), { rootMargin: `-${hh}px 0px 0px 0px`, threshold: 0 }); io.observe(el); return () => io.disconnect() }, [hh, esMes, drill, sec])
   const grid = { display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 10 }
   const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8, marginTop: D ? 12 : 8 }
-  const Lbl = ({ t, foto, link, onLink }) => <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 2px 8px' }}><span style={{ ...SEC_LBL, flex: 1 }}>{t}</span>{foto && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{foto}</span>}{link && <span onClick={onLink} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>{link} ›</span>}</div>
+  const Lbl = ({ t, foto, link, onLink, xl }) => <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 2px 8px' }}><span style={{ ...SEC_LBL, flex: 1 }}>{t}</span>{foto && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{foto}</span>}{xl && <span onClick={xl} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>Excel ›</span>}{link && <span onClick={onLink} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>{link} ›</span>}</div>
   const selSt = { fontSize: 12, fontWeight: 700, color: C.accent, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 8px', fontFamily: 'inherit', cursor: 'pointer' }
   const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1)
   const enUF = moneda === 'UF', CLP = !enUF
@@ -149,14 +147,20 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const facAnioV = resAnio.verCLP.fac || 0, ajAnio = ajR(raAnio.te - (resAnio.fac || 0)), facAnioUF = resAnio.verUF.fac || 0, ajAnioUF = Math.round(raAnio.teUF - (resAnio.facUF || 0))
   const CV = cascadaVendido(m, enUF), fV = x => enUF ? fmtUFk(x) : fmtShort(x)
   const rVend = [['Bruto', fV(CV.bruto)], ['Costos de terceros', '−' + fV(CV.costo), { neg: true }], ['Neto', fV(CV.neto), { tot: true }]]
+  const vMs = vM.v, CVm = cascadaVendido({ neto: vMs.neto, costo: vMs.costo, netoUF: vMs.netoUF, costoUF: vMs.costoUF }, enUF)
+  const rVendMes = [['Bruto', fV(CVm.bruto)], ['Costos de terceros', (CVm.costo > 0 ? '−' : '') + fV(CVm.costo), CVm.costo > 0 ? { neg: true } : undefined], ['Neto', fV(CVm.neto), { tot: true }]]
   const rFac = !esMes
     ? (CLP ? [['Total emitido', fmtShort(facAnioV + ajAnio)], ['Menos ajustes', '−' + fmtShort(ajAnio), { neg: true }], ['Facturado', fmtShort(facAnioV), { tot: true }]] : [['Total emitido', fmtUFk(facAnioUF + ajAnioUF)], ['Menos ajustes', '−' + fmtUFk(ajAnioUF), { neg: true }], ['Facturado', fmtUFk(facAnioUF), { tot: true }]])
     : (CLP ? [['Total emitido', fmtShort(rm.totalEmitido)], ['Menos ajustes', '−' + fmtShort(rm.totalEmitido - rm.fac), { neg: true }], ['Facturado', fmtShort(rm.fac), { tot: true }]] : [['Total emitido', fmtUFk(Math.round(rm.totalEmitidoUF))], ['Menos ajustes', '−' + fmtUFk(Math.round(rm.totalEmitidoUF - rm.facUF)), { neg: true }], ['Facturado', fmtUFk(Math.round(rm.facUF)), { tot: true }]])
-  const rCob = !esMes ? [['Propio', vMon(ingYTDUF, ingYTD)], ['Real', vMon(ingRealA.uf, ingRealA.clp)], ...(CLP ? [['Por cobrar', fmtShort(totPorCobrar)]] : [])] : undefined
+  const cobReal = (ymX) => ({ clp: (ing.byMonth?.[ymX] || 0) - (comP.byMonth?.[ymX] || 0) + (ing.percByMonth?.[ymX] || 0), uf: (ing.byMonthUF?.[ymX] || 0) - (comP.byMonthUF?.[ymX] || 0) + (ing.percByMonthUF?.[ymX] || 0) })
+  const rCob = !esMes ? [['Propio', vMon(ingYTDUF, ingYTD)], ['Real', vMon(ingRealA.uf, ingRealA.clp)], ...(CLP ? [['Por cobrar', fmtShort(totPorCobrar)]] : [])]
+    : [['Propio', fMon(cobM.clp, cobM.uf)], ['Real', fMon(cobReal(ymSel).clp, cobReal(ymSel).uf)]]
   const rRes = !esMes ? [['Ingresos', mRes('ing')], ['Costos', '−' + mRes('cos', true), { neg: true }], ['Comisiones', '−' + mRes('com', true), { neg: true }]]
     : (CLP ? [['Ingresos', fmtShort(rm.ing)], ['Costos', '−' + fmtShort(rm.cos), { neg: true }], ['Comisiones', '−' + fmtShort(rm.com), { neg: true }]] : undefined)
 
   // Las cuatro tarjetas, fijas arriba: mismas reglas de Inicio (tono por tarjeta, % de la meta en negrita, verde y «+N %» sobre 100).
+  // «Volver» de la cabecera de la app: primero cierra la página interior de Oficina (detalle del año o sección) y recién después sale; devuelve true si lo manejó.
+  useEffect(() => { if (!backRef) return; backRef.current = () => { if (drill) { setDrill(null); return true } if (sec) { setSec(null); return true } return false }; return () => { backRef.current = null } }, [backRef, drill, sec])
   const sel = drill?.tile
   const tira = (() => {
     if (!esMes) return (<div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8 }}>
@@ -167,9 +171,9 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
       {resAnio.ing > 0 && <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(resAnio.res < 0 ? '−' : '') + mRes('res', true)} rows={rRes} pct={resAnio.pct != null ? pct1(resAnio.pct) : null} cap='ingresos' activo={sel === 'marg'} onClick={() => setDrill(d => d && d.tile === 'marg' ? null : { tile: 'marg' })} />}
     </div>)
     return (<div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8 }}>
-      <KpiAnio D={D} ic='chart' tono='az' label='Vendido' value={fMon(vM.clp, vM.uf)} sub={dMon(vM.clp, vP.clp, vM.uf, vP.uf)} onClick={() => go('ventas')} />
+      <KpiAnio D={D} ic='chart' tono='az' label='Vendido' value={fMon(vM.clp, vM.uf)} sub={dMon(vM.clp, vP.clp, vM.uf, vP.uf)} rows={rVendMes} onClick={() => go('ventas')} />
       <KpiAnio D={D} ic='file' tono='am' label='Facturado' value={fMon(rm.fac, rm.facUF)} sub={dMon(rm.fac, rp.fac, rm.facUF, rp.facUF)} rows={rFac} onClick={() => go('estadoResultados', ymSel, { bloque: 'ing', sub: 'fac' })} />
-      <KpiAnio D={D} ic='check' tono='gr' label='Cobrado' value={fMon(cobM.clp, cobM.uf)} sub={cobP ? dMon(cobM.clp, cobP.clp, cobM.uf, cobP.uf) : undefined} onClick={() => go('cobradoMes', ymSel)} />
+      <KpiAnio D={D} ic='check' tono='gr' label='Cobrado' value={fMon(cobM.clp, cobM.uf)} sub={cobP ? dMon(cobM.clp, cobP.clp, cobM.uf, cobP.uf) : undefined} rows={rCob} onClick={() => go('cobradoMes', ymSel)} />
       <KpiAnio D={D} ic='tPct' tono='nt' label='Resultado' value={(rm.res < 0 ? '−' : '') + fMon(Math.abs(rm.res), Math.abs(rm.resUF))} sub={dMon(rm.res, rp.res, rm.resUF, rp.resUF)} rows={rRes} onClick={() => go('estadoResultados', ymSel)} />
     </div>)
   })()
@@ -205,6 +209,14 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
     </div>
   </>)
 
+  // Excel de las páginas (cifras exactas en pesos): lo que se ve en pantalla, para llevarlo a una reunión.
+  const xlSocios = () => { const f = x => Math.round(x || 0)
+    const filas = RS.SOC.map(x => { const v = card6(x, 'ytd'), r = RS.retTot[x] || 0, su = RS.sueldos[x] || 0, rt = r + su
+      return [x, f(r), f(su), f(rt), f(promDe(x)), f(v[0]), f(v[2]), f(v[5]), totRetrib > 0 ? Math.round(rt / totRetrib * 1000) / 10 : '', totIngReal > 0 ? Math.round((v[5] || 0) / totIngReal * 1000) / 10 : ''] })
+    const vs = card6(SIN_SOCIO, 'ytd'); filas.push([SIN_SOCIO, '', '', '', '', f(vs[0]), f(vs[2]), f(vs[5]), '', ''])
+    descargarXlsx({ nombre: `Socios_${year}`, hoja: 'Socios', head: ['Socio', 'Retiros', 'Sueldo', `Retribución ${year}`, 'Promedio mensual', 'Vendido neto', 'Cobrado', 'Ingreso real', '% de la retribución', '% del ingreso real'], filas, anchos: [16, 14, 14, 16, 16, 14, 14, 14, 18, 18], numCols: [1, 2, 3, 4, 5, 6, 7] }) }
+  const xlGestion = () => descargarXlsx({ nombre: `Gestion_${hoy}`, hoja: 'Cobranza', head: ['Concepto', 'Valor'], anchos: [30, 18], numCols: [1],
+    filas: [['Por cobrar', Math.round(totPorCobrar)], ['Vencido', Math.round(venc)], ['Más de 60 días', Math.round(cart.expo.m60 || 0)], ['Días de cobro, ponderado por monto', dCobro.pond ?? '']] })
   const pagina = {
     res: (<><Lbl t='Por resolver' foto='foto de hoy' /><div style={grid}>
       <Tl label='Calendario tributario' value={nA ? `${nA} aviso${nA === 1 ? '' : 's'}` : 'al día'} vcol={nA ? (calTrib.alertas[0].sev === 0 ? C.overdueText : C.soonText) : C.greenText} onClick={() => go('calendarioTrib')} />
@@ -227,7 +239,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
         <Tl label='Comisiones por pagar' value={sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día'} vcol={sc.porPagar > 0 ? C.accent : C.greenText} sub={diasCom != null && sc.porPagar > 0 ? `la más antigua, hace ${diasCom} días` : ''} onClick={() => go('proveedores')} />
         <Tl label='Mes en marcha' value={memTxt} vcol={memCol} sub={`al ${fmtFechaDMY(hoy).slice(0, 5)}`} onClick={() => go('mesEnMarcha')} />
       </div></>),
-    ges: (<><Lbl t='Cobranza' foto='foto de hoy' /><div style={grid}>
+    ges: (<><Lbl t='Cobranza' foto='foto de hoy' xl={xlGestion} /><div style={grid}>
       <Tl label='Por cobrar' value={fmtMill(totPorCobrar)} sub={totPorCobrar > 0 ? `${Math.round(venc / totPorCobrar * 100)} % vencido` : ''} onClick={() => go('cobranza')} />
       <Tl label='Vencido' value={fmtMill(venc)} vcol={venc > 0 ? C.overdueText : C.accent} sub={`${new Set(cart.vencidoBills.map(b => String(b.client_id))).size} clientes`} onClick={() => go('cobranzaVencido')} />
       <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
@@ -240,7 +252,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
         <Tl ic='building' tint={C.bgSoft} col={C.accent} label='Sueldos socios' value={fmtShort(RS.sueldoTot)} sub={RS.SOC.join(' + ')} onClick={() => go('socios')} />
         <Tl ic='chart' tint={C.azulBg} col={C.azulInfo} label='Ingreso real' value={socIng(null)} sub='oficina' onClick={() => go('porSocio', null, 5)} />
       </div>
-      <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
+      <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} xl={xlSocios} />
       <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: D ? 12 : 8 }}>
         {RS.SOC.map(s => { const v = card6(s, 'ytd'), retr = (RS.retTot[s] || 0) + (RS.sueldos[s] || 0), ir = v[5] || 0
           const pRet = totRetrib > 0 ? retr / totRetrib * 100 : null, pIr = totIngReal > 0 ? ir / totIngReal * 100 : null

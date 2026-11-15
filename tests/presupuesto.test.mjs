@@ -106,10 +106,12 @@ test('meses atípicos: más de 1,5 veces o menos de la mitad de la mediana', () 
   assert.deepEqual(mesesAtipicos([10, 10]), [])
 })
 
-test('días de cobro: promedio y mediana de facturas pagadas del año, sin reembolsos', () => {
-  const f = (/** @type {string} */ i, /** @type {string} */ p, /** @type {any} */ extra = {}) => ({ status: 'Pagado', issued_at: i, paid_at: p, billing_type: 'honorarios', ...extra })
+test('días de cobro: ponderado por monto y mediana de facturas pagadas del año, sin reembolsos ni subarriendo', () => {
+  const f = (/** @type {string} */ i, /** @type {string} */ p, /** @type {any} */ extra = {}) => ({ status: 'Pagado', issued_at: i, paid_at: p, billing_type: 'honorarios', amount: 1000000, ...extra })
   const r = diasDeCobro([f('2026-01-10', '2026-01-20'), f('2026-02-01', '2026-02-11'), f('2026-03-01', '2026-04-10'), f('2026-03-01', '2026-03-05', { billing_type: 'reembolso' }), f('2025-12-01', '2025-12-02'), { status: 'Pendiente', issued_at: '2026-05-01' }], 2026)
-  assert.equal(r.n, 3); assert.equal(r.mediana, 10); assert.equal(r.promedio, 20)
+  assert.equal(r.n, 3); assert.equal(r.mediana, 10); assert.equal(r.promedio, 20)   // montos iguales: el ponderado coincide con el simple
+  const g = diasDeCobro([f('2026-01-01', '2026-01-11', { amount: 9000000 }), f('2026-01-01', '2026-04-21', { amount: 1000000 }), f('2026-01-01', '2026-01-02', { billing_type: 'subarriendo' })], 2026)
+  assert.equal(g.n, 2); assert.equal(g.promedio, 20)   // (9M×10 + 1M×110) ÷ 10M, y el subarriendo no cuenta
   assert.deepEqual(diasDeCobro([], 2026), { n: 0, promedio: null, mediana: null })
 })
 
