@@ -208,7 +208,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
     fin: (<>
       <Lbl t={esMes ? `Resultado de ${MESES[selM - 1]}` : `Resultado, enero a ${MESES[curM - 1]}`} />
       <div style={grid}>
-        <Tl er label='Estado de resultados' value={resTxt} vcol={res < 0 ? C.overdueText : C.accent} sub={esMes ? `${mesPrev} ${rp.res < 0 ? '−' : ''}${fmtMill(Math.abs(rp.res))}` : (mg == null ? '' : `margen ${pct1(mg)} %`)} onClick={() => esMes ? go('estadoResultados', ymSel) : go('resultadoAnio')} />
+        <Tl er label='Estado de resultados' value={resTxt} vcol={res < 0 ? C.overdueText : C.accent} sub={esMes ? `${mesPrev} ${rp.res < 0 ? '−' : ''}${fmtMill(Math.abs(rp.res))}` : (mg == null ? '' : `margen ${pct1(mg)} %`)} onClick={() => esMes ? go('estadoResultados', ymSel) : go('estadoFormal')} />
         <Tl label={esMes && !rm.cerrado ? 'Costos, estimado' : 'Costos'} value={'−' + costoTxt} vcol={C.overdueText} sub={esMes ? dl(rm.cos, rp.cos, fmtMill, true) : 'incluye subarriendo y gastos varios'} onClick={() => go('costos')} />
         <Tl label='Comisiones' value={rm.com || !esMes ? '−' + comTxt : '$0'} vcol={C.overdueText} sub={esMes ? dl(rm.com, rp.com, fmtMill, true) : 'devengadas'} onClick={() => go('proveedores')} />
         <Tl label='Compras · IVA' value='Ver' sub='facturas recibidas' onClick={() => go('compras')} />
