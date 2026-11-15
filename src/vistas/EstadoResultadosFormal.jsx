@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { C, SEC_LBL, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear } from '../lib/compartido.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
+import { descargarEstadoResultadosPdf } from '../lib/pdfEstadoResultados.js'
 import { DEMO } from '../supabase'
 import { impuestosMensuales, pagosConBoleta, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 
@@ -92,6 +93,12 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
         ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT)', X1.res, X0.res)] })
   }
 
+  // PDF: las mismas filas y cifras de la tabla (celdas ya formateadas), todos los meses, carta horizontal.
+  const pdf = () => descargarEstadoResultadosPdf({ titulo: 'Estado de resultados', periodo: `Enero a ${MESES[curM - 1]} de ${year}`, unidad: enUF ? 'UF' : 'miles de pesos', emitido: fmtFechaDMY(new Date().toISOString().slice(0, 10)),
+    meses: MC.slice(0, curM), estimado: A1.R.map(r => !r.cerrado), anioPrev: String(year - 1), prevEst: prevEst,
+    filas: filas.map(f => f.t === 'sec' ? { t: 'sec', l: f.l } : { t: f.t, l: f.l, c: [...f.v.slice(0, curM).map(fN), fN(f.v[curM]), fN(f.w[curM]), fVar(f.v[curM], f.w[curM]), f.pct || f.t === 'it' || f.t === 'sub' ? fPct(f.v[curM], T1.ing[curM]) : ''] }) },
+    `Estado_de_resultados_${year}${enUF ? '_UF' : ''}.pdf`)
+
   const pad2 = D ? '7px 12px' : '6px 8px'
   const W = D ? 84 : 72
   // Columnas fijas a la derecha, de izquierda a derecha: total, año anterior, variación y % ingresos (en celular, solo las de la vista elegida).
@@ -117,6 +124,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       <div style={{ margin: '0 2px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: D ? 20 : 17, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }}>Estado de resultados</div>
+          <span onClick={pdf} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>PDF ›</span>
           <span onClick={exp} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Excel ›</span>
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{D ? `Enero a ${MESES[curM - 1]} de ${year}, al ${fmtFechaDMY(new Date().toISOString().slice(0, 10))}. Cifras en ${unidad}.` : `Ene a ${MC[curM - 1]} ${year}, ${unidad}`}</div>
