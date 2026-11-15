@@ -200,7 +200,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
         rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—', { onClick: () => go('presupuesto') }]]} />
       <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`Retribución de socios · ${year}`} onClick={() => setSec('soc')}
-        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
+        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }], ['Por socio', 'Ver ›', { onClick: () => go('porSocio') }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
         rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
     </div>

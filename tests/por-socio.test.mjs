@@ -9,8 +9,8 @@ function referencia(P, V, ym) {
   const inPer = (d, p) => { const s = String(d || '').slice(0, 7); return p === 'mes' ? s === ym : (s >= `${y}-01` && s <= ym) }
   const sumP = (s, k, soc, p) => P.reduce((a, r) => a + ((r.s === s && (k == null || (Array.isArray(k) ? k.includes(r.k) : r.k === k)) && (!soc || r.soc === soc) && inPer(r.d, p)) ? r.m : 0), 0)
   const vend = (soc, p) => V.reduce((a, x) => a + ((!soc || x.soc === soc) && (p === 'mes' ? x.ym === ym : x.ym <= ym) ? x.m : 0), 0)
-  const KF = ['emit', 'cext', 'reemb', 'nc'], KC = ['fac', 'ant', 'reemb']
-  const card6 = (soc, p) => { const fac = sumP('f', KF, soc, p), cp = sumP('c', KC, soc, p), com = -sumP('c', 'com', soc, p), pe = sumP('c', 'perc', soc, p); return [vend(soc, p), fac, cp, com, pe, cp - com + pe, sumP('c', 'sub', soc, p)] }
+  const KF = ['emit', 'reemb', 'nc'], KC = ['fac', 'ant', 'reemb']   // Facturado sin la comisión de externos, que va aparte (índice 7)
+  const card6 = (soc, p) => { const fac = sumP('f', KF, soc, p), cp = sumP('c', KC, soc, p), com = -sumP('c', 'com', soc, p), pe = sumP('c', 'perc', soc, p); return [vend(soc, p), fac, cp, com, pe, cp - com + pe, sumP('c', 'sub', soc, p), sumP('f', 'cext', soc, p)] }
   return card6
 }
 
@@ -31,6 +31,19 @@ test('Por socio: la función compartida reproduce las fórmulas originales en ca
 
 test('Por socio: sin partidas ni ventas todo es cero, sin NaN', () => {
   const r = kpisPorSocio({ P: [], V: [], ym: '2026-10' }).card6(null, 'ytd')
-  assert.equal(r.length, 7)
+  assert.equal(r.length, 8)
   assert.ok(r.every(x => x === 0))   // -0 cuenta como 0 (las comisiones pagadas van con signo)
+})
+
+test('Facturado por socio + comisiones de externos = el Facturado de antes; el ingreso emitido (facturado − comisiones) no cambia', () => {
+  for (const ym of ['2026-03', '2026-10', '2026-11']) {
+    const k = kpisPorSocio({ P, V, ym })
+    for (const soc of [null, ...SOCIOS]) for (const p of ['mes', 'ytd']) {
+      const c = k.card6(soc, p), antes = k.sumP('f', ['emit', 'cext', 'reemb', 'nc'], soc, p)
+      assert.equal(c[1] + c[7], antes, `${ym} ${soc} ${p}`)
+      assert.equal(k.emitido(soc, p).f, antes)
+    }
+    // las partes suman el total: socios + Sin socio = Oficina, en Facturado y en la comisión de externos
+    for (const i of [1, 7]) assert.equal(SOCIOS.reduce((a, s) => a + k.card6(s, 'ytd')[i], 0), k.card6(null, 'ytd')[i])
+  }
 })

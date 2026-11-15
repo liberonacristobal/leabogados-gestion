@@ -91,7 +91,7 @@ export function cascadaVendido(m, enUF){
 
 // Cifras por socio de un período — FUENTE ÚNICA de la ventana «Por socio» y del Panel de socios. Mismas fórmulas de siempre, extraídas de PorSocioVista
 // sin cambios: P = partidasPorSocio, V = vendidoPorSocio, ym = 'AAAA-MM' (el mes elegido; el año corre de enero a ese mes).
-// card6(socio|null, 'mes'|'ytd') = [Vendido, Facturado, Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo].
+// card6(socio|null, 'mes'|'ytd') = [Vendido, Facturado (sin comisión de externos), Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo, Comisiones de externos] (las dos últimas aparte; Subarriendo].
 /** @param {{P: any[], V: any[], ym: string}} a */
 export function kpisPorSocio({P,V,ym}){
   const y=Number(ym.slice(0,4))
@@ -103,17 +103,17 @@ export function kpisPorSocio({P,V,ym}){
     const its=V.filter(x=>p==='mes'?x.ym===ym:x.ym<=ym), socs=[...new Set(its.map(x=>x.soc))], r=redondearPartes(socs.map(s=>its.reduce((a,x)=>a+(x.soc===s?x.m:0),0)),1,[]), o=/** @type {Record<string,number>} */ ({})
     socs.forEach((s,i)=>{ o[s]=r[i] }); return (vCache[p]={ o, tot:r.reduce((a,x)=>a+x,0) }) }
   /** @type {(soc:any,p:string)=>number} */ const vend=(soc,p)=>{ const v=vPer(p); return soc?(v.o[soc]||0):v.tot }
-  const KF=['emit','cext','reemb','nc'], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']
-  /** @type {(soc:any,p:string)=>number[]} */ const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p)] }
+  const KF=['emit','reemb','nc'], KE=['cext'], KFI=[...KF,...KE], KC=['fac','ant','reemb'], KI=[...KC,'com','perc']   // Facturado = el de Oficina (sin la comisión de externos, que va aparte como «Comisiones de externos»); KFI = Facturado + esa comisión (plano de ingresos emitidos)
+  /** @type {(soc:any,p:string)=>number[]} */ const card6=(soc,p)=>{ const fac=sumP('f',KF,soc,p), cp=sumP('c',KC,soc,p), com=-sumP('c','com',soc,p), pe=sumP('c','perc',soc,p); return [vend(soc,p),fac,cp,com,pe,cp-com+pe,sumP('c','sub',soc,p),sumP('f',KE,soc,p)] }
   // Ingreso EMITIDO (plano facturado): facturado (KF) − comisiones de lo facturado. El subarriendo no entra (va aparte, 'sub').
-  /** @type {(soc:any,p:string)=>{f:number,c:number,i:number}} */ const emitido=(soc,p)=>{ const f=sumP('f',KF,soc,p), c=-sumP('f','com',soc,p); return {f,c,i:f-c} }
+  /** @type {(soc:any,p:string)=>{f:number,c:number,i:number}} */ const emitido=(soc,p)=>{ const f=sumP('f',KFI,soc,p), c=-sumP('f','com',soc,p); return {f,c,i:f-c} }
   /** facturas emitidas del período (una por factura; la que se devuelve entera como reembolso no cuenta) */
   /** @type {(soc:any,p:string)=>number} */ const nEmitidas=(soc,p)=>{ const rea=new Set(P.filter(r=>r.s==='f'&&r.k==='reemb'&&r.bid).map(r=>String(r.bid)+'|'+Math.round(-r.m)))
     return new Set(P.filter(r=>r.s==='f'&&(r.k==='emit'||r.k==='cext')&&r.bid&&r.m>0&&(!soc||r.soc===soc)&&inPer(r.d,p)&&!rea.has(String(r.bid)+'|'+Math.round(r.m))).map(r=>String(r.bid))).size }
   /** ingreso emitido por mes (enero → ym) y por socio: [{ym, v:{socio:monto}}] */
   /** @type {(socs:string[])=>{ym:string,v:Record<string,number>}[]} */ const emitidoMeses=(socs)=>{ const out=[]; for(let m=1;m<=Number(ym.slice(5,7));m++){ const k=`${y}-${String(m).padStart(2,'0')}`, /** @type {Record<string,number>} */ v={}
-    socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KF.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
-  return {inPer,sumP,vend,KF,KC,KI,card6,emitido,nEmitidas,emitidoMeses}
+    socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KFI.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
+  return {inPer,sumP,vend,KF,KE,KFI,KC,KI,card6,emitido,nEmitidas,emitidoMeses}
 }
 
 // Resumen Por socio: cifras en $M de 1 decimal que CUADRAN (las partes suman el total redondeado) y participación % que suma 100.
