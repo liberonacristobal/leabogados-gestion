@@ -11,6 +11,8 @@ import { KpiAnio, FilasKpi } from '../lib/tarjetasAnio.jsx'
 import { pctsAnio, useResultadoAnio, ingresoRealAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
 import { retirosSocios } from './SociosView.jsx'
+import { comisionesACobrar } from './ProveedoresView.jsx'
+import { nombreComponente } from '../../supabase/functions/_shared/presupuesto.js'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { useMesEnMarcha } from './MesEnMarchaView.jsx'
 import { diasDeCobroFacturas } from '../../supabase/functions/_shared/diasCobro.js'
@@ -47,7 +49,7 @@ const SecCard = ({ ic, tint, col, t, v, vcol, s, rows, onClick, D }) => (
     {rows && rows.length > 0 && <FilasKpi rows={rows} D={D} />}
   </div>)
 
-export function OficinaView({ backRef, sales = [], billing = [], clients = [], terceros = [], expenses = [], anticipos = [], costosOfiRows = [], fantasmaIds = null, nPendCuentas = 0, onGo }) {
+export function OficinaView({ backRef, sales = [], billing = [], clients = [], terceros = [], proveedores = [], expenses = [], anticipos = [], costosOfiRows = [], fantasmaIds = null, nPendCuentas = 0, onGo }) {
   const isDesktop = useIsDesktop()
   const go = (d, x, y) => onGo && onGo(d, x, y)
   const hoy = new Date().toISOString().slice(0, 10), ymNow = hoy.slice(0, 7), year = currentYear, curM = Number(ymNow.slice(5, 7))
@@ -96,6 +98,8 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
   const proy = useMemo(() => proyeccionCobranza(flujo).total, [flujo])
   const mesM = useMesEnMarcha({ ym: ymNow, expenses, clients, billing, sales, terceros, costosOfiRows, anticipos })
   const sc = useMemo(() => saldoComisiones(terceros, billing), [terceros, billing])
+  // Por percibir: misma regla de la vista Comisiones (comisionesACobrar, facturas del año sin cobrar, todos los proveedores).
+  const comCobrar = useMemo(() => (proveedores || []).reduce((a, p) => a + comisionesACobrar(p, terceros, billing, year).items.filter(x => !x.cob && String(x.b.issued_at || x.b.due || '').slice(0, 4) === String(year)).reduce((z, x) => z + x.monto, 0), 0), [proveedores, terceros, billing, year])
   const diasCom = sc.porPagarDesde ? Math.round((Date.now() - new Date(sc.porPagarDesde + 'T12:00').getTime()) / 86400000) : null
   const porCobrar = porCobrarBills(billing)
   const cart = useMemo(() => resumenCartera(billing), [billing])
@@ -109,10 +113,10 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
 
   // ── Presupuesto del año siguiente: estado real de su borrador (tabla presupuestos) ──
   const [ppto, setPpto] = useState(null)
-  useEffect(() => { if (DEMO) { setPpto({ borrador: true, actualizado: hoy, oficial: null }); return } let v = true
-    supabase.from('presupuestos').select('tipo,oficial,nombre,updated_at,created_at').eq('anio', year + 1).then(({ data }) => { if (!v) return
+  useEffect(() => { if (DEMO) { setPpto({ borrador: true, meta: { ancla: 'ventas', valor: 780000000 }, actualizado: hoy, oficial: null }); return } let v = true
+    supabase.from('presupuestos').select('tipo,oficial,nombre,updated_at,created_at,metas:estado->metas').eq('anio', year + 1).then(({ data }) => { if (!v) return
       const b = (data || []).find(r => r.tipo === 'borrador'), of = (data || []).find(r => r.oficial)
-      setPpto({ borrador: !!b, actualizado: b ? String(b.updated_at || b.created_at).slice(0, 10) : null, oficial: of ? { nombre: of.nombre || 'Versión oficial' } : null }) }, () => {}); return () => { v = false } }, [year])
+      setPpto({ borrador: !!b, meta: b && b.metas && Number(b.metas.valor) > 0 ? { ancla: b.metas.ancla, valor: Number(b.metas.valor) } : null, actualizado: b ? String(b.updated_at || b.created_at).slice(0, 10) : null, oficial: of ? { nombre: of.nombre || 'Versión oficial' } : null }) }, () => {}); return () => { v = false } }, [year])
 
   // ── Socios (misma regla que el Panel de socios: lo vendido, cobrado e ingreso real por socio) ──
   const [fu] = usePorSocioFuentes()
@@ -198,11 +202,11 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <SecCard D={D} ic='chart' tint={C.azulBg} col={C.azulInfo} t='Finanzas' v={resTxt} vcol={res < 0 ? C.overdueText : undefined} s={esMes ? `resultado de ${MESES[selM - 1]}` : 'resultado del año'} onClick={() => setSec('fin')}
         rows={[['Costos', '−' + costoTxt, { neg: true, onClick: () => go('costos') }], ['Comisiones', '−' + comTxt, { neg: true, onClick: () => go('proveedores') }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), { neg: fin < 0, onClick: () => go('flujoCaja') }], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
-        rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—', { onClick: () => go('presupuesto') }]]} />
+        rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Com. por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }], ['Com. por percibir', comCobrar > 0 ? fmtMill(comCobrar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`Retribución de socios · ${year}`} onClick={() => setSec('soc')}
-        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }], ['Por socio', 'Ver ›', { onClick: () => go('porSocio') }]]} />
+        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
-        rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
+        rows={ppto && ppto.actualizado ? [...(ppto.meta ? [[`Meta de ${ppto.meta.ancla === 'ventas' ? 'ventas' : nombreComponente(ppto.meta.ancla).toLowerCase()}`, fmtShort(ppto.meta.valor)]] : []), ['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
     </div>
     <div style={{ marginTop: D ? 12 : 8 }}>
       <SecCard D={D} ic='alert' tint={C.overdueBg} col={C.overdueText} t='Por resolver' v={nResolver ? String(nResolver) : 'Al día'} vcol={nResolver ? undefined : C.greenText} s={partesRes.join(', ')} onClick={() => setSec('res')} />
@@ -244,6 +248,10 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <Tl label='Vencido' value={fmtMill(venc)} vcol={venc > 0 ? C.overdueText : C.accent} sub={`${new Set(cart.vencidoBills.map(b => String(b.client_id))).size} clientes`} onClick={() => go('cobranzaVencido')} />
       <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
       <Tl label='Días de cobro' value={dCobro.pond != null ? `${dCobro.pond} días` : '—'} sub='ponderado por monto' onClick={() => go('presupuesto')} />
+    </div>
+    <Lbl t='Comisiones' foto='foto de hoy' link='Comisiones' onLink={() => go('proveedores')} /><div style={grid}>
+      <Tl label='Por pagar' value={sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día'} vcol={sc.porPagar > 0 ? C.accent : C.greenText} sub={diasCom != null && sc.porPagar > 0 ? `la más antigua, hace ${diasCom} días` : 'a colaboradores'} onClick={() => go('proveedores')} />
+      <Tl label='Por percibir' value={comCobrar > 0 ? fmtMill(comCobrar) : 'al día'} vcol={comCobrar > 0 ? C.accent : C.greenText} sub='lo que nos pagan' onClick={() => go('proveedores')} />
     </div></>),
     soc: (<>
       <div style={{ ...grid, marginTop: 14 }}>

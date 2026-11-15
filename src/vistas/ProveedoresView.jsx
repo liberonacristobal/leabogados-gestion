@@ -1196,7 +1196,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     {tileL('pp','Por pagar',ppTot,'por_pagar')}
     {tileL('cob','Sujeto a cobro',cobTot,'por_devengar')}
     {tileL('pag',`Pagada · ${yr}`,pagadasAnio,'pagada')}
-    {tileL('te','Comisiones por cobrar',porCobrarTot,'cobrar')}
+    {tileL('te','Comisiones por percibir',porCobrarTot,'cobrar')}
     {tileL('sf',`Sin factura${sinFacTot?' · '+sinFacTot:''}`,sinFacMTot,'sinfac')}
     {tileL('pi',`Por identificar${porIdent.length?' · '+porIdent.length:''}`,montoMov(porIdent),null,porIdent.length?()=>abrirFicha(porIdent[0].p.id):null)}
   </div>
