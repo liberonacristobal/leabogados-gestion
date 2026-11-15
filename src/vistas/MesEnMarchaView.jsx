@@ -4,7 +4,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { C, Gl, SIcon, diaGrande, isoLocal } from '../lib/base.jsx'
+import { C, Gl, SIcon, BtnDescarga, diaGrande, isoLocal, fmtFechaDMY } from '../lib/base.jsx'
+import { descargarTabla } from '../lib/archivos.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, PageHeader, _esDiaHabil, fmtMillLR, resultadoMes, useFuentesResultado } from '../lib/compartido.jsx'
 import { cascadaCobertura, gastosPagados, gastosPorPagar } from '../../supabase/functions/_shared/mesEnMarcha.js'
@@ -82,9 +83,20 @@ export function MesEnMarchaView({ expenses = [], clients = [], billing = [], sal
       <span style={{ color: C.textSoft }}><Gl n='chevron' /></span></div> }
   const btnMes = (/** @type {number} */ n) => { const dis = n > 0 ? ym >= hoyYm : ym <= YM_MIN; return <button onClick={() => !dis && setYm(mesMas(ym, n))} disabled={dis} aria-label={n < 0 ? 'Mes anterior' : 'Mes siguiente'} style={{ width: 30, height: 30, borderRadius: 9, border: `1px solid ${C.border}`, background: C.card, color: C.accent, cursor: dis ? 'default' : 'pointer', opacity: dis ? .35 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Gl n={n < 0 ? 'chevL' : 'chevron'} /></button> }
   const totGastos = M.pagado + M.porPagar
+  const descargar = () => {
+    const r = (/** @type {number} */ n) => Math.round(n)
+    const filas = /** @type {any[][]} */ ([['Concepto', 'Fecha', 'Monto', 'Saldo'],
+      ['Cobrado neto de comisiones', '', r(c.cobrado), r(c.cobrado)], ['Gastos pagados', '', -r(c.pagado), r(c.trasPagados)]])
+    if (M.actual) filas.push(['Gastos por pagar', '', -r(c.porPagar), r(c.saldo)])
+    filas.push([M.actual ? (c.falta > 0 ? 'Falta por cubrir' : 'Gastos cubiertos') : 'Resultado de caja', '', r(M.actual && c.falta > 0 ? c.falta : M.actual ? c.saldo : c.trasPagados), ''], ['', '', '', ''], ['Gastos del mes', 'Fecha', 'Monto', 'Estado'])
+    M.pagadosFilas.forEach(x => filas.push([x.l + (x.sub ? ` (${x.sub})` : ''), fmtFechaDMY(x.fecha), -r(x.monto), x.k === 'sinclas' ? 'Pagado, sin clasificar' : 'Pagado']))
+    M.porPagarFilas.forEach(x => filas.push([x.l, fmtFechaDMY(x.fecha), -r(x.monto), 'Proyectado']))
+    filas.push([`Total ${MESES[Number(ym.slice(5, 7)) - 1]}`, '', -r(totGastos), ''])
+    descargarTabla(`Mes_en_marcha_${ym}`, filas, { hoja: 'Mes en marcha', anchos: [44, 14, 14, 24] })
+  }
   return <div style={D ? { maxWidth: 980, margin: '0 auto', padding: '12px 20px 40px' } : { padding: '8px 16px 40px' }}>
     <PageHeader origen={backLabel} onBack={onBack} titulo='Mes en marcha' style={{ margin: D ? '-12px -20px 12px' : '-8px -16px 12px' }} />
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{btnMes(-1)}<span style={{ fontSize: 15, fontWeight: 800, color: C.accent, minWidth: 140, textAlign: 'center' }}>{ymTitulo(ym)}</span>{btnMes(1)}<span style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>{M.actual ? `en curso · al ${M.hoy.slice(8, 10)}-${M.hoy.slice(5, 7)}` : 'mes cerrado'}</span></div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{btnMes(-1)}<span style={{ fontSize: 15, fontWeight: 800, color: C.accent, minWidth: 140, textAlign: 'center' }}>{ymTitulo(ym)}</span>{btnMes(1)}<span style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>{M.actual ? `en curso, al ${M.hoy.slice(8, 10)}-${M.hoy.slice(5, 7)}` : 'mes cerrado'}</span><BtnDescarga onClick={descargar} titulo='Descargar Excel' n='sheet' /></div>
     <div style={card}>
       {tit('Cobertura de gastos', M.actual ? `al ${M.hoy.slice(8, 10)}-${M.hoy.slice(5, 7)}` : 'mes cerrado', ab.cob, () => setAb(a => ({ ...a, cob: !a.cob })))}
       {ab.cob && <>
