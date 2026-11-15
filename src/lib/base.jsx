@@ -152,6 +152,9 @@ export const Gl = ({n,w=2.2}) => <svg width='1em' height='1em' viewBox='0 0 24 2
 
 export const SIcon = ({n,s=16,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||C.muted} strokeWidth='1.7' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d={_ICON_PATHS[n]||''}/></svg>
 
+// Botón de descarga solo ícono (como en Inicio): sin texto, con título y aria-label. n: 'download' (imagen/genérico), 'sheet' (Excel), 'file' (PDF).
+export const BtnDescarga = ({onClick,titulo,n='download',s=15}) => <button onClick={onClick} title={titulo} aria-label={titulo} style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent,flexShrink:0}}><SIcon n={n} s={s} c={C.accent}/></button>
+
 // ─── Conciliación de facturas: motor de cruce + auto-generación de conocimiento ───
 // Normaliza texto (sin tildes/símbolos) y mide similitud por tokens (Jaccard) 0..1, para cruzar glosa↔proyecto.
 export const _normTxt = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()

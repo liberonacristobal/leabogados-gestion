@@ -4,7 +4,7 @@
 // abre su detalle como página (el mismo de Inicio) y las cuatro siguen a la vista. Maqueta aprobada 2026-11-14.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, Gl, SEC_LBL, SIcon, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, SIcon, BtnDescarga, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { ADMIN_NAMES, SIN_SOCIO, _ymPrev, currentYear, cargarProcesos, cobradoBill, esSubarriendo, estadoProceso, fmtMill, fmtShort, fmtUFk, partidasPorSocio, porCobrarBills, resultadoMes, resumenCartera, saldoComisiones, useCalTrib, useFlujoCaja, usePersistedState, usePorSocioFuentes, vendidoPorSocio, ventaCLP, ventaUF, _DEMO_BANDEJA, CifrasBrutoNeto } from '../lib/compartido.jsx'
 import { kpisPorSocio, cascadaVendido } from '../lib/cifras.js'
 import { KpiAnio, FilasKpi } from '../lib/tarjetasAnio.jsx'
@@ -140,7 +140,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
     const io = new IntersectionObserver(([e]) => setFuera(!e.isIntersecting && e.boundingClientRect.top < hh), { rootMargin: `-${hh}px 0px 0px 0px`, threshold: 0 }); io.observe(el); return () => io.disconnect() }, [hh, esMes, drill, sec])
   const grid = { display: 'grid', gridTemplateColumns: D ? 'repeat(4,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: 10 }
   const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: D ? 12 : 8, marginTop: D ? 12 : 8 }
-  const Lbl = ({ t, foto, link, onLink, xl }) => <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 2px 8px' }}><span style={{ ...SEC_LBL, flex: 1 }}>{t}</span>{foto && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{foto}</span>}{xl && <span onClick={xl} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>Excel ›</span>}{link && <span onClick={onLink} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>{link} ›</span>}</div>
+  const Lbl = ({ t, foto, link, onLink, xl }) => <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 2px 8px' }}><span style={{ ...SEC_LBL, flex: 1 }}>{t}</span>{foto && <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{foto}</span>}{xl && <BtnDescarga onClick={xl} titulo='Descargar Excel' n='sheet' />}{link && <span onClick={onLink} style={{ fontSize: 11, fontWeight: 700, color: C.azulInfo, cursor: 'pointer' }}>{link} ›</span>}</div>
   const selSt = { fontSize: 12, fontWeight: 700, color: C.accent, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 8px', fontFamily: 'inherit', cursor: 'pointer' }
   const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1)
   const enUF = moneda === 'UF', CLP = !enUF

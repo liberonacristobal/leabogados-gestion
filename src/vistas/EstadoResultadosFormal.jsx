@@ -4,7 +4,7 @@
 // pantallas; el impuesto es el PPM puro de impuestosMensuales. Cifras en miles de pesos o en UF (la moneda de Oficina); los subtotales se arman con las cifras ya
 // redondeadas para que el estado sume. El Excel baja las cifras exactas.
 import { useMemo, useState } from 'react'
-import { C, SEC_LBL, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
+import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear } from '../lib/compartido.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { descargarEstadoResultadosPdf } from '../lib/pdfEstadoResultados.js'
@@ -124,8 +124,8 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       <div style={{ margin: '0 2px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: D ? 20 : 17, fontWeight: 800, color: C.accent, whiteSpace: 'nowrap' }}>Estado de resultados</div>
-          <span onClick={pdf} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>PDF ›</span>
-          <span onClick={exp} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', whiteSpace: 'nowrap' }}>Excel ›</span>
+          <BtnDescarga onClick={pdf} titulo='Descargar PDF' n='file' />
+          <BtnDescarga onClick={exp} titulo='Descargar Excel' n='sheet' />
         </div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{D ? `Enero a ${MESES[curM - 1]} de ${year}, al ${fmtFechaDMY(new Date().toISOString().slice(0, 10))}. Cifras en ${unidad}.` : `Ene a ${MC[curM - 1]} ${year}, ${unidad}`}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: D ? 8 : 6, flexWrap: 'wrap', justifyContent: D ? 'flex-end' : 'flex-start' }}>
