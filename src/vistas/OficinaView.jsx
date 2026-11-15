@@ -123,6 +123,8 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const { card6 } = useMemo(() => kpisPorSocio({ P, V, ym: ymNow }), [P, V, ymNow])
   const RS = useMemo(() => retirosSocios({ expenses, clients, socios: [], yr: year }), [expenses, clients, year])   // la misma fuente de la página Socios: retiros y sueldos de los socios
   const aFavor = RS.totalRet + RS.sueldoTot, mesesComp = Math.max(0, curM - 1)
+  // Participación de cada socio en el total de los dos: su retribución sobre la retribución de socios, y su ingreso real sobre el ingreso real de los socios (cada par suma 100 %).
+  const totRetrib = RS.SOC.reduce((a, x) => a + (RS.retTot[x] || 0) + (RS.sueldos[x] || 0), 0), totIngReal = RS.SOC.reduce((a, x) => a + (card6(x, 'ytd')[5] || 0), 0)
   const promDe = s => mesesComp > 0 ? Math.round(((RS.retTot[s] || 0) + (RS.sueldos[s] || 0)) / mesesComp) : 0
 
   // ── Presentación ──
@@ -193,7 +195,7 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
         rows={[['Costos', '−' + costoTxt, { neg: true, onClick: () => go('costos') }], ['Comisiones', '−' + comTxt, { neg: true, onClick: () => go('proveedores') }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), { neg: fin < 0, onClick: () => go('flujoCaja') }], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
         rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—', { onClick: () => go('presupuesto') }]]} />
-      <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`A favor de socios · ${year}`} onClick={() => setSec('soc')}
+      <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`Retribución de socios · ${year}`} onClick={() => setSec('soc')}
         rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
         rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
@@ -233,34 +235,40 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
     </div></>),
     soc: (<>
       <div style={{ ...grid, marginTop: 14 }}>
-        <Tl ic='users' tint={C.tealBg} col={C.tealText} label={`A favor de socios · ${year}`} value={fmtShort(aFavor)} sub='retiros y sueldos' onClick={() => go('socios')} />
+        <Tl ic='users' tint={C.tealBg} col={C.tealText} label={`Retribución de socios · ${year}`} value={fmtShort(aFavor)} sub='retiros y sueldos' onClick={() => go('socios')} />
         <Tl ic='wallet' tint={C.overdueBg} col={C.overdueText} label={`Retirado ${year}`} value={fmtShort(RS.totalRet)} sub='retiros de socios' onClick={() => go('socios')} />
         <Tl ic='building' tint={C.bgSoft} col={C.accent} label='Sueldos socios' value={fmtShort(RS.sueldoTot)} sub={RS.SOC.join(' + ')} onClick={() => go('socios')} />
         <Tl ic='chart' tint={C.azulBg} col={C.azulInfo} label='Ingreso real' value={socIng(null)} sub='oficina' onClick={() => go('porSocio', null, 5)} />
       </div>
       <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
       <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: D ? 12 : 8 }}>
-        {RS.SOC.map(s => { const v = card6(s, 'ytd'); return (
+        {RS.SOC.map(s => { const v = card6(s, 'ytd'), retr = (RS.retTot[s] || 0) + (RS.sueldos[s] || 0), ir = v[5] || 0
+          const pRet = totRetrib > 0 ? retr / totRetrib * 100 : null, pIr = totIngReal > 0 ? ir / totIngReal * 100 : null
+          const pctTxt = (p, de) => p == null ? null : <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}><b style={{ color: C.accent, fontWeight: 800 }}>{pct1(p)} %</b> {de}</div>
+          const hero = (lbl, val, p, de, rows) => (
+            <div style={{ minWidth: 0 }}>
+              <div style={{ ...SEC_LBL, fontSize: 10.5 }}>{lbl}</div>
+              <div style={{ fontSize: D ? 30 : 24, fontWeight: 800, color: C.accent, letterSpacing: -.7, lineHeight: 1.1, marginTop: 2, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+              {pctTxt(p, de)}
+              <FilasKpi D={D} rows={rows} sinBorde />
+            </div>)
+          return (
           <div key={s} onClick={() => go('porSocio', s)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '14px' : '12px 10px', cursor: 'pointer', minWidth: 0, boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0 }}>
-              <span style={{ width: D ? 34 : 30, height: D ? 34 : 30, borderRadius: 8, background: C.tealBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='users' s={16} c={C.tealText} /></span>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ ...SEC_LBL, fontSize: D ? 13 : 12 }}>{s}</div>
-                <div style={{ fontSize: D ? 26 : 20, fontWeight: 800, color: C.accent, letterSpacing: -.6, lineHeight: 1.05, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{fmtShort((RS.retTot[s] || 0) + (RS.sueldos[s] || 0))}</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Total a favor · {year}</div>
-              </div>
-              <span style={{ color: C.muted, fontSize: 16, alignSelf: 'flex-start' }}>›</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: C.tealBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='users' s={15} c={C.tealText} /></span>
+              <span style={{ flex: 1, fontSize: 16, fontWeight: 800, color: C.accent }}>{s}</span>
+              <span style={{ color: C.muted, fontSize: 16 }}>›</span>
             </div>
-            <FilasKpi D={D} rows={[['Retiros', fmtShort(RS.retTot[s] || 0)], ['Sueldo', fmtShort(RS.sueldos[s] || 0)], ['Promedio mensual', fmtShort(promDe(s))]]} />
-            <FilasKpi D={D} tenue sinMargen rows={[['Vendido neto', fmtShort(v[0] || 0)], ['Cobrado', fmtShort(v[2] || 0)], ['Ingreso real', fmtShort(v[5] || 0)]]} />
+            <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr', marginTop: 10 }}>
+              <div style={D ? { paddingRight: 16, borderRight: `1px solid ${C.border}`, minWidth: 0 } : { paddingBottom: 12, minWidth: 0 }}>{hero(`Retribución · ${year}`, fmtShort(retr), pRet, 'de la retribución', [['Retiros', fmtShort(RS.retTot[s] || 0), { onClick: () => go('socios') }], ['Sueldo', fmtShort(RS.sueldos[s] || 0), { onClick: () => go('socios') }], ['Promedio mensual', fmtShort(promDe(s))]])}</div>
+              <div style={D ? { paddingLeft: 16, minWidth: 0 } : { paddingTop: 12, borderTop: `1px solid ${C.border}`, minWidth: 0 }}>{hero('Ingreso real', fmtShort(ir), pIr, 'del ingreso real', [['Vendido neto', fmtShort(v[0] || 0)], ['Cobrado', fmtShort(v[2] || 0)]])}</div>
+            </div>
           </div>) })}
       </div>
       {(() => { const v = card6(SIN_SOCIO, 'ytd'); return (
-        <div onClick={() => go('porSocio', SIN_SOCIO)} style={{ marginTop: D ? 12 : 8, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '12px 14px' : '10px', cursor: 'pointer', display: 'flex', alignItems: D ? 'center' : 'flex-start', gap: D ? 14 : 9, flexDirection: D ? 'row' : 'column', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: D ? 150 : 0 }}><span style={{ width: 30, height: 30, borderRadius: 8, background: C.bgSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='users' s={16} c={C.accent} /></span><span style={{ ...SEC_LBL, fontSize: 12 }}>{SIN_SOCIO}</span></div>
-          <div style={{ display: 'flex', gap: D ? 28 : 14, flexWrap: 'wrap', flex: 1, justifyContent: D ? 'flex-end' : 'flex-start' }}>
-            {[['Vendido neto', v[0]], ['Cobrado', v[2]], ['Ingreso real', v[5]]].map(([l, x]) => <span key={l} style={{ fontSize: D ? 12.5 : 11.5, color: C.muted, whiteSpace: 'nowrap' }}>{l} <b style={{ color: C.muted, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginLeft: 6 }}>{fmtShort(x || 0)}</b></span>)}
-          </div>
+        <div onClick={() => go('porSocio', SIN_SOCIO)} style={{ margin: '14px 4px 0', display: 'flex', alignItems: 'center', gap: D ? 18 : 12, flexWrap: 'wrap', fontSize: D ? 12.5 : 11.5, color: C.muted, cursor: 'pointer' }}>
+          <span style={{ ...SEC_LBL, fontSize: 10.5 }}>{SIN_SOCIO}</span>
+          {[['Vendido neto', v[0]], ['Cobrado', v[2]], ['Ingreso real', v[5]]].map(([l, x]) => <span key={l} style={{ whiteSpace: 'nowrap' }}>{l} <b style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginLeft: 5 }}>{fmtShort(x || 0)}</b></span>)}
         </div>) })()}
     </>),
   }
