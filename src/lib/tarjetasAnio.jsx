@@ -13,11 +13,11 @@ const ICO_ANIO = {
   tPct:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
 }
 // Filas de desglose bajo la cifra (las partes que suman el total): [rótulo, valor, {neg, tot}]. `neg` = rojo; `tot` = línea de total con filete arriba.
-export const FilasKpi = ({rows,D}) => (
-  <div style={{marginTop:D?12:8,borderTop:`1px solid ${C.border}`,paddingTop:4}}>
+export const FilasKpi = ({rows,D,tenue,sinMargen}) => (
+  <div style={{marginTop:sinMargen?4:(D?12:8),borderTop:`1px solid ${C.border}`,paddingTop:4}}>
     {rows.map(([l,v,o],i)=>{ o=o||{}; return (
       <div key={l+i} onClick={o.onClick?e=>{e.stopPropagation();o.onClick()}:undefined} style={{display:'flex',justifyContent:'space-between',gap:6,padding:D?'4px 0':'3px 0',fontSize:D?12.5:10.5,color:o.tot?C.accent:C.muted,fontWeight:o.tot?700:400,borderTop:o.tot?`1px solid ${C.border}`:'none',marginTop:o.tot?2:0,whiteSpace:'nowrap',cursor:o.onClick?'pointer':'inherit'}}>
-        <span style={{overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span><b style={{color:o.neg?C.overdueText:C.accent,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>{v}</b>
+        <span style={{overflow:'hidden',textOverflow:'ellipsis',minWidth:0}}>{l}</span><b style={{color:o.neg?C.overdueText:(tenue?C.muted:C.accent),fontWeight:tenue?600:700,fontVariantNumeric:'tabular-nums'}}>{v}</b>
       </div>) })}
   </div>)
 

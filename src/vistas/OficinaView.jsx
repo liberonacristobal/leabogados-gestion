@@ -10,6 +10,7 @@ import { kpisPorSocio, cascadaVendido } from '../lib/cifras.js'
 import { KpiAnio, FilasKpi } from '../lib/tarjetasAnio.jsx'
 import { pctsAnio, useResultadoAnio, ingresoRealAnio } from '../lib/resultadoAnio.js'
 import { proyeccionCobranza, ResDrillPanel } from './DashboardView.jsx'
+import { retirosSocios } from './SociosView.jsx'
 import { useMesEnMarcha } from './MesEnMarchaView.jsx'
 import { resumenDiasCobro } from '../../supabase/functions/_shared/diasCobro.js'
 
@@ -20,11 +21,14 @@ const margenPct = (res, ing) => ing > 0 ? res / ing * 100 : null
 const pct1 = v => v == null ? null : v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 // Tarjeta chica (la misma forma para todas las hermanas): etiqueta, cifra y una línea de apoyo. `er` = gris suave (Estado de resultados).
-const Tl = ({ label, value, sub, vcol, er, onClick }) => (
-  <div onClick={onClick} className='pv-c' style={{ background: er ? C.border : C.card, border: `1px solid ${er ? C.border : C.border}`, borderRadius: 12, padding: '10px 12px', minWidth: 0, boxSizing: 'border-box', cursor: onClick ? 'pointer' : 'default' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...SEC_LBL, fontSize: 10, letterSpacing: .5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-    <div style={{ fontSize: 17, fontWeight: 800, color: vcol || C.accent, letterSpacing: -.4, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{value}</div>
-    <div style={{ fontSize: 10.5, color: C.textSoft, minHeight: 14, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</div>
+const Tl = ({ label, value, sub, vcol, er, onClick, ic, tint, col }) => (
+  <div onClick={onClick} className='pv-c' style={{ background: er ? C.border : C.card, border: `1px solid ${er ? C.border : C.border}`, borderRadius: 12, padding: '10px 12px', minWidth: 0, boxSizing: 'border-box', cursor: onClick ? 'pointer' : 'default', display: ic ? 'flex' : 'block', alignItems: 'center', gap: 10 }}>
+    {ic && <span style={{ width: 32, height: 32, borderRadius: 8, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n={ic} s={16} c={col} /></span>}
+    <div style={{ minWidth: 0, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...SEC_LBL, fontSize: 10, letterSpacing: .5, ...(ic ? { whiteSpace: 'normal', lineHeight: 1.2 } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: vcol || C.accent, letterSpacing: -.4, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: C.textSoft, minHeight: 14, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</div>
+    </div>
   </div>)
 
 // Tarjeta de sección de la portada: ícono a la izquierda, rótulo, cifra y apoyo a su derecha; debajo, las partidas que la forman. Misma forma para las cuatro hermanas.
@@ -117,8 +121,9 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
   const P = useMemo(() => partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic: fu.ic, ia: fu.ia, ov: fu.ov, fondoExtra: {} }), [billing, sales, clients, anticipos, terceros, expenses, fu])
   const V = useMemo(() => vendidoPorSocio(sales, clients, ufRef, year, null, { terceros, billing }), [sales, clients, ufRef, terceros, billing])
   const { card6 } = useMemo(() => kpisPorSocio({ P, V, ym: ymNow }), [P, V, ymNow])
-  const sociosFilas = [...ADMIN_NAMES, SIN_SOCIO, null]
-  const retAnio = useMemo(() => (expenses || []).filter(e => e && !e.deleted_at && e.type === 'gasto' && String(e.category || '') === 'Retiros' && String(e.date || '').slice(0, 4) === String(year)).reduce((a, e) => a + (Number(e.amount) || 0), 0), [expenses, year])
+  const RS = useMemo(() => retirosSocios({ expenses, clients, socios: [], yr: year }), [expenses, clients, year])   // la misma fuente de la página Socios: retiros y sueldos de los socios
+  const aFavor = RS.totalRet + RS.sueldoTot, mesesComp = Math.max(0, curM - 1)
+  const promDe = s => mesesComp > 0 ? Math.round(((RS.retTot[s] || 0) + (RS.sueldos[s] || 0)) / mesesComp) : 0
 
   // ── Presentación ──
   const D = isDesktop
@@ -188,8 +193,8 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
         rows={[['Costos', '−' + costoTxt, { neg: true, onClick: () => go('costos') }], ['Comisiones', '−' + comTxt, { neg: true, onClick: () => go('proveedores') }], ['Flujo de caja', (fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin)), { neg: fin < 0, onClick: () => go('flujoCaja') }], ['Comisiones por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
         rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Días de cobro', dCobro.pond != null ? `${dCobro.pond} días` : '—', { onClick: () => go('presupuesto') }]]} />
-      <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={socIng(null)} s={`ingreso real, enero a ${MESES[curM - 1]}`} onClick={() => setSec('soc')}
-        rows={[...ADMIN_NAMES.map(s => [s, socIng(s), { onClick: () => go('porSocio', s) }]), ['Retiros y sueldos', fmtShort(retAnio), { onClick: () => go('socios') }]]} />
+      <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`A favor de socios · ${year}`} onClick={() => setSec('soc')}
+        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
         rows={ppto && ppto.actualizado ? [['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
     </div>
@@ -226,19 +231,38 @@ export function OficinaView({ sales = [], billing = [], clients = [], terceros =
       <Tl label='Más de 60 días' value={fmtMill(cart.expo.m60 || 0)} vcol={cart.expo.m60 > 0 ? C.overdueText : C.accent} sub={totPorCobrar > 0 ? `${Math.round((cart.expo.pctM60 || 0) * 100)} % de la cartera` : ''} onClick={() => go('cobranzaM60')} />
       <Tl label='Días de cobro' value={dCobro.pond != null ? `${dCobro.pond} días` : '—'} sub='ponderado por monto' onClick={() => go('presupuesto')} />
     </div></>),
-    soc: (<><Lbl t='Retiros y sueldos' /><div style={grid}><Tl label='Retiros y sueldos' value={fmtShort(retAnio)} sub='retiros del año, sueldos y simulador de retiros' onClick={() => go('socios')} /></div>
+    soc: (<>
+      <div style={{ ...grid, marginTop: 14 }}>
+        <Tl ic='users' tint={C.tealBg} col={C.tealText} label={`A favor de socios · ${year}`} value={fmtShort(aFavor)} sub='retiros y sueldos' onClick={() => go('socios')} />
+        <Tl ic='wallet' tint={C.overdueBg} col={C.overdueText} label={`Retirado ${year}`} value={fmtShort(RS.totalRet)} sub='retiros de socios' onClick={() => go('socios')} />
+        <Tl ic='building' tint={C.bgSoft} col={C.accent} label='Sueldos socios' value={fmtShort(RS.sueldoTot)} sub={RS.SOC.join(' + ')} onClick={() => go('socios')} />
+        <Tl ic='chart' tint={C.azulBg} col={C.azulInfo} label='Ingreso real' value={socIng(null)} sub='oficina' onClick={() => go('porSocio', null, 5)} />
+      </div>
       <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} />
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: D ? 12.5 : 12, fontVariantNumeric: 'tabular-nums' }}>
-          <thead><tr>{['Socio', 'Vendido neto', 'Cobrado', 'Ingreso real'].map((h, i) => <th key={h} style={{ padding: D ? '8px 14px' : '8px 6px', fontSize: D ? 10 : 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, color: C.accent, background: C.bgSoft, textAlign: i ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
-          <tbody>{sociosFilas.map(s => { const v = card6(s, 'ytd'), tot = s === null; return (
-            <tr key={s || 'ofi'} onClick={() => go('porSocio')} style={{ cursor: 'pointer', background: tot ? C.bgSoft : undefined }}>
-              <td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, fontWeight: tot ? 800 : 600, color: tot ? C.accent : C.text }}>{tot ? 'Oficina' : s}</td>
-              {[0, 2, 5].map(i => <td key={i} onClick={e => { e.stopPropagation(); go('porSocio', s, i) }} style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: tot ? `1.5px solid ${C.accent}` : `1px solid ${C.bgSoft}`, textAlign: 'right', fontWeight: tot ? 800 : 400, color: tot ? C.accent : undefined }}>{fmtShort(v[i] || 0)}</td>)}
-            </tr>) })}
-            <tr onClick={() => go('socios')} style={{ cursor: 'pointer' }}><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, fontWeight: 600 }}>Retiros de socios</td><td /><td /><td style={{ padding: D ? '8px 14px' : '8px 6px', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right' }}>{fmtShort(retAnio)}</td></tr>
-          </tbody></table></div>
-      </div></>),
+      <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(2,minmax(0,1fr))' : '1fr', gap: D ? 12 : 8 }}>
+        {RS.SOC.map(s => { const v = card6(s, 'ytd'); return (
+          <div key={s} onClick={() => go('porSocio', s)} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '14px' : '12px 10px', cursor: 'pointer', minWidth: 0, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: D ? 12 : 9, minWidth: 0 }}>
+              <span style={{ width: D ? 34 : 30, height: D ? 34 : 30, borderRadius: 8, background: C.tealBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='users' s={16} c={C.tealText} /></span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ ...SEC_LBL, fontSize: D ? 13 : 12 }}>{s}</div>
+                <div style={{ fontSize: D ? 26 : 20, fontWeight: 800, color: C.accent, letterSpacing: -.6, lineHeight: 1.05, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>{fmtShort((RS.retTot[s] || 0) + (RS.sueldos[s] || 0))}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Total a favor · {year}</div>
+              </div>
+              <span style={{ color: C.muted, fontSize: 16, alignSelf: 'flex-start' }}>›</span>
+            </div>
+            <FilasKpi D={D} rows={[['Retiros', fmtShort(RS.retTot[s] || 0)], ['Sueldo', fmtShort(RS.sueldos[s] || 0)], ['Promedio mensual', fmtShort(promDe(s))]]} />
+            <FilasKpi D={D} tenue sinMargen rows={[['Vendido neto', fmtShort(v[0] || 0)], ['Cobrado', fmtShort(v[2] || 0)], ['Ingreso real', fmtShort(v[5] || 0)]]} />
+          </div>) })}
+      </div>
+      {(() => { const v = card6(SIN_SOCIO, 'ytd'); return (
+        <div onClick={() => go('porSocio', SIN_SOCIO)} style={{ marginTop: D ? 12 : 8, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: D ? '12px 14px' : '10px', cursor: 'pointer', display: 'flex', alignItems: D ? 'center' : 'flex-start', gap: D ? 14 : 9, flexDirection: D ? 'row' : 'column', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: D ? 150 : 0 }}><span style={{ width: 30, height: 30, borderRadius: 8, background: C.bgSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n='users' s={16} c={C.accent} /></span><span style={{ ...SEC_LBL, fontSize: 12 }}>{SIN_SOCIO}</span></div>
+          <div style={{ display: 'flex', gap: D ? 28 : 14, flexWrap: 'wrap', flex: 1, justifyContent: D ? 'flex-end' : 'flex-start' }}>
+            {[['Vendido neto', v[0]], ['Cobrado', v[2]], ['Ingreso real', v[5]]].map(([l, x]) => <span key={l} style={{ fontSize: D ? 12.5 : 11.5, color: C.muted, whiteSpace: 'nowrap' }}>{l} <b style={{ color: C.muted, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginLeft: 6 }}>{fmtShort(x || 0)}</b></span>)}
+          </div>
+        </div>) })()}
+    </>),
   }
 
   return (
