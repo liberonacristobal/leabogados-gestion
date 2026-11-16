@@ -59,3 +59,8 @@ test('la calculadora de aumento es un solo bloque y está en las dos pantallas d
   assert.ok(leer('src/lib/costoEmpresaBloque.jsx').some((x) => /remuneracionDeLiquido/.test(x.t)))
   assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /Aumento al equipo/.test(x.t)))
 })
+
+test('la calculadora de Costos de Oficina compara con el monto vigente de la línea, no con el campo «Antes»', () => {
+  const l = leer('src/App.jsx').filter((x) => /const hoyL=/.test(x.t))
+  assert.equal(l.length, 1); assert.ok(/const hoyL=Number\(r\.monto\)/.test(l[0].t)); assert.ok(!/ef\.prev/.test(l[0].t))
+})
