@@ -11,6 +11,7 @@ import { clientesParecidos, _tipoDupLbl, Sel, Txt, PaginaSobre } from './lib/com
 import { normRut } from './lib/compartido.jsx'
 import { META_UF, costoOperacionReal, useFlujoCaja, comisPorPagarAnteriores, _resultadoInicio } from './lib/compartido.jsx'
 import { CostoEmpresaBloque, calcularAumento } from './lib/costoEmpresaBloque.jsx'
+import { mismaPersona } from '../supabase/functions/_shared/liquidacionesReglas.js'
 import { fetchUFFechas, iuPresupuestoMes, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
 import { fmtUFk, inicioVentaYM, ventaCuentaEnAnio } from './lib/compartido.jsx'
 import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
@@ -1335,7 +1336,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:ef.desde?7:0}}><span style={{fontSize:11,color:C.muted,width:52}}>Rige desde</span><select value={ef.desde} onChange={e=>setEf(f=>({...f,desde:e.target.value, prev:e.target.value&&!f.prev?String(r.monto||''):f.prev}))} style={{...inpS,flex:1}}><option value=''>Siempre</option>{mesesOpt.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
                     {ef.desde&&<div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted,width:52}}>Antes</span><span style={{fontSize:12,color:C.textSoft}}>$</span><input type='number' value={ef.prev} onChange={e=>setEf(f=>({...f,prev:e.target.value}))} placeholder='monto anterior' style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>}
                     {r.categoria==='Remuneraciones'&&(()=>{ const hoyL=ef.desde?(Number(ef.prev)||0):(Number(r.monto)||0), nuevoL=Number(ef.monto)||0; if(!(hoyL>0&&nuevoL>0&&hoyL!==nuevoL)) return null
-                      const esBol=fuC.boleta.has(_normTxt(r.item||''))
+                      const esBol=[...fuC.boleta].some(n=>mismaPersona(n,r.item||''))
                       return <div style={{marginTop:9}}><CostoEmpresaBloque key={r.id} esBoleta={esBol} D={isDeskC} meses={12} anio={ym.slice(0,4)} entrada={{persona:r.item,liquido:hoyL,liquidoNuevo:nuevoL,liq:fuC.liq,tramosIU:fuC.tramosIU,plan:fuC.plan,uf:ufC,ufDeLiquidacion:()=>ufC,ym}}/></div> })()}
                     <div style={{display:'flex',gap:7,marginTop:9}}>
                       <button onClick={()=>guardarEdit(r)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
@@ -1347,7 +1348,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                   <div onClick={()=>abrirEdit(r)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text}}>{r.item}</div>
-                      {r.categoria==='Remuneraciones'&&iuRows([r])>0&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>líquido {fmt(eff(r))} + impuesto único {fmt(iuRows([r]))}</div>}
+                      {r.categoria==='Remuneraciones'&&iuRows([r])>0&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>líquido {fmt(eff(r))} + {[...fuC.boleta].some(n=>mismaPersona(n,r.item||''))?'retención de honorarios':'impuesto único'} {fmt(iuRows([r]))}</div>}
                       {r.desde&&r.monto_prev!=null&&<div style={{fontSize:10,color:C.soonText,fontWeight:600,marginTop:1}}>{!Number(r.monto_prev)?'nuevo desde':Number(r.monto)<Number(r.monto_prev)?'bajó en':'subió en'} {MESES[+String(r.desde).slice(5,7)-1]}{Number(r.monto_prev)?` · antes ${fmt(r.monto_prev)}`:''}</div>}
                     </div>
                     <span style={{fontSize:13,fontWeight:600,color:r.es_ingreso?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{r.es_ingreso?'−':''}{fmt(eff(r)+(r.categoria==='Remuneraciones'?iuRows([r]):0))}</span>

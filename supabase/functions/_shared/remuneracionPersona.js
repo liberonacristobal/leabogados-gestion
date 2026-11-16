@@ -51,15 +51,18 @@ export function remuneracionDeLiquido(p) {
 }
 
 /**
- * Impuesto único de las líneas de «Remuneraciones» del presupuesto de oficina en el mes `ym`: cada línea es un sueldo líquido; el impuesto único sale de su remuneración completa.
- * Las líneas sin liquidación (quien emite boleta, otros) no suman: su retención ya va en el bruto de la boleta.
- * @param {{rows:any[], ym:string, liquidaciones:any[], tramosFilas:any[], ufDelMes:number, ufDeLiquidacion:(ym:string)=>number, vigente:(r:any)=>number}} p `vigente` = monto de la línea en ese mes (con su desde/monto_prev)
+ * Lo que el presupuesto de oficina debe sumar a las líneas de «Remuneraciones» (cada línea guarda un sueldo LÍQUIDO) para llegar a lo que cuesta la persona:
+ * el impuesto único de quien tiene contrato (desde su líquido y su última liquidación) o la retención de la boleta de quien emite boleta de honorarios (bruto − líquido).
+ * Las líneas sin liquidación y sin boleta (otras) no suman.
+ * @param {{rows:any[], ym:string, liquidaciones:any[], tramosFilas:any[], ufDelMes:number, ufDeLiquidacion:(ym:string)=>number, vigente:(r:any)=>number, boleta?:string[]}} p `vigente` = monto de la línea en ese mes (con su desde/monto_prev); `boleta` = nombres de quienes emiten boleta
  */
 export function impuestoUnicoPresupuesto(p) {
   let total = 0
   for (const r of p.rows || []) {
     if (!r || r.activo === false || r.es_ingreso || String(r.categoria || '') !== 'Remuneraciones') continue
-    const x = remuneracionDeLiquido({ liquido: _n(p.vigente(r)), persona: String(r.item || ''), liquidaciones: p.liquidaciones, ym: p.ym, uf: p.ufDelMes, ufDeLiquidacion: p.ufDeLiquidacion, tramosFilas: p.tramosFilas })
+    const liquido = _n(p.vigente(r))
+    if ((p.boleta || []).some(n => mismaPersona(n, String(r.item || '')))) { const b = remuneracionBoleta({ liquido, fecha: p.ym + '-01' }); if (b) total += b.iu; continue }
+    const x = remuneracionDeLiquido({ liquido, persona: String(r.item || ''), liquidaciones: p.liquidaciones, ym: p.ym, uf: p.ufDelMes, ufDeLiquidacion: p.ufDeLiquidacion, tramosFilas: p.tramosFilas })
     if (x) total += x.iu
   }
   return total

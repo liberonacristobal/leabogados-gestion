@@ -61,3 +61,11 @@ test('pasar de boleta a contrato: con AFP y plan dados se calcula sin liquidaci�
   assert.ok(c); assert.ok(Math.abs(c.liquido - 500000) <= 1); assert.ok(c.cotTrab > 0); assert.equal(c.empleador, Math.round(0.06 * c.imponible))
   assert.equal(remuneracionDeLiquido({ ...base, parametros: null, liquido: 500000 }), null)   // sin liquidación ni parámetros no se inventa
 })
+
+test('presupuesto: quien emite boleta suma la retención (bruto − líquido) aunque su línea tenga un nombre largo; el resto suma impuesto único', () => {
+  const rows = [{ categoria: 'Remuneraciones', item: 'Persona Uno', monto: L[0].liquido }, { categoria: 'Remuneraciones', item: 'Otra Procuradora (procuradora)', monto: 500000 }]
+  const p = { rows, ym: '2026-10', liquidaciones: L, tramosFilas: FILAS, ufDelMes: UF['2026-10'], ufDeLiquidacion, vigente: (r) => r.monto }
+  const con = impuestoUnicoPresupuesto({ ...p, boleta: ['otra'] }), sin = impuestoUnicoPresupuesto({ ...p, boleta: [] })
+  assert.equal(con - sin, 89970)   // 500.000 líquidos a 15,25 % de retención
+  assert.ok(sin > 0)
+})

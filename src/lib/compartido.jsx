@@ -721,7 +721,7 @@ export function remuneracionesBancoMes(expenses, clients, ym, boleta){
 // Impuesto único de las líneas de Remuneraciones del PRESUPUESTO de oficina en un mes (cada línea es un sueldo líquido): una sola función para lo estimado de resultadoMes y para Presupuesto vs real.
 export function iuPresupuestoMes(fu, costosOfiRows, ym, ufd=null, ufFb=0){
   const u=iso=>ufDelDia(ufd, iso, ufFb||UF_FALLBACK), eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
-  return impuestoUnicoPresupuesto({rows:costosOfiRows, ym, liquidaciones:fu?.liq||[], tramosFilas:fu?.tramosIU||[], ufDelMes:u(finMesOHoy(ym)), ufDeLiquidacion:p=>u(finMesOHoy(p)), vigente:eff})
+  return impuestoUnicoPresupuesto({rows:costosOfiRows, ym, liquidaciones:fu?.liq||[], tramosFilas:fu?.tramosIU||[], ufDelMes:u(finMesOHoy(ym)), ufDeLiquidacion:p=>u(finMesOHoy(p)), vigente:eff, boleta:[...(fu?.boleta||[])]})
 }
 export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], expenses=[], clients=[], ufd=null, ufFb=0}, ym){
   const u=iso=>ufDelDia(ufd, iso, ufFb||UF_FALLBACK), ufFin=u(finMesOHoy(ym))

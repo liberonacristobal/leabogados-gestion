@@ -12,3 +12,6 @@ dist
 # Renders con datos de clientes (correos, nombres): no van al repositorio
 docs/render-*.html
 .claude/settings.local.json
+
+# Archivos locales de la CLI de Supabase (se recrean al usarla)
+supabase/.temp/
