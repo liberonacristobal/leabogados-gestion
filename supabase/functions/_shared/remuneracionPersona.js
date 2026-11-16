@@ -36,7 +36,7 @@ export function parametrosDeLiquidacion(l, uf) {
 /**
  * Remuneración completa de una persona para un líquido dado en el mes `ym`.
  * @param {{liquido:number, persona:string, liquidaciones:any[], ym:string, uf:number, ufDeLiquidacion:(ym:string)=>number, tramosFilas:any[], tasaEmpleador?:number}} p
- * @returns {{imponible:number, cotTrab:number, iu:number, liquido:number, haberes:number, empleador:number, costoEmpresa:number, afpPct:number, planUF:number}|null} null si la persona no tiene liquidación de la que tomar sus parámetros
+ * @returns {{imponible:number, afp:number, ces:number, saludTotal:number, cotTrab:number, iu:number, liquido:number, haberes:number, empleador:number, costoEmpresa:number, afpPct:number, planUF:number}|null} null si la persona no tiene liquidación de la que tomar sus parámetros
  */
 export function remuneracionDeLiquido(p) {
   const ult = ultimaLiquidacionDe(p.persona, p.liquidaciones, p.ym); if (!ult) return null
@@ -44,7 +44,7 @@ export function remuneracionDeLiquido(p) {
   const tramos = tramosDelMes(p.tramosFilas, p.ym); if (!tramos.length) return null
   const r = imponibleDeLiquido({ liquido: p.liquido, afpPct: prm.afpPct, planSaludPesos: prm.planUF * p.uf, uf: p.uf, tramos }); if (!r) return null
   const c = costoEmpresaMes({ imponible: r.imponible, tasaEmpleador: _n(p.tasaEmpleador) })
-  return { imponible: r.imponible, cotTrab: r.cotTrab, iu: r.iu, liquido: r.liquido, haberes: c.haberes, empleador: c.empleador, costoEmpresa: c.costoEmpresa, afpPct: prm.afpPct, planUF: prm.planUF }
+  return { imponible: r.imponible, afp: r.afp, ces: r.ces, saludTotal: r.saludTotal, cotTrab: r.cotTrab, iu: r.iu, liquido: r.liquido, haberes: c.haberes, empleador: c.empleador, costoEmpresa: c.costoEmpresa, afpPct: prm.afpPct, planUF: prm.planUF }
 }
 
 /**
@@ -60,6 +60,24 @@ export function impuestoUnicoPresupuesto(p) {
     if (x) total += x.iu
   }
   return total
+}
+
+/**
+ * Tasa de la parte del empleador sobre el imponible: del último mes con planilla y liquidaciones, (cotizaciones de la planilla − las del trabajador) ÷ imponible de las liquidaciones.
+ * @param {{plan:any[], liquidaciones:any[]}} p `plan` = filas de la planilla mensual (anio, mes, cotizaciones)
+ * @returns {{tasa:number, periodo:string}|null}
+ */
+export function tasaEmpleadorDe({ plan, liquidaciones }) {
+  const porMes = new Map()
+  for (const l of liquidaciones || []) { if (!l) continue; const k = String(l.periodo); const a = porMes.get(k) || { imp: 0, ct: 0 }; a.imp += _n(l.imponible); a.ct += Math.max(0, _n(l.imponible) - _n(l.impuesto_unico) - _n(l.liquido)); porMes.set(k, a) }
+  const pers = [...porMes.keys()].sort().reverse()
+  for (const per of pers) {
+    const row = (plan || []).find(r => r && `${r.anio}-${String(r.mes).padStart(2, '0')}` === per && _n(r.cotizaciones) > 0), a = porMes.get(per)
+    if (!row || !a || !(a.imp > 0)) continue
+    const emp = _n(row.cotizaciones) - a.ct
+    if (emp > 0) return { tasa: emp / a.imp, periodo: per }
+  }
+  return null
 }
 
 export { liquidacionDeImponible }

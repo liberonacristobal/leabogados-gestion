@@ -52,3 +52,10 @@ test('Resultado antes de sueldos de socios sale de la misma función en Inicio y
   assert.ok(leer('src/vistas/EstadoResultadosFormal.jsx').some((x) => /Resultado antes de sueldos de socios/.test(x.t) && /T1\.resSin/.test(x.t)))
   assert.ok(leer('src/lib/resultadoAnio.js').some((x) => /o\.resSin=o\.res\+o\.soc/.test(x.t)))
 })
+
+test('la calculadora de aumento es un solo bloque y está en las dos pantallas del presupuesto', () => {
+  assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /<CostoEmpresaBloque/.test(x.t)))
+  assert.ok(leer('src/App.jsx').some((x) => /<CostoEmpresaBloque/.test(x.t)))
+  assert.ok(leer('src/lib/costoEmpresaBloque.jsx').some((x) => /remuneracionDeLiquido/.test(x.t)))
+  assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /Aumento al equipo/.test(x.t)))
+})

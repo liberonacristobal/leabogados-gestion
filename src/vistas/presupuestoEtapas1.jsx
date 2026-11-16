@@ -1,8 +1,10 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
-import { C, fmtFechaDMY } from '../lib/base.jsx'
+import { C, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { costosPresupuesto, costosBrutosNetos, ID_SUBARRIENDO, mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, Ic, LBL, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
+import { CostoEmpresaBloque, calcularAumento } from '../lib/costoEmpresaBloque.jsx'
+import { ufDelDia, finMesOHoy } from '../lib/compartido.jsx'
 import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 import { ETIQ_DESTINO } from '../../supabase/functions/_shared/impuestosMensuales.js'
@@ -217,6 +219,14 @@ export function Costos({ X }) {
               <span>{X.ESC.map(([kk, n], j) => <span key={kk}>{j ? ' · ' : ''}{n} <b style={{ color: C.text }}>{mm(val(c, kk))}</b></span>)}</span>
               <Lnk rojo onClick={() => delCosto(i)}>Quitar partida</Lnk>
             </div>
+            {c.g === 'Remuneraciones' && !c.imp && !c.boleta && c.m > 0 && (() => {
+              const nuevoLiq = Math.round(c.m * (1 + efec / 100)), ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', uf = ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef)
+              const calc = ymR ? calcularAumento({ persona: c.n, liquido: c.m, liquidoNuevo: nuevoLiq, liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR }) : null
+              return <>
+                <div style={{ gridColumn: '1 / -1' }}><div style={eti}>Líquido con el aumento</div><FldDin w={150} clp={nuevoLiq} tasa={tasa26()} onCommit={(x) => setCosto(i, 'alza', Math.round((x / c.m - 1) * 10000) / 100)} /></div>
+                <CostoEmpresaBloque calc={calc} D={D} meses={c.meses} anio={Y} />
+              </>
+            })()}
             {c.id === 'cot-empleador' && d.cotEmp.total > 0 && (() => {
               const cm = d.cotEmp, tp = (/** @type {number} */ x) => Number(x).toLocaleString('es-CL', { maximumFractionDigits: 2 }) + ' %', desde = cm.meses.find((x) => x.tasa > cm.tasaBase), fila = (t, v, tot) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, ...(tot ? { borderTop: `1px solid ${C.border}`, paddingTop: 4, marginTop: 2, fontWeight: 700, color: C.accent } : { color: C.muted }) }}><span>{t}</span><span style={{ fontVariantNumeric: 'tabular-nums', color: tot ? C.accent : C.text, fontWeight: tot ? 800 : 600 }}>{v}</span></div>
               return <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -255,6 +265,35 @@ export function Costos({ X }) {
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
           <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
+          {(() => {
+            const eq = ui.equipo || { abierto: false, pct: '' }, pct = Number(String(eq.pct).replace(',', '.')) || 0
+            const ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', ufR = ymR ? ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef) : 0
+            const filasEq = !eq.abierto || !ymR ? [] : est.costos.map((c, i) => [c, i]).filter(([c]) => c.g === 'Remuneraciones' && !c.imp && !c.boleta && c.m > 0)
+              .map(([c, i]) => [c, i, calcularAumento({ persona: c.n, liquido: c.m, liquidoNuevo: Math.round(c.m * (1 + pct / 100)), liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf: ufR, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR })]).filter((x) => x[2])
+            const ch = filasEq.reduce((a, x) => a + x[2].hoy.costoEmpresa, 0), cn = filasEq.reduce((a, x) => a + x[2].nuevo.costoEmpresa, 0)
+            const sg = (n) => (n >= 0 ? '+' : '−') + fmt(Math.abs(n))
+            return <>
+              <div style={{ padding: '8px 16px', borderTop: `1px solid ${C.border}` }}><Lnk onClick={() => setUI({ equipo: { ...eq, abierto: !eq.abierto } })}>{eq.abierto ? 'Cerrar aumento al equipo' : 'Aumento al equipo'}</Lnk></div>
+              {eq.abierto && <div style={{ background: C.bgSoft, padding: '10px 16px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}><div><div style={eti}>Aumento al equipo, sobre el líquido</div><Fld kind='pct' suf='%' w={110} value={eq.pct === '' ? null : Number(String(eq.pct).replace(',', '.'))} onCommit={(x) => setUI({ equipo: { ...eq, pct: x == null ? '' : String(x) } })} /></div></div>
+                {filasEq.length === 0 ? <span style={{ fontSize: 12, color: C.muted }}>Ninguna persona del presupuesto tiene liquidación de la que calcular el costo empresa</span>
+                  : <div style={{ border: `2px solid ${C.accent}`, borderRadius: 12, overflow: 'hidden', background: C.card }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 120px 120px 120px 110px' : 'minmax(0,1fr) auto', gap: '0 10px', padding: '0 14px' }}>
+                      {D && ['Persona', 'Líquido nuevo', 'Costo empresa hoy', 'Con el aumento', 'Diferencia'].map((h, j) => <span key={h} style={{ padding: '8px 0', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, textAlign: j ? 'right' : 'left' }}>{h}</span>)}
+                      {filasEq.flatMap(([c, i, k]) => D
+                        ? [<span key={i + 'a'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}` }}>{c.n}</span>, <span key={i + 'b'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.liquido)}</span>, <span key={i + 'c'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(k.hoy.costoEmpresa)}</span>, <span key={i + 'd'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.costoEmpresa)}</span>, <span key={i + 'e'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{sg(k.nuevo.costoEmpresa - k.hoy.costoEmpresa)}</span>]
+                        : [<span key={i + 'a'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}` }}>{c.n}<span style={{ display: 'block', fontSize: 11, color: C.muted }}>Hoy {fmt(k.hoy.costoEmpresa)}, {sg(k.nuevo.costoEmpresa - k.hoy.costoEmpresa)}</span></span>, <b key={i + 'b'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.costoEmpresa)}</b>])}
+                      {D ? [<span key='ta' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, fontWeight: 700, color: C.accent, background: C.grisBg }}>Total por mes</span>, <span key='tb' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, background: C.grisBg }} />, <span key='tc' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, background: C.grisBg, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(ch)}</span>, <b key='td' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, background: C.grisBg, textAlign: 'right', color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(cn)}</b>, <b key='te' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, background: C.grisBg, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{sg(cn - ch)}</b>]
+                        : [<b key='ta' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, color: C.accent }}>Total por mes<span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: C.muted }}>Hoy {fmt(ch)}, {sg(cn - ch)}</span></b>, <b key='tb' style={{ padding: '8px 0', borderTop: `1px solid ${C.accent}`, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(cn)}</b>]}
+                    </div>
+                  </div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <Btn onClick={() => setUI({ equipo: { abierto: false, pct: '' } })}>Cancelar</Btn>
+                  <Btn primary onClick={() => { if (pct) { filasEq.forEach(([, i]) => setCosto(i, 'alza', pct)); setUI({ equipo: { abierto: false, pct: '' } }) } }}>Aplicar al presupuesto</Btn>
+                </div>
+              </div>}
+            </>
+          })()}
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
           <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />

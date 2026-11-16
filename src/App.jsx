@@ -10,7 +10,8 @@ import { MEDIOS_MOV, MEDIO_CON_DETALLE, medioMovDe, glosaMovilizacion, FloatFld,
 import { clientesParecidos, _tipoDupLbl, Sel, Txt, PaginaSobre } from './lib/compartido.jsx'
 import { normRut } from './lib/compartido.jsx'
 import { META_UF, costoOperacionReal, useFlujoCaja, comisPorPagarAnteriores, _resultadoInicio } from './lib/compartido.jsx'
-import { fetchUFFechas, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
+import { CostoEmpresaBloque, calcularAumento } from './lib/costoEmpresaBloque.jsx'
+import { fetchUFFechas, iuPresupuestoMes, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
 import { fmtUFk, inicioVentaYM, ventaCuentaEnAnio } from './lib/compartido.jsx'
 import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
 import { _adminsEstudioCache, cargarAdminsEstudio, _nRut, tituloProv, pctBHE, esBoletaProv, fechaBHE, abrirDocumento, saldoComisiones, _diasDesde, correoMarcaHtml, driveTrash, Attachments, nCuotaDe } from './lib/compartido.jsx'
@@ -1236,13 +1237,17 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       {id:'co6',categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},
       {id:'co7',categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
       {id:'co8',categoria:'Impuestos y patentes',item:'PPM',monto:800000},
+      {id:'co9',categoria:'Remuneraciones',item:'Cristóbal',monto:3091604},{id:'co10',categoria:'Remuneraciones',item:'Erasmo',monto:3066855},{id:'co11',categoria:'Remuneraciones',item:'Martín',monto:1651328},
     ]); return }
     supabase.from('costos_oficina').select('*').eq('activo',true).order('orden').then(({data})=>{ if(alive) setRows(data||[]) },()=>{ if(alive) setRows([]) })
     return ()=>{alive=false}
   },[])
   const eff = r => (r.desde && ym < String(r.desde).slice(0,7)) ? (r.monto_prev??r.monto) : r.monto
-  const totalMes = costosOficinaMes(rows, ym)   // neto: el subarriendo y los gastos recuperados bajan el costo (costosOficina.js)
-  const totalCat = cat => costoOficinaNeto((rows||[]).filter(r=>r.categoria===cat), ym)
+  // Remuneraciones del presupuesto = sueldo líquido + impuesto único de cada persona (calculado desde su líquido y su última liquidación): lo mismo que cuenta el Resultado.
+  const fuC = useFuentesResultado(), ufC = useUF().uf || UF_FALLBACK, isDeskC = useIsDesktop()
+  const iuRows = list => iuPresupuestoMes(fuC, list, ym, null, ufC)
+  const totalMes = costosOficinaMes(rows, ym) + iuRows(rows||[])   // neto: el subarriendo y los gastos recuperados bajan el costo (costosOficina.js)
+  const totalCat = cat => costoOficinaNeto((rows||[]).filter(r=>r.categoria===cat), ym) + (cat==='Remuneraciones' ? iuRows((rows||[]).filter(r=>r.categoria===cat)) : 0)
   // ③ Real este mes = gastos del cliente interno (Oficina) del mes, agrupados por categoría (mapeadas). La nómina no se registra como gasto → esas categorías quedan "sin registro".
   const ofiCli = (clients||[]).find(c=>c.is_internal || /liberona\s+escala/i.test(c.name||''))
   const realPorCat = (()=>{ const m={}; if(!ofiCli) return m; (expenses||[]).forEach(e=>{ if(e.deleted_at||e.type!=='gasto') return; if(String(e.client_id)!==String(ofiCli.id)) return; if(String(e.date||'').slice(0,7)!==ym) return; const cat=catOficinaNueva(e.category); m[cat]=(m[cat]||0)+(Number(e.amount)||0) }); return m })()
@@ -1329,6 +1334,8 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:7}}><span style={{fontSize:11,color:C.muted,width:52}}>Monto</span><span style={{fontSize:12,color:C.textSoft}}>$</span><input type='number' value={ef.monto} onChange={e=>setEf(f=>({...f,monto:e.target.value}))} style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:ef.desde?7:0}}><span style={{fontSize:11,color:C.muted,width:52}}>Rige desde</span><select value={ef.desde} onChange={e=>setEf(f=>({...f,desde:e.target.value, prev:e.target.value&&!f.prev?String(r.monto||''):f.prev}))} style={{...inpS,flex:1}}><option value=''>Siempre</option>{mesesOpt.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
                     {ef.desde&&<div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted,width:52}}>Antes</span><span style={{fontSize:12,color:C.textSoft}}>$</span><input type='number' value={ef.prev} onChange={e=>setEf(f=>({...f,prev:e.target.value}))} placeholder='monto anterior' style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>}
+                    {r.categoria==='Remuneraciones'&&(()=>{ const hoyL=ef.desde?(Number(ef.prev)||0):(Number(r.monto)||0), nuevoL=Number(ef.monto)||0; if(!(hoyL>0&&nuevoL>0&&hoyL!==nuevoL)) return null
+                      const calc=calcularAumento({persona:r.item,liquido:hoyL,liquidoNuevo:nuevoL,liq:fuC.liq,tramosIU:fuC.tramosIU,plan:fuC.plan,uf:ufC,ufDeLiquidacion:()=>ufC,ym}); return calc?<div style={{marginTop:9}}><CostoEmpresaBloque calc={calc} D={isDeskC} meses={12} anio={ym.slice(0,4)}/></div>:null })()}
                     <div style={{display:'flex',gap:7,marginTop:9}}>
                       <button onClick={()=>guardarEdit(r)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
                       <button onClick={()=>setEdId(null)} style={{padding:'8px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
@@ -1339,9 +1346,10 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                   <div onClick={()=>abrirEdit(r)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',cursor:'pointer'}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,color:C.text}}>{r.item}</div>
+                      {r.categoria==='Remuneraciones'&&iuRows([r])>0&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>líquido {fmt(eff(r))} + impuesto único {fmt(iuRows([r]))}</div>}
                       {r.desde&&r.monto_prev!=null&&<div style={{fontSize:10,color:C.soonText,fontWeight:600,marginTop:1}}>{!Number(r.monto_prev)?'nuevo desde':Number(r.monto)<Number(r.monto_prev)?'bajó en':'subió en'} {MESES[+String(r.desde).slice(5,7)-1]}{Number(r.monto_prev)?` · antes ${fmt(r.monto_prev)}`:''}</div>}
                     </div>
-                    <span style={{fontSize:13,fontWeight:600,color:r.es_ingreso?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{r.es_ingreso?'−':''}{fmt(eff(r))}</span>
+                    <span style={{fontSize:13,fontWeight:600,color:r.es_ingreso?C.greenText:C.text,fontVariantNumeric:'tabular-nums'}}>{r.es_ingreso?'−':''}{fmt(eff(r)+(r.categoria==='Remuneraciones'?iuRows([r]):0))}</span>
                     <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.done} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}}><path d='M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/></svg>
                   </div>
                 )}

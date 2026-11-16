@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { liquidacionDeImponible } from '../supabase/functions/_shared/liquidoABruto.js'
-import { tramosDelMes, ultimaLiquidacionDe, parametrosDeLiquidacion, remuneracionDeLiquido, impuestoUnicoPresupuesto } from '../supabase/functions/_shared/remuneracionPersona.js'
+import { tramosDelMes, ultimaLiquidacionDe, parametrosDeLiquidacion, remuneracionDeLiquido, impuestoUnicoPresupuesto, tasaEmpleadorDe } from '../supabase/functions/_shared/remuneracionPersona.js'
 
 const FILAS = [[0, 950000, 0, 0], [950000.01, 2100000, 0.04, 38000], [2100000.01, 3500000, 0.08, 122000], [3500000.01, 4900000, 0.135, 314000], [4900000.01, 1e12, 0.23, 780000]]
   .flatMap((t, i) => ['2026-09', '2026-10'].map(periodo => ({ periodo, tramo: i + 1, desde: t[0], hasta: t[1] === 1e12 ? null : t[1], factor: t[2], rebaja: t[3] })))
@@ -40,4 +40,11 @@ test('impuesto único del presupuesto: suma las líneas de Remuneraciones con li
   const iu = impuestoUnicoPresupuesto({ rows, ym: '2026-10', liquidaciones: L, tramosFilas: FILAS, ufDelMes: UF['2026-10'], ufDeLiquidacion, vigente: (r) => r.monto })
   assert.ok(iu > 0); assert.ok(Math.abs(iu - L[0].impuesto_unico) <= 2000)   // otra UF y otra tabla del mes: casi el mismo impuesto
   assert.equal(impuestoUnicoPresupuesto({ rows: [], ym: '2026-10', liquidaciones: L, tramosFilas: FILAS, ufDelMes: 40200, ufDeLiquidacion, vigente: (r) => r.monto }), 0)
+})
+
+test('tasa del empleador: planilla menos cotizaciones del trabajador, sobre el imponible del último mes que tiene ambas', () => {
+  const liqs = [{ periodo: '2026-09', persona: 'A', imponible: 1000000, impuesto_unico: 0, liquido: 800000 }, { periodo: '2026-09', persona: 'B', imponible: 1000000, impuesto_unico: 0, liquido: 800000 }]   // trabajador: 200.000 cada uno
+  const r = tasaEmpleadorDe({ plan: [{ anio: 2026, mes: 9, cotizaciones: 520000 }], liquidaciones: liqs })
+  assert.equal(r.periodo, '2026-09'); assert.ok(Math.abs(r.tasa - 0.06) < 1e-9)
+  assert.equal(tasaEmpleadorDe({ plan: [], liquidaciones: liqs }), null); assert.equal(tasaEmpleadorDe({ plan: [{ anio: 2026, mes: 9, cotizaciones: 100 }], liquidaciones: liqs }), null)
 })

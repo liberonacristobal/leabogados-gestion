@@ -293,7 +293,7 @@ export function usePresupuestoDatos({ sales = [], billing = [], terceros = [], c
     conversion,
     subarriendoAnual: (sales || []).filter((s) => s && !s.deleted_at && esSubarriendo(s) && esRecurrente(s)).reduce((a, s) => a + ventaCLP(s, ufRef), 0),
     refMeses: { ventas: ult3.map((m) => ({ m, v: (evo.vend[m - 1] ?? 0) - (m > 1 ? evo.vend[m - 2] ?? 0 : 0) })), fact: ult3.map((m) => ({ m, v: serie[ym(currentYear, m)]?.fac ?? 0 })), caja: ult3.map((m) => ({ m, v: cobMes[ym(currentYear, m)] ?? 0 })) },
-    cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, origenMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
+    liqPersonas: (fuRes && fuRes.liq) || [], tramosIU: (fuRes && fuRes.tramosIU) || [], planCostos: (fuRes && fuRes.plan) || [], ufDias, cotEmp, hoy, anio, anioBase: currentYear, metaVentasUF: metaUF || 0, uf26, refUF, cobMesUF, costos26, retiros26, referencia, ratioFactVend, comisVentaPct, pesosEst, ufRef, ufDic, serie, cobMes, origenMes, base, sinBase: base.baseCLP.every((x) => !x), cierres, oficiales,
     clientes, totalFact, evo, concentracion5: concentracion(clientes.map((c) => c.monto), totalFact, 5),
     recurrente, costos, ppmMes, terc, dias, socios, impuestos, impMig, impListo: impFu.cargado && fuRes.listo !== false, impOk: impFu.ok && fuRes.ok !== false, ppmAntes, tasaBoleta: tasaBol,
   }
