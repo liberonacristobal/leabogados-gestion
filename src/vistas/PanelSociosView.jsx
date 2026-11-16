@@ -359,7 +359,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       {['UF','CLP'].map(u=>{ const on=moneda===u; return <span key={u} onClick={()=>setMoneda(u)} style={{fontSize:10,fontWeight:700,color:on?'#fff':C.done,background:on?C.accent:'transparent',borderRadius:18,padding:'3px 9px',cursor:'pointer',lineHeight:1}}>{u}</span> })}
     </div>)
   const ano = (<>
-    <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Resultado del año' onLink={()=>go('resultadoAnio')}/>
+    <Sec t={`Año ${currentYear}`} extra={selMoneda} link='Estado de resultados' onLink={()=>go('resultadoAnio')}/>
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?12:8}}>
       <KpiAnio D={isDesktop} ic='chart' tono='az' label='Vendido' dual={<CifrasBrutoNeto desk={isDesktop} bruto={vMon(m.brutoUF,m.bruto)} neto={vMon(m.netoUF,m.neto)} princ={vendPrinc} onAlt={setVendPrinc}/>} pct={m.meta>0?(vendPrinc==='neto'?ventaNetoPct:ventaPct):null} cap={<><style>{'@container (max-width:112px){.kpi-neto{display:none}}'}</style><span className='kpi-neto'>{vendPrinc==='neto'?'neto ':'bruto '}</span>de la meta</>} activo={drill?.tile==='vend'} onClick={()=>setDrill(d=>d&&d.tile==='vend'?null:{tile:'vend',year:null})}/>
       <KpiAnio D={isDesktop} ic='file' tono='am' label='Facturado' value={mRes('fac')} pct={m.bruto>0?factPct:null} cap='del bruto' activo={drill?.tile==='fact'} onClick={()=>setDrill(d=>d&&d.tile==='fact'?null:{tile:'fact',year:null})}/>

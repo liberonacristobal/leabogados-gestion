@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
 import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill } from '../lib/compartido.jsx'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
+import { ResultadoAnioView } from './ResultadoAnioView.jsx'
 import { puenteCaja } from '../../supabase/functions/_shared/puenteCaja.js'
 import { idpcDesdePuente } from '../../supabase/functions/_shared/idpcEstimado.js'
 import { desfaseFinAnio } from '../../supabase/functions/_shared/desfasePagos.js'
@@ -24,7 +25,7 @@ const fVar = (a, p) => { if (!p) return ''; const v = Math.round((a - p) / Math.
 const suma = a => a.reduce((x, y) => x + y, 0)
 const ORDEN = ['rem', 'cot', 'arr', 'con', 'otr', 'pre', 'gv', 'sub']
 
-export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], sales = [], anticipos = [], backLabel = 'Oficina', onBack, onGo }) {
+export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], sales = [], anticipos = [], user, onOpenGasto, onCargarBoleta, backLabel = 'Oficina', onBack, onGo }) {
   const D = useIsDesktop()
   const fu = useFuentesResultado()
   const year = currentYear, curM = new Date().getMonth() + 1, n = curM + 1
@@ -100,7 +101,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
   const cerrado = i => A1.R[i]?.cerrado
   const colsIdx = D ? Array.from({ length: n }, (_, i) => i) : [selM - 1, curM]   // celular: el mes elegido y el total del año
   const nomCol = i => i === curM ? 'Total' : MC[i]
-  const goMes = i => i < curM ? () => onGo && onGo('estadoResultados', `${year}-${pad(i + 1)}`) : () => onGo && onGo('resultadoAnio')
+  const goMes = i => () => onGo && onGo('estadoResultados', `${year}-${pad(Math.min(i + 1, curM))}`)   // la columna Total abre el mes en curso; el año ya está en esta página
   const gasIdx = k => gKeys.findIndex(g => g.k === k)
   const filas = [
     { t: 'sec', l: 'Ingresos de explotación (Revenue)' },
@@ -228,5 +229,8 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
           </div>
         </div>
       })()}
+
+      {/* Lo que antes vivía solo en «Resultado del año»: Presupuesto vs real y Salud de datos (la planilla de costos por mes sigue en su página). */}
+      <ResultadoAnioView soloControl isDesktop={D} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} expenses={expenses} clients={clients} user={user} onOpenGasto={onOpenGasto} onCargarBoleta={onCargarBoleta} />
     </div>)
 }
