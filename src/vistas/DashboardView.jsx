@@ -7,6 +7,8 @@ import { demoData } from '../demoData'
 import { useResultadoAnio, pctsAnio } from '../lib/resultadoAnio.js'
 import { cascadaVendido } from '../lib/cifras.js'
 import { descargarResultadoAnioPdf } from '../lib/pdfResultadoAnio.js'
+import { alturaImagenResultado, dibujarImagenResultado } from '../lib/dibujoResultadoAnio.js'
+import { entregarArchivo } from '../lib/archivos.js'
 import { CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -573,73 +575,40 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       ]
       return { secs, ingYTD, comisYTD, percYTD, ingReal, iv, ufR, yrsCob, fby, fbyU, yrsFac, yrLbl, pe }
   }
+  // Imagen para el celular (PNG): las cuatro cifras y la cascada del Resultado en una sola pantalla; en iPhone usa la hoja de compartir. Mismas cifras que el PDF (armarDocumento);
+  // el dibujo está en lib/dibujoResultadoAnio.js.
   const descargarResultado = async () => {
     try{
-      const { secs, ingYTD, comisYTD, percYTD, ingReal, iv, ufR, yrsCob, fby, fbyU, yrsFac, yrLbl, pe } = armarSecciones()
-      const S=2, W=470, P=16, HDR=62, BAND=30, GAP=10, FOOT=30, LH=27
-      const cardH = s => 14 + 42 + (s.lines.length*LH) + 10 + (s.bar!=null?16:0)
-      const H = HDR + BAND + secs.reduce((a,s)=>a+cardH(s)+GAP,0) + FOOT
+      const d=armarDocumento(), S=2, W=390, H=alturaImagenResultado(d)
       const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S
-      const g=cv.getContext('2d'); g.scale(S,S); g.textBaseline='alphabetic'
-      const F=(w,s)=>`${w} ${s}px 'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif`
-      const rr=(x,y,w,h,r)=>{ g.beginPath(); if(g.roundRect) g.roundRect(x,y,w,h,r); else { g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r); g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r); g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r); g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); } g.closePath() }
-      g.fillStyle='#fff'; g.fillRect(0,0,W,H)
-      // header navy + logo real
-      g.fillStyle='#003C50'; g.fillRect(0,0,W,HDR)
-      try{ const logo=new Image(); logo.src=location.origin+BRAND.logo.blanco; await Promise.race([ new Promise((res,rej)=>{ logo.onload=res; logo.onerror=rej; if(logo.complete&&logo.naturalWidth) res() }), new Promise((_,rej)=>setTimeout(rej,1500)) ]); const lh=20, lw=logo.naturalWidth&&logo.naturalHeight?logo.naturalWidth/logo.naturalHeight*lh:130; g.drawImage(logo,P,(HDR-lh)/2,lw,lh) }catch(_){ g.fillStyle='#fff'; g.font=F(800,15); g.fillText(BRAND.nombre||'',P,HDR/2+5) }
-      g.textAlign='right'; g.fillStyle='#fff'; g.font=F(800,13); g.fillText('RESULTADO DEL AÑO',W-P,HDR/2-2); g.fillStyle='#9FC4DD'; g.font=F(600,10); g.fillText(`Ejercicio ${selYear}`,W-P,HDR/2+13); g.textAlign='left'
-      // banda fecha de corte
-      const hoy=new Date(), dias=hoy.toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'}), hhmm=`${String(hoy.getHours()).padStart(2,'0')}:${String(hoy.getMinutes()).padStart(2,'0')}`
-      g.fillStyle='#E6F1FB'; g.fillRect(0,HDR,W,BAND)
-      g.fillStyle=C.azulInfo; g.font=F(800,11); g.fillText(`CORTE AL ${dias.toUpperCase()}`,P,HDR+BAND/2+4)
-      g.textAlign='right'; g.fillText(`${hhmm} HRS`,W-P,HDR+BAND/2+4); g.textAlign='left'
-      // cards
-      let y=HDR+BAND+GAP
-      secs.forEach(s=>{
-        const h=cardH(s), x=P, w=W-2*P
-        g.strokeStyle='#E4E8EB'; g.lineWidth=1; rr(x,y,w,h,12); g.fillStyle='#fff'; g.fill(); g.stroke()
-        let cy=y+22
-        g.fillStyle='#537281'; g.font=F(800,9.5); g.fillText(s.t.toUpperCase(),x+13,cy)
-        if(s.pct!=null){ g.textAlign='right'; g.fillStyle=C.azulInfo; g.font=F(800,10); g.fillText(`${s.pct} %`,x+w-13,cy); g.textAlign='left' }
-        cy+=20
-        g.fillStyle='#003C50'; g.font=F(800,19); g.fillText(s.uf,x+13,cy)
-        g.fillStyle='#537281'; g.font=F(700,11); g.fillText(s.clp,x+13,cy+15)
-        cy+=15+12
-        s.lines.forEach(([l,ufv,clpv])=>{ const neg=String(ufv).startsWith('−'); g.fillStyle=neg?'#C0453F':'#537281'; g.font=F(500,10.5); g.fillText(l,x+13,cy); g.textAlign='right'; g.fillStyle=neg?'#C0453F':'#003C50'; g.font=F(800,11); g.fillText(ufv,x+w-13,cy); g.fillStyle='#99ABB4'; g.font=F(600,9.5); g.fillText(clpv,x+w-13,cy+12); g.textAlign='left'; cy+=LH })
-        if(s.bar!=null){ const bw=w-26; g.fillStyle='#EDEFF1'; rr(x+13,cy-2,bw,7,3.5); g.fill(); g.fillStyle='#003C50'; rr(x+13,cy-2,bw*Math.min(100,s.bar)/100,7,3.5); g.fill() }
-        y+=h+GAP
-      })
-      g.fillStyle='#99ABB4'; g.font=F(800,9); g.fillText('DOCUMENTO INTERNO · '+(BRAND.dominio||''),P,H-12); g.textAlign='right'; g.fillText((BRAND.nombre||'').toUpperCase(),W-P,H-12); g.textAlign='left'
+      const g=cv.getContext('2d'); g.scale(S,S)
+      let logo=null
+      try{ const im=new Image(); im.src=location.origin+BRAND.logo.blanco; await Promise.race([ new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; if(im.complete&&im.naturalWidth) res() }), new Promise((_,rej)=>setTimeout(rej,1500)) ]); logo=im }catch(_){ logo=null }
+      dibujarImagenResultado(g,d,logo,BRAND.nombre||'')
       const blob=await new Promise(res=>cv.toBlob(res,'image/png'))
       if(!blob) throw new Error('canvas vacío')
-      const file=new File([blob],`RESULTADO-DEL-ANO-${selYear}.png`,{type:'image/png'})
-      if(navigator.canShare&&navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file],title:`Resultado del año ${selYear}`}); return }catch(_){ } }
-      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000)
+      await entregarArchivo(blob,`RESULTADO-DEL-ANO-${selYear}.png`)
     }catch(e){ appAlert('No se pudo generar la imagen: '+(e.message||e)) }
   }
-  // PDF directo del informe del año (hoja carta, estado corrido en cuatro bloques, cifras en UF y pesos): lo que antes abría la ventana de impresión.
-  // Las cifras salen de las mismas fuentes que la pantalla y la imagen (resAnio, ingresosPorAnioVenta, pctsAnio, cobranzaVsMeta); el dibujo está en lib/pdfResultadoAnio.js.
+  // PDF directo del informe del año (hoja carta horizontal, huincha azul con el logo blanco y cuatro cajas: Vendido neto, Facturado, Cobrado propio y Resultado del ejercicio, cifras en UF y pesos).
+  // Las cifras salen de las mismas fuentes que la pantalla y la imagen (resAnio, ingresosPorAnioVenta, pctsAnio, cobranzaVsMeta); el dibujo está en lib/dibujoResultadoAnio.js.
   const armarDocumento = () => {
     const iv=ingresosPorAnioVenta, ingYTD=iv.total||0, comisYTD=comisPagadasAnioVenta.total||0, percYTD=iv.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
     const { ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
     const CVu=cascadaVendido(m,true), V=resAnio.verUF, comU=comisPagadasAnioVenta.totalUF||0, percU=iv.percibidasUF||0, cz=cobranzaVsMeta(ingYTD,iv)
     const fby=facturadoByYear.byYear||{}, fbyU=facturadoByYear.byYearUF||{}, yrsFac=Object.keys(fby).map(Number).sort((a,b)=>b-a).slice(0,3), yrsCob=(iv.allYears||[]).slice(0,3)
     const yrLbl=y=>y?`De ventas ${y}${y!==selYear?' (ant.)':''}`:'Sin venta asociada'
-    const nU=n=>Math.round(Math.abs(n||0)).toLocaleString('es-CL'), pe=n=>'$'+Math.abs(Math.round(n||0)).toLocaleString('es-CL'), mM=n=>'$'+(Math.abs(n||0)/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'M'
-    const fila=(s,l,ufv,clpv,o={})=>({s,l,uf:nU(ufv),clp:pe(clpv),...o})
-    const hoy=new Date(), hhmm=`${String(hoy.getHours()).padStart(2,'0')}:${String(hoy.getMinutes()).padStart(2,'0')}`, margen=v=>v==null?'':`${pct1(v)} % margen`
-    const grupos=[
-      { t:'Vendido', chip:`${ventaNetoPct} % de la meta`, filas:[ fila('','Vendido bruto',CVu.bruto,m.bruto), fila('−','Costos de terceros',CVu.costo,m.costo,{neg:true}), fila('=','Vendido neto',CVu.neto,m.neto,{t:'tot'}), fila('','Meta del año',metaUF,m.meta,{t:'mut'}) ] },
-      { t:'Facturado', chip:`${m.bruto>0?factPct:0} % del bruto`, gris:true, filas:[ ...yrsFac.map(y=>fila('',yrLbl(y),fbyU[y]||0,fby[y]||0)), fila('=','Facturado',V.fac,resAnio.fac,{t:'tot'}), ...(facturadoEmitido.total>0?[fila('','Total emitido',facturadoEmitido.totalUF,facturadoEmitido.total,{t:'mut'})]:[]) ] },
-      { t:'Cobrado', chip:`${cobroPct} % de la meta`, filas:[ ...yrsCob.map(y=>fila('',yrLbl(y),(iv.byYearUF||{})[y]||0,iv.byYear[y]||0)), fila('=','Cobrado propio',iv.totalUF||0,ingYTD,{t:'tot'}), fila('−','Comisiones pagadas',comU,comisYTD,{neg:true}), fila('+','Comisiones percibidas',percU,percYTD), fila('=','Ingreso real',(iv.totalUF||0)-comU+percU,ingReal,{t:'tot'}), fila('','Total a caja',iv.totalCajaUF||0,iv.totalCaja||0,{t:'mut'}), fila('','Meta de cobranza',cz.metaUF,metaCobranza,{t:'mut'}), fila('',cz.sobre?'Sobre la meta de cobranza':'Falta para la meta de cobranza',cz.difUF,Math.abs(ingYTD-metaCobranza),{t:'mut'}) ] },
-      { t:resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio', chip:margen(resAnio.pct), filas:[ fila('','Facturado',V.fac,resAnio.fac), ...(resAnio.rex?[fila('+','Comisión de externos',V.rex,resAnio.rex)]:[]), fila('=','Ingresos',V.ing,resAnio.ing,{t:'tot'}), fila('−','Costos',V.cos,resAnio.cos,{neg:true}), fila('−','Comisiones',V.com,resAnio.com,{neg:true}), fila('=',resAnio.res>=0?'Resultado':'Pérdida',V.res,resAnio.res,{t:'tot'}), ...(resAnio.soc?[fila('+','Sueldos de socios',V.soc,resAnio.soc), fila('=','Antes de sueldos de socios',V.resSin,resAnio.resSin,{t:'tot',chip:margen(resAnio.pctSin)})]:[]) ] },
-    ]
-    const cifra=(t,ufv,clpv)=>({t,uf:'UF '+nU(ufv),clp:mM(clpv)})
-    return { titulo:`Resultado del año ${selYear}`, corte:`Corte al ${fmtFechaDMY(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`)}, ${hhmm} hrs`,
-      cifras:[ cifra('Vendido neto',CVu.neto,m.neto), cifra('Facturado',V.fac,resAnio.fac), cifra('Cobrado propio',iv.totalUF||0,ingYTD), cifra(resAnio.res>=0?'Resultado':'Pérdida',V.res,resAnio.res) ], grupos,
-      notas:[ 'Total emitido incluye documentos de terceros y reembolsos. Total a caja incluye, además del cobrado propio, subarriendo, reembolsos y la parte de externos.',
-        `${resAnio.sub?`Costos incluyen subarriendo y gastos recuperados como menor costo (UF ${nU(V.sub)}, ${mM(resAnio.sub)}). `:''}${resAnio.soc?'Sueldos de socios a costo empresa: líquido, impuesto único y cotizaciones.':''}`.trim(),
-        'Resultado es devengado; Cobrado, por fecha del depósito. UF del día de cada movimiento.' ].filter(Boolean), dominio:BRAND.dominio||'' }
+    const nU=n=>Math.round(Math.abs(n||0)).toLocaleString('es-CL'), pe=n=>'$'+Math.abs(Math.round(n||0)).toLocaleString('es-CL')
+    const fila=(s,l,ufv,clpv,o={})=>({s,l,uf:nU(ufv),clp:pe(clpv),n:Math.abs(clpv||0),...o})
+    const hoy=new Date(), hhmm=`${String(hoy.getHours()).padStart(2,'0')}:${String(hoy.getMinutes()).padStart(2,'0')}`
+    const bloque=(t,pct,ufv,clpv,filas)=>({t,pct,uf:'UF '+nU(ufv),clp:pe(clpv),n:Math.abs(clpv||0),filas})
+    return { titulo:`Resultado del año ${selYear}`, corte:`Corte al ${fmtFechaDMY(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`)}, ${hhmm} hrs`, dominio:BRAND.dominio||'',
+      bloques:[
+        bloque('Vendido neto',`${ventaNetoPct} % de la meta`,CVu.neto,m.neto,[ fila('','Vendido bruto',CVu.bruto,m.bruto), fila('−','Costos de terceros',CVu.costo,m.costo,{neg:true}), fila('','Meta del año',metaUF,m.meta,{t:'mut'}) ]),
+        bloque('Facturado',`${m.bruto>0?factPct:0} % de lo vendido bruto`,V.fac,resAnio.fac,[ ...yrsFac.map(y=>fila('',yrLbl(y),fbyU[y]||0,fby[y]||0)), ...(facturadoEmitido.total>0?[fila('','Total emitido',facturadoEmitido.totalUF,facturadoEmitido.total,{t:'mut'})]:[]) ]),
+        bloque('Cobrado propio',`${cobroPct} % de la meta`,iv.totalUF||0,ingYTD,[ fila('−','Comisiones pagadas',comU,comisYTD,{neg:true}), fila('+','Comisiones percibidas',percU,percYTD), fila('=','Ingreso real',(iv.totalUF||0)-comU+percU,ingReal,{t:'tot'}), fila('','Total a caja',iv.totalCajaUF||0,iv.totalCaja||0,{t:'mut'}), ...yrsCob.map(y=>fila('',yrLbl(y),(iv.byYearUF||{})[y]||0,iv.byYear[y]||0,{t:'mut'})), fila('','Meta de cobranza',cz.metaUF,metaCobranza,{t:'mut'}), fila('',cz.sobre?'Sobre la meta de cobranza':'Falta para la meta de cobranza',cz.difUF,Math.abs(ingYTD-metaCobranza),{t:'mut'}) ]),
+        bloque(resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio',resAnio.pct==null?'':`${pct1(resAnio.pct)} % margen`,V.res,resAnio.res,[ fila('','Facturado',V.fac,resAnio.fac), ...(resAnio.rex?[fila('+','Comisión de externos',V.rex,resAnio.rex)]:[]), fila('=','Ingresos',V.ing,resAnio.ing,{t:'tot'}), fila('−','Costos',V.cos,resAnio.cos,{neg:true}), ...(resAnio.sub?[fila('','incluye subarriendo',V.sub,resAnio.sub,{t:'mut'})]:[]), fila('−','Comisiones',V.com,resAnio.com,{neg:true}), ...(resAnio.soc?[fila('+','Sueldos de socios',V.soc,resAnio.soc), fila('=','Antes de sueldos de socios',V.resSin,resAnio.resSin,{t:'tot'})]:[]) ]),
+      ] }
   }
   const descargarResultadoPdf = () => descargarResultadoAnioPdf(armarDocumento(), `RESULTADO-DEL-ANO-${selYear}.pdf`)
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
