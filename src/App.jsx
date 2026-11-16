@@ -3045,7 +3045,7 @@ function FacturaPage({b,cli,origen,onBack,onOpenClientFicha,children}){
   const isDesktop=useIsDesktop()
   const titulo = b?.invoice_no ? `Factura N° ${folioN(b.invoice_no)}` : (b?.id ? 'Cobro' : 'Nuevo cobro')
   const ctx = cli ? <span onClick={onOpenClientFicha?()=>onOpenClientFicha(cli.id):undefined} title={onOpenClientFicha?'Ver ficha del cliente':undefined} style={{cursor:onOpenClientFicha?'pointer':'default',color:onOpenClientFicha?C.accent:C.muted,fontWeight:600}}>{cli.name}</span> : null
-  const right = b?.dte_xml ? <button onClick={()=>verFacturaPdf(b)} title='Descargar el PDF con timbre (desde el XML del SII)' style={{display:'inline-flex',alignItems:'center',gap:6,minHeight:32,padding:'0 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.card,color:C.accent,fontSize:13,fontWeight:700,cursor:'pointer'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2.4' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3v12'/><polyline points='7 10 12 15 17 10'/><path d='M5 21h14'/></svg>{isDesktop?'Descargar PDF':'PDF'}</button> : null
+  const right = b?.dte_xml ? <BtnDescarga onClick={()=>verFacturaPdf(b)} titulo='Descargar PDF' n='file' /> : null
   return (
     <div className='pg-form'>
       <PageHeader origen={origen} onBack={onBack} titulo={titulo} ctx={ctx} right={right}/>

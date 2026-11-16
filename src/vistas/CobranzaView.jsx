@@ -1,7 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, fmtFechaDMY, folioN, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { Buscador, FlujoPagina, Modal, NOMBRE_CLI, PageHeader, TH_BAND, TIT_PAG, avisoNoEnviado, bigDate, daysLeft, daysLeftB, enviarComoUsuario, esVencidaB, facturaPdfAdjunto, fmtMill, modoEnvioLote, nDias, pillPersonaSty, montoFactura, recordatorioCobro, rsDeFactura, rsDisplay, saldoBill, setLearningKV, txtEnviado, txtResumenEnvio, useTrabajosDetenidos, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError, logActividad, venceBill, okDB } from '../lib/compartido.jsx'
 import { TRAMOS, enFiltroMora, estadoCompromiso, exposicionCartera, puntualidadPorCliente } from '../../supabase/functions/_shared/cobranzaExposicion.js'
 import { nombreCortoContacto, resumenPropio } from '../../supabase/functions/_shared/cobranzaPropio.js'
@@ -337,7 +337,7 @@ export function CobranzaView({ billing=[], terceros=[], proveedores=[], clients=
     const showRs = !!rs && (nEnt>1 || _normTxt(rs)!==_normTxt(cn(b.client_id)))
     const det = b.sale_id ? detPorVenta[String(b.sale_id)] : null
     const acciones=(<div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:5,width:isDesktop?'auto':'100%'}}>
-          {b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}
+          {b.dte_xml&&<BtnDescarga onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} titulo='Descargar PDF' n='file' />}
           {onIrConciliacion&&<button onClick={e=>{e.stopPropagation();onIrConciliacion(b)}} style={{minHeight:32,padding:'0 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.greenBg,color:C.greenText,fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>Buscar pago <Gl n='chevron'/></button>}
         </div>)
     return (

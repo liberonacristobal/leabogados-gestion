@@ -979,7 +979,7 @@ export function FinancieroTab({client, clientBilling, entities, sales=[], antici
                       ? <><div style={{fontSize:10,color:C.textSoft}}>Saldo</div><div style={{fontSize:14,fontWeight:700,color:C.overdueText,lineHeight:1.05}}>{fmt(sal)}</div><div style={{fontSize:10,color:C.textSoft,marginTop:1}}>Abonado {fmt(b.paid_amount)} de {fmt(b.amount)}</div></>
                       : <div style={{fontSize:13,fontWeight:600,color:esVencidaB(b)?C.overdueText:(pend?C.accent:C.text)}}>{fmt(b.amount)}</div> })()}
                     {pend&&<ActBtn variant='softNavy' onClick={(ev)=>{ev.stopPropagation();recordarCobro(b)}} style={{marginTop:5}}>Recordar</ActBtn>}
-                    {b.invoice_no&&b.dte_xml&&<button onClick={(ev)=>{ev.stopPropagation();verFacturaPdf(b)}} title='Descargar copia PDF (con timbre)' style={{marginTop:5,display:'block',marginLeft:'auto',fontSize:10,fontWeight:700,color:C.tealText,background:'#fff',border:`0.5px solid ${C.tealText}`,borderRadius:8,padding:'3px 10px',cursor:'pointer'}}>PDF ↓</button>}
+                    {b.invoice_no&&b.dte_xml&&<BtnDescarga onClick={(ev)=>{ev.stopPropagation();verFacturaPdf(b)}} titulo='Descargar PDF' n='file' />}
                   </div>
                 </div>
                 {(b.anulada_por||'').startsWith('Nota de crédito')&&<div style={{marginTop:6,marginLeft:49,fontSize:10,lineHeight:1.4,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',background:'#FFFBF4',border:'1px solid #EAD9B8',borderRadius:8,padding:'6px 9px'}}>

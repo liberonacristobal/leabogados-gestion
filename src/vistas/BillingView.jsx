@@ -370,7 +370,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:5,flexShrink:0}}>
             <div style={{fontSize:compact?13:13,fontWeight:600,color:C.text}}>{fmt(montoFactura(b))}</div>
-            <div style={{display:'flex',gap:6}}>{b.dte_xml&&<button onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} title='Descargar el PDF con timbre' style={{background:C.surface,color:C.accent,border:`1px solid ${C.border}`,borderRadius:8,padding: compact?'3px 9px':'5px 10px',fontSize: compact?11:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>PDF</button>}{onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?11:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}</div>
+            <div style={{display:'flex',gap:6}}>{b.dte_xml&&<BtnDescarga onClick={e=>{e.stopPropagation();verFacturaPdf(b)}} titulo='Descargar PDF' n='file' />}{onEnviar&&<button onClick={e=>{e.stopPropagation(); onEnviar(b)}} style={{background: sent?'#fff':C.accent,color: sent?C.accent:'#fff',border: sent?`1px solid ${C.accent}`:'none',borderRadius:8,padding: compact?'3px 11px':'5px 12px',fontSize: compact?11:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{sent?'Reenviar':'Enviar'}</button>}</div>
           </div>
           <span style={{fontSize:12,color:C.muted,flexShrink:0}}>{open?<Gl n='chevD'/>:<Gl n='chevron'/>}</span>
         </div>
