@@ -12,6 +12,14 @@ export function liquidacionesVigentes(filas) {
 }
 
 /**
+ * Búsqueda de Gmail de las liquidaciones de la contadora. Acepta «LIQUIDACIONES» y «LIQUIDACION» en el asunto: la corregida llega como
+ * «LIQUIDACION MARTIN CAMPERO CORREGIDA» (singular) y con solo «LIQUIDACIONES» no se encontraba, así que la versión original quedaba vigente.
+ * @param {string} contadora correo de la contadora
+ * @param {string} [extra] condición adicional (p. ej. «newer_than:40d» o «subject:02-2026»)
+ */
+export const consultaLiquidaciones = (contadora, extra = '') => `from:${contadora} (subject:LIQUIDACIONES OR subject:LIQUIDACION) has:attachment${extra ? ' ' + extra : ''}`
+
+/**
  * Cotizaciones provisorias de un mes, mientras la contadora no manda sus valores: cotizaciones del trabajador de las liquidaciones del mes más la parte
  * del empleador del último mes con valores reales (cotización real − la del trabajador), proporcional al imponible.
  * @param {{mes:{imponible:number, cotizaciones:number}[], previo:{imponible:number, cotizaciones:number}[], cotizPrevReal:number}} p

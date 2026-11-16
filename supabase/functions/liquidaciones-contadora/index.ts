@@ -6,7 +6,7 @@
 // (texto de un PDF, para revisar el formato). body.dryRun = no guarda.
 // Auth: CRON_SECRET o usuario del dominio. verify_jwt=false.
 import * as pdfjs from "npm:pdfjs-dist@4.10.38/legacy/build/pdf.mjs";
-import { liquidacionesVigentes, cotizacionesProvisorias, mismaPersona, personaDelPago, presupuestoDesdeLiquidaciones } from "../_shared/liquidacionesReglas.js";
+import { liquidacionesVigentes, consultaLiquidaciones, cotizacionesProvisorias, mismaPersona, personaDelPago, presupuestoDesdeLiquidaciones } from "../_shared/liquidacionesReglas.js";
 
 const CLIENT_ID = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "";
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     if (body.accion === "leer") {
       const H = { Authorization: `Bearer ${await token()}` };
       const meses = Math.min(Math.max(Number(body.meses) || 2, 1), 24);
-      const q = encodeURIComponent(`from:${CONTADORA} subject:LIQUIDACIONES has:attachment newer_than:${meses * 31 + 10}d`);
+      const q = encodeURIComponent(consultaLiquidaciones(CONTADORA, `newer_than:${meses * 31 + 10}d`));
       const lista = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=100`, { headers: H }).then((r) => r.json());
       const filas: Record<string, unknown>[] = [], errores: string[] = [];
       for (const it of lista.messages || []) {
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
     }
     if (body.accion === "muestra") {
       const H = { Authorization: `Bearer ${await token()}` };
-      const q = encodeURIComponent(`from:${CONTADORA} subject:LIQUIDACIONES has:attachment ${body.mes ? `subject:${body.mes}` : "newer_than:40d"}`);
+      const q = encodeURIComponent(consultaLiquidaciones(CONTADORA, body.mes ? `subject:${body.mes}` : "newer_than:40d"));
       const lista = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=5`, { headers: H }).then((r) => r.json());
       const id = lista.messages?.[0]?.id; if (!id) return json({ ok: true, mensajes: 0 });
       const m = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, { headers: H }).then((r) => r.json());

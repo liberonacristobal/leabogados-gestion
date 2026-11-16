@@ -1,7 +1,7 @@
 // Liquidaciones de la contadora: la corregida (correo más reciente) reemplaza a la original. Casos con cifras ficticias, sin nombres ni sueldos reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { liquidacionesVigentes, cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
+import { liquidacionesVigentes, consultaLiquidaciones, cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
 
 const L = (periodo, persona, imponible, _t) => ({ periodo, persona, imponible, _t })
 
@@ -42,4 +42,15 @@ test('cotizaciones provisorias: sin datos del mes anterior o con una cotización
   assert.equal(cotizacionesProvisorias({ mes: m, previo: m, cotizPrevReal: 0 }), null)
   assert.equal(cotizacionesProvisorias({ mes: m, previo: m, cotizPrevReal: 100000 }), null)
   assert.equal(cotizacionesProvisorias({ mes: [], previo: m, cotizPrevReal: 300000 }), null)
+})
+
+test('la búsqueda de liquidaciones acepta el asunto en singular de las corregidas y la versión corregida pisa a la original', () => {
+  const q = consultaLiquidaciones('contadora@ejemplo.cl', 'newer_than:40d')
+  assert.match(q, /subject:LIQUIDACIONES OR subject:LIQUIDACION/); assert.match(q, /^from:contadora@ejemplo\.cl /); assert.match(q, /has:attachment newer_than:40d$/)
+  assert.equal(consultaLiquidaciones('c@x.cl'), 'from:c@x.cl (subject:LIQUIDACIONES OR subject:LIQUIDACION) has:attachment')
+  const v = liquidacionesVigentes([
+    { periodo: '2026-02', persona: 'TRABAJADOR A', imponible: 1871901, _t: 100 },
+    { periodo: '2026-02', persona: 'TRABAJADOR A', imponible: 3486416, _t: 200 },   // corregida con bono, llegó después
+  ])
+  assert.equal(v.length, 1); assert.equal(v[0].imponible, 3486416)
 })
