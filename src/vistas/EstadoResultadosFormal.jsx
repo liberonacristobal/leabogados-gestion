@@ -5,7 +5,10 @@
 // redondeadas para que el estado sume. El Excel baja las cifras exactas.
 import { useMemo, useState } from 'react'
 import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear } from '../lib/compartido.jsx'
+import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill } from '../lib/compartido.jsx'
+import { useResultadoAnio } from '../lib/resultadoAnio.js'
+import { puenteCaja } from '../../supabase/functions/_shared/puenteCaja.js'
+import { idpcDesdePuente } from '../../supabase/functions/_shared/idpcEstimado.js'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { descargarEstadoResultadosPdf } from '../lib/pdfEstadoResultados.js'
 import { DEMO } from '../supabase'
@@ -20,7 +23,7 @@ const fVar = (a, p) => { if (!p) return ''; const v = Math.round((a - p) / Math.
 const suma = a => a.reduce((x, y) => x + y, 0)
 const ORDEN = ['rem', 'cot', 'arr', 'con', 'otr', 'pre', 'gv', 'sub']
 
-export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], backLabel = 'Oficina', onBack, onGo }) {
+export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiRows = [], expenses = [], clients = [], sales = [], anticipos = [], backLabel = 'Oficina', onBack, onGo }) {
   const D = useIsDesktop()
   const fu = useFuentesResultado()
   const year = currentYear, curM = new Date().getMonth() + 1, n = curM + 1
@@ -42,6 +45,29 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
   }
   const A1 = useMemo(() => anio(year), [fu, billing, terceros, costosOfiRows, expenses, clients, imps, ufDias, ufRef, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
   const A0 = useMemo(() => anio(year - 1), [fu, billing, terceros, costosOfiRows, expenses, clients, imps, ufDias, ufRef, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // IDPC estimado del año: puente del «Resultado antes de impuestos» de ESTE estado a la base de caja (reglas únicas puenteCaja e idpcEstimado). Cobrado = el de Inicio (cobrado propio más comisión percibida,
+  // por fecha del depósito, solo lo ligado a facturas y anticipos); comisiones pagadas = las de Inicio. Los costos pagados se toman iguales a los devengados mientras no se mida el desfase de pago
+  // (cotizaciones y F29 del mes anterior): queda rotulado. Los depósitos sin identificar se muestran, fuera de la base.
+  const RA = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: year })
+  const [verIdpc, setVerIdpc] = useState(false)
+  const idpc = useMemo(() => {
+    const IA = RA.ingresosPorAnioVenta, R = A1.R
+    const cobMes = ym => (IA.byMonth[ym] || 0) + ((IA.percByMonth && IA.percByMonth[ym]) || 0)
+    const cobrado = (IA.total || 0) + (IA.percibidas || 0)
+    const fact = suma(R.map(m => m.ing)), cos = suma(R.map(m => m.cos)), com = suma(R.map(m => m.com)), comPag = RA.comisPagadasAnioVenta.total || 0
+    const p = puenteCaja({ resultadoAntes: suma(R.map(m => m.res)), facturado: fact, cobrado, devengado: cos + com, pagado: cos + comPag })
+    // Comprobación del cobrado: facturas propias emitidas en el año; cobrado por cartola frente al cobrado por saldo de cada factura.
+    const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
+    const delAnio = b => b && RA._esFactHon(b) && !RA.extBillIds.has(String(b.id)) && String(b.issued_at || '').slice(0, 4) === String(year)
+    let porCartola = 0
+    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const b = billById[String(c.factura_id)], m = abonoById[String(c.movimiento_id)]; if (!delAnio(b) || !m || !String(m.fecha || '').startsWith(String(year)) || m.categoria === 'Subarriendo') return; porCartola += Number(c.monto_aplicado) || 0 })
+    const facs = billing.filter(delAnio), porSaldo = suma(facs.map(b => montoFactura(b))) - suma(facs.map(b => saldoBill(b)))
+    const difCobrado = porCartola - porSaldo, cuadra = Math.abs(difCobrado) <= Math.max(500000, 0.01 * suma(facs.map(b => montoFactura(b))))   // tolerancia: 1 % de lo facturado o $500.000
+    const cobMeses = Array.from({ length: Math.max(0, curM - 1) }, (_, i) => cobMes(`${year}-${pad(i + 1)}`)), ult = A1.R[Math.max(0, curM - 2)]
+    const e = idpcDesdePuente({ baseAlCorte: p.base, mesesRestantes: 12 - curM, cobradoMes: cobMeses, pagadoUltimoMes: ult ? (ult.cos + ult.com) : 0, ppmPagado: suma(A1.ppm.map(x => x.clp)), ppmUltimoMes: A1.ppm[Math.max(0, curM - 2)]?.clp || 0 })
+    return { p, e, porCartola, porSaldo, difCobrado, cuadra, sinIdentificar: IA.porIdentificar || 0 }
+  }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
   const gKeys = useMemo(() => { const m = {}; [A1, A0].forEach(A => A.R.forEach(r => (r.cosLines || []).forEach(l => { if (!m[l.k]) m[l.k] = l.l }))); return Object.keys(m).sort((a, b) => ORDEN.indexOf(a) - ORDEN.indexOf(b)).map(k => ({ k, l: m[k] })) }, [A1, A0])
@@ -157,5 +183,40 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       <div style={{ fontSize: 11, color: C.muted, margin: '10px 2px 0', lineHeight: 1.5 }}>
         Los gastos se muestran en negativo; el subarriendo y los gastos recuperados reducen los gastos. Los meses «estimado» usan el presupuesto de oficina mientras no se carguen sus costos reales. Los subtotales suman las cifras redondeadas a {enUF ? 'UF enteras' : 'miles'}. El impuesto es solo el PPM del período, anticipo del impuesto de primera categoría; el impuesto anual se liquida en abril. El PPM es el declarado en el F29; mientras un mes no se declara, se estima con la tasa declarada sobre la base del mes. {year - 1} se compara de enero a {MESES[curM - 1]}{prevEst ? ' y sus costos son estimados, porque no están cargados los costos reales de ese año' : ''}.{enUF ? ' En UF, cada cifra va a la UF del día de su movimiento.' : ''}
       </div>
+
+      {(() => {
+        const { p, e } = idpc, fila = (k, sg, l, v, o = {}) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: D ? '8px 14px' : '8px 12px', borderTop: `1px solid ${C.bgSoft}`, background: o.tot ? C.bgSoft : undefined, fontSize: D ? 13 : 12, whiteSpace: 'nowrap' }}>
+          <span style={{ width: 12, textAlign: 'center', color: C.muted, fontWeight: 700, flexShrink: 0 }}>{sg}</span>
+          <span style={{ flex: 1, minWidth: 0, fontWeight: o.tot || o.big ? 800 : 600, color: o.tot || o.big ? C.accent : (o.mute ? C.muted : C.text) }}>{l}</span>
+          <span style={{ fontWeight: o.tot || o.big ? 800 : 700, fontVariantNumeric: 'tabular-nums', color: o.neg ? C.overdueText : (o.tot || o.big ? C.accent : (o.mute ? C.muted : C.text)) }}>{v}</span></div>
+        const proy = curM < 11 ? `Proyección ${MC[curM]}–dic` : (curM === 11 ? 'Proyección diciembre' : null)
+        return <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', margin: '0 2px 8px', ...SEC_LBL, fontSize: 10.5 }}><span>IDPC estimado del año</span><span style={{ color: C.muted, textTransform: 'none', letterSpacing: 0 }}>estimación</span></div>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+            {idpc.cuadra
+              ? <>{fila('i', '', 'IDPC estimado del año', fmtMill(e.idpc), { big: true })}{fila('s', '', 'Saldo a abril', fmtMill(e.saldo), { big: true, neg: e.saldo < 0 })}</>
+              : <div style={{ padding: '12px 14px', fontSize: 12, color: C.overdueText, fontWeight: 600 }}>Estimación no disponible: el cobrado de las facturas del año no cuadra entre la cartola y el saldo de cada factura (diferencia {fmtMill(idpc.difCobrado)}).</div>}
+            <div onClick={() => setVerIdpc(!verIdpc)} style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', borderTop: `1px solid ${C.bgSoft}` }}>{verIdpc ? 'Ocultar cálculo' : 'Ver cálculo'} ›</div>
+            {verIdpc && <>
+              {fila('r', '', 'Resultado antes de impuestos', fmtMill(p.resultadoAntes))}
+              {fila('c', '', 'Variación de cuentas por cobrar', fmtMill(p.varCxC), { neg: p.varCxC < 0 })}
+              {fila('pg', '', 'Variación de cuentas por pagar', fmtMill(p.varCxP), { neg: p.varCxP < 0 })}
+              {fila('b1', '=', 'Base al ' + fmtFechaDMY(new Date().toISOString().slice(0, 10)), fmtMill(p.base), { tot: true })}
+              {proy && fila('py', '', proy, fmtMill(e.proyeccion), { neg: e.proyeccion < 0 })}
+              {fila('b2', '=', 'Base del año', fmtMill(e.baseAnio), { tot: true })}
+              {fila('in', '−', 'Incentivo al ahorro, 50 %', fmtMill(e.incentivo))}
+              {fila('b3', '=', 'Base afecta', fmtMill(e.baseAfecta), { tot: true })}
+              {fila('id', '', 'IDPC 12,5 %', fmtMill(e.idpc))}
+              {fila('pp', '−', 'PPM del año', fmtMill(e.ppm))}
+              {fila('sa', '=', 'Saldo a abril', fmtMill(e.saldo), { tot: true, neg: e.saldo < 0 })}
+              {fila('si', '', 'Depósitos sin identificar, fuera de la base', fmtMill(idpc.sinIdentificar), { mute: true })}
+              {fila('co', '', 'Cobrado de facturas del año, diferencia entre cartola y saldos', fmtMill(idpc.difCobrado), { mute: true })}
+            </>}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, margin: '10px 2px 0', lineHeight: 1.5 }}>
+            Estimación en pesos, régimen Pro Pyme general. Parte del Resultado antes de impuestos de este Estado y lo lleva a caja con el cobrado de Inicio (facturas y anticipos conciliados) y las comisiones pagadas. Los costos se toman como pagados en el mes en que se devengan; aún no se mide el desfase de cotizaciones y F29. Es un piso: los depósitos sin identificar no entran. Proyección moderada de los meses que faltan, sin crecimiento.
+          </div>
+        </div>
+      })()}
     </div>)
 }
