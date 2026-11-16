@@ -279,13 +279,13 @@ export function Costos({ X }) {
     <div role='button' tabIndex={0} aria-label={`${nombreCorto('costos', CFG)} ${Y}`} onClick={() => ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } })} onKeyDown={(ev) => { if (ev.key === 'Enter') ir1({ drill: { t: 'comp', de: 'metas', k: 'costos' } }) }} style={{ background: C.tealBg, border: `1px solid ${C.tealBg}`, color: C.tealText, borderRadius: 12, padding: D ? '10px 14px' : '8px 10px', cursor: 'pointer', display: 'grid', gridTemplateColumns: `${D ? 36 : 28}px minmax(0,1fr)`, columnGap: D ? 12 : 8, rowGap: 4, alignItems: 'center', minWidth: 0 }}>
       <span style={{ gridRow: '1 / span 3', width: D ? 36 : 28, height: D ? 36 : 28, borderRadius: 10, background: C.card, display: 'grid', placeItems: 'center' }}><Ic n='egr' s={D ? 18 : 15} /></span>
       <div style={{ ...LBL, fontSize: D ? 13 : 12, color: C.tealText }}>{`${nombreCorto('costos', CFG)} ${Y} · ${nomE}`}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${D ? 4 : 2},minmax(0,1fr))`, gap: D ? 16 : '6px 10px' }}>{[['Costos brutos', cb.brutos], ['Recuperado', cb.subarriendo, 'Subarriendo y gastos recuperados'], ['Costos netos', cb.netos], ['Comisiones', e.terc]].map(([cap2, v2, full]) => <div key={cap2} title={full} aria-label={full ? `${full}: ${mm(v2)}` : undefined} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 10.5, color: C.tealText, opacity: 0.85, whiteSpace: 'nowrap' }}>{cap2}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.6, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><Val v={mm(v2)} /></div></div>)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(3,minmax(0,1fr))`, gap: D ? 16 : '6px 10px' }}>{[['Costos brutos', cb.brutos], ['Recuperado', cb.subarriendo, 'Subarriendo y gastos recuperados'], ['Costos netos', cb.netos]].map(([cap2, v2, full]) => <div key={cap2} title={full} aria-label={full ? `${full}: ${mm(v2)}` : undefined} style={{ minWidth: 0 }}><div style={{ ...LBL, fontSize: 10.5, color: C.tealText, opacity: 0.85, whiteSpace: 'nowrap' }}>{cap2}</div><div style={{ fontSize: D ? 21 : 16, fontWeight: 800, letterSpacing: -0.6, color: C.accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><Val v={mm(v2)} /></div></div>)}</div>
       <div style={{ fontSize: D ? 12 : 11, color: C.muted, display: 'flex', gap: '0 12px', flexWrap: 'wrap' }}><span>{dc.sg}{dc.abs} contra hoy</span>{cotV > 0 && <span>de lo cual, alza de cotización +{mmP(cotV)}</span>}</div>
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
-          <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
+          <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /> del cobrado, {mm(e.terc)} al año</span><span>Variable: se paga solo si hay cobro y se resta de los ingresos, no suma a los costos</span></div>
           {(() => {
             const eq = ui.equipo || { abierto: false, pct: '' }, pct = Number(String(eq.pct).replace(',', '.')) || 0
             const ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', ufR = ymR ? ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef) : 0
@@ -317,7 +317,6 @@ export function Costos({ X }) {
           })()}
           {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Variación</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
-          <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
           {d.impuestos && d.impuestos.nF29 > 0
             ? (() => { const retContadora = d.impuestos.externos.filter((x) => x.destino === 'contabilidad').reduce((a, x) => a + x.anual, 0); return <>
               <Fila tot sin nombre='Impuestos mensuales · pago al SII' valor={mm(e.ppm + d.impuestos.retencionPropiaAnual + retContadora)} />
@@ -328,7 +327,6 @@ export function Costos({ X }) {
             </> })()
             : <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />}
           {subIt && materia({ m: subIt[0].n, it: [subIt], t27: val(subIt[0], k), t26: costoAnualBase(subIt[0], Yb) })}
-          <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
           <div onClick={addCosto} style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, fontSize: 13, fontWeight: 700, color: C.accent, cursor: 'pointer' }}>+ Agregar partida</div>
         </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
