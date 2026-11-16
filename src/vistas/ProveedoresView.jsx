@@ -117,7 +117,7 @@ const _tercEtq = f => ({recibida:['pg','Recibida'],registrada:['dev','Sin docume
 const _TERC_TONO = {pg:[C.greenBg,C.greenText],pp:[C.soonBg,C.soonText],dev:[C.bgSoft,C.muted],rev:[C.overdueBg,C.overdueText]}
 function TercChip({tono,txt}){ const [bg,fg]=_TERC_TONO[tono]||_TERC_TONO.dev; return <span style={{fontSize:10,fontWeight:700,borderRadius:20,padding:'2px 8px',background:bg,color:fg,lineHeight:1.35,display:'inline-block',whiteSpace:'nowrap'}}>{txt}</span> }
 
-export function TercFacturasCard({rt, isDesktop, dmy, cuotaTxt, onAbrir, onCuadrar, onDescartar, busy}){
+export function TercFacturasCard({rt, isDesktop, dmy, cuotaTxt, cuotaPartes, onFicha, onAbrir, onCuadrar, onDescartar, busy}){
   const T=rt.cadena.totales
   const kLbl={fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}
   const num={fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}
@@ -134,14 +134,19 @@ export function TercFacturasCard({rt, isDesktop, dmy, cuotaTxt, onAbrir, onCuadr
     {rt.alertas.length>0&&<>{lbl(`Alertas · ${rt.alertas.length}`)}{rt.alertas.map((a,i)=>{ const t=a.pago, cu=cuotaDe(t)
       const sub=a.tipo==='esperada_sin_emitir'?`Se esperaba hasta el ${dmy(a.detalle)}`:a.tipo==='monto'?`Factura N° ${a.detalle} del SII difiere ${_pctTxt(a.pct||0)} de la parte esperada`:a.tipo==='folio_repetido'?`La factura N° ${a.detalle} está en más de una cuota`:`La factura N° ${a.detalle} del SII es de otro RUT`
       return row('a'+i,<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:C.overdueText}}>{TERC_ALERTA[a.tipo]}</div><div style={{fontSize:11,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{cu} · {sub}</div></div>,<span style={{fontSize:13,fontWeight:700,...num}}>{fmt(a.doc?Math.abs(Number(a.doc.monto)||0):Number(t.monto)||0)}</span>,()=>onAbrir(t.id)) })}</>}
-    {rt.propuestas.length>0&&<>{lbl(`Cuadres propuestos · ${rt.propuestas.length}`)}{rt.propuestas.map(pr=>{ const d=pr.doc, t=pr.pago
+    {rt.propuestas.length>0&&<>{lbl(`Cuadres propuestos · ${rt.propuestas.length}`)}{rt.propuestas.map(pr=>{ const d=pr.doc, ts=pr.pagos||[pr.pago], n=ts.length, suma=ts.reduce((a,t)=>a+(Number(t.monto)||0),0)
       return <div key={d.id} style={{padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,display:'flex',flexDirection:'column',gap:6}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700}}>Factura N° {d.folio} <span style={{fontWeight:400,color:C.muted}}>· {dmy(d.fecha_emision)}</span></div>
-            <div style={{fontSize:11,color:C.muted}}>Cuadra con {cuotaDe(t)} · {pr.diferencia===0?'monto exacto':`difiere ${_pctTxt(pr.pct)} de la parte esperada ${fmt(Number(t.monto)||0)}`} · única cuota facturada sin factura del proveedor</div></div>
+            <div style={{fontSize:11,color:C.muted}}>Cuadra con {n} cuota{n===1?'':'s'} · {pr.diferencia===0?'monto exacto':`difiere ${_pctTxt(pr.pct)} de la parte esperada ${fmt(suma)}`}, única {n===1?'cuota facturada':'combinación de cuotas facturadas'} sin factura del proveedor</div></div>
           <span style={{fontSize:13,fontWeight:700,...num}}>{fmt(Math.abs(Number(d.monto)||0))}</span></div>
+        <div>{ts.map(t=>{ const q=cuotaPartes(t)
+          return <div key={t.id} onClick={()=>onAbrir(t.id)} className='pv-c' style={{display:'flex',alignItems:'center',gap:10,minHeight:44,padding:'4px 0 4px 8px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{q.cuota} · {q.cli&&onFicha?<span onClick={e=>{e.stopPropagation();onFicha(q.cli.id)}} style={{textDecoration:'underline',textDecorationColor:C.border,textUnderlineOffset:2}}>{q.cli.name}</span>:q.cli?.name}{q.fac?` · ${q.fac}`:''}</div>
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',fontSize:11,color:C.muted}}><span>{dmy(q.fecha)}</span><TercChip tono='pp' txt='Por cuadrar'/></div></div>
+            <span style={{fontSize:12,fontWeight:700,...num}}>{fmt(Number(t.monto)||0)}</span></div> })}</div>
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <ActBtn variant='ghost' onClick={()=>onDescartar(d,t)}>No es esa</ActBtn>
+          <ActBtn variant='ghost' onClick={()=>onDescartar(d,ts)}>{n===1?'No es esa':'No son esas'}</ActBtn>
           <ActBtn variant='primary' onClick={()=>onCuadrar(pr)}>{busy==='cuadre:'+d.id?'Cuadrando…':'Cuadrar'}</ActBtn></div></div> })}</>}
     {rt.noResueltas.length>0&&<>{lbl(`Por revisar a mano · ${rt.noResueltas.length}`)}{rt.noResueltas.map(n=>row('n'+n.doc.id,<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700}}>Factura N° {n.doc.folio} <span style={{fontWeight:400,color:C.muted}}>· {dmy(n.doc.fecha_emision)}</span></div><div style={{fontSize:11,color:C.muted}}>{n.motivo==='varias_cuotas'?'Cabe en más de una cuota':n.motivo==='fuera_tolerancia'?'Ninguna cuota sin factura queda dentro del 1%':'No hay cuota facturada sin factura del proveedor'}</div></div>,<span style={{fontSize:13,fontWeight:700,...num}}>{fmt(Math.abs(Number(n.doc.monto)||0))}</span>))}</>}
     {lbl('Cuotas')}
@@ -568,21 +573,25 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   // Facturas del tercero: «Cuadrar» escribe factura_numero y factura_fecha en la cuota (como el registro de la factura del proveedor) y deja historial.
   const cuadrarTercero = async pr => {
     if(busy) return
-    const t=pr.pago, d=pr.doc, b=facDe(t), prov=proveedores.find(p=>String(p.id)===String(t.proveedor_id)), monto=Math.abs(Number(d.monto)||0)
-    if(!(await appConfirm(`¿Cuadrar la factura N° ${d.folio} del ${dmy(d.fecha_emision)} (${fmt(monto)}) con la cuota ${b?.invoice_no?'de la factura N° '+folioN(b.invoice_no):'elegida'}${cliDe(t)?' de '+cliDe(t).name:''}? Se anota en esa cuota.`))) return
+    const ts=pr.pagos||[pr.pago], d=pr.doc, t=ts[0], b=facDe(t), monto=Math.abs(Number(d.monto)||0)
+    const dondeTxt = ts.length===1 ? `con la cuota ${b?.invoice_no?'de la factura N° '+folioN(b.invoice_no):'elegida'}${cliDe(t)?' de '+cliDe(t).name:''}? Se anota en esa cuota.` : `con ${ts.length} cuotas (${ts.map(x=>cliCorto2(cliDe(x)?.name)).join(', ')})? Se anota en esas cuotas.`
+    if(!(await appConfirm(`¿Cuadrar la factura N° ${d.folio} del ${dmy(d.fecha_emision)} (${fmt(monto)}) ${dondeTxt}`))) return
     setBusy('cuadre:'+d.id)
     const patch={factura_numero:String(d.folio),factura_fecha:String(d.fecha_emision||'').slice(0,10)||null}
-    if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update(patch).eq('id',t.id); if(error){ setBusy(null); appAlert('No se pudo cuadrar: '+error.message); return } }
-    setTerceros&&setTerceros(p=>p.map(x=>x.id===t.id?{...x,...patch}:x))
-    logActividad(`proveedores.${t.proveedor_id}.factura_tercero`,{tabla:'terceros_pagos',id:t.id,detalle:{title:`Factura N° ${d.folio} cuadrada con la cuota${b?.invoice_no?' de la factura N° '+folioN(b.invoice_no):''}`,monto}})
+    const ids=ts.map(x=>x.id)
+    if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update(patch).in('id',ids); if(error){ setBusy(null); appAlert('No se pudo cuadrar: '+error.message); return } }
+    setTerceros&&setTerceros(p=>p.map(x=>ids.includes(x.id)?{...x,...patch}:x))
+    ts.forEach(x=>{ const bx=facDe(x); logActividad(`proveedores.${x.proveedor_id}.factura_tercero`,{tabla:'terceros_pagos',id:x.id,detalle:{title:`Factura N° ${d.folio} cuadrada con la cuota${bx?.invoice_no?' de la factura N° '+folioN(bx.invoice_no):''}`,monto:Number(x.monto)||0}}) })
     setBusy(null)
   }
-  const descartarTercero = async (d,t) => {
-    if(!(await appConfirm(`¿Descartar el cuadre de la factura N° ${d.folio} con esta cuota? No se vuelve a proponer.`))) return
-    terc.descartar(d.id,t.id)
-    logActividad(`proveedores.${t.proveedor_id}.factura_tercero_no`,{tabla:'sii_compras_docs',id:d.id,detalle:{title:`Factura N° ${d.folio}: no corresponde a esa cuota`}})
+  const descartarTercero = async (d,ts) => {
+    const lista=Array.isArray(ts)?ts:[ts]
+    if(!(await appConfirm(`¿Descartar el cuadre de la factura N° ${d.folio} con ${lista.length===1?'esta cuota':'estas cuotas'}? No se vuelve a proponer.`))) return
+    lista.forEach(t=>terc.descartar(d.id,t.id))
+    logActividad(`proveedores.${lista[0].proveedor_id}.factura_tercero_no`,{tabla:'sii_compras_docs',id:d.id,detalle:{title:`Factura N° ${d.folio}: no corresponde a ${lista.length===1?'esa cuota':'esas cuotas'}`}})
   }
   const cliCorto2 = n => String(n||'').split(/\s+/).slice(0,2).join(' ')
+  const cuotaPartes = t => { const b=facDe(t), q=nCuotaDe(b), c=cliDe(t); return { cuota: q?`Cuota ${q.n}${q.de?' de '+q.de:''}`:'Cuota', cli: c?{id:c.id,name:cliCorto2(c.name)}:null, fac: b?.invoice_no?'Factura N° '+folioN(b.invoice_no):'', fecha: b?.issued_at } }
   const cuotaTercTxt = t => { const b=facDe(t), q=nCuotaDe(b); return `${q?`Cuota ${q.n}${q.de?' de '+q.de:''}`:'Cuota'} · ${cliCorto2(cliDe(t)?.name)}${b?.invoice_no?' · Factura N° '+folioN(b.invoice_no):''}` }
   const anios = [...new Set([...terceros.map(t=>yOf(t.pagado_at)),...docs.map(d=>yOf(d.fecha_emision)),...cargos.map(m=>yOf(m.fecha))].filter(y=>/^\d{4}$/.test(y)))]
   if(!anios.includes(yr)) anios.push(yr)
@@ -1121,7 +1130,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     const facY = docsY.filter(d=>Number(d.tipo_dte)!==61), nNC = docsY.length-facY.length, docNet = docsY.reduce((x,d)=>x+sgn(d)*Math.abs(Number(d.monto)||0),0)
     const ultDoc = [...facY].sort((p1,p2)=>String(p1.fecha_emision).localeCompare(String(p2.fecha_emision))).pop()
     const rtT = ro ? null : terc.porProveedor[String(sel.id)]
-    const tercEl = rtT ? <TercFacturasCard rt={rtT} isDesktop={isDesktop} dmy={dmy} cuotaTxt={cuotaTercTxt} busy={busy} onAbrir={id=>{ try{ const d=document.getElementById('main-scroll'); scrollFichaRef.current={w:window.scrollY||0,d:d?d.scrollTop:0} }catch(_){} setCadSel(id);setView('cadena'); setTimeout(()=>restoreScroll({w:0,d:0}),0) }} onCuadrar={cuadrarTercero} onDescartar={descartarTercero}/> : null
+    const tercEl = rtT ? <TercFacturasCard rt={rtT} isDesktop={isDesktop} dmy={dmy} cuotaTxt={cuotaTercTxt} cuotaPartes={cuotaPartes} onFicha={onOpenClientFicha} busy={busy} onAbrir={id=>{ try{ const d=document.getElementById('main-scroll'); scrollFichaRef.current={w:window.scrollY||0,d:d?d.scrollTop:0} }catch(_){} setCadSel(id);setView('cadena'); setTimeout(()=>restoreScroll({w:0,d:0}),0) }} onCuadrar={cuadrarTercero} onDescartar={descartarTercero}/> : null
     const secs = [
       pagosCard&&{k:'pagos',t:'Pagos del banco',v:fmt(pagTot),s:`${pagosY.length} en ${yr}${ultPagoF?' · último '+dmy(ultPagoF):''}`,el:pagosCard},
       docsCard&&{k:'sii',t:'Facturas en el SII',v:fmt(docNet),s:`${facY.length} factura${facY.length!==1?'s':''}${nNC?` y ${nNC} NC`:''} en ${yr}${ultDoc?' · última F'+ultDoc.folio:''}`,el:docsCard},

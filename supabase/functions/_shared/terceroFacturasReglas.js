@@ -45,11 +45,35 @@ function _ctx(/** @type {any} */ a) {
 }
 
 /**
+ * Combinación ÚNICA de 2 a 6 cuotas cuya suma esperada calza con el monto `m` dentro de la tolerancia (una factura del tercero que cubre varias
+ * comisiones, p. ej. BDA). Solo las primeras 24 cuotas (las más antiguas) que caben en el monto. Si hay más de una combinación, devuelve null: no se adivina.
+ */
+function _combinacionUnica(/** @type {any[]} */ cands, /** @type {number} */ m, /** @type {number} */ tol) {
+  const tope = m / (1 - tol)
+  const c = cands.filter(t => _n(t.monto) <= tope).slice(0, 24)
+  /** @type {any[][]} */
+  const sols = []
+  const dfs = (/** @type {number} */ ini, /** @type {any[]} */ sel, /** @type {number} */ suma) => {
+    if (sols.length > 1) return
+    if (sel.length >= 2 && Math.abs(_pct(m, suma)) <= tol) sols.push(sel.slice())
+    if (sel.length === 6) return
+    for (let i = ini; i < c.length; i++) {
+      const s = suma + _n(c[i].monto)
+      if (s > tope) continue
+      sel.push(c[i]); dfs(i + 1, sel, s); sel.pop()
+      if (sols.length > 1) return
+    }
+  }
+  dfs(0, [], 0)
+  return sols.length === 1 ? sols[0] : null
+}
+
+/**
  * Calce factura del tercero ↔ cuota. Para cada documento del SII del proveedor (33/34, aún no ligado a una cuota por factura_numero)
  * propone la cuota sin factura_numero, con factura nuestra emitida, cuyo monto esperado queda dentro de la tolerancia. Los documentos
  * se recorren en orden de emisión y las cuotas en el orden en que se facturaron (la más antigua primero); una cuota ya propuesta sale
  * del universo, de modo que lo que era ambiguo puede resolverse con la siguiente vuelta. Si hay más de una cuota posible o ninguna
- * dentro de tolerancia, no propone y deja el motivo. `descartes`: claves `${doc.id}|${pago.id}` ya rechazadas por el usuario.
+ * dentro de tolerancia, no propone y deja el motivo; si ninguna cuota sola calza, busca una combinación ÚNICA de 2 a 6 cuotas que sume el monto (`pagos`). `descartes`: claves `${doc.id}|${pago.id}` ya rechazadas por el usuario.
  */
 export function propuestasCuadre(/** @type {any} */ args) {
   const { docs = [], pagos = [], billing = [], proveedor = null, tolerancia = TERCERO_TOLERANCIA, descartes = new Set() } = args || {}
@@ -59,7 +83,7 @@ export function propuestasCuadre(/** @type {any} */ args) {
     .sort((/** @type {any} */ a, /** @type {any} */ b) => _f10(a.fecha_emision).localeCompare(_f10(b.fecha_emision)) || _folio(a.folio).localeCompare(_folio(b.folio), 'es', { numeric: true }))
   const cuotas = misPagos.filter((/** @type {any} */ t) => !String(t.factura_numero || '').trim() && facturaEmitida(fac(t)) && _n(t.monto) > 0)
     .sort((/** @type {any} */ a, /** @type {any} */ b) => _f10(fac(a).issued_at).localeCompare(_f10(fac(b).issued_at)) || String(a.id).localeCompare(String(b.id)))
-  /** @type {{doc:any,pago:any,diferencia:number,pct:number}[]} */
+  /** @type {{doc:any,pago:any,pagos:any[],diferencia:number,pct:number}[]} */
   const propuestas = []
   const tomadas = new Set(), hechos = new Set()
   let cambio = true
@@ -71,9 +95,21 @@ export function propuestasCuadre(/** @type {any} */ args) {
       const posibles = cuotas.filter((/** @type {any} */ t) => !tomadas.has(String(t.id)) && !descartes.has(`${d.id}|${t.id}`) && Math.abs(_pct(m, _n(t.monto))) <= tolerancia)
       if (posibles.length !== 1) continue
       const t = posibles[0]
-      propuestas.push({ doc: d, pago: t, diferencia: m - _n(t.monto), pct: _pct(m, _n(t.monto)) })
+      propuestas.push({ doc: d, pago: t, pagos: [t], diferencia: m - _n(t.monto), pct: _pct(m, _n(t.monto)) })
       tomadas.add(String(t.id)); hechos.add(String(d.id)); cambio = true
     }
+  }
+  // Lo que ningún cuota sola explica: una factura que cubre VARIAS cuotas. Solo si la combinación es única.
+  for (const d of libres) {
+    if (hechos.has(String(d.id))) continue
+    const m = _montoDoc(d)
+    const disp = cuotas.filter((/** @type {any} */ t) => !tomadas.has(String(t.id)) && !descartes.has(`${d.id}|${t.id}`))
+    if (disp.some((/** @type {any} */ t) => Math.abs(_pct(m, _n(t.monto))) <= tolerancia)) continue
+    const comb = _combinacionUnica(disp, m, tolerancia)
+    if (!comb) continue
+    const suma = comb.reduce((/** @type {number} */ a, /** @type {any} */ t) => a + _n(t.monto), 0)
+    propuestas.push({ doc: d, pago: comb[0], pagos: comb, diferencia: m - suma, pct: _pct(m, suma) })
+    comb.forEach((/** @type {any} */ t) => tomadas.add(String(t.id))); hechos.add(String(d.id))
   }
   const noResueltas = libres.filter((/** @type {any} */ d) => !hechos.has(String(d.id))).map((/** @type {any} */ d) => {
     const m = _montoDoc(d)
@@ -97,7 +133,7 @@ export function alertasTercero(/** @type {any} */ args) {
   const { rut, misPagos, misDocs, fac } = _ctx({ docs, pagos, billing, proveedor })
   /** @type {{tipo:string,pago:any,doc?:any,detalle:string,pct?:number}[]} */
   const out = []
-  const conPropuesta = new Set(propuestasCuadre({ docs, pagos, billing, proveedor, tolerancia, descartes }).propuestas.map(p => String(p.pago.id)))
+  const conPropuesta = new Set(propuestasCuadre({ docs, pagos, billing, proveedor, tolerancia, descartes }).propuestas.flatMap(p => p.pagos.map((/** @type {any} */ t) => String(t.id))))
   const h = _f10(hoy)
   for (const t of misPagos) {
     if (String(t.factura_numero || '').trim() || t.estado === 'pagado') continue
@@ -144,7 +180,7 @@ export function alertasTercero(/** @type {any} */ args) {
 export function cadenaCuotas(/** @type {any} */ args) {
   const { pagos = [], docs = [], billing = [], proveedor = null, hoy = '', descartes = new Set(), tolerancia = TERCERO_TOLERANCIA, montoBill = (/** @type {any} */ b) => _n(b && b.amount) } = args || {}
   const { misPagos, misDocs, fac } = _ctx({ docs, pagos, billing, proveedor })
-  const prop = new Map(propuestasCuadre({ docs, pagos, billing, proveedor, tolerancia, descartes }).propuestas.map(p => [String(p.pago.id), p]))
+  const prop = new Map(propuestasCuadre({ docs, pagos, billing, proveedor, tolerancia, descartes }).propuestas.flatMap(p => p.pagos.map((/** @type {any} */ t) => /** @type {[string, any]} */ ([String(t.id), p]))))
   const h = _f10(hoy)
   const cuotas = misPagos.filter((/** @type {any} */ t) => facturaEmitida(fac(t)))
     .sort((/** @type {any} */ a, /** @type {any} */ b) => _f10(fac(a).issued_at).localeCompare(_f10(fac(b).issued_at)) || String(a.id).localeCompare(String(b.id)))

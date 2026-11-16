@@ -156,3 +156,28 @@ test('un documento del tercero que consolida comisiones de VARIAS facturas nuest
   const sinDoc = alertasTercero({ docs: [], pagos, billing, proveedor: PROV, hoy: '2026-11-16' })
   assert.deepEqual(sinDoc.map(a => a.tipo), ['folio_repetido'])
 })
+
+test('una factura que cubre varias cuotas: se propone solo si la combinación es única', () => {
+  const b = [bill('b1', 'F1', '2026-08-03'), bill('b2', 'F2', '2026-09-01'), bill('b3', 'F3', '2026-10-02')]
+  const pagos = [pago('t1', 'b1', 384038), pago('t2', 'b2', 438366), pago('t3', 'b3', 100000)]
+  const r = propuestasCuadre({ docs: [doc('d1', 200, '2026-11-12', 822404)], pagos, billing: b, proveedor: PROV })
+  assert.equal(r.propuestas.length, 1)
+  assert.deepEqual(r.propuestas[0].pagos.map(t => t.id), ['t1', 't2'])
+  assert.equal(r.propuestas[0].diferencia, 0)
+  assert.equal(r.noResueltas.length, 0)
+  // con cuotas ya con folio no entran; si hay dos combinaciones posibles, no se adivina
+  const pagos2 = [pago('t1', 'b1', 300000), pago('t2', 'b2', 300000), pago('t3', 'b3', 300000)]
+  const r2 = propuestasCuadre({ docs: [doc('d1', 201, '2026-11-12', 600000)], pagos: pagos2, billing: b, proveedor: PROV })
+  assert.equal(r2.propuestas.length, 0); assert.equal(r2.noResueltas.length, 1)
+  // un descarte de cualquiera de las cuotas saca esa combinación
+  const r3 = propuestasCuadre({ docs: [doc('d1', 200, '2026-11-12', 822404)], pagos, billing: b, proveedor: PROV, descartes: new Set(['d1|t2']) })
+  assert.equal(r3.propuestas.length, 0)
+})
+
+test('las cuotas de un cuadre múltiple no generan alerta de factura sin emitir y salen «por cuadrar» en la cadena', () => {
+  const b = [bill('b1', 'F1', '2026-08-03'), bill('b2', 'F2', '2026-09-01')]
+  const pagos = [pago('t1', 'b1', 384038), pago('t2', 'b2', 438366)]
+  const args = { docs: [doc('d1', 200, '2026-11-12', 822404)], pagos, billing: b, proveedor: PROV, hoy: '2026-11-16' }
+  assert.equal(alertasTercero(args).filter(a => a.tipo === 'esperada_sin_emitir').length, 0)
+  assert.deepEqual(cadenaCuotas(args).cuotas.map(c => c.debemos.factura), ['propuesta', 'propuesta'])
+})
