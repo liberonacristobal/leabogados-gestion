@@ -145,3 +145,14 @@ test('una factura del tercero que cubre dos filas de la MISMA factura nuestra: s
   const r2 = alertasTercero({ docs: [doc('d1', 300, '2026-08-31', 560000)], pagos, billing, proveedor: PROV, hoy: '2026-11-02' })
   assert.equal(r2.filter(a => a.tipo === 'monto').length, 1)
 })
+
+test('un documento del tercero que consolida comisiones de VARIAS facturas nuestras: sin alerta si la suma calza con el documento', () => {
+  const pagos = [pago('t1', 'b1', 400000, { factura_numero: '400' }), pago('t2', 'b2', 422000, { factura_numero: '400' })]
+  const ok = alertasTercero({ docs: [doc('d1', 400, '2026-10-31', 822000)], pagos, billing, proveedor: PROV, hoy: '2026-11-16' })
+  assert.deepEqual(ok.filter(a => a.tipo === 'folio_repetido' || a.tipo === 'monto'), [])
+  // Si la suma no calza con el documento, sigue siendo folio repetido; y sin documento que lo respalde también.
+  const mal = alertasTercero({ docs: [doc('d1', 400, '2026-10-31', 700000)], pagos, billing, proveedor: PROV, hoy: '2026-11-16' })
+  assert.deepEqual(mal.map(a => a.tipo), ['folio_repetido'])
+  const sinDoc = alertasTercero({ docs: [], pagos, billing, proveedor: PROV, hoy: '2026-11-16' })
+  assert.deepEqual(sinDoc.map(a => a.tipo), ['folio_repetido'])
+})

@@ -111,7 +111,14 @@ export function alertasTercero(/** @type {any} */ args) {
   for (const t of misPagos) for (const f of new Set(_folios(t.factura_numero))) porFolio.set(f, [...(porFolio.get(f) || []), t])
   for (const [f, ts] of porFolio) {
     const distintas = new Set(ts.map(t => String(t.billing_id || t.id)))
-    if (distintas.size > 1) { out.push({ tipo: 'folio_repetido', pago: ts[0], detalle: f }); continue }
+    if (distintas.size > 1) {
+      // Un documento del tercero puede consolidar comisiones de VARIAS facturas nuestras (p. ej. BDA factura varias comisiones juntas): es válido si el SII trae el documento y
+      // lo esperado de todas esas cuotas suma su monto dentro de la tolerancia. Sin documento que lo respalde, o si la suma no calza, el folio repetido sigue siendo una alerta.
+      const doc = misDocs.find((/** @type {any} */ d) => _folio(d.folio) === f)
+      const suma = ts.filter((/** @type {any} */ t) => _folios(t.factura_numero).length === 1).reduce((a, t) => a + _n(t.monto), 0)
+      if (doc && suma > 0 && Math.abs(_pct(_montoDoc(doc), suma)) <= tolerancia) continue
+      out.push({ tipo: 'folio_repetido', pago: ts[0], detalle: f }); continue
+    }
     // Una factura del tercero puede cubrir varias filas de comisión de la MISMA factura nuestra (p. ej. dos tramos): se compara la
     // suma de lo esperado de todas esas filas con el monto del documento, no cada fila por separado.
     const propio = misDocs.find((/** @type {any} */ d) => _folio(d.folio) === f)
