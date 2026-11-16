@@ -9,6 +9,7 @@ import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFec
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { puenteCaja } from '../../supabase/functions/_shared/puenteCaja.js'
 import { idpcDesdePuente } from '../../supabase/functions/_shared/idpcEstimado.js'
+import { desfaseFinAnio } from '../../supabase/functions/_shared/desfasePagos.js'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { descargarEstadoResultadosPdf } from '../lib/pdfEstadoResultados.js'
 import { DEMO } from '../supabase'
@@ -67,8 +68,13 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     const sinRespaldo = facs.map(b => ({ b, dif: montoFactura(b) - saldoBill(b) - (cartolaDe[String(b.id)] || 0) })).filter(x => x.dif > 1000)
     const difCobrado = porCartola - porSaldo, cuadra = Math.abs(difCobrado) <= Math.max(500000, 0.01 * montoFacs)   // tolerancia: 1 % de lo facturado o $500.000
     const cobMeses = Array.from({ length: Math.max(0, curM - 1) }, (_, i) => cobMes(`${year}-${pad(i + 1)}`)), ult = A1.R[Math.max(0, curM - 2)]
-    const e = idpcDesdePuente({ baseAlCorte: p.base, mesesRestantes: 12 - curM, cobradoMes: cobMeses, pagadoUltimoMes: ult ? (ult.cos + ult.com) : 0, ppmPagado: suma(A1.ppm.map(x => x.clp)), ppmUltimoMes: A1.ppm[Math.max(0, curM - 2)]?.clp || 0 })
-    return { p, e, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
+    // Desfase de pago de fin de año: cotizaciones y F29 sin PPM (retención de honorarios e impuesto único) se pagan el mes siguiente; el último período cerrado hace de proxy de diciembre.
+    const pagosI = DEMO ? (imps.pagos || []) : pagosConBoleta({ expenses, ofiId, boletaSet: fu.boleta, terceros }), docsI = (fu.sii && fu.sii.length ? fu.sii : imps.docs) || []
+    const sinPpm = per => { const i = impuestosMensuales({ per, docs: docsI, boletas: imps.boletas, pagos: pagosI, liquidaciones: imps.liquidaciones, declarados: imps.declarados, informado: imps.valores?.[per]?.ppm, destinos: imps.destinos || {}, terceros, boletaSet: [...fu.boleta] }); return (i.retencion.monto || 0) + (i.unico.monto || 0) }
+    const perUlt = `${year}-${pad(Math.max(1, curM - 1))}`
+    const des = desfaseFinAnio({ expenses, ofiId, anio: year, perUlt, f29SinPpmInicial: sinPpm(`${year - 1}-12`), f29SinPpmUlt: sinPpm(perUlt) })
+    const e = idpcDesdePuente({ baseAlCorte: p.base, mesesRestantes: 12 - curM, cobradoMes: cobMeses, pagadoUltimoMes: ult ? (ult.cos + ult.com) : 0, ppmPagado: suma(A1.ppm.map(x => x.clp)), ppmUltimoMes: A1.ppm[Math.max(0, curM - 2)]?.clp || 0, ajusteFinAnio: des.desfase })
+    return { p, e, des, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
   }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
@@ -205,6 +211,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
               {fila('pg', '', 'Variación de cuentas por pagar', fmtMill(p.varCxP), { neg: p.varCxP < 0 })}
               {fila('b1', '=', 'Base al ' + fmtFechaDMY(new Date().toISOString().slice(0, 10)), fmtMill(p.base), { tot: true })}
               {proy && fila('py', '', proy, fmtMill(e.proyeccion), { neg: e.proyeccion < 0 })}
+              {fila('ds', '', 'Desfase de pago a fin de año', fmtMill(idpc.des.desfase), { neg: idpc.des.desfase < 0 })}
               {fila('b2', '=', 'Base del año', fmtMill(e.baseAnio), { tot: true })}
               {fila('in', '−', 'Incentivo al ahorro, 50 %', fmtMill(e.incentivo))}
               {fila('b3', '=', 'Base afecta', fmtMill(e.baseAfecta), { tot: true })}
@@ -216,7 +223,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
             </>}
           </div>
           <div style={{ fontSize: 11, color: C.muted, margin: '10px 2px 0', lineHeight: 1.5 }}>
-            Estimación en pesos, régimen Pro Pyme general. Parte del Resultado antes de impuestos de este Estado y lo lleva a caja con el cobrado de Inicio (facturas y anticipos conciliados) y las comisiones pagadas. Los costos se toman como pagados en el mes en que se devengan; aún no se mide el desfase de cotizaciones y F29. Es un piso: los depósitos sin identificar no entran. Proyección moderada de los meses que faltan, sin crecimiento.
+            Estimación en pesos, régimen Pro Pyme general. Parte del Resultado antes de impuestos de este Estado y lo lleva a caja con el cobrado de Inicio (facturas y anticipos conciliados) y las comisiones pagadas. Los costos se toman como pagados en el mes en que se devengan, salvo el desfase de un mes de cotizaciones y F29 (retención e impuesto único), que se ajusta a fin de año con diciembre anterior y el último período cerrado. Es un piso: los depósitos sin identificar no entran. Proyección moderada de los meses que faltan, sin crecimiento.
           </div>
         </div>
       })()}

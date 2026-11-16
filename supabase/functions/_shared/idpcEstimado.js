@@ -10,17 +10,19 @@ const _suma = (/** @type {number[]} */ a) => a.reduce((s, x) => s + _n(x), 0)
 /**
  * IDPC del año desde la base de caja al corte (la del puente del Estado) más la proyección moderada de los meses restantes: ingresos = promedio de los últimos 6 meses cobrados,
  * gastos = último mes completo, PPM = último mes. Sin crecimiento.
- * @param {{ baseAlCorte:number, mesesRestantes:number, cobradoMes:number[], pagadoUltimoMes:number, ppmPagado:number, ppmUltimoMes:number, tasa?:number, incentivo?:number, topeIncentivo?:number|null }} o
- * @returns {{ baseAlCorte:number, proyeccion:number, baseAnio:number, incentivo:number, baseAfecta:number, idpc:number, ppm:number, saldo:number, perdida:number }}
+ * `ajusteFinAnio` = desfase de pago de cotizaciones y F29 entre diciembre del año anterior y diciembre de este año (desfasePagos.js); sube o baja la base del año.
+ * @param {{ baseAlCorte:number, mesesRestantes:number, cobradoMes:number[], pagadoUltimoMes:number, ppmPagado:number, ppmUltimoMes:number, ajusteFinAnio?:number, tasa?:number, incentivo?:number, topeIncentivo?:number|null }} o
+ * @returns {{ baseAlCorte:number, proyeccion:number, ajusteFinAnio:number, baseAnio:number, incentivo:number, baseAfecta:number, idpc:number, ppm:number, saldo:number, perdida:number }}
  */
 export function idpcDesdePuente(o) {
   const resto = Math.max(0, Math.min(12, Math.floor(_n(o.mesesRestantes))))
   const ult6 = (o.cobradoMes || []).slice(-6).map(_n), prom = ult6.length ? _suma(ult6) / ult6.length : 0
   const proyeccion = Math.round((prom - _n(o.pagadoUltimoMes)) * resto)
   const ppm = _n(o.ppmPagado) + Math.round(_n(o.ppmUltimoMes) * resto)
-  const baseAnio = Math.round(_n(o.baseAlCorte)) + proyeccion
+  const ajusteFinAnio = Math.round(_n(o.ajusteFinAnio))
+  const baseAnio = Math.round(_n(o.baseAlCorte)) + proyeccion + ajusteFinAnio
   const r = idpcAnual({ percibidos: baseAnio, pagados: 0, ppmPagado: ppm, tasa: o.tasa, incentivo: o.incentivo, topeIncentivo: o.topeIncentivo })
-  return { baseAlCorte: Math.round(_n(o.baseAlCorte)), proyeccion, baseAnio, incentivo: r.incentivo, baseAfecta: r.baseAfecta, idpc: r.idpc, ppm, saldo: r.saldo, perdida: r.perdida }
+  return { baseAlCorte: Math.round(_n(o.baseAlCorte)), proyeccion, ajusteFinAnio, baseAnio, incentivo: r.incentivo, baseAfecta: r.baseAfecta, idpc: r.idpc, ppm, saldo: r.saldo, perdida: r.perdida }
 }
 
 /**
