@@ -58,12 +58,13 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     const cobrado = (IA.total || 0) + (IA.percibidas || 0)
     const fact = suma(R.map(m => m.ing)), cos = suma(R.map(m => m.cos)), com = suma(R.map(m => m.com)), comPag = RA.comisPagadasAnioVenta.total || 0
     const p = puenteCaja({ resultadoAntes: suma(R.map(m => m.res)), facturado: fact, cobrado, devengado: cos + com, pagado: cos + comPag })
-    // Comprobación del cobrado: facturas propias emitidas en el año, sin las pagadas con un anticipo (esas entran por el anticipo conciliado); cobrado por cartola frente al cobrado por saldo de cada factura.
+    // Comprobación del cobrado: facturas propias emitidas en el año, sin las cubiertas por anticipos (esas entran por el anticipo conciliado); cobrado por cartola (de cualquier fecha: una factura de enero puede estar cobrada en diciembre) frente al cobrado por saldo de cada factura.
     const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
-    const porAnticipo = b => b.prepaid_anticipo_id != null || /anticipo/i.test(String(b.payment_ref || ''))
+    const conAnticipo = new Set((anticipos || []).filter(x => x && x.billing_id != null).map(x => String(x.billing_id)))   // facturas cubiertas por anticipos ligados a ellas (anticipos.billing_id): entran por el anticipo conciliado
+    const porAnticipo = b => b.prepaid_anticipo_id != null || conAnticipo.has(String(b.id)) || /anticipo/i.test(String(b.payment_ref || ''))
     const delAnio = b => b && RA._esFactHon(b) && !RA.extBillIds.has(String(b.id)) && !porAnticipo(b) && String(b.issued_at || '').slice(0, 4) === String(year)
     const cartolaDe = {}; let porCartola = 0
-    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const b = billById[String(c.factura_id)], m = abonoById[String(c.movimiento_id)]; if (!delAnio(b) || !m || !String(m.fecha || '').startsWith(String(year)) || m.categoria === 'Subarriendo') return; const v = Number(c.monto_aplicado) || 0; porCartola += v; cartolaDe[String(b.id)] = (cartolaDe[String(b.id)] || 0) + v })
+    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const b = billById[String(c.factura_id)], m = abonoById[String(c.movimiento_id)]; if (!delAnio(b) || !m || m.categoria === 'Subarriendo') return; const v = Number(c.monto_aplicado) || 0; porCartola += v; cartolaDe[String(b.id)] = (cartolaDe[String(b.id)] || 0) + v })
     const facs = billing.filter(delAnio), montoFacs = suma(facs.map(b => montoFactura(b))), porSaldo = montoFacs - suma(facs.map(b => saldoBill(b)))
     const sinRespaldo = facs.map(b => ({ b, dif: montoFactura(b) - saldoBill(b) - (cartolaDe[String(b.id)] || 0) })).filter(x => x.dif > 1000)
     const difCobrado = porCartola - porSaldo, cuadra = Math.abs(difCobrado) <= Math.max(500000, 0.01 * montoFacs)   // tolerancia: 1 % de lo facturado o $500.000
