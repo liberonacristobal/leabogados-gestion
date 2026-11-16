@@ -2,6 +2,8 @@
 // regla de líquido a bruto (liquidoABruto.js). Regla pura: no lee ni escribe la base. La usan el Presupuesto (impuesto único y cotizaciones de cada línea de Remuneraciones) y la calculadora de aumentos.
 import { imponibleDeLiquido, liquidacionDeImponible, costoEmpresaMes, TOPE_AFP_UF, TOPE_CES_UF, SALUD_LEGAL, CES_TRABAJADOR } from './liquidoABruto.js'
 import { mismaPersona } from './liquidacionesReglas.js'
+import { brutoDeLiquido } from './impuestosMensuales.js'
+import { tasaBHE } from './comisionesReglas.js'
 
 const _n = (/** @type {any} */ x) => { const v = Number(x); return Number.isFinite(v) ? v : 0 }
 
@@ -35,12 +37,13 @@ export function parametrosDeLiquidacion(l, uf) {
 
 /**
  * Remuneración completa de una persona para un líquido dado en el mes `ym`.
- * @param {{liquido:number, persona:string, liquidaciones:any[], ym:string, uf:number, ufDeLiquidacion:(ym:string)=>number, tramosFilas:any[], tasaEmpleador?:number}} p
+ * @param {{liquido:number, persona:string, liquidaciones:any[], ym:string, uf:number, ufDeLiquidacion:(ym:string)=>number, tramosFilas:any[], tasaEmpleador?:number, parametros?:{afpPct:number, planUF:number}|null}} p
  * @returns {{imponible:number, afp:number, ces:number, saludTotal:number, cotTrab:number, iu:number, liquido:number, haberes:number, empleador:number, costoEmpresa:number, afpPct:number, planUF:number}|null} null si la persona no tiene liquidación de la que tomar sus parámetros
  */
 export function remuneracionDeLiquido(p) {
-  const ult = ultimaLiquidacionDe(p.persona, p.liquidaciones, p.ym); if (!ult) return null
-  const prm = parametrosDeLiquidacion(ult, p.ufDeLiquidacion(String(ult.periodo))); if (!prm) return null
+  let prm = p.parametros || null   // persona sin liquidación (p. ej. quien pasa de boleta a contrato): AFP y plan de salud dados
+  if (!prm) { const ult = ultimaLiquidacionDe(p.persona, p.liquidaciones, p.ym); if (!ult) return null; prm = parametrosDeLiquidacion(ult, p.ufDeLiquidacion(String(ult.periodo))) }
+  if (!prm) return null
   const tramos = tramosDelMes(p.tramosFilas, p.ym); if (!tramos.length) return null
   const r = imponibleDeLiquido({ liquido: p.liquido, afpPct: prm.afpPct, planSaludPesos: prm.planUF * p.uf, uf: p.uf, tramos }); if (!r) return null
   const c = costoEmpresaMes({ imponible: r.imponible, tasaEmpleador: _n(p.tasaEmpleador) })
@@ -78,6 +81,17 @@ export function tasaEmpleadorDe({ plan, liquidaciones }) {
     if (emp > 0) return { tasa: emp / a.imp, periodo: per }
   }
   return null
+}
+
+/**
+ * Quien emite boleta de honorarios: el costo es el bruto de la boleta (líquido ÷ (1 − retención del año)); no hay cotizaciones ni impuesto único, la retención es el impuesto.
+ * Misma forma que remuneracionDeLiquido para mostrarse en el mismo bloque.
+ * @param {{liquido:number, fecha:string}} p `fecha` fija el año de la retención (Ley 21.133: 14,5 % en 2025, 15,25 % en 2026, 16 % en 2027)
+ */
+export function remuneracionBoleta(p) {
+  const liquido = Math.round(_n(p.liquido)); if (!(liquido > 0)) return null
+  const tasa = tasaBHE(p.fecha), bruto = brutoDeLiquido(liquido, tasa)
+  return { imponible: bruto, afp: 0, ces: 0, saludTotal: 0, cotTrab: 0, iu: bruto - liquido, liquido, haberes: bruto, empleador: 0, costoEmpresa: bruto, afpPct: 0, planUF: 0, tasa }
 }
 
 export { liquidacionDeImponible }

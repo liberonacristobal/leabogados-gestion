@@ -219,12 +219,13 @@ export function Costos({ X }) {
               <span>{X.ESC.map(([kk, n], j) => <span key={kk}>{j ? ' · ' : ''}{n} <b style={{ color: C.text }}>{mm(val(c, kk))}</b></span>)}</span>
               <Lnk rojo onClick={() => delCosto(i)}>Quitar partida</Lnk>
             </div>
-            {c.g === 'Remuneraciones' && !c.imp && !c.boleta && c.m > 0 && (() => {
-              const nuevoLiq = Math.round(c.m * (1 + efec / 100)), ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', uf = ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef)
-              const calc = ymR ? calcularAumento({ persona: c.n, liquido: c.m, liquidoNuevo: nuevoLiq, liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR }) : null
+            {c.g === 'Remuneraciones' && !c.imp && (c.boleta ? c.liq > 0 : c.m > 0) && (() => {
+              const liqBase = c.boleta ? c.liq : c.m, nuevoLiq = Math.round(liqBase * (1 + efec / 100)), ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', uf = ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef)
+              if (!ymR) return null
+              const entrada = { persona: c.n, liquido: liqBase, liquidoNuevo: nuevoLiq, liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR, ymNuevo: `${Y}-01` }
               return <>
-                <div style={{ gridColumn: '1 / -1' }}><div style={eti}>Líquido con el aumento</div><FldDin w={150} clp={nuevoLiq} tasa={tasa26()} onCommit={(x) => setCosto(i, 'alza', Math.round((x / c.m - 1) * 10000) / 100)} /></div>
-                <CostoEmpresaBloque calc={calc} D={D} meses={c.meses} anio={Y} />
+                <div style={{ gridColumn: '1 / -1' }}><div style={eti}>Líquido con el aumento</div><FldDin w={150} clp={nuevoLiq} tasa={tasa26()} onCommit={(x) => setCosto(i, 'alza', Math.round((x / liqBase - 1) * 10000) / 100)} /></div>
+                <CostoEmpresaBloque key={c.id + (c.boleta ? 'b' : 'c')} entrada={entrada} esBoleta={!!c.boleta} D={D} meses={c.meses} anio={Y} />
               </>
             })()}
             {c.id === 'cot-empleador' && d.cotEmp.total > 0 && (() => {
@@ -268,8 +269,8 @@ export function Costos({ X }) {
           {(() => {
             const eq = ui.equipo || { abierto: false, pct: '' }, pct = Number(String(eq.pct).replace(',', '.')) || 0
             const ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', ufR = ymR ? ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef) : 0
-            const filasEq = !eq.abierto || !ymR ? [] : est.costos.map((c, i) => [c, i]).filter(([c]) => c.g === 'Remuneraciones' && !c.imp && !c.boleta && c.m > 0)
-              .map(([c, i]) => [c, i, calcularAumento({ persona: c.n, liquido: c.m, liquidoNuevo: Math.round(c.m * (1 + pct / 100)), liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf: ufR, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR })]).filter((x) => x[2])
+            const filasEq = !eq.abierto || !ymR ? [] : est.costos.map((c, i) => [c, i]).filter(([c]) => c.g === 'Remuneraciones' && !c.imp && (c.boleta ? c.liq > 0 : c.m > 0))
+              .map(([c, i]) => [c, i, calcularAumento({ modo: c.boleta ? 'boleta' : 'liquidacion', ymNuevo: `${Y}-01`, persona: c.n, liquido: c.boleta ? c.liq : c.m, liquidoNuevo: Math.round((c.boleta ? c.liq : c.m) * (1 + pct / 100)), liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf: ufR, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR })]).filter((x) => x[2])
             const ch = filasEq.reduce((a, x) => a + x[2].hoy.costoEmpresa, 0), cn = filasEq.reduce((a, x) => a + x[2].nuevo.costoEmpresa, 0)
             const sg = (n) => (n >= 0 ? '+' : '−') + fmt(Math.abs(n))
             return <>

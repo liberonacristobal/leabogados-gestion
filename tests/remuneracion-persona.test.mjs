@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { liquidacionDeImponible } from '../supabase/functions/_shared/liquidoABruto.js'
-import { tramosDelMes, ultimaLiquidacionDe, parametrosDeLiquidacion, remuneracionDeLiquido, impuestoUnicoPresupuesto, tasaEmpleadorDe } from '../supabase/functions/_shared/remuneracionPersona.js'
+import { tramosDelMes, ultimaLiquidacionDe, parametrosDeLiquidacion, remuneracionDeLiquido, impuestoUnicoPresupuesto, tasaEmpleadorDe, remuneracionBoleta } from '../supabase/functions/_shared/remuneracionPersona.js'
 
 const FILAS = [[0, 950000, 0, 0], [950000.01, 2100000, 0.04, 38000], [2100000.01, 3500000, 0.08, 122000], [3500000.01, 4900000, 0.135, 314000], [4900000.01, 1e12, 0.23, 780000]]
   .flatMap((t, i) => ['2026-09', '2026-10'].map(periodo => ({ periodo, tramo: i + 1, desde: t[0], hasta: t[1] === 1e12 ? null : t[1], factor: t[2], rebaja: t[3] })))
@@ -47,4 +47,17 @@ test('tasa del empleador: planilla menos cotizaciones del trabajador, sobre el i
   const r = tasaEmpleadorDe({ plan: [{ anio: 2026, mes: 9, cotizaciones: 520000 }], liquidaciones: liqs })
   assert.equal(r.periodo, '2026-09'); assert.ok(Math.abs(r.tasa - 0.06) < 1e-9)
   assert.equal(tasaEmpleadorDe({ plan: [], liquidaciones: liqs }), null); assert.equal(tasaEmpleadorDe({ plan: [{ anio: 2026, mes: 9, cotizaciones: 100 }], liquidaciones: liqs }), null)
+})
+
+test('boleta de honorarios: el costo es el bruto con la retención del año; 500.000 líquidos a 15,25 % son 589.970; en 2027 la retención sube', () => {
+  const a = remuneracionBoleta({ liquido: 500000, fecha: '2026-10-01' }), b = remuneracionBoleta({ liquido: 500000, fecha: '2027-01-01' })
+  assert.equal(a.costoEmpresa, 589970); assert.equal(a.iu, 89970); assert.equal(a.cotTrab, 0); assert.equal(a.empleador, 0); assert.equal(a.tasa, 0.1525)
+  assert.ok(b.costoEmpresa > a.costoEmpresa); assert.equal(b.tasa, 0.16); assert.equal(remuneracionBoleta({ liquido: 0, fecha: '2026-10-01' }), null)
+})
+
+test('pasar de boleta a contrato: con AFP y plan dados se calcula sin liquidación previa, y el contrato lleva cotizaciones y impuesto único', () => {
+  const base = { persona: 'Persona nueva', liquidaciones: [], ym: '2026-10', uf: 40200, ufDeLiquidacion: () => 40200, tramosFilas: FILAS, tasaEmpleador: 0.06, parametros: { afpPct: 0.1, planUF: 0 } }
+  const c = remuneracionDeLiquido({ ...base, liquido: 500000 })
+  assert.ok(c); assert.ok(Math.abs(c.liquido - 500000) <= 1); assert.ok(c.cotTrab > 0); assert.equal(c.empleador, Math.round(0.06 * c.imponible))
+  assert.equal(remuneracionDeLiquido({ ...base, parametros: null, liquido: 500000 }), null)   // sin liquidación ni parámetros no se inventa
 })

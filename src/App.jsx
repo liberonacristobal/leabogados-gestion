@@ -1237,7 +1237,7 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
       {id:'co6',categoria:'Servicios y tecnología',item:'Google Workspace',monto:90000},
       {id:'co7',categoria:'Servicios y tecnología',item:'ChatGPT',monto:20000},
       {id:'co8',categoria:'Impuestos y patentes',item:'PPM',monto:800000},
-      {id:'co9',categoria:'Remuneraciones',item:'Cristóbal',monto:3091604},{id:'co10',categoria:'Remuneraciones',item:'Erasmo',monto:3066855},{id:'co11',categoria:'Remuneraciones',item:'Martín',monto:1651328},
+      {id:'co9',categoria:'Remuneraciones',item:'Cristóbal',monto:3091604},{id:'co10',categoria:'Remuneraciones',item:'Erasmo',monto:3066855},{id:'co11',categoria:'Remuneraciones',item:'Martín',monto:1651328},{id:'co12',categoria:'Remuneraciones',item:'Carla',monto:500000},
     ]); return }
     supabase.from('costos_oficina').select('*').eq('activo',true).order('orden').then(({data})=>{ if(alive) setRows(data||[]) },()=>{ if(alive) setRows([]) })
     return ()=>{alive=false}
@@ -1335,7 +1335,8 @@ function CostosOficinaModal({ expenses=[], clients=[] }){
                     <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:ef.desde?7:0}}><span style={{fontSize:11,color:C.muted,width:52}}>Rige desde</span><select value={ef.desde} onChange={e=>setEf(f=>({...f,desde:e.target.value, prev:e.target.value&&!f.prev?String(r.monto||''):f.prev}))} style={{...inpS,flex:1}}><option value=''>Siempre</option>{mesesOpt.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
                     {ef.desde&&<div style={{display:'flex',alignItems:'center',gap:6}}><span style={{fontSize:11,color:C.muted,width:52}}>Antes</span><span style={{fontSize:12,color:C.textSoft}}>$</span><input type='number' value={ef.prev} onChange={e=>setEf(f=>({...f,prev:e.target.value}))} placeholder='monto anterior' style={{...inpS,flex:1,textAlign:'right',fontVariantNumeric:'tabular-nums'}}/></div>}
                     {r.categoria==='Remuneraciones'&&(()=>{ const hoyL=ef.desde?(Number(ef.prev)||0):(Number(r.monto)||0), nuevoL=Number(ef.monto)||0; if(!(hoyL>0&&nuevoL>0&&hoyL!==nuevoL)) return null
-                      const calc=calcularAumento({persona:r.item,liquido:hoyL,liquidoNuevo:nuevoL,liq:fuC.liq,tramosIU:fuC.tramosIU,plan:fuC.plan,uf:ufC,ufDeLiquidacion:()=>ufC,ym}); return calc?<div style={{marginTop:9}}><CostoEmpresaBloque calc={calc} D={isDeskC} meses={12} anio={ym.slice(0,4)}/></div>:null })()}
+                      const esBol=fuC.boleta.has(_normTxt(r.item||''))
+                      return <div style={{marginTop:9}}><CostoEmpresaBloque key={r.id} esBoleta={esBol} D={isDeskC} meses={12} anio={ym.slice(0,4)} entrada={{persona:r.item,liquido:hoyL,liquidoNuevo:nuevoL,liq:fuC.liq,tramosIU:fuC.tramosIU,plan:fuC.plan,uf:ufC,ufDeLiquidacion:()=>ufC,ym}}/></div> })()}
                     <div style={{display:'flex',gap:7,marginTop:9}}>
                       <button onClick={()=>guardarEdit(r)} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:C.accent,color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}}>Guardar</button>
                       <button onClick={()=>setEdId(null)} style={{padding:'8px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:12,fontWeight:600,cursor:'pointer'}}>Cancelar</button>
