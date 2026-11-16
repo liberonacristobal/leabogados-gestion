@@ -1,3 +1,4 @@
+- 2026-11-16 · Oficina y Socios › «Sueldos socios» pasa a «Sueldos líquidos»: es el líquido que reciben (parte de la retribución de socios); el costo empresa sigue en el Estado de resultados. Solo cambia el nombre, no la cifra.
 - 2026-11-16 · Excel del Presupuesto › la hoja Costos rotula «Reajuste (%)» (antes «Alza propia (%)»), igual que el paso Costos.
 - 2026-11-16 · Presupuesto 2027 › Costos: las comisiones dejan de sumarse a los costos (sin la tarjeta Comisiones, la fila ni «Con comisiones»); quedan como variable del cobrado en la línea del porcentaje, y se restan de los ingresos en Metas y Escenarios, como antes.
 - 2026-11-16 · Presupuesto 2027 › Costos: «Impuestos mensuales» proyecta solo el PPM y la retención de honorarios de la procuradora y la contadora; sale la línea «Impuesto único de trabajadores» (ya va como partida en Remuneraciones) y los demás emisores de boleta, que son ocasionales.

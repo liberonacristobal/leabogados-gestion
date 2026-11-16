@@ -204,7 +204,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <SecCard D={D} ic='wallet' tint={C.tealBg} col={C.tealText} t='Gestión' v={fmtMill(totPorCobrar)} s='por cobrar' onClick={() => setSec('ges')}
         rows={[['Vencido', fmtMill(venc), { neg: venc > 0, onClick: () => go('cobranzaVencido') }], ['Más de 60 días', fmtMill(cart.expo.m60 || 0), { neg: cart.expo.m60 > 0, onClick: () => go('cobranzaM60') }], ['Com. por pagar', sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día', { onClick: () => go('proveedores') }], ['Com. por percibir', comCobrar > 0 ? fmtMill(comCobrar) : 'al día', { onClick: () => go('proveedores') }]]} />
       <SecCard D={D} ic='users' tint={C.tealBg} col={C.tealText} t='Socios' v={fmtShort(aFavor)} s={`Retribución de socios · ${year}`} onClick={() => setSec('soc')}
-        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos socios', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
+        rows={[['Retirado ' + year, fmtShort(RS.totalRet), { onClick: () => go('socios') }], ['Sueldos líquidos', fmtShort(RS.sueldoTot), { onClick: () => go('socios') }], ['Ingreso real', socIng(null), { onClick: () => go('porSocio', null, 5) }]]} />
       <SecCard D={D} ic='building' tint={C.bgSoft} col={C.accent} t={`Presupuesto ${year + 1}`} v={!ppto ? '…' : ppto.borrador ? 'Borrador' : 'Sin empezar'} s={ppto && ppto.oficial ? ppto.oficial.nombre : 'sin versión oficial'} onClick={() => go('presupuesto')}
         rows={ppto && ppto.actualizado ? [...(ppto.meta ? [[`Meta de ${ppto.meta.ancla === 'ventas' ? 'ventas' : nombreComponente(ppto.meta.ancla).toLowerCase()}`, fmtShort(ppto.meta.valor)]] : []), ['Actualizado', fmtFechaDMY(ppto.actualizado)]] : undefined} />
     </div>
@@ -260,7 +260,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       <div style={{ ...grid, marginTop: 14 }}>
         <Tl ic='users' tint={C.tealBg} col={C.tealText} label={`Retribución de socios · ${year}`} value={fmtShort(aFavor)} sub='retiros y sueldos' onClick={() => go('socios')} />
         <Tl ic='wallet' tint={C.overdueBg} col={C.overdueText} label={`Retirado ${year}`} value={fmtShort(RS.totalRet)} sub='retiros de socios' onClick={() => go('socios')} />
-        <Tl ic='building' tint={C.bgSoft} col={C.accent} label='Sueldos socios' value={fmtShort(RS.sueldoTot)} sub={RS.SOC.join(' + ')} onClick={() => go('socios')} />
+        <Tl ic='building' tint={C.bgSoft} col={C.accent} label='Sueldos líquidos' value={fmtShort(RS.sueldoTot)} sub={RS.SOC.join(' + ')} onClick={() => go('socios')} />
         <Tl ic='chart' tint={C.azulBg} col={C.azulInfo} label='Ingreso real' value={socIng(null)} sub='oficina' onClick={() => go('porSocio', null, 5)} />
       </div>
       <Lbl t={`Por socio, enero a ${MESES[curM - 1]}`} link='Por socio' onLink={() => go('porSocio')} xl={xlSocios} />
