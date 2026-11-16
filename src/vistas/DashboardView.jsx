@@ -6,6 +6,7 @@ import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { useResultadoAnio, pctsAnio } from '../lib/resultadoAnio.js'
 import { cascadaVendido } from '../lib/cifras.js'
+import { descargarResultadoAnioPdf } from '../lib/pdfResultadoAnio.js'
 import { CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
@@ -530,6 +531,10 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
   // Recuadros por sección (Ventas/Facturado/Cobrado/Margen/Cobranza), logo real, fecha de corte destacada, cifras en UF y en pesos.
   // Las secciones de «Resultado del año» (Ventas, Facturado, Cobrado propio, Margen y Cobranza) con las cifras que muestra Inicio. Las usan la foto descargable
   // y Counsel AI (publica el resultado para responder la misma cifra, sin otra fórmula).
+  // Meta de cobranza en UF contra lo cobrado (UF con la UF promedio de lo cobrado, así Cobrado − Meta = Sobre/Falta cuadra en UF): la usan la imagen, el PDF y Counsel AI.
+  const cobranzaVsMeta = (ingYTD, iv) => { const ufR=ufRef||1, mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, sobre=ingYTD>=metaCobranza
+    const [a,b]=sobre?redondearPartes([mU,(iv.totalUF||0)-mU],1,[]):redondearPartes([iv.totalUF||0,mU-(iv.totalUF||0)],1,[0])
+    return { sobre, metaUF:sobre?a:a+b, difUF:b } }
   const armarSecciones = () => {
       const ingYTD=ingresosPorAnioVenta.total||0, comisYTD=comisPagadasAnioVenta.total||0
       const percYTD=ingresosPorAnioVenta.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
@@ -563,9 +568,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
             ...(resAnio.sub?[['incluye subarriendo y gastos recuperados (menor costo)', '−'+fmtUFk(resAnio.verUF.sub), '−'+pe(resAnio.sub)]]:[]),
             ['− Comisiones', fmtUFk(resAnio.verUF.com), pe(resAnio.com)] ] },
         // Meta de cobranza (pesos) en UF con la UF promedio de lo cobrado → Cobrado − Meta = Sobre (o Meta − Cobrado = Falta) cuadra en UF.
-        { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:(()=>{ const mU=ingYTD>0&&iv.totalUF>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, sobre=ingYTD>=metaCobranza
-            const [a,b]=sobre?redondearPartes([mU,iv.totalUF-mU],1,[]):redondearPartes([iv.totalUF,mU-iv.totalUF],1,[0])
-            return [['Meta de cobranza', fmtUFk(sobre?a:a+b), pe(metaCobranza)], [sobre?'Sobre la meta':'Falta para la meta', fmtUFk(b), pe(Math.abs(ingYTD-metaCobranza))]] })(), bar:cobPct },
+        { t:'Cobranza', pct:cobPct, uf:uf(iv.totalUF), clp:pe(ingYTD), lines:(()=>{ const cz=cobranzaVsMeta(ingYTD,iv)
+            return [['Meta de cobranza', fmtUFk(cz.metaUF), pe(metaCobranza)], [cz.sobre?'Sobre la meta':'Falta para la meta', fmtUFk(cz.difUF), pe(Math.abs(ingYTD-metaCobranza))]] })(), bar:cobPct },
       ]
       return { secs, ingYTD, comisYTD, percYTD, ingReal, iv, ufR, yrsCob, fby, fbyU, yrsFac, yrLbl, pe }
   }
@@ -613,34 +617,31 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000)
     }catch(e){ appAlert('No se pudo generar la imagen: '+(e.message||e)) }
   }
-  // Imprimir informe del año (HTML limpio → Imprimir/PDF). Recuadros por sección, logo, fecha de corte destacada, cifras en UF y pesos.
-  const imprimirResultado = () => {
-    const iv=ingresosPorAnioVenta, ufR=ufRef||1
-    const ingYTD=iv.total||0, comisYTD=comisPagadasAnioVenta.total||0
-    const percYTD=iv.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
-    const A='#003C50', MUT='#537281', AZ3='#99ABB4', GRAY='#E4E8EB', GREEN=C.greenText, RED='#C0453F'
-    const pe=n=>(n<0?'−$':'$')+Math.abs(Math.round(n||0)).toLocaleString('es-CL')
-    const { ventaNetoPct, factPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza }), pct=(a,b)=>b>0?Math.round(a/b*100):0   // % de Vendido y Facturado: fuente única (pctsAnio), no se recalculan
-    // fila de detalle: la UF manda y el peso va DEBAJO (no al lado), más chico
-    const row=(l,ufv,clpv,neg)=>`<tr><td style='padding:7px 0;color:${neg?RED:MUT};font-size:12px;vertical-align:top'>${l}</td><td style='padding:7px 0;text-align:right;font-variant-numeric:tabular-nums'><div style='font-weight:800;color:${neg?RED:A};font-size:12.5px;line-height:1.15'>${neg?'− ':''}${fmtUFk(ufv)}</div><div style='color:${AZ3};font-size:10.5px;font-weight:600'>${pe(clpv)}</div></td></tr>`
-    const card=(titulo,ufv,clpv,chip,rowsHtml)=>`<div style='border:1px solid ${GRAY};border-radius:12px;padding:14px 16px;margin-bottom:12px'><div style='display:flex;justify-content:space-between;align-items:baseline'><div style='font-size:10px;font-weight:800;color:${MUT};text-transform:uppercase;letter-spacing:.5px'>${titulo}</div>${chip!=null?`<div style='font-size:11px;font-weight:800;color:${A}'>${chip}</div>`:''}</div><div style='margin-top:6px;font-size:22px;font-weight:800;color:${A};letter-spacing:-.5px;line-height:1'>${fmtUFk(ufv)}</div><div style='font-size:12.5px;color:${MUT};font-weight:700;margin-top:2px'>${pe(clpv)}</div>${rowsHtml?`<table style='width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #EFF1F3'>${rowsHtml}</table>`:''}</div>`
-    const yrLbl=(y)=> y? `De ventas ${y}${y!==selYear?' (anterior)':''}` : 'Sin venta asociada'
-    // UF con la UF del DÍA de cada movimiento (mismas cifras que la pantalla); los pesos, tal cual.
-    const yrsCob=(iv.allYears||[]).map(y=>row(yrLbl(y), (iv.byYearUF||{})[y]||0, iv.byYear[y]||0)).join('')
-    const fby=facturadoByYear.byYear||{}, fbyU=facturadoByYear.byYearUF||{}; const yrsFac=Object.keys(fby).map(Number).sort((a,b)=>b-a).map(y=>row(yrLbl(y), fbyU[y]||0, fby[y]||0)).join('')
-    const V=resAnio.verUF, comU=comisPagadasAnioVenta.totalUF||0, percU=iv.percibidasUF||0
-    const CVu=cascadaVendido(m,true), ventasCard=card('Vendido neto', CVu.neto, m.neto, `${ventaNetoPct} % de la meta`, row('Vendido bruto',CVu.bruto,m.bruto)+row('Costos de terceros',CVu.costo,m.costo,true)+row('Meta del año',metaUF,m.meta))
-    const factCard=card('Facturado', V.fac, resAnio.fac, `${m.bruto>0?factPct:0} % de lo vendido bruto`, `<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Emitido en ${selYear}, según año de la venta</td></tr>`+yrsFac+(facturadoEmitido.total>0?row('Total emitido (con terceros y reembolsos)',facturadoEmitido.totalUF,facturadoEmitido.total):''))
-    const cobCard=card('Cobrado propio', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Comisiones pagadas',comU,comisYTD,true)+row('+ Comisiones percibidas',percU,percYTD)+row('Ingreso real',(iv.totalUF||0)-comU+percU,ingReal)+row('Total a caja',iv.totalCajaUF||0,iv.totalCaja||0)+`<tr><td colspan='2' style='padding:8px 0 3px;font-size:9px;font-weight:800;color:${AZ3};text-transform:uppercase;letter-spacing:.4px'>Según año de la venta</td></tr>`+yrsCob)
-    const margCard=card(resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio', V.res, resAnio.res, (resAnio.pct!=null?`${pct1(resAnio.pct)} % margen`:'— margen'), row('Facturado',V.fac,resAnio.fac)+(resAnio.rex?row('+ Comisión de externos',V.rex,resAnio.rex):'')+row('= Ingresos',V.ing,resAnio.ing)+row('Costos',V.cos,resAnio.cos,true)+(resAnio.sub?row('incluye subarriendo y gastos recuperados (menor costo)',V.sub,resAnio.sub,true):'')+row('Comisiones',V.com,resAnio.com,true))
-    const _mU=ingYTD>0&&(iv.totalUF||0)>0?metaCobranza*iv.totalUF/ingYTD:metaCobranza/ufR, _sob=ingYTD>=metaCobranza
-    const [_a,_b]=_sob?redondearPartes([_mU,(iv.totalUF||0)-_mU],1,[]):redondearPartes([iv.totalUF||0,_mU-(iv.totalUF||0)],1,[0])
-    const cobranzaCard=card('Cobranza', iv.totalUF||0, ingYTD, `${pct(ingYTD,metaCobranza)} % de la meta`, row('Meta de cobranza',_sob?_a:_a+_b,metaCobranza)+row(_sob?'Sobre la meta':'Falta para la meta',_b,Math.abs(ingYTD-metaCobranza)))
-    const dias=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'})
-    const hhmm=new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})
-    const html=`<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Resultado del año ${selYear} — ${BRAND.nombre}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'DM Sans',Helvetica,Arial,sans-serif;color:#3D3D3D;background:#fff;font-size:12px}.page{max-width:760px;margin:0 auto}@page{size:letter portrait;margin:14mm}@media print{.no-print{display:none}}.print-btn{position:fixed;bottom:20px;right:20px;background:${A};color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}</style></head><body><div class='page'><div style='background:${A};color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center'><img src='${location.origin}${BRAND.logo.blanco}' alt='${BRAND.nombre}' style='height:26px;display:block'/><div style='text-align:right'><div style='font-size:14px;font-weight:800;letter-spacing:.3px'>RESULTADO DEL AÑO</div><div style='font-size:10px;color:#9FC4DD;margin-top:2px'>Ejercicio ${selYear}</div></div></div><div style='background:#E6F1FB;color:#185FA5;padding:8px 22px;display:flex;justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.3px'><span>CORTE AL ${dias.toUpperCase()}</span><span>${hhmm} HRS</span></div><div style='padding:18px 22px'><div class='two'>${ventasCard}${factCard}</div>${cobCard}${margCard}${cobranzaCard}<div style='margin-top:8px;padding-top:10px;border-top:1px solid ${GRAY};font-size:9px;color:${AZ3};font-weight:700;letter-spacing:.3px'>DOCUMENTO INTERNO · ${BRAND.nombre} · ${BRAND.dominio||''}</div></div></div><button class='print-btn no-print' onclick='window.print()'>Imprimir / Guardar PDF</button></body></html>`
-    const w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close() } else appAlert('Habilita las ventanas emergentes para imprimir el informe.')
+  // PDF directo del informe del año (hoja carta, estado corrido en cuatro bloques, cifras en UF y pesos): lo que antes abría la ventana de impresión.
+  // Las cifras salen de las mismas fuentes que la pantalla y la imagen (resAnio, ingresosPorAnioVenta, pctsAnio, cobranzaVsMeta); el dibujo está en lib/pdfResultadoAnio.js.
+  const armarDocumento = () => {
+    const iv=ingresosPorAnioVenta, ingYTD=iv.total||0, comisYTD=comisPagadasAnioVenta.total||0, percYTD=iv.percibidas||0, ingReal=ingYTD-comisYTD+percYTD
+    const { ventaNetoPct, factPct, cobroPct } = pctsAnio({ m, resAnio, metaUF, ingYTD, metaCobranza })
+    const CVu=cascadaVendido(m,true), V=resAnio.verUF, comU=comisPagadasAnioVenta.totalUF||0, percU=iv.percibidasUF||0, cz=cobranzaVsMeta(ingYTD,iv)
+    const fby=facturadoByYear.byYear||{}, fbyU=facturadoByYear.byYearUF||{}, yrsFac=Object.keys(fby).map(Number).sort((a,b)=>b-a).slice(0,3), yrsCob=(iv.allYears||[]).slice(0,3)
+    const yrLbl=y=>y?`De ventas ${y}${y!==selYear?' (ant.)':''}`:'Sin venta asociada'
+    const nU=n=>Math.round(Math.abs(n||0)).toLocaleString('es-CL'), pe=n=>'$'+Math.abs(Math.round(n||0)).toLocaleString('es-CL'), mM=n=>'$'+(Math.abs(n||0)/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+'M'
+    const fila=(s,l,ufv,clpv,o={})=>({s,l,uf:nU(ufv),clp:pe(clpv),...o})
+    const hoy=new Date(), hhmm=`${String(hoy.getHours()).padStart(2,'0')}:${String(hoy.getMinutes()).padStart(2,'0')}`, margen=v=>v==null?'':`${pct1(v)} % margen`
+    const grupos=[
+      { t:'Vendido', chip:`${ventaNetoPct} % de la meta`, filas:[ fila('','Vendido bruto',CVu.bruto,m.bruto), fila('−','Costos de terceros',CVu.costo,m.costo,{neg:true}), fila('=','Vendido neto',CVu.neto,m.neto,{t:'tot'}), fila('','Meta del año',metaUF,m.meta,{t:'mut'}) ] },
+      { t:'Facturado', chip:`${m.bruto>0?factPct:0} % del bruto`, gris:true, filas:[ ...yrsFac.map(y=>fila('',yrLbl(y),fbyU[y]||0,fby[y]||0)), fila('=','Facturado',V.fac,resAnio.fac,{t:'tot'}), ...(facturadoEmitido.total>0?[fila('','Total emitido',facturadoEmitido.totalUF,facturadoEmitido.total,{t:'mut'})]:[]) ] },
+      { t:'Cobrado', chip:`${cobroPct} % de la meta`, filas:[ ...yrsCob.map(y=>fila('',yrLbl(y),(iv.byYearUF||{})[y]||0,iv.byYear[y]||0)), fila('=','Cobrado propio',iv.totalUF||0,ingYTD,{t:'tot'}), fila('−','Comisiones pagadas',comU,comisYTD,{neg:true}), fila('+','Comisiones percibidas',percU,percYTD), fila('=','Ingreso real',(iv.totalUF||0)-comU+percU,ingReal,{t:'tot'}), fila('','Total a caja',iv.totalCajaUF||0,iv.totalCaja||0,{t:'mut'}), fila('','Meta de cobranza',cz.metaUF,metaCobranza,{t:'mut'}), fila('',cz.sobre?'Sobre la meta de cobranza':'Falta para la meta de cobranza',cz.difUF,Math.abs(ingYTD-metaCobranza),{t:'mut'}) ] },
+      { t:resAnio.res>=0?'Resultado del ejercicio':'Pérdida del ejercicio', chip:margen(resAnio.pct), filas:[ fila('','Facturado',V.fac,resAnio.fac), ...(resAnio.rex?[fila('+','Comisión de externos',V.rex,resAnio.rex)]:[]), fila('=','Ingresos',V.ing,resAnio.ing,{t:'tot'}), fila('−','Costos',V.cos,resAnio.cos,{neg:true}), fila('−','Comisiones',V.com,resAnio.com,{neg:true}), fila('=',resAnio.res>=0?'Resultado':'Pérdida',V.res,resAnio.res,{t:'tot'}), ...(resAnio.soc?[fila('+','Sueldos de socios',V.soc,resAnio.soc), fila('=','Antes de sueldos de socios',V.resSin,resAnio.resSin,{t:'tot',chip:margen(resAnio.pctSin)})]:[]) ] },
+    ]
+    const cifra=(t,ufv,clpv)=>({t,uf:'UF '+nU(ufv),clp:mM(clpv)})
+    return { titulo:`Resultado del año ${selYear}`, corte:`Corte al ${fmtFechaDMY(`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`)}, ${hhmm} hrs`,
+      cifras:[ cifra('Vendido neto',CVu.neto,m.neto), cifra('Facturado',V.fac,resAnio.fac), cifra('Cobrado propio',iv.totalUF||0,ingYTD), cifra(resAnio.res>=0?'Resultado':'Pérdida',V.res,resAnio.res) ], grupos,
+      notas:[ 'Total emitido incluye documentos de terceros y reembolsos. Total a caja incluye, además del cobrado propio, subarriendo, reembolsos y la parte de externos.',
+        `${resAnio.sub?`Costos incluyen subarriendo y gastos recuperados como menor costo (UF ${nU(V.sub)}, ${mM(resAnio.sub)}). `:''}${resAnio.soc?'Sueldos de socios a costo empresa: líquido, impuesto único y cotizaciones.':''}`.trim(),
+        'Resultado es devengado; Cobrado, por fecha del depósito. UF del día de cada movimiento.' ].filter(Boolean), dominio:BRAND.dominio||'' }
   }
+  const descargarResultadoPdf = () => descargarResultadoAnioPdf(armarDocumento(), `RESULTADO-DEL-ANO-${selYear}.pdf`)
   // Años con meta cargada O con ventas registradas (así 2025/2024 aparecen al ingresar sus ventas, sin necesidad de meta)
   const aniosDisponibles = [...new Set([currentYear, ...targets.map(t=>t.year), ...sales.filter(s=>!['Borrador','Propuesta','Rechazada'].includes(s.status)&&!esSubarriendo(s)).map(s=>s.year).filter(Boolean)])].sort((a,b)=>b-a)
   const ufFecha = ufState.asOf ? new Date(ufState.asOf+'T12:00').toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit'}) : ''
@@ -920,8 +921,8 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
               <button onClick={descargarResultado} title="Descargar imagen" aria-label="Descargar imagen" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
-              <button onClick={imprimirResultado} title="Imprimir informe" aria-label="Imprimir informe" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <button onClick={descargarResultadoPdf} title="Descargar PDF" aria-label="Descargar PDF" style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:0,cursor:'pointer',color:C.accent}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
               </button>
               <span onClick={()=>go('sales')} style={{fontSize:11,fontWeight:700,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><span className='fecha-full'>Ver detalle</span><span className='fecha-short'>Detalle</span> <Gl n='chevron'/></span>
             </div>
