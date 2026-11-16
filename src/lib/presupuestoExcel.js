@@ -63,7 +63,7 @@ export function hojasPresupuesto(P) {
   const costos = {
     nombre: 'Costos', anchos: [34, 14, 16, 8, 16, ...ESC.map(() => 18)],
     filas: [
-      ['Partida', 'Tipo', 'Monto mensual', 'Meses', 'Alza propia (%)', ...ESC.map(([, n]) => n)],
+      ['Partida', 'Tipo', 'Monto mensual', 'Meses', 'Reajuste (%)', ...ESC.map(([, n]) => n)],
       ...P.costos.map((c, i) => [c.n, c.t || '', N(c.m), N(c.meses, '0'), c.alza == null ? null : N(c.alza, '0.0'), ...ESC.map((_, j) => F(`$C${i + 2}*$D${i + 2}*(1+IF(ISBLANK($E${i + 2}),Supuestos!${sc(j)}$13,$E${i + 2})/100)`))]),
       ['Total', '', null, null, null, ...ESC.map((_, j) => F(`SUM(${COL(5 + j)}2:${COL(5 + j)}${nC + 1})`))],
     ],
