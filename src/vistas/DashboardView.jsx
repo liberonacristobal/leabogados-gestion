@@ -29,9 +29,10 @@ export { META_CLP } from '../lib/resultadoAnio.js'
 // kind: neg (resta, rojo) · tot (subtotal) · res/resNeg (resultado) · sub (detalle chico). tenue: cifra en gris (lo que queda aparte del total).
 export function CxRow({sg='',label,extra,pill,val,kind,onClick,open,isDesk,tenue}){
   const tot=kind==='tot', res=kind==='res'||kind==='resNeg', sub=kind==='sub', fuerte=tot||res
+  const envuelve=!isDesk&&!!extra   // en el teléfono, una fila con margen puede pasar el margen a la línea siguiente en vez de cortarlo
   return (<div onClick={onClick} style={{display:'grid',gridTemplateColumns:isDesk?'16px minmax(0,1fr) auto 10px auto':'14px minmax(0,1fr) auto 10px auto',columnGap:6,alignItems:'center',padding:res?'12px 14px':sub?'7px 14px':'9px 14px',borderTop:fuerte?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,background:res?'#EDF1F4':sub?C.bgSoft:undefined,cursor:onClick?'pointer':'default'}}>
     <span style={{fontSize:14,fontWeight:700,color:fuerte?C.accent:C.muted,textAlign:'center'}}>{sg}</span>
-    <span style={{fontSize:sub?12:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,display:'flex',alignItems:'baseline',gap:6,minWidth:0,whiteSpace:'nowrap',overflow:'hidden'}}>{label}{extra}</span>
+    <span style={{fontSize:sub?12:13,color:fuerte?C.accent:C.muted,fontWeight:fuerte?800:600,minWidth:0,...(envuelve?{display:'block',whiteSpace:'normal',lineHeight:1.25}:{display:'flex',alignItems:'baseline',gap:6,whiteSpace:'nowrap',overflow:'hidden'})}}>{label}{envuelve&&' '}{extra}</span>
     <span style={{justifySelf:'end'}}>{pill||null}</span>
     <span style={{color:C.textSoft,display:'flex',justifyContent:'center'}}>{open!=null&&<ChevAb open={open}/>}</span>
     <span style={{fontWeight:800,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',justifySelf:'end',color:(kind==='neg'||kind==='resNeg')?C.overdueText:(tenue&&!fuerte)?C.textSoft:C.accent,fontSize:res?20:tot?15:sub?11.5:13,letterSpacing:res?'-.4px':undefined}}>{val}</span>
