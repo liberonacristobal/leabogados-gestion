@@ -584,6 +584,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
       const g=cv.getContext('2d'); g.scale(S,S)
       let logo=null
       try{ const im=new Image(); im.src=location.origin+BRAND.logo.blanco; await Promise.race([ new Promise((res,rej)=>{ im.onload=res; im.onerror=rej; if(im.complete&&im.naturalWidth) res() }), new Promise((_,rej)=>setTimeout(rej,1500)) ]); logo=im }catch(_){ logo=null }
+      try{ await Promise.all([document.fonts.load("400 12px 'DM Sans'"),document.fonts.load("600 12px 'DM Sans'")]) }catch(_){}   // el canvas solo usa la tipografía de la marca si ya está cargada
       dibujarImagenResultado(g,d,logo,BRAND.nombre||'')
       const blob=await new Promise(res=>cv.toBlob(res,'image/png'))
       if(!blob) throw new Error('canvas vacío')

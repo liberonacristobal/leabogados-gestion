@@ -10,12 +10,12 @@ const AZ = [0, 60, 80], MU = [83, 114, 129], S3 = [153, 171, 180], TX = [61, 61,
  * @typedef {{ titulo: string, corte: string, bloques: BloqueDoc[], dominio: string }} DatosDoc
  */
 
-/** Dibuja el PDF en `doc` (una página carta horizontal). Devuelve la y donde termina el último bloque. @param {any} doc @param {DatosDoc} d @param {string|null} logo logo blanco (PNG) @param {string} [nombre] */
-export function dibujarResultadoAnio(doc, d, logo, nombre = '') {
+/** Dibuja el PDF en `doc` (una página carta horizontal). Devuelve la y donde termina el último bloque. @param {any} doc @param {DatosDoc} d @param {string|null} logo logo blanco (PNG) @param {string} [nombre] @param {string} [fuente] */
+export function dibujarResultadoAnio(doc, d, logo, nombre = '', fuente = 'helvetica') {
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 44, R = W - M, GAP = 20
   const col = (/** @type {number[]} */ c) => doc.setTextColor(c[0], c[1], c[2])
   const fill = (/** @type {number[]} */ c) => doc.setFillColor(c[0], c[1], c[2])
-  const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(String(t).replace(/−/g, '-'), x, y, al ? { align: al } : undefined) }
+  const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont(fuente, b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(fuente === 'helvetica' ? String(t).replace(/−/g, '-') : String(t), x, y, al ? { align: al } : undefined) }
 
   // Huincha azul con el logo blanco y el título
   const BANDA = 66

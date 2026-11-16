@@ -1,7 +1,8 @@
 // PDF directo (sin ventana de impresión) del «Estado de resultados» formal: carta horizontal, mismas líneas, cifras y orden que la vista.
-// No calcula nada: recibe las celdas ya formateadas por la vista (una sola fuente de cifras) y solo las dibuja (jsPDF, helvetica).
+// No calcula nada: recibe las celdas ya formateadas por la vista (una sola fuente de cifras) y solo las dibuja (jsPDF, DM Sans).
 import { BRAND, appAlert } from './base.jsx'
 import { entregarArchivo } from './archivos.js'
+import { registrarFuentePdf } from './fuentePdf.js'
 
 const AZ = [0, 60, 80], MU = [83, 114, 129], TX = [61, 61, 61], LN = [228, 232, 235], BG = [245, 247, 249], RJ = [162, 45, 45]
 
@@ -12,17 +13,18 @@ const AZ = [0, 60, 80], MU = [83, 114, 129], TX = [61, 61, 61], LN = [228, 232, 
  */
 
 /** Dibuja el estado en `doc` (una página carta horizontal). Separado de la descarga para poder probarlo sin navegador. @param {any} doc @param {DatosPdf} d @param {string|null} logo @param {string} [nombre] */
-export function dibujarEstadoResultados(doc, d, logo, nombre = '') {
+export function dibujarEstadoResultados(doc, d, logo, nombre = '', fuente = 'helvetica') {
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 32, R = W - M
   const col = (/** @type {number[]} */ c) => doc.setTextColor(c[0], c[1], c[2])
   const draw = (/** @type {number[]} */ c) => doc.setDrawColor(c[0], c[1], c[2])
   const fill = (/** @type {number[]} */ c) => doc.setFillColor(c[0], c[1], c[2])
-  const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(String(t), x, y, al ? { align: al } : undefined) }
-  // Encabezado
-  let y = 40
-  if (logo) { try { doc.addImage(logo, 'PNG', M, y - 6, 130, 130 * 91 / 600) } catch (_) { txt(nombre, M, y + 10, 13, true, AZ) } } else txt(nombre, M, y + 10, 13, true, AZ)
-  txt(d.titulo.toUpperCase(), R, y + 6, 12, true, AZ, 'right'); txt(`Emitido el ${d.emitido}`, R, y + 19, 8.5, false, MU, 'right')
-  y += 36; draw(AZ); doc.setLineWidth(1.2); doc.line(M, y, R, y); y += 16
+  const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont(fuente, b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(String(t), x, y, al ? { align: al } : undefined) }
+  // Encabezado: huincha azul con el logo blanco, igual que «Resultado del año»
+  const BANDA = 58
+  fill(AZ); doc.rect(0, 0, W, BANDA, 'F')
+  if (logo) { try { doc.addImage(logo, 'PNG', M, 17, 140, 140 * 114 / 747) } catch (_) { txt(nombre, M, 36, 13, true, [255, 255, 255]) } } else txt(nombre, M, 36, 13, true, [255, 255, 255])
+  txt(d.titulo, R, 28, 13, true, [255, 255, 255], 'right'); txt(`Emitido el ${d.emitido}`, R, 42, 8, false, [153, 171, 180], 'right')
+  let y = BANDA + 22
   txt(d.periodo, M, y, 10, true, TX); txt(`Cifras en ${d.unidad}`, R, y, 9, false, MU, 'right'); y += 14
 
   // Columnas: concepto, un mes por columna, total, año anterior, variación y % ingresos.
@@ -42,7 +44,7 @@ export function dibujarEstadoResultados(doc, d, logo, nombre = '') {
   d.filas.forEach(f => {
     if (f.t === 'sec') { y += 5; txt(f.l.toUpperCase(), M + 6, y + 9, 7.5, true, AZ); y += 14; return }
     const res = f.t === 'res', sub = f.t === 'sub' || res, bold = f.t !== 'it' && f.t !== 'inf', xl = M + (f.t === 'it' || f.t === 'inf' ? 14 : 6), fs = f.t === 'inf' ? 7.5 : 8
-    doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(fs)
+    doc.setFont(fuente, bold ? 'bold' : 'normal'); doc.setFontSize(fs)
     const lin = /** @type {string[]} */ (doc.splitTextToSize(f.l, wConc - (xl - M) - 6)), alto = 15 + (lin.length - 1) * 9 + (res ? 2 : 0)
     if (res) { fill(BG); doc.rect(M, y, R - M, alto, 'F'); draw(AZ); doc.setLineWidth(1); doc.line(M, y, R, y) } else if (sub) { draw(LN); doc.setLineWidth(0.7); doc.line(M, y, R, y) }
     const base = y + 11 + (res ? 1 : 0)
@@ -62,8 +64,8 @@ export async function descargarEstadoResultadosPdf(d, nombreArchivo) {
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
     const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'landscape' })
     let logo = null
-    try { const r = await fetch(BRAND.logo.color); const bl = await r.blob(); logo = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(bl) }) } catch (_) { logo = null }
-    dibujarEstadoResultados(doc, d, /** @type {string|null} */ (logo), BRAND.nombre || '')
+    try { const r = await fetch(BRAND.logo.blanco); const bl = await r.blob(); logo = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(bl) }) } catch (_) { logo = null }
+    dibujarEstadoResultados(doc, d, /** @type {string|null} */ (logo), BRAND.nombre || '', await registrarFuentePdf(doc))
     await entregarArchivo(doc.output('blob'), nombreArchivo)
   } catch (e) { appAlert('No se pudo generar el PDF: ' + (e && /** @type {any} */ (e).message || e)) }
 }

@@ -4,6 +4,7 @@
 import { BRAND, appAlert } from './base.jsx'
 import { entregarArchivo } from './archivos.js'
 import { dibujarResultadoAnio } from './dibujoResultadoAnio.js'
+import { registrarFuentePdf } from './fuentePdf.js'
 
 /** Descarga el PDF. @param {DatosDoc} d @param {string} nombreArchivo */
 export async function descargarResultadoAnioPdf(d, nombreArchivo) {
@@ -12,7 +13,7 @@ export async function descargarResultadoAnioPdf(d, nombreArchivo) {
     const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'landscape' })
     let logo = null
     try { const r = await fetch(BRAND.logo.blanco); const bl = await r.blob(); logo = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(bl) }) } catch (_) { logo = null }
-    dibujarResultadoAnio(doc, d, /** @type {string|null} */ (logo), BRAND.nombre || '')
+    dibujarResultadoAnio(doc, d, /** @type {string|null} */ (logo), BRAND.nombre || '', await registrarFuentePdf(doc))
     await entregarArchivo(doc.output('blob'), nombreArchivo)
   } catch (e) { appAlert('No se pudo generar el PDF: ' + (e && /** @type {any} */ (e).message || e)) }
 }

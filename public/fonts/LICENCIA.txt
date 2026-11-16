@@ -1,0 +1,1 @@
+DM Sans (pesos 400 y 600): tipografía de la marca, SIL Open Font License 1.1 (Colophon Foundry, Google Fonts). Se incluye para los PDF (jsPDF no usa la fuente de la página).

@@ -1,7 +1,8 @@
 // PDF directo (sin ventana de impresión) del «Estado de comisiones»: carta, mismo contenido y orden que estadoComisionesHtml.
-// Datos y agrupación salen de _shared/estadoComisiones.js; aquí solo se dibuja (jsPDF, helvetica).
+// Datos y agrupación salen de _shared/estadoComisiones.js; aquí solo se dibuja (jsPDF, DM Sans).
 import { BRAND, appAlert } from './base.jsx'
 import { entregarArchivo } from './archivos.js'
+import { registrarFuentePdf } from './fuentePdf.js'
 import { armarEstadoComisiones, mesTitulo, pesos, dmy } from '../../supabase/functions/_shared/estadoComisiones.js'
 
 const AZ = [0, 60, 80], MU = [83, 114, 129], TX = [61, 61, 61], LN = [228, 232, 235], LN2 = [153, 171, 180]
@@ -12,12 +13,13 @@ export async function descargarEstadoComisionesPdf({ proveedor, rut, items, emit
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
     const doc = new jsPDF({ unit: 'pt', format: 'letter' })
     const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 50, R = W - M, BOT = H - 56
+    const fuente = await registrarFuentePdf(doc)
     const e = armarEstadoComisiones(items), T = e.totales
     const col = (/** @type {number[]} */ c) => doc.setTextColor(c[0], c[1], c[2])
     const draw = (/** @type {number[]} */ c) => doc.setDrawColor(c[0], c[1], c[2])
     const fill = (/** @type {number[]} */ c) => doc.setFillColor(c[0], c[1], c[2])
-    const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(String(t), x, y, al ? { align: al } : undefined) }
-    const uno = (/** @type {string} */ t, /** @type {number} */ w, /** @type {number} */ s, /** @type {boolean} */ b) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(s); const l = doc.splitTextToSize(String(t), w)[0] || ''; return l === String(t) ? l : l.slice(0, -1).trimEnd() + '…' }
+    const txt = (/** @type {string} */ t, /** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ s, /** @type {boolean} */ b, /** @type {number[]} */ c, /** @type {any} */ al) => { doc.setFont(fuente, b ? 'bold' : 'normal'); doc.setFontSize(s); col(c); doc.text(String(t), x, y, al ? { align: al } : undefined) }
+    const uno = (/** @type {string} */ t, /** @type {number} */ w, /** @type {number} */ s, /** @type {boolean} */ b) => { doc.setFont(fuente, b ? 'bold' : 'normal'); doc.setFontSize(s); const l = doc.splitTextToSize(String(t), w)[0] || ''; return l === String(t) ? l : l.slice(0, -1).trimEnd() + '…' }
     let logo = null
     try { const r = await fetch(BRAND.logo.color); const bl = await r.blob(); logo = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(bl) }) } catch (_) { logo = null }
     // Encabezado
