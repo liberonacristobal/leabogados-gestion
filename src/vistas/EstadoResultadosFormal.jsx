@@ -151,9 +151,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     { t: 'sub', l: 'Resultado antes de impuestos (EBIT)', v: T1.res, w: T0.res, pct: true },
     { t: 'it', l: 'PPM, impuesto de primera categoría (pago provisional)', v: T1.imp, w: T0.imp },
     { t: 'res', l: 'Resultado después de impuestos (Net income)', v: T1.neto, w: T0.neto, pct: true },
-    { t: 'sec', l: 'Partida informativa' },
-    { t: 'inf', l: 'EBITDA, igual al EBIT (el activo fijo se lleva a gasto al pagarlo)', v: T1.res, w: T0.res },
-    ...(T1.soc.some(x => x) || T0.soc.some(x => x) ? [{ t: 'inf', l: 'Sueldos de socios (remuneraciones y cotizaciones)', v: T1.soc, w: T0.soc }, { t: 'sub', l: 'Resultado antes de sueldos de socios', v: T1.resSin, w: T0.resSin, pct: true }] : []),
+    ...(T1.soc.some(x => x) || T0.soc.some(x => x) ? [{ t: 'sec', l: 'Partida informativa' }, { t: 'inf', l: 'Sueldos de socios (costo empresa)', v: T1.soc, w: T0.soc }, { t: 'sub', l: 'Resultado antes de sueldos de socios', v: T1.resSin, w: T0.resSin, pct: true }] : []),
   ]
 
   const exp = () => {
@@ -245,7 +243,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
         </div>
       </div>
       <div style={{ fontSize: 11, color: C.muted, margin: '10px 2px 0', lineHeight: 1.5 }}>
-        Los gastos se muestran en negativo; el subarriendo y los gastos recuperados reducen los gastos. Los meses «estimado» usan el presupuesto de oficina mientras no se carguen sus costos reales. Los subtotales suman las cifras redondeadas a {enUF ? 'UF enteras' : 'miles'}. El impuesto es solo el PPM del período, anticipo del impuesto de primera categoría; el impuesto anual se liquida en abril. El PPM es el declarado en el F29; mientras un mes no se declara, se estima con la tasa declarada sobre la base del mes. {year - 1} se compara de enero a {MESES[curM - 1]}{prevEst ? ' y sus costos son estimados, porque no están cargados los costos reales de ese año' : ''}.{enUF ? ' En UF, cada cifra va a la UF del día de su movimiento.' : ''}
+        Los gastos se muestran en negativo; el subarriendo y los gastos recuperados reducen los gastos. Los meses «estimado» usan el presupuesto de oficina mientras no se carguen sus costos reales. Los subtotales suman las cifras redondeadas a {enUF ? 'UF enteras' : 'miles'}. El impuesto es solo el PPM del período, anticipo del impuesto de primera categoría; el impuesto anual se liquida en abril. El activo fijo se lleva a gasto el año en que se paga, por lo que el EBITDA es igual al EBIT. El PPM es el declarado en el F29; mientras un mes no se declara, se estima con la tasa declarada sobre la base del mes. {year - 1} se compara de enero a {MESES[curM - 1]}{prevEst ? ' y sus costos son estimados, porque no están cargados los costos reales de ese año' : ''}.{enUF ? ' En UF, cada cifra va a la UF del día de su movimiento.' : ''}
       </div>
 
       {(() => {
