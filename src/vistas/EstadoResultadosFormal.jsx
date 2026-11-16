@@ -57,16 +57,18 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     const cobrado = (IA.total || 0) + (IA.percibidas || 0)
     const fact = suma(R.map(m => m.ing)), cos = suma(R.map(m => m.cos)), com = suma(R.map(m => m.com)), comPag = RA.comisPagadasAnioVenta.total || 0
     const p = puenteCaja({ resultadoAntes: suma(R.map(m => m.res)), facturado: fact, cobrado, devengado: cos + com, pagado: cos + comPag })
-    // Comprobación del cobrado: facturas propias emitidas en el año; cobrado por cartola frente al cobrado por saldo de cada factura.
+    // Comprobación del cobrado: facturas propias emitidas en el año, sin las pagadas con un anticipo (esas entran por el anticipo conciliado); cobrado por cartola frente al cobrado por saldo de cada factura.
     const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
-    const delAnio = b => b && RA._esFactHon(b) && !RA.extBillIds.has(String(b.id)) && String(b.issued_at || '').slice(0, 4) === String(year)
-    let porCartola = 0
-    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const b = billById[String(c.factura_id)], m = abonoById[String(c.movimiento_id)]; if (!delAnio(b) || !m || !String(m.fecha || '').startsWith(String(year)) || m.categoria === 'Subarriendo') return; porCartola += Number(c.monto_aplicado) || 0 })
-    const facs = billing.filter(delAnio), porSaldo = suma(facs.map(b => montoFactura(b))) - suma(facs.map(b => saldoBill(b)))
-    const difCobrado = porCartola - porSaldo, cuadra = Math.abs(difCobrado) <= Math.max(500000, 0.01 * suma(facs.map(b => montoFactura(b))))   // tolerancia: 1 % de lo facturado o $500.000
+    const porAnticipo = b => b.prepaid_anticipo_id != null || /anticipo/i.test(String(b.payment_ref || ''))
+    const delAnio = b => b && RA._esFactHon(b) && !RA.extBillIds.has(String(b.id)) && !porAnticipo(b) && String(b.issued_at || '').slice(0, 4) === String(year)
+    const cartolaDe = {}; let porCartola = 0
+    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const b = billById[String(c.factura_id)], m = abonoById[String(c.movimiento_id)]; if (!delAnio(b) || !m || !String(m.fecha || '').startsWith(String(year)) || m.categoria === 'Subarriendo') return; const v = Number(c.monto_aplicado) || 0; porCartola += v; cartolaDe[String(b.id)] = (cartolaDe[String(b.id)] || 0) + v })
+    const facs = billing.filter(delAnio), montoFacs = suma(facs.map(b => montoFactura(b))), porSaldo = montoFacs - suma(facs.map(b => saldoBill(b)))
+    const sinRespaldo = facs.map(b => ({ b, dif: montoFactura(b) - saldoBill(b) - (cartolaDe[String(b.id)] || 0) })).filter(x => x.dif > 1000)
+    const difCobrado = porCartola - porSaldo, cuadra = Math.abs(difCobrado) <= Math.max(500000, 0.01 * montoFacs)   // tolerancia: 1 % de lo facturado o $500.000
     const cobMeses = Array.from({ length: Math.max(0, curM - 1) }, (_, i) => cobMes(`${year}-${pad(i + 1)}`)), ult = A1.R[Math.max(0, curM - 2)]
     const e = idpcDesdePuente({ baseAlCorte: p.base, mesesRestantes: 12 - curM, cobradoMes: cobMeses, pagadoUltimoMes: ult ? (ult.cos + ult.com) : 0, ppmPagado: suma(A1.ppm.map(x => x.clp)), ppmUltimoMes: A1.ppm[Math.max(0, curM - 2)]?.clp || 0 })
-    return { p, e, porCartola, porSaldo, difCobrado, cuadra, sinIdentificar: IA.porIdentificar || 0 }
+    return { p, e, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
   }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
@@ -145,7 +147,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
   const unidad = enUF ? 'UF' : 'miles de pesos'
 
   return (
-    <div style={{ paddingBottom: 40 }}>
+    <div style={{ padding: D ? '0 20px 40px' : '0 2px 40px' }}>
       <div onClick={onBack} style={{ fontSize: 12, fontWeight: 700, color: C.accent, cursor: 'pointer', margin: '2px 2px 8px' }}>← {backLabel}</div>
       <div style={{ margin: '0 2px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
@@ -195,7 +197,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
             {idpc.cuadra
               ? <>{fila('i', '', 'IDPC estimado del año', fmtMill(e.idpc), { big: true })}{fila('s', '', 'Saldo a abril', fmtMill(e.saldo), { big: true, neg: e.saldo < 0 })}</>
-              : <div style={{ padding: '12px 14px', fontSize: 12, color: C.overdueText, fontWeight: 600 }}>Estimación no disponible: el cobrado de las facturas del año no cuadra entre la cartola y el saldo de cada factura (diferencia {fmtMill(idpc.difCobrado)}).</div>}
+              : <div style={{ padding: '12px 14px', fontSize: 12, color: C.overdueText, fontWeight: 600 }}>Estimación no disponible: {idpc.sinRespaldo.n} {idpc.sinRespaldo.n === 1 ? 'factura pagada' : 'facturas pagadas'} del año sin respaldo en la cartola, por {fmtMill(idpc.sinRespaldo.monto)}. Concílialas en Banco o corrige su estado.</div>}
             <div onClick={() => setVerIdpc(!verIdpc)} style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: C.azulInfo, cursor: 'pointer', borderTop: `1px solid ${C.bgSoft}` }}>{verIdpc ? 'Ocultar cálculo' : 'Ver cálculo'} ›</div>
             {verIdpc && <>
               {fila('r', '', 'Resultado antes de impuestos', fmtMill(p.resultadoAntes))}
@@ -210,7 +212,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
               {fila('pp', '−', 'PPM del año', fmtMill(e.ppm))}
               {fila('sa', '=', 'Saldo a abril', fmtMill(e.saldo), { tot: true, neg: e.saldo < 0 })}
               {fila('si', '', 'Depósitos sin identificar, fuera de la base', fmtMill(idpc.sinIdentificar), { mute: true })}
-              {fila('co', '', 'Cobrado de facturas del año, diferencia entre cartola y saldos', fmtMill(idpc.difCobrado), { mute: true })}
+              {fila('co', '', 'Facturas pagadas sin respaldo en la cartola', fmtMill(idpc.sinRespaldo.monto), { mute: true })}
             </>}
           </div>
           <div style={{ fontSize: 11, color: C.muted, margin: '10px 2px 0', lineHeight: 1.5 }}>
