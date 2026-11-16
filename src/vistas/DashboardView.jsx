@@ -945,7 +945,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
                 {m.bruto>0 && kpiTile('vend','Vendido',C.azulBg,C.azulBd,'#fff',C.azulInfo, null, m.meta>0?(vendPrinc==='neto'?ventaNetoPct:ventaPct):null,<><span className='kpi-neto'>{vendPrinc==='neto'?'neto ':'bruto '}</span>de la meta</>, {bruto:vMon(m.brutoUF,m.bruto),neto:vMon(m.netoUF,m.neto)})}   {/* Vendido: BRUTO y NETO gemelos en una línea, la principal se alterna (vendPrinc); % de la meta sobre el neto. Datos: m.brutoUF/m.bruto, m.netoUF/m.neto, m.costoUF/m.costo */}
                 {kpiTile('fact','Facturado',C.soonBg,C.avisoLine,'#fff',C.soonText, mRes('fac'), m.bruto>0?factPct:null,'del bruto')}
                 {kpiTile('cob','Cobrado',C.greenBg,C.greenDeep,'#fff',C.greenText, cobPrinc==='real'?vMon(ingRealUF,ingReal):vMon(ingYTDUF,ingYTD), metaCobranza>0?(cobPrinc==='real'?cobroRealPct:cobroPct):null,'de la meta',undefined,{etiqueta:cobPrinc==='real'?'Real':'Propio',otra:cobPrinc==='real'?'propio':'real',onAlt:setCobPrinc})}
-                {resAnio.ing>0 && kpiTile('marg','Resultado',C.surface,C.border,C.bgSoft,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
+                {resAnio.ing>0 && kpiTile('marg','Resultado',C.grisBg,C.grisBd,C.surface,C.accent, (resAnio.res<0?'−':'')+mRes('res',true), pct1(resAnio.pct),'ingresos')}
               </div>)
             })()}
             {resDrill&&<ResDrillPanel datos={resData} clients={clients} terceros={terceros} tile={resDrill.tile} year={resDrill.year} setDrill={setResDrill} moneda={dashMoneda} go={go} isDesk={isDeskRes} selYear={selYear} onOpenClientFicha={onOpenClientFicha} onOpenEstadoResultados={onOpenEstadoResultados}/>}

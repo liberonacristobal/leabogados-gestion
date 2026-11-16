@@ -27,7 +27,7 @@ export const C = {
   onNavyLabel:'#85B7EB', onNavyBtn:'#0E5066', onNavyLine:'#1C5468', onNavyGreen:'#9BD9BE', onNavyRed:'#F0A3A3',
   // tenues con letra oscura: chips y botón de guardar (azul) y avisos en línea (crema + café)
   // series del gráfico del flujo: tonos de la paleta (AZUL2/AZUL3/AZUL4 ingresos; accent y AZUL2 egresos, bajo el cero)
-  serie1:'#537281', serie2:'#99ABB4', serie3:'#E4E8EB', egrOp:'#003C50', egrCom:'#537281',
+  serie1:'#537281', serie2:'#99ABB4', serie3:'#E4E8EB', grisBg:'#E4E8EB', grisBd:'#CBD3D9',   // grisBg/grisBd: tarjeta Resultado (AZUL4 y su borde) egrOp:'#003C50', egrCom:'#537281',
   azulTenue:'#EFF5FA', azulTenueOn:'#E3EDF5', avisoBg:'#FFFBF0', avisoLine:'#F3E2BC', avisoMid:'#FBF1DE', avisoText:'#633806',
 }
 

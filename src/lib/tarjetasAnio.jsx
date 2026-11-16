@@ -4,7 +4,7 @@ import { C, SEC_LBL } from './base.jsx'
 import { BrutoNetoPill } from './compartido.jsx'
 
 const DOS_LINEAS = {display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
-export const TONO_ANIO = { az:[C.azulBg,C.azulBd,'#fff',C.azulInfo], am:[C.soonBg,C.avisoLine,'#fff',C.soonText], gr:[C.greenBg,C.greenDeep,'#fff',C.greenText], nt:[C.surface,C.border,C.bgSoft,C.accent] }
+export const TONO_ANIO = { az:[C.azulBg,C.azulBd,'#fff',C.azulInfo], am:[C.soonBg,C.avisoLine,'#fff',C.soonText], gr:[C.greenBg,C.greenDeep,'#fff',C.greenText], nt:[C.grisBg,C.grisBd,C.surface,C.accent] }
 // Mismos íconos que los tiles de Inicio (DashboardView): tendencia, documento, billete y margen.
 const ICO_ANIO = {
   chart:<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>,
