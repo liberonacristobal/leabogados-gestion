@@ -11,7 +11,7 @@ const _n = (/** @type {any} */ x) => { const v = Number(x); return Number.isFini
 /**
  * @param {{ items:{persona:string, liquido:number}[], liquidaciones:any[], ym:string, cotPlanilla:number, socios:string[] }} p
  *   items = pagos de sueldo del banco del mes (remuneracionesBancoMes); socios = nombres cortos de los socios.
- * @returns {{ sueldo:number, iu:number, cotTrab:number, cotEmp:number, cot:number, total:number, provisorio:boolean }}
+ * @returns {{ sueldo:number, iu:number, cotTrab:number, cotEmp:number, cot:number, total:number, provisorio:boolean, porSocio:Record<string, {sueldo:number, iu:number, cotTrab:number, cotEmp:number, cot:number, total:number}> }}
  */
 export function costoSociosMes({ items, liquidaciones, ym, cotPlanilla, socios }) {
   const esSocio = (/** @type {string} */ nombre) => (socios || []).some((s) => mismaPersona(s, nombre))
@@ -23,7 +23,16 @@ export function costoSociosMes({ items, liquidaciones, ym, cotPlanilla, socios }
   const iu = soc.reduce((a, l) => a + _n(l.impuesto_unico), 0)
   const cotTrab = soc.reduce((a, l) => a + ct(l), 0)
   const empTotal = Math.max(0, _n(cotPlanilla) - filas.reduce((a, l) => a + ct(l), 0))
-  const cotEmp = impTot > 0 ? Math.round(empTotal * impSoc / impTot) : 0
+  // Por socio: su sueldo, su impuesto único, sus cotizaciones y su parte del empleador (en proporción a su imponible). El total del empleador es la suma de las partes, así las partes suman el total.
+  /** @type {Record<string, {sueldo:number, iu:number, cotTrab:number, cotEmp:number, cot:number, total:number}>} */ const porSocio = {}
+  for (const s of socios || []) {
+    const sS = (items || []).filter((x) => mismaPersona(s, String(x.persona))).reduce((a, x) => a + _n(x.liquido), 0)
+    const ls = soc.filter((l) => mismaPersona(s, String(l.persona)))
+    const iuS = ls.reduce((a, l) => a + _n(l.impuesto_unico), 0), ctS = ls.reduce((a, l) => a + ct(l), 0), impS = ls.reduce((a, l) => a + _n(l.imponible), 0)
+    const eS = impTot > 0 ? Math.round(empTotal * impS / impTot) : 0
+    porSocio[s] = { sueldo: sS, iu: iuS, cotTrab: ctS, cotEmp: eS, cot: ctS + eS, total: sS + iuS + ctS + eS }
+  }
+  const cotEmp = Object.values(porSocio).reduce((a, x) => a + x.cotEmp, 0)
   const cot = cotTrab + cotEmp
-  return { sueldo, iu, cotTrab, cotEmp, cot, total: sueldo + iu + cot, provisorio }
+  return { sueldo, iu, cotTrab, cotEmp, cot, total: sueldo + iu + cot, provisorio, porSocio }
 }

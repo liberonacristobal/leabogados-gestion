@@ -6,7 +6,7 @@ import { redondearPartes } from '../lib/cifras.js'
 import { EscenariosRetiro } from './EscenariosRetiro.jsx'
 import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
-import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado } from '../lib/compartido.jsx'
+import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado, costoSociosAnio } from '../lib/compartido.jsx'
 import { descargarTabla } from '../lib/archivos.js'
 
 // Comisión del mes = terceros_pagos pagados en el mes.
@@ -162,6 +162,9 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
   const scrollA=ref=>ref&&ref.current&&ref.current.scrollIntoView({behavior:'smooth',block:'start'})
   const verSocio=s=>{ setMovVista('socio'); setTimeout(()=>scrollA(listaRef),60) }
   const { GAP, ofi, SOC_SRC, SOC, A, B, dnum, inOfi, movs, clusterSocio, bySoc, retiros, retSoc, otros, sueldos, retTot, retN, totalRet, sueldoTot, nRet, rondas, difAcum } = retirosSocios({ expenses, clients, socios, yr })   // fuente única: la misma del Panel de socios
+  // Sueldos de socios = costo empresa (sueldo líquido, impuesto único y cotizaciones), la misma regla del Estado de resultados; sin planilla cargada queda el líquido del banco.
+  const fuS=useFuentesResultado(), CE=useMemo(()=>costoSociosAnio(fuS,{billing,terceros,costosOfiRows,expenses,clients},yr,yr<curY?12:curM),[fuS,billing,terceros,costosOfiRows,expenses,clients,yr])   // eslint-disable-line react-hooks/exhaustive-deps
+  const usaCE=CE.total>0, sueldoVal=usaCE?CE.total:sueldoTot, sueldoDe=s=>usaCE?(CE.por[s]?.total||0):(sueldos[s]||0), liquidoDe=s=>usaCE?(CE.por[s]?.liquido||0):(sueldos[s]||0)
   useEffect(()=>{ if(!focoSocio) return; const r=retSoc.filter(x=>x.socio===focoSocio).sort((a,b)=>String(b.d0).localeCompare(String(a.d0)))[0]; if(r){ setExpRet(r.socio+'|'+r.d0); setAbLista(true) } },[focoSocio])   // eslint-disable-line  — llegar desde el Panel con el último retiro de ese socio abierto
   const _PAL=[[C.accent,'#EAF1F4'],['#8A6D12','#F8F1DE'],['#3B6D11','#EAF3DE'],[C.overdueText,C.overdueBg],['#A8472A','#FAECE7'],[C.tealText,C.tealBg]]
   const COL=Object.fromEntries(SOC_SRC.map((s,i)=>[s.nombre,(_PAL[i]||_PAL[0])[0]]))
@@ -175,7 +178,7 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
   const yrs=(()=>{ const s=new Set([curY]); (expenses||[]).forEach(e=>{ const y=parseInt(String(e.date||'').slice(0,4),10); if(y) s.add(y) }); return [...s].sort((a,b)=>b-a) })()
   const promRetiro=nRet?Math.round(totalRet/nRet):0
   const mesesComp=yr<curY?12:(yr>curY?0:Math.max(0,curM-1))
-  const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?(sueldos[s]||0):0); return mesesComp>0?Math.round(base/mesesComp):0 }
+  const promDe=s=>{ const base=(retTot[s]||0)+(eqMode==='ambos'?sueldoDe(s):0); return mesesComp>0?Math.round(base/mesesComp):0 }
   const faltaTxt=d=>d===0?null:(d>0?`falta ${B} ${fmt(Math.abs(d))}`:`falta ${A} ${fmt(Math.abs(d))}`)
   // período = mes; dentro de un mes puede haber varias rondas de retiro. Muestro todos los meses del año transcurrido; toggle oculta los sin retiros.
   const mesesDelAnio=yr<curY?12:(yr>curY?0:curM)
@@ -230,13 +233,13 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
       <div onClick={()=>scrollA(listaRef)} style={{background:C.accent,color:'#fff',borderRadius:18,padding:'19px 21px',gridColumn:isDesktop?'auto':'1/-1',cursor:'pointer',position:'relative'}}>
         <span style={{position:'absolute',top:16,right:16,color:'#85B7EB',fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
         <div style={{display:'flex',alignItems:'center',gap:7,fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:.5,color:'#9FC6D8'}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#9FC6D8' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>Retribución de socios · {yr}</div>
-        <div style={{fontSize:40,fontWeight:800,letterSpacing:-1.5,lineHeight:1,margin:'11px 0 10px',fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet+sueldoTot)}</div>
+        <div style={{fontSize:40,fontWeight:800,letterSpacing:-1.5,lineHeight:1,margin:'11px 0 10px',fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet+sueldoVal)}</div>
         <div style={{display:'flex',gap:10}}>
           <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Retiros</div><div style={{fontSize:16,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(totalRet)}</div></div>
-          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos</div><div style={{fontSize:16,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoTot)}</div></div>
+          <div style={{flex:1,background:'rgba(255,255,255,.1)',borderRadius:10,padding:'8px 11px'}}><div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.3,color:'#9FC6D8'}}>Sueldos de socios</div><div style={{fontSize:16,fontWeight:800,marginTop:1,fontVariantNumeric:'tabular-nums'}}>{fmtM(sueldoVal)}</div></div>
         </div>
       </div>
-      {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,C.azulInfo,<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos líquidos',fmtM(sueldoTot),SOC.join(' + '),BG[B]||'#F8F1DE','#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
+      {[['Retirado '+yr,fmtM(totalRet),nRet+' retiros · '+fmtM(promRetiro)+' prom.',C.azulBg,C.azulInfo,<><path d='M21 12V7H5a2 2 0 0 1 0-4h14v4'/><path d='M3 5v14a2 2 0 0 0 2 2h16v-5'/><path d='M18 12a2 2 0 0 0 0 4h4v-4Z'/></>],['Sueldos de socios',fmtM(sueldoVal),usaCE?`líquido ${fmtM(CE.liquido)}, impuestos y cotizaciones ${fmtM(CE.iuCot)}`:SOC.join(' + '),BG[B]||'#F8F1DE','#8A6D12',<><rect x='2' y='7' width='20' height='14' rx='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/></>]].map((k,i)=>
         <div key={i} onClick={()=>scrollA(i===0?listaRef:porSocioRef)} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'16px 17px',cursor:'pointer',position:'relative'}}>
           <span style={{position:'absolute',top:15,right:14,color:C.textSoft,fontSize:16,fontWeight:700}}><Gl n='chevron'/></span>
           <span style={{width:34,height:34,borderRadius:10,background:k[3],display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke={k[4]} strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>{k[5]}</svg></span>
@@ -254,12 +257,12 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
         {seg(eqMode,setEqMode,[['ambos','Retiro + sueldo'],['retiros','Solo retiros']])}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr',gap:isDesktop?8:12,padding:'2px 16px 16px'}}>
-        {SOC.map(s=>{ const tot=(retTot[s]||0)+(sueldos[s]||0)
+        {SOC.map(s=>{ const tot=(retTot[s]||0)+sueldoDe(s)
           // Escritorio: una fila por socio (nombre y cuatro cifras en línea) en vez de tarjeta alta; el celular conserva la tarjeta.
           if(isDesktop){ const cel=(l,v,sub)=><div style={{minWidth:0,textAlign:'right'}}><div style={{...SEC_LBL,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:15,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div>{sub&&<div style={{fontSize:10,color:C.textSoft,fontWeight:600,whiteSpace:'nowrap'}}>{sub}</div>}</div>
             return <div key={s} onClick={()=>verSocio(s)} role='button' style={{background:BG[s],borderRadius:12,padding:'10px 16px',cursor:'pointer',display:'grid',gridTemplateColumns:'minmax(170px,1.3fr) repeat(4,minmax(0,1fr)) 16px',columnGap:14,alignItems:'center'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}><span style={{width:30,height:30,borderRadius:'50%',background:COL[s],color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:13,flexShrink:0}}>{s[0]}</span><div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:15,color:COL[s]}}>{s}</div><div style={{fontSize:11,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</div></div></div>
-              {cel('Retribución · '+yr,fmtM(tot))}{cel('Retiros',fmt(retTot[s]||0))}{cel('Sueldo',fmt(sueldos[s]||0))}{cel('Promedio mensual',fmtM(promDe(s)),`÷ ${mesesComp} meses`)}
+              {cel('Retribución · '+yr,fmtM(tot))}{cel('Retiros',fmt(retTot[s]||0))}{cel('Sueldo',fmt(sueldoDe(s)),usaCE?`líquido ${fmt(liquidoDe(s))}`:null)}{cel('Promedio mensual',fmtM(promDe(s)),`÷ ${mesesComp} meses`)}
               <span style={{color:COL[s],opacity:.5}}><Gl n='chevron'/></span></div> }
           // Celular: tarjeta compacta de dos filas (nombre y total arriba; retiros, sueldo y promedio mensual abajo).
           return <div key={s} onClick={()=>verSocio(s)} role='button' style={{background:BG[s],borderRadius:12,padding:'10px 12px',cursor:'pointer'}}>
@@ -267,7 +270,7 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
               <div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:14,color:COL[s]}}>{s}</div><div style={{fontSize:10.5,fontWeight:700,color:C.muted}}>{retN[s]||0} retiro{(retN[s]||0)!==1?'s':''}</div></div>
               <div style={{marginLeft:'auto',textAlign:'right'}}><div style={{fontSize:20,fontWeight:800,letterSpacing:-.5,lineHeight:1.05,color:COL[s],fontVariantNumeric:'tabular-nums'}}>{fmtM(tot)}</div><div style={{...SEC_LBL,fontSize:9.5}}>total a favor</div></div></div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6,marginTop:8}}>
-              {[['Retiros',fmtM(retTot[s]||0)],['Sueldo',fmtM(sueldos[s]||0)],['Prom. mensual',fmtM(promDe(s))]].map(([l,v])=><div key={l} style={{background:'rgba(255,255,255,.7)',borderRadius:8,padding:'5px 8px',minWidth:0}}><div style={{...SEC_LBL,fontSize:9,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:12.5,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div></div>)}</div>
+              {[['Retiros',fmtM(retTot[s]||0)],['Sueldo',fmtM(sueldoDe(s))],['Prom. mensual',fmtM(promDe(s))]].map(([l,v])=><div key={l} style={{background:'rgba(255,255,255,.7)',borderRadius:8,padding:'5px 8px',minWidth:0}}><div style={{...SEC_LBL,fontSize:9,whiteSpace:'nowrap'}}>{l}</div><div style={{fontSize:12.5,fontWeight:800,color:COL[s],fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{v}</div></div>)}</div>
           </div> })}
       </div>
     </div>

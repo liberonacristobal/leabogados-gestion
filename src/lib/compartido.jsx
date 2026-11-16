@@ -719,6 +719,19 @@ export function remuneracionesBancoMes(expenses, clients, ym, boleta){
 // facturas y NC por emisión, comisiones por pago, gastos del banco por su fecha y la planilla mensual al cierre del mes (finMesOHoy).
 // Sin serie (ufd null) todo cae a ufFb = UF de hoy, igual que antes. Los pesos no cambian.
 // Impuesto único de las líneas de Remuneraciones del PRESUPUESTO de oficina en un mes (cada línea es un sueldo líquido): una sola función para lo estimado de resultadoMes y para Presupuesto vs real.
+// Costo de los socios del año hasta el mes `hasta` (el último con planilla): la MISMA regla del Estado de resultados (resultadoMes.socDet). Sueldo líquido, impuesto único y cotizaciones, en total y por socio; `hasta` = último mes con costo (null si no hay).
+export function costoSociosAnio(fu, deps, year, hasta){
+  const o={total:0,liquido:0,iu:0,cot:0,iuCot:0,por:{},hasta:null}
+  for(let m=1;m<=Math.max(0,Math.min(12,hasta||0));m++){
+    const d=resultadoMes(fu,deps,`${year}-${String(m).padStart(2,'0')}`).socDet
+    if(!(d&&d.total>0)) continue
+    o.total+=d.total; o.liquido+=d.sueldo; o.iu+=d.iu; o.cot+=d.cot; o.hasta=m
+    Object.entries(d.porSocio||{}).forEach(([s,x])=>{ const a=o.por[s]||(o.por[s]={liquido:0,total:0}); a.liquido+=x.sueldo; a.total+=x.total })
+  }
+  o.iuCot=o.iu+o.cot
+  return o
+}
+
 export function iuPresupuestoMes(fu, costosOfiRows, ym, ufd=null, ufFb=0){
   const u=iso=>ufDelDia(ufd, iso, ufFb||UF_FALLBACK), eff=r=>(r.desde&&ym<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto
   return impuestoUnicoPresupuesto({rows:costosOfiRows, ym, liquidaciones:fu?.liq||[], tramosFilas:fu?.tramosIU||[], ufDelMes:u(finMesOHoy(ym)), ufDeLiquidacion:p=>u(finMesOHoy(p)), vigente:eff, boleta:[...(fu?.boleta||[])]})
@@ -759,7 +772,7 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const remUF = (remB.total>0 ? remB.items.reduce((a,x)=>a+x.costo/u(x.e.date),0) : remBase/ufFin) + iuM.total/ufFin
   const remDet = { liquido: remB.items.filter(x=>!x.boleta).reduce((a,x)=>a+x.liquido,0) || (remB.total>0?0:remBase), retencion: remB.items.filter(x=>x.boleta).reduce((a,x)=>a+x.costo-x.liquido,0), boleta: remB.items.filter(x=>x.boleta).reduce((a,x)=>a+x.liquido,0), iu: iuM.total, iuProvisorio: iuM.provisorio, iuPeriodo: iuM.periodo }
   // Costo de los socios del mes (sueldo, impuesto único y cotizaciones): lo que el Resultado ya descuenta por ellos; «Resultado antes de sueldos de socios» lo suma de vuelta.
-  const socM = (row && remBase>0 && (fu?.socios||[]).length) ? costoSociosMes({items:remB.items.map(x=>({persona:x.persona,liquido:x.liquido})), liquidaciones:fu?.liq||[], ym, cotPlanilla:n('cotizaciones'), socios:fu.socios}) : {sueldo:0,iu:0,cotTrab:0,cotEmp:0,cot:0,total:0,provisorio:false}
+  const socM = (row && remBase>0 && (fu?.socios||[]).length) ? costoSociosMes({items:remB.items.map(x=>({persona:x.persona,liquido:x.liquido})), liquidaciones:fu?.liq||[], ym, cotPlanilla:n('cotizaciones'), socios:fu.socios}) : {sueldo:0,iu:0,cotTrab:0,cotEmp:0,cot:0,total:0,provisorio:false,porSocio:{}}
   const socSueldoUF = socM.total>0 ? remB.items.filter(x=>(fu?.socios||[]).some(sn=>mismaPersona(sn,x.persona))).reduce((a,x)=>a+x.liquido/u(x.e.date),0) : 0
   const socRemUF = socSueldoUF + socM.iu/ufFin, socCotUF = socM.cot/ufFin, socUF = socRemUF + socCotUF
   const conItems=contadoraBancoItems(expenses,clients,ym), conB=conItems.reduce((a,e)=>a+(Number(e.amount)||0),0)

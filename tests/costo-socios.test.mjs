@@ -26,3 +26,11 @@ test('si el mes aún no tiene liquidaciones usa el anterior y lo marca provisori
   const r = costoSociosMes({ ...base, ym: '2026-11', cotPlanilla: 2150000 })
   assert.equal(r.provisorio, true); assert.equal(r.iu, 200000)
 })
+
+test('el costo por socio suma el del total, con su parte del empleador por imponible', () => {
+  const r = costoSociosMes({ ...base, cotPlanilla: 1670000 + 480000 })
+  const p = r.porSocio
+  assert.equal(p.Socia.sueldo, 2300000); assert.equal(p.Socia.iu, 100000); assert.equal(p.Socia.cotTrab, 600000); assert.equal(p.Socia.cotEmp, 180000)
+  assert.equal(p.Socia.total, 2300000 + 100000 + 600000 + 180000)
+  assert.equal(p.Socia.total + p.Socio.total, r.total); assert.equal(p.Socia.cotEmp + p.Socio.cotEmp, r.cotEmp)
+})
