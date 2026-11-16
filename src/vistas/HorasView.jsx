@@ -4,7 +4,7 @@ import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesI
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop } from '../lib/base.jsx'
+import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
 import { RendicionModal } from '../lib/rendiciones.jsx'
 import { descargarTabla } from '../lib/archivos.js'
@@ -821,7 +821,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
       {semana.length>0 && <>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'14px 2px 7px'}}>
           <span style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'.05em'}}>{isAdmin?'Horas de la semana':'Mis horas de la semana'}</span>
-          <button onClick={exportarCSV} title='Exportar mis horas a CSV' style={{fontSize:11,fontWeight:600,color:C.azulInfo,background:'#fff',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 11px',cursor:'pointer'}}>↓ CSV</button>
+          <BtnDescarga onClick={exportarCSV} titulo='Descargar Excel' n='sheet' />
         </div>
         <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:12,padding:'4px 12px'}}>
           {semana.map(h=> editH===h.id ? (

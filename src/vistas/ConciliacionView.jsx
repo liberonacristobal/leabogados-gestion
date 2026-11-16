@@ -16,7 +16,7 @@ import { liqParaCargo as _liqParaCargo } from '../../supabase/functions/_shared/
 import { cuentaEnSaldo, propuestaFondoRendicion } from '../../supabase/functions/_shared/gastosReglas.js'
 import { glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import * as SD from '../../supabase/functions/_shared/saludDatos.js'
-import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, isoLocal, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ChevAb, fmtMillLR, reasignarFondosDeMovimiento, PaginaSobre, ADMIN_NAMES, AsignarClienteInline, BitacoraLista, CATS_LEGALES, CATS_OFICINA_NUEVAS, Copyable, EQUIPO_CFG, FlujoPagina, MESES_ABR, Modal, RESPALDO_CUTOFF, SOCIOS_CFG, Sparkle, _ccDia, _ccEsAjuste, _esDiaHabil, _glosaTransf, _norm, acusePagoEmail, calceCajaChica, catOficinaNueva, claudeCall, concPeriodoOf, driveToken, esFacIngreso, esSubarriendo, estadoFacturaLabel, extraerTextoGmail, facturaRespaldo, fmtShort, glosaFactura, learnPut, logActividad, montoFactura, nDias, proyectoSeguro, rsLabel, saldoCliente, setLearningKV, txtEnviado, usePersistedState, viewMemGuardar, viewMemLeer, registrarError, useDestinosBoleta} from '../lib/compartido.jsx'
 import { rutsDeDestino } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { descargarTabla } from '../lib/archivos.js'
@@ -2720,7 +2720,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
               {c2(C.tealBg,C.tealText,'file','Cargar cartola',C.tealText,'',C.tealText,cartolas.length?`${cartolas.length} cargada${cartolas.length!==1?'s':''} · subir`:'subir · verificar',()=>goHub(()=>setVerCarga(true)))}
             </div>
             <div style={{display:'flex',justifyContent:'flex-end',marginTop:2}}>
-              <button onClick={exportConc} style={{fontSize:11,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'6px 12px',cursor:'pointer'}}>Exportar estado (CSV) ↓</button>
+              <BtnDescarga onClick={exportConc} titulo='Descargar Excel' n='sheet' />
             </div>
           </>
         })()}
@@ -2973,7 +2973,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
         <div onClick={()=>setCobradasOpen(true)} style={{cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',background:C.surface}}><div style={{fontSize:11,fontWeight:600,color:C.text}}>Sin respaldo</div><div style={{fontSize:10,color:C.muted}}>Facturas sin banco</div></div>
         <div onClick={()=>setVerCarga(true)} style={{cursor:'pointer',border:`1px solid ${C.border}`,borderRadius:8,padding:'7px 8px',background:C.surface}}><div style={{fontSize:11,fontWeight:600,color:C.text}}>Cargar cartola</div><div style={{fontSize:10,color:C.muted}}>{cartolas.length} cargadas</div></div>
       </div>
-      <div style={{textAlign:'right',marginTop:8}}><button onClick={exportConc} style={{fontSize:10,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:8,padding:'4px 9px',cursor:'pointer'}}>Exportar (CSV) ↓</button></div>
+      <div style={{textAlign:'right',marginTop:8}}><BtnDescarga onClick={exportConc} titulo='Descargar Excel' n='sheet' /></div>
     </div>
   )
   // Detalle de un movimiento (glosa, propuesta, otras opciones, contexto, lo conciliado). Fuente ÚNICA: bajo la fila en móvil y en el panel derecho en escritorio.

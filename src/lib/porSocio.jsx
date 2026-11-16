@@ -5,7 +5,7 @@ import { resumenDiasCobro } from '../../supabase/functions/_shared/diasCobro.js'
 import { useAnnualTargets } from './resultadoAnio.js'
 import { descargarFotoTabla } from './fotoTabla.js'
 import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
-import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop } from './base.jsx'
+import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, diaGrande, fmt, fmtFechaDMY, folioN, useIsDesktop, BtnDescarga } from './base.jsx'
 import { Fragment } from 'react'
 import { esSubarriendo, redondearPartes, kpisPorSocio, partesM, partesPctEnt } from './cifras.js'
 import { usePropuestasNoCuentan, ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, usePorSocioFuentes, useUF, vendidoPorSocio } from './compartido.jsx'
@@ -338,7 +338,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       {seg([['res','Resumen'],['cmp','Comparativo'],['dat','Datos']],tab,setTab)}
       {seg([['mes','Mes'],['ytd','Año']],vista,v=>{ setVista(v); setOpen(null); setKopen(null) })}
       <span style={{display:'inline-flex',alignItems:'center',gap:6,marginLeft:isDesk?'auto':0}}>{nb(false,()=>shift(-1),'chevL')}<span style={{minWidth:isDesk?124:96,textAlign:'center',fontSize:13.5,fontWeight:700,color:C.text}}>{perLbl(vista)}</span>{nb(ym===curYM,()=>shift(1),'chevron')}</span>
-      <button onClick={exportar} style={{fontSize:11,fontWeight:600,color:C.accent,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',whiteSpace:'nowrap',marginLeft:isDesk?0:'auto'}}>{isDesk?'Exportar ↓':'↓'}</button>
+      <BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />
     </div>
     {tab!=='cmp'&&kpiTiles()}
     {tab==='res'&&<div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8,marginTop:isDesk?12:8}}>

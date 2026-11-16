@@ -2604,7 +2604,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px'}}>
                       <span style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{castSocio||'Todos'} · {castVis.length}</span>
-                      <button type='button' onClick={exportCast} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',cursor:'pointer',fontFamily:'inherit'}}>Exportar</button>
+                      <BtnDescarga onClick={exportCast} titulo='Descargar Excel' n='sheet' />
                       <span style={{marginLeft:'auto',fontSize:14,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(castTot)}</span>
                     </div>
                     {castVis.map(x=>{ const cn=(clients||[]).find(c=>String(c.id)===String(x.e.client_id))?.name||'—'; return (
@@ -2939,7 +2939,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:10,marginBottom:9}}>
               <div><div style={{...SEC_LBL}}>Historial de cargas</div>
                 {cargas.length>0&&<div style={{fontSize:11,color:C.muted,marginTop:1}}>{cargas.length} carga{cargas.length!==1?'s':''} · {totCarg} cargada{totCarg!==1?'s':''}{errSin>0&&<> · <b style={{color:C.overdueText}}>{errSin} con error sin resolver</b></>}</div>}</div>
-              {cargas.length>0&&<button onClick={exportarHistCSV} style={{flexShrink:0,fontSize:11,fontWeight:600,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'5px 11px',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:5}}><svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke={C.accent} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>Exportar CSV</button>}
+              {cargas.length>0&&<BtnDescarga onClick={exportarHistCSV} titulo='Descargar Excel' n='sheet' />}
             </div>
             {cargas.length===0&&<div style={{color:C.muted,textAlign:'center',padding:28,fontSize:13,background:'#fff',border:`1px solid ${C.border}`,borderRadius:12}}>Aún no hay cargas. Sube un Excel para empezar.</div>}
             <div style={{display:'flex',flexDirection:'column',gap:8}}>{cargas.map(c=>{ const open=cargaOpen===c.id; const dd=c.created_at?new Date(c.created_at):null; const dnum=dd?dd.getDate():'—'; const dmon=dd?mesCorto(dd):''; const undone=c.status==='undone'
@@ -3245,7 +3245,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:12}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                 <span style={{...SEC_LBL}}>Cobrado por la notaría{cobAnio?` en ${cobAnio}`:''}</span>
-                {rows.length>0&&<button onClick={()=>csvDownload('cobros_notaria.csv',csvRows())} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Exportar ↓</button>}
+                {rows.length>0&&<BtnDescarga onClick={()=>csvDownload('cobros_notaria.csv',csvRows())} titulo='Descargar Excel' n='sheet' />}
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:26,fontWeight:800,color:C.text,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(sum(base))}</span><span style={{fontSize:12,color:C.muted}}>· {base.length} OT</span></div>
               <div style={{display:'grid',gridTemplateColumns:`repeat(${['porpagar','enliq','pagada','err'].filter(k=>de(k).length||k==='porpagar'||k==='pagada').length},minmax(0,1fr))`,gap:8,marginTop:12}}>{['porpagar','enliq','pagada','err'].map(estTile)}</div>
@@ -3458,7 +3458,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:'13px 15px',marginBottom:12}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                 <span style={{...SEC_LBL}}>Pagado a la notaría{pagAnio?` en ${pagAnio}`:''}</span>
-                {list.length>0&&<button onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap'}}>Exportar ↓</button>}
+                {list.length>0&&<BtnDescarga onClick={()=>csvDownload('pagos_notaria.csv',csvRows())} titulo='Descargar Excel' n='sheet' />}
               </div>
               <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:2}}><span style={{fontSize:26,fontWeight:800,color:C.greenText,letterSpacing:-.5,fontVariantNumeric:'tabular-nums'}}>{fmt(tot)}</span><span style={{fontSize:12,color:C.muted}}>· {list.length-nPorEnv} pago{list.length-nPorEnv!==1?'s':''}</span></div>
               {(notaPendTotal>0||nPorEnv>0)&&<div style={{display:'flex',gap:8,marginTop:12}}>

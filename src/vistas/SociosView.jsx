@@ -1,7 +1,7 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
-import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal } from '../lib/base.jsx'
+import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal, BtnDescarga } from '../lib/base.jsx'
 import { redondearPartes } from '../lib/cifras.js'
 import { EscenariosRetiro } from './EscenariosRetiro.jsx'
 import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
@@ -223,7 +223,7 @@ export function SociosView({ onOpenClientFicha, onOpenFlujoCaja, onAbrirBanco, o
         : <span style={{fontSize:11,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'6px 12px'}}>Por igualar · {faltaTxt(difAcum)}</span>}
       <span style={{flex:1}}/>
       <select value={yr} onChange={e=>setYr(parseInt(e.target.value,10))} style={{fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 10px',background:C.azulBg,color:C.accent,cursor:'pointer'}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
-      {nRet>0&&<button onClick={exportar} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,fontWeight:700,color:C.accent,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'7px 13px',cursor:'pointer'}}><svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><path d='m7 10 5 5 5-5'/><path d='M12 15V3'/></svg>Exportar</button>}
+      {nRet>0&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
     </div>
 
     <div style={{display:'grid',gridTemplateColumns:isDesktop?'1.25fr 1fr 1fr':'1fr 1fr',gap:12,marginBottom:12}}>

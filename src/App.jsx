@@ -1497,7 +1497,7 @@ function ComprasModal({ compras=[], proveedores=[], onSaveProveedor, isDesktop=t
             {rest>0&&<div style={{padding:'7px 13px',fontSize:10,color:C.textSoft,borderTop:`1px solid ${C.bgSoft}`}}>+ {rest} documento{rest!==1?'s':''} más</div>}
           </div>
         </div>) })}
-      <div onClick={exportar} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginTop:12,border:`1px solid ${C.border}`,borderRadius:10,padding:10,background:'#fff',fontSize:12,fontWeight:700,color:C.accent,cursor:'pointer'}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3'/></svg> Exportar a Excel para la contadora</div>
+      <BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />
     </>}
   </div>)
 }
