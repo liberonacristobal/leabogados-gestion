@@ -140,6 +140,16 @@ Prioridad #1 del usuario: **la misma cifra se ve igual entre por donde se entre*
 - **Diferencias estructurales se rotulan, no se esconden.** Si dos cifras miden planos distintos (devengado vs caja, emitido vs cobrado), cada una dice su plano en una línea; no se presentan como "la misma" ni como error.
 - **Al cambiar una cifra o una regla:** buscar TODAS las vistas, correos y exports que la muestran y dejarlas en el mismo helper en el mismo commit; verificar con datos reales que coinciden (consulta o arnés con las funciones de la app).
 
+## REGLA DE ORO: la fecha de pago de una factura es la fecha del abono en la cartola
+
+Definida por el usuario el 2026-11-16 (transferencias en sábado, pagos de viernes en la tarde y feriados: el banco los refleja el día hábil siguiente).
+- **Fuente de la verdad: el abono conciliado en el banco.** Su fecha (la que trae la cartola) es la fecha de pago; nunca la fecha en que el cliente transfirió. Sábado, viernes tarde y feriado = el día hábil en que el banco abona.
+- **Varios abonos:** la fecha de pago es la del último que completa la factura; los tiempos de cobro usan cada abono con su monto.
+- **Sin abono en cartola** (efectivo, otra cuenta): fecha manual con su motivo; es la única excepción.
+- **`paid_at` y `payment_date` se derivan, no se tipean:** `persistPagoFactura` (ConciliacionView) los toma del depósito al conciliar, también si la factura ya estaba Pagada. Salud de datos («Fecha de pago y depósito») avisa cualquier diferencia con el último depósito conciliado.
+- **La caja no depende de `paid_at`:** Inicio, el IDPC y el cobrado miden por la fecha del depósito.
+- **Cierre de año:** se revisan a mano los abonos del 28 de diciembre al 4 de enero (un pago del 31-12 abonado el 03-01 cae en el año nuevo); Salud de datos los lista en esa ventana.
+
 ## REGLA DE ORO: lenguaje — revisar las reglas antes de escribir
 
 Todo lo acordado sobre lenguaje es regla de oro. Antes de escribir **cualquier** texto (etiqueta, título, botón, aviso, correo, asunto, render, propuesta), pasar por este checklist; nunca inventar lenguaje:

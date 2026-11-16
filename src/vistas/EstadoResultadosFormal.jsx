@@ -80,14 +80,14 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     return { p, e, des, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
   }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Salud de datos › «Fecha de pago y depósito»: la fuente de la verdad de la fecha de cobro es el depósito conciliado en el banco; una factura cuya fecha de pago difiere en más de 3 días del último depósito conciliado del año se avisa (caso Bustos: dos conciliaciones cruzadas).
+  // Salud de datos › «Fecha de pago y depósito»: la fuente de la verdad de la fecha de cobro es el abono conciliado en el banco (regla de CLAUDE.md); una factura cuya fecha de pago difiere de la del último abono conciliado del año se avisa (caso Bustos: dos conciliaciones cruzadas).
   const checkFechas = useMemo(() => {
     const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
     const ultDep = {}
     RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const m = abonoById[String(c.movimiento_id)]; if (!m) return; const f = String(m.fecha || '').slice(0, 10); if (!ultDep[String(c.factura_id)] || f > ultDep[String(c.factura_id)]) ultDep[String(c.factura_id)] = f })
     const dias = (a, b) => Math.round(Math.abs(new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / 864e5)
     const lista = []
-    Object.keys(ultDep).forEach(id => { const b = billById[id], dep = ultDep[id]; if (!b || b.deleted_at || b.status === 'Anulada' || !b.paid_at || !dep.startsWith(String(year))) return; const d = dias(String(b.paid_at).slice(0, 10), dep); if (d > 3) lista.push({ b, d, dep }) })
+    Object.keys(ultDep).forEach(id => { const b = billById[id], dep = ultDep[id]; if (!b || b.deleted_at || b.status === 'Anulada' || !b.paid_at || !dep.startsWith(String(year))) return; const d = dias(String(b.paid_at).slice(0, 10), dep); if (d > 0) lista.push({ b, d, dep }) })
     lista.sort((x, y) => y.d - x.d)
     const nombre = b => (clients.find(c => String(c.id) === String(b.client_id)) || {}).name || 'cliente', n = lista.length
     // Alinear: la fecha de pago pasa a ser la del último depósito conciliado (la fuente de la verdad); queda en la bitácora.
@@ -99,7 +99,17 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       try { logActividad('banco.alinear_fechas', { tabla: 'billing', detalle: { title: `Alineó la fecha de pago de ${ok} factura${ok !== 1 ? 's' : ''} con su depósito conciliado`, n: ok } }) } catch (_) { /* la bitácora no frena la acción */ }
       avisarBillingCambio(); appAlert(`Listo: ${ok} de ${n} fechas alineadas con su depósito.`)
     }
-    return [[n === 0, 'Fecha de pago y depósito', n ? `${n} factura${n !== 1 ? 's' : ''} con la fecha de pago distinta de su depósito conciliado, en más de 3 días: ${lista.slice(0, 3).map(x => `${nombre(x.b)} ${x.b.invoice_no}`).join(', ')}` : 'cada fecha de pago coincide con su depósito conciliado', n ? { label: 'Alinear', on: alinear } : null]]
+    // Cierre de año: un pago del 31-12 que el banco abona el 03-01 cae en el año nuevo; del 15-dic al 31-ene se listan los abonos del 28-dic al 04-ene para revisarlos a mano.
+    const hoyD = new Date(), mesH = hoyD.getMonth() + 1, Yc = mesH === 12 ? year : (mesH === 1 ? year - 1 : null)
+    let cierre = []
+    if (Yc != null) {
+      const ini = `${Yc}-12-28`, fin = `${Yc + 1}-01-04`, corte = `${Yc}-12-31`
+      const ab = RA.ingAbonos.filter(m => { const f = String(m.fecha || '').slice(0, 10); return f >= ini && f <= fin })
+      const antes = ab.filter(m => String(m.fecha).slice(0, 10) <= corte), despues = ab.filter(m => String(m.fecha).slice(0, 10) > corte)
+      const sm = a => a.reduce((x, m) => x + (Number(m.monto) || 0), 0)
+      cierre = [[ab.length === 0, 'Abonos del cierre de año', ab.length ? `${antes.length} hasta el 31-12 (${fmtMill(sm(antes))}) y ${despues.length} desde el 01-01 (${fmtMill(sm(despues))}): revisa la fecha en que el banco los abonó` : 'sin abonos entre el 28-12 y el 04-01', null]]
+    }
+    return [[n === 0, 'Fecha de pago y depósito', n ? `${n} factura${n !== 1 ? 's' : ''} con la fecha de pago distinta de la del abono conciliado en el banco: ${lista.slice(0, 3).map(x => `${nombre(x.b)} ${x.b.invoice_no}`).join(', ')}` : 'cada fecha de pago coincide con su depósito conciliado', n ? { label: 'Alinear', on: alinear } : null], ...cierre]
   }, [RA, billing, clients, year])
 
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
