@@ -118,7 +118,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     { t: 'it', l: 'PPM, impuesto de primera categoría (pago provisional)', v: T1.imp, w: T0.imp },
     { t: 'res', l: 'Resultado después de impuestos (Net income)', v: T1.neto, w: T0.neto, pct: true },
     { t: 'sec', l: 'Partida informativa' },
-    { t: 'inf', l: 'EBITDA, igual al EBIT (sin activo fijo no hay depreciación)', v: T1.res, w: T0.res },
+    { t: 'inf', l: 'EBITDA, igual al EBIT (el activo fijo se lleva a gasto al pagarlo)', v: T1.res, w: T0.res },
   ]
 
   const exp = () => {
@@ -126,7 +126,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     const f = (l, a, b) => [l, ...a, p0(b)]
     descargarXlsx({ nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
       filas: [f('Honorarios facturados', X1.hon, X0.hon), f('Comisiones de externos', X1.rex, X0.rex), f('Total ingresos de explotación (Revenue)', X1.ing, X0.ing), f('Comisiones devengadas', X1.com, X0.com), f('Margen bruto (Gross profit)', X1.mb, X0.mb),
-        ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT)', X1.res, X0.res)] })
+        ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT, el activo fijo se lleva a gasto al pagarlo)', X1.res, X0.res)] })
   }
 
   // PDF: las mismas filas y cifras de la tabla (celdas ya formateadas), todos los meses, carta horizontal.

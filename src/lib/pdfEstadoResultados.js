@@ -52,7 +52,7 @@ export function dibujarEstadoResultados(doc, d, logo, nombre = '') {
     y += alto
   })
   y += 12; draw(LN); doc.setLineWidth(0.7); doc.line(M, y, R, y)
-  txt('Resultado después de impuestos considera solo el PPM. Sin activo fijo no hay depreciación, por lo que el EBITDA es igual al EBIT.', M, y + 12, 7, false, MU)
+  txt('Resultado después de impuestos considera solo el PPM. El activo fijo se lleva a gasto el año en que se paga (depreciación instantánea del régimen), por lo que el EBITDA es igual al EBIT.', M, y + 12, 7, false, MU)
   txt(nombre ? `${nombre}, ${d.emitido}` : d.emitido, R, H - 24, 7, false, MU, 'right')
 }
 

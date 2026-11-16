@@ -152,103 +152,28 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       <h1 style={{fontSize:isDesktop?20:19,fontWeight:800,color:C.accent,letterSpacing:-.5,margin:0}}>Planilla de costos</h1>
       <span style={{flex:1}}/>
       <select value={yr} onChange={e=>setYr(parseInt(e.target.value,10))} style={{fontSize:12,fontWeight:700,border:`1px solid ${C.border}`,borderRadius:20,padding:'6px 10px',background:C.azulBg,color:C.accent,cursor:'pointer'}}>{yrs.map(y=><option key={y} value={y}>{y}</option>)}</select>
-      {seg(scope,setScope,[['ytd','Año'],['mes','Por mes']])}
     </div>
 
-    {scope==='mes'&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'1px 1px 11px'}}>{Array.from({length:maxM},(_,i)=>i+1).map(m=><button key={m} onClick={()=>setSelM(m)} style={{flex:'0 0 auto',fontSize:11,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',whiteSpace:'nowrap',border:`1px solid ${selM===m?C.accent:C.border}`,background:selM===m?C.accent:'#fff',color:selM===m?'#fff':C.muted}}>{MESES[m-1]}</button>)}</div>}
 
     {/* Molde Oficina / Estado de resultados (18-10): 4 tarjetas de color (las mismas de Oficina) + 3 bloques blancos que se abren
         en su cascada (+ − = con redondeo que cuadra) + comparativa mensual como la del Estado de resultados (cada mes:
         Ingresos − Costos − Comisiones = Resultado). Misma fuente: resultadoMes por mes. */}
     {(()=>{
-      const num={fontVariantNumeric:'tabular-nums'}
-      const kLbl={fontSize:isDesktop?10.5:10,fontWeight:700,letterSpacing:isDesktop?.5:.3,textTransform:'uppercase',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}
-      const kt=(k,ic,[bg,fg],lab,val,sub,on,{sel,chev,big=true}={})=>{ const blanco=bg===C.card; return <div key={k} onClick={on} className='pv-c' style={{background:bg,border:`${sel?1.5:1}px solid ${sel?C.accent:(blanco?C.border:'transparent')}`,borderRadius:12,padding:isDesktop?'14px 14px':'11px 10px',display:'flex',gap:isDesktop?12:8,alignItems:'center',minWidth:0,cursor:on?'pointer':'default'}}>
-        {(isDesktop||big)&&<KpiIco n={ic} c={fg} soft={blanco}/>}
-        <div style={{minWidth:0,flex:1}}><div style={{...kLbl,color:fg}}>{lab}</div><div style={{fontSize:isDesktop?(big?26:22):(big?20:18),fontWeight:800,color:bg===C.card||bg===C.overdueBg?fg:C.accent,letterSpacing:-.6,marginTop:2,whiteSpace:'nowrap',...num}}>{val}</div>{sub&&<div style={{fontSize:11,color:fg,opacity:.85,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div>}</div>
-        {chev&&<span style={{color:C.done,fontSize:13}}>{sel?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</div> }
-      const sgn=v=>(v<0?'−':'')+fmtMill(Math.abs(v)), sgnLR=v=>(v<0?'−':'')+fmtMillLR(Math.abs(v))
-      const Q=cascadaResultado({fac:S(m=>R(m,'fac')),rex,cos:costosOper,com:comis,res:resultado}), egr=Q.egr   // partes redondeadas que suman (igual que Oficina)
-      const per=scope==='mes'?`${MESES[selM-1]} ${yr}`:(yr<curY?`${yr} completo`:`ene–${MES_C[maxM-1]} ${yr}`)
-      const estadoP=scope==='mes'?((cmBy[selM]&&cmBy[selM].cerrado)?'cerrado':'provisorio'):(yr<curY?'cerrado':'al día')
-      const grid4={display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}
-      const tRes=resultado>=0?[C.border,C.accent]:[C.card,C.overdueText]
-      const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0,marginTop:8}
-      // Fila de cascada (mismo patrón que el Estado de resultados): signo · etiqueta · cifra; tot = fila «=» gris azulada.
-      const ln=({k,sg='',l,v,tot,on,open:op,est})=><div key={k} onClick={on} className={on?'er-c':undefined} style={{display:'flex',alignItems:'center',gap:7,padding:'8px 14px',borderTop:tot?`1.5px solid ${C.accent}`:`1px solid ${C.bgSoft}`,background:tot?'#EDF1F4':undefined,fontSize:13,cursor:on?'pointer':'default'}}>
-        <span style={{width:12,flexShrink:0,textAlign:'center',fontSize:13,fontWeight:700,color:tot?C.accent:C.muted}}>{sg}</span>
-        <span style={{flex:1,minWidth:0,fontWeight:tot?800:600,color:(on||tot)?C.accent:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{l}{est&&<span style={{fontSize:10,fontWeight:700,color:C.soonText,background:C.soonBg,borderRadius:20,padding:'1px 7px',marginLeft:6}}>est.</span>}{op!==undefined&&<span style={{color:C.textSoft,marginLeft:5}}>{op?<Gl n='chevU'/>:<Gl n='chevD'/>}</span>}</span>
-        <span style={{fontWeight:tot?800:700,minWidth:72,textAlign:'right',whiteSpace:'nowrap',color:tot?C.accent:C.text,...num}}>{v}</span></div>
-      const subF=(k,a,b,v)=><div key={k} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 14px 6px 33px',borderTop:`1px solid ${C.bgSoft}`,background:C.bgSoft,fontSize:12}}><span style={{fontWeight:600,color:C.text,whiteSpace:'nowrap',flexShrink:0}}>{a}</span>{isDesktop&&b?<span style={{flex:1,minWidth:0,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{b}</span>:<span style={{flex:1}}/>}<span style={{fontWeight:600,whiteSpace:'nowrap',...num}}>{v}</span></div>
-      const cab=t=><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>{t} · {per}</span></div>
-      // Ingresos: Facturación propia (+ su apertura emitida − NC − terceros) + Comisión de externos = Ingresos (el subarriendo baja el costo, no suma aquí)
-      const vFac=Q.fac, vRex=Q.rex   // las mismas partes de Oficina: el Facturado al redondeo normal y la comisión de externos chica, exacta
-      const [fFac,fNc,fTer]=redondearPartes([facturacion,nc,terc],1e5,[0])
-      const detIng=<div style={card}>{cab('Ingresos')}
-        {ln({k:'fac',l:'Facturación propia',v:fmtMillLR(vFac),on:e=>{e.stopPropagation();setNcOpen(!ncOpen)},open:ncOpen})}
-        {ncOpen&&<>{subF('em','Emitida en el SII','sin facturas de gastos ni subarriendo',fmtMillLR(fFac+fNc+fTer))}{subF('nc','− Notas de crédito',ncList.length?`${ncList.length} nota${ncList.length!==1?'s':''}`:'',fmtMillLR(fNc))}{fTer?subF('te','− Por cuenta de terceros','se traspasa a externos',fmtMillLR(fTer)):null}</>}
-        {rex!==0&&ln({k:'rex',sg:'+',l:'Comisión de externos',v:fmtMillLR(vRex)})}
-        {ln({k:'ingT',sg:'=',l:'Ingresos',v:fmtMillLR(Q.ing),tot:true})}</div>
-      // Costos: suma de las líneas de resultadoMes de los meses del período (misma fuente que Estado de resultados).
-      const COSL={rem:'Remuneraciones',cot:'Cotizaciones',arr:'Arriendo y GGCC',con:'Contadora',otr:'Otros costos',pre:'Presupuesto de oficina',sub:etiquetaRecuperado(costosOfiRows)+', menor costo',gv:'Gastos varios'}
-      const cosAgg={}; months.forEach(m=>(rmes[m]?.cosLines||[]).forEach(x=>{ cosAgg[x.k]=(cosAgg[x.k]||0)+(Number(x.m)||0) }))
-      const cosK=['rem','cot','arr','con','otr','pre','sub','gv'].filter(k=>cosAgg[k])
-      const cosV=redondearA(cosK.map(k=>cosAgg[k]),Q.cos,1e5)
-      const remEst=months.some(m=>rmes[m]?.remEst&&rmes[m]?.conPlanilla)
-      const detCos=<div style={card}>{cab('Costos')}
-        {cosK.map((k,i)=>k==='sub'?ln({k,sg:'−',l:COSL[k],v:fmtMillLR(-cosV[i])}):ln({k,sg:i?'+':'',l:COSL[k],v:fmtMillLR(cosV[i]),est:k==='rem'&&remEst}))}
-        {ln({k:'cosT',sg:'=',l:'Costos',v:fmtMillLR(cosV.reduce((a,x)=>a+x,0)),tot:true})}
-        {ppm>0&&<div style={{fontSize:12,color:C.muted,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`}}>Pago al SII (F29) {per} <b style={{color:C.accent}}>{fmtMill(ppm)}</b> · anticipo de impuesto, va aparte</div>}</div>
-      // Comisiones (devengadas): por colaborador (comList de cada mes).
-      const comAgg={}; months.forEach(m=>(rmes[m]?.comList||[]).forEach(x=>{ const k=String(x.pid||x.nombre); if(!comAgg[k]) comAgg[k]={nombre:x.nombre,m:0}; comAgg[k].m+=Number(x.m)||0 }))
-      const comL=Object.values(comAgg).sort((a,b)=>b.m-a.m), comV=redondearA(comL.map(x=>x.m),Q.com,1e5)
-      const detCom=<div style={card}>{cab('Comisiones')}
-        {comL.length?<>{comL.map((x,i)=>ln({k:'c'+i,sg:i?'+':'',l:x.nombre,v:fmtMillLR(comV[i])}))}{comL.length>1&&ln({k:'comT',sg:'=',l:'Comisiones',v:fmtMillLR(comV.reduce((a,x)=>a+x,0)),tot:true})}</>
-          :<div style={{padding:'10px 14px',fontSize:12,color:C.muted,borderTop:`1px solid ${C.bgSoft}`}}>Sin comisiones en el período</div>}</div>
-      const blk=open==='cos'||open==='com'?open:(open===null?null:'ing')
-      const B=[{k:'ing',ic:'tEntra',lab:'Ingresos',val:fmtMill(Q.ing)},{k:'cos',ic:'wallet',lab:'Costos',val:Q.cos?'−'+fmtMill(Q.cos):'$0'},{k:'com',ic:'tPct',lab:'Comisiones',val:Q.com?'−'+fmtMill(Q.com):'$0'}]
-      const det=k=>k==='ing'?detIng:k==='cos'?detCos:detCom
-      const bloques=isDesktop
-        ? <><div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,marginTop:12}}>{B.map(b=>kt(b.k,b.ic,[C.card,C.accent],b.lab,b.val,null,()=>setOpen(blk===b.k?null:b.k),{sel:blk===b.k,chev:true,big:false}))}</div>{blk&&det(blk)}</>
-        : <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:12}}>{B.map(b=><Fragment key={b.k}>{kt(b.k,b.ic,[C.card,C.accent],b.lab,b.val,null,()=>setOpen(blk===b.k?null:b.k),{sel:blk===b.k,chev:true,big:false})}{blk===b.k&&det(b.k)}</Fragment>)}</div>
-      // Comparativa mensual: por mes, Ingresos − Costos − Comisiones = Resultado (redondeo que cuadra en cada mes; el resultado fijo).
-      const allM=Array.from({length:maxM},(_,i)=>i+1)
-      const col=ms=>{ const ing=ms.reduce((a,m)=>a+R(m,'ing'),0), cos=ms.reduce((a,m)=>a+R(m,'cos'),0), com=ms.reduce((a,m)=>a+R(m,'com'),0), res=ms.reduce((a,m)=>a+R(m,'res'),0); const [r,c,k]=redondearPartes([res,cos,com],1e5,[0]); return {ing:r+c+k,cos:c,com:k,res:r,margen:margenPct(res,ing)} }
-      const cols=allM.map(m=>({m,...col([m])})), tot=col(allM)
-      const pctM=v=>v==null?'—':`${v.toLocaleString('es-CL',{maximumFractionDigits:1})} %`
-      const th={fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent,background:C.bgSoft,padding:'7px 8px',textAlign:'right',whiteSpace:'nowrap'}
-      const td={padding:'7px 8px',textAlign:'right',borderTop:`1px solid ${C.bgSoft}`,whiteSpace:'nowrap',fontSize:12,...num}
-      const dot=m=><span title={mesEstado(m)} style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:EST_COL[mesEstado(m)],marginRight:4,verticalAlign:'middle'}}/>
-      const filaT=(lab,get,neg)=><tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:600}}>{lab}</td>,...cols.map(c=>{ const v=get(c); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,cursor:'pointer',color:v?C.text:C.done}}>{v?(neg?'−':'')+fmtMillLR(v):'—'}</td> }),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{(neg&&get(tot)?'−':'')+fmtMillLR(get(tot))}</td>]}</tr>
-      const tabla=<div style={{...card,marginTop:0}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Comparativa mensual · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{nCerrados>0?`${nCerrados} ${nCerrados===1?'mes cerrado':'meses cerrados'} · `:''}toca un mes para editar</span></div>
-        <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%'}}><thead><tr><th style={{...th,textAlign:'left',paddingLeft:14}}/>{cols.map(c=><th key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...th,cursor:'pointer'}}>{dot(c.m)}{MES_C[c.m-1]}</th>)}<th style={th}>{yr}</th></tr></thead>
-        <tbody>{filaT('Ingresos',c=>c.ing,false)}{filaT('− Costos',c=>c.cos,true)}{filaT('− Comisiones',c=>c.com,true)}
-          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`}}>= Resultado</td>,...cols.map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:800,background:bg,color:fg,cursor:'pointer',borderTop:`1.5px solid ${C.accent}`}}>{sgnLR(c.res)}</td> }),<td key='t' style={{...td,fontWeight:800,color:tot.res>=0?C.greenText:C.overdueText,borderTop:`1.5px solid ${C.accent}`,borderLeft:`1px solid ${C.border}`}}>{sgnLR(tot.res)}</td>]}</tr>
-          <tr>{[<td key='l' style={{...td,textAlign:'left',paddingLeft:14,fontWeight:700}}>Margen</td>,...cols.map(c=><td key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{...td,fontWeight:700,fontSize:12,cursor:'pointer',color:tonoMargen(c.margen)[1]}}>{pctM(c.margen)}</td>),<td key='t' style={{...td,fontWeight:800,borderLeft:`1px solid ${C.border}`}}>{pctM(tot.margen)}</td>]}</tr>
-        </tbody></table></div></div>
-      // Celular (como el Estado de resultados): un mes por línea, del más nuevo al más antiguo; tocar abre su planilla.
-      const lista=<div style={{...card,marginTop:0}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'10px 14px 8px'}}><span style={{...kLbl,color:C.accent}}>Mes a mes · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>toca para editar</span></div>
-        {[...cols].reverse().map(c=>{ const [bg,fg]=tonoMargen(c.margen); return <div key={c.m} onClick={()=>abrirEditor(c.m)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
-          <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{dot(c.m)}{MESES[c.m-1]}</span>
-          <span style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'2px 8px',background:bg,color:fg,minWidth:58,textAlign:'center',whiteSpace:'nowrap',...num}}>{pctM(c.margen)}</span>
-          <span style={{fontSize:13,fontWeight:800,minWidth:70,textAlign:'right',whiteSpace:'nowrap',color:c.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(c.res)}</span></div> })}
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}><span style={{flex:1,fontSize:13,fontWeight:800,color:C.accent}}>{yr}</span><span style={{fontSize:11,fontWeight:700,color:C.accent,...num}}>{pctM(tot.margen)}</span><span style={{fontSize:13,fontWeight:800,minWidth:70,textAlign:'right',color:tot.res>=0?C.greenText:C.overdueText,...num}}>{sgnLR(tot.res)}</span></div></div>
-      return <>
-        <div style={grid4}>
-          {kt('ing','tEntra',[C.soonBg,C.soonText],'Ingresos',fmtMill(Q.ing),'facturación propia y externos',()=>setOpen('ing'))}
-          {kt('egr','wallet',[C.overdueBg,C.overdueText],'Egresos',egr?'−'+fmtMill(egr):'$0','costos + comisiones',()=>setOpen('cos'))}
-          {kt('res','chart',tRes,'Resultado',sgn(Q.res),`${per} · ${estadoP}${estim?' · incl. estimados':''}`)}
-          {kt('mar','tPct',[C.card,C.accent],'Margen',margenV==null?'—':`${margenV.toLocaleString('es-CL',{maximumFractionDigits:1})} %`,'sobre los ingresos')}
-        </div>
-        {bloques}
-        <div style={{marginTop:14}}>{isDesktop?tabla:lista}</div>
-      </>
+      // Planilla de costos: un mes por línea (el más reciente primero); tocar un mes abre su editor. El resultado del año, sus aperturas y la comparativa mensual viven en el Estado de resultados.
+      const ETQ={cerrado:'Cerrado',provisorio:'Provisorio',estimado:'Estimado',abierto:'Abierto',vacio:'Sin datos'}
+      return <div style={card}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'12px 16px 8px'}}><span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.accent}}>Costos por mes · {yr}</span><span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>toca un mes para editar</span></div>
+        {Array.from({length:maxM},(_,i)=>maxM-i).map(m=>{ const est=mesEstado(m); return <div key={m} onClick={()=>abrirEditor(m)} className='er-c' style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderTop:`1px solid ${C.bgSoft}`,cursor:'pointer'}}>
+          <span style={{width:7,height:7,borderRadius:'50%',background:EST_COL[est],flexShrink:0}}/>
+          <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,color:C.accent,whiteSpace:'nowrap'}}>{MESES[m-1]}</span>
+          <span style={{fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{ETQ[est]}</span>
+          <span style={{fontSize:13,fontWeight:700,minWidth:72,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:C.text}}>{fmtMill(R(m,'cos'))}</span>
+          <Gl n='chevron'/></div> })}
+      </div>
     })()}
     </>}
 
-    {(()=>{
+    {soloControl&&(()=>{
       // Presupuesto vs real, en costos BRUTOS por categoría. Presupuesto = Costos de oficina (sin PPM, sin el subarriendo ni los gastos recuperados, vigente por mes con desde/monto_prev).
       // Real = las mismas líneas de costo de resultadoMes SIN la línea de subarriendo (planilla + banco + gastos varios): cuadra con «Costos de operación» más el subarriendo (que baja ese total).
       const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
@@ -349,7 +274,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       </>
     })()}
 
-    {(()=>{
+    {soloControl&&(()=>{
       const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
       const allM=Array.from({length:cerM},(_,i)=>i+1)
       const sinEnl=(ventas||[]).filter(d=>String(d.fecha_emision||'').slice(0,4)===String(yr)&&[33,34,61].includes(Number(d.tipo_dte))&&!d.billing_id)
