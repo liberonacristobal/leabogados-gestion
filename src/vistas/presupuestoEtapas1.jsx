@@ -7,7 +7,6 @@ import { CostoEmpresaBloque, calcularAumento } from '../lib/costoEmpresaBloque.j
 import { ufDelDia, finMesOHoy } from '../lib/compartido.jsx'
 import { TONO_COMP, ComoSeCalcula } from './presupuestoMetas.jsx'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
-import { ETIQ_DESTINO } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { lineasTocadas } from '../../supabase/functions/_shared/arrastreAnio.js'
 
 const ym = (y, i) => `${y}-${String(i + 1).padStart(2, '0')}`
@@ -320,14 +319,13 @@ export function Costos({ X }) {
           {materias.map(materia)}
           <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
           {d.impuestos && d.impuestos.nF29 > 0
-            ? <>
-              <Fila tot sin nombre='Impuestos mensuales · pago al SII' valor={mm(e.ppm + d.impuestos.retencionPropiaAnual + d.impuestos.unicoAnual)} />
+            ? (() => { const retContadora = d.impuestos.externos.filter((x) => x.destino === 'contabilidad').reduce((a, x) => a + x.anual, 0); return <>
+              <Fila tot sin nombre='Impuestos mensuales · pago al SII' valor={mm(e.ppm + d.impuestos.retencionPropiaAnual + retContadora)} />
               <Fila nombre='PPM' peq={`${d.impuestos.nF29} F29 declarados, ${fmtFechaDMY(d.impuestos.desde + '-01').slice(3)} a ${fmtFechaDMY(d.impuestos.hasta + '-01').slice(3)} · descuenta el impuesto anual`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />
-              <Fila nombre='Retención de honorarios' peq='costo del honorario bruto · la de externos se muestra y no se suma' valor={mm(d.impuestos.retencionPropiaAnual)}>
-                {[...d.impuestos.propias.map((x) => ({ n: x.persona, v: x.anual, t: `boleta ${mp(x.bruto)} · líquido ${mp(x.liquido)} · costo ${mp(x.retencionMes)} al mes` })), ...d.impuestos.externos.map((x) => ({ n: x.persona, v: x.anual, t: ETIQ_DESTINO[x.destino] || 'por clasificar' }))].map((x) => <div key={x.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 30px', borderTop: `1px solid ${C.border}`, fontSize: 12 }}><span style={{ minWidth: 0, flex: 1 }}><b style={{ color: C.text }}>{x.n}</b><span style={{ display: 'block', color: C.muted }}>{x.t}</span></span><b style={{ color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{mm(x.v)}</b></div>)}
+              <Fila nombre='Retención de honorarios' peq='procuradora y contadora' valor={mm(d.impuestos.retencionPropiaAnual + retContadora)}>
+                {[...d.impuestos.propias.map((x) => ({ n: x.persona, v: x.anual, t: `boleta ${mp(x.bruto)} · líquido ${mp(x.liquido)} · costo ${mp(x.retencionMes)} al mes` })), ...d.impuestos.externos.filter((x) => x.destino === 'contabilidad').map((x) => ({ n: x.persona, v: x.anual, t: 'contadora' }))].map((x) => <div key={x.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 30px', borderTop: `1px solid ${C.border}`, fontSize: 12 }}><span style={{ minWidth: 0, flex: 1 }}><b style={{ color: C.text }}>{x.n}</b><span style={{ display: 'block', color: C.muted }}>{x.t}</span></span><b style={{ color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{mm(x.v)}</b></div>)}
               </Fila>
-              <Fila nombre='Impuesto único de trabajadores' peq={`costo de remuneraciones · liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12`} valor={mm(d.impuestos.unicoAnual)} />
-            </>
+            </> })()
             : <Fila nombre='Impuestos y patentes' peq={`${TXc('pagoMensual')} · pagado hoy`} valor={mm(e.ppm)} onClick={() => X.irEscTab('imp')} />}
           {subIt && materia({ m: subIt[0].n, it: [subIt], t27: val(subIt[0], k), t26: costoAnualBase(subIt[0], Yb) })}
           <Fila tot sin nombre='Con comisiones' valor={mm(e.costos + e.terc)} />
