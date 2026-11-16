@@ -57,10 +57,17 @@ test('la calculadora de aumento es un solo bloque y está en las dos pantallas d
   assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /<CostoEmpresaBloque/.test(x.t)))
   assert.ok(leer('src/App.jsx').some((x) => /<CostoEmpresaBloque/.test(x.t)))
   assert.ok(leer('src/lib/costoEmpresaBloque.jsx').some((x) => /remuneracionDeLiquido/.test(x.t)))
-  assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /Aumento al equipo/.test(x.t)))
+  assert.ok(leer('src/vistas/presupuestoEtapas1.jsx').some((x) => /Reajuste al equipo/.test(x.t)))
 })
 
 test('la calculadora de Costos de Oficina compara con el monto vigente de la línea, no con el campo «Antes»', () => {
   const l = leer('src/App.jsx').filter((x) => /const hoyL=/.test(x.t))
   assert.equal(l.length, 1); assert.ok(/const hoyL=Number\(r\.monto\)/.test(l[0].t)); assert.ok(!/ef\.prev/.test(l[0].t))
+})
+
+test('presupuesto de costos: «Reajuste» es lo que se decide y «Variación» la columna 2027 contra 2026; no hay palanca de alza ni «aumento propio»', () => {
+  const v = leer('src/vistas/presupuestoEtapas1.jsx').map((x) => x.t).join('\n')
+  assert.ok(/<span style=\{\{ textAlign: 'right' \}\}>Variación<\/span>/.test(v)); assert.ok(/<div style=\{eti\}>Reajuste<\/div>/.test(v))
+  assert.ok(!/Aumento propio/.test(v)); assert.ok(!/Alza de costos <Stp/.test(v)); assert.ok(!/Aumento al equipo/.test(v))
+  assert.ok(/Cada 1 % de reajuste general/.test(v))
 })

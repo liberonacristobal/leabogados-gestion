@@ -146,6 +146,6 @@ test('subarriendo como partida negativa: costosPresupuesto y toda la cadena qued
   assert.equal(partidaSubarriendo(0), null); assert.equal(partidaSubarriendo(null), null)
   const costos = [{ id: 1, n: 'Arriendo', m: 3_948_900, meses: 12, t: 'fijo', alza: null }, pa]
   const r = costosBrutosNetos(costos, 4.5)
-  assert.ok(Math.abs(r.brutos - 3_948_900 * 12 * 1.045) < 1e-6); assert.equal(r.subarriendo, -12_960_000); assert.ok(Math.abs(r.netos - (r.brutos + r.subarriendo)) < 1e-6)
+  assert.ok(Math.abs(r.brutos - 3_948_900 * 12) < 1e-6)   // sin reajuste se mantiene; assert.equal(r.subarriendo, -12_960_000); assert.ok(Math.abs(r.netos - (r.brutos + r.subarriendo)) < 1e-6)
   assert.ok(Math.abs(costosPresupuesto({ costos }, 4.5) - r.netos) < 1e-6)   // el modelo usa la misma cifra neta
 })

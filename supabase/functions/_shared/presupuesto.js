@@ -125,7 +125,7 @@ export function proyectarUF(ufDic, reajustePct, mesIdx) {
 
 /** Presupuesto de costos del año: partidas × meses × (1 + alza propia o la del escenario). @param {EstadoPresupuesto} st @param {number} alza */
 export function costosPresupuesto(st, alza) {
-  return sum(st.costos.map((c) => num(c.m) * num(c.meses) * (1 + (c.alza == null ? alza : num(c.alza)) / 100)))
+  return sum(st.costos.map((c) => num(c.m) * num(c.meses) * (1 + (c.alza == null ? 0 : num(c.alza)) / 100)))
 }
 
 /** UF de cada mes, facturado base a crecimiento 0 (F0), peso de diciembre en ese facturado y facturado base de diciembre: lo que comparten todos los cálculos. @param {BasePresupuesto} base @param {EstadoPresupuesto} st */
@@ -325,8 +325,8 @@ export function reservaRecomendada(o) {
 }
 
 // ── Costos: monto 2027 y aumento enlazados en los dos sentidos; sueldos por persona ──
-/** Alza que se aplica a una partida: la propia (puede ser negativa) o la del escenario. @param {PartidaCosto} c @param {number} alzaEsc */
-export const alzaEfectiva = (c, alzaEsc) => (c.alza == null ? alzaEsc : num(c.alza))
+/** Reajuste de una partida: el propio (puede ser negativo); sin reajuste el costo se mantiene. El alza del escenario ya no se aplica a los costos (queda guardada, sin efecto). @param {PartidaCosto} c @param {number} [_alzaEsc] */
+export const alzaEfectiva = (c, _alzaEsc) => (c.alza == null ? 0 : num(c.alza))
 /** Monto de la partida en el año del presupuesto. @param {PartidaCosto} c @param {number} alzaEsc */
 export const monto27 = (c, alzaEsc) => num(c.m) * num(c.meses) * (1 + alzaEfectiva(c, alzaEsc) / 100)
 /**
@@ -795,7 +795,7 @@ export const NOMBRE_SUBARRIENDO = 'Subarriendo y gastos recuperados'
 export function partidaSubarriendo(anual) { const a = Math.round(num(anual)); return a > 0 ? { id: ID_SUBARRIENDO, n: NOMBRE_SUBARRIENDO, m: -Math.round(a / 12), meses: 12, t: 'fijo', alza: 0, auto: true } : null }
 /** Costos brutos (partidas positivas), subarriendo (negativas) y netos de un presupuesto de costos 2027 con el alza del escenario. @param {PartidaCosto[]} costos @param {number} alza */
 export function costosBrutosNetos(costos, alza) {
-  const v = (/** @type {PartidaCosto} */ c) => num(c.m) * num(c.meses) * (1 + (c.alza == null ? alza : num(c.alza)) / 100)
+  const v = (/** @type {PartidaCosto} */ c) => num(c.m) * num(c.meses) * (1 + (c.alza == null ? 0 : num(c.alza)) / 100)
   const brutos = (costos || []).filter((c) => num(c.m) >= 0).reduce((a, c) => a + v(c), 0), sub = (costos || []).filter((c) => num(c.m) < 0).reduce((a, c) => a + v(c), 0)
   return { brutos, subarriendo: sub, netos: brutos + sub }
 }

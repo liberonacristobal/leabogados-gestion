@@ -32,21 +32,24 @@ test('modelo: cada mes parte de la base en UF y la cascada cierra al peso', () =
   }
 })
 
-test('modelo: más crecimiento da más retiros; más alza de costos, menos; y el impuesto no es negativo con pérdida', () => {
+test('modelo: más crecimiento da más retiros; un reajuste de costos, menos; el alza guardada del escenario no cambia nada; y el impuesto no es negativo con pérdida', () => {
   const st = estadoInicial({ costos })
   const a = modeloPresupuesto(base, st).esc.base.retiros
   st.p.base.g += 10
   assert.ok(modeloPresupuesto(base, st).esc.base.retiros > a)
   st.p.base.g -= 10; st.p.base.alza += 10
+  assert.equal(modeloPresupuesto(base, st).esc.base.retiros, a)   // el alza del escenario quedó sin efecto: los costos se mantienen salvo reajuste de la partida
+  st.p.base.alza -= 10; st.costos[0].alza = 10
   assert.ok(modeloPresupuesto(base, st).esc.base.retiros < a)
   const perdida = estadoInicial({ costos: [{ id: 9, n: 'Enorme', m: 90_000_000, meses: 12, t: 'fijo', alza: null }] })
   const e = modeloPresupuesto(base, perdida).esc.base
   assert.ok(e.base < 0); assert.equal(e.idpc, 0); assert.equal(e.retiros, 0)
 })
 
-test('modelo: la alza propia de una partida manda sobre la del escenario y los meses prorratean', () => {
+test('modelo: sin reajuste la partida se mantiene, el reajuste propio la sube y los meses prorratean; el alza del escenario no cuenta', () => {
   const st = estadoInicial({ costos: [{ id: 0, n: 'Nuevo ingreso', m: 1_000_000, meses: 6, t: 'fijo', alza: null }] })
-  assert.ok(Math.abs(modeloPresupuesto(base, st).esc.base.costos - 6_000_000 * 1.045) < 1e-6)
+  assert.ok(Math.abs(modeloPresupuesto(base, st).esc.base.costos - 6_000_000) < 1e-6)
+  st.p.base.alza = 20; assert.ok(Math.abs(modeloPresupuesto(base, st).esc.base.costos - 6_000_000) < 1e-6)
   st.costos[0].alza = 10
   assert.ok(Math.abs(modeloPresupuesto(base, st).esc.base.costos - 6_000_000 * 1.1) < 1e-6)
 })

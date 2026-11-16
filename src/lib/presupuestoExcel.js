@@ -34,7 +34,7 @@ export function hojasPresupuesto(P) {
       [],
       ['Supuesto', ...ESC.map(([, n]) => n)],
       ['Crecimiento real (%)', ...ESC.map(([k]) => N(est.p[k].g, '0.0'))],
-      ['Alza de costos (%)', ...ESC.map(([k]) => N(est.p[k].alza, '0.0'))],
+      ['Reajuste general (%)', ...ESC.map(() => N(0, '0.0'))],
       ['Comisiones (% de lo cobrado)', ...ESC.map(([k]) => N(est.p[k].terc, '0.0'))],
       ['Días de cobro', ...ESC.map(([k]) => N(est.p[k].dias, '0'))],
       ['Facturado / vendido bruto (%) · metas', N(P.ratio ?? 0, '0.0')],

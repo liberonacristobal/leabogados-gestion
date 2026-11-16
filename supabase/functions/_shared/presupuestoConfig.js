@@ -33,9 +33,9 @@ export const CONFIG_DEFECTO = /** @type {any} */ ({
   anclaInicial: 'retiros',
   /** Escenarios de partida y sus palancas: criterio inicial editable (crecimiento) o dato real del año anterior (comisiones, días de cobro, que reemplazan al de partida). La clave `meta` se mantiene por compatibilidad con lo guardado. */
   escenarios: [
-    { k: 'prudente', n: 'Prudente', t: 0, p: { g: 0, alza: 6, terc: 24.4, dias: 35 } },
-    { k: 'base', n: 'Base', t: 1, p: { g: 10, alza: 4.5, terc: 24.4, dias: 24 } },
-    { k: 'meta', n: 'Optimista', t: 2, p: { g: 25, alza: 4.5, terc: 24.4, dias: 24 } },
+    { k: 'prudente', n: 'Prudente', t: 0, p: { g: 0, alza: 0, terc: 24.4, dias: 35 } },
+    { k: 'base', n: 'Base', t: 1, p: { g: 10, alza: 0, terc: 24.4, dias: 24 } },
+    { k: 'meta', n: 'Optimista', t: 2, p: { g: 25, alza: 0, terc: 24.4, dias: 24 } },
   ],
   /** Escenario cuyos supuestos usan las metas (si no existe, el primero de la lista). */
   escenarioMetas: 'base',

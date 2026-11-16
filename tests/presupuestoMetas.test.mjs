@@ -126,7 +126,7 @@ test('reserva recomendada: 3 meses de costos con un aumento gradual por trimestr
 
 test('costos: el monto 2027 y el aumento se enlazan en los dos sentidos, también con rebajas', () => {
   const c = costos[2], alzaEsc = 4.5
-  cerca(monto27(c, alzaEsc), 1_600_000 * 12 * 1.045, 1e-6)
+  cerca(monto27(c, alzaEsc), 1_600_000 * 12, 1e-6)                                                     // sin reajuste la partida se mantiene; el alza del escenario no cuenta
   const p = fijarMonto27(c, 1_600_000 * 12 * 1.2); cerca(p.alza, 20, 1e-9)                           // monto → %
   cerca(monto27({ ...c, ...p }, alzaEsc), 1_600_000 * 12 * 1.2, 1e-6)                                 // % → mismo monto
   const rebaja = fijarMonto27(c, 1_600_000 * 12 * 0.9); cerca(rebaja.alza, -10, 1e-9)
@@ -166,9 +166,9 @@ test('sueldos y retiros de los socios: el mismo dinero por socio, sin doble cont
   assert.equal(esDePersona('Asociada senior · Mdylhud', 'Mdylhud'), true); assert.equal(esDePersona('Cristóbal Liberona', 'Cristobal'), true); assert.equal(esDePersona('Martín', 'Erasmo'), false)
   const st = estado(), m = modeloPresupuesto(base, st), e = m.esc.base
   const r = sueldosYRetiros({ socios: ['Cristóbal', 'Erasmo'], costos: st.costos, alza: st.p.base.alza, retiros: e.retiros, real: { sueldos: { Cristóbal: 24e6, Erasmo: 23e6 }, retiros: { Cristóbal: 50e6, Erasmo: 50e6 } } })
-  cerca(r.filas[0].sueldo27, 3_000_000 * 12 * 1.045, 1e-6)                                            // sigue el alza del escenario
+  cerca(r.filas[0].sueldo27, 3_000_000 * 12, 1e-6)                                                     // sin reajuste se mantiene
   cerca(r.filas[1].sueldo27, 3_000_000 * 12, 1e-6)                                                    // alza propia 0 %
-  cerca(r.filas[0].leyes27, 900_000 * 12 * 1.045, 1e-6)                                               // leyes sociales: costo de la oficina
+  cerca(r.filas[0].leyes27, 900_000 * 12, 1e-6)                                                        // leyes sociales: costo de la oficina
   cerca(r.filas[0].ret27 + r.filas[1].ret27, e.retiros, 1e-6); cerca(r.filas[0].ret27, e.retiros / 2, 1e-6)
   cerca(r.total.tot27, r.total.sueldo27 + r.total.ret27, 1e-6); cerca(r.total.tot26, 24e6 + 23e6 + 100e6, 1e-6)
   const antes = JSON.stringify(m.esc.base)
@@ -187,7 +187,7 @@ test('migración v3 → v4: las etapas desde la 4.ª se desplazan, se agregan me
   assert.equal(m4.v, 7); assert.deepEqual(m4.hecho, [3]); assert.deepEqual(m4.metas, { ancla: 'caja', valor: 5, ratio: 70 }); assert.equal(m4.reservaIni, 10); assert.equal(m4.ppmAnual, 0)
   assert.equal(migrarEstado(null).v, 7)
   assert.equal(estadoInicial({ costos }).v, 7); assert.deepEqual(estadoInicial({ costos }).arrastre, { ajustes: {}, extras: [] })
-  assert.equal(supuestosMetas(estado()).alza, 4.5)
+  assert.equal(supuestosMetas(estado()).alza, 0)                                                      // sin alza por defecto
   // v5 → v6: el bloque del Arrastre aparece vacío; uno con ajustes se conserva y se limpia
   const v5 = migrarEstado({ v: 5, esc: 'base', hecho: [1], notas: {}, p: {}, costos: [], escs: [{ k: 'base', n: 'Base', t: 0 }] }, 2027)
   assert.equal(v5.v, 7); assert.deepEqual(v5.arrastre, { ajustes: {}, extras: [] })

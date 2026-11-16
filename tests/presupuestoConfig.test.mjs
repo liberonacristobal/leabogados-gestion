@@ -16,20 +16,21 @@ const r0 = (x) => Math.round(x)
 
 test('regresión: con un 15 % de reserva fijado (borradores guardados), el modelo da las mismas cifras de antes (pesos redondeados)', () => {
   const st = estado({ reserva: 15 }), m = modeloPresupuesto(base, st)
+  // Valores recalculados el 16-11-2026 al quitar el alza por defecto: los costos se mantienen (72.000.000) salvo reajuste de la partida; ventas, caja y comisiones no cambian.
   const dorado = {
-    prudente: { fact: 162860452, caja: 163552452, costos: 76320000, terc: 39906798, base: 47325653, idpc: 5915707, post: 41409947, retiros: 35198455, reserva: 6211492, reservaCierre: 36211492, saldo: 4715707, dCob: -692000 },
-    base: { fact: 179146497, caja: 177947397, costos: 75240000, terc: 43419165, base: 59288232, idpc: 7411029, post: 51877203, retiros: 44095622, reserva: 7781580, reservaCierre: 37781580, saldo: 6211029, dCob: 1199100 },
-    meta: { fact: 203575564, caja: 199799314, costos: 75240000, terc: 48751033, base: 75808282, idpc: 9476035, post: 66332247, retiros: 56382410, reserva: 9949837, reservaCierre: 39949837, saldo: 8276035, dCob: 3776250 },
+    prudente: { fact: 162860452, caja: 163552452, costos: 72000000, terc: 39906798, base: 51645653, idpc: 6455707, post: 45189947, retiros: 38411455, reserva: 6778492, reservaCierre: 36778492, saldo: 5255707, dCob: -692000 },
+    base: { fact: 179146497, caja: 177947397, costos: 72000000, terc: 43419165, base: 62528232, idpc: 7816029, post: 54712203, retiros: 46505372, reserva: 8206830, reservaCierre: 38206830, saldo: 6616029, dCob: 1199100 },
+    meta: { fact: 203575564, caja: 199799314, costos: 72000000, terc: 48751033, base: 79048282, idpc: 9881035, post: 69167247, retiros: 58792160, reserva: 10375087, reservaCierre: 40375087, saldo: 8681035, dCob: 3776250 },
   }
   for (const k of Object.keys(dorado)) for (const [campo, v] of Object.entries(dorado[k])) assert.equal(r0(m.esc[k][campo]), v, `${k}.${campo}`)
   const ch = cadenaMeta(base, st, 12, 66)
-  assert.deepEqual([r0(ch.fact), r0(ch.caja), r0(ch.retiros), r0(ch.ventas)], [182403706, 180860986, 45733861, 276369251])
+  assert.deepEqual([r0(ch.fact), r0(ch.caja), r0(ch.retiros), r0(ch.ventas)], [182403706, 180860986, 48143611, 276369251])
   const inv = metasDesdeComponente(base, st, { componente: 'retiros', valor: 50_000_000, ratio: 66 })
-  assert.deepEqual([Math.round(inv.g * 1000) / 1000, r0(inv.fact), r0(inv.ventas)], [17.208, 190885810, 289220924])
+  assert.deepEqual([Math.round(inv.g * 1000) / 1000, r0(inv.fact), r0(inv.ventas)], [14.266, 186094651, 281961592])
   assert.deepEqual([tasaIDPCLegal(2027), tasaIDPCLegal(2028), tasaIDPCLegal(2030), tasaPPMLegal(2027, 1000), tasaPPMLegal(2027, 60000), tasaPPMLegal(2029, 1000), tasaPPMLegal(2029, 60000)], [12.5, 15, 25, 0.125, 0.25, 0.25, 0.5])
   const rr = reservaRecomendada({ costosAnio: m.esc.base.costos, reservaIni: st.reservaIni, reservaAnio: m.esc.base.reserva, post: m.esc.base.post })
-  assert.deepEqual([r0(rr.objetivo), r0(rr.porTrimestre), rr.mesesCierre], [18810000, 0, 6.025770404962991])
-  assert.deepEqual(st.p, { prudente: { g: 0, alza: 6, terc: 24.4, dias: 40 }, base: { g: 10, alza: 4.5, terc: 24.4, dias: 30 }, meta: { g: 25, alza: 4.5, terc: 24.4, dias: 30 } })
+  assert.deepEqual([r0(rr.objetivo), r0(rr.porTrimestre), rr.mesesCierre], [18000000, 0, 6.367805073186325])
+  assert.deepEqual(st.p, { prudente: { g: 0, alza: 0, terc: 24.4, dias: 40 }, base: { g: 10, alza: 0, terc: 24.4, dias: 30 }, meta: { g: 25, alza: 0, terc: 24.4, dias: 30 } })
   assert.deepEqual([st.reservaIni, st.tasaIDPC, st.ppmAnual, st.reserva, st.reajusteUF], [30_000_000, 12.5, 1_200_000, 15, 3.5])
   assert.deepEqual(componentesDe().map((x) => x[1]), ['Vendido', 'Facturado', 'Cobrado', 'Presupuesto de costos', 'Resultado', 'Retiros'])
   assert.deepEqual(estado({ cfg: configPresupuesto(), reserva: 15 }), st)                              // pasar la configuración por defecto explícita no cambia nada

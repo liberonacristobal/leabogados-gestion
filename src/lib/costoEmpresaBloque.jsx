@@ -54,7 +54,7 @@ export function CostoEmpresaBloque({ entrada, esBoleta, D, meses = 12, anio }) {
   const inp = { border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 9px', fontSize: 13, width: 92, color: C.accent, fontWeight: 600, background: C.card, textAlign: 'right' }
   const chip = (v, t) => <span key={v} onClick={() => setModoB(v)} style={{ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${modoB === v ? C.accent : C.border}`, background: modoB === v ? C.accent : C.card, color: modoB === v ? '#fff' : C.muted, whiteSpace: 'nowrap' }}>{t}</span>
   return <div style={{ gridColumn: '1 / -1', border: `2px solid ${C.accent}`, borderRadius: 12, overflow: 'hidden', background: C.card }}>
-    <div style={{ padding: '7px 14px', background: C.accent, color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase' }}>Costo empresa con el aumento</div>
+    <div style={{ padding: '7px 14px', background: C.accent, color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase' }}>Costo empresa con el reajuste</div>
     {esBoleta && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 14px 4px' }}>{chip('boleta', 'Boleta de honorarios')}{chip('contrato', 'Contrato de trabajo')}</div>}
     {esBoleta && modoB === 'contrato' && <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', padding: '6px 14px 8px' }}>
       <div><div style={{ fontSize: 10, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 }}>AFP, tasa</div><input value={afp} onChange={e => setAfp(e.target.value)} style={inp} /></div>
@@ -62,7 +62,7 @@ export function CostoEmpresaBloque({ entrada, esBoleta, D, meses = 12, anio }) {
     {!calc ? <div style={{ padding: '10px 14px', fontSize: 12, color: C.muted }}>Falta la tabla del impuesto único del SII o la AFP para calcular el contrato</div> : <>
     {D
       ? <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 120px 130px 110px', padding: '0 14px' }}>
-        {['Por mes', modo === 'contrato' ? 'Hoy, boleta' : 'Hoy', modo === 'contrato' ? 'Con contrato' : 'Con el aumento', 'Diferencia'].map((h, i) => <span key={h} style={{ ...celda, borderTop: 'none', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, textAlign: i ? 'right' : 'left' }}>{h}</span>)}
+        {['Por mes', modo === 'contrato' ? 'Hoy, boleta' : 'Hoy', modo === 'contrato' ? 'Con contrato' : 'Con el reajuste', 'Diferencia'].map((h, i) => <span key={h} style={{ ...celda, borderTop: 'none', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, textAlign: i ? 'right' : 'left' }}>{h}</span>)}
         {filas.flatMap(([s, l, k, c]) => {
           const tot = c === 'tot' || c === 'res', bg = c === 'res' ? C.grisBg : undefined, bt = c === 'tot' ? `1px solid ${C.accent}` : celda.borderTop
           return [
@@ -76,10 +76,10 @@ export function CostoEmpresaBloque({ entrada, esBoleta, D, meses = 12, anio }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: C.muted }}><span>{s ? s + ' ' : ''}{l}</span><b style={{ color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(nuevo[k])}</b></div>
         <div style={{ fontSize: 11, color: C.textSoft }}>Hoy {fmt(hoy[k])}, {sg(nuevo[k] - hoy[k])}</div></div>)}</div>}
     <div style={{ padding: '9px 14px', borderTop: `1px solid ${C.bgSoft}`, fontSize: 12, color: C.muted, display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {modo !== 'boleta' && <span>Sueldo base {fmt(calc.base.hoy.sueldoBase)} y gratificación {fmt(calc.base.hoy.gratificacion)} hoy; con el aumento {fmt(calc.base.nuevo.sueldoBase)} y {fmt(calc.base.nuevo.gratificacion)}</span>}
+      {modo !== 'boleta' && <span>Sueldo base {fmt(calc.base.hoy.sueldoBase)} y gratificación {fmt(calc.base.hoy.gratificacion)} hoy; con el reajuste {fmt(calc.base.nuevo.sueldoBase)} y {fmt(calc.base.nuevo.gratificacion)}</span>}
       {modo !== 'liquidacion' && hoy.tasa != null && <span>Retención de la boleta: {String((hoy.tasa * 100).toFixed(2)).replace('.', ',')} % hoy{nuevo.tasa != null && nuevo.tasa !== hoy.tasa ? `, ${String((nuevo.tasa * 100).toFixed(2)).replace('.', ',')} % con el aumento` : ''}</span>}
       <span>Costo empresa{anio ? ` de ${anio}` : ''}, {meses} meses: <b style={{ color: C.accent }}>{fmt(nuevo.costoEmpresa * meses)}</b>, {sg(dif * meses)} contra hoy</span>
-      {tope && <span>La AFP ya está en el tope imponible: no sube con el aumento</span>}
+      {tope && <span>La AFP ya está en el tope imponible: no sube con el reajuste</span>}
       {calc.sinTasa && <span>Sin planilla del mes para calcular las cotizaciones del empleador</span>}
     </div></>}
   </div>

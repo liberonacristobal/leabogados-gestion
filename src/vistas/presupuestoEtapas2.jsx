@@ -71,7 +71,7 @@ export function CardEsc({ X, k, editable }) {
     {(() => { const det = <>
     <div style={{ marginTop: X.D ? 6 : 2 }}>{xr('Cobrado', e.caja, () => X.irBase())}{xr(`− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, e.terc, () => X.irCostos())}{xr(`− ${nombreCorto('costos', CFG)}`, e.costos, () => X.irCostos())}{xr('− Impuesto', e.idpc, () => irEscTab('imp'))}{xr('− Aumento de reserva', e.reserva)}</div>
     <div style={{ fontSize: X.D ? 11 : 12, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 5 : 7 }}>Reserva al cierre <b style={{ color: C.accent }}>{mm(e.reservaCierre)}</b>{e.mesesReserva != null ? ` · ${e.mesesReserva.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} meses de costos` : ''}</div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Costos', 'alza', '%', 0.5, 0, 20)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: X.D ? 10 : 6, marginTop: X.D ? 6 : 2 }}>{lv('Ventas', 'g', '%', 1, -30, 80)}{lv('Cobro', 'dias', 'd', 5, 0, 90, true)}</div>
     {editable && <div style={acc} onClick={(ev) => ev.stopPropagation()}>
       {n < CFG.maxEscenarios && <Lnk onClick={() => X.duplicarEsc(k)}>Duplicar</Lnk>}
       <Lnk onClick={() => setRen(true)}>Renombrar</Lnk>
@@ -98,7 +98,7 @@ function CardEscSimple({ X, k }) {
     <div style={{ fontSize: X.D ? 26 : 21, fontWeight: 800, letterSpacing: -0.6, color: e.retiros > 0 ? C.greenText : C.muted, lineHeight: 1.1 }}><Val v={mm(e.retiros)} /></div>
     <div style={{ fontSize: 11, color: C.muted }}>{e.retiros <= 0 ? 'no alcanza para retirar' : `${mmP(e.retiros * partePorSocio(X.datos.socios, CFG) / 12)} por socio al mes`}</div>
     {cu && cu.dif != null && Math.abs(cu.dif) >= 1 ? <div style={{ fontSize: 12, color: C.muted }}><Flecha sube={cu.cubre} bueno={cu.cubre}>{cu.dif > 0 ? 'exceso' : 'déficit'} {mmP(Math.abs(cu.dif))}</Flecha></div> : cu && cu.cubre ? <div style={{ fontSize: 12, fontWeight: 700, color: C.greenText }}>Cubre la meta</div> : null}
-    <div style={{ fontSize: 11, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 5 }}>Ventas {fm(p.g)} % · Costos {fm(p.alza)} % · Cobro {p.dias} d</div>
+    <div style={{ fontSize: 11, color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: 5 }}>Ventas {fm(p.g)} % · Cobro {p.dias} d</div>
   </div>
 }
 
@@ -130,7 +130,7 @@ function PanelEsc({ X }) {
     <div style={{ padding: '0 16px' }}>
       {fila('caja', 'Cobrado', mm(e.caja), <>{ctl('Ventas', false, MT.ok ? <span style={{ fontSize: 13 }}>{pc(p.g)} <span style={{ color: C.muted }}>real en UF · lo exige la meta</span></span> : stp('g', '%', 1, -30, 80))}{ctl('Reajuste UF', false, <Fld kind='pct' suf='%' value={est.reajusteUF} onCommit={(v) => setGen('reajusteUF', v)} w={110} />)}{ctl('Cobro', true, stp('dias', 'd', 5, 0, 90, true))}</>)}
       {fila('terc', `− Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`, mm(e.terc), null, false, `Real ${X.datos.anioBase}, no se elige`)}
-      {fila('costos', `− ${nombreCorto('costos', CFG)}`, mm(e.costos), ctl('Alza de costos', true, stp('alza', '%', 0.5, 0, 20)))}
+      {fila('costos', `− ${nombreCorto('costos', CFG)}`, mm(e.costos))}
       {fila('idpc', '− Impuesto', mm(e.idpc), <>{ctl('Tasa 1ª categoría', false, <Fld kind='pct' suf='%' value={est.tasaIDPC} onCommit={(v) => setGen('tasaIDPC', v)} w={110} />)}{ctl('PPM del año', false, <FldDin clp={est.ppmAnual} tasa={tasa27()} onCommit={(v) => setGen('ppmAnual', v)} w={150} />)}</>)}
       {fila('reserva', '− Aumento de reserva', mm(e.reserva), <>{ctl('Aumento', true, <Fld kind='pct' suf='%' value={est.reserva} onCommit={(v) => setGen('reserva', v)} w={110} />)}{ctl('Reserva en cuenta corriente', true, <FldDin clp={est.reservaIni} tasa={tasa26()} onCommit={(v) => setGen('reservaIni', Math.max(0, v))} w={150} />)}</>)}
       {fila('retiros', '= Retiros', mm(e.retiros), ctl('Meta', true, <span style={{ fontSize: 13 }}>{mm(MT.valor)} {cu ? <b style={{ color: cu.cubre ? C.greenText : C.overdueText }}>{cu.cubre ? 'la cubre' : 'no la cubre'}</b> : null}</span>), true)}

@@ -191,17 +191,37 @@ export function Costos({ X }) {
   const cb = costosBrutosNetos(est.costos, p.alza)
   const cotC = est.costos.find((c) => c.id === 'cot-empleador'), cotV = cotC ? val(cotC, k) : 0   // alza de cotización del empleador (si la partida sigue y vale algo)
   const itemsDe = (c) => (d.costos.find((x) => String(x.id) === String(c.id))?.items) || []
+  // Reajuste de un sueldo con contrato: las Leyes sociales de esa persona y el impuesto único siguen su aumento (se calculan con su liquidación), sin alza propia.
+  const ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', ufR = ymR ? ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef) : 0
+  const entradaPersona = (c, liquido, liquidoNuevo) => ({ persona: c.n, liquido, liquidoNuevo, liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf: ufR, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR, ymNuevo: `${Y}-01` })
+  const esSueldoPersona = (c) => c.g === 'Remuneraciones' && !c.imp && !c.boleta && c.m > 0
+  const aplicarReajustes = (map) => {
+    Object.entries(map).forEach(([i, a]) => patchCosto(Number(i), fijarAlza(a)))
+    if (!ymR) return
+    let iuHoy = 0, iuNuevo = 0
+    est.costos.forEach((c, i) => {
+      if (!esSueldoPersona(c)) return
+      const a = i in map ? map[i] : (c.alza == null ? 0 : Number(c.alza) || 0), k = calcularAumento(entradaPersona(c, c.m, Math.round(c.m * (1 + a / 100))))
+      if (!k) return
+      iuHoy += k.hoy.iu; iuNuevo += k.nuevo.iu
+      if (!(i in map)) return
+      const j = est.costos.findIndex((l) => l.g === 'Leyes sociales' && !l.auto && l.n === c.n), lh = k.hoy.cotTrab + k.hoy.empleador, ln = k.nuevo.cotTrab + k.nuevo.empleador
+      if (j >= 0 && lh > 0) patchCosto(j, fijarAlza(Math.round((ln / lh - 1) * 10000) / 100))
+    })
+    const jimp = est.costos.findIndex((l) => l.imp)
+    if (jimp >= 0 && iuHoy > 0) patchCosto(jimp, fijarAlza(Math.round((iuNuevo / iuHoy - 1) * 10000) / 100))
+  }
   // Una fila por materia (c.g si la partida es por persona; si no, su nombre), de mayor a menor monto 2027; todo cerrado al entrar.
   const mapa = {}
   const subIt = est.costos.map((c, i) => [c, i]).find(([c]) => c.id === ID_SUBARRIENDO)   // fila propia al final de Partidas
   est.costos.forEach((c, i) => { if (c.id === ID_SUBARRIENDO) return; const m = c.g || c.n; (mapa[m] || (mapa[m] = { m, it: [] })).it.push([c, i]) })
   const materias = Object.values(mapa).map((x) => ({ ...x, t27: x.it.reduce((a, [c]) => a + val(c, k), 0), t26: x.it.reduce((a, [c]) => a + costoAnualBase(c, Yb), 0) })).sort((a, b) => b.t27 - a.t27)
   const partida = ([c, i]) => {
-        const v = val(c, k), abierto = ui.abierta === i, rj = reajusteVigente(c, Yb), efec = c.alza == null ? p.alza : c.alza
+        const v = val(c, k), abierto = ui.abierta === i, rj = reajusteVigente(c, Yb), efec = c.alza == null ? 0 : c.alza
         const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : c.imp ? `liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12 · costo de remuneraciones` : c.boleta ? `boleta ${mp(c.m)} · líquido ${mp(c.liq)} · retención ${mp(c.m - c.liq)} al mes` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
         const campos = <>
-          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>Aumento</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><Fld sobrio kind='pct' suf='%' value={efec} onCommit={(x) => patchCosto(i, fijarAlza(x == null ? 0 : x))} label={`Aumento de ${c.n}`} /></span></div>
-          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => patchCosto(i, c.m < 0 ? { m: -Math.abs(x == null ? 0 : x) / Math.max(1, c.meses), alza: 0 } : fijarMonto27(c, x == null ? 0 : x))} label={`Monto ${Y} de ${c.n}`} /></span></div>
+          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>Variación</span>}<span style={{ fontSize: 13, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{costoAnualBase(c, Yb) > 0 ? `${v >= costoAnualBase(c, Yb) ? '+' : '−'}${pc(Math.abs((v / costoAnualBase(c, Yb) - 1) * 100))}` : '—'}</span></div>
+          <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => (esSueldoPersona(c) ? aplicarReajustes({ [i]: fijarMonto27(c, x == null ? 0 : x).alza }) : patchCosto(i, c.m < 0 ? { m: -Math.abs(x == null ? 0 : x) / Math.max(1, c.meses), alza: 0 } : fijarMonto27(c, x == null ? 0 : x)))} label={`Monto ${Y} de ${c.n}`} /></span></div>
         </>
         return <div key={c.id}>
           <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 96px 84px 160px' : 'minmax(0,1fr) minmax(0,1fr)', gap: D ? 14 : '6px 18px', alignItems: 'center', padding: D ? '10px 16px 10px 30px' : '10px 16px 10px 24px', borderTop: `1px solid ${C.border}`, fontSize: 13, background: abierto ? C.bgSoft : 'transparent' }}>
@@ -213,7 +233,8 @@ export function Costos({ X }) {
             <div style={{ gridColumn: D ? undefined : '1 / -1' }}><div style={eti}>Nombre</div><Fld text value={c.n} onCommit={(x) => setCosto(i, 'n', x)} /></div>
             <div><div style={eti}>{c.m < 0 ? 'Rebaja por mes' : 'Monto por mes'}</div><FldDin w={150} clp={Math.abs(c.m)} tasa={tasa26()} onCommit={(x) => setCosto(i, 'm', c.m < 0 ? -Math.max(0, x) : Math.max(0, x))} /></div>
             <div><div style={eti}>Meses</div><Fld kind='int' suf='de 12' w={96} value={c.meses} onCommit={(x) => setCosto(i, 'meses', Math.min(12, Math.max(0, Math.round(x))))} /></div>
-            <div><div style={eti}>Aumento propio</div><Fld kind='pct' suf='%' w={96} ph={String(p.alza).replace('.', ',')} value={c.alza} onCommit={(x) => setCosto(i, 'alza', x)} /></div>
+            <div><div style={eti}>Reajuste</div><Fld kind='pct' suf='%' w={96} ph='0' value={c.alza} onCommit={(x) => (esSueldoPersona(c) ? aplicarReajustes({ [i]: x == null ? 0 : x }) : setCosto(i, 'alza', x))} /></div>
+            {(c.imp || (c.g === 'Leyes sociales' && !c.auto && est.costos.some((l) => esSueldoPersona(l) && l.n === c.n))) && <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.muted }}>{c.imp ? 'Se calcula con el sueldo reajustado de cada persona.' : `Sigue el reajuste del sueldo de ${c.n}.`}</div>}
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: C.muted }}>
               <Seg options={[['fijo', 'Fijo'], ['discrecional', 'Discrecional']]} value={c.t} onChange={(x) => setCosto(i, 't', x)} />
               <span>{X.ESC.map(([kk, n], j) => <span key={kk}>{j ? ' · ' : ''}{n} <b style={{ color: C.text }}>{mm(val(c, kk))}</b></span>)}</span>
@@ -224,7 +245,7 @@ export function Costos({ X }) {
               if (!ymR) return null
               const entrada = { persona: c.n, liquido: liqBase, liquidoNuevo: nuevoLiq, liq: d.liqPersonas, tramosIU: d.tramosIU, plan: d.planCostos, uf, ufDeLiquidacion: (pp) => ufDelDia(d.ufDias, finMesOHoy(pp), d.ufRef), ym: ymR, ymNuevo: `${Y}-01` }
               return <>
-                <div style={{ gridColumn: '1 / -1' }}><div style={eti}>Líquido con el aumento</div><FldDin w={150} clp={nuevoLiq} tasa={tasa26()} onCommit={(x) => setCosto(i, 'alza', Math.round((x / liqBase - 1) * 10000) / 100)} /></div>
+                <div style={{ gridColumn: '1 / -1' }}><div style={eti}>Líquido reajustado</div><FldDin w={150} clp={nuevoLiq} tasa={tasa26()} onCommit={(x) => { const a = Math.round((x / liqBase - 1) * 10000) / 100; if (esSueldoPersona(c)) aplicarReajustes({ [i]: a }); else setCosto(i, 'alza', a) }} /></div>
                 <CostoEmpresaBloque key={c.id + (c.boleta ? 'b' : 'c')} entrada={entrada} esBoleta={!!c.boleta} D={D} meses={c.meses} anio={Y} />
               </>
             })()}
@@ -265,7 +286,7 @@ export function Costos({ X }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <Pliegue t='Partidas' v={`${materias.length} materias · ${mm(e.costos)}`}>
-          <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Alza de costos <Stp value={p.alza} suf='%' step={0.5} min={0} max={20} onChange={(v) => setPal(k, 'alza', v)} /></span><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
+          <div style={{ ...LBLC, padding: '9px 16px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontWeight: 500, letterSpacing: 0, textTransform: 'none', color: C.muted, fontSize: 12 }}><span>Comisiones <Stp value={p.terc} suf='%' step={1} min={0} max={60} onChange={(v) => setPal(k, 'terc', v)} /></span></div>
           {(() => {
             const eq = ui.equipo || { abierto: false, pct: '' }, pct = Number(String(eq.pct).replace(',', '.')) || 0
             const ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', ufR = ymR ? ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef) : 0
@@ -274,13 +295,13 @@ export function Costos({ X }) {
             const ch = filasEq.reduce((a, x) => a + x[2].hoy.costoEmpresa, 0), cn = filasEq.reduce((a, x) => a + x[2].nuevo.costoEmpresa, 0)
             const sg = (n) => (n >= 0 ? '+' : '−') + fmt(Math.abs(n))
             return <>
-              <div style={{ padding: '8px 16px', borderTop: `1px solid ${C.border}` }}><Lnk onClick={() => setUI({ equipo: { ...eq, abierto: !eq.abierto } })}>{eq.abierto ? 'Cerrar aumento al equipo' : 'Aumento al equipo'}</Lnk></div>
+              <div style={{ padding: '8px 16px', borderTop: `1px solid ${C.border}` }}><Lnk onClick={() => setUI({ equipo: { ...eq, abierto: !eq.abierto } })}>{eq.abierto ? 'Cerrar reajuste al equipo' : 'Reajuste al equipo'}</Lnk></div>
               {eq.abierto && <div style={{ background: C.bgSoft, padding: '10px 16px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}><div><div style={eti}>Aumento al equipo, sobre el líquido</div><Fld kind='pct' suf='%' w={110} value={eq.pct === '' ? null : Number(String(eq.pct).replace(',', '.'))} onCommit={(x) => setUI({ equipo: { ...eq, pct: x == null ? '' : String(x) } })} /></div></div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}><div><div style={eti}>Reajuste al equipo, sobre el líquido</div><Fld kind='pct' suf='%' w={110} value={eq.pct === '' ? null : Number(String(eq.pct).replace(',', '.'))} onCommit={(x) => setUI({ equipo: { ...eq, pct: x == null ? '' : String(x) } })} /></div></div>
                 {filasEq.length === 0 ? <span style={{ fontSize: 12, color: C.muted }}>Ninguna persona del presupuesto tiene liquidación de la que calcular el costo empresa</span>
                   : <div style={{ border: `2px solid ${C.accent}`, borderRadius: 12, overflow: 'hidden', background: C.card }}>
                     <div style={{ display: 'grid', gridTemplateColumns: D ? 'minmax(0,1fr) 120px 120px 120px 110px' : 'minmax(0,1fr) auto', gap: '0 10px', padding: '0 14px' }}>
-                      {D && ['Persona', 'Líquido nuevo', 'Costo empresa hoy', 'Con el aumento', 'Diferencia'].map((h, j) => <span key={h} style={{ padding: '8px 0', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, textAlign: j ? 'right' : 'left' }}>{h}</span>)}
+                      {D && ['Persona', 'Líquido reajustado', 'Costo empresa hoy', 'Con el reajuste', 'Diferencia'].map((h, j) => <span key={h} style={{ padding: '8px 0', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, textAlign: j ? 'right' : 'left' }}>{h}</span>)}
                       {filasEq.flatMap(([c, i, k]) => D
                         ? [<span key={i + 'a'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}` }}>{c.n}</span>, <span key={i + 'b'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.liquido)}</span>, <span key={i + 'c'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(k.hoy.costoEmpresa)}</span>, <span key={i + 'd'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', fontWeight: 700, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.costoEmpresa)}</span>, <span key={i + 'e'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, textAlign: 'right', color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{sg(k.nuevo.costoEmpresa - k.hoy.costoEmpresa)}</span>]
                         : [<span key={i + 'a'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}` }}>{c.n}<span style={{ display: 'block', fontSize: 11, color: C.muted }}>Hoy {fmt(k.hoy.costoEmpresa)}, {sg(k.nuevo.costoEmpresa - k.hoy.costoEmpresa)}</span></span>, <b key={i + 'b'} style={{ padding: '8px 0', borderTop: `1px solid ${C.bgSoft}`, color: C.accent, fontVariantNumeric: 'tabular-nums' }}>{fmt(k.nuevo.costoEmpresa)}</b>])}
@@ -290,12 +311,12 @@ export function Costos({ X }) {
                   </div>}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <Btn onClick={() => setUI({ equipo: { abierto: false, pct: '' } })}>Cancelar</Btn>
-                  <Btn primary onClick={() => { if (pct) { filasEq.forEach(([, i]) => setCosto(i, 'alza', pct)); setUI({ equipo: { abierto: false, pct: '' } }) } }}>Aplicar al presupuesto</Btn>
+                  <Btn primary onClick={() => { if (pct) { aplicarReajustes(Object.fromEntries(filasEq.map(([, i]) => [i, pct]))); setUI({ equipo: { abierto: false, pct: '' } }) } }}>Aplicar el reajuste</Btn>
                 </div>
               </div>}
             </>
           })()}
-          {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Aumento</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
+          {D && <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 96px 84px 160px', gap: 14, padding: '10px 16px', ...eti2 }}><span>Materia y partida</span><span style={{ textAlign: 'right' }}>{Yb} /año</span><span style={{ textAlign: 'right' }}>Variación</span><span style={{ textAlign: 'right' }}>{Y}</span></div>}
           {materias.map(materia)}
           <Fila nombre={`Comisiones ${pc(p.terc, Number.isInteger(p.terc) ? 0 : 1)} del cobrado`} peq='variable · se ajusta arriba' valor={mm(e.terc)} onClick={() => X.irEsc('res')} />
           {d.impuestos && d.impuestos.nF29 > 0
@@ -314,7 +335,7 @@ export function Costos({ X }) {
         </Pliegue>
         <div style={{ fontSize: 12, color: C.muted, margin: '6px 4px 0' }}><Lnk onClick={resetCostos}>Restaurar los valores vigentes</Lnk></div>
       </div>
-      <Det t='Cálculo'><Lista items={[<span><b>Alza de cotización del empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Subarriendo y gastos recuperados: lo que paga el subarrendatario (mensual × 12) rebaja los costos; es una partida editable al final de Partidas, sin alza.', 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
+      <Det t='Cálculo'><Lista items={[<span><b>Cada 1 % de reajuste general:</b> {mm(cb.brutos / 100)} al año. Es una estimación y no cambia las cifras: los costos se mantienen salvo el reajuste de cada partida y lo que exige la ley.</span>, <span><b>Alza de cotización del empleador (Ley 21.735, estimación):</b> (tasa de cada mes − {pc(d.cotEmp.tasaBase, 2)} que ya incluye la base de {d.cotEmp.base.mes}) × remuneración imponible mensual {m26(d.cotEmp.base.monto)} ({d.cotEmp.base.fuente}) = {m26(d.cotEmp.total)} en {Y}; entra como partida de Leyes sociales solo en {Y} (no cuenta en {Yb} ni en lo vigente), editable{est.sinCotEmpleador ? ' (quitada)' : ''}.</span>, <span><b>Presupuesto vigente:</b> {m26(tot26)} (costos de oficina × 12, sin {TXc('pagoMensual')}){Math.abs(base26 - tot26) > 1 ? <>; {Yb} con sus reajustes {m26(base26)}</> : ''}.</span>, 'Subarriendo y gastos recuperados: lo que paga el subarrendatario (mensual × 12) rebaja los costos; es una partida editable al final de Partidas, sin alza.', 'Remuneraciones: una partida por persona, con el monto vigente al comenzar el año; un sueldo que ya subió rige desde su fecha y solo sube otra vez si lo escribes.', 'Leyes sociales: parte del empleador; son costo de la oficina, no ingreso del socio.', 'Gastos reembolsables a clientes: no son costo ni ingreso, quedan fuera.', 'Comisiones: salen de la regla de la app, como pago a terceros.', 'Meses: 6 sirve para una contratación desde julio; 1, para un gasto único.']} /></Det>
     </div>
   </>
 }

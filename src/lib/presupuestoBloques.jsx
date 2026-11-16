@@ -63,7 +63,6 @@ export function Supuestos({ X, MT }) {
   const campos = [
     ['Comisiones', 'terc', 'pct', '%', p.terc, (v) => setPal(rk, 'terc', Math.max(0, v)), mm(ch.terc), 'de comisiones'],
     ['Días de cobro', 'dias', 'int', 'días', p.dias, (v) => setPal(rk, 'dias', Math.max(0, Math.round(v))), mm(ch.dCob), 'por cobrar al cierre'],
-    ['Alza de costos', 'alza', 'pct', '%', p.alza, (v) => setPal(rk, 'alza', v), mm(ch.costos), 'de costos ' + X.datos.anio],
     ['Impuesto', 'tasa', 'pct', '%', est.tasaIDPC, (v) => setGen('tasaIDPC', Math.max(0, v)), mm(ch.idpc), 'de impuesto'],
     ['Aumento de reserva', 'res', 'pct', '%', est.reserva, (v) => setGen('reserva', Math.min(100, Math.max(0, v))), mm(ch.reserva), 'de aumento'],
     ['Facturado / vendido bruto', 'ratio', 'pct', '%', MT.ratio, (v) => parche((c) => { c.metas = { ...(c.metas || {}), ratio: v == null ? null : Math.min(100, Math.max(1, v)) } }), MT.ratio != null ? mm(ch.fact) : '—', 'facturables'],
