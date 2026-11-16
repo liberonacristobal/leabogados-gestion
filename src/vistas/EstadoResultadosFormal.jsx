@@ -4,16 +4,17 @@
 // pantallas; el impuesto es el PPM puro de impuestosMensuales. Cifras en miles de pesos o en UF (la moneda de Oficina); los subtotales se arman con las cifras ya
 // redondeadas para que el estado sume. El Excel baja las cifras exactas.
 import { useMemo, useState } from 'react'
-import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop } from '../lib/base.jsx'
-import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill } from '../lib/compartido.jsx'
+import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop, appAlert, appConfirm } from '../lib/base.jsx'
+import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill, avisarBillingCambio, logActividad, esPPMcosto } from '../lib/compartido.jsx'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ResultadoAnioView } from './ResultadoAnioView.jsx'
 import { puenteCaja } from '../../supabase/functions/_shared/puenteCaja.js'
 import { idpcDesdePuente } from '../../supabase/functions/_shared/idpcEstimado.js'
 import { desfaseFinAnio } from '../../supabase/functions/_shared/desfasePagos.js'
+import { presupuestoVsReal } from '../../supabase/functions/_shared/presupuestoVsReal.js'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { descargarEstadoResultadosPdf } from '../lib/pdfEstadoResultados.js'
-import { DEMO } from '../supabase'
+import { DEMO, supabase } from '../supabase'
 import { impuestosMensuales, pagosConBoleta, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -86,10 +87,19 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const m = abonoById[String(c.movimiento_id)]; if (!m) return; const f = String(m.fecha || '').slice(0, 10); if (!ultDep[String(c.factura_id)] || f > ultDep[String(c.factura_id)]) ultDep[String(c.factura_id)] = f })
     const dias = (a, b) => Math.round(Math.abs(new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / 864e5)
     const lista = []
-    Object.keys(ultDep).forEach(id => { const b = billById[id], dep = ultDep[id]; if (!b || b.deleted_at || b.status === 'Anulada' || !b.paid_at || !dep.startsWith(String(year))) return; const d = dias(String(b.paid_at).slice(0, 10), dep); if (d > 3) lista.push({ b, d }) })
+    Object.keys(ultDep).forEach(id => { const b = billById[id], dep = ultDep[id]; if (!b || b.deleted_at || b.status === 'Anulada' || !b.paid_at || !dep.startsWith(String(year))) return; const d = dias(String(b.paid_at).slice(0, 10), dep); if (d > 3) lista.push({ b, d, dep }) })
     lista.sort((x, y) => y.d - x.d)
     const nombre = b => (clients.find(c => String(c.id) === String(b.client_id)) || {}).name || 'cliente', n = lista.length
-    return [[n === 0, 'Fecha de pago y depósito', n ? `${n} factura${n !== 1 ? 's' : ''} con la fecha de pago distinta de su depósito conciliado, en más de 3 días: ${lista.slice(0, 3).map(x => `${nombre(x.b)} ${x.b.invoice_no}`).join(', ')}` : 'cada fecha de pago coincide con su depósito conciliado', null]]
+    // Alinear: la fecha de pago pasa a ser la del último depósito conciliado (la fuente de la verdad); queda en la bitácora.
+    const alinear = async () => {
+      if (DEMO) { appAlert('En la demo no se guardan cambios.'); return }
+      if (!(await appConfirm(`Se cambiará la fecha de pago de ${n} factura${n !== 1 ? 's' : ''} a la de su último depósito conciliado en el banco. ¿Continuar?`))) return
+      let ok = 0
+      for (const x of lista) { const { error } = await supabase.from('billing').update({ paid_at: x.dep, payment_date: x.dep, updated_at: new Date().toISOString() }).eq('id', x.b.id); if (!error) ok++ }
+      try { logActividad('banco.alinear_fechas', { tabla: 'billing', detalle: { title: `Alineó la fecha de pago de ${ok} factura${ok !== 1 ? 's' : ''} con su depósito conciliado`, n: ok } }) } catch (_) { /* la bitácora no frena la acción */ }
+      avisarBillingCambio(); appAlert(`Listo: ${ok} de ${n} fechas alineadas con su depósito.`)
+    }
+    return [[n === 0, 'Fecha de pago y depósito', n ? `${n} factura${n !== 1 ? 's' : ''} con la fecha de pago distinta de su depósito conciliado, en más de 3 días: ${lista.slice(0, 3).map(x => `${nombre(x.b)} ${x.b.invoice_no}`).join(', ')}` : 'cada fecha de pago coincide con su depósito conciliado', n ? { label: 'Alinear', on: alinear } : null]]
   }, [RA, billing, clients, year])
 
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
@@ -145,7 +155,18 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       ['Incentivo al ahorro, 50 %', -ee.incentivo], ['Base afecta', ee.baseAfecta], ['IDPC 12,5 %', ee.idpc], ['PPM del año', -ee.ppm], ['Saldo a abril', ee.saldo],
       ['', ''], ['Depósitos sin identificar, fuera de la base', Math.round(idpc.sinIdentificar)], ['Facturas pagadas sin respaldo en la cartola', Math.round(idpc.sinRespaldo.monto)], ['Comprobación del cobrado', idpc.cuadra ? 'Cuadra' : 'No cuadra'],
       ['', ''], ['Estimación, régimen Pro Pyme general. Es un piso: los depósitos sin identificar no entran. Proyección moderada sin crecimiento.', ''] ] }
-    descargarXlsx({ extras: [hojaIdpc], nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
+    // Tercera hoja: presupuesto vs real de los costos de oficina (la misma regla de la página, solo meses cerrados).
+    const rmesPv = {}; A1.R.forEach((r, i) => { rmesPv[i + 1] = r })
+    const PV = presupuestoVsReal({ costosOfiRows, rmes: rmesPv, yr: year, curY: currentYear, curM, esPPM: esPPMcosto })
+    const hojaPvr = PV ? { hoja: 'Presupuesto vs real', head: ['Concepto', 'Presupuesto', 'Real', 'Desvío'], anchos: [40, 16, 16, 16], numCols: [1, 2, 3], filas: [
+      ['MES A MES', '', '', ''], ...PV.filas.map(f => [MESES[f.m - 1].charAt(0).toUpperCase() + MESES[f.m - 1].slice(1) + (f.est ? ' (estimado)' : ''), Math.round(f.bt), Math.round(f.rt), Math.round(f.rt - f.bt)]),
+      ...(PV.resto.length ? [[`${MESES[PV.cerM].charAt(0).toUpperCase() + MESES[PV.cerM].slice(1)}${PV.resto.length > 1 ? ' a diciembre' : ''} (proyectado)`, Math.round(PV.budResto), '', '']] : []),
+      [String(year) + ' proyectado', Math.round(PV.budAnio), Math.round(PV.proy), Math.round(PV.proy - PV.budAnio)],
+      ['', '', '', ''], [`POR CATEGORÍA, ENERO A ${MESES[PV.cerM - 1].toUpperCase()}`, '', '', ''],
+      ...PV.CATS.map(([k, l]) => { const t = PV.catTot(k); return [l, Math.round(t.b), Math.round(t.r), Math.round(t.r - t.b)] }),
+      ['Total', Math.round(PV.bud), Math.round(PV.real), Math.round(PV.dv)],
+      ['', '', '', ''], ['Costos brutos, sin descontar el subarriendo. Solo meses cerrados; los meses «estimado» usan el presupuesto mientras no se carguen sus costos reales.', '', '', ''] ] } : null
+    descargarXlsx({ extras: hojaPvr ? [hojaIdpc, hojaPvr] : [hojaIdpc], nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
       filas: [f('Honorarios facturados', X1.hon, X0.hon), f('Comisiones de externos', X1.rex, X0.rex), f('Total ingresos de explotación (Revenue)', X1.ing, X0.ing), f('Comisiones devengadas', X1.com, X0.com), f('Margen bruto (Gross profit)', X1.mb, X0.mb),
         ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT, el activo fijo se lleva a gasto al pagarlo)', X1.res, X0.res)] })
   }

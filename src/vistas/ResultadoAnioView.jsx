@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { etiquetaRecuperado, docDeSubarriendo, recuperadoOficinaMes } from '../../supabase/functions/_shared/costosOficina.js'
+import { presupuestoVsReal } from '../../supabase/functions/_shared/presupuestoVsReal.js'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
 import { impuestosMensuales, pagosConBoleta, listaBoletasPorCargar, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { GrupoImpuestos, DetalleImpuestos } from './impuestosMensualesUI.jsx'
@@ -176,25 +177,9 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     {soloControl&&(()=>{
       // Presupuesto vs real, en costos BRUTOS por categoría. Presupuesto = Costos de oficina (sin PPM, sin el subarriendo ni los gastos recuperados, vigente por mes con desde/monto_prev).
       // Real = las mismas líneas de costo de resultadoMes SIN la línea de subarriendo (planilla + banco + gastos varios): cuadra con «Costos de operación» más el subarriendo (que baja ese total).
-      const cerM=yr<curY?12:curM-1   // solo meses cerrados: el mes en curso trae costos parciales y se compararía contra su presupuesto completo
-      const allM=Array.from({length:cerM},(_,i)=>i+1)
-      const CATS=[['rem','Remuneraciones'],['cot','Leyes sociales'],['arr','Arriendo y GGCC'],['gv','Gastos varios'],['con','Contadora']]
-      const budCat=r=>{ const c=String(r.categoria||''), it=String(r.item||''); if(/contador/i.test(it)) return 'con'; if(c==='Remuneraciones') return 'rem'; if(c==='Leyes sociales') return 'cot'; if(c==='Arriendo y espacio'&&!/limpieza|aseo/i.test(it)) return 'arr'; return 'gv' }
-      const vacio=()=>({rem:0,cot:0,arr:0,gv:0,con:0})
-      const budM=m=>{ const o=vacio(); (costosOfiRows||[]).filter(r=>r&&r.activo!==false&&!r.es_ingreso&&!esPPMcosto(r)).forEach(r=>{ const eff=(r.desde&&pad(m)<String(r.desde).slice(0,7))?(r.monto_prev??r.monto):r.monto; o[budCat(r)]+=Number(eff)||0 }); return o }
-      const LMAP={rem:'rem',cot:'cot',arr:'arr',con:'con',otr:'gv',gv:'gv'}
-      const realM=m=>{ const r=rmes[m]; const o=vacio(); if(!r) return o; if(!r.conPlanilla){ const b=budM(m); Object.keys(o).forEach(k=>o[k]=b[k]); o.gv+=Number(r.gv)||0; return o }
-        ;(r.cosLines||[]).forEach(x=>{ const k=LMAP[x.k]; if(k) o[k]+=Number(x.m)||0 }); return o }
-      const tot=o=>Object.values(o).reduce((a,v)=>a+v,0)
-      const filas=allM.map(m=>{ const b=budM(m), r=realM(m); return {m,b,r,bt:tot(b),rt:tot(r),est:!!(rmes[m]&&(rmes[m].estimado||!rmes[m].conPlanilla))} })
-      const bud=filas.reduce((a,f)=>a+f.bt,0), real=filas.reduce((a,f)=>a+f.rt,0), dv=real-bud
-      if(!(bud>0)) return null
-      const resto=Array.from({length:12-cerM},(_,i)=>cerM+1+i), budResto=resto.reduce((a,m)=>a+tot(budM(m)),0)
-      const proy=real+budResto, budAnio=bud+budResto
-      const catTot=k=>({b:filas.reduce((a,f)=>a+f.b[k],0), r:filas.reduce((a,f)=>a+f.r[k],0)})
-      const gvGrupos=(()=>{ const g={}; allM.forEach(m=>(rmes[m]?.gvItems||[]).forEach(e=>{ const l=[e.category,e.subcategory].filter(Boolean).join(' › ')||'Sin categoría'; g[l]=(g[l]||0)+(Number(e.amount)||0) }))
-        const otr=allM.reduce((a,m)=>a+(Number((rmes[m]?.cosLines||[]).find(x=>x.k==='otr')?.m)||0),0); if(otr) g['Otros (planilla)']=otr
-        return Object.entries(g).sort((a,b)=>b[1]-a[1]) })()
+      // Presupuesto vs real: regla única (_shared/presupuestoVsReal.js), la misma que baja al Excel del Estado de resultados.
+      const PV=presupuestoVsReal({costosOfiRows,rmes,yr,curY,curM,esPPM:esPPMcosto}); if(!PV) return null
+      const {cerM,allM,CATS,filas,bud,real,dv,resto,budResto,proy,budAnio,catTot,gvGrupos}=PV
       const dCol=v=>Math.abs(v)<1?C.done:v>0?C.overdueText:C.greenText
       const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))
       const pct=bud>0?Math.abs(dv)/bud*100:0

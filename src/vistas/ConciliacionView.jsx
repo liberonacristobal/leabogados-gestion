@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { clasificacionPorRut, clientePorMensaje, completarRutCortado, esPagoTGR, gastosCandidatosCargo, glosaGenerica, rutParcialDeGlosa } from '../../supabase/functions/_shared/cargoAprendido.js'
+import { facturaMasAntiguaIgual } from '../../supabase/functions/_shared/conciliacionOrden.js'
 import { boletasDeCargo } from '../../supabase/functions/_shared/boletasRecibidas.js'
 import { selectAll } from '../../supabase/functions/_shared/paginar.js'
 import { CargarBoletasSII } from './boletasRecibidasCarga.jsx'
@@ -889,7 +890,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     const now=new Date().toISOString()
     let patch
     if(factura.status==='Pagado'){
-      patch = { reconciled_at:now, updated_at:now }   // ya estaba pagada: SOLO enlaza, no toca estado/monto
+      // ya estaba pagada: enlaza sin tocar estado ni monto; la fecha de pago se toma del depósito cuando el banco ya cubre la factura (la fuente de la verdad de la fecha de cobro es el depósito conciliado)
+      patch = { reconciled_at:now, updated_at:now, ...(aplicadoTotal >= (factura.amount||0)-TOL && fechaPago ? { paid_at:fechaPago, payment_date:fechaPago } : {}) }
     } else {
       const cubierta = aplicadoTotal >= (factura.amount||0)-TOL   // cubierta = aplicado cubre el monto (TOL=0: calce exacto, no hay comisiones)
       patch = cubierta
@@ -912,6 +914,14 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     setBusy(mov.id)
     let cr=null
     try{
+      // Orden cronológico: si el cliente tiene otra factura SIN PAGAR del mismo monto y más antigua, lo habitual es aplicar el pago a esa (regla única conciliacionOrden.js).
+      if(origen==='manual'){
+        const ant = facturaMasAntiguaIgual({ facturas: facturasCliente(factura.client_id), elegida: factura, saldoDe: saldoFactura, tol: TOL })
+        if(ant){
+          const f0 = n => folioN(n)||'—'
+          if(await appConfirm(`Hay otra factura del mismo cliente por el mismo monto y más antigua, aún sin pagar:\n\nFactura N° ${f0(ant.invoice_no)} (emitida ${fmtFechaDMY(ant.issued_at||ant.due)})\n\nLo habitual es aplicar el pago a la más antigua. ¿Aplicarlo a la N° ${f0(ant.invoice_no)} en vez de la N° ${f0(factura.invoice_no)}?\n\nAceptar = la más antigua · Cancelar = seguir con la N° ${f0(factura.invoice_no)}`)) factura = ant
+        }
+      }
       const saldo = saldoFactura(factura)
       const resto = (mov.monto||0) - (mov.monto_conciliado||0)
       const aplicado = Math.max(0, Math.min(resto, saldo))
