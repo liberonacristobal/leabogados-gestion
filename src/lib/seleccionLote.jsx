@@ -101,14 +101,19 @@ export async function copiarTexto(txt, aviso = 'Copiado') {
 }
 
 // Excel de lo elegido: head = encabezados, filas = arreglo de arreglos, numCols = índices con formato de pesos.
-export async function descargarXlsx({ nombre, hoja, head, filas, anchos = [], numCols = [], fmtNum = '#,##0' }) {
+export async function descargarXlsx({ nombre, hoja, head, filas, anchos = [], numCols = [], fmtNum = '#,##0', extras = [] }) {
   try {
     const XLSX = await cargarXlsx()
-    const ws = XLSX.utils.aoa_to_sheet([head, ...filas])
-    ws['!cols'] = head.map((_, i) => ({ wch: anchos[i] || 14 }))
-    ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(head.length - 1)}${filas.length + 1}` }; ws['!views'] = [{ state: 'frozen', ySplit: 1 }]
-    for (let r = 1; r <= filas.length; r++) numCols.forEach(cc => { const cell = ws[XLSX.utils.encode_cell({ r, c: cc })]; if (cell && cell.t === 'n') cell.z = fmtNum })
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, hoja)
+    // Una hoja: primera fila = encabezado, columnas con su ancho y cifras con formato. `extras` = hojas adicionales { hoja, head, filas, anchos, numCols }.
+    const armar = ({ head: h, filas: f, anchos: a = [], numCols: n = [] }) => {
+      const ws = XLSX.utils.aoa_to_sheet([h, ...f])
+      ws['!cols'] = h.map((_, i) => ({ wch: a[i] || 14 }))
+      ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(h.length - 1)}${f.length + 1}` }; ws['!views'] = [{ state: 'frozen', ySplit: 1 }]
+      for (let r = 1; r <= f.length; r++) n.forEach(cc => { const cell = ws[XLSX.utils.encode_cell({ r, c: cc })]; if (cell && cell.t === 'n') cell.z = fmtNum })
+      return ws
+    }
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, armar({ head, filas, anchos, numCols }), hoja)
+    extras.forEach(x => XLSX.utils.book_append_sheet(wb, armar(x), String(x.hoja).slice(0, 31)))
     await guardarLibro(XLSX, wb, `${nombre}_${new Date().toISOString().slice(0, 10)}.xlsx`)
     return 'Excel descargado'
   } catch (e) { appAlert('No se pudo generar el Excel: ' + e.message); return false }

@@ -124,7 +124,15 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
   const exp = () => {
     const X1 = tabla(A1, 1), X0 = tabla(A0, 1)
     const f = (l, a, b) => [l, ...a, p0(b)]
-    descargarXlsx({ nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
+    // Segunda hoja: el IDPC estimado del año con su puente (siempre en pesos, rotulado como estimación).
+    const { p: pp, e: ee, des } = idpc, hoy = fmtFechaDMY(new Date().toISOString().slice(0, 10))
+    const hojaIdpc = { hoja: 'IDPC estimado', head: ['Concepto', 'Monto (CLP)'], anchos: [58, 18], numCols: [1], filas: [
+      ['Resultado antes de impuestos (Estado de resultados)', Math.round(pp.resultadoAntes)], ['Variación de cuentas por cobrar', Math.round(pp.varCxC)], ['Variación de cuentas por pagar', Math.round(pp.varCxP)],
+      ['Base al ' + hoy, pp.base], ['Proyección de los meses que faltan, moderada', ee.proyeccion], ['Desfase de pago a fin de año', ee.ajusteFinAnio], ['Base del año', ee.baseAnio],
+      ['Incentivo al ahorro, 50 %', -ee.incentivo], ['Base afecta', ee.baseAfecta], ['IDPC 12,5 %', ee.idpc], ['PPM del año', -ee.ppm], ['Saldo a abril', ee.saldo],
+      ['', ''], ['Depósitos sin identificar, fuera de la base', Math.round(idpc.sinIdentificar)], ['Facturas pagadas sin respaldo en la cartola', Math.round(idpc.sinRespaldo.monto)], ['Comprobación del cobrado', idpc.cuadra ? 'Cuadra' : 'No cuadra'],
+      ['', ''], ['Estimación, régimen Pro Pyme general. Es un piso: los depósitos sin identificar no entran. Proyección moderada sin crecimiento.', ''] ] }
+    descargarXlsx({ extras: [hojaIdpc], nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
       filas: [f('Honorarios facturados', X1.hon, X0.hon), f('Comisiones de externos', X1.rex, X0.rex), f('Total ingresos de explotación (Revenue)', X1.ing, X0.ing), f('Comisiones devengadas', X1.com, X0.com), f('Margen bruto (Gross profit)', X1.mb, X0.mb),
         ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT, el activo fijo se lleva a gasto al pagarlo)', X1.res, X0.res)] })
   }
