@@ -1,6 +1,6 @@
 // Presupuesto anual · etapas 1 a 3: Mirada a 2026, Base y Costos. Todo dato abre su detalle (ir y volver al lugar exacto).
 import { C, fmt, fmtFechaDMY } from '../lib/base.jsx'
-import { costosPresupuesto, costosBrutosNetos, ID_SUBARRIENDO, mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente } from '../../supabase/functions/_shared/presupuesto.js'
+import { costosPresupuesto, costosBrutosNetos, ID_SUBARRIENDO, mesesAtipicos, nombreComponente, nombreCorto, componentesCortosDe, componentesDe, afavor, cadenaMeta, valorComponente, escenarioMetas, monto27, fijarMonto27, fijarAlza, costoAnualBase, costoVigente, reajusteVigente, costoEmpresaPersona } from '../../supabase/functions/_shared/presupuesto.js'
 import { VacioPaso, Ic, LBL, nf, mm, mx, m26, mp, mxP, mmP, ufs, pc, sgn, MESL, MESC, Mini, Titulo, Panel, Pliegue, Seg, Chip, Btn, Lnk, Fld, FldDin, Stp, Fila, Val, Lista, Det, Grid, Tarjeta, Flecha, monedaActual, tasa27, tasa26, difMon } from '../lib/presupuestoUI.jsx'
 import { Cmp } from '../lib/presupuestoBloques.jsx'
 import { CostoEmpresaBloque, calcularAumento } from '../lib/costoEmpresaBloque.jsx'
@@ -217,7 +217,9 @@ export function Costos({ X }) {
   const materias = Object.values(mapa).map((x) => ({ ...x, t27: x.it.reduce((a, [c]) => a + val(c, k), 0), t26: x.it.reduce((a, [c]) => a + costoAnualBase(c, Yb), 0) })).sort((a, b) => b.t27 - a.t27)
   const partida = ([c, i]) => {
         const v = val(c, k), abierto = ui.abierta === i, rj = reajusteVigente(c, Yb), efec = c.alza == null ? 0 : c.alza
-        const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : c.imp ? `liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12 · costo de remuneraciones` : c.boleta ? `boleta ${mp(c.m)} · líquido ${mp(c.liq)} · retención ${mp(c.m - c.liq)} al mes` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
+        // Costo empresa de la persona (líquido, impuesto único y leyes sociales de las propias partidas): siempre a la vista junto al líquido; el desglose abre con la fila.
+        const ceP = esSueldoPersona(c) && c.meses >= 12 && ymR ? costoEmpresaPersona({ costos: est.costos, persona: c.n, liquidaciones: d.liqPersonas, ym: ymR, alza: p.alza }) : null, conCE = !!ceP && (ceP.iu > 0 || ceP.leyes > 0)
+        const peq = c.id === ID_SUBARRIENDO ? `rebaja el arriendo · ${mp(-c.m)} al mes · sin alza` : c.imp ? `liquidaciones de ${MESL[Number((d.impuestos.unicoPeriodo || '0000-01').slice(5, 7)) - 1] || ''} × 12 · costo de remuneraciones` : c.boleta ? `boleta ${mp(c.m)} · líquido ${mp(c.liq)} · retención ${mp(c.m - c.liq)} al mes` : conCE ? `Líquido ${mp(Math.round(c.m * (1 + efec / 100)))} al mes, costo empresa ${mp(Math.round(ceP.costo / 12))}${rj ? `, subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''}` : [c.g || '', c.t === 'fijo' ? 'Fijo' : 'Discrecional', c.meses < 12 ? c.meses + ' meses' : '', rj ? `subió ${pc(rj.pct)} desde ${fmtFechaDMY(rj.desde)} (antes ${mp(rj.previo)})` : ''].filter(Boolean).join(' · ')
         const campos = <>
           <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>Variación</span>}<span style={{ fontSize: 13, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{costoAnualBase(c, Yb) > 0 ? `${v >= costoAnualBase(c, Yb) ? '+' : '−'}${pc(Math.abs((v / costoAnualBase(c, Yb) - 1) * 100))}` : '—'}</span></div>
           <div style={{ display: 'flex', flexDirection: D ? 'row' : 'column', gap: 2, alignItems: D ? 'baseline' : 'flex-start', justifyContent: 'flex-end' }}>{!D && <span style={cap}>{Y}</span>}<span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}><FldDin sobrio clp={Math.round(v)} tasa={tasa27()} onCommit={(x) => (esSueldoPersona(c) ? aplicarReajustes({ [i]: fijarMonto27(c, x == null ? 0 : x).alza }) : patchCosto(i, c.m < 0 ? { m: -Math.abs(x == null ? 0 : x) / Math.max(1, c.meses), alza: 0 } : fijarMonto27(c, x == null ? 0 : x)))} label={`Monto ${Y} de ${c.n}`} /></span></div>
@@ -239,6 +241,10 @@ export function Costos({ X }) {
               <span>{X.ESC.map(([kk, n], j) => <span key={kk}>{j ? ' · ' : ''}{n} <b style={{ color: C.text }}>{mm(val(c, kk))}</b></span>)}</span>
               <Lnk rojo onClick={() => delCosto(i)}>Quitar partida</Lnk>
             </div>
+            {conCE && <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={eti}>Costo empresa al mes</div>
+              {[['Líquido', ceP.liquido], ['Impuesto único', ceP.iu], ['Leyes sociales', ceP.leyes], ['Costo empresa', ceP.costo]].map(([t, x], j) => <div key={t} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, ...(j === 3 ? { borderTop: `1px solid ${C.border}`, paddingTop: 4, marginTop: 2, fontWeight: 700, color: C.accent } : { color: C.muted }) }}><span>{t}</span><span style={{ fontVariantNumeric: 'tabular-nums', color: j === 3 ? C.accent : C.text }}>{mp(Math.round(Number(x) / 12))}</span></div>)}
+            </div>}
             {c.g === 'Remuneraciones' && !c.imp && (c.boleta ? c.liq > 0 : c.m > 0) && (() => {
               const liqBase = c.boleta ? c.liq : c.m, nuevoLiq = Math.round(liqBase * (1 + efec / 100)), ymR = d.hoy ? String(d.hoy).slice(0, 7) : '', uf = ufDelDia(d.ufDias, finMesOHoy(ymR), d.ufRef)
               if (!ymR) return null

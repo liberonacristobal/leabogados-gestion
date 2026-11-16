@@ -9,6 +9,7 @@ import { descargarTabla } from '../lib/archivos.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, PageHeader, _esDiaHabil, fmtMillLR, resultadoMes, useFuentesResultado } from '../lib/compartido.jsx'
 import { cascadaCobertura, gastosPagados, gastosPorPagar } from '../../supabase/functions/_shared/mesEnMarcha.js'
+import { finDeMes } from '../../supabase/functions/_shared/calendarioReglas.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 export const YM_MIN = '2026-01'
@@ -22,7 +23,7 @@ function useCargosSinClasificar(ym) {
     let vivo = true
     const filtra = (/** @type {any[]} */ a) => (a || []).filter(m => m && m.tipo === 'cargo' && m.estado === 'pendiente' && !m.es_interno && String(m.fecha || '').slice(0, 7) === ym)
     if (DEMO) { setRows(filtra(demoData.cartola_movimientos)); return }
-    selectAll(() => supabase.from('cartola_movimientos').select('id,fecha,tipo,monto,estado,es_interno,nombre_contraparte,descripcion').eq('tipo', 'cargo').eq('estado', 'pendiente').gte('fecha', ym + '-01').lte('fecha', ym + '-31').order('id'))
+    selectAll(() => supabase.from('cartola_movimientos').select('id,fecha,tipo,monto,estado,es_interno,nombre_contraparte,descripcion').eq('tipo', 'cargo').eq('estado', 'pendiente').gte('fecha', ym + '-01').lte('fecha', finDeMes(ym)).order('id'))
       .then(r => { if (vivo) setRows(filtra((r && r.data) || r)) }, () => { if (vivo) setRows([]) })
     return () => { vivo = false }
   }, [ym])

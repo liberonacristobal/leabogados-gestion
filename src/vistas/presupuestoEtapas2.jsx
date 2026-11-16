@@ -7,7 +7,7 @@ import { aplicarAjustesArrastre } from '../../supabase/functions/_shared/arrastr
 import { useEffect, useRef, useState } from 'react'
 import { marcarPropuestaNoCuenta } from '../lib/compartido.jsx'
 import { C, appAlert, fmtFechaDMY } from '../lib/base.jsx'
-import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, totalesSocios, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
+import { mesesCerradosAnio, repartoMensual, seguimientoMensual, afavor, componentesDe, componentesCortosDe, nombreCorto, modeloPresupuesto, diferenciaEstructurada, parteMeta, partePorSocio, tasaPPMLegal, escenariosContraMeta, referenciaSeguimiento, valorComponente, nombreComponente, sueldosYRetiros, costoEmpresaPersona, totalesSocios, escenarioMetas, nombreEscenario, resumenDistribucion, MAX_NOMBRE_ESCENARIO } from '../../supabase/functions/_shared/presupuesto.js'
 import { CFG_PRESUPUESTO as CFG } from '../lib/presupuestoCfg.js'
 const TX = new Proxy({}, { get: (_, k) => CFG.tributario.textos[/** @type {string} */ (k)] }), cap = (/** @type {string} */ t) => t.charAt(0).toUpperCase() + t.slice(1)   // textos del régimen (cfg.tributario.textos)
 import { descargarLibroPresupuesto } from '../lib/presupuestoExcel.js'
@@ -158,6 +158,8 @@ const metasEsc = (X, k) => ({ ventas: valorComponente(X.M.esc[k], 'ventas', X.MT
 
 function TabSoc({ X }) {
   const { est, M, datos: d } = X, e = M.esc[est.esc], tot = d.socios.reduce((a, s) => a + s.facturado, 0), mt = metasEsc(X, est.esc)
+  // Costo empresa del socio (líquido, impuesto único y leyes sociales de las propias partidas): el líquido sigue a la vista y el costo empresa se ve al lado.
+  const ceDe = (/** @type {string} */ k, /** @type {string} */ nombre) => costoEmpresaPersona({ costos: est.costos, persona: nombre, liquidaciones: d.liqPersonas, ym: String(d.hoy || '').slice(0, 7), alza: est.p[k].alza })
   return <>
     <Panel hd={`Por socio · ${X.nomEsc(est.esc)}`} small={CFG.socios && CFG.socios.reparto ? 'reparto de la configuración' : `partes iguales (${pc(parteMeta(d.socios, d.socios[0]?.nombre, CFG) * 100, 0)} cada socio)`}>
       {d.socios.map((s) => { const sh = tot ? s.facturado / tot : 0, sin = s.nombre === 'Sin socio', pm = parteMeta(d.socios, s.nombre, CFG)
@@ -167,10 +169,10 @@ function TabSoc({ X }) {
     <Titulo>Sueldos y retiros por escenario</Titulo>
     <Grid cols={colsEsc(X.ESC.length)} colsM={1}>{X.ESC.map(([k, n]) => { const r = sueldosYRetiros({ socios: d.retiros26.socios, costos: est.costos, alza: est.p[k].alza, retiros: M.esc[k].retiros, real: { sueldos: d.retiros26.sueldos, retiros: d.retiros26.porSocio }, cfg: CFG }), tn = tonoEsc(X.tonoDe(k))
       return <Panel key={k} hd={<span style={{ background: tn.bg, color: tn.fg, border: `1px solid ${tn.bd}`, borderRadius: 20, padding: '2px 11px', letterSpacing: 0, textTransform: 'none', fontSize: 13 }}>{n}</span>}>
-        {r.filas.map((f) => <Fila key={f.nombre} nombre={f.nombre} peq={`sueldo ${mmP(f.sueldo27)} + retiros ${mmP(f.ret27)}`} valor={mm(f.tot27)} onClick={X.onOpenSocios} />)}
-        <Fila tot sin nombre='Oficina' peq={`sueldos ${mmP(r.total.sueldo27)} + retiros ${mmP(r.total.ret27)}`} valor={mm(r.total.tot27)} />
+        {r.filas.map((f) => <Fila key={f.nombre} nombre={f.nombre} peq={`sueldo líquido ${mmP(f.sueldo27)} + retiros ${mmP(f.ret27)}${ceDe(k, f.nombre) ? `, costo empresa ${mmP(ceDe(k, f.nombre).costo)}` : ''}`} valor={mm(f.tot27)} onClick={X.onOpenSocios} />)}
+        <Fila tot sin nombre='Oficina' peq={`sueldos líquidos ${mmP(r.total.sueldo27)} + retiros ${mmP(r.total.ret27)}${r.filas.some((f) => ceDe(k, f.nombre)) ? `, costo empresa ${mmP(r.filas.reduce((t, f) => t + (ceDe(k, f.nombre)?.costo || 0), 0))}` : ''}`} valor={mm(r.total.tot27)} />
       </Panel> })}</Grid>
-    <div style={{ fontSize: 12, color: C.muted, margin: '-6px 4px 0' }}>Sueldo = Remuneraciones del socio con el alza del escenario; sus leyes sociales son costo de la oficina. Retiros en partes iguales.</div>
+    <div style={{ fontSize: 12, color: C.muted, margin: '-6px 4px 0' }}>Sueldo = Remuneraciones líquidas del socio con el reajuste del escenario. Costo empresa = líquido, impuesto único y leyes sociales del socio. Retiros en partes iguales.</div>
   </>
 }
 

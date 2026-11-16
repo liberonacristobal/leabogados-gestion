@@ -5,7 +5,7 @@
 // Plano: CAJA (el régimen Pro Pyme tributa lo percibido menos lo pagado). Sociedad de profesionales exenta de IVA: lo facturado es el neto.
 
 /** @typedef {{ g:number, alza:number, terc:number, dias:number }} Supuestos  g = crecimiento real de ventas (% en UF); alza = alza de costos (%); terc = comisiones (% de lo cobrado); dias = días de cobro */
-/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean, auto?:boolean }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
+/** @typedef {{ id:number|string, n:string, m:number, meses:number, t:string, alza:number|null, g?:string, desde?:string|null, mPrev?:number|null, sinBase?:boolean, auto?:boolean, imp?:boolean, boleta?:boolean, liq?:number }} PartidaCosto  m = monto por mes (el vigente al inicio del año del presupuesto); meses = meses del año; alza propia (null = la del escenario; puede ser negativa); g = grupo de una partida por persona (Remuneraciones, Leyes sociales); desde/mPrev = vigencia de un reajuste (el monto m rige desde `desde`; antes regía mPrev) */
 import { brutoDeLiquido, mismaPersona } from './impuestosMensuales.js'
 import { CONFIG_DEFECTO, tramoDelAnio } from './presupuestoConfig.js'
 import { normalizarArrastre, arrastreVacio, lineasTocadas } from './arrastreAnio.js'
@@ -401,6 +401,26 @@ export function sueldosYRetiros(o) {
   })
   const t = (/** @type {keyof typeof filas[0]} */ k) => sum(filas.map((f) => Number(f[k])))
   return { filas, total: { sueldo26: t('sueldo26'), ret26: t('ret26'), tot26: t('tot26'), sueldo27: t('sueldo27'), ret27: t('ret27'), tot27: t('tot27'), leyes27: t('leyes27') } }
+}
+
+/**
+ * Costo empresa de una persona en el presupuesto, anual: su sueldo líquido, su impuesto único y sus leyes sociales (cotizaciones del trabajador y del empleador), todo de las propias partidas,
+ * así lo que se ve por persona suma lo mismo que las partidas. Su impuesto único es el de su última liquidación hasta `ym`, con el reajuste de la partida «Impuesto único de trabajadores».
+ * Quien emite boleta no entra (su partida ya es el bruto) y la alza de cotización del empleador (Ley 21.735) queda en su propia partida.
+ * @param {{ costos:PartidaCosto[], persona:string, liquidaciones:any[], ym:string, alza:number, cfg?:CfgPresupuesto }} o
+ * @returns {{ liquido:number, iu:number, leyes:number, costo:number }|null} null si la persona no tiene sueldo con contrato en el presupuesto
+ */
+export function costoEmpresaPersona(o) {
+  const cfg = o.cfg || CONFIG_DEFECTO
+  const sueldos = o.costos.filter((c) => c.g === cfg.costos.grupoSueldos && !c.imp && !c.boleta && esDePersona(c.n, o.persona))
+  if (!sueldos.length) return null
+  const liquido = sum(sueldos.map((c) => monto27(c, o.alza)))
+  const leyes = sum(o.costos.filter((c) => c.g === cfg.costos.grupoLeyes && !c.auto && esDePersona(c.n, o.persona)).map((c) => monto27(c, o.alza)))
+  const impC = o.costos.find((c) => c.imp)
+  const ult = (o.liquidaciones || []).filter((l) => l && mismaPersona(o.persona, String(l.persona)) && String(l.periodo) <= o.ym).sort((a, b) => String(a.periodo).localeCompare(String(b.periodo))).pop()
+  const iuMes = ult ? num(ult.impuesto_unico) : 0
+  const iu = impC && iuMes > 0 ? iuMes * 12 * (1 + alzaEfectiva(impC, o.alza) / 100) : 0
+  return { liquido, iu, leyes, costo: liquido + iu + leyes }
 }
 
 // ── Moneda: pesos ↔ UF (selector Pesos / UF / Ambos del Presupuesto) ──
