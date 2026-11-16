@@ -137,3 +137,19 @@ test('el impuesto único de las liquidaciones va dentro de Remuneraciones: líqu
   const sin = M.resultadoMes({ sii: [], plan: [], boleta: new Set(), liq }, { billing: [], terceros: [], costosOfiRows: [], expenses: [], clients }, '2026-11')
   assert.equal(sin.remDet.iu, 0)   // sin remuneración en el mes no se carga impuesto único
 })
+
+test('el costo de los socios del mes (sueldo, impuesto único y cotizaciones) sale de resultadoMes y suma lo que el Resultado ya descuenta por ellos', () => {
+  const clients = [{ id: 'of', is_internal: true }]
+  const expenses = [
+    { client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Socia', date: '2026-10-30', amount: 2_300_000 },
+    { client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Empleado', date: '2026-10-30', amount: 1_500_000 },
+  ]
+  const liq = [{ periodo: '2026-10', persona: 'UNO PEREZ SOCIA', imponible: 3_000_000, impuesto_unico: 100_000, liquido: 2_300_000 }, { periodo: '2026-10', persona: 'TRES LOPEZ EMPLEADO', imponible: 2_000_000, impuesto_unico: 30_000, liquido: 1_500_000 }]
+  const fu = { sii: [], plan: [{ anio: 2026, mes: 10, cotizaciones: 1_300_000 }], boleta: new Set(), liq, socios: ['Socia'] }
+  const r = M.resultadoMes(fu, { billing: [], terceros: [], costosOfiRows: [], expenses, clients }, '2026-10')
+  // trabajador socia: 3.000.000 − 100.000 − 2.300.000 = 600.000; empleado: 470.000; empleador = 1.300.000 − 1.070.000 = 230.000, de lo cual 60 % es de la socia
+  assert.equal(r.socDet.sueldo, 2_300_000); assert.equal(r.socDet.iu, 100_000); assert.equal(r.socDet.cotTrab, 600_000); assert.equal(r.socDet.cotEmp, 138_000)
+  assert.equal(r.soc, 2_300_000 + 100_000 + 600_000 + 138_000); assert.equal(r.socRem, 2_400_000); assert.equal(r.socCot, 738_000)
+  assert.ok(r.soc <= r.cosLines.filter((x) => x.k === 'rem' || x.k === 'cot').reduce((a, x) => a + x.m, 0))   // nunca más de lo que el Resultado descuenta en Remuneraciones y Cotizaciones
+  const sinSocios = M.resultadoMes({ ...fu, socios: [] }, { billing: [], terceros: [], costosOfiRows: [], expenses, clients }, '2026-10'); assert.equal(sinSocios.soc, 0)
+})

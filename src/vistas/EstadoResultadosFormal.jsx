@@ -124,7 +124,8 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     const imp = fila((_, i) => -(enUF ? A.ppm[i].uf : A.ppm[i].clp))
     const ing = hon.map((x, i) => x + rex[i]), mb = ing.map((x, i) => x + com[i]), totGas = Array.from({ length: n }, (_, i) => gas.reduce((a, g) => a + g.v[i], 0))
     const res = mb.map((x, i) => x + totGas[i]), neto = res.map((x, i) => x + imp[i])
-    return { hon, rex, com, gas, imp, ing, mb, totGas, res, neto }
+    const soc = fila(m => enUF ? m.socUF : m.soc), resSin = res.map((x, i) => x + soc[i])   // lo que el Resultado descuenta por los socios y el Resultado antes de ello
+    return { hon, rex, com, gas, imp, ing, mb, totGas, res, neto, soc, resSin }
   }
   const esc = enUF ? 1 : 1000
   const T1 = tabla(A1, esc), T0 = tabla(A0, esc)
@@ -152,6 +153,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     { t: 'res', l: 'Resultado después de impuestos (Net income)', v: T1.neto, w: T0.neto, pct: true },
     { t: 'sec', l: 'Partida informativa' },
     { t: 'inf', l: 'EBITDA, igual al EBIT (el activo fijo se lleva a gasto al pagarlo)', v: T1.res, w: T0.res },
+    ...(T1.soc.some(x => x) || T0.soc.some(x => x) ? [{ t: 'inf', l: 'Sueldos de socios (remuneraciones y cotizaciones)', v: T1.soc, w: T0.soc }, { t: 'sub', l: 'Resultado antes de sueldos de socios', v: T1.resSin, w: T0.resSin, pct: true }] : []),
   ]
 
   const exp = () => {
@@ -178,7 +180,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       ['', '', '', ''], ['Costos brutos, sin descontar el subarriendo. Solo meses cerrados; los meses «estimado» usan el presupuesto mientras no se carguen sus costos reales.', '', '', ''] ] } : null
     descargarXlsx({ extras: hojaPvr ? [hojaIdpc, hojaPvr] : [hojaIdpc], nombre: `Estado_de_resultados_${year}${enUF ? '_UF' : ''}`, hoja: 'Estado de resultados', head: ['Concepto', ...MC.slice(0, curM), 'Total', `${year - 1} (mismo período)`], anchos: [48, ...Array(n + 1).fill(13)], numCols: Array.from({ length: n + 1 }, (_, i) => i + 1),
       filas: [f('Honorarios facturados', X1.hon, X0.hon), f('Comisiones de externos', X1.rex, X0.rex), f('Total ingresos de explotación (Revenue)', X1.ing, X0.ing), f('Comisiones devengadas', X1.com, X0.com), f('Margen bruto (Gross profit)', X1.mb, X0.mb),
-        ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT, el activo fijo se lleva a gasto al pagarlo)', X1.res, X0.res)] })
+        ...X1.gas.map((g, k) => f(g.l, g.v, X0.gas[k].v)), f('Total gastos de administración (Opex)', X1.totGas, X0.totGas), f('Resultado antes de impuestos (EBIT)', X1.res, X0.res), f('PPM, impuesto de primera categoría', X1.imp, X0.imp), f('Resultado después de impuestos (Net income)', X1.neto, X0.neto), f('EBITDA (igual al EBIT, el activo fijo se lleva a gasto al pagarlo)', X1.res, X0.res), ...(X1.soc.some(x => x) ? [f('Sueldos de socios (remuneraciones y cotizaciones)', X1.soc, X0.soc), f('Resultado antes de sueldos de socios', X1.resSin, X0.resSin)] : [])] })
   }
 
   // PDF: las mismas filas y cifras de la tabla (celdas ya formateadas), todos los meses, carta horizontal.

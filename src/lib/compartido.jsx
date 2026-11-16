@@ -39,7 +39,8 @@ import { gastosPorRendirCli } from '../../supabase/functions/_shared/gastosRegla
 import { ventasFacturando, trabajosSinFacturar, noEmitirDeFilas, conPostergadas } from '../../supabase/functions/_shared/ventasReglas.js'
 import { connectDrive } from '../supabase'
 import { estadoComision, comisionesDevengadas } from '../../supabase/functions/_shared/comisionesReglas.js'
-import { impuestoUnicoDelMes } from '../../supabase/functions/_shared/liquidacionesReglas.js'
+import { impuestoUnicoDelMes, mismaPersona } from '../../supabase/functions/_shared/liquidacionesReglas.js'
+import { costoSociosMes } from '../../supabase/functions/_shared/costoSocios.js'
 import { impuestoUnicoPresupuesto } from '../../supabase/functions/_shared/remuneracionPersona.js'
 import { esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, redondearPartes, redondearA, cascadaResultado } from './cifras.js'
 import { guardarLibro, cargarXlsx } from './archivos.js'
@@ -757,6 +758,10 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const rem = remBase + iuM.total
   const remUF = (remB.total>0 ? remB.items.reduce((a,x)=>a+x.costo/u(x.e.date),0) : remBase/ufFin) + iuM.total/ufFin
   const remDet = { liquido: remB.items.filter(x=>!x.boleta).reduce((a,x)=>a+x.liquido,0) || (remB.total>0?0:remBase), retencion: remB.items.filter(x=>x.boleta).reduce((a,x)=>a+x.costo-x.liquido,0), boleta: remB.items.filter(x=>x.boleta).reduce((a,x)=>a+x.liquido,0), iu: iuM.total, iuProvisorio: iuM.provisorio, iuPeriodo: iuM.periodo }
+  // Costo de los socios del mes (sueldo, impuesto único y cotizaciones): lo que el Resultado ya descuenta por ellos; «Resultado antes de sueldos de socios» lo suma de vuelta.
+  const socM = (row && remBase>0 && (fu?.socios||[]).length) ? costoSociosMes({items:remB.items.map(x=>({persona:x.persona,liquido:x.liquido})), liquidaciones:fu?.liq||[], ym, cotPlanilla:n('cotizaciones'), socios:fu.socios}) : {sueldo:0,iu:0,cotTrab:0,cotEmp:0,cot:0,total:0,provisorio:false}
+  const socSueldoUF = socM.total>0 ? remB.items.filter(x=>(fu?.socios||[]).some(sn=>mismaPersona(sn,x.persona))).reduce((a,x)=>a+x.liquido/u(x.e.date),0) : 0
+  const socRemUF = socSueldoUF + socM.iu/ufFin, socCotUF = socM.cot/ufFin, socUF = socRemUF + socCotUF
   const conItems=contadoraBancoItems(expenses,clients,ym), conB=conItems.reduce((a,e)=>a+(Number(e.amount)||0),0)
   const conUF = conB>0 ? conItems.reduce((a,e)=>a+(Number(e.amount)||0)/u(e.date),0) : n('contadora')/ufFin
   const pla=v=>[v, v/ufFin]   // monto mensual de la planilla → UF del cierre del mes
@@ -775,7 +780,7 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const pagItems=(terceros||[]).filter(t=>t&&t.comision_pct==null&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)), cP=agrupa(pagItems,t=>t.pagado_at)
   const comPag=cP.m, comPagUF=cP.mUF, comPagList=cP.l
   const ing=fac+rex, res=ing-cos-com, ingUF=facUF+rexUF, resUF=ingUF-cosUF-comUF   // ingresos = facturación propia + % de externos; el subarriendo baja el costo, no suma aquí
-  return {ym,remDet,fac,facExc,totalEmitido:fac+facExc.nc+facExc.reemb+facExc.subarr+facExc.ext,totalEmitidoUF:facUF+facExcUF.nc+facExcUF.reemb+facExcUF.subarr+facExcUF.ext,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,comItems,comPag,comPagUF,comPagList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
+  return {ym,remDet,soc:socM.total,socUF,socRem:socM.sueldo+socM.iu,socRemUF,socCot:socM.cot,socCotUF,socDet:socM,fac,facExc,totalEmitido:fac+facExc.nc+facExc.reemb+facExc.subarr+facExc.ext,totalEmitidoUF:facUF+facExcUF.nc+facExcUF.reemb+facExcUF.subarr+facExcUF.ext,sub,rex,rexItems,ing,cosLines,cos,gv,gvItems,com,comList,comItems,comPag,comPagUF,comPagList,res,facUF,subUF,rexUF,ingUF,cosUF,comUF,resUF,margen:margenPct(res,ing),ppm,rem:row?rem:0,remEst,remItems:remB.items,conItems,arriendo:n('arriendo'),ggcc:n('gastos_comunes'),estimado:!!row?.estimado,cerrado:!!row?.cerrado,cerradoAt:row?.cerrado_at||null,conPlanilla:!!row,planillaIncompleta:!!rowRaw&&!row,facDocs,sinReg}
 }
 
 // Fuentes de «Impuestos mensuales» (boletas de honorarios, F29 declarados, liquidaciones, «Iva» del correo de la contadora), una vez por sesión; `recargar` tras cargar una boleta. Solo administradores (RLS).
@@ -820,10 +825,10 @@ export function useImpuestosFuentes(){
 export let _fuentesRes=null, _fuentesResP=null
 
 export function useFuentesResultado(){
-  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[],boleta:new Set(),liq:[],tramosIU:[],listo:!!DEMO})
+  const [f,setF]=useState(()=>_fuentesRes||{sii:[],plan:[],boleta:new Set(),liq:[],tramosIU:[],socios:[],listo:!!DEMO})
   useEffect(()=>{ if(DEMO) return; if(_fuentesRes){ setF(_fuentesRes); return }
-    if(!_fuentesResP) _fuentesResP=Promise.all([selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')),supabase.from('oficina_costos_mensual').select('*'),supabase.from('miembros').select('nombre').eq('paga_con_boleta',true),supabase.from('remuneraciones_tributables').select('periodo,persona,imponible,cotizaciones,impuesto_unico,liquido,salud_adicional,tributable').gte('periodo','2025-01'),supabase.from('sii_impuesto_unico').select('periodo,tramo,desde,hasta,factor,rebaja')])
-      .then(([a,b,c,d,e])=>{ const x={sii:a?.data||[],plan:b?.data||[],boleta:new Set((c?.data||[]).map(y=>_normTxt(y.nombre))),liq:d?.data||[],tramosIU:e?.data||[],listo:true,ok:!(a?.error||b?.error||c?.error)}; if(x.ok) _fuentesRes=x; else _fuentesResP=null; return x }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[],boleta:new Set(),listo:true,ok:false} })
+    if(!_fuentesResP) _fuentesResP=Promise.all([selectAll(()=>supabase.from('sii_cargas_docs').select('tipo_dte,monto,fecha_emision,folio,receptor_name,billing_id').order('id')),supabase.from('oficina_costos_mensual').select('*'),supabase.from('miembros').select('nombre').eq('paga_con_boleta',true),supabase.from('remuneraciones_tributables').select('periodo,persona,imponible,cotizaciones,impuesto_unico,liquido,salud_adicional,tributable').gte('periodo','2025-01'),supabase.from('sii_impuesto_unico').select('periodo,tramo,desde,hasta,factor,rebaja'),supabase.from('miembros').select('nombre').eq('es_socio',true)])
+      .then(([a,b,c,d,e,g])=>{ const x={sii:a?.data||[],plan:b?.data||[],boleta:new Set((c?.data||[]).map(y=>_normTxt(y.nombre))),liq:d?.data||[],tramosIU:e?.data||[],socios:[...new Set((g?.data||[]).map(y=>y.nombre).filter(Boolean))],listo:true,ok:!(a?.error||b?.error||c?.error)}; if(x.ok) _fuentesRes=x; else _fuentesResP=null; return x }).catch(()=>{ _fuentesResP=null; return {sii:[],plan:[],boleta:new Set(),listo:true,ok:false} })
     let v=true; _fuentesResP.then(x=>{ if(v) setF(x) }); return ()=>{v=false} },[])
   return f
 }

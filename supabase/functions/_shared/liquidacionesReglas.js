@@ -27,15 +27,25 @@ export const consultaLiquidaciones = (contadora, extra = '') => `from:${contador
  * @returns {{total:number, personas:{persona:string, iu:number}[], periodo:string|null, provisorio:boolean}}
  */
 export function impuestoUnicoDelMes(liquidaciones, ym) {
+  const { filas, periodo, provisorio } = liquidacionesDelMes(liquidaciones, ym)
+  const personas = filas.map(l => ({ persona: String(l.persona), iu: Number(l.impuesto_unico) || 0 }))
+  return { total: personas.reduce((a, x) => a + x.iu, 0), personas, periodo, provisorio }
+}
+
+/**
+ * Liquidaciones del mes trabajado `ym`; si la contadora aún no las manda, las del último mes anterior que las tenga (provisorio).
+ * @param {any[]} liquidaciones @param {string} ym
+ * @returns {{filas:any[], periodo:string|null, provisorio:boolean}}
+ */
+export function liquidacionesDelMes(liquidaciones, ym) {
   const todas = (liquidaciones || []).filter(l => l && /^\d{4}-\d{2}$/.test(String(l.periodo)))
   let per = String(ym), provisorio = false
   if (!todas.some(l => l.periodo === per)) {
     const prev = [...new Set(todas.map(l => String(l.periodo)).filter(p => p < per))].sort().pop()
-    if (!prev) return { total: 0, personas: [], periodo: null, provisorio: false }
+    if (!prev) return { filas: [], periodo: null, provisorio: false }
     per = prev; provisorio = true
   }
-  const personas = todas.filter(l => l.periodo === per).map(l => ({ persona: String(l.persona), iu: Number(l.impuesto_unico) || 0 }))
-  return { total: personas.reduce((a, x) => a + x.iu, 0), personas, periodo: per, provisorio }
+  return { filas: todas.filter(l => l.periodo === per), periodo: per, provisorio }
 }
 
 /**

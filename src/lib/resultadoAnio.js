@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { UF_FALLBACK, comisionesVenta, currentYear, esFacIngreso, esSubarriendo, margenPct, montoFactura, redondearPartes, resultadoMes, ufDelDia, useFuentesResultado, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF, ventaVendidaEnAnio } from './compartido.jsx'
+import { UF_FALLBACK, comisionesVenta, currentYear, esFacIngreso, esSubarriendo, margenPct, montoFactura, redondearPartes, redondearA, resultadoMes, ufDelDia, useFuentesResultado, useUF, useUFFechas, ventaCLP, ventaCuentaEnAnio, ventaUF, ventaVendidaEnAnio } from './compartido.jsx'
 
 export const META_CLP = 400000000
 
@@ -177,13 +177,15 @@ export function useResultadoAnio({ sales, billing, terceros, costosOfiRows, expe
   const fuRes = useFuentesResultado()
   // MARGEN del año = el MISMO resultado del Estado de resultados / Oficina / Resultado del año (devengado): Σ resultadoMes del año elegido.
   const resAnio = useMemo(()=>{ const deps={billing,terceros,costosOfiRows,expenses,clients,ufd:ufDias,ufFb:ufRef}, ult=selYear===currentYear?_mNow:12
-    const K=['fac','sub','rex','ing','cos','com','res'], o={}; K.forEach(k=>{ o[k]=0; o[k+'UF']=0 })
+    const K=['fac','sub','rex','ing','cos','com','res','soc','socRem','socCot'], o={}; K.forEach(k=>{ o[k]=0; o[k+'UF']=0 })
     o.rexItems=[]; const cosAgg={}   // líneas de Costos del año (misma fuente que Resultado del año)
     for(let i=1;i<=ult;i++){ const r=resultadoMes(fuRes,deps,`${selYear}-${String(i).padStart(2,'0')}`); K.forEach(k=>{ o[k]+=r[k]; o[k+'UF']+=r[k+'UF'] }); o.rexItems.push(...(r.rexItems||[])); (r.cosLines||[]).forEach(x=>{ const c=cosAgg[x.k]||(cosAgg[x.k]={k:x.k,l:x.l,m:0,mUF:0}); c.m+=x.m; c.mUF+=x.mUF }) }
     o.cosLines=Object.values(cosAgg)
     o.pct=margenPct(o.res,o.ing)
+    // Resultado antes de sueldos de socios: el Resultado más lo que descuenta por ellos (sueldo, impuesto único y cotizaciones). Una sola cifra para Inicio, Oficina y el Estado.
+    o.resSin=o.res+o.soc; o.resSinUF=o.resUF+o.socUF; o.pctSin=margenPct(o.resSin,o.ing)
     // Cifras para MOSTRAR la cascada: redondeadas de modo que las partes sumen el total (UF enteras; pesos a $0,1M como fmtMill).
-    const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,rex]=redondearPartes([o['fac'+sf],o['rex'+sf]],paso,[0]), sub=Math.round(o['sub'+sf]/paso)*paso, [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]); return {fac,sub,rex,ing,cos,com,res} }
+    const cuadra=(paso,sf)=>{ const ing=Math.round(o['ing'+sf]/paso)*paso, [fac,rex]=redondearPartes([o['fac'+sf],o['rex'+sf]],paso,[0]), sub=Math.round(o['sub'+sf]/paso)*paso, [res,cos,com]=redondearPartes([o['res'+sf],o['cos'+sf],o['com'+sf]],paso,[0]), soc=Math.round(o['soc'+sf]/paso)*paso, [socRem,socCot]=redondearA([o['socRem'+sf],o['socCot'+sf]],soc,paso); return {fac,sub,rex,ing,cos,com,res,soc,socRem,socCot,resSin:res+soc} }
     o.verUF=cuadra(1,'UF'); o.verCLP=cuadra(1e5,'')
     return o },[fuRes,billing,terceros,costosOfiRows,expenses,clients,selYear,currentYear,_mNow,ufDias,ufRef])
   return { vendidoMes, salesYr, ufState, ufHoy, ufRef, ufDias, ingConc, ingAbonos, targets, metricasAnio, m, metaUF, ingresosPorAnioVenta, comisPagadasAnioVenta, metaCobranza, _esFactHon, extBillIds, facturadoTerceros, facturadoEmitido, facturadoYr, facturadoByYear, fuRes, resAnio }

@@ -39,3 +39,16 @@ test('la cifra en pesos es «Resultado» y «Margen» solo el porcentaje y «Pag
   }
   assert.equal(leer('src/App.jsx').filter((x) => /filaT\('Subarriendo/.test(x.t)).length, 0)
 })
+
+test('el porcentaje junto al Resultado se llama «margen», nunca «ingresos» ni «sobre los ingresos»', () => {
+  const dash = leer('src/vistas/DashboardView.jsx'), ofi = leer('src/vistas/OficinaView.jsx')
+  assert.deepEqual(dash.filter((x) => /sobre los ingresos/.test(x.t)).map((x) => x.n), [])
+  assert.deepEqual(dash.filter((x) => /kpiTile\('marg'/.test(x.t) && /'ingresos'\)/.test(x.t)).map((x) => x.n), [])
+  assert.deepEqual(ofi.filter((x) => /label='Resultado'/.test(x.t) && /cap='ingresos'/.test(x.t)).map((x) => x.n), [])
+})
+
+test('Resultado antes de sueldos de socios sale de la misma función en Inicio y en el Estado', () => {
+  assert.ok(leer('src/vistas/DashboardView.jsx').some((x) => /Resultado antes de sueldos de socios/.test(x.t) && /mRes\('resSin'/.test(x.t)))
+  assert.ok(leer('src/vistas/EstadoResultadosFormal.jsx').some((x) => /Resultado antes de sueldos de socios/.test(x.t) && /T1\.resSin/.test(x.t)))
+  assert.ok(leer('src/lib/resultadoAnio.js').some((x) => /o\.resSin=o\.res\+o\.soc/.test(x.t)))
+})
