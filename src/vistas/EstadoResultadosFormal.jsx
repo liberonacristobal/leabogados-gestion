@@ -5,7 +5,7 @@
 // redondeadas para que el estado sume. El Excel baja las cifras exactas.
 import { useMemo, useState } from 'react'
 import { C, SEC_LBL, BtnDescarga, fmtFechaDMY, useIsDesktop, appAlert, appConfirm } from '../lib/base.jsx'
-import { resultadoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill, avisarBillingCambio, logActividad, esPPMcosto } from '../lib/compartido.jsx'
+import { resultadoMes, iuPresupuestoMes, useFuentesResultado, useImpuestosFuentes, useUF, useUFFechas, ufDelDia, finMesOHoy, usePersistedState, UF_FALLBACK, currentYear, fmtMill, montoFactura, saldoBill, avisarBillingCambio, logActividad, esPPMcosto } from '../lib/compartido.jsx'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ResultadoAnioView } from './ResultadoAnioView.jsx'
 import { puenteCaja } from '../../supabase/functions/_shared/puenteCaja.js'
@@ -167,7 +167,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       ['', ''], ['Estimación, régimen Pro Pyme general. Es un piso: los depósitos sin identificar no entran. Proyección moderada sin crecimiento.', ''] ] }
     // Tercera hoja: presupuesto vs real de los costos de oficina (la misma regla de la página, solo meses cerrados).
     const rmesPv = {}; A1.R.forEach((r, i) => { rmesPv[i + 1] = r })
-    const PV = presupuestoVsReal({ costosOfiRows, rmes: rmesPv, yr: year, curY: currentYear, curM, esPPM: esPPMcosto })
+    const PV = presupuestoVsReal({ costosOfiRows, rmes: rmesPv, yr: year, curY: currentYear, curM, esPPM: esPPMcosto, iuMes: (m) => iuPresupuestoMes(fu, costosOfiRows, `${year}-${pad(m)}`) })
     const hojaPvr = PV ? { hoja: 'Presupuesto vs real', head: ['Concepto', 'Presupuesto', 'Real', 'Desvío'], anchos: [40, 16, 16, 16], numCols: [1, 2, 3], filas: [
       ['MES A MES', '', '', ''], ...PV.filas.map(f => [MESES[f.m - 1].charAt(0).toUpperCase() + MESES[f.m - 1].slice(1) + (f.est ? ' (estimado)' : ''), Math.round(f.bt), Math.round(f.rt), Math.round(f.rt - f.bt)]),
       ...(PV.resto.length ? [[`${MESES[PV.cerM].charAt(0).toUpperCase() + MESES[PV.cerM].slice(1)}${PV.resto.length > 1 ? ' a diciembre' : ''} (proyectado)`, Math.round(PV.budResto), '', '']] : []),

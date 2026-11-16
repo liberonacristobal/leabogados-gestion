@@ -8,7 +8,7 @@ import { impuestosMensuales, pagosConBoleta, listaBoletasPorCargar, idOficina } 
 import { GrupoImpuestos, DetalleImpuestos } from './impuestosMensualesUI.jsx'
 import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
-import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
+import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, iuPresupuestoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
 export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, soloControl=false, checksExtra=[], onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
@@ -60,7 +60,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
     try{ await setLearningKV('boleta_destino',rut,v||''); imps.recargar() }catch(e){ appAlert('No se pudo guardar el destino: '+(e.message||e)) } }
   const impOf=m=>impuestosMensuales({per:pad(m),docs:(ventas&&ventas.length?ventas:imps.docs)||[],boletas:imps.boletas,pagos:pagosB,liquidaciones:imps.liquidaciones,declarados:imps.declarados,informado:imps.valores?.[pad(m)]?.ppm,destinos,terceros,boletaSet:[...fuB.boleta]})
   const faltanOtros=m=>listaBoletasPorCargar({pagos:pagosB,boletas:imps.boletas,declarados:imps.declarados,desde:`${yr}-01`,destinos}).filter(x=>x.per!==pad(m)).map(x=>({...x,mesLbl:MESES[Number(x.per.slice(5,7))-1]}))
-  const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[],boleta:fuB.boleta}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
+  const rmes=useMemo(()=>{ const fuY={sii:ventas||[],plan:cm||[],boleta:fuB.boleta,liq:fuB.liq||[]}, deps={billing,terceros,costosOfiRows,expenses,clients}, o={}
     for(let m=1;m<=maxM;m++) o[m]=resultadoMes(fuY,deps,pad(m)); return o },[ventas,cm,fuB,billing,terceros,costosOfiRows,expenses,clients,yr,maxM])   // eslint-disable-line react-hooks/exhaustive-deps
   const R=(m,k)=>Number(rmes[m]?.[k])||0
   // Desglose de la facturación propia (cuadra con resultadoMes.fac): emitida sin facturas de gastos ni de subarriendo − NC − externos.
@@ -178,7 +178,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       // Presupuesto vs real, en costos BRUTOS por categoría. Presupuesto = Costos de oficina (sin PPM, sin el subarriendo ni los gastos recuperados, vigente por mes con desde/monto_prev).
       // Real = las mismas líneas de costo de resultadoMes SIN la línea de subarriendo (planilla + banco + gastos varios): cuadra con «Costos de operación» más el subarriendo (que baja ese total).
       // Presupuesto vs real: regla única (_shared/presupuestoVsReal.js), la misma que baja al Excel del Estado de resultados.
-      const PV=presupuestoVsReal({costosOfiRows,rmes,yr,curY,curM,esPPM:esPPMcosto}); if(!PV) return null
+      const PV=presupuestoVsReal({costosOfiRows,rmes,yr,curY,curM,esPPM:esPPMcosto,iuMes:m=>iuPresupuestoMes(fuB,costosOfiRows,`${yr}-${pad(m)}`)}); if(!PV) return null
       const {cerM,allM,CATS,filas,bud,real,dv,resto,budResto,proy,budAnio,catTot,gvGrupos}=PV
       const dCol=v=>Math.abs(v)<1?C.done:v>0?C.overdueText:C.greenText
       const dTxt=v=>Math.abs(v)<1?'—':(v>0?'+':'−')+fmtMill(Math.abs(v))

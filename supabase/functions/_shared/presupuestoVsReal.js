@@ -10,15 +10,15 @@ const vacio = () => /** @type {Record<string,number>} */ ({ rem: 0, cot: 0, arr:
 const tot = (/** @type {Record<string,number>} */ o) => Object.values(o).reduce((a, v) => a + v, 0)
 
 /**
- * @param {{ costosOfiRows:any[], rmes:Record<number,any>, yr:number, curY:number, curM:number, esPPM:(r:any)=>boolean }} o
+ * @param {{ costosOfiRows:any[], rmes:Record<number,any>, yr:number, curY:number, curM:number, esPPM:(r:any)=>boolean, iuMes?:(m:number)=>number }} o `iuMes(m)` = impuesto único de las líneas de Remuneraciones en ese mes (va en Remuneraciones, como en lo real)
  * `rmes[m]` = resultadoMes del mes m (1 a 12). Devuelve null si no hay presupuesto.
  */
-export function presupuestoVsReal({ costosOfiRows, rmes, yr, curY, curM, esPPM }) {
+export function presupuestoVsReal({ costosOfiRows, rmes, yr, curY, curM, esPPM, iuMes }) {
   const pad = (/** @type {number} */ m) => `${yr}-${String(m).padStart(2, '0')}`
   const cerM = yr < curY ? 12 : curM - 1
   const allM = Array.from({ length: Math.max(0, cerM) }, (_, i) => i + 1)
   const budCat = (/** @type {any} */ r) => { const c = String(r.categoria || ''), it = String(r.item || ''); if (/contador/i.test(it)) return 'con'; if (c === 'Remuneraciones') return 'rem'; if (c === 'Leyes sociales') return 'cot'; if (c === 'Arriendo y espacio' && !/limpieza|aseo/i.test(it)) return 'arr'; return 'gv' }
-  const budM = (/** @type {number} */ m) => { const o = vacio(); (costosOfiRows || []).filter((r) => r && r.activo !== false && !r.es_ingreso && !esPPM(r)).forEach((r) => { const eff = (r.desde && pad(m) < String(r.desde).slice(0, 7)) ? (r.monto_prev ?? r.monto) : r.monto; o[budCat(r)] += _n(eff) }); return o }
+  const budM = (/** @type {number} */ m) => { const o = vacio(); (costosOfiRows || []).filter((r) => r && r.activo !== false && !r.es_ingreso && !esPPM(r)).forEach((r) => { const eff = (r.desde && pad(m) < String(r.desde).slice(0, 7)) ? (r.monto_prev ?? r.monto) : r.monto; o[budCat(r)] += _n(eff) }); if (iuMes) o.rem += _n(iuMes(m)); return o }
   const realM = (/** @type {number} */ m) => {
     const r = rmes[m], o = vacio(); if (!r) return o
     if (!r.conPlanilla) { const b = budM(m); Object.keys(o).forEach((k) => { o[k] = b[k] }); o.gv += _n(r.gv); return o }

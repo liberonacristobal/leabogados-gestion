@@ -120,3 +120,20 @@ test('de lo emitido a lo facturado: Total emitido − reembolsos − subarriendo
   assert.equal(r.totalEmitido, 2_400_000)               // todos los documentos tipo 33/34 del mes
   assert.equal(r.totalEmitido - r.facExc.reemb - r.facExc.subarr - r.facExc.ext - r.facExc.nc, r.fac)
 })
+
+test('el impuesto único de las liquidaciones va dentro de Remuneraciones: líquido del banco + impuesto único (+ retención de la boleta), y sin remuneración no hay impuesto único', () => {
+  const ym2 = '2026-10', clients = [{ id: 'of', is_internal: true }]
+  const expenses = [
+    { client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Ana', date: '2026-10-30', amount: 1_000_000 },
+    { client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Beto', date: '2026-10-30', amount: 600_000 },
+    { client_id: 'of', type: 'gasto', category: 'Sueldos', subcategory: 'Carla', date: '2026-10-30', amount: 500_000 },   // emite boleta
+  ]
+  const liq = [{ periodo: '2026-10', persona: 'A', impuesto_unico: 50_000 }, { periodo: '2026-10', persona: 'B', impuesto_unico: 20_000 }]
+  const r = M.resultadoMes({ sii: [], plan: [{ anio: 2026, mes: 10 }], boleta: new Set(['carla']), liq }, { billing: [], terceros: [], costosOfiRows: [], expenses, clients }, ym2)
+  const bruta = Math.round(500_000 / (1 - 0.1525))
+  assert.equal(r.remDet.iu, 70_000); assert.equal(r.remDet.liquido, 1_600_000); assert.equal(r.remDet.boleta, 500_000); assert.ok(Math.abs(r.remDet.retencion - (bruta - 500_000)) <= 1)
+  assert.ok(Math.abs(r.cosLines.find((x) => x.k === 'rem').m - (1_600_000 + bruta + 70_000)) <= 1)
+  assert.equal(r.cos, r.cosLines.reduce((t, x) => t + x.m, 0))
+  const sin = M.resultadoMes({ sii: [], plan: [], boleta: new Set(), liq }, { billing: [], terceros: [], costosOfiRows: [], expenses: [], clients }, '2026-11')
+  assert.equal(sin.remDet.iu, 0)   // sin remuneración en el mes no se carga impuesto único
+})

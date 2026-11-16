@@ -20,6 +20,25 @@ export function liquidacionesVigentes(filas) {
 export const consultaLiquidaciones = (contadora, extra = '') => `from:${contadora} (subject:LIQUIDACIONES OR subject:LIQUIDACION) has:attachment${extra ? ' ' + extra : ''}`
 
 /**
+ * Impuesto único retenido a los trabajadores en el MES TRABAJADO `ym` («AAAA-MM»), de las liquidaciones: es parte del costo de la remuneración (el bruto que paga el estudio).
+ * Si la contadora aún no manda las liquidaciones del mes, se usa el mes anterior con liquidaciones y se marca `provisorio` (no se inventa una cifra distinta).
+ * @param {{periodo:string, persona:string, impuesto_unico:number}[]} liquidaciones
+ * @param {string} ym
+ * @returns {{total:number, personas:{persona:string, iu:number}[], periodo:string|null, provisorio:boolean}}
+ */
+export function impuestoUnicoDelMes(liquidaciones, ym) {
+  const todas = (liquidaciones || []).filter(l => l && /^\d{4}-\d{2}$/.test(String(l.periodo)))
+  let per = String(ym), provisorio = false
+  if (!todas.some(l => l.periodo === per)) {
+    const prev = [...new Set(todas.map(l => String(l.periodo)).filter(p => p < per))].sort().pop()
+    if (!prev) return { total: 0, personas: [], periodo: null, provisorio: false }
+    per = prev; provisorio = true
+  }
+  const personas = todas.filter(l => l.periodo === per).map(l => ({ persona: String(l.persona), iu: Number(l.impuesto_unico) || 0 }))
+  return { total: personas.reduce((a, x) => a + x.iu, 0), personas, periodo: per, provisorio }
+}
+
+/**
  * Cotizaciones provisorias de un mes, mientras la contadora no manda sus valores: cotizaciones del trabajador de las liquidaciones del mes más la parte
  * del empleador del último mes con valores reales (cotización real − la del trabajador), proporcional al imponible.
  * @param {{mes:{imponible:number, cotizaciones:number}[], previo:{imponible:number, cotizaciones:number}[], cotizPrevReal:number}} p

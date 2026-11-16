@@ -1,7 +1,7 @@
 // Liquidaciones de la contadora: la corregida (correo más reciente) reemplaza a la original. Casos con cifras ficticias, sin nombres ni sueldos reales.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { liquidacionesVigentes, consultaLiquidaciones, cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
+import { liquidacionesVigentes, consultaLiquidaciones, impuestoUnicoDelMes, cotizacionesProvisorias } from '../supabase/functions/_shared/liquidacionesReglas.js'
 
 const L = (periodo, persona, imponible, _t) => ({ periodo, persona, imponible, _t })
 
@@ -53,4 +53,11 @@ test('la búsqueda de liquidaciones acepta el asunto en singular de las corregid
     { periodo: '2026-02', persona: 'TRABAJADOR A', imponible: 3486416, _t: 200 },   // corregida con bono, llegó después
   ])
   assert.equal(v.length, 1); assert.equal(v[0].imponible, 3486416)
+})
+
+test('impuesto único del mes: suma las liquidaciones del mes trabajado; sin ellas usa el mes anterior y lo marca provisorio', () => {
+  const l = [{ periodo: '2026-09', persona: 'A', impuesto_unico: 100 }, { periodo: '2026-09', persona: 'B', impuesto_unico: 50 }, { periodo: '2026-10', persona: 'A', impuesto_unico: 120 }]
+  assert.deepEqual(impuestoUnicoDelMes(l, '2026-09'), { total: 150, personas: [{ persona: 'A', iu: 100 }, { persona: 'B', iu: 50 }], periodo: '2026-09', provisorio: false })
+  const nov = impuestoUnicoDelMes(l, '2026-11'); assert.equal(nov.total, 120); assert.equal(nov.provisorio, true); assert.equal(nov.periodo, '2026-10')
+  assert.equal(impuestoUnicoDelMes(l, '2026-08').total, 0); assert.equal(impuestoUnicoDelMes([], '2026-10').total, 0); assert.equal(impuestoUnicoDelMes(null, '2026-10').total, 0)
 })
