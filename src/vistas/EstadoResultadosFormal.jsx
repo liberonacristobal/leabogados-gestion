@@ -79,6 +79,19 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     return { p, e, des, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
   }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Salud de datos › «Fecha de pago y depósito»: la fuente de la verdad de la fecha de cobro es el depósito conciliado en el banco; una factura cuya fecha de pago difiere en más de 3 días del último depósito conciliado del año se avisa (caso Bustos: dos conciliaciones cruzadas).
+  const checkFechas = useMemo(() => {
+    const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
+    const ultDep = {}
+    RA.ingConc.forEach(c => { if (c.tipo_destino !== 'factura') return; const m = abonoById[String(c.movimiento_id)]; if (!m) return; const f = String(m.fecha || '').slice(0, 10); if (!ultDep[String(c.factura_id)] || f > ultDep[String(c.factura_id)]) ultDep[String(c.factura_id)] = f })
+    const dias = (a, b) => Math.round(Math.abs(new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / 864e5)
+    const lista = []
+    Object.keys(ultDep).forEach(id => { const b = billById[id], dep = ultDep[id]; if (!b || b.deleted_at || b.status === 'Anulada' || !b.paid_at || !dep.startsWith(String(year))) return; const d = dias(String(b.paid_at).slice(0, 10), dep); if (d > 3) lista.push({ b, d }) })
+    lista.sort((x, y) => y.d - x.d)
+    const nombre = b => (clients.find(c => String(c.id) === String(b.client_id)) || {}).name || 'cliente', n = lista.length
+    return [[n === 0, 'Fecha de pago y depósito', n ? `${n} factura${n !== 1 ? 's' : ''} con la fecha de pago distinta de su depósito conciliado, en más de 3 días: ${lista.slice(0, 3).map(x => `${nombre(x.b)} ${x.b.invoice_no}`).join(', ')}` : 'cada fecha de pago coincide con su depósito conciliado', null]]
+  }, [RA, billing, clients, year])
+
   // Líneas de gastos: la unión de las de ambos años (en su orden), con el subarriendo como menor gasto (signo contrario).
   const gKeys = useMemo(() => { const m = {}; [A1, A0].forEach(A => A.R.forEach(r => (r.cosLines || []).forEach(l => { if (!m[l.k]) m[l.k] = l.l }))); return Object.keys(m).sort((a, b) => ORDEN.indexOf(a) - ORDEN.indexOf(b)).map(k => ({ k, l: m[k] })) }, [A1, A0])
 
@@ -239,6 +252,6 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
       })()}
 
       {/* Lo que antes vivía solo en «Resultado del año»: Presupuesto vs real y Salud de datos (la planilla de costos por mes sigue en su página). */}
-      <ResultadoAnioView soloControl isDesktop={D} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} expenses={expenses} clients={clients} user={user} onOpenGasto={onOpenGasto} onCargarBoleta={onCargarBoleta} />
+      <ResultadoAnioView soloControl isDesktop={D} billing={billing} terceros={terceros} costosOfiRows={costosOfiRows} expenses={expenses} clients={clients} user={user} onOpenGasto={onOpenGasto} onCargarBoleta={onCargarBoleta} checksExtra={checkFechas} />
     </div>)
 }

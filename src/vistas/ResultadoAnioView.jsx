@@ -10,7 +10,7 @@ import { descargarXlsx } from '../lib/seleccionLote.jsx'
 import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
-export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, soloControl=false, onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
+export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, soloControl=false, checksExtra=[], onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
   const curY=new Date().getFullYear(), curM=new Date().getMonth()+1
   // Salud de datos › Fondos de clientes: el reparto por fondo (repartoFondos) debe sumar el saldo de la ficha (fgCliente), cliente por cliente.
   // Una sola pasada por los gastos, agrupados por cliente (ambas funciones filtran por cliente: mismo resultado); se recalcula solo si cambian.
@@ -295,7 +295,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         [subSinItem.length===0,'Subarriendo en Costos de Oficina',subSinItem.length?`${subSinItem.length} mes${subSinItem.length!==1?'es':''} con factura de subarriendo y sin el ítem que baja el costo en Costos de Oficina: el subarriendo no aparece en el resultado`:'el subarriendo facturado tiene su ítem en Costos de Oficina'],
         [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${fondosChk.n} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
-      ]
+      ,...(checksExtra||[])]
       return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
         <div style={card}>{(()=>{ const out=[]; checks.forEach(([ok,t,d,act],i)=>{
           out.push(<div key={'c'+i} onClick={act?act.on:undefined} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 16px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:act?'pointer':'default'}}>
