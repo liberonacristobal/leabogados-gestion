@@ -1,7 +1,7 @@
 // Movido de compartido.jsx por scripts/dividir-compartido.py. Sin cambios de comportamiento.
 import { useState, useMemo, useEffect } from 'react'
 import { supabase, DEMO } from '../supabase'
-import { resumenDiasCobro } from '../../supabase/functions/_shared/diasCobro.js'
+import { resumenDiasCobro, facturasCobradas } from '../../supabase/functions/_shared/diasCobro.js'
 import { useAnnualTargets } from './resultadoAnio.js'
 import { descargarFotoTabla } from './fotoTabla.js'
 import { conversionPropuestas } from '../../supabase/functions/_shared/ventasConversion.js'
@@ -227,7 +227,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const metaDe=soc=>soc===null?metaAnio:ADMIN_NAMES.includes(soc)?metaAnio/ADMIN_NAMES.length:0   // meta repartida en partes iguales entre los socios; «Sin socio» no tiene
   const ventasP=ventas   // misma lista de ventas del período que usan el ticket y el mayor cliente (kpisPorSocio)
   const itVenta=(x,m)=>({d:`${x.ym}-01`,cid:x.s.client_id,doc:'',det:x.s.title||'',m,soc:x.soc})
-  const cobradas=(soc,p)=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no&&inPer(b.paid_at,p)&&!['reembolso','nota_credito'].includes(b.billing_type)&&(!soc||socioDe(b,ctx)===soc)).map(b=>({b,dias:Math.round((new Date(b.paid_at)-new Date(b.issued_at))/864e5),monto:montoFactura(b)||Number(b.amount)||0}))
+  const cobradas=(soc,p)=>facturasCobradas((billing||[]).filter(b=>b&&(!soc||socioDe(b,ctx)===soc)),y,{ym,mes:p==='mes'})   // la regla única de _shared/diasCobro.js: emitidas en el período y ya pagadas, sin subarriendo; la misma de Oficina y Presupuesto
   const itCobro=(soc,p)=>cobradas(soc,p).map(x=>({d:x.b.paid_at,cid:x.b.client_id,doc:`F${folioN(x.b.invoice_no)}`,det:`${x.dias} d`,m:x.monto,soc:socioDe(x.b,ctx)}))
   const itP=(s,ks,sg)=>(soc,p)=>P.filter(r=>r.s===s&&ks.includes(r.k)&&(!soc||r.soc===soc)&&inPer(r.d,p)).map(r=>({d:r.d,cid:r.cid,doc:r.doc,det:r.det,m:sg*r.m,soc:r.soc,mov:r.mov}))
   const itKV=k=>soc=>(KV[k]?.it||[]).filter(x=>!soc||x.soc===soc)
@@ -249,9 +249,9 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     {g:'cos',k:'fnet',l:'Facturado neto de comisiones',f:'$',ext:1,v:(s,p)=>emitido(s,p).i,dr:itP('f',[...KFI,'com'],1)},
     {g:'cos',k:'cpag',l:'Comisiones pagadas en el año',f:'$',ext:1,v:(s,p)=>-sumP('c','com',s,p),dr:itP('c',['com'],-1)},
     {g:'cob',k:'ireal',l:'Ingreso real',f:'$',ext:1,v:(s,p)=>card6(s,p)[5],dr:itP('c',KI,1)},
-    {g:'cob',k:'dcob',l:'Días de cobro',f:'d',v:(s,p)=>dc(s,p).pond,dr:itCobro},
-    {g:'cob',k:'p60',l:'Cobrado en ≤60 días',f:'%',v:(s,p)=>dc(s,p).pct60,dr:itCobro},
-    {g:'cob',k:'p90',l:'Cobrado en más de 90 días',f:'%',v:(s,p)=>dc(s,p).pct90,dr:itCobro},
+    {g:'cob',k:'dcob',l:'Días de cobro',f:'d',per:'anio',v:(s,p)=>dc(s,p).pond,dr:itCobro},
+    {g:'cob',k:'p60',l:'Cobrado en ≤60 días',f:'%',per:'anio',v:(s,p)=>dc(s,p).pct60,dr:itCobro},
+    {g:'cob',k:'p90',l:'Cobrado en más de 90 días',f:'%',per:'anio',v:(s,p)=>dc(s,p).pct90,dr:itCobro},
     {g:'car',k:'venc',l:'Vencido',f:'$',ext:1,per:'hoy',v:s=>{ const o=KV.venc; return o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0 },dr:itKV('venc')},
     {g:'car',k:'vencp',l:'Vencido, % de lo facturado',f:'%',per:'hoy',v:s=>{ const o=KV.venc, vv=o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0, fa=card6(s,'ytd')[1]; return fa>0?vv/fa*100:null },dr:itKV('venc')},
     {g:'car',k:'pcob',l:'Por cobrar',f:'$',ext:1,per:'hoy',v:s=>{ const o=KV.pcob; return o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0 },dr:itKV('pcob')},
@@ -276,7 +276,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     return <div><div style={{...SEC_LBL,fontWeight:800,margin:'2px 2px 8px'}}>Indicadores clave, {perLbl(vista)}</div>
       <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>{filas.map(F2=>{ const vs=valsFila(F2), pcs=F2.ext?partesPctEnt(vs.slice(1)):null, on=vs[0]!=null&&F2.dr
         const menor=CLAVE_MENOR.includes(F2.k), a=vs[1], b=vs[2], lider=(a==null||b==null||a===b)?-1:((menor?a<b:a>b)?0:1)
-        const sub=F2.k==='tick'?`Oficina, mediano ${fV(ticketMediano(null,pDe(F2)),'$')}`:F2.per==='hoy'?'Oficina, hoy':'Oficina'
+        const sub=F2.k==='tick'?`Oficina, mediano ${fV(ticketMediano(null,pDe(F2)),'$')}`:F2.per==='hoy'?'Oficina, hoy':F2.per==='anio'?'Oficina, en el año':'Oficina'
         const parte=(soc,j)=>{ const v=vs[j+1], d=F2.ext?null:difDe(F2,v,vs[0]), chip=F2.ext?(v!=null&&Math.abs(v)>=1?`${pcs[j]} %`:null):null
           return <div key={soc} onClick={v!=null&&F2.dr?e=>{ e.stopPropagation(); abrirFila(F2.k,soc) }:undefined} style={{display:'flex',alignItems:'center',gap:7,padding:isDesk?'4px 0':'3px 0',fontSize:isDesk?12.5:10.5,color:C.muted,cursor:v!=null&&F2.dr?'pointer':'default'}}>
             <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{soc}</span>
