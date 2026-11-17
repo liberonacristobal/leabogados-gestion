@@ -8,6 +8,7 @@
  * @returns {{n:number, monto:number, pond:number|null, simple:number|null, pct60:number|null, pct90:number|null}}
  */
 export function resumenDiasCobro(items) {
+  // Decidido 2026-11-17: la factura que se emite ya pagada (días negativos: pago por adelantado) no tiene cobro que medir y queda fuera, no cuenta como 0 días.
   const v = (items || []).filter(x => x && Number(x.monto) > 0 && Number.isFinite(x.dias) && x.dias >= 0 && x.dias < 400)
   const monto = v.reduce((a, x) => a + x.monto, 0)
   if (!v.length || !(monto > 0)) return { n: 0, monto: 0, pond: null, simple: null, pct60: null, pct90: null }

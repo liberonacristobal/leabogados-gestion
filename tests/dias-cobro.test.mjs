@@ -30,3 +30,7 @@ test('una sola regla: emitidas en el período y pagadas, sin subarriendo, reembo
   assert.equal(diasDeCobroFacturas(B, 2026).pond, 25)                                                // (100·10 + 300·30) ÷ 400
   assert.equal(diasDeCobroFacturas(B, 2026, { ym: '2026-04' }).pond, 10)
 })
+test('la factura emitida ya pagada (días negativos) no se mide: queda fuera, no cuenta como 0 días', () => {
+  const r = resumenDiasCobro([{ monto: 100, dias: 20 }, { monto: 900, dias: -15 }])
+  assert.equal(r.n, 1); assert.equal(r.pond, 20)
+})
