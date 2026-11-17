@@ -62,7 +62,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const P=useMemo(()=>partidasPorSocio({billing,sales,clients,anticipos,terceros,expenses,ic:fu.ic,ia:fu.ia,ov:fu.ov,fondoExtra}),[billing,sales,clients,anticipos,terceros,expenses,fu,fondoExtra])
   const V=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y,null,{terceros,billing}),[sales,clients,ufRef,y,terceros,billing])
   const Vprev=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y-1,null,{terceros,billing}),[sales,clients,ufRef,y,terceros,billing])   // año anterior: base del crecimiento
-  const {inPer,sumP,vend,KF,KFI,KC,KI,card6,emitido,ventas,ticket,ticketMediano,mayorCliente,margen,crecimiento}=kpisPorSocio({P,V,Vprev,ym})   // fuente única (compartido.jsx): la misma que usa el Panel de socios
+  const {inPer,sumP,vend,KF,KFI,KC,KI,card6,emitido,ventas,ventasConMonto,ticket,ticketMediano,mayorCliente,margen,crecimiento}=kpisPorSocio({P,V,Vprev,ym})   // fuente única (compartido.jsx): la misma que usa el Panel de socios
   // «Sin socio» dice de quién es: los abogados no socios dueños de sus partidas del año (venta.responsible → abogado del cliente).
   const sinAbos=useMemo(()=>{ const set=new Set(); P.forEach(r=>{ if(r.soc!==SIN_SOCIO||r.k==='sub'||!String(r.d).startsWith(String(y))) return; const b=r.bid&&billById[String(r.bid)], sv=b&&b.sale_id&&saleById[String(b.sale_id)], a=(sv&&sv.responsible)||cliById[String(r.cid)]?.abogado_responsable; if(a&&!ADMIN_NAMES.includes(a)) set.add(a) }); return [...set].sort() },[P,y,billById,saleById,cliById])
   const Ls=c=>c!==SIN_SOCIO?c:sinAbos.length===1?sinAbos[0]:sinAbos.length?'Otros':SIN_SOCIO   // encabezados angostos
@@ -240,8 +240,8 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     {g:'ven',k:'vbru',l:'Vendido bruto',f:'$',ext:1,v:(s,p)=>ventasP(s,p).reduce((a,x)=>a+x.b,0),dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
     {g:'ven',k:'vnet',l:'Vendido neto de comisiones',f:'$',ext:1,v:(s,p)=>vend(s,p),dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.m))},
     {g:'ven',k:'nven',l:'Ventas cerradas',f:'n',ext:1,v:(s,p)=>ventasP(s,p).length,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
-    {g:'ven',k:'tick',l:'Ticket promedio',f:'$',v:ticket,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
-    {g:'ven',k:'tickm',l:'Ticket mediano',f:'$',v:ticketMediano,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'tick',l:'Ticket promedio',f:'$',v:ticket,dr:(s,p)=>ventasConMonto(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'tickm',l:'Ticket mediano',f:'$',v:ticketMediano,dr:(s,p)=>ventasConMonto(s,p).map(x=>itVenta(x,x.b))},
     {g:'ven',k:'mcli',l:'Mayor cliente, % del vendido',f:'%',v:mayorCliente,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
     {g:'ven',k:'crec',l:`Crecimiento contra ${y-1}`,f:'%+',v:crecimiento,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.m))},
     {g:'ven',k:'conv',l:'Conversión de propuestas',f:'%',per:'hoy',v:s=>conversionPropuestas({sales:sociosDe(s),noCuentan}).pct,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},

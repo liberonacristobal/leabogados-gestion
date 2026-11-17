@@ -115,15 +115,16 @@ export function kpisPorSocio({P,V,ym,Vprev}){
     socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KFI.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
   // Ventas del socio en el período (items de V: b = bruto, m = neto de comisiones, c = comisión, s = la venta).
   /** @type {(soc:any,p:string)=>any[]} */ const ventas=(soc,p)=>V.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym))
-  /** Ticket promedio = vendido bruto ÷ ventas cerradas. @type {(soc:any,p:string)=>number|null} */ const ticket=(soc,p)=>{ const a=ventas(soc,p); return a.length?a.reduce((t,x)=>t+(Number(x.b)||0),0)/a.length:null }
-  /** Ticket mediano: no lo distorsionan las pocas ventas muy grandes. @type {(soc:any,p:string)=>number|null} */ const ticketMediano=(soc,p)=>{ const a=ventas(soc,p).map(x=>Number(x.b)||0).sort((x,y)=>x-y); if(!a.length) return null; const k=a.length>>1; return a.length%2?a[k]:(a[k-1]+a[k])/2 }
+  /** Ventas con monto: las «por horas» aún sin precio (bruto 0) no tienen ticket y no entran en el ticket promedio ni en el mediano. @type {(soc:any,p:string)=>any[]} */ const ventasConMonto=(soc,p)=>ventas(soc,p).filter(x=>(Number(x.b)||0)>0)
+  /** Ticket promedio = vendido bruto ÷ ventas con monto. @type {(soc:any,p:string)=>number|null} */ const ticket=(soc,p)=>{ const a=ventasConMonto(soc,p); return a.length?a.reduce((t,x)=>t+(Number(x.b)||0),0)/a.length:null }
+  /** Ticket mediano: no lo distorsionan las pocas ventas muy grandes. @type {(soc:any,p:string)=>number|null} */ const ticketMediano=(soc,p)=>{ const a=ventasConMonto(soc,p).map(x=>Number(x.b)||0).sort((x,y)=>x-y); if(!a.length) return null; const k=a.length>>1; return a.length%2?a[k]:(a[k-1]+a[k])/2 }
   /** Mayor cliente: % del vendido bruto que concentra el cliente con más ventas. @type {(soc:any,p:string)=>number|null} */ const mayorCliente=(soc,p)=>{ const a=ventas(soc,p), por=/** @type {Record<string,number>} */ ({}); let tot=0
     a.forEach(x=>{ const k=String(x.s&&x.s.client_id||'?'), b=Number(x.b)||0; por[k]=(por[k]||0)+b; tot+=b }); return tot>0?Math.max(...Object.values(por))/tot*100:null }
   /** Margen después de comisiones = (facturado − comisiones de lo facturado) ÷ facturado. @type {(soc:any,p:string)=>number|null} */ const margen=(soc,p)=>{ const e=emitido(soc,p); return e.f>0?e.i/e.f*100:null }
   /** Crecimiento del vendido neto contra el mismo período del año anterior (%; null sin base). @type {(soc:any,p:string)=>number|null} */ const crecimiento=(soc,p)=>{ if(!Vprev) return null
     const pm=`${y-1}${ym.slice(4)}`, sum=(/** @type {any[]} */ a)=>a.reduce((t,x)=>t+(Number(x.m)||0),0)
     const cur=sum(ventas(soc,p)), prev=sum(Vprev.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===pm:x.ym<=pm))); return prev>0?(cur-prev)/prev*100:null }
-  return {inPer,sumP,vend,KF,KE,KFI,KC,KI,card6,emitido,nEmitidas,emitidoMeses,ventas,ticket,ticketMediano,mayorCliente,margen,crecimiento}
+  return {inPer,sumP,vend,KF,KE,KFI,KC,KI,card6,emitido,nEmitidas,emitidoMeses,ventas,ventasConMonto,ticket,ticketMediano,mayorCliente,margen,crecimiento}
 }
 
 // Resumen Por socio: cifras en $M de 1 decimal que CUADRAN (las partes suman el total redondeado) y participación % que suma 100.

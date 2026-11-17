@@ -47,3 +47,11 @@ test('margen después de comisiones = (facturado − comisiones) ÷ facturado, s
   const k = kpisPorSocio({ P, V: [], ym: '2026-11' })
   assert.equal(k.margen('Ana', 'ytd'), 90); assert.equal(k.margen('Beto', 'ytd'), null)
 })
+test('el ticket ignora las ventas por horas sin monto (bruto 0)', () => {
+  const V = [..._V, _v('Ana', '2026-06', 0, 900, 'k4'), _v('Beto', '2026-07', 0, 0, 'k5')]
+  const k = kpisPorSocio({ P: [], V, ym: '2026-11' })
+  assert.equal(k.ticket('Ana', 'ytd'), 4000); assert.equal(k.ticketMediano('Ana', 'ytd'), 3000)   // igual que sin las ventas de monto 0
+  assert.equal(k.ticket(null, 'ytd'), 14000 / 5); assert.equal(k.ventasConMonto(null, 'ytd').length, 5)
+  assert.equal(k.ventas(null, 'ytd').length, 7)                                                    // las ventas siguen contándose en «Ventas cerradas»
+  assert.equal(k.ticket('Nadie', 'ytd'), null)
+})
