@@ -57,7 +57,7 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
     for(let m=1;m<=maxM;m++){ const ym=`${yr}-${String(m).padStart(2,'0')}`; cob+=Number(cobMes[ym])||0; cos+=Number(resultadoMes(fu,deps,ym).cos)||0; com+=comisionMesTerc(terceros,ym) }
     const ofi=(clients||[]).find(c=>c&&(c.is_internal||/liberona\s+escala/i.test(c.name||'')))
     const gF29=ofi?(expenses||[]).filter(e=>e&&!e.deleted_at&&e.type==='gasto'&&String(e.client_id)===String(ofi.id)&&String(e.category||'')==='Impuestos y patentes'&&/ppm/i.test(String(e.subcategory||''))):[]
-    const f29=f29CajaDelAnio(gF29,imp.declarados||{},yr,maxM), ppm=f29.total   // PPM + impuesto único del F29 declarado por fecha de pago; la retención ya está en el honorario bruto de Costos reales (_shared/f29Caja.js)
+    const f29=f29CajaDelAnio(gF29,imp.declarados||{},yr,maxM), ppm=f29.total   // solo el PPM del F29 declarado por fecha de pago: el impuesto único y la retención ya están en Costos reales (_shared/f29Caja.js)
     const gen=cob-cos-com-ppm
     return {cob,cos,com,ppm,f29,gen,sin:gen-totalRet} },[fu,billing,terceros,costosOfiRows,expenses,clients,yr,maxM,totalRet,cobMes,imp.declarados])   // eslint-disable-line react-hooks/exhaustive-deps
   const fM=n=>(n<0?'−':'')+fmtMill(Math.abs(Number(n)||0))
@@ -107,8 +107,8 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
         {ln('','Cobrado',fMLR(genV+cosV+comV+ppmV),{on:onOpenResultado})}
         {ln('−','Costos reales',fMLR(cosV),{menos:true,on:onOpenEstado&&(()=>onOpenEstado(isoLocal(Date.now()).slice(0,7)))})}
         {ln('−','Comisiones pagadas',fMLR(comV),{menos:true,on:onOpenProveedores})}
-        {ln('−','Pago al SII (F29)',fMLR(ppmV),{menos:true,on:()=>setF29Ab(v=>!v),open:f29Ab})}
-        {f29Ab&&<>{ln('','PPM',fMLR(caja.f29.ppm),{sub:true})}{ln('','Impuesto único de trabajadores',fMLR(caja.f29.unico),{sub:true})}{ln('','Retención de honorarios (ya está en Costos reales)',fMLR(caja.f29.ret),{sub:true})}{caja.f29.sinDeclarar>0&&ln('','Sin F29 declarado (monto pagado)',fMLR(caja.f29.sinDeclarar),{sub:true})}</>}
+        {ln('−','PPM pagado al SII',fMLR(ppmV),{menos:true,on:()=>setF29Ab(v=>!v),open:f29Ab})}
+        {f29Ab&&<>{ln('','Impuesto único de trabajadores (ya está en Costos reales)',fMLR(caja.f29.unico),{sub:true})}{ln('','Retención de honorarios (ya está en Costos reales)',fMLR(caja.f29.ret),{sub:true})}{caja.f29.sinDeclarar>0&&ln('','Sin F29 declarado (monto pagado)',fMLR(caja.f29.sinDeclarar),{sub:true})}</>}
         {ln('=','Caja generada',fMLR(genV),{tot:true})}
         {ln('−','Retirado',fMLR(retV),{menos:true,on:onVerRetiros})}
         {ln('=','Sin retirar del año',fMLR(sinV),{tot:true})}

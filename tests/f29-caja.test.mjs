@@ -1,4 +1,4 @@
-// «Pago al SII (F29)» de la caja del año: PPM + impuesto único del F29 declarado; la retención de honorarios no suma (ya va en el bruto de Costos reales). Datos anonimizados.
+// «Pago al SII (F29)» de la caja del año: solo el PPM del F29 declarado; el impuesto único y la retención de honorarios no suman (ya van en Costos reales). Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { f29CajaDelAnio, periodoDeConceptoF29 } from './../supabase/functions/_shared/f29Caja.js'
@@ -7,11 +7,11 @@ const decl = { '2026-08': { ppm: 416721, impuesto_unico: 161063, retencion_bhe: 
 const G = (id, date, concept, amount) => ({ id, date, concept, amount })
 
 test('período del concepto', () => { assert.equal(periodoDeConceptoF29('IVA/PPM 09-2026 (retenciones BHE'), '2026-09'); assert.equal(periodoDeConceptoF29('Patente'), null) })
-test('declarado: cuenta PPM + impuesto único (sin la retención), sea cual sea el monto registrado del gasto', () => {
+test('declarado: cuenta solo el PPM (ni el impuesto único ni la retención, que ya están en Costos reales), sea cual sea el monto registrado del gasto', () => {
   const r = f29CajaDelAnio([G('a', '2026-09-11', 'IVA/PPM 08-2026', 577784), G('b', '2026-10-13', 'IVA/PPM 09-2026', 1035335)], decl, 2026, 12)
-  assert.equal(r.total, 416721 + 161063 + 659577 + 160564)
-  assert.equal(r.ret, 27917 + 215194)      // la retención se informa, no suma
-  assert.equal(r.items[0].registrado, 577784); assert.equal(r.items[0].monto, 416721 + 161063)   // no el registrado: el declarado manda
+  assert.equal(r.total, 416721 + 659577)
+  assert.equal(r.unico, 161063 + 160564); assert.equal(r.ret, 27917 + 215194)      // el impuesto único y la retención se informan, no suman
+  assert.equal(r.items[0].registrado, 577784); assert.equal(r.items[0].monto, 416721)   // no el registrado: el declarado manda
 })
 test('sin declarar: cuenta el gasto registrado entero y lo marca', () => {
   const r = f29CajaDelAnio([G('a', '2026-11-12', 'IVA/PPM 10-2026', 1883004)], decl, 2026, 12)
