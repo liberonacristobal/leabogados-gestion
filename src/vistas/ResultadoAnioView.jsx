@@ -8,7 +8,7 @@ import { impuestosMensuales, pagosConBoleta, listaBoletasPorCargar, idOficina } 
 import { GrupoImpuestos, DetalleImpuestos } from './impuestosMensualesUI.jsx'
 import { C, Gl, appAlert, fmt, fmtFechaDMY } from '../lib/base.jsx'
 import { descargarXlsx } from '../lib/seleccionLote.jsx'
-import { KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, iuPresupuestoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
+import { ChevAb, KpiIco, MESES, MES_C, esPPMcosto, fmtMill, fmtMillLR, margenPct, redondearPartes, redondearA, cascadaResultado, repartoFondos, resultadoMes, iuPresupuestoMes, tonoMargen, useFuentesResultado, useImpuestosFuentes, setLearningKV } from '../lib/compartido.jsx'
 
 // ── Página "Resultado del año" (tab resultadoAnio, en Oficina). Ingresos (facturación SII propia neta de NC + comisión de externos) − egresos (planilla real oficina_costos_mensual, neta del subarriendo, + comisiones). Cifras desde fuentes de verdad: SII (sii_cargas_docs) + planilla editable. Cada bloque se expande (NC cliqueables). Filtros Año / Por mes. Responsive. ──
 export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[], costosOfiRows=[], isDesktop=true, soloControl=false, checksExtra=[], onBack, user, expenses=[], clients=[], onOpenGasto, onCargarBoleta }){
@@ -23,6 +23,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
   const [selM,setSelM]=useState(curM)
   const [open,setOpen]=useState('ing')   // bloque abierto: 'ing' | 'cos' | 'com' | null
   const [ncOpen,setNcOpen]=useState(false)
+  const [ctrlAb,setCtrlAb]=useState({pv:false,sd:false})   // Presupuesto vs real y Salud de datos (Estado de resultados): replegados al entrar
   const [sinEnlOpen,setSinEnlOpen]=useState(false)   // Salud de datos: despliegue inline de facturas SII sin enlazar
   const [ventas,setVentas]=useState([]); const [cm,setCm]=useState([])
   const [editM,setEditM]=useState(null)   // mes en edición (1-12) o null
@@ -238,7 +239,8 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
       const card2={background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',minWidth:0}
       const secT=t=><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.accent,margin:'16px 4px 8px'}}>{t}</div>
       return <>
-        <div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Presupuesto vs real · costos brutos, sin descontar el subarriendo · {per}{cerM<12?' '+yr:''}</div>
+        <div onClick={()=>setCtrlAb(x=>({...x,pv:!x.pv}))} role='button' style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}><span style={{minWidth:0}}>Presupuesto vs real · costos brutos, sin descontar el subarriendo · {per}{cerM<12?' '+yr:''}</span><ChevAb open={ctrlAb.pv}/></div>
+        {ctrlAb.pv&&<>
         <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8}}>
           {kt('pb','file',C.card,C.accent,'Presupuesto',fmtMill(bud),`costos ${per}`)}
           {kt('pr','wallet',C.azulBg,C.accent,'Real',fmtMill(real),'banco + planilla')}
@@ -256,6 +258,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
             return [fila(id,l,t.b,t.r,{open:o,on:()=>tg(id)}), ...(o?[...(dr?gvGrupos.map(([g,v])=><div key={id+g} style={{display:'grid',gridTemplateColumns:isDesktop?'minmax(0,1fr) 110px 110px 100px':'minmax(0,1fr) auto',gap:10,padding:isDesktop?'5px 14px 5px 30px':'6px 12px 6px 24px',background:C.bgSoft,fontSize:12,color:C.muted,fontVariantNumeric:'tabular-nums'}}><span style={{minWidth:0,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontWeight:600}}>{g}</span>{isDesktop?<span/>:null}<span style={{whiteSpace:'nowrap',fontWeight:600,textAlign:'right'}}>{fmtMill(v)}</span>{isDesktop?<span/>:null}</div>):[]),...filas.filter(f=>f.b[k]||f.r[k]).flatMap(f=>{ const cid=f.m+k, oc=pvCat===cid; return [fila(id+'m'+f.m,isDesktop?MESES[f.m-1]:MES_C[f.m-1],f.b[k],f.r[k],{sub:true,est:f.est,open:oc,on:()=>setPvCat(x=>x===cid?null:cid)}),...(oc?[panelPartidas(f.m,k,f.b[k],f.r[k])]:[])] })]:[])] })}
           {fila('pvctot','Total',bud,real,{tot:true})}
         </div>
+        </>}
       </>
     })()}
 
@@ -281,8 +284,9 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
         [descF.length===0,'Fondos de clientes',descF.length?`${descF.length} cliente${descF.length!==1?'s':''} cuyo reparto por fondo no suma su saldo: ${descF.slice(0,3).join(', ')}`:`el reparto por fondo suma el saldo de cada ficha · ${fondosChk.n} clientes`],
         [sldFalta.length===0,'Sueldos de la planilla',sldFalta.length?`${sldFalta.length} mes${sldFalta.length!==1?'es':''} sin sueldos cargados · confírmalos con las liquidaciones`:'cargados en todos los meses · confírmalos con las liquidaciones', sldFalta.length?{label:'editar',on:()=>abrirEditor(sldFalta[0])}:null],
       ,...(checksExtra||[])]
-      return <><div style={{fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}>Salud de datos</div>
-        <div style={card}>{(()=>{ const out=[]; checks.forEach(([ok,t,d,act],i)=>{
+      const nRev=checks.filter(c=>!c[0]).length
+      return <><div onClick={()=>setCtrlAb(x=>({...x,sd:!x.sd}))} role='button' style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:10.5,fontWeight:800,letterSpacing:.5,textTransform:'uppercase',color:C.muted,margin:'22px 4px 10px'}}><span>Salud de datos</span>{nRev>0&&<span style={{fontSize:10.5,fontWeight:700,letterSpacing:0,textTransform:'none',color:C.soonText,background:C.soonBg,borderRadius:10,padding:'1px 8px'}}>{nRev} por revisar</span>}<ChevAb open={ctrlAb.sd}/></div>
+        {ctrlAb.sd&&<div style={card}>{(()=>{ const out=[]; checks.forEach(([ok,t,d,act],i)=>{
           out.push(<div key={'c'+i} onClick={act?act.on:undefined} style={{display:'flex',alignItems:'center',gap:11,padding:'12px 16px',borderTop:i?`1px solid ${C.bgSoft}`:'none',cursor:act?'pointer':'default'}}>
             <span style={{width:28,height:28,borderRadius:'50%',background:ok?C.greenBg:C.soonBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ok
               ?<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke={C.greenText} strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'><path d='M20 6 9 17l-5-5'/></svg>
@@ -291,7 +295,7 @@ export function ResultadoAnioView({ backLabel='Oficina', billing=[], terceros=[]
             {act&&<span style={{flexShrink:0,fontSize:11,fontWeight:800,color:C.soonText,whiteSpace:'nowrap'}}>{act.label} <Gl n='chevron'/></span>}
           </div>)
           if(i===0&&sinEnlOpen&&sinEnl.length>0) out.push(<div key='sinenl' style={{padding:'0 16px 12px'}}><div style={{background:C.overdueBg,borderRadius:10,overflow:'hidden'}}>{sinEnl.slice().sort((a,b)=>String(a.fecha_emision||'').localeCompare(String(b.fecha_emision||''))).map((d,j)=><div key={j} style={{display:'flex',justifyContent:'space-between',gap:10,padding:'7px 12px',fontSize:12,color:C.overdueText,fontWeight:600,borderTop:j?'1px solid rgba(163,45,45,.14)':'none'}}><span>{Number(d.tipo_dte)===61?'NC · ':''}N° {d.folio} · {d.receptor_name||'—'}</span><span style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmt(Number(d.monto)||0)}</span></div>)}</div></div>)
-        }); return out })()}</div></>
+        }); return out })()}</div>}</>
     })()}
   </div>)
 }
