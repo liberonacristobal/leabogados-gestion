@@ -588,10 +588,13 @@ export const comisionesVenta = (s, terceros=[], billing=[], ufRef=0) => {
       const ult=[...filas].sort((a,b)=>fecha(b).localeCompare(fecha(a)))[0]
       proy=Math.max(0,12-filas.length)*(Number(ult?.monto)||0)
     }
-    return { clp, real:true, filas, proy, anual:clp+proy }
+    // Facturas «por cuenta de un externo» (comision_pct): el monto es la parte del externo, no un costo de la oficina (lo nuestro entra aparte como «Comisiones de externos»).
+    // `clp` las incluye para lo facturado de la venta; `anual` (el neto de la venta en Inicio, Resultado, Por socio, Presupuesto) no las descuenta.
+    const ext=filas.reduce((a,t)=>a+(t.comision_pct!=null?(Number(t.monto)||0):0),0)
+    return { clp, real:true, filas, proy, ext, anual:clp-ext+proy }
   }
   const clp0=Math.round(costoVentaUF(s,ufRef)*(ufRef||0))
-  return { clp:clp0, real:false, filas:[], proy:0, anual:clp0 }
+  return { clp:clp0, real:false, filas:[], proy:0, ext:0, anual:clp0 }
 }
 
 // ─── UF EN VIVO (fuente única) ────────────────────────────────────────────────
