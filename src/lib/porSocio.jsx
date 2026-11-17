@@ -102,17 +102,19 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
 
   // ── Resumen (alternativa A): 4 tarjetas con el ingreso real en $M (cuadran con redondearPartes) y UNA tabla comparativa, Oficina primera.
   const kv=vista, ir6=COLS.map(c=>card6(c,kv)[5]), irM=partesM(ir6), irPct=partesPctEnt(ir6), irOf=irM.reduce((a,x)=>a+x,0)
-  const iniC={[ADMIN_NAMES[0]]:'C',[ADMIN_NAMES[1]]:'E',[SIN_SOCIO]:'S'}, bgC={[ADMIN_NAMES[0]]:C.azulBg,[ADMIN_NAMES[1]]:C.tealBg,[SIN_SOCIO]:C.ambarBg}
-  const kpiTiles=()=>{ const t=(key,ini,bg,col,lab,val,sub,go)=><div key={key} {...(go?{role:'button',tabIndex:0,onClick:go,onKeyDown:e=>{ if(e.key==='Enter') go() }}:{})} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'10px 14px':'8px 10px',display:'grid',gridTemplateColumns:`${isDesk?36:28}px minmax(0,1fr)`,columnGap:isDesk?12:8,alignItems:'center',minWidth:0,cursor:'pointer',boxSizing:'border-box'}}>
-      <span style={{gridRow:'1 / span 3',width:isDesk?36:28,height:isDesk?36:28,borderRadius:'50%',background:bg,color:col,display:'grid',placeItems:'center'}}><span style={{width:isDesk?12:10,height:isDesk?12:10,borderRadius:'50%',background:col}}/></span>
-      <div style={{fontSize:isDesk?11:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:col,whiteSpace:'nowrap'}}>{lab}</div>
-      <div style={{fontSize:isDesk?21:17,fontWeight:800,letterSpacing:-.6,color:col===C.done?C.done:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.15}}>{fmtMillLR(val)}</div>
-      <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{sub}</div></div>
+  const ICO_SOC={of:_ic(<><rect x='4' y='3' width='16' height='18' rx='1.5'/><path d='M9 8h2M13 8h2M9 12h2M13 12h2M10 21v-4h4v4'/></>),soc:_ic(<><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></>)}
+  // Tarjetas de socios (Resumen y Datos): misma estructura que los indicadores clave del Comparativo, neutras, con ícono a la izquierda. «Sin socio» al final y en gris.
+  const kpiTiles=(o={})=>{ const vals=o.vals||irM, pct=partesPctEnt(vals), ofi=vals.reduce((a,x)=>a+x,0), sel=o.sel
+    const t=(key,ico,lab,val,sub,go,gris)=><div key={key} {...(go?{role:'button',tabIndex:0,onClick:go,onKeyDown:e=>{ if(e.key==='Enter') go() }}:{})} style={{background:sel===key?C.bgSoft:C.card,border:`1px solid ${sel===key?C.accent:C.border}`,borderRadius:12,padding:isDesk?'14px':'12px 10px',display:'flex',alignItems:'center',gap:isDesk?12:9,minWidth:0,cursor:go?'pointer':'default',boxSizing:'border-box'}}>
+      <span style={{width:isDesk?34:30,height:isDesk?34:30,borderRadius:8,background:C.bgSoft,color:gris?C.textSoft:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ico}</span>
+      <div style={{minWidth:0,flex:1}}><div style={{...SEC_LBL,fontSize:isDesk?12:10,lineHeight:1.25,letterSpacing:isDesk?.5:.2,color:gris?C.textSoft:undefined}}>{lab}</div>
+        <div style={{fontSize:isDesk?26:20,fontWeight:800,letterSpacing:-.6,lineHeight:1.05,color:gris?C.textSoft:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtMillLR(val)}</div>
+        <div style={{fontSize:isDesk?11:10,color:C.muted,marginTop:3,lineHeight:1.25,whiteSpace:'nowrap'}}>{sub}</div></div></div>
     return <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>
-      {t('of','▦',C.greenBg,C.greenText,'Oficina',irOf,'Socios + Sin socio',()=>irDatos(null,5,kv))}
-      {COLS.map((c,i)=>t(c,iniC[c],bgC[c],tinta[c],L(c),irM[i],`${irPct[i]} % del total`,()=>irDatos(c,5,kv)))}
+      {t('of',ICO_SOC.of,'Oficina',ofi,o.subOf||'Socios + Sin socio',o.goOf||(()=>irDatos(null,5,kv)))}
+      {COLS.map((c,i)=>t(c,ICO_SOC.soc,L(c),vals[i],o.subs?o.subs[i]:`${pct[i]} % del total`,o.go?()=>o.go(c):()=>irDatos(c,5,kv),c===SIN_SOCIO))}
     </div> }
-  const tablaResumen=()=>{ const cs=[null,...COLS], A=cs.map(c=>card6(c,kv)), lab=[['Vendido neto',0],['Facturado',1],['+ Comisiones de externos',7],['Cobrado propio',2],['− Com. pagadas',3],['+ Com. percibidas',4],['= Ingreso real',5],[isDesk?'Subarriendo · aparte':'Subarriendo',6]]
+  const tablaResumen=()=>{ const cs=[null,...COLS], A=cs.map(c=>card6(c,kv)), lab=[['Vendido neto',0],['Facturado',1],[isDesk?'+ Comisiones de externos':'+ Com. de externos',7],['Cobrado propio',2],['− Com. pagadas',3],['+ Com. percibidas',4],['= Ingreso real',5],[isDesk?'Subarriendo · aparte':'Subarriendo',6]]
     const th2=(c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],background:c===null?C.greenSoft:C.bgSoft,paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c===null?'Oficina':Ls(c)}</th>
     return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Comparativo · {perLbl(kv)}</span></div>
@@ -154,7 +156,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     return <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{wCols(colsT.length).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
       <thead><tr><th style={{...th,textAlign:'left'}}/>{colsT.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===colsT.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
       <tbody>{seccion('f','Facturado',FF,'Facturado')}{seccion('c','Cobrado',FC,'Ingreso real','sub')}</tbody></table> }
-  const MesAMes=()=>{ const csM=[...COLS,null], s=mm, nMes=mo
+  const MesAMes=()=>{ const csM=[null,...COLS], s=mm, nMes=mo
     const ks=s==='c'?KI:KF
     const cv=csM.map(soc=>{ const a=Array.from({length:nMes},(_,i)=>P.reduce((x,r)=>x+((r.s===s&&ks.includes(r.k)&&(!soc||r.soc===soc)&&String(r.d).startsWith(`${y}-${String(i+1).padStart(2,'0')}`))?r.m:0),0)); return isDesk?a:redondearPartes(a,1e5) })
     const socIdx=csM.map((c,j)=>c?j:-1).filter(j=>j>=0)
@@ -162,7 +164,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Mes</th>{csM.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===csM.length-1?(isDesk?16:8):undefined}}>{c?Ls(c):'Oficina'}</th>)}</tr></thead>
       <tbody>{Array.from({length:nMes},(_,k)=>nMes-1-k).map(i=>{ const vs=cv.map(a=>a[i]); const a0=socIdx.length>1?vs[socIdx[0]]:null, a1=socIdx.length>1?vs[socIdx[1]]:null, mx=a0==null?-1:(a0>=a1?socIdx[0]:socIdx[1]); const ymI=`${y}-${String(i+1).padStart(2,'0')}`, sel=vista==='mes'&&ym===ymI
         return <tr key={i} onClick={()=>{ setYm(ymI); setVista('mes'); setOpen(null) }} className='er-c' style={{cursor:'pointer',background:sel?C.azulBg:undefined}}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.accent,fontWeight:700}}>{isDesk?mesTitulo(new Date(y,i,15)).split(' ')[0]:MES_C[i]}</td>
-          {vs.map((v,j)=><td key={j} style={{...td,fontWeight:csM[j]===null?800:700,color:Math.abs(v)<1?C.done:csM[j]===null?C.accent:(j===mx?tinta[csM[j]]:C.text),paddingRight:j===vs.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td>)}</tr> })}
+          {vs.map((v,j)=><td key={j} style={{...td,fontWeight:csM[j]===null?800:700,color:Math.abs(v)<1?C.done:csM[j]===null?C.accent:(csM[j]===SIN_SOCIO?C.textSoft:C.text),paddingRight:j===vs.length-1?(isDesk?16:8):undefined}}>{Math.abs(v)>=1?FMT(v):'—'}</td>)}</tr> })}
         <tr><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>{y}</td>{cv.map((a,j)=><td key={j} style={{...td,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===cv.length-1?(isDesk?16:8):undefined}}>{FMT(a.reduce((x,v)=>x+v,0))}</td>)}</tr>
       </tbody></table> }
 
@@ -315,16 +317,17 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   // ── Datos crudos (partidas reales, monto en la columna de su socio)
   const CON={f:{emit:'Facturas emitidas',cext:'Comisión de externos',reemb:'Reembolsos de gastos',nc:'Notas de crédito',com:'Comisiones de lo facturado',sub:'Subarriendo · aparte'},c:{fac:'Cobrado de facturas',ant:'Anticipos',reemb:'Reembolsos de gastos',com:'Comisiones pagadas',perc:'Comisiones percibidas',sub:'Subarriendo · aparte'}}
   const SECL={f:'Facturado',c:'Cobrado'}
-  const Datos=()=>{ const p=vista, base=P.filter(r=>r.s===dat.sec&&inPer(r.d,p)&&(!dat.soc||r.soc===dat.soc)), presentes=[...new Set(base.map(r=>r.k))], q=_normTxt(dat.q||'')
+  const Datos=()=>{ const p=vista, base0=P.filter(r=>r.s===dat.sec&&inPer(r.d,p)), base=base0.filter(r=>!dat.soc||r.soc===dat.soc), presentes=[...new Set(base.map(r=>r.k))], q=_normTxt(dat.q||'')
     const grupo=dat.con==='pre'?(dat.sec==='f'?KF:KI):dat.con==='cp'?KC:[dat.con]
     let LD=base.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q)))
     LD.sort((a,b)=>dat.ord==='m'?Math.abs(b.m)-Math.abs(a.m):String(b.d).localeCompare(String(a.d)))
     const T={}; COLS.forEach(c=>T[c]=0); LD.forEach(r=>T[r.soc]+=r.m)
     const chip=(on,t,f)=><button key={t} onClick={f} style={{fontSize:11,fontWeight:700,borderRadius:20,padding:'4px 10px',border:0,cursor:'pointer',background:on?C.accent:C.bgSoft,color:on?'#fff':C.muted,whiteSpace:'nowrap'}}>{t}</button>
     const tdD={padding:isDesk?'7px 10px':'7px 6px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12:11,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums',overflow:'hidden',textOverflow:'ellipsis'}
-    return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    const LS=base0.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q))), TS={}; COLS.forEach(c=>TS[c]=0); LS.forEach(r=>TS[r.soc]+=r.m); const nP=c=>LS.filter(r=>r.soc===c).length
+    return <div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8}}>{kpiTiles({vals:COLS.map(c=>TS[c]),subs:COLS.map(c=>`${nP(c)} partidas`),subOf:`${LS.length} partidas`,sel:dat.soc||'of',go:c=>setDat(d=>({...d,soc:d.soc===c?null:c,lim:40})),goOf:()=>setDat(d=>({...d,soc:null,lim:40}))})}
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800}}>{SECL[dat.sec]} · partidas · {perLbl(p)}</span></div>
-      <div style={{display:'flex',gap:12,flexWrap:'wrap',padding:isDesk?'8px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`,fontSize:11.5,fontWeight:700}}>{COLS.map(c=><span key={c} style={{color:tinta[c],fontVariantNumeric:'tabular-nums'}}>{L(c)} {P$(T[c])}</span>)}<span style={{color:C.accent,fontVariantNumeric:'tabular-nums'}}>· Oficina {P$(COLS.reduce((a,c)=>a+T[c],0))}</span></div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:isDesk?'10px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`}}>
         {chip(dat.sec==='f','Facturado',()=>setDat(d=>({...d,sec:'f',con:'pre',lim:40})))}{chip(dat.sec==='c','Cobrado',()=>setDat(d=>({...d,sec:'c',con:'pre',lim:40})))}
         <span style={{width:6}}/>{[[null,'Todos'],...COLS.map(c=>[c,L(c)])].map(([k,l])=>chip(dat.soc===k,l,()=>setDat(d=>({...d,soc:k,lim:40}))))}
@@ -343,13 +346,13 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
           {isDesk&&<td style={{...tdD,textAlign:'left',color:C.muted}}>{r.doc||'—'}</td>}
           {isDesk&&<td style={{...tdD,textAlign:'left',color:C.textSoft}} title={r.det}>{CON[r.s][r.k]}</td>}
           {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,color:c===r.soc?(r.m<0?C.overdueText:C.text):C.done,paddingRight:j===COLS.length-1?16:undefined}}>{c===r.soc?P$(r.m):'·'}</td>)
-            :<td style={{...tdD,paddingRight:10,verticalAlign:'top',color:r.m<0?C.overdueText:C.text}}><span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:tinta[r.soc],marginRight:5}}/>{P$(r.m)}</td>}
+            :<td style={{...tdD,paddingRight:10,verticalAlign:'top',color:r.m<0?C.overdueText:C.text}}>{P$(r.m)}</td>}
         </tr>)}
           <tr><td colSpan={isDesk?4:1} style={{...tdD,textAlign:'left',paddingLeft:isDesk?16:10,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4'}}>Total · {LD.length} partidas</td>
             {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===COLS.length-1?16:undefined}}>{P$(T[c])}</td>)
               :<td style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:10}}>{P$(COLS.reduce((a,c)=>a+T[c],0))}</td>}</tr></tbody></table>
       {LD.length>dat.lim&&<div onClick={()=>setDat(d=>({...d,lim:d.lim+40}))} style={{textAlign:'center',padding:10,fontSize:12,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>Ver {Math.min(40,LD.length-dat.lim)} más de {LD.length}</div>}
-    </div> }
+    </div></div> }
 
   const exportar=()=>{ try{
     const rows=[['Fecha','Socio','Sección','Concepto','Cliente','Folio','Detalle','Monto']]
@@ -367,7 +370,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
       <span style={{display:'inline-flex',alignItems:'center',gap:6,marginLeft:isDesk?'auto':0}}>{nb(false,()=>shift(-1),'chevL')}<span style={{minWidth:isDesk?124:96,textAlign:'center',fontSize:13.5,fontWeight:700,color:C.text}}>{perLbl(vista)}</span>{nb(ym===curYM,()=>shift(1),'chevron')}</span>
       <BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />
     </div>
-    {tab!=='cmp'&&kpiTiles()}
+    {tab==='res'&&kpiTiles()}
     {tab==='res'&&<div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8,marginTop:isDesk?12:8}}>
       {tablaResumen()}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
