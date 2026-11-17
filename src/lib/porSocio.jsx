@@ -40,7 +40,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const [vista,setVista]=useState(datIni?.p||_psMem?.vista||'ytd')
   const [ps,setPs0]=useState(()=>_lsGet('porsocio_ps',false)); const setPs=v=>{ setPs0(v); _lsSet('porsocio_ps',v) }
   const [sec,setSec]=useState({f:false,c:false})
-  const [plg,setPlg]=useState({})   // bloques del Resumen y Datos: entran replegados
+  const [plg,setPlg]=useState({dat:true})   // bloques del Resumen y Datos: entran replegados
   const tg=k=>()=>setPlg(x=>({...x,[k]:!x[k]})), Chv=k=><span style={{color:C.textSoft,display:'inline-flex',marginLeft:2}}><ChevAb open={!!plg[k]}/></span>
   const [open,setOpen]=useState(null)
   const [verTodo,setVerTodo]=useState(false)
@@ -345,7 +345,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
         {Object.entries(CON[dat.sec]).filter(([k])=>presentes.includes(k)).map(([k,l])=>chip(dat.con===k,l,()=>setDat(d=>({...d,con:k,lim:40}))))}
         <span style={{marginLeft:'auto',display:'inline-flex',gap:4}}>{chip(dat.ord==='f','Fecha',()=>setDat(d=>({...d,ord:'f'})))}{chip(dat.ord==='m','Monto',()=>setDat(d=>({...d,ord:'m'})))}</span></div>
       <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
-        <colgroup>{(isDesk?['10%','22%','8%','21%','13%','13%','13%']:['66%','34%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+        <colgroup>{(isDesk?['12%','21%','8%','19%','13%','13%','14%']:['66%','34%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
         <thead><tr>{(isDesk?['Fecha','Cliente','Folio','Concepto']:['Cliente']).map((h,i)=><th key={h} style={{...th,textAlign:'left',paddingLeft:i===0?(isDesk?16:10):undefined}}>{h}</th>)}{(isDesk?COLS:['Monto']).map((c,j,arr)=><th key={c} style={{...th,color:tinta[c]||C.accent,paddingRight:j===arr.length-1?(isDesk?16:10):undefined}}>{COLS.includes(c)?L(c):c}</th>)}</tr></thead>
         <tbody>{LD.slice(0,dat.lim).map((r,i)=><tr key={i} onClick={()=>irA(r)} className='er-c' style={{cursor:'pointer'}}>
           {isDesk?<><td style={{...tdD,textAlign:'left',paddingLeft:16,color:C.muted}}>{fmtFechaDMY(r.d)}</td>
