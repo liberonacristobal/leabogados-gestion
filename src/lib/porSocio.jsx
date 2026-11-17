@@ -11,6 +11,17 @@ import { esSubarriendo, redondearPartes, kpisPorSocio, partesM, partesPctEnt } f
 import { usePropuestasNoCuentan, ADMIN_NAMES, ChevAb, MES_C, MES_L, PS_RX_GASTO, SIN_SOCIO, UF_FALLBACK, _lsGet, _lsSet, esVencidaB, fmtMillLR, logActividad, mesTitulo, montoFactura, partidasPorSocio, saldoBill, setLearningKV, socioDe, socioDeVenta, usePorSocioFuentes, useUF, vendidoPorSocio } from './compartido.jsx'
 import { descargarTabla } from './archivos.js'
 
+// Indicadores clave del Comparativo (siempre a la vista, como tarjetas) y su presentación. «menor es mejor» en días de cobro y vencido.
+const CLAVE=['vnet','ireal','tick','dcob','venc','cump'], CLAVE_MENOR=['dcob','venc']
+const CLAVE_LBL={vnet:'Vendido neto'}
+const _ic=d=><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'>{d}</svg>
+const CLAVE_ICO={vnet:_ic(<><polyline points='3 17 9 11 13 15 21 7'/><polyline points='15 7 21 7 21 13'/></>),
+  ireal:_ic(<><rect x='2' y='6' width='20' height='12' rx='2'/><circle cx='12' cy='12' r='2.5'/></>),
+  tick:_ic(<><path d='M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/><circle cx='7.5' cy='7.5' r='1.2'/></>),
+  dcob:_ic(<><circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15.5 14'/></>),
+  venc:_ic(<><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/><path d='M12 9v4M12 17h.01'/></>),
+  cump:_ic(<><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.2'/></>)}
+
 // Última posición de la vista (pestaña, período y fila abierta): al volver desde una ficha se regresa al mismo lugar.
 let _psMem=null
 
@@ -48,7 +59,8 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const ctx={saleById,cliById,ov:fu.ov}
   const P=useMemo(()=>partidasPorSocio({billing,sales,clients,anticipos,terceros,expenses,ic:fu.ic,ia:fu.ia,ov:fu.ov,fondoExtra}),[billing,sales,clients,anticipos,terceros,expenses,fu,fondoExtra])
   const V=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y,null,{terceros,billing}),[sales,clients,ufRef,y,terceros,billing])
-  const {inPer,sumP,vend,KF,KFI,KC,KI,card6,emitido}=kpisPorSocio({P,V,ym})   // fuente única (compartido.jsx): la misma que usa el Panel de socios
+  const Vprev=useMemo(()=>vendidoPorSocio(sales,clients,ufRef,y-1,null,{terceros,billing}),[sales,clients,ufRef,y,terceros,billing])   // año anterior: base del crecimiento
+  const {inPer,sumP,vend,KF,KFI,KC,KI,card6,emitido,ventas,ticket,ticketMediano,mayorCliente,margen,crecimiento}=kpisPorSocio({P,V,Vprev,ym})   // fuente única (compartido.jsx): la misma que usa el Panel de socios
   // «Sin socio» dice de quién es: los abogados no socios dueños de sus partidas del año (venta.responsible → abogado del cliente).
   const sinAbos=useMemo(()=>{ const set=new Set(); P.forEach(r=>{ if(r.soc!==SIN_SOCIO||r.k==='sub'||!String(r.d).startsWith(String(y))) return; const b=r.bid&&billById[String(r.bid)], sv=b&&b.sale_id&&saleById[String(b.sale_id)], a=(sv&&sv.responsible)||cliById[String(r.cid)]?.abogado_responsable; if(a&&!ADMIN_NAMES.includes(a)) set.add(a) }); return [...set].sort() },[P,y,billById,saleById,cliById])
   const Ls=c=>c!==SIN_SOCIO?c:sinAbos.length===1?sinAbos[0]:sinAbos.length?'Otros':SIN_SOCIO   // encabezados angostos
@@ -204,7 +216,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     return o },[bill,fu.ov,saleById,cliById])
   const metaAnio=Number(metas.find(t=>t.year===y)?.target_amount)||0
   const metaDe=soc=>soc===null?metaAnio:ADMIN_NAMES.includes(soc)?metaAnio/ADMIN_NAMES.length:0   // meta repartida en partes iguales entre los socios; «Sin socio» no tiene
-  const ventasP=(soc,p)=>V.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym))
+  const ventasP=ventas   // misma lista de ventas del período que usan el ticket y el mayor cliente (kpisPorSocio)
   const itVenta=(x,m)=>({d:`${x.ym}-01`,cid:x.s.client_id,doc:'',det:x.s.title||'',m,soc:x.soc})
   const cobradas=(soc,p)=>(billing||[]).filter(b=>b&&!b.deleted_at&&b.status==='Pagado'&&b.paid_at&&b.issued_at&&b.invoice_no&&inPer(b.paid_at,p)&&!['reembolso','nota_credito'].includes(b.billing_type)&&(!soc||socioDe(b,ctx)===soc)).map(b=>({b,dias:Math.round((new Date(b.paid_at)-new Date(b.issued_at))/864e5),monto:montoFactura(b)||Number(b.amount)||0}))
   const itCobro=(soc,p)=>cobradas(soc,p).map(x=>({d:x.b.paid_at,cid:x.b.client_id,doc:`F${folioN(x.b.invoice_no)}`,det:`${x.dias} d`,m:x.monto,soc:socioDe(x.b,ctx)}))
@@ -213,74 +225,89 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const ssAll=useMemo(()=>(sales||[]).filter(s=>s&&!s.deleted_at&&!esSubarriendo(s)),[sales])
   const sociosDe=soc=>soc?ssAll.filter(s=>socioDeVenta(s,{cliById})===soc):ssAll
   const dc=(soc,p)=>resumenDiasCobro(cobradas(soc,p))
-  const marg=(soc,p)=>{ const e=emitido(soc,p); return e.f>0?e.i/e.f*100:null }
   const cobt=(soc,p)=>{ const its=ventasP(soc,p), tot=its.reduce((a,x)=>a+x.b,0); return tot>0?its.filter(x=>x.c>0).reduce((a,x)=>a+x.b,0)/tot*100:null }
   // g = tema · f = formato · ext = cifra de monto o cantidad (muestra su participación en la Oficina); sin ext = cifra relativa (muestra la diferencia con la Oficina)
   const FILAS=[
     {g:'ven',k:'vbru',l:'Vendido bruto',f:'$',ext:1,v:(s,p)=>ventasP(s,p).reduce((a,x)=>a+x.b,0),dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
     {g:'ven',k:'vnet',l:'Vendido neto de comisiones',f:'$',ext:1,v:(s,p)=>vend(s,p),dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.m))},
     {g:'ven',k:'nven',l:'Ventas cerradas',f:'n',ext:1,v:(s,p)=>ventasP(s,p).length,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
-    {g:'ven',k:'tick',l:'Ticket promedio',f:'$',v:(s,p)=>{ const a=ventasP(s,p); return a.length?a.reduce((x,y2)=>x+y2.b,0)/a.length:null },dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'tick',l:'Ticket promedio',f:'$',v:ticket,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'tickm',l:'Ticket mediano',f:'$',v:ticketMediano,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'mcli',l:'Mayor cliente, % del vendido',f:'%',v:mayorCliente,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
+    {g:'ven',k:'crec',l:`Crecimiento contra ${y-1}`,f:'%+',v:crecimiento,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.m))},
     {g:'ven',k:'conv',l:'Conversión de propuestas',f:'%',per:'hoy',v:s=>conversionPropuestas({sales:sociosDe(s),noCuentan}).pct,dr:(s,p)=>ventasP(s,p).map(x=>itVenta(x,x.b))},
     {g:'cos',k:'cfac',l:'Comisiones de lo facturado',f:'$',ext:1,v:(s,p)=>-sumP('f','com',s,p),dr:itP('f',['com'],-1)},
     {g:'cos',k:'fnet',l:'Facturado neto de comisiones',f:'$',ext:1,v:(s,p)=>emitido(s,p).i,dr:itP('f',[...KFI,'com'],1)},
     {g:'cos',k:'cpag',l:'Comisiones pagadas en el año',f:'$',ext:1,v:(s,p)=>-sumP('c','com',s,p),dr:itP('c',['com'],-1)},
+    {g:'cob',k:'ireal',l:'Ingreso real',f:'$',ext:1,v:(s,p)=>card6(s,p)[5],dr:itP('c',KI,1)},
     {g:'cob',k:'dcob',l:'Días de cobro',f:'d',v:(s,p)=>dc(s,p).pond,dr:itCobro},
     {g:'cob',k:'p60',l:'Cobrado en ≤60 días',f:'%',v:(s,p)=>dc(s,p).pct60,dr:itCobro},
     {g:'cob',k:'p90',l:'Cobrado en más de 90 días',f:'%',v:(s,p)=>dc(s,p).pct90,dr:itCobro},
     {g:'car',k:'venc',l:'Vencido',f:'$',ext:1,per:'hoy',v:s=>{ const o=KV.venc; return o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0 },dr:itKV('venc')},
+    {g:'car',k:'vencp',l:'Vencido, % de lo facturado',f:'%',per:'hoy',v:s=>{ const o=KV.venc, vv=o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0, fa=card6(s,'ytd')[1]; return fa>0?vv/fa*100:null },dr:itKV('venc')},
     {g:'car',k:'pcob',l:'Por cobrar',f:'$',ext:1,per:'hoy',v:s=>{ const o=KV.pcob; return o?(s?o.v[s]||0:Object.values(o.v).reduce((a,x)=>a+x,0)):0 },dr:itKV('pcob')},
-    {g:'mar',k:'marg',l:'Margen después de comisiones',f:'%',v:marg,dr:itP('f',['com'],-1)},
+    {g:'mar',k:'marg',l:'Margen',f:'%',v:margen,dr:itP('f',['com'],-1)},
     {g:'mar',k:'cobt',l:'Cobertura de otros costos',f:'%',v:cobt,dr:(s,p)=>ventasP(s,p).filter(x=>!(x.c>0)).map(x=>itVenta(x,x.b))},
     {g:'met',k:'meta',l:'Meta del año',f:'$',ext:1,per:'anio',v:s=>metaDe(s)>0?metaDe(s):null},
     {g:'met',k:'cump',l:'Cumplimiento de la meta',f:'%',per:'anio',v:s=>metaDe(s)>0?vend(s,'ytd')/metaDe(s)*100:null,dr:(s)=>ventasP(s,'ytd').map(x=>itVenta(x,x.m))},
   ]
   const GRUPOS=[['ven','Ventas','',C.azulBg],['cos','Costo de la venta','comisiones a terceros',C.ambarBg],['cob','Cobro','ponderado por monto',C.tealBg],['car','Cartera · hoy','',C.greenBg],['mar','Margen','después de comisiones',C.bgSoft],['met','Metas','repartidas 50 % y 50 % entre los socios',C.azulBg]]
-  const fV=(v,f)=>v==null?'—':f==='$'?(Math.abs(v)<1?'—':fmtMillLR(v)):f==='%'?`${Math.round(v)} %`:f==='d'?`${Math.round(v)} d`:String(Math.round(v))
+  const fV=(v,f)=>v==null?'—':f==='$'?(Math.abs(v)<1?'—':fmtMillLR(v)):f==='%'?`${Math.round(v)} %`:f==='%+'?`${v>0?'+':''}${Math.round(v)} %`:f==='d'?`${Math.round(v)} d`:String(Math.round(v))
   // Diferencia de un socio con la Oficina en una cifra relativa: sin umbral, cualquier diferencia se marca.
   const difDe=(F2,v,vo)=>{ if(F2.ext||v==null||vo==null||(F2.f==='$'&&(Math.abs(v)<1||Math.abs(vo)<1))) return null; const d=F2.f==='$'?(vo?(v/vo-1)*100:0):v-vo, r=Math.round(Math.abs(d)); if(r<1) return null; return {up:d>0,t:F2.f==='$'?`${r} %`:F2.f==='d'?`${r} d`:`${r} pp`} }
   const Flecha=({up,t})=><span style={{display:'inline-flex',alignItems:'center',gap:2,fontSize:10,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:10,padding:'0 6px',lineHeight:'16px',whiteSpace:'nowrap'}}><Gl n={up?'arrowUp':'arrowDown'}/>{t}</span>
-  const [ind,setInd0]=useState(()=>{ const v=_lsGet('porsocio_ind','vnet'); return FILAS.some(x=>x.k===v)?v:'vnet' }); const setInd=v=>{ setInd0(v); _lsSet('porsocio_ind',v) }
   const [dif,setDif0]=useState(()=>_lsGet('porsocio_dif',true)); const setDif=v=>{ setDif0(v); _lsSet('porsocio_dif',v) }
   const [ofiFin,setOfiFin0]=useState(()=>_lsGet('porsocio_ofifin',false)); const setOfiFin=v=>{ setOfiFin0(v); _lsSet('porsocio_ofifin',v) }
-  const [gAb,setGAb]=useState({})   // grupos plegados
-  const [indMenu,setIndMenu]=useState(false)
+  const [gAb,setGAb]=useState(()=>Object.fromEntries(GRUPOS.map(([g])=>[g,true])))   // grupos plegados: entran todos replegados
   const pDe=F2=>F2.per==='anio'?'ytd':vista
-  const abrirFila=(k,soc)=>{ const F2=FILAS.find(x=>x.k===k); if(!F2?.dr) return; setVerTodo(false); setGAb(g=>({...g,[F2.g]:false})); setKopen(o=>(o&&o.k===k&&o.soc===soc)?null:{k,soc}); setTimeout(()=>{ try{ document.getElementById('cmp-'+k)?.scrollIntoView({block:'center',behavior:'smooth'}) }catch(_){} },60) }
+  const abrirFila=(k,soc)=>{ const F2=FILAS.find(x=>x.k===k); if(!F2?.dr) return; setVerTodo(false); if(!CLAVE.includes(k)) setGAb(g=>({...g,[F2.g]:false})); setKopen(o=>(o&&o.k===k&&o.soc===soc)?null:{k,soc}); setTimeout(()=>{ try{ document.getElementById(CLAVE.includes(k)?'cmp-clave':'cmp-'+k)?.scrollIntoView({block:'center',behavior:'smooth'}) }catch(_){} },60) }
   const valsFila=F2=>{ const p=pDe(F2); const o=[F2.v(null,p),...COLS.map(c=>F2.v(c,p))]; return o }   // [Oficina, ...socios]
-  const TarjetasCmp=()=>{ const F2=FILAS.find(x=>x.k===ind)||FILAS[1], vs=valsFila(F2), pcs=F2.ext?partesPctEnt(vs.slice(1)):null
-    const card=(soc,j)=>{ const v=vs[j], d=soc===null?null:difDe(F2,v,vs[0]), col=soc===null?C.greenText:tinta[soc], on=v!=null&&F2.dr
-      return <div key={soc||'of'} role={on?'button':undefined} tabIndex={on?0:undefined} onClick={on?()=>abrirFila(F2.k,soc):undefined} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'10px 14px':'9px 11px',minWidth:0,cursor:on?'pointer':'default',boxSizing:'border-box'}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><span style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0}}/><span style={{fontSize:isDesk?11:10,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:col,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{soc===null?'Oficina':(isDesk?L(soc):Ls(soc))}</span></div>
-        <div style={{fontSize:isDesk?22:18,fontWeight:800,letterSpacing:-.6,color:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap',lineHeight:1.2,marginTop:3}}>{fV(v,F2.f)}</div>
-        <div style={{fontSize:11,color:C.muted,whiteSpace:'nowrap',minHeight:16}}>{soc===null?(F2.ext?'Suma de los socios':'Toda la oficina'):F2.ext?(v!=null&&Math.abs(v)>=1?`${pcs[j-1]} % de la oficina`:'—'):(dif&&d?<Flecha {...d}/>:'')}</div></div> }
-    return <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>{[null,...COLS].map((c,j)=>card(c,j))}</div> }
+  // Indicadores clave: seis tarjetas siempre a la vista (misma estructura que las de Inicio): cifra de la Oficina y, debajo, cada socio; «Sin socio» al pie y en gris.
+  const Claves=()=>{ const filas=CLAVE.map(k=>FILAS.find(x=>x.k===k)).filter(Boolean), [S1,S2]=ADMIN_NAMES
+    return <div><div style={{...SEC_LBL,fontWeight:800,margin:'2px 2px 8px'}}>Indicadores clave, {perLbl(vista)}</div>
+      <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>{filas.map(F2=>{ const vs=valsFila(F2), pcs=F2.ext?partesPctEnt(vs.slice(1)):null, on=vs[0]!=null&&F2.dr
+        const menor=CLAVE_MENOR.includes(F2.k), a=vs[1], b=vs[2], lider=(a==null||b==null||a===b)?-1:((menor?a<b:a>b)?0:1)
+        const sub=F2.k==='tick'?`Oficina, mediano ${fV(ticketMediano(null,pDe(F2)),'$')}`:F2.per==='hoy'?'Oficina, hoy':'Oficina'
+        const parte=(soc,j)=>{ const v=vs[j+1], d=F2.ext?null:difDe(F2,v,vs[0]), chip=F2.ext?(v!=null&&Math.abs(v)>=1?`${pcs[j]} %`:null):null
+          return <div key={soc} onClick={v!=null&&F2.dr?e=>{ e.stopPropagation(); abrirFila(F2.k,soc) }:undefined} style={{display:'flex',alignItems:'center',gap:7,padding:isDesk?'4px 0':'3px 0',fontSize:isDesk?12.5:10.5,color:C.muted,cursor:v!=null&&F2.dr?'pointer':'default'}}>
+            <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{soc}</span>
+            <b style={{color:C.accent,fontWeight:lider===j?800:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fV(v,F2.f)}</b>
+            {isDesk&&(chip?<span style={{fontSize:10,fontWeight:700,color:C.azulInfo,background:C.azulBg,borderRadius:10,padding:'0 6px',lineHeight:'16px',whiteSpace:'nowrap'}}>{chip}</span>:(dif&&d?<Flecha {...d}/>:null))}</div> }
+        return <div key={F2.k} role={on?'button':undefined} tabIndex={on?0:undefined} onClick={on?()=>abrirFila(F2.k,null):undefined} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:isDesk?'14px':'12px 10px',minWidth:0,boxSizing:'border-box',cursor:on?'pointer':'default',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:isDesk?12:9,minWidth:0}}>
+            <span style={{width:isDesk?34:30,height:isDesk?34:30,borderRadius:8,background:C.bgSoft,color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{CLAVE_ICO[F2.k]}</span>
+            <div style={{minWidth:0,flex:1}}><div style={{...SEC_LBL,fontSize:isDesk?12:10,lineHeight:1.25,letterSpacing:isDesk?.5:.2}}>{CLAVE_LBL[F2.k]||F2.l}</div>
+              <div style={{fontSize:isDesk?26:20,fontWeight:800,letterSpacing:-.6,lineHeight:1.05,color:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fV(vs[0],F2.f)}</div>
+              <div style={{fontSize:isDesk?11:10,color:C.muted,marginTop:3,lineHeight:1.25}}>{sub}</div></div></div>
+          <div style={{marginTop:isDesk?12:8,borderTop:`1px solid ${C.border}`,paddingTop:4}}>{parte(S1,0)}{parte(S2,1)}
+            <div style={{fontSize:isDesk?11.5:10,color:C.textSoft,paddingTop:4}}>{SIN_SOCIO} {fV(vs[3],F2.f)}</div></div></div> })}</div></div> }
+  // Detalle de la tarjeta abierta (una partida por fila): las filas clave no están en la tabla, así que su lista se abre bajo las tarjetas.
+  const ClaveDetalle=()=>{ const F2=kopen&&CLAVE.includes(kopen.k)?FILAS.find(x=>x.k===kopen.k):null; if(!F2?.dr) return null
+    return <div id='cmp-clave' style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{lista(F2.dr(kopen.soc,pDe(F2)).sort((a,b)=>Math.abs(b.m)-Math.abs(a.m)),`${kopen.soc?L(kopen.soc):'Oficina'} · ${F2.l}`)}</div> }
   const fotoCmp=()=>{ const cs=ofiFin?[...COLS,null]:[null,...COLS], filas=[]
     GRUPOS.forEach(([g,gl])=>{ filas.push({t:'sec',c:[gl]}); FILAS.filter(x=>x.g===g).forEach(F2=>{ const vs=valsFila(F2); filas.push({t:'fila',c:[F2.l,...cs.map(c=>fV(vs[c===null?0:COLS.indexOf(c)+1],F2.f))]}) }) })
     descargarFotoTabla({ titulo:'Comparativo de socios', sub:perLbl(vista), cols:['Indicador',...cs.map(c=>c===null?'Oficina':Ls(c))], filas, archivo:`COMPARATIVO-SOCIOS-${ym}.png` }) }
   const Comparativo=()=>{ const cs=ofiFin?[...COLS,null]:[null,...COLS], w=['28%','18%','18%','18%','18%']
     const seg2=(on,t,f,ic)=><button key={t} onClick={f} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,border:`1px solid ${on?C.azulBd:C.border}`,background:on?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 10px',cursor:'pointer',whiteSpace:'nowrap'}}>{ic}{t}</button>
     return <div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><span style={{...SEC_LBL,fontWeight:800}}>Indicador</span>
-        <button onClick={()=>setIndMenu(v=>!v)} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:12.5,fontWeight:700,color:C.accent,background:C.bgSoft,border:0,borderRadius:16,padding:'5px 12px',cursor:'pointer',maxWidth:'100%'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(FILAS.find(x=>x.k===ind)||FILAS[1]).l} · {perLbl(pDe(FILAS.find(x=>x.k===ind)||FILAS[1]))}</span><ChevAb open={indMenu}/></button></div>
-      {indMenu&&<div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{GRUPOS.map(([g,gl])=><div key={g}><div style={{padding:'8px 14px 4px',...SEC_LBL,fontWeight:800}}>{gl}</div>{FILAS.filter(x=>x.g===g).map(x=><div key={x.k} onClick={()=>{ setInd(x.k); setIndMenu(false) }} className='er-c' style={{padding:'9px 14px',fontSize:12.5,fontWeight:x.k===ind?800:600,color:C.accent,background:x.k===ind?C.azulBg:undefined,cursor:'pointer'}}>{x.l}</div>)}</div>)}</div>}
-      {TarjetasCmp()}
+      {Claves()}
+      {ClaveDetalle()}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>{isDesk?'Comparativo entre socios':'Comparativo'} · {perLbl(vista)}</span>
           <span style={{marginLeft:'auto',display:'inline-flex',gap:6,alignItems:'center'}}><button onClick={fotoCmp} title='Descargar imagen' aria-label='Descargar imagen' style={{display:'inline-flex',alignItems:'center',background:'none',border:'none',padding:'0 4px',cursor:'pointer',color:C.accent}}><svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg></button>{seg2(dif,'Diferencias',()=>setDif(!dif),<Gl n='arrowUp'/>)}{seg2(ofiFin,'Oficina al final',()=>setOfiFin(!ofiFin))}</span></div>
         <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{w.map((x,i)=><col key={i} style={{width:x}}/>)}</colgroup>
-          <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Indicador</th>{cs.map((c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c?(isDesk?L(c):Ls(c)):'Oficina'}</th>)}</tr></thead>
-          <tbody>{GRUPOS.map(([g,gl,gs,gbg])=>{ const rows=FILAS.filter(x=>x.g===g), ab=!gAb[g]
+          <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}>Indicador</th>{cs.map((c,j)=><th key={j} style={{...th,color:c===SIN_SOCIO?C.textSoft:tinta[c||'Oficina'],paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c?(isDesk?L(c):Ls(c)):'Oficina'}</th>)}</tr></thead>
+          <tbody>{GRUPOS.map(([g,gl,gs,gbg])=>{ const rows=FILAS.filter(x=>x.g===g&&!CLAVE.includes(x.k)), ab=!gAb[g]
             const nDif=dif?rows.filter(F2=>{ const vs=valsFila(F2); return COLS.some((c,j)=>difDe(F2,vs[j+1],vs[0])) }).length:0
             return <Fragment key={g}>
-              <tr onClick={()=>setGAb(x=>({...x,[g]:!x[g]}))} style={{cursor:'pointer',background:gbg}}><td colSpan={cs.length+1} style={{padding:isDesk?'9px 16px':'9px 8px',borderTop:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800}}>{gl}{gs?<span style={{fontWeight:600,textTransform:'none',letterSpacing:0,color:C.muted}}> · {gs}</span>:null}</span> <span style={{color:C.textSoft}}><ChevAb open={ab}/></span>{nDif>0&&<span style={{marginLeft:8,display:'inline-flex',alignItems:'center',gap:2,fontSize:10.5,fontWeight:700,color:C.azulInfo,verticalAlign:'middle'}}><Gl n='arrowUp'/><Gl n='arrowDown'/>{nDif}</span>}</td></tr>
+              <tr onClick={()=>setGAb(x=>({...x,[g]:!x[g]}))} style={{cursor:'pointer',background:ab?gbg:C.bgSoft}}><td colSpan={cs.length+1} style={{padding:isDesk?'9px 16px':'9px 8px',borderTop:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800}}>{gl}{gs?<span style={{fontWeight:600,textTransform:'none',letterSpacing:0,color:C.muted}}> · {gs}</span>:null}</span> <span style={{color:C.textSoft}}><ChevAb open={ab}/></span>{nDif>0&&<span style={{marginLeft:8,display:'inline-flex',alignItems:'center',gap:2,fontSize:10.5,fontWeight:700,color:C.azulInfo,verticalAlign:'middle'}}><Gl n='arrowUp'/><Gl n='arrowDown'/>{nDif}</span>}</td></tr>
               {ab&&rows.map(F2=>{ const vs=valsFila(F2), pcs=F2.ext?partesPctEnt(vs.slice(1)):null, ko=kopen&&kopen.k===F2.k
                 return <Fragment key={F2.k}>
                   <tr id={'cmp-'+F2.k}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,color:C.muted,fontWeight:600,whiteSpace:'normal',lineHeight:1.25}}>{F2.l}{F2.per==='hoy'&&<span style={{display:'block',fontSize:10,color:C.textSoft,fontWeight:600}}>hoy</span>}</td>
-                    {cs.map((c,j)=>{ const idx=c===null?0:COLS.indexOf(c)+1, v=vs[idx], d=c===null?null:difDe(F2,v,vs[0]), clic=v!=null&&Math.abs(v)>=(F2.f==='$'?1:0)&&F2.dr, sel=ko&&kopen.soc===c
-                      return <td key={j} onClick={clic?()=>abrirFila(F2.k,c):undefined} className={clic?'er-c':undefined} style={{...td,fontWeight:c===null?800:700,color:v==null||(F2.f==='$'&&Math.abs(v)<1)?C.done:c===null?C.accent:C.text,cursor:clic?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===cs.length-1?(isDesk?16:8):undefined,verticalAlign:'top'}}>{fV(v,F2.f)}
-                        {c!==null&&F2.ext&&v!=null&&Math.abs(v)>=1&&<div style={{fontSize:10,color:C.textSoft,fontWeight:600}}>{pcs[COLS.indexOf(c)]} %</div>}
-                        {dif&&d&&<div style={{marginTop:2}}><Flecha {...d}/></div>}</td> })}</tr>
+                    {cs.map((c,j)=>{ const idx=c===null?0:COLS.indexOf(c)+1, v=vs[idx], d=c===null?null:difDe(F2,v,vs[0]), clic=v!=null&&Math.abs(v)>=(F2.f==='$'?1:0)&&F2.dr, sel=ko&&kopen.soc===c, ms=c===SIN_SOCIO
+                      return <td key={j} onClick={clic?()=>abrirFila(F2.k,c):undefined} className={clic?'er-c':undefined} style={{...td,fontWeight:c===null?800:ms?600:700,color:v==null||(F2.f==='$'&&Math.abs(v)<1)?C.done:ms?C.textSoft:c===null?C.accent:C.text,cursor:clic?'pointer':'default',background:sel?C.azulBg:undefined,paddingRight:j===cs.length-1?(isDesk?16:8):undefined,verticalAlign:'top'}}>{fV(v,F2.f)}
+                        {c!==null&&!ms&&F2.ext&&v!=null&&Math.abs(v)>=1&&<div style={{fontSize:10,color:C.textSoft,fontWeight:600}}>{pcs[COLS.indexOf(c)]} %</div>}
+                        {dif&&d&&!ms&&<div style={{marginTop:2}}><Flecha {...d}/></div>}</td> })}</tr>
                   {ko&&F2.dr&&<tr><td colSpan={cs.length+1} style={{padding:0}}>{lista(F2.dr(kopen.soc,pDe(F2)).sort((a,b)=>Math.abs(b.m)-Math.abs(a.m)),`${kopen.soc?L(kopen.soc):'Oficina'} · ${F2.l}`)}</td></tr>}
                 </Fragment> })}
             </Fragment> })}</tbody></table></div></div> }

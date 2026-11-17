@@ -122,7 +122,7 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
   const [fu] = usePorSocioFuentes()
   const P = useMemo(() => partidasPorSocio({ billing, sales, clients, anticipos, terceros, expenses, ic: fu.ic, ia: fu.ia, ov: fu.ov, fondoExtra: {} }), [billing, sales, clients, anticipos, terceros, expenses, fu])
   const V = useMemo(() => vendidoPorSocio(sales, clients, ufRef, year, null, { terceros, billing }), [sales, clients, ufRef, terceros, billing])
-  const { card6 } = useMemo(() => kpisPorSocio({ P, V, ym: ymNow }), [P, V, ymNow])
+  const { card6, ticket, margen } = useMemo(() => kpisPorSocio({ P, V, ym: ymNow }), [P, V, ymNow])
   const RS = useMemo(() => retirosSocios({ expenses, clients, socios: [], yr: year }), [expenses, clients, year])   // la misma fuente de la página Socios: retiros y sueldos de los socios
   // Sueldos de socios = costo empresa (sueldo líquido, impuesto único y cotizaciones), la misma regla del Estado de resultados; sin planilla cargada queda el líquido del banco.
   const CE = useMemo(() => costoSociosAnio(fuRes, { billing, terceros, costosOfiRows, expenses, clients }, year, curM), [fuRes, billing, terceros, costosOfiRows, expenses, clients])
@@ -219,9 +219,9 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
   // Excel de las páginas (cifras exactas en pesos): lo que se ve en pantalla, para llevarlo a una reunión.
   const xlSocios = () => { const f = x => Math.round(x || 0)
     const filas = RS.SOC.map(x => { const v = card6(x, 'ytd'), r = RS.retTot[x] || 0, su = sueldoDe(x), rt = r + su
-      return [x, f(r), f(su), f(liquidoDe(x)), f(rt), f(promDe(x)), f(v[0]), f(v[2]), f(v[5]), totRetrib > 0 ? Math.round(rt / totRetrib * 1000) / 10 : '', totIngReal > 0 ? Math.round((v[5] || 0) / totIngReal * 1000) / 10 : ''] })
-    const vs = card6(SIN_SOCIO, 'ytd'); filas.push([SIN_SOCIO, '', '', '', '', '', f(vs[0]), f(vs[2]), f(vs[5]), '', ''])
-    descargarXlsx({ nombre: `Socios_${year}`, hoja: 'Socios', head: ['Socio', 'Retiros', 'Sueldos de socios (costo empresa)', 'De los cuales, líquido', `Retribución ${year}`, 'Promedio mensual', 'Vendido neto', 'Cobrado', 'Ingreso real', '% de la retribución', '% del ingreso real'], filas, anchos: [16, 14, 20, 16, 16, 16, 14, 14, 14, 18, 18], numCols: [1, 2, 3, 4, 5, 6, 7, 8] }) }
+      return [x, f(r), f(su), f(liquidoDe(x)), f(rt), f(promDe(x)), f(v[0]), f(v[2]), f(v[5]), totRetrib > 0 ? Math.round(rt / totRetrib * 1000) / 10 : '', totIngReal > 0 ? Math.round((v[5] || 0) / totIngReal * 1000) / 10 : '', ticket(x, 'ytd') == null ? '' : f(ticket(x, 'ytd')), margen(x, 'ytd') == null ? '' : Math.round(margen(x, 'ytd') * 10) / 10] })
+    const vs = card6(SIN_SOCIO, 'ytd'); filas.push([SIN_SOCIO, '', '', '', '', '', f(vs[0]), f(vs[2]), f(vs[5]), '', '', ticket(SIN_SOCIO, 'ytd') == null ? '' : f(ticket(SIN_SOCIO, 'ytd')), margen(SIN_SOCIO, 'ytd') == null ? '' : Math.round(margen(SIN_SOCIO, 'ytd') * 10) / 10])
+    descargarXlsx({ nombre: `Socios_${year}`, hoja: 'Socios', head: ['Socio', 'Retiros', 'Sueldos de socios (costo empresa)', 'De los cuales, líquido', `Retribución ${year}`, 'Promedio mensual', 'Vendido neto', 'Cobrado', 'Ingreso real', '% de la retribución', '% del ingreso real', 'Ticket promedio', 'Margen, %'], filas, anchos: [16, 14, 20, 16, 16, 16, 14, 14, 14, 18, 18, 16, 12], numCols: [1, 2, 3, 4, 5, 6, 7, 8, 11] }) }
   const xlGestion = () => descargarXlsx({ nombre: 'Gestion', hoja: 'Gestión', head: ['Concepto', 'Valor'], anchos: [34, 18], numCols: [1],
     filas: [['Por cobrar', Math.round(totPorCobrar)], ['Vencido', Math.round(venc)], ['Más de 60 días', Math.round(cart.expo.m60 || 0)], ['Días de cobro, ponderado por monto', dCobro.pond ?? ''], ['Comisiones por pagar', Math.round(sc.porPagar || 0)], ['Comisiones por percibir', Math.round(comCobrar || 0)]] })
   const xlFinanzas = () => { const f = x => Math.round(x || 0), cos = esMes ? rm.cos : (resAnio.verCLP.cos || 0), com = esMes ? rm.com : (resAnio.verCLP.com || 0)
@@ -286,8 +286,8 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
               <span style={{ color: C.muted, fontSize: 16 }}>›</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: D ? '1fr 1fr' : '1fr', marginTop: 10 }}>
-              <div style={D ? { paddingRight: 16, borderRight: `1px solid ${C.border}`, minWidth: 0 } : { paddingBottom: 12, minWidth: 0 }}>{hero(`Retribución · ${year}`, fmtShort(retr), pRet, 'de la retribución', [['Retiros', fmtShort(RS.retTot[s] || 0), { onClick: () => go('socios') }], ['Sueldo', fmtShort(sueldoDe(s)), { onClick: () => go('socios') }], ['Promedio mensual', fmtShort(promDe(s))]])}</div>
-              <div style={D ? { paddingLeft: 16, minWidth: 0 } : { paddingTop: 12, borderTop: `1px solid ${C.border}`, minWidth: 0 }}>{hero('Ingreso real', fmtShort(ir), pIr, 'del ingreso real', [['Vendido neto', fmtShort(v[0] || 0)], ['Cobrado', fmtShort(v[2] || 0)]])}</div>
+              <div style={D ? { paddingRight: 16, borderRight: `1px solid ${C.border}`, minWidth: 0 } : { paddingBottom: 12, minWidth: 0 }}>{hero(`Retribución · ${year}`, fmtShort(retr), pRet, 'de la retribución', [['Retiros', fmtShort(RS.retTot[s] || 0), { onClick: () => go('socios') }], ['Sueldo costo empresa', fmtShort(sueldoDe(s)), { onClick: () => go('socios') }], ['Sueldo líquido', fmtShort(liquidoDe(s)), { onClick: () => go('socios') }], ['Promedio mensual', fmtShort(promDe(s))]])}</div>
+              <div style={D ? { paddingLeft: 16, minWidth: 0 } : { paddingTop: 12, borderTop: `1px solid ${C.border}`, minWidth: 0 }}>{hero('Ingreso real', fmtShort(ir), pIr, 'del ingreso real', [['Vendido neto', fmtShort(v[0] || 0)], ['Cobrado', fmtShort(v[2] || 0)], ['Ticket promedio', ticket(s, 'ytd') == null ? '—' : fmtShort(ticket(s, 'ytd')), { onClick: () => go('porSocio', s) }], ['Margen', margen(s, 'ytd') == null ? '—' : Math.round(margen(s, 'ytd')) + ' %', { onClick: () => go('porSocio', s) }]])}</div>
             </div>
           </div>) })}
       </div>

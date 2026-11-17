@@ -92,8 +92,8 @@ export function cascadaVendido(m, enUF){
 // Cifras por socio de un período — FUENTE ÚNICA de la ventana «Por socio» y del Panel de socios. Mismas fórmulas de siempre, extraídas de PorSocioVista
 // sin cambios: P = partidasPorSocio, V = vendidoPorSocio, ym = 'AAAA-MM' (el mes elegido; el año corre de enero a ese mes).
 // card6(socio|null, 'mes'|'ytd') = [Vendido, Facturado (sin comisión de externos), Cobrado propio, Comisiones pagadas, Comisiones percibidas, Ingreso real, Subarriendo, Comisiones de externos] (las dos últimas aparte; Subarriendo].
-/** @param {{P: any[], V: any[], ym: string}} a */
-export function kpisPorSocio({P,V,ym}){
+/** @param {{P: any[], V: any[], ym: string, Vprev?: any[]}} a  Vprev = vendidoPorSocio del año anterior (para el crecimiento; sin él, crecimiento() devuelve null). */
+export function kpisPorSocio({P,V,ym,Vprev}){
   const y=Number(ym.slice(0,4))
   /** @type {(d:any,p:string)=>boolean} */ const inPer=(d,p)=>{ const s=String(d||'').slice(0,7); return p==='mes'?s===ym:(s>=`${y}-01`&&s<=ym) }
   /** @type {(s:string,k:any,soc:any,p:string)=>number} */ const sumP=(s,k,soc,p)=>P.reduce((a,r)=>a+((r.s===s&&(k==null||(Array.isArray(k)?k.includes(r.k):r.k===k))&&(!soc||r.soc===soc)&&inPer(r.d,p))?r.m:0),0)
@@ -113,7 +113,17 @@ export function kpisPorSocio({P,V,ym}){
   /** ingreso emitido por mes (enero → ym) y por socio: [{ym, v:{socio:monto}}] */
   /** @type {(socs:string[])=>{ym:string,v:Record<string,number>}[]} */ const emitidoMeses=(socs)=>{ const out=[]; for(let m=1;m<=Number(ym.slice(5,7));m++){ const k=`${y}-${String(m).padStart(2,'0')}`, /** @type {Record<string,number>} */ v={}
     socs.forEach(soc=>{ v[soc]=P.reduce((a,r)=>a+((r.s==='f'&&(KFI.includes(r.k)||r.k==='com')&&r.soc===soc&&String(r.d||'').slice(0,7)===k)?r.m:0),0) }); out.push({ym:k,v}) } return out }
-  return {inPer,sumP,vend,KF,KE,KFI,KC,KI,card6,emitido,nEmitidas,emitidoMeses}
+  // Ventas del socio en el período (items de V: b = bruto, m = neto de comisiones, c = comisión, s = la venta).
+  /** @type {(soc:any,p:string)=>any[]} */ const ventas=(soc,p)=>V.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===ym:x.ym<=ym))
+  /** Ticket promedio = vendido bruto ÷ ventas cerradas. @type {(soc:any,p:string)=>number|null} */ const ticket=(soc,p)=>{ const a=ventas(soc,p); return a.length?a.reduce((t,x)=>t+(Number(x.b)||0),0)/a.length:null }
+  /** Ticket mediano: no lo distorsionan las pocas ventas muy grandes. @type {(soc:any,p:string)=>number|null} */ const ticketMediano=(soc,p)=>{ const a=ventas(soc,p).map(x=>Number(x.b)||0).sort((x,y)=>x-y); if(!a.length) return null; const k=a.length>>1; return a.length%2?a[k]:(a[k-1]+a[k])/2 }
+  /** Mayor cliente: % del vendido bruto que concentra el cliente con más ventas. @type {(soc:any,p:string)=>number|null} */ const mayorCliente=(soc,p)=>{ const a=ventas(soc,p), por=/** @type {Record<string,number>} */ ({}); let tot=0
+    a.forEach(x=>{ const k=String(x.s&&x.s.client_id||'?'), b=Number(x.b)||0; por[k]=(por[k]||0)+b; tot+=b }); return tot>0?Math.max(...Object.values(por))/tot*100:null }
+  /** Margen después de comisiones = (facturado − comisiones de lo facturado) ÷ facturado. @type {(soc:any,p:string)=>number|null} */ const margen=(soc,p)=>{ const e=emitido(soc,p); return e.f>0?e.i/e.f*100:null }
+  /** Crecimiento del vendido neto contra el mismo período del año anterior (%; null sin base). @type {(soc:any,p:string)=>number|null} */ const crecimiento=(soc,p)=>{ if(!Vprev) return null
+    const pm=`${y-1}${ym.slice(4)}`, sum=(/** @type {any[]} */ a)=>a.reduce((t,x)=>t+(Number(x.m)||0),0)
+    const cur=sum(ventas(soc,p)), prev=sum(Vprev.filter(x=>(!soc||x.soc===soc)&&(p==='mes'?x.ym===pm:x.ym<=pm))); return prev>0?(cur-prev)/prev*100:null }
+  return {inPer,sumP,vend,KF,KE,KFI,KC,KI,card6,emitido,nEmitidas,emitidoMeses,ventas,ticket,ticketMediano,mayorCliente,margen,crecimiento}
 }
 
 // Resumen Por socio: cifras en $M de 1 decimal que CUADRAN (las partes suman el total redondeado) y participación % que suma 100.
