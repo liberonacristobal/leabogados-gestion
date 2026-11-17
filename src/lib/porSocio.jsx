@@ -40,6 +40,8 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const [vista,setVista]=useState(datIni?.p||_psMem?.vista||'ytd')
   const [ps,setPs0]=useState(()=>_lsGet('porsocio_ps',false)); const setPs=v=>{ setPs0(v); _lsSet('porsocio_ps',v) }
   const [sec,setSec]=useState({f:false,c:false})
+  const [plg,setPlg]=useState({})   // bloques del Resumen y Datos: entran replegados
+  const tg=k=>()=>setPlg(x=>({...x,[k]:!x[k]})), Chv=k=><span style={{color:C.textSoft,display:'inline-flex',marginLeft:2}}><ChevAb open={!!plg[k]}/></span>
   const [open,setOpen]=useState(null)
   const [verTodo,setVerTodo]=useState(false)
   const [mm,setMm]=useState('c')
@@ -71,7 +73,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const FMT=v=>isDesk?P$(v):fmtMillLR(v)
   const nm=cid=>cliById[String(cid)]?.name||'Sin cliente'
   const irA=it=>{ if(it.mov&&onIrBanco) return onIrBanco(it.mov); if(it.k==='com'&&onIrProveedores) return onIrProveedores(); if(it.k==='sub'&&onIrSubarriendo) return onIrSubarriendo(); if(it.cid&&onOpenClientFicha) return onOpenClientFicha(it.cid) }
-  const irDatos=(soc,i,p)=>{ setVista(p); if(i===0){ setTab('cmp'); return } setDat(d=>({...d,sec:(i===1||i===7)?'f':'c',con:[null,'pre','cp','com','perc','pre','sub','cext'][i],soc,lim:40})); setTab('dat') }
+  const irDatos=(soc,i,p)=>{ setVista(p); if(i===0){ setTab('cmp'); return } setDat(d=>({...d,sec:(i===1||i===7)?'f':'c',con:[null,'pre','cp','com','perc','pre','sub','cext'][i],soc,lim:40})); setPlg(x=>({...x,dat:true})); setTab('dat') }
   const lista=(items,tit)=>{ const tot=items.reduce((a,x)=>a+x.m,0), shown=verTodo?items:items.slice(0,8)
     return <div style={{background:C.bgSoft}}>
       <div style={{display:'flex',justifyContent:'space-between',padding:isDesk?'7px 16px':'7px 10px',...SEC_LBL,fontWeight:800}}><span>{tit} · {items.length}</span><span style={{fontVariantNumeric:'tabular-nums'}}>{P$(tot)}</span></div>
@@ -105,26 +107,31 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
   const ICO_SOC={of:_ic(<><rect x='4' y='3' width='16' height='18' rx='1.5'/><path d='M9 8h2M13 8h2M9 12h2M13 12h2M10 21v-4h4v4'/></>),soc:_ic(<><circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/></>)}
   // Tarjetas de socios (Resumen y Datos): misma estructura que los indicadores clave del Comparativo, neutras, con ícono a la izquierda. «Sin socio» al final y en gris.
   const kpiTiles=(o={})=>{ const vals=o.vals||irM, pct=partesPctEnt(vals), ofi=vals.reduce((a,x)=>a+x,0), sel=o.sel
-    const t=(key,ico,lab,val,sub,go,gris)=><div key={key} {...(go?{role:'button',tabIndex:0,onClick:go,onKeyDown:e=>{ if(e.key==='Enter') go() }}:{})} style={{background:sel===key?C.bgSoft:C.card,border:`1px solid ${sel===key?C.accent:C.border}`,borderRadius:12,padding:isDesk?'14px':'12px 10px',display:'flex',alignItems:'center',gap:isDesk?12:9,minWidth:0,cursor:go?'pointer':'default',boxSizing:'border-box'}}>
+    const t=(key,ico,lab,val,sub,go,gris)=><div key={key} {...(go?{role:'button',tabIndex:0,onClick:go,onKeyDown:e=>{ if(e.key==='Enter') go() }}:{})} style={{background:sel===key?C.bgSoft:C.card,border:`1px solid ${sel===key?C.accent:C.border}`,borderRadius:12,padding:isDesk?'14px':'12px 10px',display:'flex',alignItems:'center',gap:isDesk?12:9,minWidth:0,cursor:go?'pointer':'default',boxSizing:'border-box',gridColumn:key==='of'&&!isDesk?'1 / -1':undefined}}>
       <span style={{width:isDesk?34:30,height:isDesk?34:30,borderRadius:8,background:C.bgSoft,color:gris?C.textSoft:C.accent,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ico}</span>
       <div style={{minWidth:0,flex:1}}><div style={{...SEC_LBL,fontSize:isDesk?12:10,lineHeight:1.25,letterSpacing:isDesk?.5:.2,color:gris?C.textSoft:undefined}}>{lab}</div>
         <div style={{fontSize:isDesk?26:20,fontWeight:800,letterSpacing:-.6,lineHeight:1.05,color:gris?C.textSoft:C.accent,marginTop:3,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtMillLR(val)}</div>
         <div style={{fontSize:isDesk?11:10,color:C.muted,marginTop:3,lineHeight:1.25,whiteSpace:'nowrap'}}>{sub}</div></div></div>
-    return <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>
-      {t('of',ICO_SOC.of,'Oficina',ofi,o.subOf||'Socios + Sin socio',o.goOf||(()=>irDatos(null,5,kv)))}
-      {COLS.map((c,i)=>t(c,ICO_SOC.soc,L(c),vals[i],o.subs?o.subs[i]:`${pct[i]} % del total`,o.go?()=>o.go(c):()=>irDatos(c,5,kv),c===SIN_SOCIO))}
+    const ss=COLS.length-1, goSS=o.go?()=>o.go(COLS[ss]):()=>irDatos(COLS[ss],5,kv)
+    return <div style={{display:'flex',flexDirection:'column',gap:isDesk?8:6}}>
+      <div style={{display:'grid',gridTemplateColumns:isDesk?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesk?12:8}}>
+        {t('of',ICO_SOC.of,'Oficina',ofi,o.subOf||'Socios + Sin socio',o.goOf||(()=>irDatos(null,5,kv)))}
+        {COLS.slice(0,ss).map((c,i)=>t(c,ICO_SOC.soc,L(c),vals[i],o.subs?o.subs[i]:`${pct[i]} % del total`,o.go?()=>o.go(c):()=>irDatos(c,5,kv)))}
+      </div>
+      <div role='button' tabIndex={0} onClick={goSS} onKeyDown={e=>{ if(e.key==='Enter') goSS() }} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:10,border:`1px solid ${sel===COLS[ss]?C.accent:C.border}`,background:sel===COLS[ss]?C.bgSoft:'transparent',fontSize:isDesk?12:11,color:C.textSoft,cursor:'pointer',minWidth:0}}>
+        <span style={{fontWeight:700,textTransform:'uppercase',letterSpacing:.4,whiteSpace:'nowrap'}}>{L(COLS[ss])}</span><b style={{fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtMillLR(vals[ss])}</b><span style={{marginLeft:'auto',whiteSpace:'nowrap'}}>{o.subs?o.subs[ss]:`${pct[ss]} % del total`}</span></div>
     </div> }
   const tablaResumen=()=>{ const cs=[null,...COLS], A=cs.map(c=>card6(c,kv)), lab=[['Vendido neto',0],['Facturado',1],[isDesk?'+ Comisiones de externos':'+ Com. de externos',7],['Cobrado propio',2],['− Com. pagadas',3],['+ Com. percibidas',4],['= Ingreso real',5],[isDesk?'Subarriendo · aparte':'Subarriendo',6]]
     const th2=(c,j)=><th key={j} style={{...th,color:tinta[c||'Oficina'],background:c===null?C.greenSoft:C.bgSoft,paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{c===null?'Oficina':Ls(c)}</th>
     return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Comparativo · {perLbl(kv)}</span></div>
-      <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(isDesk?['28%','18%','18%','18%','18%']:['28%','18%','18%','18%','18%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
+      <div onClick={tg('cmp')} style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:plg.cmp?`1px solid ${C.border}`:'none',cursor:'pointer'}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Comparativo · {perLbl(kv)}</span>{Chv('cmp')}</div>
+      {plg.cmp&&<table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}><colgroup>{(isDesk?['28%','18%','18%','18%','18%']:['28%','18%','18%','18%','18%']).map((w,i)=><col key={i} style={{width:w}}/>)}</colgroup>
         <thead><tr><th style={{...th,textAlign:'left',paddingLeft:isDesk?16:8}}/>{cs.map(th2)}</tr></thead>
         <tbody>{lab.map(([l,i])=>{ const fin=i===5, ap=i===6
           return <tr key={i}><td style={{...td,textAlign:'left',paddingLeft:isDesk?16:8,fontWeight:fin?800:600,...(fin?{fontSize:isDesk?14:12.5}:{}),color:ap?C.done:fin?C.accent:C.muted,borderTop:fin?`1.5px solid ${C.accent}`:ap?`1px dashed ${C.border}`:`1px solid ${C.border}`}}>{l}</td>
             {ap?<><td style={{...td,color:C.done,background:C.greenSoft,borderTop:`1px dashed ${C.border}`}}>{Math.abs(A[0][6])>=1?FMT(A[0][6]):'—'}</td><td colSpan={3} style={{...td,textAlign:'left',color:C.done,fontSize:11,borderTop:`1px dashed ${C.border}`,whiteSpace:'normal'}}>No es de ningún socio · no suma al ingreso real</td></>
             :cs.map((c,j)=>{ const v=A[j][i], on=Math.abs(v)>=1; return <td key={j} onClick={on?()=>irDatos(c,i,kv):undefined} className={on?'er-c':undefined} style={{...td,cursor:on?'pointer':'default',fontWeight:fin||c===null?800:600,...(fin?{fontSize:isDesk?15:13}:{}),color:!on?C.done:fin?(c===null?C.greenText:tinta[c]):c===null?C.accent:C.text,background:c===null?C.greenSoft:undefined,borderTop:fin?`1.5px solid ${C.accent}`:`1px solid ${C.border}`,paddingRight:j===cs.length-1?(isDesk?16:8):undefined}}>{on?FMT(v):'—'}</td> })}
-          </tr> })}</tbody></table></div> }
+          </tr> })}</tbody></table>}</div> }
 
   // ── Composición (plegada) y mes a mes: escritorio en pesos; celular en $M con cada columna cuadrada (redondearPartes)
   // Fila sin clave = subtotal (suma de las filas anteriores); el subarriendo va aparte, debajo, sin sumar.
@@ -327,7 +334,8 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     const LS=base0.filter(r=>grupo.includes(r.k)&&(!q||_normTxt(nm(r.cid)).includes(q)||String(r.doc||'').toLowerCase().includes(q))), TS={}; COLS.forEach(c=>TS[c]=0); LS.forEach(r=>TS[r.soc]+=r.m); const nP=c=>LS.filter(r=>r.soc===c).length
     return <div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8}}>{kpiTiles({vals:COLS.map(c=>TS[c]),subs:COLS.map(c=>`${nP(c)} partidas`),subOf:`${LS.length} partidas`,sel:dat.soc||'of',go:c=>setDat(d=>({...d,soc:d.soc===c?null:c,lim:40})),goOf:()=>setDat(d=>({...d,soc:null,lim:40}))})}
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800}}>{SECL[dat.sec]} · partidas · {perLbl(p)}</span></div>
+      <div onClick={tg('dat')} style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:plg.dat?`1px solid ${C.border}`:'none',cursor:'pointer'}}><span style={{...SEC_LBL,fontWeight:800}}>{SECL[dat.sec]} · partidas · {perLbl(p)}</span>{Chv('dat')}<span style={{marginLeft:'auto',fontSize:11,color:C.muted}}>{LD.length} partidas</span></div>
+      {plg.dat&&<>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',padding:isDesk?'10px 16px':'8px 10px',borderBottom:`1px solid ${C.border}`}}>
         {chip(dat.sec==='f','Facturado',()=>setDat(d=>({...d,sec:'f',con:'pre',lim:40})))}{chip(dat.sec==='c','Cobrado',()=>setDat(d=>({...d,sec:'c',con:'pre',lim:40})))}
         <span style={{width:6}}/>{[[null,'Todos'],...COLS.map(c=>[c,L(c)])].map(([k,l])=>chip(dat.soc===k,l,()=>setDat(d=>({...d,soc:k,lim:40}))))}
@@ -352,6 +360,7 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
             {isDesk?COLS.map((c,j)=><td key={c} style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:j===COLS.length-1?16:undefined}}>{P$(T[c])}</td>)
               :<td style={{...tdD,fontWeight:800,color:C.accent,borderTop:`1.5px solid ${C.accent}`,background:'#EDF1F4',paddingRight:10}}>{P$(COLS.reduce((a,c)=>a+T[c],0))}</td>}</tr></tbody></table>
       {LD.length>dat.lim&&<div onClick={()=>setDat(d=>({...d,lim:d.lim+40}))} style={{textAlign:'center',padding:10,fontSize:12,fontWeight:700,color:C.azulInfo,borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>Ver {Math.min(40,LD.length-dat.lim)} más de {LD.length}</div>}
+      </>}
     </div></div> }
 
   const exportar=()=>{ try{
@@ -374,12 +383,12 @@ export function PorSocioVista({billing=[],sales=[],clients=[],anticipos=[],terce
     {tab==='res'&&<div style={{display:'flex',flexDirection:'column',gap:isDesk?12:8,marginTop:isDesk?12:8}}>
       {tablaResumen()}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Mes a mes {y}</span><span style={{marginLeft:'auto',display:'inline-flex',background:C.bgSoft,borderRadius:12,padding:2}}>{[['c','Ingreso real'],['f','Facturado']].map(([k,l])=><button key={k} onClick={()=>setMm(k)} style={{fontSize:10.5,fontWeight:700,border:0,borderRadius:10,padding:'3px 9px',cursor:'pointer',background:mm===k?C.card:'transparent',color:mm===k?C.accent:C.muted,boxShadow:mm===k?`0 0 0 1px ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</button>)}</span></div>
-        {MesAMes()}
+        <div onClick={tg('mm')} style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:plg.mm?`1px solid ${C.border}`:'none',cursor:'pointer'}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Mes a mes {y}</span>{Chv('mm')}{plg.mm&&<span style={{marginLeft:'auto',display:'inline-flex',background:C.bgSoft,borderRadius:12,padding:2}}>{[['c','Ingreso real'],['f','Facturado']].map(([k,l])=><button key={k} onClick={e=>{ e.stopPropagation(); setMm(k) }} style={{fontSize:10.5,fontWeight:700,border:0,borderRadius:10,padding:'3px 9px',cursor:'pointer',background:mm===k?C.card:'transparent',color:mm===k?C.accent:C.muted,boxShadow:mm===k?`0 0 0 1px ${C.border}`:'none',whiteSpace:'nowrap'}}>{l}</button>)}</span>}</div>
+        {plg.mm&&MesAMes()}
       </div>
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:`1px solid ${C.border}`}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Composición · {perLbl(vista)}</span><button onClick={()=>setPs(!ps)} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${ps?C.azulBd:C.border}`,background:ps?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{ps?'Cerrar por socio':'Abrir por socio'}</button></div>
-        {Comp()}
+        <div onClick={tg('comp')} style={{display:'flex',alignItems:'center',gap:8,padding:isDesk?'11px 16px':'10px',borderBottom:plg.comp?`1px solid ${C.border}`:'none',cursor:'pointer'}}><span style={{...SEC_LBL,fontWeight:800,whiteSpace:'nowrap'}}>Composición · {perLbl(vista)}</span>{Chv('comp')}{plg.comp&&<button onClick={e=>{ e.stopPropagation(); setPs(!ps) }} style={{marginLeft:'auto',fontSize:11,fontWeight:700,border:`1px solid ${ps?C.azulBd:C.border}`,background:ps?C.azulBg:C.card,color:C.accent,borderRadius:14,padding:'4px 11px',cursor:'pointer',whiteSpace:'nowrap'}}>{ps?'Cerrar por socio':'Abrir por socio'}</button>}</div>
+        {plg.comp&&Comp()}
       </div>
       {ParaRevisar()}
     </div>}
