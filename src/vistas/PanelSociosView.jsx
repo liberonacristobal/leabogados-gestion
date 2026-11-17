@@ -267,7 +267,7 @@ export function PanelSociosView({ sales=[], billing=[], clients=[], terceros=[],
       body:<>
         <Fila tono='az' label={`Costos de ${mesPasado}`} sub={`año a la fecha ${fmtShort(resAnio.cos)}`} value={fmtShort(Qm.cos)} raw={Qm.cos} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>
         {(rm.cosLines||[]).map((l,i)=><Fila key={l.k} tono='az' label={l.k==='sub'?l.l+' · menor costo':l.l} value={fmtShort(cosQ[i])} raw={cosQ[i]} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos',sub:l.k})}/>)}
-        {rm.ppm>0&&<Fila tono='az' label='Pago al SII (F29)' sub='aparte de los costos' value={fmtShort(rm.ppm)} raw={rm.ppm} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>}
+        {rm.ppm>0&&<Fila tono='az' label='Pago al SII (F29)' sub='incluye impuesto único y retención, ya en costos' value={fmtShort(rm.ppm)} raw={rm.ppm} onClick={()=>go('estadoResultados',ymPrev,{bloque:'cos'})}/>}
       </> },
     com: { cap:'Costos y pagos', capCorto:'Costos y pagos', titulo:'Comisiones', hl:<>Pagadas {currentYear} <b style={{color:C.greenText}}>{fmtShort(comP.total||0)}</b></>, tono:'gr', link:'Comisiones', dest:'proveedores',
       body:<>

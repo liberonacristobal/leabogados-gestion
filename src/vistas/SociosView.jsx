@@ -9,9 +9,9 @@ import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado, costoSociosAnio } from '../lib/compartido.jsx'
 import { descargarTabla } from '../lib/archivos.js'
 
-// Comisión del mes = terceros_pagos pagados en el mes.
-
-export const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
+// Comisión del mes = terceros_pagos pagados en el mes. Misma regla que `comisPagadasAnioVenta` (resultadoAnio.js):
+// monto > 0 y sin `comision_pct` (con `comision_pct` es traspaso de una factura de un externo, no costo nuestro).
+export const comisionMesTerc = (terceros, ym) => (terceros||[]).filter(t=>t&&t.estado==='pagado'&&t.comision_pct==null&&(Number(t.monto)||0)>0&&String(t.pagado_at||'').startsWith(ym)).reduce((a,t)=>a+(Number(t.monto)||0),0)
 
 // Sueldo de socio: los sueldos/bonos usan `subcategory` = nombre de la persona. Devuelve el socio si lo es, o null.
 export const _SOCIO_SUELDO = e => { const scN=_norm(e.subcategory); for(const s of SOCIOS_CFG){ if(scN && (scN===_norm(s.nombre)||scN.includes(_norm(s.nombre)))) return s.nombre } return null }
