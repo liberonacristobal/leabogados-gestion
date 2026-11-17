@@ -167,6 +167,7 @@ export const demoData = {
     // Vencidas (aging)
     { id:'b13', client_id:'c3', sale_id:'s3', concept:'Litigio laboral — cuota 2',              amount:35000000, status:'Vencido',    invoice_no:'1270', issued_at:'2026-04-01', due:'2026-05-05', paid_at:'2026-05-20', paid_amount:35000000, payment_date:'2026-05-20', billing_type:'honorarios', monto_terceros:0 },
     { id:'b14', client_id:'c7', sale_id:'s7', concept:'Defensa tributaria — cuota 2/3',          amount:26000000, status:'Vencido',    invoice_no:'1248', issued_at:'2026-03-10', due:'2026-03-25', paid_at:'2026-04-15', paid_amount:26000000, reconciled_at:'2026-04-15', billing_type:'honorarios', monto_terceros:0 },
+    { id:'bpar1', client_id:'c3', sale_id:'s3', concept:'Litigio laboral — cuota 3 (cobro parcial)', amount:4000000, status:'Vencido', invoice_no:'1301', issued_at:'2026-10-01', due:'2026-10-31', paid_amount:2400000, billing_type:'honorarios', monto_terceros:0 },
     // Programadas (futuro, cash flow)
     { id:'b13a1', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 1/3', amount:351000, status:'Anticipada', prepaid_anticipo_id:'ant5', invoice_no:null, issued_at:null, due:'2026-09-01', billing_type:'honorarios', monto_terceros:0 },
     { id:'b13a2', client_id:'c3', sale_id:'s13', concept:'Asesoría laboral por hora — Cuota 2/3', amount:351000, status:'Programada', invoice_no:null, issued_at:null, due:'2026-10-01', billing_type:'honorarios', monto_terceros:0 },
@@ -346,6 +347,7 @@ export const demoData = {
     { id:'tp6', billing_id:'b13a2', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
     { id:'tp7', billing_id:'b13a3', proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:70200, liquido:59494, retencion:10706, estado:'pendiente', tipo_costo:'pct', valor:20, sale_id:'s13', created_at:'2026-09-01' },
     { id:'tp5', billing_id:'b4',  proveedor_id:'pv3', proveedor:'Tomás Vidal', monto:212389, liquido:180000, retencion:32389, estado:'por_pagar', tipo_costo:'pct', valor:10, created_at:'2026-03-22' },
+    { id:'tpar1', billing_id:'bpar1', sale_id:'s3', proveedor_id:'pv4', proveedor:'Proveedor A', monto:3400000, estado:'pendiente', tipo_costo:'clp', naturaleza:'comision', created_at:'2026-10-02' },
   ],
   // Facturas que los proveedores le emiten al estudio (SII · registro de compras)
   sii_compras_docs: [

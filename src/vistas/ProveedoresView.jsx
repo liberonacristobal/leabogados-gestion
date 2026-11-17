@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { tasaBHE, pagarT, reajusteBHEPago, estadoComision } from '../../supabase/functions/_shared/comisionesReglas.js'
+import { tasaBHE, pagarT, reajusteBHEPago, estadoComision, comisionFactura, comisionParcial, ajusteComision, planLiberarParcial } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { calcesCompraPago } from '../../supabase/functions/_shared/comprasReglas.js'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 import { BRAND, C, Gl, SIcon, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, useIsDesktop } from '../lib/base.jsx'
@@ -272,6 +272,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
   const [mesF,setMesF] = useState(null)                // filtro por mes de la cuota del cliente (tarjeta Comisiones sujetas a cobro, por mes)
   const [ordC,setOrdC] = useState(-1), [ordP,setOrdP] = useState(-1)   // orden por fecha: comisiones · pagos y facturas del SII (−1 = más nuevo primero)
   const [expT,setExpT] = useState(null), [nVer,setNVer] = useState(5) // comisión desplegada · cuántas se muestran
+  const [ajC,setAjC] = useState(null)                  // «Ajustar comisión» abierto: {id, val} (% de la factura)
   const [revOpen,setRevOpen] = useState(false), [secAb,setSecAb] = useState(null), [cliMas,setCliMas] = useState(false)   // ficha: revisar y acciones · tarjetita abierta · más clientes
   useEffect(()=>{ if(ro) return; viewMemGuardar('proveedores',{view:['form','pagar','boleta','cadena'].includes(view)?(selId?'ficha':'list'):view,selId,yr,modo,tf}) },[view,selId,yr,modo,tf])
   useEffect(()=>{ if(focoProvId&&proveedores.some(p=>String(p.id)===String(focoProvId))){ setSelId(String(focoProvId)); setView('ficha'); setCf('todas'); abrirTercRef.current=true; setVolverOrigen(true); onFocoUsado&&onFocoUsado() } },[focoProvId,proveedores])   // llegó desde otra vista (Facturación): «‹» de la ficha vuelve ahí
@@ -562,6 +563,43 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).in('id',ids); if(error){ appAlert('No se pudo: '+error.message); return } }
     setTerceros&&setTerceros(p=>p.map(t=>ids.includes(t.id)?{...t,estado:'por_pagar'}:t))
     ts.forEach(t=>logActividad(`proveedores.${t.proveedor_id}.devengar`,{tabla:'terceros_pagos',id:t.id,detalle:{title:`Comisión${facDe(t)?.invoice_no?' factura '+folioN(facDe(t).invoice_no):''} pasa a por pagar`,monto:Number(t.monto)||0}}))
+  }
+  // Cobro parcial: el cliente pagó una parte de la factura, entonces corresponde pagar al proveedor esa misma parte de su comisión (regla única: comisionParcial).
+  // Compuerta: tú confirmas. Si lo liberable no cubre la fila, se parte: lo cobrado queda «por pagar» y el resto sigue «sujeto a cobro» (como el anticipo de una factura).
+  const parcialDe = t => { const b=facDe(t); return b&&t.estado==='pendiente' ? comisionParcial(terceros,b,montoFactura(b),t.proveedor_id) : null }
+  const pctTxt = n => String(Math.round(n*10)/10).replace('.',',')
+  const pasarParcial = async t => {
+    const b=facDe(t), pa=parcialDe(t), plan=pa&&planLiberarParcial(t,pa.liberable); if(!plan||!b) return
+    if(!(await appConfirm(`El cliente pagó ${fmt(pa.cobrado)} de ${fmt(pa.monto)}. ¿Pasar ${fmt(plan.liberar)} de la comisión a "por pagar"?${plan.completa?'':` Quedan ${fmt(plan.resto)} sujetos a cobro.`}`))) return
+    const folio=folioN(b.invoice_no)||'sin folio'
+    try{
+      if(plan.completa){
+        if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update({estado:'por_pagar'}).eq('id',t.id); if(error) throw error }
+        setTerceros&&setTerceros(p=>p.map(x=>String(x.id)===String(t.id)?{...x,estado:'por_pagar'}:x))
+      } else {
+        const nueva={billing_id:t.billing_id,sale_id:t.sale_id,proveedor_id:t.proveedor_id,proveedor:t.proveedor,rut:t.rut,naturaleza:t.naturaleza||'comision',factura_numero:t.factura_numero||null,factura_fecha:t.factura_fecha||null,estudio_id:t.estudio_id||null,
+          tipo_costo:'clp',valor:plan.liberar,monto:plan.liberar,estado:'por_pagar',referencia:`Cobro parcial de F${folio} (${pctTxt(pa.cobrado/pa.monto*100)} % cobrado)`,created_by:user?.email||null}
+        let ins={...nueva,id:'demo-'+Date.now()}
+        if(!DEMO){ const r=await supabase.from('terceros_pagos').insert(nueva).select().single(); if(r.error) throw r.error; ins=r.data
+          const u=await supabase.from('terceros_pagos').update({monto:plan.resto,valor:plan.resto,tipo_costo:'clp'}).eq('id',t.id)
+          if(u.error){ await supabase.from('terceros_pagos').delete().eq('id',ins.id); throw u.error } }
+        setTerceros&&setTerceros(p=>[...p.map(x=>String(x.id)===String(t.id)?{...x,monto:plan.resto,valor:plan.resto,tipo_costo:'clp'}:x),ins])
+      }
+      logActividad(`proveedores.${t.proveedor_id}.liberar`,{tabla:'terceros_pagos',id:t.id,detalle:{title:`Comisión factura ${folio}: ${fmt(plan.liberar)} pasa a por pagar por cobro parcial`,monto:plan.liberar}})
+    }catch(e){ appAlert('No se pudo pasar a por pagar: '+(e.message||e)) }
+  }
+  // «Ajustar comisión»: fija el % de la factura (85, 100, otro); cambia solo la fila pendiente, lo pagado o por pagar no se toca. Regla única: ajusteComision.
+  const guardarAjuste = async t => {
+    const b=facDe(t); if(!b||!ajC) return
+    const r=ajusteComision(terceros,b,montoFactura(b),ajC.val,t.proveedor_id); if(r.error){ appAlert(r.error); return }
+    if(r.monto===Number(t.monto)){ setAjC(null); return }
+    const antes=comisionFactura(terceros,b,montoFactura(b),t.proveedor_id)
+    try{
+      if(!DEMO){ const {error}=await supabase.from('terceros_pagos').update({monto:r.monto,valor:r.monto,tipo_costo:'clp'}).eq('id',t.id); if(error) throw error }
+      setTerceros&&setTerceros(p=>p.map(x=>String(x.id)===String(t.id)?{...x,monto:r.monto,valor:r.monto,tipo_costo:'clp'}:x))
+      logActividad(`proveedores.${t.proveedor_id}.ajuste`,{tabla:'terceros_pagos',id:t.id,detalle:{title:`Comisión factura ${folioN(b.invoice_no)||'sin folio'}: ${pctTxt(antes?.pct||0)} % a ${pctTxt(Number(ajC.val))} % (${fmt(antes?.total||0)} a ${fmt((antes?.total||0)-Number(t.monto)+r.monto)})`,monto:r.monto}})
+      setAjC(null)
+    }catch(e){ appAlert('No se pudo ajustar la comisión: '+(e.message||e)) }
   }
   const desenlazarDoc = async (d, prov) => {
     if(!(await appConfirm(`¿Quitar el enlace de la factura N° ${d.folio} con su pago?`))) return
@@ -1011,7 +1049,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
     // Quien emite boleta de honorarios: en escritorio la fila muestra costo (bruto) · retención · líquido · boleta.
     const BOL_GC = '104px 92px 82px 92px'   // Boleta · Costo · Retención · Líquido (cifras al extremo derecho)
     const bolCab = conBolF&&isDesktop ? <div style={{display:'flex',justifyContent:'flex-end',padding:'6px 14px',...TH_BAND}}><div style={{display:'grid',gridTemplateColumns:BOL_GC,columnGap:12,textAlign:'right'}}><span style={{textAlign:'left'}}>Boleta</span><span>Costo (bruto)</span><span>Retención</span><span>Líquido</span></div></div> : null
-    const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return ['Sujeto a cobro',C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
+    const estLbl = t => { const e=est(t); if(e==='por_pagar') return [aporteDe(t.id)>0?'Pago parcial':'Por pagar',C.soonText]; if(e==='por_devengar') return [(parcialDe(t)?.liberable||0)>0?'Cobro parcial':'Sujeto a cobro',(parcialDe(t)?.liberable||0)>0?C.soonText:C.muted]; return [esAnt(t)?'Anticipo':'Pagada',esAnt(t)?C.azulInfo:C.muted] }
     const det = (l,v) => <div style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:12,padding:'2px 0',maxWidth:340}}><span style={{color:C.muted,whiteSpace:'nowrap'}}>{l}</span><span style={{textAlign:'right',fontWeight:600,color:C.text,minWidth:0}}>{v}</span></div>
     const lk = (txt,on) => on ? <span onClick={e=>{e.stopPropagation();on()}} style={{color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}>{txt} <Gl n='chevron'/></span> : <span style={{whiteSpace:'nowrap'}}>{txt}</span>
     const filaT = t => { const b=facDe(t), pc=pagoCli(t), [eL,eC]=estLbl(t), open=expT===t.id, e=est(t), w=trabajoDe(t), ap=aporteDe(t.id), bh=bheDe(t)
@@ -1025,7 +1063,19 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
             <div style={{display:'flex',alignItems:'baseline',gap:8,minWidth:0}}><span style={{fontSize:13,fontWeight:700,color:C.text,flexShrink:0}}>{b?.invoice_no?`Factura N° ${folioN(b.invoice_no)}`:'Sin factura'}</span><span style={{fontSize:12,color:C.muted,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{(!cliF&&cliDe(t)?.name)?`${cliDe(t).name} · `:''}{glosa}</span></div>
             {open&&<div style={{marginTop:7}} onClick={e=>e.stopPropagation()}>
               {b&&det('Tu factura',lk(`Factura N° ${folioN(b.invoice_no)||'—'} · ${fmt(montoFactura(b))}`,onOpenFactura?()=>onOpenFactura(b):null))}
-              {det('Cliente pagó',cliTxt)}
+              {det('Cliente pagó',(()=>{ const pa0=parcialDe(t); return pa0?lk(`${fmt(pa0.cobrado)} de ${fmt(pa0.monto)}`,b&&onOpenFactura?()=>onOpenFactura(b):null):cliTxt })())}
+              {(()=>{ const cf=b&&t.estado==='pendiente'&&t.liquido==null&&t.comision_pct==null&&!ro?comisionFactura(terceros,b,montoFactura(b),t.proveedor_id):null, pa=parcialDe(t), edit=ajC?.id===t.id
+                if(!cf) return null
+                const inp={width:52,padding:'2px 5px',border:`1px solid ${C.border}`,borderRadius:6,fontSize:12,fontWeight:700,color:C.text,textAlign:'right',height:22,fontFamily:'inherit',boxSizing:'border-box'}
+                const ln={background:'none',border:'none',padding:0,fontSize:12,fontWeight:700,textDecoration:'underline',textUnderlineOffset:2,cursor:'pointer',fontFamily:'inherit'}
+                const nuevoTot=edit&&ajC.val!==''&&Number(ajC.val)>=0&&Number(ajC.val)<=100?Math.round(cf.monto*Number(ajC.val)/100):null
+                return <>
+                  {det('Comisión',edit
+                    ? <span style={{display:'inline-flex',alignItems:'center',gap:6}}><input type='text' inputMode='decimal' value={ajC.val} onFocus={e=>e.target.select()} onChange={e=>setAjC({id:t.id,val:e.target.value.replace(',','.').replace(/[^0-9.]/g,'').slice(0,5)})} onKeyDown={e=>{ if(e.key==='Enter') guardarAjuste(t); if(e.key==='Escape') setAjC(null) }} autoFocus style={inp}/><span style={{fontWeight:700}}>%</span><button onClick={()=>guardarAjuste(t)} style={{...ln,color:C.accent}}>Guardar</button><button onClick={()=>setAjC(null)} style={{...ln,color:C.muted,fontWeight:600}}>Cancelar</button></span>
+                    : <span>{pctTxt(cf.pct)} % de la factura, {fmt(cf.total)} <span style={{display:'block'}}><span onClick={()=>setAjC({id:t.id,val:String(Math.round(cf.pct*10)/10)})} style={{color:C.accent,cursor:'pointer',fontWeight:700,textDecoration:'underline',textUnderlineOffset:2,whiteSpace:'nowrap'}}>Ajustar comisión</span></span></span>)}
+                  {edit&&nuevoTot!=null&&<div style={{fontSize:11,color:C.muted,maxWidth:340,textAlign:'right'}}>La comisión de la factura pasa de {fmt(cf.total)} a {fmt(nuevoTot)}</div>}
+                  {pa&&pa.liberable>0&&det('Por pagar según lo cobrado',<span>{fmt(pa.liberable)} <span style={{display:'block'}}><span onClick={()=>pasarParcial(t)} style={{color:C.accent,cursor:'pointer',fontWeight:700,textDecoration:'underline',textUnderlineOffset:2,whiteSpace:'nowrap'}}>Pasar a por pagar</span></span></span>)}
+                </> })()}
               {!m0.equipo&&!conBolF&&det(`${tituloProv(sel)} facturó`,t.factura_numero?`Factura N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk('Sin factura del proveedor',ro?null:()=>abrirBoleta(sel)))}
               {conBolF&&<>
                 {det('Boleta',bh?<span onClick={()=>abrirDocumento(bh.storage_path)} title='Descargar la boleta (PDF)' style={{display:'inline-flex',alignItems:'center',gap:4,color:C.accent,cursor:'pointer',whiteSpace:'nowrap'}}><SIcon n='download' s={12} c={C.accent}/>N° {bh.folio} · {dmy(bh.fecha)}</span>:t.factura_numero?`N° ${t.factura_numero}${t.factura_fecha?' · '+dmy(t.factura_fecha):''}`:lk(ro?'Sin boleta':'Sin boleta · registrar',ro?null:()=>abrirBoleta(sel)))}
@@ -1100,7 +1150,7 @@ export function ProveedoresView({proveedores=[],terceros=[],setTerceros,billing=
         {diaGrande(d.fecha_emision)}<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{tit}</div><div style={{fontSize:11,color:C.muted}}>{subT}</div></div>
         <span style={{fontSize:13,fontWeight:700,color:nc?C.muted:C.text,...num}}>{nc?'−':''}{fmt(Math.abs(Number(d.monto)||0))}</span></div>{enlP?.did===d.id&&panelEnlace()}</Fragment> }
     const docsCard = docsY.length ? <div style={{...card,overflow:'hidden'}}>{band(`Facturas de ${tituloProv(sel)} en el SII · ${yr}`,ordTog(ordP,setOrdP))}{docsY.map(filaDoc)}</div> : null
-    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta'],['factura_tercero','Cuadró una factura del proveedor con su cuota'],['factura_tercero_no','Descartó un cuadre de factura']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
+    const ETQ = Object.fromEntries([['comision','Enlazó un pago con una comisión'],['factura','Enlazó una factura con su pago'],['factura_quitar','Quitó el enlace de una factura'],['asignar','Asignó una factura'],['deshacer','Deshizo un pago'],['pagar','Pagó comisiones'],['boleta','Registró su factura'],['boleta_enviada','Envió su boleta a la oficina'],['enlace','Enlazó un pago'],['marca','Marcó un pago'],['devengar','Pasó una comisión a por pagar'],['liberar','Pasó a por pagar lo cobrado de una factura'],['ajuste','Ajustó el porcentaje de una comisión'],['editar','Editó los datos'],['crear','Creó la ficha'],['cuadre','Cuadró la cuenta'],['factura_tercero','Cuadró una factura del proveedor con su cuota'],['factura_tercero_no','Descartó un cuadre de factura']].map(([k,l])=>[`proveedores.${sel.id}.${k}`,l]))
     const bita = <BitacoraLista prefijo={`proveedores.${sel.id}.`} etiquetas={ETQ} limite={15} vacio='Aquí queda cada pago, enlace o cambio: quién y cuándo.'/>
     // Datos del proveedor siempre a la vista (copiables); Editar al extremo.
     const dItem = (l,v,max) => <span style={{display:'flex',flexDirection:'column',minWidth:0,maxWidth:max||'none'}}><span style={{...kLbl,fontSize:10}}>{l}</span><span style={{fontSize:13,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{v}</span></span>

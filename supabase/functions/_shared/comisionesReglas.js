@@ -38,6 +38,66 @@ export function tercerosPorFactura({ terceros, venta, montoFactura, fecha }) {
 // Estado de una comisión: pagada (lo marcó el banco) · por pagar (el cliente ya pagó su cuota) · por devengar.
 export const estadoComision = (t, b) => t?.estado === 'pagado' ? 'pagada' : (t?.estado === 'por_pagar' || b?.status === 'Pagado' || b?.status === 'Anticipada') ? 'por_pagar' : 'por_devengar'
 
+// ── Cobro parcial: la comisión se paga SOBRE LO COBRADO ─────────────────────────────────────────────────────────────────────────────────────
+// Si el cliente abona una parte de la factura, al proveedor le corresponde ese mismo porcentaje de su comisión (no se retiene plata de terceros
+// hasta el pago total). Una sola regla para la ficha del proveedor y para el pago desde Banco. Funciones puras.
+// El % de la comisión de una factura = (suma de TODAS sus comisiones de esa factura) ÷ monto de la factura; «Ajustar comisión» lo cambia.
+// Solo comisiones en % de la factura: sin boleta (liquido/bhe_id), sin retención de externo (comision_pct) y no complementarias.
+const _esComFactura = (/** @type {any} */ t, /** @type {any} */ b) => !!t && String(t.billing_id) === String(b && b.id) && t.comision_pct == null && (t.naturaleza || 'comision') === 'comision' && t.liquido == null && !t.bhe_id
+/**
+ * Comisión de una factura (sumadas todas sus filas en % de la factura): total, % y reparto por estado. null si no hay filas o la factura no tiene monto.
+ * @param {any[]} filas terceros_pagos (de cualquier factura) @param {any} b factura (billing) @param {number} monto monto de la factura (DTE)
+ * @param {string|number|null} [proveedorId] limita a las comisiones de un proveedor
+ */
+export function comisionFactura(filas, b, monto, proveedorId = null) {
+  const M = Number(monto) || 0
+  if (!b || b.deleted_at || !(M > 0)) return null
+  const fs = (filas || []).filter((/** @type {any} */ t) => _esComFactura(t, b) && (proveedorId == null || String(t.proveedor_id) === String(proveedorId)))
+  if (!fs.length) return null
+  const suma = (/** @type {string} */ e) => fs.filter((/** @type {any} */ t) => t.estado === e).reduce((a, /** @type {any} */ t) => a + (Number(t.monto) || 0), 0)
+  const total = fs.reduce((a, /** @type {any} */ t) => a + (Number(t.monto) || 0), 0)
+  return { monto: M, total, pct: total / M * 100, pagado: suma('pagado'), porPagar: suma('por_pagar'), pendiente: suma('pendiente') }
+}
+/**
+ * Estado de la comisión de una factura cobrada en parte. null si la factura no está cobrada en parte.
+ * liberable = lo que ya corresponde pagar sobre lo cobrado y aún figura «sujeto a cobro» (tope: lo pendiente). Mismos parámetros que comisionFactura.
+ * @param {any[]} filas @param {any} b @param {number} monto @param {string|number|null} [proveedorId]
+ */
+export function comisionParcial(filas, b, monto, proveedorId = null) {
+  const cob = Number(b && b.paid_amount) || 0
+  if (!b || ['Pagado', 'Anticipada', 'Anulada'].includes(b.status) || !(cob > 0)) return null
+  const c = comisionFactura(filas, b, monto, proveedorId)
+  if (!c) return null
+  const cobrado = Math.min(cob, c.monto), devengado = Math.round(c.total * cobrado / c.monto)
+  return { ...c, cobrado, devengado, liberable: Math.max(0, Math.min(c.pendiente, devengado - c.pagado - c.porPagar)) }
+}
+/**
+ * Comisión nueva de la fila `pendiente` al fijar el % de la factura (el resto de las comisiones de esa factura no se toca).
+ * Devuelve { id, monto } o { error }. Exige UNA sola fila pendiente (si hay varias, no se adivina cuál ajustar).
+ * @param {any[]} filas @param {any} b @param {number} monto @param {number} pct @param {string|number|null} [proveedorId]
+ */
+export function ajusteComision(filas, b, monto, pct, proveedorId = null) {
+  const M = Number(monto) || 0, p = Number(pct)
+  if (!b || !(M > 0)) return { error: 'La factura no tiene monto.' }
+  if (!(p >= 0 && p <= 100)) return { error: 'El porcentaje debe estar entre 0 y 100.' }
+  const fs = (filas || []).filter((/** @type {any} */ t) => _esComFactura(t, b) && (proveedorId == null || String(t.proveedor_id) === String(proveedorId)))
+  const pend = fs.filter((/** @type {any} */ t) => t.estado === 'pendiente')
+  if (pend.length !== 1) return { error: pend.length ? 'Hay más de una comisión pendiente en esta factura.' : 'No hay comisión pendiente que ajustar: ya está por pagar o pagada.' }
+  const otras = fs.filter((/** @type {any} */ t) => t !== pend[0]).reduce((a, /** @type {any} */ t) => a + (Number(t.monto) || 0), 0)
+  const nuevo = Math.round(M * p / 100) - otras
+  if (nuevo < 0) return { error: 'Con ese porcentaje la comisión quedaría bajo lo ya pagado o por pagar.' }
+  return { id: pend[0].id, monto: nuevo }
+}
+/**
+ * Pasar a «por pagar» lo cobrado: si lo liberable cubre toda la fila, pasa entera; si no, la fila se parte en lo liberable (por pagar) y el resto (pendiente).
+ * Devuelve { id, completa, liberar, resto } o null si no hay nada que pasar. @param {any} t fila pendiente @param {number} liberable de comisionParcial
+ */
+export function planLiberarParcial(t, liberable) {
+  const m = Number(t && t.monto) || 0, L = Math.round(Number(liberable) || 0)
+  if (!t || t.estado !== 'pendiente' || !(m > 0) || !(L > 0)) return null
+  return L >= m ? { id: t.id, completa: true, liberar: m, resto: 0 } : { id: t.id, completa: false, liberar: L, resto: m - L }
+}
+
 const _num = s => parseInt(String(s || '').replace(/[^\d]/g, ''), 10) || 0
 const _nRut = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase()
 const _fmtRut = r => { const c = _nRut(r); return c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + c.slice(-1) }
