@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
       todas("clients?select=id,name,rut,drive_folder_id,is_internal,is_colaborador,abogado_responsable"),
       todas("client_entities?select=id,client_id,name,rut"),
-      todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,ot_number,drive_file_id,drive_nombre,leido_at&origen=eq.notaria"),
+      todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,ot_number,drive_file_id,drive_nombre,leido_at,motivo&origen=eq.notaria"),
       todas("contacts?select=id,client_id,nombre"),
       todas("learnings?kind=eq.notaria_parte&select=id,key,value"),
       todas("learnings?kind=eq.notaria_rut&select=key,value"),
@@ -221,9 +221,13 @@ Deno.serve(async (req) => {
     // Un documento que espera su OT y ya está en «Por asignar» (tiene su archivo en Drive) no necesita volver a leer el correo: cuando
     // aparece su OT se asigna con lo guardado y el paso siguiente lo mueve. Antes se releía el correo, y si había desaparecido de Gmail
     // fallaba (404) en cada corrida sin poder asignarse nunca (17-11-2026: 3 documentos, la vigilancia de procesos avisó).
-    for (const p of previos.filter((x) => x.estado === "pendiente_ot" && x.drive_file_id && !x.cliente_id)) {
-      const ot = otParaDocumento({ tipo: p.tipo_documento, fecha: String(p.fecha_documento || "").slice(0, 10) }, ots);
+    // También los «Por clasificar» que quedaron sin OT (pasados los 45 días): la OT puede llegar después con la liquidación de la notaría.
+    // Solo cuentan las OT sin documento (una OT que ya tiene el suyo no se reparte dos veces).
+    const otsLibres = ots.filter((o) => !usadas.has(String(o.ot_number)));
+    for (const p of previos.filter((x) => (x.estado === "pendiente_ot" || (x.estado === "por_clasificar" && /^Sin OT/.test(x.motivo || ""))) && x.drive_file_id && !x.cliente_id)) {
+      const ot = otParaDocumento({ tipo: p.tipo_documento, fecha: String(p.fecha_documento || "").slice(0, 10) }, otsLibres);
       if (!ot?.client_id) continue;
+      usadas.add(String(ot.ot_number));
       const cambios = { cliente_id: ot.client_id, expense_id: ot.id, ot_number: ot.ot_number, metodo: "ot_tipo_fecha", estado: "asignado", motivo: null, updated_at: new Date().toISOString() };
       if (!dryRun) await rest(`documentos_notaria?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(cambios) });
       Object.assign(p, cambios);
