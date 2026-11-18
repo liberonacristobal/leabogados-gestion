@@ -1849,6 +1849,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   useEffect(()=>{ if(detInicial&&onDetInicialUsado) onDetInicialUsado() },[])   // solo al montar: se consume una vez
   const [excl,setExcl]=useState(()=>new Set())   // borradores revisados que NO van en el envío conjunto (por defecto van todos)
   const [confEnv,setConfEnv]=useState(false)   // confirmación del envío conjunto
+  const [unir,setUnir]=useState(false)   // juntar en UN correo (con todos sus PDF) los borradores seleccionados de un mismo cliente
   // Corte semanal: el lunes se preparan los borradores de los clientes que ya tenían gastos por rendir; lo cargado después espera al lunes siguiente.
   const lunesISO=lunesSemanaISO()
   useEffect(()=>{ try{ localStorage.setItem(prefKey,JSON.stringify({g,abg,ord,autor})) }catch(_){} },[g,abg,ord,autor])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -2002,6 +2003,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   const armRows = verBorr ? envRows.filter(x=>x.tipo==='arm') : []
   const selArm = armRows.filter(x=>!excl.has(x.r.id))
   const todosSel = armRows.length>0 && selArm.length===armRows.length
+  const hayVarios = (()=>{ const c={}; selArm.forEach(x=>{ const k=String(x.c.id); c[k]=(c[k]||0)+1 }); return Object.values(c).some(n=>n>1) })()
   const toggleTodos = () => setExcl(todosSel ? new Set(armRows.map(x=>x.r.id)) : new Set())
   // «Separadas en un correo» (sep1) salen juntas: se marcan y desmarcan como grupo.
   const grupoDe = r => r.correo?.modo==='sep1'&&(r.correo.grupo||[]).length>1 ? r.correo.grupo : [r.id]
@@ -2017,7 +2019,9 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   const colaEnvio = (()=>{ if(!verBorr) return []; const vistos=new Set(), cuenta={}, out=[]
     selArm.forEach(x=>{ if(vistos.has(x.r.id)) return
       const gr=x.r.correo?.modo==='sep1'?(x.r.correo.grupo||[]).map(id=>id===x.r.id?x.r:(rendiciones||[]).find(y=>y.id===id&&!y.sent_at&&!y.anulada_at&&!vistos.has(y.id)&&!excl.has(y.id)&&y.correo?.modo==='sep1'&&(y.correo.grupo||[]).includes(x.r.id))).filter(Boolean):[]
-      const grupo=gr.length>1?gr:[x.r]; grupo.forEach(y=>vistos.add(y.id))
+      let grupo=gr.length>1?gr:[x.r]
+      if(unir) grupo=selArm.filter(y=>String(y.c.id)===String(x.c.id)&&!vistos.has(y.r.id)).map(y=>y.r)   // todos los borradores marcados de este cliente, en un solo correo
+      grupo.forEach(y=>vistos.add(y.id))
       const cid=String(x.c.id); const base=corrSiguiente(rendiciones,x.c.id)+(cuenta[cid]||0); cuenta[cid]=(cuenta[cid]||0)+grupo.length
       const filasG=grupo.map((y,i)=>({r:y, corr:base+i, pide:confEnv?Math.max(0,-fondoDeRend(y,expenses,clientEntities).saldo):0}))   // el fondo se calcula solo al confirmar
       out.push({c:x.c, filas:filasG}) })
@@ -2111,6 +2115,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
     </table>) : colaEnvio.flatMap(gq=>gq.filas.map(f=>(<div key={f.r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderTop:`1px solid ${C.track}`}}>
         <div style={{flex:1,minWidth:0}}><div style={{...NOMBRE_CLI,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{gq.c.name}</div><div style={{fontSize:12,color:C.textSoft}}>N° {f.corr} · {f.r.n_gastos||0} gastos</div></div>
         <div style={{textAlign:'right',flexShrink:0,fontVariantNumeric:'tabular-nums'}}><div style={{fontSize:14,fontWeight:700,color:C.text}}>{fmt(f.r.total||0)}</div><div style={{fontSize:12,color:C.textSoft}}>{f.pide>0?<>solicita <b style={{color:C.text,fontWeight:600}}>{fmt(f.pide)}</b></>:'sin solicitud'}</div></div></div>)))}
+    {hayVarios&&<div onClick={()=>setUnir(v=>!v)} style={{display:'flex',alignItems:'center',gap:9,padding:'10px 14px',borderTop:`1px solid ${C.border}`,cursor:'pointer'}}>{caja(unir)}<span style={{fontSize:13,color:C.text}}>Juntar en un solo correo los borradores de un mismo cliente</span></div>}
     <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:10,padding:'10px 14px',borderTop:`1px solid ${C.border}`,flexDirection:D?'row':'column-reverse'}}>
       <button onClick={()=>setConfEnv(false)} style={{border:'none',background:'none',color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',padding:'7px 12px'}}>Volver a borradores</button>
       <button onClick={confirmarEnvio} style={{border:'none',borderRadius:10,background:C.normal,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',padding:'9px 18px',width:D?'auto':'100%'}}>Confirmar envío</button>
