@@ -1797,8 +1797,7 @@ export async function registrarFondoPropuesto(r, {proyecto, yo, sales, expenses,
     if(!fondo){ const {data,error}=await supabase.from('expenses').insert(fondoBase).select().single(); if(error) throw error; fondo=data; creado=true; onFondo&&onFondo(data) }
     let sinConciliar=false
     if(mov){ const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id,tipo_destino:'fondo',gasto_id:fondo.id,monto_aplicado:monto,origen:'manual'}).select().single()
-      if(ic.error) sinConciliar=true
-      else{ const total=Number(mov.monto)||monto; const {error:me}=await supabase.from('cartola_movimientos').update({estado:monto>=total?'conciliado':'parcial',monto_conciliado:monto}).eq('id',mov.id); if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); sinConciliar=true } } }
+      if(ic.error) sinConciliar=true }   // estado y monto conciliado del depósito los deriva la base; si ya estaba conciliado, la base rechaza la fila
     if(p.solicitud_id) await supabase.from('fund_requests').update({recibido_at:new Date(fecha+'T12:00').toISOString(),movimiento_id:mov?.id||null,estado:'recibida'}).eq('id',p.solicitud_id).is('recibido_at',null)
     const c={estado:'registrado',motivo:`${vinculado?'Fondo vinculado':'Fondo registrado'} por ${yo}${sinConciliar?' · el depósito no quedó conciliado: concílialo en Banco':''}`,...cierre,propuesta:{...p,proyecto:proyecto||null,fondo_id:fondo.id}}
     await supabase.from('agente_bandeja').update(c).eq('id',r.id)

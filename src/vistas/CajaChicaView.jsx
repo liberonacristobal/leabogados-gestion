@@ -68,7 +68,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
     const nota=`${petty.notes||''}${nuevoMonto?` · ajustada de ${fmtCLP(petty.amount)} a lo transferido`:''} · mov:${cargo.id}`.trim()
     const patch={notes:nota,movimiento_id:cargo.id,...(nuevoMonto?{amount:monto}:{})}
     const {error}=await supabase.from('petty_cash').update(patch).eq('id',petty.id); if(error) throw error
-    await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:monto,categoria:'Caja chica'}).eq('id',cargo.id)
+    await supabase.from('cartola_movimientos').update({categoria:'Caja chica'}).eq('id',cargo.id)   // estado y monto conciliado los deriva la base desde la caja chica
     setPettyCash(p=>p.map(x=>x.id===petty.id?{...x,...patch}:x))
     setMisTransf(p=>p.map(m=>m.id===cargo.id?{...m,estado:'conciliado',categoria:'Caja chica'}:m))
     logActividad('cajachica.conciliada',{tabla:'petty_cash',id:petty.id,detalle:{title:`${me} · caja ${fmtFechaDMY(petty.delivered_at)} ↔ transferencia ${fmtFechaDMY(cargo.fecha)}`,monto}})
@@ -81,7 +81,7 @@ export function CajaChicaView({isAdmin=false,expenses,setExpenses,clients,curren
     try{
       const monto=Math.round(Math.abs(cargo.monto||0))
       const {data,error}=await supabase.from('petty_cash').insert({user_name:me,amount:monto,delivered_at:_ccDia(cargo.fecha),notes:`Registrada desde la transferencia · mov:${cargo.id}`,movimiento_id:cargo.id}).select().single(); if(error) throw error
-      await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:monto,categoria:'Caja chica'}).eq('id',cargo.id)
+      await supabase.from('cartola_movimientos').update({categoria:'Caja chica'}).eq('id',cargo.id)   // estado y monto conciliado los deriva la base desde la caja chica
       setPettyCash(p=>[data,...p]); setMisTransf(p=>p.map(m=>m.id===cargo.id?{...m,estado:'conciliado',categoria:'Caja chica'}:m))
       logActividad('cajachica.registrada',{tabla:'petty_cash',id:data.id,detalle:{title:`Caja recibida · ${me} · desde la transferencia ${fmtFechaDMY(cargo.fecha)}`,monto}})
     }catch(e){ appAlert('No se pudo registrar: '+e.message) }

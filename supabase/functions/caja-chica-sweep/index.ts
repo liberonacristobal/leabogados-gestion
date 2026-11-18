@@ -117,7 +117,7 @@ serve(async (req) => {
       for (const e of (muestra ? [] : enlazadas)) {
         try {
           await sb.from("petty_cash").update({ notes: `${e.notesPrev} · mov:${e.movId}`.trim(), movimiento_id: e.movId }).eq("id", e.pettyId);
-          await sb.from("cartola_movimientos").update({ estado: "conciliado", monto_conciliado: e.monto, categoria: "Caja chica" }).eq("id", e.movId);
+          await sb.from("cartola_movimientos").update({ categoria: "Caja chica" }).eq("id", e.movId);
           e.ok = true;
         } catch (err) { e.error = String((err as any).message); }
       }

@@ -7596,7 +7596,6 @@ export default function App() {
       if(concRows&&concRows.length){
         const movIds=[...new Set(concRows.map(c=>c.movimiento_id))]
         await supabase.from('conciliacion').delete().eq('anticipo_id',a.id)
-        for(const mid of movIds){ await supabase.from('cartola_movimientos').update({estado:'pendiente',monto_conciliado:0}).eq('id',mid) }
       }
       const {error}=await supabase.from('anticipos').delete().eq('id',a.id); if(error) throw error
       setAnticipos(p=>p.filter(x=>String(x.id)!==String(a.id)))
@@ -8419,8 +8418,7 @@ export default function App() {
       if(tercero.movimiento_id){ const monto=Number(tercero.monto)||0
         const {data:cs}=await supabase.from('conciliacion').select('id,monto_aplicado').eq('movimiento_id',tercero.movimiento_id).eq('tipo_destino','tercero')
         const c=(cs||[])[0]; if(c){ const resto=(Number(c.monto_aplicado)||0)-monto; if(resto>0) await supabase.from('conciliacion').update({monto_aplicado:resto}).eq('id',c.id); else await supabase.from('conciliacion').delete().eq('id',c.id) }
-        const {data:mv}=await supabase.from('cartola_movimientos').select('monto_conciliado').eq('id',tercero.movimiento_id).maybeSingle()
-        if(mv){ const ap=Math.max(0,(Number(mv.monto_conciliado)||0)-monto); await supabase.from('cartola_movimientos').update({monto_conciliado:ap,estado:ap>0?'parcial':'pendiente'}).eq('id',tercero.movimiento_id) } }
+ }
       setTerceros(p=>p.map(t=>t.id===data.id?data:t))
       return data
     }catch(e){appAlert('Error: '+e.message); return null}

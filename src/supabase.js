@@ -43,6 +43,15 @@ const fetchVigilado = vigilarEscrituras(() => _alFallo)
 export const supabase = DEMO ? demoClient : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { fetch: fetchVigilado } })
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+// estado y monto_conciliado de un movimiento los deriva la base (conciliacion + caja chica, trigger conciliacion_sync_mov); la app NO los escribe:
+// guarda solo lo que no se deriva (categoría, cliente) y lee de vuelta lo que la base dejó. Escribir un valor calculado en pantalla pisaba
+// lo que otra persona o el agente habían conciliado mientras tanto (caso del 12-11-2026, aseo $276.000 contado dos veces).
+export async function sincMov(id, extra=null){
+  if(extra && Object.keys(extra).length){ const {error}=await supabase.from('cartola_movimientos').update(extra).eq('id',id); if(error) return {error} }
+  const {data,error}=await supabase.from('cartola_movimientos').select('estado,monto_conciliado').eq('id',id).single()
+  return {error, estado:data?.estado, monto_conciliado:Number(data?.monto_conciliado)||0}
+}
+
 export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',

@@ -1,6 +1,6 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
-import { supabase, DEMO } from '../supabase'
+import { supabase, DEMO, sincMov } from '../supabase'
 import { clasificacionPorRut, clientePorMensaje, completarRutCortado, esPagoTGR, gastosCandidatosCargo, glosaGenerica, rutParcialDeGlosa } from '../../supabase/functions/_shared/cargoAprendido.js'
 import { facturaMasAntiguaIgual } from '../../supabase/functions/_shared/conciliacionOrden.js'
 import { boletasDeCargo } from '../../supabase/functions/_shared/boletasRecibidas.js'
@@ -45,15 +45,6 @@ export const lblFacturaN = b => b&&!b.invoice_no&&b.billing_type==='comision' ? 
 export const abonoConResto = m => !!m && m.tipo==='abono' && !m.es_interno && String(m.estado)==='parcial' && (Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0))>1000
 
 export const restoAbono = m => abonoConResto(m) ? Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0) : (Number(m?.monto)||0)
-
-// estado y monto_conciliado de un movimiento los deriva la base (conciliacion + caja chica, trigger conciliacion_sync_mov); la app NO los escribe:
-// guarda solo lo que no se deriva (categoría, cliente) y lee de vuelta lo que la base dejó. Escribir un valor calculado en pantalla pisaba
-// lo que otra persona o el agente habían conciliado mientras tanto (caso del 12-11-2026, aseo $276.000 contado dos veces).
-export async function sincMov(id, extra=null){
-  if(extra && Object.keys(extra).length){ const {error}=await supabase.from('cartola_movimientos').update(extra).eq('id',id); if(error) return {error} }
-  const {data,error}=await supabase.from('cartola_movimientos').select('estado,monto_conciliado').eq('id',id).single()
-  return {error, estado:data?.estado, monto_conciliado:Number(data?.monto_conciliado)||0}
-}
 
 // Marca en terceros_pagos.referencia de un costo registrado directo desde un cargo de Banco (su Deshacer lo borra).
 export const REF_COSTO_BANCO = 'Registrado desde Banco'

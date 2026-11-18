@@ -3,7 +3,7 @@ import { clasificarPorFacturar, cuotasVencidasSinFacturar } from '../../supabase
 import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Menu, Flecha } from '../lib/presupuestoUI.jsx'
-import { supabase, selectAll, connectDrive, upsertBilling, DEMO } from '../supabase'
+import { supabase, selectAll, connectDrive, upsertBilling, DEMO, sincMov } from '../supabase'
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
@@ -2035,9 +2035,6 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       if(dteTot>aplic+1){ Object.assign(patch,{status:'Pendiente', paid:false, paid_at:null, paid_amount:aplic}); ajusteCom={tipo:'falta', dif:dteTot-aplic} }
       else if(dteTot<aplic-1&&(cs||[]).length===1){ const c=cs[0], dif=aplic-dteTot
         const {error:ce}=await supabase.from('conciliacion').update({monto_aplicado:dteTot}).eq('id',c.id); if(ce) throw ce
-        const {data:mv}=await supabase.from('cartola_movimientos').select('monto_conciliado').eq('id',c.movimiento_id).maybeSingle()
-        const mc=Math.max(0,(Number(mv?.monto_conciliado)||0)-dif)
-        const {error:me}=await supabase.from('cartola_movimientos').update({monto_conciliado:mc, estado:mc>0?'parcial':'pendiente'}).eq('id',c.movimiento_id); if(me) throw me
         ajusteCom={tipo:'sobra', dif} }
     }
     const { error } = await supabase.from('billing').update(patch).eq('id',item.progId)
@@ -2373,9 +2370,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       if(ins.error) throw ins.error
       if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }   // auditoría: quién concilió (resiliente si la columna no existe) — alinea con persistPagoFactura/marcaQuien
       setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:aplicado}])   // refleja el saldo nuevo en vivo
-      const movAplicado=(m.monto_conciliado||0)+aplicado
-      const estado=((m.monto||0)-movAplicado)<=0?'conciliado':'parcial'
-      await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',m.id)
+      const {estado,monto_conciliado:movAplicado}=await sincMov(m.id)   // la base deriva estado y monto conciliado
       setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
       if(cubre) await onStatusChange(b.id,'Pagado',m.fecha,{paid:true,paid_amount:(b.amount||0),payment_method:'Transferencia',payment_ref:m.n_operacion||null,payment_date:m.fecha,reconciled_at:new Date().toISOString()},{skipRespaldoWarn:true})   // marca pagada + metadata (paid/paid_amount/payment_method/ref/reconciled_at) igual que la Conciliación (persistPagoFactura). SOLO si el abono cubre el saldo; en parcial la factura sigue pendiente (respaldo refleja el saldo). skip: ya estamos conciliando
       setPagosFor(null); setOtraFor(null)
@@ -2407,9 +2402,8 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
       if(ins.error) throw ins.error
       if(ins.data?.id && user?.email){ try{ supabase.from('conciliacion').update({created_by:user.email}).eq('id',ins.data.id).then(()=>{},()=>{}) }catch(e){registrarError({origen:'accion',vista:'conciliacion',err:e})} }
       setConcFac(p=>[...p,{factura_id:b.id,movimiento_id:m.id,monto_aplicado:resto}])
-      const movAplicado=(m.monto_conciliado||0)+resto
-      await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:movAplicado}).eq('id',m.id)
-      setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado:'conciliado',monto_conciliado:movAplicado}:x))
+      const {estado,monto_conciliado:movAplicado}=await sincMov(m.id)   // la base deriva estado y monto conciliado
+      setAbonos(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplicado}:x))
       await onStatusChange(b.id,'Pagado',m.fecha,{paid:true,paid_amount:resto,payment_method:'Transferencia',payment_ref:m.n_operacion||null,payment_date:m.fecha,reconciled_at:new Date().toISOString()},{skipRespaldoWarn:true})   // paid_amount = lo que realmente llegó al banco (monto programado); saldoBill devuelve 0 con status Pagado → factura saldada, la diferencia de UF no queda como saldo
       setPagosFor(null); setOtraFor(null)
       appAlert(`Conciliado. La factura quedó saldada; ${fmt(dif)} se registró como diferencia de UF.`)
