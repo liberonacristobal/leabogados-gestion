@@ -44,7 +44,7 @@ test('revisión de una carga de la notaría: sin cliente, sin trabajo y por conf
     { id: 4, amount: 50000, client_id: 'c', project: 'Trabajo A' },                     // en orden
     { id: 5, amount: 1, client_id: null, personal_de: null, project: null },            // OT no válida
   ]
-  const r = revisionCargaNotaria(g, { cargadas: 4, noNuestras: [{ monto: 20000 }, { monto: 1 }] })
+  const r = revisionCargaNotaria(g, { cargadas: 3, noNuestras: [{ monto: 20000 }, { monto: 1 }] })
   assert.deepEqual(r.sinCliente, { n: 1, m: 30000 })
   assert.deepEqual(r.sinTrabajo, { n: 1, m: 20000 })
   assert.deepEqual(r.porConfirmar, { n: 1, m: 20000 })

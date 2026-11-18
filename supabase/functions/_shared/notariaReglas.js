@@ -136,6 +136,7 @@ export function revisionCargaNotaria(gastos = [], resumen = {}) {
   const sinTrabajo = vivas.filter(e => e.client_id && !String(e.project || '').trim())
   const noNuestras = ((resumen && resumen.noNuestras) || []).filter(x => (Number(x.monto) || 0) > OT_NO_VALIDA_MONTO)
   const parte = xs => ({ n: xs.length, m: suma(xs) })
-  const r = { cargadas: Number(resumen && resumen.cargadas) || vivas.length, monto: suma(vivas), sinCliente: parte(sinCliente), sinTrabajo: parte(sinTrabajo), porConfirmar: parte(noNuestras) }
+  // cargadas = todas las OT que creó la carga (con cliente y sin él), no solo las que el resumen cuenta como «cargadas» (esas excluyen las pendientes de cliente).
+  const r = { cargadas: vivas.length, monto: suma(vivas), sinCliente: parte(sinCliente), sinTrabajo: parte(sinTrabajo), porConfirmar: parte(noNuestras) }
   return { ...r, porRevisar: r.sinCliente.n + r.sinTrabajo.n + r.porConfirmar.n }
 }
