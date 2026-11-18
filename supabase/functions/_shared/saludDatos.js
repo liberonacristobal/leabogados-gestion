@@ -153,6 +153,19 @@ export const gastoRsAjena = (expenses, ents) => {
 // Trabajo Terminado que sigue recibiendo gastos: gastos con FECHA en los últimos `dias` → reabrirlo o pasarlos a otro trabajo.
 // No por fecha de carga: las reimportaciones dejan created_at reciente en gastos antiguos (falso positivo 25-10-2026). ok =
 // { sale_id: fecha «Sigue terminado» }: vuelve a aparecer solo con gastos cargados después de esa fecha.
+// Pagos sin factura que llevan meses sin imputarse (anticipos «disponibles»): plata recibida que no es de ninguna factura todavía. Si el trabajo (o el
+// cliente) tiene una cuota programada sin folio, esa es la candidata («emitir con cargo al anticipo»); si no hay ninguna, nadie sabe a qué va.
+// Un caso por anticipo. No escribe: propone. dias = antigüedad desde el pago.
+/** @param {any[]} anticipos @param {any[]} billing @param {string} hoy @param {number} [dias] @returns {{a:any, dias:number, cuota:any|null}[]} */
+export function anticiposSinImputar(anticipos, billing, hoy, dias = 60) {
+  const t = (/** @type {any} */ x) => new Date(String(x || '').slice(0, 10) + 'T12:00:00').getTime()
+  const h = t(hoy)
+  const cuotas = (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && !b.invoice_no).sort((x, y) => String(x.due || '').localeCompare(String(y.due || '')))
+  return (anticipos || []).filter(a => a && a.estado === 'disponible' && !a.billing_id && Number(a.monto) > 0 && !isNaN(t(a.fecha)) && Math.round((h - t(a.fecha)) / 864e5) > dias)
+    .map(a => ({ a, dias: Math.round((h - t(a.fecha)) / 864e5), cuota: cuotas.find(b => a.sale_id ? String(b.sale_id) === String(a.sale_id) : String(b.client_id) === String(a.client_id)) || null }))
+    .sort((x, y) => y.dias - x.dias)
+}
+
 // Gastos sin fecha (carga masiva o captura incompleta): sin fecha no entran a ningún mes ni a la antigüedad de lo pendiente. Un caso por cliente
 // (no uno por gasto) para no llenar la revisión. Fondos y aperturas no cuentan.
 /** @param {any[]} expenses @returns {{cid:string, gastos:any[], monto:number}[]} */
@@ -311,6 +324,7 @@ export function hallazgos(d) {
   gastoRsAjena(d.gastos, d.clientEntities).forEach(e => add('gasto_rs_ajena', e.id, `Gasto con razón social de otro cliente · ${nom(e.client_id)} · ${String(e.concept || '').slice(0, 60)}`.trim(), e.amount, { gasto: e.id, entidad: e.entity_id, fecha: e.date }))
   terminadaConGastos(d.sales, d.gastos, d.hoy || new Date().toISOString().slice(0, 10), { ok: d.terminadaOk || {} }).forEach(x => add('terminada_con_gastos', x.s.id, `Trabajo terminado que sigue recibiendo gastos · ${nom(x.s.client_id)} · ${x.s.title || ''}`.trim(), x.monto, { venta: x.s.id, gastos: x.gastos.map(e => e.id), ultimo: x.ultimo }))
   gastosSinFecha(d.gastos).forEach(x => add('gasto_sin_fecha', x.cid, `${x.gastos.length} gasto${x.gastos.length === 1 ? '' : 's'} sin fecha · ${x.cid === '—' ? 'sin cliente' : nom(x.cid)}`, x.monto, { gastos: x.gastos.slice(0, 50).map(e => e.id), total: x.gastos.length }))
+  anticiposSinImputar(d.anticipos, d.billing, d.hoy || new Date().toISOString().slice(0, 10)).forEach(x => add('anticipo_sin_imputar', x.a.id, x.cuota ? `Pago sin factura de hace ${x.dias} días que podría cubrir una cuota programada · ${nom(x.a.client_id)}` : `Pago sin factura de hace ${x.dias} días sin cuota a la que imputarlo · ${nom(x.a.client_id)}`, x.a.monto, { anticipo: x.a.id, fecha: x.a.fecha, cuota: x.cuota ? x.cuota.id : null }))
   // Permisos de la base fuera de la regla (rpc auditoria_permisos): la consola de Supabase crea tablas abiertas al rol sin sesión.
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
@@ -322,6 +336,7 @@ export function hallazgos(d) {
 }
 
 export const DETECTOR_LBL = {
+  anticipo_sin_imputar: 'Pagos sin factura de más de 60 días',
   gasto_sin_fecha: 'Gastos sin fecha',
   plantilla_con_numeros: 'Plantillas de correo con números escritos a mano',
   nc_sin_registrar: 'Notas de crédito del SII sin registrar',

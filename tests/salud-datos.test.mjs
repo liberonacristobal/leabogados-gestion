@@ -104,3 +104,14 @@ test('revisión: gastos sin fecha, un caso por cliente; fondos, aperturas y borr
   const h = hallazgos({ gastos: ex, clientName: id => 'Cliente ' + id }).filter(x => x.detector === 'gasto_sin_fecha')
   assert.equal(h.length, 2); assert.equal(h[1].clave, 'gasto_sin_fecha:A'); assert.equal(h[1].monto, 1500)
 })
+
+test('revisión: pago sin factura de más de 60 días; propone la cuota programada del mismo trabajo o dice que no hay', async () => {
+  const { anticiposSinImputar, hallazgos } = await import('../supabase/functions/_shared/saludDatos.js')
+  const an = [{ id: 'a1', client_id: 'A', sale_id: 's1', monto: 1000, estado: 'disponible', fecha: '2026-04-24' }, { id: 'a2', client_id: 'B', monto: 500, estado: 'disponible', fecha: '2026-01-01' },
+    { id: 'a3', client_id: 'A', sale_id: 's1', monto: 9, estado: 'disponible', fecha: '2026-11-03' }, { id: 'a4', client_id: 'A', monto: 9, estado: 'consumido', fecha: '2026-01-01' }, { id: 'a5', client_id: 'A', monto: 9, estado: 'disponible', fecha: '2026-01-01', billing_id: 'f' }]
+  const bs = [{ id: 'c2', client_id: 'A', sale_id: 's1', status: 'Programada', due: '2026-12-01' }, { id: 'c1', client_id: 'A', sale_id: 's1', status: 'Programada', due: '2026-11-01' }, { id: 'c9', client_id: 'A', sale_id: 's9', status: 'Programada', due: '2026-10-01' }]
+  const r = anticiposSinImputar(an, bs, '2026-11-18')
+  assert.deepEqual(r.map(x => [x.a.id, x.cuota ? x.cuota.id : null]), [['a2', null], ['a1', 'c1']])   // recientes, consumidos y ya ligados a factura no cuentan; la cuota es la primera del mismo trabajo
+  const h = hallazgos({ anticipos: an, billing: bs, hoy: '2026-11-18', clientName: id => 'Cliente ' + id }).filter(x => x.detector === 'anticipo_sin_imputar')
+  assert.equal(h.length, 2); assert.match(h[1].titulo, /podría cubrir una cuota programada/); assert.match(h[0].titulo, /sin cuota a la que imputarlo/)
+})
