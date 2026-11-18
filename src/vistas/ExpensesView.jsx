@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { notariaPendientes, disponibleNotaria, revisionCargaNotaria, clienteSugeridoPorGlosa } from '../../supabase/functions/_shared/notariaReglas.js'
+import { notariaPendientes, disponibleNotaria, revisionCargaNotaria, clienteSugeridoPorGlosa, otNoValida } from '../../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../../supabase/functions/_shared/notariaDocsReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, rendicionDeGasto } from '../../supabase/functions/_shared/gastosReglas.js'
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
@@ -2269,7 +2269,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
   const aprVentaN=useAprendidosVenta(), iaVentaN=useIaVenta()   // trabajo sugerido para las OT sin trabajo (regla única sugerirVentaGasto)
   const [ultAsigN,setUltAsigN] = useState(null)   // última asignación de trabajo desde Pagar: {cid,n,undo}
   const [showCartola,setShowCartola] = useState(false)   // página «Cartola» del cliente abierto
-  useEffect(()=>{ setShowCartola(false) },[selectedClient?.id])
+  const [verNoValidas,setVerNoValidas] = useState(false)   // las OT de $0 o $1 (no válidas, no se deben) van ocultas por defecto
+  useEffect(()=>{ setShowCartola(false); setVerNoValidas(false) },[selectedClient?.id])
   const [orfPersona,setOrfPersona] = useState(null)   // gasto sin cliente → selector "Personal de" abierto (id)
   const [rendNav,setRendNav] = useState(null)   // borradores preparados en revisión: {ids, i} (orden de la lista de Rendir a cliente)
   const [rendAbg,setRendAbg] = useState(null)   // abogado con que abre Rendir a cliente (el de la tarjeta que se tocó)
@@ -4088,7 +4089,8 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           {(()=>{
             const _qm=_normTxt(qMovG.trim()), _qd=qMovG.replace(/\D/g,'')
             const matchMov=e=>!_qm || _normTxt(`${e.concept||''} ${e.subconcept||''} ${e.ot_number||''} ${e.category||''} ${e.requirente||''}`).includes(_qm) || (_qd.length>=3&&String(Math.abs(e.amount||0)).includes(_qd))
-            const movs=filtered.filter(e=>esOficina(selectedClient.id)?!esRendido(e):true).filter(matchMov)   // cliente: los rendidos van en la misma lista (marca gris con su fecha)
+            const esNV=e=>e.type!=='fondo'&&!!e.ot_number&&otNoValida(e), nNV=filtered.filter(esNV).length
+            const movs=filtered.filter(e=>esOficina(selectedClient.id)?!esRendido(e):true).filter(matchMov).filter(e=>verNoValidas||!esNV(e))   // cliente: los rendidos van en la misma lista (marca gris con su fecha); sin las OT no válidas salvo que se pidan
             const fondos=movs.filter(e=>e.type==='fondo')
             const gastos=movs.filter(e=>e.type!=='fondo')
             const rendidos=filtered.filter(esRendido)
@@ -4097,6 +4099,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             if(!esOficina(selectedClient.id)) return (<>
               {movs.length>0&&<><div style={{...SEC_LBL,margin:'4px 2px 6px'}}>{gastoCatF==='Fondo'?'Fondos':gastoCatF==='__gastos__'?'Gastos':'Movimientos'} · {movs.length}</div>{movs.map(renderMov)}</>}
               {movs.length===0&&<div style={{color:C.muted,textAlign:'center',padding:22,fontSize:13}}>Sin movimientos con estos filtros.</div>}
+              {nNV>0&&<button type='button' onClick={()=>setVerNoValidas(v=>!v)} title='Una OT de $0 o $1 es un repertorio no usado o anulado: no se debe' style={{fontSize:12,fontWeight:600,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:'6px 2px'}}>{verNoValidas?`Ocultar las ${nNV} OT no válidas`:`Mostrar ${nNV} OT no válida${nNV!==1?'s':''}`}</button>}
             </>)
             return (<>
               {fondos.length>0&&<><div style={{fontSize:10,color:C.greenText,fontWeight:700,letterSpacing:.4,textTransform:'uppercase',margin:'2px 2px 6px'}}>Fondos recibidos · {fondos.length}</div>{fondos.map(renderMov)}</>}

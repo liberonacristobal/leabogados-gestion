@@ -53,7 +53,7 @@ export function cartolaCliente({ expenses, clientId, zona = 'America/Santiago' }
   const ev = []
   const glosa = (/** @type {any} */ e) => `${e.ot_number ? `OT ${e.ot_number} · ` : ''}${txt(e.concept).replace(/^Gastos notariales — /, '')}`
   fondos.forEach(e => ev.push({ f: diaISO(e.date, zona) || diaISO(e.created_at, zona), o: 1, k: 'Fondo', det: txt(e.concept) || 'Fondo', abono: Number(e.amount) || 0, cargo: 0, inc: 0, ref: { tipo: 'fondo', id: e.id, ids: [e.id] } }))
-  gastos.forEach(e => ev.push({ f: diaISO(e.date, zona) || diaISO(e.created_at, zona), o: 0, k: 'Gasto', det: glosa(e), abono: 0, cargo: 0, inc: Number(e.amount) || 0, ref: { tipo: 'gasto', id: e.id, ids: [e.id] } }))
+  gastos.forEach(e => ev.push({ f: diaISO(e.date, zona) || diaISO(e.created_at, zona), o: 0, k: 'Gasto', det: glosa(e), abono: 0, cargo: 0, inc: Number(e.amount) || 0, nv: !!txt(e.ot_number) && (Number(e.amount) || 0) <= 1, ref: { tipo: 'gasto', id: e.id, ids: [e.id] } }))
   /** @type {Map<string, any>} */
   const pagos = new Map()
   gastos.forEach(e => { const p = pagoDeGasto(e); if (!p.pagado) return; const f = diaISO(p.fecha, zona), k = `${f}|${p.medio}`; if (!pagos.has(k)) pagos.set(k, { f, medio: p.medio, xs: [] }); pagos.get(k).xs.push(e) })

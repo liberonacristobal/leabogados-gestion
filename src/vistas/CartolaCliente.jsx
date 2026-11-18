@@ -14,13 +14,14 @@ const LIM = 40
 export function CartolaPagina({ client, expenses, onBack, onVerGasto, onDescargar }) {
   const D = useIsDesktop()
   const cart = useMemo(() => cartolaCliente({ expenses, clientId: client.id }), [expenses, client.id])
-  const [fil, setFil] = useState('todos'), [q, setQ] = useState(''), [asc, setAsc] = useState(false), [todos, setTodos] = useState(false), [abierto, setAbierto] = useState(/** @type {any} */ (null))
+  const [fil, setFil] = useState('todos'), [q, setQ] = useState(''), [asc, setAsc] = useState(false), [todos, setTodos] = useState(false), [verNV, setVerNV] = useState(false), [abierto, setAbierto] = useState(/** @type {any} */ (null))
   const porId = useMemo(() => new Map((expenses || []).map(e => [String(e.id), e])), [expenses])
   const nq = q.trim().toLowerCase()
   const lista = useMemo(() => {
-    const xs = cart.eventos.filter(e => (fil === 'todos' || e.k === fil) && (!nq || `${e.det} ${e.ots || ''} ${e.k}`.toLowerCase().includes(nq) || String(Math.round(e.abono || e.cargo || e.inc)).includes(nq.replace(/\D/g, '') || '§')))
+    const xs = cart.eventos.filter(e => (verNV || !e.nv) && (fil === 'todos' || e.k === fil) && (!nq || `${e.det} ${e.ots || ''} ${e.k}`.toLowerCase().includes(nq) || String(Math.round(e.abono || e.cargo || e.inc)).includes(nq.replace(/\D/g, '') || '§')))
     return asc ? xs : xs.slice().reverse()
-  }, [cart, fil, nq, asc])
+  }, [cart, fil, nq, asc, verNV])
+  const nNV = cart.eventos.filter(e => e.nv).length
   const ver = todos ? lista : lista.slice(0, LIM)
   const abrir = e => { if (e.k === 'Pago') setAbierto(a => (a === e.ref.id ? null : e.ref.id)); else if (onVerGasto) onVerGasto(e.ref.id) }
 
@@ -48,6 +49,7 @@ export function CartolaPagina({ client, expenses, onBack, onVerGasto, onDescarga
       </div>
       {FILTROS.map(([k, l]) => <button key={k} type='button' onClick={() => setFil(k)} style={{ fontSize: 12, fontWeight: 600, border: `1px solid ${fil === k ? C.accent : C.border}`, borderRadius: 10, background: fil === k ? C.accent : C.surface, color: fil === k ? '#fff' : C.accent, padding: '7px 11px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{l}</button>)}
       <button type='button' onClick={() => setAsc(v => !v)} style={{ fontSize: 12, fontWeight: 600, border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface, color: C.accent, padding: '7px 11px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Fecha {asc ? '↑' : '↓'}</button>
+      {nNV > 0 && <button type='button' onClick={() => setVerNV(v => !v)} title='Una OT de $0 o $1 es un repertorio no usado o anulado: no se debe' style={{ fontSize: 12, fontWeight: 600, border: `1px solid ${verNV ? C.accent : C.border}`, borderRadius: 10, background: verNV ? C.accent : C.surface, color: verNV ? '#fff' : C.accent, padding: '7px 11px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>OT no válidas {nNV}</button>}
       {onDescargar && <BtnDescarga onClick={onDescargar} titulo='Descargar Excel de gastos' n='download' s={18} />}
     </div>)
   const th = (t, n) => <th style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.accent, textAlign: n ? 'right' : 'left', padding: '9px 8px', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>{t}</th>

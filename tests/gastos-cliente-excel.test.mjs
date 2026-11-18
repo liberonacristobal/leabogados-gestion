@@ -89,3 +89,10 @@ test('Un gasto en un borrador de rendición no figura como rendido: ni en la reg
   const h = hojasGastosCliente({ cliente: cli, expenses: [gb, ge, g(3, 5000)], rendiciones: [borr, env] }), enc = h.gastos[0], col = enc.indexOf('Rendido al cliente')
   assert.deepEqual(h.gastos.slice(1, 4).map(r => celda(r[col])), ['En borrador, sin enviar', fechaExcel('2026-11-17'), ''])
 })
+
+test('Cartola: una OT de $0 o $1 va marcada como no válida (la página la oculta por defecto) y el saldo sigue cuadrando', () => {
+  const ex = [{ id: 'f1', client_id: 'c1', type: 'fondo', amount: 100000, date: '2026-08-01' }, g(1, 40000, { ot_number: '1111' }), g(2, 1, { ot_number: '2222' }), g(3, 0, { ot_number: '3333' }), g(4, 1, {})]
+  const c = cartolaCliente({ expenses: ex, clientId: 'c1' })
+  assert.deepEqual(c.eventos.filter(e => e.nv).map(e => e.ref.id).sort(), [2, 3])   // el de $1 sin OT no es una OT no válida
+  assert.equal(c.saldo, fgCliente(ex, 'c1').saldo)
+})
