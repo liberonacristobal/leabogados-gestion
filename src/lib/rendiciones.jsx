@@ -1090,7 +1090,7 @@ Saludos cordiales,`
       const conNum = saved.map(x=>{ if(x.sent_at&&x.correlativo) return x   // reenvío: el cliente ya tiene ese N°, no se renumera
         const c=(x.correlativo&&x.correlativo>=libre)?x.correlativo:libre; libre=c+1; return {...x, correlativo:c} })
       const nombrePdf = x => `${lang==='en'?'Expense Report':'Rendicion'}${conNum.length>1?` ${x.correlativo}`:''} ${(client?.name||'').replace(/[^\w\s-]/g,'')} ${x.project||''}`.trim()+'.pdf'
-      const armarAdjuntos = async()=>{ const out=[]; for(const x of conNum){ out.push({base64:await rendicionPdfBase64(x, client, expenses, clientEntities, user, attachSet, lang), name:nombrePdf(x), mime:'application/pdf'}) } return out }
+      const armarAdjuntos = async()=>{ const out=[]; for(const x of conNum){ out.push({base64:await rendicionPdfBase64(x, client, expenses, clientEntities, user, attachSet, lang, rendiciones), name:nombrePdf(x), mime:'application/pdf'}) } return out }
       // Envío directo con PDF adjunto vía Gmail API (si el token tiene el scope gmail.send)
       let conAdjunto = false
       let sendErr = null, viaRend = null
@@ -1279,7 +1279,7 @@ Saludos cordiales,`
   return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?780:640} title={<><span style={{color:C.accent}}>Enviar rendición</span>{client?.name&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
 }
 
-export async function rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang='es'){
+export async function rendicionPdfBase64(r, client, expenses, clientEntities, user, attachSet, lang='es', rendiciones=null){
   const EN = lang==='en'
   const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm')
   const doc = new jsPDF({unit:'pt', format:'letter'})
