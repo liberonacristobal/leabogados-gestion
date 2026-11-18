@@ -27,6 +27,7 @@ import { ordenarFilas } from '../lib/ordenar.js'
 import { BRAND, C, CUENTA_HONORARIOS, diaGrande, isoLocal, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtN, fmtRutCL, folioN, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { useTerceroFacturas } from '../lib/terceroFacturas.js'
 
+import { sugerirReparto, claveRepartoAprendido } from '../../supabase/functions/_shared/repartoSugerido.js'
 import { PaginaSobre, generoF, equipoPorNombre, mesTitulo, driveTokenVigente, facturaPdfSii, HubTile, Buscador, ADMIN_NAMES, ActBtn, AsignarClienteInline, AsignarVentaFactura, CORREO_DESPEDIDA, CUENTA_GASTOS_DEFAULT, Copyable, CubrirCuotasModal, DATOS_PAGO_HTML, DATOS_PAGO_TXT, DriveAuthError, ESTADO_COBRO, EstadoFacturaChip, FacturarBloqueModal, FlujoPagina, Inp, MESES, MESES_ABR, MESES_LG, MES_C, Modal, NOMBRE_CLI, PageHeader, Sparkle, TH_BAND, TIPOS_FACTURA, WHO_LIST, _correoToP, _respaldoCache, acusePagoEmail, aprenderRS, bigDate, catSinClienteVenta, chipBtn, claudeCall, cobradoBill, cuentaHtml, cuentaTxt, cuotasCubiertasVenta, currentMonth, currentYear, daysLeft, driveCarpetaFacturacion, driveToken, driveUpload, dteMontoTotal, dueFromIssued, enviarComoUsuario, esCorreoOficina, esPersona, esRecurrente, esSubarriendo, esVencidaB, estadoCobro, estadoFacturaLabel, fInp, facturaCorreoBody, facturaCorreoHtml, facturaCorreoShell, facturaDtePdfBase64, facturaGlosaPartes, facturaPdfAdjunto, facturaRespaldo, fetchUF, firmaDefault, fmtDate, fmtFechaHora, fmtMill, fmtShort, fmtUF, logActividad, logEvent, matchProgEmitidas, mejorVenta, modoEnvioLote, montoFactura, okDB, parseDteFactura, reconcileProgramada, recordatorioCobro, resolverClienteSII, restoreScroll, rolledDueMap, rsDeFactura, rsDisplay, rsLabel, saldoBill, saludoCli, setLearningKV, splitSetDTE, tipoFactura, tipoFacturaLbl, titleCase, txtEnviado, txtNoEnviado, txtResumenEnvio, ufFechaCache, useCompromisosCobranza, useNoEmitirSet, usePersisted, usePersistedState, useUF, venceBill, ventaNombre, verFacturaPdf, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
 
@@ -780,7 +781,7 @@ async function ajustarTercerosPorFactura(billingId, saleId, sales, monto, fecha)
     for(const c of tercerosPorFactura({terceros:ts||[],venta,montoFactura:monto,fecha})) await supabase.from('terceros_pagos').update(c.patch).eq('id',c.id)
   }catch(e){ registrarError({origen:'accion',vista:'terceros_por_factura',err:e}) } }
 
-export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],sales=[],anticipos=[],user=null,onReclasificarTercero,initialMes,onOpenClientFicha,asPage=false}) {
+export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],billing=[],sales=[],anticipos=[],terceros=[],user=null,onReclasificarTercero,initialMes,onOpenClientFicha,asPage=false}) {
   const isDesktop = useIsDesktop()
   const hoy = new Date()
   const [mes,setMes] = useState((/^\d{4}-\d{2}$/.test(initialMes||'')?initialMes:`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`))
@@ -974,6 +975,24 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
     }catch(e){ setError(`No se pudo asignar Factura N° ${it.folio}: ${e.message}`) }
     setAmbBusy(null)
   }
+  // Reparto sugerido con el colaborador (BDA): propone el % de las facturas laborales anteriores del cliente (regla única repartoSugerido.js).
+  // Al cargar con reparto se crea el pago al colaborador anclado a la factura y se aprende para ese cliente.
+  const [repApr,setRepApr] = useState({})            // clave cliente|laboral → {proveedorId,proveedor,rut,pct}
+  const [repPct,setRepPct] = useState({})            // folio → % editado
+  useEffect(()=>{ if(DEMO) return; (async()=>{ try{ const {data}=await supabase.from('learnings').select('key,value').eq('kind','reparto_cliente'); const o={}; (data||[]).forEach(r=>{ try{ o[r.key]=JSON.parse(r.value) }catch(_){} }); setRepApr(o) }catch(_){} })() },[])
+  const repDe = (it,cli) => cli ? sugerirReparto({clienteId:cli.id,glosa:it.glosa||null,monto:it.monto,billing,terceros,aprendido:repApr[claveRepartoAprendido(cli.id)]||null}) : null
+  const repPartes = (it,sug) => { const raw=repPct[it.folio]; const pct=Math.min(99,Math.max(1,raw!==undefined&&raw!==''?Number(String(raw).replace(',','.'))||sug.pct:sug.pct)); const total=Math.round(Number(it.monto)||0), m=Math.round(total*pct/100); return {pct,monto:m,resto:total-m} }
+  const cargarConReparto = async(it,cli,sug)=>{
+    const {pct,monto}=repPartes(it,sug)
+    const fac=await ingresarHuerfana(it,cli.id,{sinCuota:true}); if(!fac?.id) return
+    if(DEMO) return
+    try{
+      const {error}=await supabase.from('terceros_pagos').insert({billing_id:fac.id,sale_id:fac.sale_id||null,proveedor_id:sug.proveedorId,proveedor:sug.proveedor,rut:sug.rut,naturaleza:'comision',tipo_costo:'pct',valor:pct,monto,estado:'pendiente',created_by:user?.email||null}); if(error) throw error
+      await setLearningKV('reparto_cliente',claveRepartoAprendido(cli.id),JSON.stringify({proveedorId:sug.proveedorId,proveedor:sug.proveedor,rut:sug.rut,pct}))
+      setRepApr(p=>({...p,[claveRepartoAprendido(cli.id)]:{proveedorId:sug.proveedorId,proveedor:sug.proveedor,rut:sug.rut,pct}}))
+      if(onRefresh) await onRefresh()
+    }catch(e){ setError(`La factura N° ${it.folio} se cargó, pero no se pudo guardar el reparto con ${sug.proveedor}: ${e.message}. Agrégalo desde la factura.`) }
+  }
   // Venta de terceros: se registra la factura sin venta y se le asocia el externo con su comisión (por defecto la aprendida, 15 %; editable por porcentaje o por monto).
   const [extEdit,setExtEdit] = useState(()=>({}))   // folio → {modo:'pct'|'monto', valor:string}
   const extPartes = it => { const e=extEdit[it.folio]||{}, total=Math.round(Number(it.monto)||0), pct0=Number(it.externo?.pct)||15
@@ -1128,7 +1147,19 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
                             <div style={{fontSize:11,color:C.greenText}}><Gl n='tick'/> mismo RUT</div>
                           </div>
                         </div>
-                        <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:24,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'Cargando…':`Cargar a ${cli?.name}`}</button>
+                        {(()=>{ const sug=repDe(it,cli); if(!sug) return <button onClick={()=>ingresarHuerfana(it)} disabled={ingresando===it.folio} style={{height:24,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ingresando===it.folio?.5:1}}>{ingresando===it.folio?'Cargando…':`Cargar a ${cli?.name}`}</button>
+                          const pt=repPartes(it,sug), ocupado=ingresando===it.folio, nf=n=>fmt(n)
+                          return <>
+                            <div style={{margin:'2px 0 10px',background:C.bgPanel,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 12px'}}>
+                              <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.3,marginBottom:6}}>Reparto sugerido con {sug.proveedor.replace(/ limitada$/i,'')}</div>
+                              <div style={{display:'flex',alignItems:'baseline',gap:10,padding:'5px 0',fontSize:12}}><span style={{flex:1,minWidth:0,color:C.text}}>{sug.proveedor}</span><span style={{display:'inline-flex',alignItems:'center',gap:2,width:58,height:24,border:`1px solid ${C.border}`,borderRadius:6,background:'#fff',padding:'0 7px',fontWeight:700,color:C.accent,justifyContent:'flex-end'}}><input aria-label='Porcentaje del colaborador' value={repPct[it.folio]!==undefined?repPct[it.folio]:String(sug.pct)} onChange={ev=>setRepPct(x=>({...x,[it.folio]:ev.target.value.replace(/[^\d,.]/g,'')}))} style={{width:30,border:'none',outline:'none',textAlign:'right',font:'inherit',color:'inherit',background:'transparent',padding:0}}/>%</span><span style={{width:92,textAlign:'right',fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nf(pt.monto)}</span></div>
+                              <div style={{display:'flex',alignItems:'baseline',gap:10,padding:'5px 0',borderTop:`.5px solid ${C.border}`,fontSize:12}}><span style={{flex:1,minWidth:0,color:C.text}}>Estudio</span><span style={{width:58,textAlign:'right',color:C.muted}}>{Math.round((100-pt.pct)*100)/100} %</span><span style={{width:92,textAlign:'right',fontWeight:700,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{nf(pt.resto)}</span></div>
+                              <div style={{fontSize:11,color:C.textSoft,marginTop:6}}>{sug.senal==='aprendido'?`Lo guardaste para este cliente.`:`Por qué: las facturas laborales anteriores de este cliente (${sug.porque.map(f=>`F${f}`).join(', ')}) llevaron ${sug.proveedor.replace(/ limitada$/i,'')} al ${sug.pct} %.`}{sug.glosa==='sin_glosa'?' El SII aún no entrega la glosa de esta factura.':''}</div>
+                            </div>
+                            <button onClick={()=>cargarConReparto(it,cli,sug)} disabled={ocupado} style={{height:34,width:'100%',borderRadius:8,background:C.accent,color:'#fff',border:'none',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ocupado?.5:1}}>{ocupado?'Cargando…':`Cargar con reparto ${pt.pct}/${Math.round((100-pt.pct)*100)/100}`}</button>
+                            <div style={{fontSize:11,color:C.textSoft,textAlign:'center',marginTop:6}}>Se guarda para este cliente al cargar.</div>
+                            <div onClick={()=>!ocupado&&ingresarHuerfana(it)} style={{fontSize:12,fontWeight:600,color:C.azulInfo,textAlign:'center',marginTop:8,cursor:'pointer'}}>Cargar sin reparto</div>
+                          </> })()}
                       </div>}
                     </div>
                   )})}
@@ -2928,7 +2959,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
       <FacturarBloqueModal asPage anticipo={facturarAnt} billing={billing} sales={sales} clients={clients} onConfirm={d=>onFacturarBloque&&onFacturarBloque(facturarAnt,d)} onClose={()=>setFacturarAnt(null)}/>
     </FlujoPagina> : null
   const siiCotejoPage = siiOpen ? <FlujoPagina origen={siiPageOpen?'Facturación electrónica':origenDe('sii',origenFact)} titulo='Cuadrar con SII' onBack={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} maxW={1000}>
-      <SiiSyncModal asPage onClose={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} anticipos={anticipos} user={user} onReclasificarTercero={onReclasificarTercero} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>
+      <SiiSyncModal asPage onClose={volverOrigen('sii',()=>{setSiiOpen(false);setCotejoMes(null)})} onRefresh={onRefresh} clients={clients} clientEntities={clientEntities} billing={billing} sales={sales} anticipos={anticipos} terceros={terceros} user={user} onReclasificarTercero={onReclasificarTercero} initialMes={cotejoMes} onOpenClientFicha={onOpenClientFicha}/>
     </FlujoPagina> : null
   const regPage = regReview ? (()=>{ const items=regReview; const total=items.reduce((a,r)=>a+(r.monto||0),0)
     return <FlujoPagina origen={origenFact} titulo={`Registrar ${items.length} factura${items.length!==1?'s':''}`} onBack={()=>!regBusy&&setRegReview(null)} maxW={720}>
