@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hojasGastosCliente, pagoDeGasto, descuentaSaldo, fechaExcel } from '../supabase/functions/_shared/gastosClienteExcel.js'
+import { hojasGastosCliente, cartolaCliente, pagoDeGasto, descuentaSaldo, fechaExcel } from '../supabase/functions/_shared/gastosClienteExcel.js'
 import { fgCliente } from '../supabase/functions/_shared/gastosReglas.js'
 
 const cli = { id: 'c1', name: 'Cliente de prueba' }
@@ -14,6 +14,7 @@ const exps = [
   g(5, 99000, { deleted_at: '2026-09-02' }),
   { ...g(6, 7000), client_id: 'otro' },
 ]
+const celda = c => (c && c.v !== undefined ? c.v : c)
 
 test('Excel de gastos: una fila por gasto con OT y glosas completas; no entran borrados ni de otro cliente', () => {
   const h = hojasGastosCliente({ cliente: cli, expenses: exps, pagadoPor: e => e.category === 'Notaria' ? 'Notaría' : 'Oficina' })
@@ -32,20 +33,44 @@ test('Excel de gastos: estado y fecha de pago salen de la liquidación o de la r
   assert.deepEqual(est[1], ['Pagado', 'Rendición de caja chica', fechaExcel('2026-09-25')])
   assert.deepEqual(est[2], ['Sin pago', '', ''])
   assert.deepEqual(pagoDeGasto({}), { pagado: false, fecha: null, medio: '' })
+  assert.equal(descuentaSaldo({ no_descuenta_saldo: true }), 'No, saldado fuera de la app')
 })
 
-test('Excel de gastos: el saldo es el de fgCliente y los grupos suman el total cargado', () => {
-  const h = hojasGastosCliente({ cliente: cli, expenses: exps }), fg = fgCliente(exps.filter(e => !e.deleted_at), 'c1')
-  const r = Object.fromEntries(h.resumen.slice(1).map(x => [`${x[0]}|${x[1]}`, x[3]?.v]))
-  assert.equal(r['Saldo|Saldo'], fg.saldo); assert.equal(r['Saldo|Fondos recibidos'], 1000000); assert.equal(r['Saldo|Gastos que descuentan saldo'], 480000)
-  assert.equal(r['Saldo|Gastos saldados fuera de la app (no descuentan)'], 10000)
-  const total = h.totales.gastos
-  assert.equal(total, 490000)
-  for (const g of ['Estado de pago', 'Pagado por', 'Categoría']) {
-    const s = h.resumen.slice(1).filter(x => x[0] === g).reduce((a, x) => a + x[3].v, 0)
-    assert.equal(s, total, g)
-  }
-  assert.equal(descuentaSaldo({ no_descuenta_saldo: true }), 'No, saldado fuera de la app')
+test('Cartola: los tres saldos cuadran con fgCliente y un pago no mueve el saldo del cliente', () => {
+  const vivos = exps.filter(e => !e.deleted_at), fg = fgCliente(vivos, 'c1')
+  const c = cartolaCliente({ expenses: exps, clientId: 'c1' })
+  assert.equal(c.saldo, fg.saldo); assert.equal(c.saldo, c.caja - c.por)
+  assert.equal(c.caja, 1000000 - 450000)                         // fondos − lo pagado (400.000 liquidado + 50.000 rendido)
+  assert.equal(c.por, 480000 - 450000)                           // incurrido (sin el saldado fuera de la app) − pagado
+  const pagos = c.eventos.filter(e => e.k === 'Pago')
+  assert.deepEqual(pagos.map(e => e.cargo), [400000, 50000])
+  pagos.forEach(p => { const i = c.eventos.indexOf(p); assert.equal(p.cli, c.eventos[i - 1].cli) })   // el saldo del cliente no cambia al pagar
+  assert.match(pagos[0].det, /Liquidación a la notaría · 1 OT/); assert.equal(pagos[0].ots, '490673')
+})
+
+test('Cartola: orden cronológico (gasto, fondo, pago el mismo día) y el Excel repite la misma cartola', () => {
+  const h = hojasGastosCliente({ cliente: cli, expenses: exps }), fin = h.cartola[h.cartola.length - 1]
+  const c = cartolaCliente({ expenses: exps, clientId: 'c1' })
+  assert.equal(celda(fin[8]), c.saldo); assert.equal(h.cartola.length, 1 + c.eventos.length + 1)
+  const fechas = c.eventos.map(e => e.f); assert.deepEqual(fechas, [...fechas].sort())
+})
+
+test('Excel de pagos y fondos: lo sin pago primero, cada pago con su subtotal, y los sin fondo aparte', () => {
+  const h = hojasGastosCliente({ cliente: cli, expenses: exps, pagadoPor: e => e.category === 'Notaria' ? 'Notaría' : 'Oficina' })
+  const etiquetas = h.pagos.slice(1).map(r => celda(r[0])).filter(x => /^Total/.test(x))
+  assert.equal(etiquetas.at(-1), 'Total gastos cargados')
+  assert.equal(h.totales.gastos, 490000)
+  const total = h.pagos.find(r => celda(r[0]) === 'Total gastos cargados'); assert.equal(celda(total[9]), 490000)
+  assert.equal(h.pagos[1][0], 'Sin pago')                        // lo sin pago va primero
+  const sinFondo = h.fondos.filter(r => celda(r[0]) === 'Sin fondo, a pedir al cliente'); assert.equal(sinFondo.length, 0)   // el fondo de 1.000.000 alcanza
+})
+
+test('Fondos: lo que ningún fondo alcanza queda «Sin fondo, a pedir al cliente»', () => {
+  const corto = [{ id: 'f1', client_id: 'c1', type: 'fondo', amount: 100000, date: '2026-08-01', concept: 'Provisión' }, g(1, 100000), g(2, 60000, { ot_number: '502219' })]   // el fondo se agota con el primero: un gasto cae en un fondo mientras le quede saldo
+  const h = hojasGastosCliente({ cliente: cli, expenses: corto })
+  const filas = h.fondos.filter(r => celda(r[0]) === 'Sin fondo, a pedir al cliente')
+  assert.equal(filas.length, 1); assert.equal(celda(filas[0][2]), '502219'); assert.equal(celda(filas[0][6]), -60000)
+  assert.equal(celda(h.fondos.at(-1)[6]), -60000)
 })
 
 test('fechaExcel: la fecha de un timestamp es la de Chile, no la UTC', () => {

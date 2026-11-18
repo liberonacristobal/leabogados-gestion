@@ -1,8 +1,8 @@
 // Movido desde App.jsx por scripts/mover-a-modulo.py. Sin cambios de comportamiento.
 import { useState, useEffect } from 'react'
 import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
-import { C, Gl, SEC_LBL, SIcon, _normTxt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, CAT_COLORS, ChipSearch, Copyable, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, bigDate, chipBtn, driveBtn, rsDisplay, rsLabel } from '../lib/compartido.jsx'
+import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
+import { ActBtn, CAT_COLORS, ChipSearch, Copyable, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, bigDate, chipBtn, driveBtn, rsDisplay, rsLabel, rendicionPdfHtml } from '../lib/compartido.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 
@@ -136,7 +136,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
           </div>
 
           {(()=>{
-            const rends=(rendiciones||[]).filter(r=>r.client_id===cl.id&&r.tipo==='cliente').sort((a,b)=>b.created_at>a.created_at?1:-1)
+            const rends=(rendiciones||[]).filter(r=>r.client_id===cl.id&&r.tipo==='cliente'&&r.sent_at&&!r.anulada_at).sort((a,b)=>b.created_at>a.created_at?1:-1)
             if(!rends.length) return null
             return (
               <div style={{marginBottom:20}}>
@@ -151,7 +151,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
                           {bigDate(r.created_at)}
                           <div style={{minWidth:0}}>
                           <div style={{fontSize:12,fontWeight:600,color:C.text}}>{r.periodo}</div>
-                          <div style={{fontSize:10,color:C.muted}}>{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.user_name?` · ${r.user_name}`:''}</div>
+                          <div style={{fontSize:10,color:C.muted}}>{r.correlativo?`N° ${r.correlativo} · `:''}{r.n_gastos} gasto{r.n_gastos!==1?'s':''}{r.user_name?` · ${r.user_name}`:''}</div>
                           </div>
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
@@ -161,6 +161,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
                       </div>
                       {isOpen&&(
                         <div style={{padding:'2px 0 10px 4px'}}>
+                          <div style={{padding:'2px 0 6px'}}><span onClick={ev=>{ ev.stopPropagation(); const w=window.open('','_blank'); if(!w){ appAlert('El navegador bloqueó la ventana del PDF. Permite ventanas emergentes para esta página.'); return } w.document.write(r.pdf_html||rendicionPdfHtml(r,cl,expenses,clientEntities)); w.document.close() }} style={{fontSize:12,fontWeight:600,color:C.azulInfo,cursor:'pointer'}}>Ver PDF</span></div>
                           {det.length===0&&<div style={{fontSize:11,color:C.muted,padding:'4px 0'}}>Sin detalle disponible</div>}
                           {det.map(e=>(
                             <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #E4E8EB'}}>
