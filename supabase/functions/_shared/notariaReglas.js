@@ -140,3 +140,27 @@ export function revisionCargaNotaria(gastos = [], resumen = {}) {
   const r = { cargadas: vivas.length, monto: suma(vivas), sinCliente: parte(sinCliente), sinTrabajo: parte(sinTrabajo), porConfirmar: parte(noNuestras) }
   return { ...r, porRevisar: r.sinCliente.n + r.sinTrabajo.n + r.porConfirmar.n }
 }
+
+const _sinTildes = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const _GENERICAS = new Set(['gastos', 'notariales', 'sociedad', 'sociedades', 'constitucion', 'modificacion', 'compraventa', 'poder', 'mandato', 'autorizacion', 'autorizaciones', 'uso', 'domicilio', 'comercial', 'spa', 'limitada', 'ltda', 'inversiones', 'inversion', 'servicios', 'asesorias', 'grupo', 'capital', 'chile', 'varias', 'firmas', 'contratos', 'escritura', 'publica', 'certificado', 'protocolizacion'])
+/**
+ * Cliente sugerido para una OT sin cliente, por las palabras propias de su glosa (no genéricas, 4 letras o más): se puntúa cada cliente por cuántas de esas palabras
+ * aparecen en sus gastos y se sugiere solo con un ganador claro (2 palabras o más, y más que el siguiente). Una sola palabra común no basta.
+ * Devuelve {clienteId, palabras} o null.
+ * @param {{concept?:string, id?:any}} ot
+ * @param {any[]} gastos
+ */
+export function clienteSugeridoPorGlosa(ot, gastos) {
+  const resto = String(ot?.concept || '').split('—').slice(1).join(' ') || String(ot?.concept || '')
+  const palabras = [...new Set(_sinTildes(resto).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 4 && !_GENERICAS.has(w)))]
+  /** @type {Map<string, Set<string>>} */ const por = new Map()
+  for (const g of gastos || []) {
+    if (!g || g.deleted_at || !g.client_id || String(g.id) === String(ot?.id)) continue
+    const txt = _sinTildes(g.concept)
+    for (const w of palabras) if (txt.includes(w)) { const k = String(g.client_id); let ws = por.get(k); if (!ws) { ws = new Set(); por.set(k, ws) } ws.add(w) }
+  }
+  const orden = [...por].map(([clienteId, ws]) => ({ clienteId, palabras: [...ws] })).sort((a, b) => b.palabras.length - a.palabras.length)
+  if (!orden.length || orden[0].palabras.length < 2) return null
+  if (orden[1] && orden[1].palabras.length >= orden[0].palabras.length) return null
+  return orden[0]
+}

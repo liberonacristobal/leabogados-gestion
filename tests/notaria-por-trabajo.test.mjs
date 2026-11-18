@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { disponibleNotaria, notariaPendientes, otNoValida, revisionCargaNotaria } from '../supabase/functions/_shared/notariaReglas.js'
+import { disponibleNotaria, notariaPendientes, otNoValida, revisionCargaNotaria, clienteSugeridoPorGlosa } from '../supabase/functions/_shared/notariaReglas.js'
 
 const fondo = (id, amount, project, date = '2026-09-01') => ({ id, client_id: 'c', type: 'fondo', amount, project, date })
 const ot = (id, amount, project) => ({ id, client_id: 'c', type: 'gasto', category: 'Notaria', ot_number: String(400000 + id), amount, project, date: '2026-10-01' })
@@ -50,4 +50,17 @@ test('revisión de una carga de la notaría: sin cliente, sin trabajo y por conf
   assert.deepEqual(r.porConfirmar, { n: 1, m: 20000 })
   assert.equal(r.porRevisar, 3)
   assert.equal(r.cargadas, 4)
+})
+
+test('OT sin cliente: se sugiere el cliente con más palabras propias de la glosa en sus gastos; una palabra común o un empate no sugieren', () => {
+  const g = [
+    { id: 1, client_id: 'jhvorj', concept: 'Contratos varios — Jhvpdt VsD, Grupo Mulet Inversiones SpA' },
+    { id: 2, client_id: 'jhvorj', concept: 'Inscripcion Constitucion Modulares Mulet' },
+    { id: 3, client_id: 'otro', concept: 'Gastos notariales — Compensación' },
+  ]
+  const ot = { id: 9, concept: 'Gastos notariales — Compensación, Grupo Mulet Inversiones SpA y Bodegas Modulares Mulet' }
+  assert.equal(clienteSugeridoPorGlosa(ot, g).clienteId, 'jhvorj')
+  assert.equal(clienteSugeridoPorGlosa({ id: 9, concept: 'Gastos notariales — Compensación' }, g), null)          // una sola palabra y común
+  const empate = [{ id: 1, client_id: 'a', concept: 'Mulet Modulares' }, { id: 2, client_id: 'b', concept: 'Modulares Mulet' }]
+  assert.equal(clienteSugeridoPorGlosa({ id: 9, concept: 'X — Mulet Modulares' }, empate), null)                // empate entre dos clientes
 })

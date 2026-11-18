@@ -270,6 +270,9 @@ export const demoData = {
     { id:'n5',  bulk_import_id:'bi1', client_id:'c3', type:'gasto', amount:20000,  ot_number:'48318', concept:'Gastos notariales — Declaración jurada',      category:'Notaria', date:'2026-08-19', created_by:'Martina', paid_by_client:false },
     { id:'n6',  bulk_import_id:'bi1', client_id:'c4', type:'gasto', amount:90000,  ot_number:'48320', concept:'Gastos notariales — Constitución de sociedad',category:'Notaria', date:'2026-08-19', created_by:'Martina', paid_by_client:false },
     { id:'n7',  bulk_import_id:'bi1', client_id:'c5', type:'gasto', amount:15000,  ot_number:'48325', concept:'Gastos notariales — Protocolización',         category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false, sale_id:'s11', project:'Asesoría M&A — venta de activos' },
+    { id:'n8',  bulk_import_id:'bi10', client_id:'c1', type:'gasto', amount:50000, ot_number:'49001', concept:'Gastos notariales — Mandato judicial',  category:'Notaria', date:'2026-10-20', created_by:'Martina', paid_by_client:false },
+    { id:'n9',  bulk_import_id:'bi10', client_id:'c2', type:'gasto', amount:30000, ot_number:'49002', concept:'Gastos notariales — Autorización de firmas', category:'Notaria', date:'2026-10-20', created_by:'Martina', paid_by_client:false },
+    { id:'n10', bulk_import_id:'bi10', client_id:null, type:'gasto', amount:30000, ot_number:'49003', concept:'Gastos notariales — Compensación, Inversiones del Sur SpA', category:'Notaria', date:'2026-10-21', created_by:'Martina', paid_by_client:false },
     { id:'n8',  bulk_import_id:'bi1', client_id:'c6', type:'gasto', amount:110000, ot_number:'48330', concept:'Gastos notariales — Compraventa',            category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
     { id:'n9',  bulk_import_id:'bi1', client_id:'c2', type:'gasto', amount:25000,  ot_number:'48340', concept:'Gastos notariales — Reconocimiento de deuda', category:'Notaria', date:'2026-08-20', created_by:'Martina', paid_by_client:false },
     { id:'nk1', client_id:'c3', type:'gasto', amount:10000, ot_number:'466201', incobrable_at:'2026-10-13T12:00:00', incobrable_by:'cl@demo', no_descuenta_saldo:true, concept:'Gastos notariales — Poder especial', category:'Notaria', date:'2026-06-16', paid_by_client:true },
@@ -285,6 +288,7 @@ export const demoData = {
   ],
   // Cargas masivas de notaría (Carga masiva / historial). El resumen guarda las "no son nuestras" para el panel dedicado.
   bulk_imports: [
+    { id:'bi10', created_at:'2026-10-22T10:05:00Z', created_by:'Martina', filename:'Liquidación (2).xlsx', row_count:3, status:'active', resumen:{ leidas:5, cargadas:2, pendientes:1, error:1, omitidas:1, notaria:true, noNuestras:[{ ot:'OT-49010', fecha:'2026-10-02', monto:20000, concepto:'Gastos notariales — Protocolización de certificado', nombre:'Dirección Regional', motivo:'PROTOCOLIZACION CERTIFICADO' }] } },
     { id:'bi9', created_at:'2026-10-09T15:10:00Z', created_by:'Martina', filename:'Liquidación.xlsx', row_count:18, status:'active', resumen:{ leidas:19, cargadas:18, pendientes:0, error:0, omitidas:1, notaria:true } },
     { id:'bi1', created_at:'2026-08-21', created_by:'Martina', filename:'Notaría Lascar — agosto.xlsx', row_count:12, status:'active',
       resumen:{ leidas:16, cargadas:12, pendientes:0, error:1, omitidas:0, notaria:true,

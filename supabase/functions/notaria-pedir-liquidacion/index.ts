@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
         const gastos = await sb(`expenses?select=id,amount,client_id,personal_de,project,deleted_at&bulk_import_id=eq.${c.id}&deleted_at=is.null`);
         const r = revisionCargaNotaria(gastos, c.resumen);
         // Fecha de la liquidación = la de la respuesta de la notaría anterior a la carga (hasta 14 días antes); si no hay, la de la carga.
-        const resps = await sb(`activity_log?select=created_at&action=eq.notaria.respuesta_liquidacion&created_at=lte.${encodeURIComponent(c.created_at)}&order=created_at.desc&limit=1`);
+        const resps = await sb(`activity_log?select=created_at,detail&action=eq.notaria.respuesta_liquidacion&created_at=lte.${encodeURIComponent(c.created_at)}&order=created_at.desc&limit=1`);
         const fechaLiq = resps?.[0] && (+new Date(c.created_at) - +new Date(resps[0].created_at)) < 14 * 864e5 ? resps[0].created_at : c.created_at;
         const lineas = [
           r.sinCliente.n ? `<b>${r.sinCliente.n}</b> sin cliente (${clp(r.sinCliente.m)})` : "",
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
           await sbInsert("tasks", { title: "Revisar las OT de la liquidación cargada", who: quienRev, assignees: [quienRev], assigned_by: "App", status: "Activo", client_id: ofi?.[0]?.id || null, due: iso(hoy),
             note: `Liquidación del ${dmy(String(fechaLiq))}: ${r.porRevisar} OT por revisar o confirmar. En Gastos › Notaría › Deuda.`, estudio_id: "lea" });
         }
-        await log("notaria.aviso_carga", { carga: c.id, title: `Aviso a ${quienRev} · ${r.cargadas} OT cargadas, ${r.porRevisar} por revisar`, to: para, ...r });
+        await log("notaria.aviso_carga", { slot: resps?.[0] ? det(resps[0]).slot : null, carga: c.id, title: `Aviso a ${quienRev} · ${r.cargadas} OT cargadas, ${r.porRevisar} por revisar`, to: para, ...r });
         avisados.push({ carga: c.id, para, ...r });
       }
       return json({ ok: true, dryRun: dry, cargas: cargas.length, avisados: avisados.length, detalle: dry ? avisados : undefined });

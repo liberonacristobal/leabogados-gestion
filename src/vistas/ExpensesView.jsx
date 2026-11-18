@@ -2,12 +2,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
-import { notariaPendientes, disponibleNotaria } from '../../supabase/functions/_shared/notariaReglas.js'
+import { notariaPendientes, disponibleNotaria, revisionCargaNotaria, clienteSugeridoPorGlosa } from '../../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../../supabase/functions/_shared/notariaDocsReglas.js'
 import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../../supabase/functions/_shared/gastosReglas.js'
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { AsignarProyectoRS } from '../lib/fichaCliente.jsx'
-import { subproyectosCliente, useAprendidosVenta, useIaVenta } from '../lib/compartido.jsx'
+import { PaginaSobre, subproyectosCliente, useAprendidosVenta, useIaVenta } from '../lib/compartido.jsx'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
@@ -66,7 +66,7 @@ export const anexoCajaChica = (expenses, clients, persona, gastosLiq, hasta) => 
 
 // Pedidos de liquidación a la notaría (edge notaria-pedir-liquidacion + agente-correo): cada pedido con su recorrido
 // (envío, tarea de seguimiento, seguimiento, respuesta). Fuente única para la tarjeta de Notaría y la vista Pedidos.
-export const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion','notaria.aviso_liquidacion','notaria.aviso_liquidacion_fallido']
+export const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion','notaria.aviso_liquidacion','notaria.aviso_liquidacion_fallido','notaria.aviso_carga','notaria.aviso_carga_fallido']
 
 export function usePedidosNotaria(bulkImports=[]){
   const [rows,setRows]=useState(null), [rev,setRev]=useState(0)
@@ -83,7 +83,7 @@ export function usePedidosNotaria(bulkImports=[]){
       const fallo=p.action==='notaria.pedido_liquidacion_fallido'
       // Liquidación cargada = una carga de notaría (bulk_imports) hecha después de la respuesta con Excel.
       const carga=resp&&resp.d.con_excel?(bulkImports||[]).filter(b=>(b.status||'active')==='active'&&(b.resumen?.notaria===true||/notar/i.test(String(b.filename||'')))&&String(b.created_at)>=String(resp.created_at)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0]||null:null
-      const eventos=carga?[...mismos,{id:'c'+carga.id,action:'__carga',created_at:carga.created_at,d:{n:carga.resumen?.cargadas??carga.row_count}}]:mismos
+      const eventos=carga?[...mismos,{id:'c'+carga.id,action:'__carga',created_at:carga.created_at,d:{n:carga.row_count??carga.resumen?.cargadas}}]:mismos
       const estado=fallo?'fallo':carga?'carg':resp?(resp.d.con_excel?'rev':'resp'):sinR?'sin':'env'
       const ultSeg=seg.length?seg[seg.length-1]:null
       return {slot, p, eventos, estado, resp, carga, porSeguir:estado==='sin'&&(!ultSeg||String(ultSeg.created_at)<String(sinR.created_at))}
@@ -446,8 +446,9 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
 
 export function PedidosTile({render, bulkImports}){ const {pedidos}=usePedidosNotaria(bulkImports); return render(pedidos===null?undefined:(pedidos[0]||null)) }
 
-export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
+export function PedidosNotaria({isDesktop, bulkImports, onRevisar, expenses=[], clients=[], sales=[], setExpenses, onAssignClientToExpense, onVerNoNuestras, onOpenClientFicha}){
   const {pedidos,recargar}=usePedidosNotaria(bulkImports)
+  const [revCarga,setRevCarga]=useState(null)   // carga de la notaría que se está revisando (página «Revisar OT cargadas»)
   const [busy,setBusy]=useState(null)
   const D=isDesktop
   const [nombres,setNombres]=useState(_nombresMiembrosCache||{})
@@ -463,6 +464,8 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
     if(e.action==='notaria.respuesta_liquidacion') return D?(d.title||'Respuesta de la notaría'):(d.con_excel?'Respuesta con Excel':'Respuesta sin liquidación')
     if(e.action==='notaria.aviso_liquidacion') return D?(d.title||'Aviso y tarea de revisión'):'Tarea de revisión'
     if(e.action==='notaria.aviso_liquidacion_fallido') return 'El aviso NO se envió'
+    if(e.action==='notaria.aviso_carga') return D?(d.title||'Aviso de la carga'):'Aviso de la carga'
+    if(e.action==='notaria.aviso_carga_fallido') return 'El aviso de la carga NO se envió'
     if(e.action==='__carga') return `Liquidación cargada${d.n!=null?` · ${d.n} OT`:''}`
     return e.action }
   const seguir=async x=>{ if(busy) return; setBusy(x.slot)
@@ -514,12 +517,61 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar}){
               {x.eventos.map(e=><div key={e.id} style={{display:'flex',gap:8,alignItems:'baseline',fontSize:12,color:C.text,minWidth:0}}>
                 <span style={{color:C.muted,width:D?128:78,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{hm(e.created_at)}</span>
                 <span style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,minWidth:0}}>{etiqueta(e)}</span></div>)}
+              {x.carga&&(()=>{ const n=revisionCargaNotaria((expenses||[]).filter(g=>String(g.bulk_import_id)===String(x.carga.id)),x.carga.resumen).porRevisar; return n>0?<div style={{display:'flex',gap:8,fontSize:12}}><span style={{width:D?128:78,flexShrink:0}}/><span onClick={()=>setRevCarga(x.carga)} style={{fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>{`Revisar ${n} OT ›`}</span></div>:null })()}
               {x.estado==='rev'&&<div style={{display:'flex',gap:8,fontSize:12}}><span style={{width:D?128:78,flexShrink:0}}/><span onClick={()=>revisar(x)} style={{fontWeight:700,color:C.azulInfo,cursor:'pointer'}}>Revisar liquidación ›</span></div>}
             </div>
           </div>
         </div> })}
     </div>
+    {revCarga&&<RevisarCargaNotaria carga={revCarga} isDesktop={D} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} onVerNoNuestras={onVerNoNuestras} onOpenClientFicha={onOpenClientFicha} onBack={()=>setRevCarga(null)}/>}
   </div>)
+}
+
+// Página «Revisar OT cargadas»: lo que quien carga la liquidación de la notaría debe revisar o confirmar, en tres partidas (pestañas): OT sin trabajo, sin cliente y por confirmar
+// con la notaría. Cada fila tiene una sola acción, con la sugerencia ya puesta cuando existe. Fuente: las OT que creó la carga (bulk_import_id) y su resumen.
+function RevisarCargaNotaria({carga, isDesktop, expenses, clients, sales, setExpenses, onAssignClientToExpense, onVerNoNuestras, onOpenClientFicha, onBack}){
+  const D=isDesktop
+  const [tab,setTab]=useState('t'), [busy,setBusy]=useState(null)
+  const gastos=(expenses||[]).filter(g=>String(g.bulk_import_id)===String(carga.id)&&!g.deleted_at)
+  const r=revisionCargaNotaria(gastos,carga.resumen)
+  const vivas=gastos.filter(g=>!(g.amount!=null&&(Number(g.amount)||0)<=1))
+  const sinTrab=vivas.filter(g=>g.client_id&&!String(g.project||'').trim()), sinCli=vivas.filter(g=>!g.client_id&&!g.personal_de)
+  const noNuestras=((carga.resumen&&carga.resumen.noNuestras)||[]).filter(x=>(Number(x.monto)||0)>1)
+  const nomCli=id=>(clients.find(c=>String(c.id)===String(id))||{}).name||'—'
+  const trabajosDe=cid=>[...new Set([...(sales||[]).filter(v=>String(v.client_id)===String(cid)&&!v.deleted_at&&v.status==='Activo').map(v=>String(v.title||'').trim()),...(expenses||[]).filter(g=>String(g.client_id)===String(cid)&&g.type==='fondo'&&!g.deleted_at&&String(g.project||'').trim()).map(g=>String(g.project).trim())].filter(Boolean))]
+  const guardar=async(g,patch)=>{ if(busy) return; setBusy(g.id)
+    try{ if(!DEMO){ const {error}=await supabase.from('expenses').update(patch).eq('id',g.id); if(error) throw error }
+      setExpenses&&setExpenses(p=>p.map(x=>x.id===g.id?{...x,...patch}:x))
+    }catch(e){ appAlert('No se pudo guardar: '+(e.message||e)) } finally{ setBusy(null) } }
+  const asignarTrabajo=(g,t)=>{ const v=(sales||[]).find(x=>String(x.client_id)===String(g.client_id)&&String(x.title||'').trim()===t); guardar(g,{project:t,...(v?{sale_id:v.id}:{})}) }
+  const asignarCliente=async(g,cid)=>{ if(busy) return; setBusy(g.id); try{ if(onAssignClientToExpense) await onAssignClientToExpense(g,cid); else await guardar(g,{client_id:cid}) }catch(e){ appAlert('No se pudo asignar: '+(e.message||e)) } finally{ setBusy(null) } }
+  const btn={height:D?30:44,borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:D?11:12,fontWeight:600,padding:'0 12px',cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,width:D?'auto':'100%'}
+  const btnSug={...btn,background:C.greenBg,borderColor:'#CDEBE0',color:C.greenText}
+  const fila=(key,no,cp,fe,mt,accion,nota)=>(<div key={key} style={D?{display:'grid',gridTemplateColumns:'76px minmax(0,1fr) 92px 100px 232px',gap:10,alignItems:'center',padding:'10px 20px',borderBottom:`.5px solid ${C.border}`}:{display:'grid',gridTemplateColumns:'1fr auto',gap:'2px 8px',padding:'10px 12px',borderBottom:`.5px solid ${C.border}`}}>
+    <span style={{fontWeight:700,color:C.azulInfo,fontSize:12}}>{no}{!D&&<span style={{fontWeight:400,color:C.muted,marginLeft:8}}>{fe}</span>}</span>
+    {D&&<div style={{gridColumn:2,gridRow:1,minWidth:0}}><div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.3}}>{cp}</div>{nota&&<div style={{fontSize:11,color:C.textSoft}}>{nota}</div>}</div>}
+    {D&&<span style={{color:C.muted,fontSize:12,fontVariantNumeric:'tabular-nums'}}>{fe}</span>}
+    <span style={{textAlign:'right',fontWeight:700,color:C.accent,fontSize:12,fontVariantNumeric:'tabular-nums',...(D?{}:{gridColumn:2,gridRow:1})}}>{fmt(mt)}</span>
+    {!D&&<div style={{gridColumn:'1/3',minWidth:0}}><div style={{fontSize:12,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.3}}>{cp}</div>{nota&&<div style={{fontSize:11,color:C.textSoft}}>{nota}</div>}</div>}
+    <div style={D?{display:'flex',justifyContent:'flex-end',gap:6}:{gridColumn:'1/3',marginTop:6}}>{accion}</div></div>)
+  const grupo=(cid,xs,render)=><Fragment key={cid}><div onClick={()=>onOpenClientFicha&&onOpenClientFicha(cid)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:D?'9px 20px':'9px 12px',background:C.bgSoft,borderTop:`.5px solid ${C.border}`,borderBottom:`.5px solid ${C.border}`,fontSize:12,cursor:onOpenClientFicha?'pointer':'default'}}><b style={{color:C.accent,fontSize:13}}>{nomCli(cid)} ›</b><span style={{color:C.muted,fontVariantNumeric:'tabular-nums'}}>{xs.length} OT, {fmt(xs.reduce((a,g)=>a+(Number(g.amount)||0),0))}</span></div>{xs.map(render)}</Fragment>
+  const T=(k,l,n,m)=><div key={k} role='button' onClick={()=>setTab(k)} style={{border:`1px solid ${tab===k?C.accent:C.border}`,boxShadow:tab===k?`inset 0 0 0 1px ${C.accent}`:'none',background:tab===k?C.selBg:C.surface,borderRadius:12,padding:D?'12px 14px':'9px',minWidth:0,cursor:'pointer'}}><div style={{fontSize:D?10:9,fontWeight:700,letterSpacing:.06,textTransform:'uppercase',color:C.accent}}>{l}</div><div style={{fontSize:D?28:22,fontWeight:700,color:C.accent,lineHeight:1.1,marginTop:2,fontVariantNumeric:'tabular-nums'}}>{n}</div><div style={{fontSize:11,color:C.textSoft,marginTop:2}}>{m}</div></div>
+  let lista=null
+  if(tab==='t'){ const por={}; sinTrab.forEach(g=>{ (por[g.client_id]=por[g.client_id]||[]).push(g) })
+    lista=sinTrab.length?Object.entries(por).map(([cid,xs])=>{ const ts=trabajosDe(cid); return grupo(cid,xs,g=>{ const una=ts.length===1?ts[0]:null
+      const acc=una?<button disabled={busy===g.id} onClick={()=>asignarTrabajo(g,una)} style={btnSug}>{`Asignar «${una}»`}</button>
+        : ts.length?<select aria-label='Elegir trabajo' defaultValue='' disabled={busy===g.id} onChange={ev=>ev.target.value&&asignarTrabajo(g,ev.target.value)} style={btn}><option value='' disabled>Elegir trabajo</option>{ts.map(t=><option key={t} value={t}>{t}</option>)}</select>
+        : <span style={{fontSize:11,color:C.textSoft}}>Sin trabajos del cliente</span>
+      return fila(g.id,g.ot_number,g.concept||'—',fmtFechaDMY(g.date),g.amount,acc) }) }):<div style={{padding:'16px 20px',fontSize:13,color:C.muted}}>Todas las OT de esta carga tienen trabajo.</div> }
+  if(tab==='c'){ lista=sinCli.length?sinCli.map(g=>{ const sug=clienteSugeridoPorGlosa(g,expenses); const cs=sug?clients.find(c=>String(c.id)===String(sug.clienteId)):null
+      return fila(g.id,g.ot_number,g.concept||'—',fmtFechaDMY(g.date),g.amount,cs?<button disabled={busy===g.id} onClick={()=>asignarCliente(g,cs.id)} style={btnSug}>{`Asignar a ${cs.name}`}</button>:<AsignarClienteInline bill={{folio:g.ot_number}} clients={clients} onAssign={(_,cid)=>asignarCliente(g,cid)} label='Elegir cliente' placeholder='Buscar cliente…'/>,cs?`Las palabras ${sug.palabras.slice(0,2).join(' y ')} aparecen en gastos de ${cs.name}`:null) }):<div style={{padding:'16px 20px',fontSize:13,color:C.muted}}>Todas las OT de esta carga tienen cliente.</div> }
+  if(tab==='p'){ lista=noNuestras.length?noNuestras.map((x,i)=>fila('n'+i,String(x.ot||'').replace(/^OT-?/i,''),x.concepto||x.motivo||x.nombre||'—',fmtFechaDMY(x.fecha),x.monto,<button onClick={()=>onVerNoNuestras&&onVerNoNuestras()} style={btn}>Consultar a la notaría</button>,'Cobrada por la notaría, no reconocida')):<div style={{padding:'16px 20px',fontSize:13,color:C.muted}}>Ninguna OT por confirmar con la notaría.</div> }
+  return <PaginaSobre origen='Pedidos' titulo={`Liquidación del ${fmtFechaDMY(isoLocal(carga.created_at))}`} onBack={onBack} maxW={1114}>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
+      <div style={{padding:'8px 16px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>{`${r.cargadas} OT cargadas por ${fmt(r.monto)}${noNuestras.length?`, más ${noNuestras.length} por confirmar con la notaría`:''}`}</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:D?10:6,padding:D?'14px 16px 10px':'10px 10px 8px'}}>{T('t','Sin trabajo',r.sinTrabajo.n,fmt(r.sinTrabajo.m))}{T('c','Sin cliente',r.sinCliente.n,fmt(r.sinCliente.m))}{T('p','Por confirmar',r.porConfirmar.n,fmt(r.porConfirmar.m))}</div>
+      {lista}
+    </div></PaginaSobre>
 }
 
 // Saldos por razón social (entity) de un cliente. Con 1 RS, todo (incl. sin entity_id) va a esa RS.
@@ -3276,7 +3328,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
       {showNotaria&&notaTab==='recordatorios'&&(
         <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?760:undefined,margin:'0 auto'}}>
-          <PedidosNotaria isDesktop={isDesktop} bulkImports={bulkImports} onRevisar={arch=>onBulk&&onBulk(true,arch)}/>
+          <PedidosNotaria isDesktop={isDesktop} bulkImports={bulkImports} onRevisar={arch=>onBulk&&onBulk(true,arch)} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} onVerNoNuestras={()=>setNotaTab('nn')} onOpenClientFicha={onOpenClientFicha}/>
         </div>
       )}
       {showNotaria&&notaTab==='documentos'&&(
