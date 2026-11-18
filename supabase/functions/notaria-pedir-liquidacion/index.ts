@@ -11,7 +11,7 @@ import { revisionCargaNotaria } from "../_shared/notariaReglas.js";
 // notaria.pedido_sin_respuesta (3 días hábiles sin respuesta → tarea a quien va en "seguimiento_a"), y
 // notaria.seguimiento_liquidacion (body.seguimiento, lo envía una persona desde la app, en el mismo hilo).
 // Cada vez que se CARGA una liquidación (bulk_imports de notaría) avisa a quien revisa (seguimiento_a) con lo que hay por revisar o confirmar
-// (cron cada 20 min, body.avisoCarga; una vez por carga; solo cargas posteriores a learnings config notaria_aviso_carga_desde).
+// (lo llama la app al terminar la carga y un cron diario de respaldo, body.avisoCarga; una vez por carga; solo cargas posteriores a learnings config notaria_aviso_carga_desde).
 // La respuesta de la notaría la registra agente-correo (notaria.respuesta_liquidacion). Logo: el publicado en APP_URL.
 // Auth: cron con secreto. JWT @dominio = simulación. body.dryRun=true arma sin enviar; body.testTo=correo prueba a uno;
 // body.fecha='YYYY-MM-DD' simula el día (para probar el corrimiento a día hábil).
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     // Solo un miembro del estudio (tabla miembros), no cualquier cuenta con sesión.
     const mb = u?.email ? await sb(`miembros?select=email&email=eq.${encodeURIComponent(String(u.email).toLowerCase())}&limit=1`) : [];
     if (!mb.length) return json({ error: "No autorizado" }, 403);
-    dry = !body.seguimiento || !!body.dryRun;   // un seguimiento lo envía una persona desde la app: sí sale (salvo dryRun)
+    dry = (!body.seguimiento && !body.avisoCarga) || !!body.dryRun;   // un seguimiento lo envía una persona desde la app: sí sale (salvo dryRun)
     body.__quien = u.email;
   }
   // Prueba a un correo: solo con el secreto del cron, y SIEMPRE solo a ese correo (nunca a la notaría ni con copia).
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, enviado: true, para });
     }
     // (0b) Se cargó una liquidación: aviso SIEMPRE a quien revisa, una vez por carga, con lo que hay por revisar o confirmar.
-    if (body.avisoCarga && esCron) {
+    if (body.avisoCarga && (esCron || body.__quien)) {
       const clp = (n: number) => "$" + Math.round(n || 0).toLocaleString("es-CL");
       const desdeCfg = String((await sb("learnings?select=value&kind=eq.config&key=eq.notaria_aviso_carga_desde&limit=1"))?.[0]?.value || "2999-01-01");
       // deno-lint-ignore no-explicit-any

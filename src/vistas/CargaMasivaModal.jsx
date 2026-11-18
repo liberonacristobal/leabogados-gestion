@@ -1287,6 +1287,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       if(notaria){ const conCli=pagadores.filter(r=>r.client_id&&!r.personal_de&&!esOficinaCli(r.client_id)); const porPagar=target.reduce((a,r)=>a+(r.monto||0),0); const clientes=new Set(conCli.map(r=>String(r.client_id))).size
         setResultado({...res, ajustados:ajN, imported:res.cargadas??pagadores.length, nota:{porPagar,clientes}, leidas:notaResumen.leidas, errores:notaResumen.error, erroresDet:notaResumen.erroresDet, omitidas:notaResumen.omitidas, pendientes:res.pendientes??pendRows.length}) }
       else setResultado(res)
+      // Liquidación de la notaría cargada: avisa a quien revisa (una vez por carga; el servidor evita repetirlo). Un cron diario es el respaldo si esta llamada no sale.
+      if(notaria&&!DEMO){ supabase.functions.invoke('notaria-pedir-liquidacion',{body:{avisoCarga:true}}).catch(()=>{}) }
     }catch(e){ appAlert('Error al importar: '+(e.message||e)) }
     setGuardando(false)
   }
