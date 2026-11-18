@@ -63,7 +63,7 @@ export async function detectarSolicitudesFondos(clients) {
       const para = emailsDe(H.to), cc = emailsDe(H.cc)
       // Sin cliente reconocido igual se propone (se elige a mano), siempre que el correo haya salido hacia afuera del estudio.
       const client_id = clienteDeCorreo([...para, ...cc], texto, clients, mapa) || null
-      if (!client_id && !externos([...para, ...cc]).length) return
+      if (!externos([...para, ...cc]).length) return   // una solicitud sale a alguien de fuera del estudio: un correo solo interno («Primeras tareas», avisos) nunca lo es, aunque nombre al cliente
       const fecha = isoLocal(Number(j.internalDate)) || new Date().toISOString().slice(0, 10)
       // Ya registrada por otra vía (el módulo «Solicitar fondos» o la rendición): mismo cliente y monto dentro de 2 días.
       const t0 = new Date(fecha + 'T12:00').getTime()

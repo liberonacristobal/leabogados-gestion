@@ -991,6 +991,7 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   const [copiarme,setCopiarme]=useState(false)
   const [intro,setIntro]=useState('Se activó una propuesta que tienes a cargo. Estas son las primeras tareas para arrancar.')
   const [sending,setSending]=useState(false)
+  const [resultado,setResultado]=useState(null)   // lo que se creó y se envió: pantalla de confirmación con «Volver a Ventas»
 
   const proponer = async()=>{
     setLoading(true)
@@ -1016,8 +1017,8 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   const addItem=()=>setItems(p=>[...p,{titulo:'',due:addDays(7),nota:'',incluir:true}])
   const delItem=i=>setItems(p=>p.filter((_,j)=>j!==i))
 
-  const buildEmail = (incl)=>{
-    const nombre = responsable || 'equipo'
+  const buildEmail = (incl, persona)=>{
+    const nombre = persona || responsable || 'equipo'
     const introTxt = (intro||'').trim() || 'Estas son las primeras tareas para arrancar.'
     const subject = `Primeras tareas · ${sale?.title||'Nuevo encargo'} — ${cliName}`
     const rowsHtml = incl.map((it,i)=>`<tr><td style="padding:9px 0;border-top:1px solid #eee;vertical-align:top;"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="width:24px;vertical-align:top;"><span style="display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;background:#0F6E56;color:#fff;font-size:10px;font-weight:bold;">${i+1}</span></td><td style="font-size:13px;color:#1a1a1a;"><b>${esc(it.titulo)}</b>${it.nota?`<div style="font-size:11px;color:#888;margin-top:2px;">${esc(it.nota)}</div>`:''}<div style="font-size:11px;color:#854F0B;margin-top:2px;">Vence ${esc(fmtDue(it.due))}</div></td></tr></table></td></tr>`).join('')
@@ -1027,14 +1028,18 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   }
 
   const confirmar = async()=>{
+    if(sending||resultado) return   // una vez creadas no se pueden crear de nuevo
     const incl = items.filter(it=>it.incluir && it.titulo.trim())
     if(!incl.length){ appAlert('Deja al menos una tarea con título.'); return }
     if(!responsable){ appAlert('Elige a quién se le asignan las tareas.'); return }
-    const to = EMAIL_BY_NAME[responsable] || null
-    const cc = (copiarme && miEmail && miEmail.toLowerCase()!==(to||'').toLowerCase()) ? [miEmail] : []
-    const {subject,html,text}=buildEmail(incl)
+    // Cada tarea va a su persona (la de la fila o, si no tiene, el responsable) y cada persona recibe UN correo con sus tareas.
+    const porPersona={}; incl.forEach(it=>{ const p=it.asignado||responsable; (porPersona[p]=porPersona[p]||[]).push(it) })
+    const correos=Object.entries(porPersona).map(([persona,its])=>{ const to=EMAIL_BY_NAME[persona]||null
+      const cc=(copiarme && miEmail && miEmail.toLowerCase()!==(to||'').toLowerCase()) ? [miEmail] : []
+      return {persona, to, cc, n:its.length, ...buildEmail(its,persona)} })
     setSending(true)
-    await onConfirm({sale, items:incl, responsable, to, cc, subject, html, text, area})
+    try{ setResultado(await onConfirm({sale, items:incl, responsable, correos, area})) }
+    catch(e){ appAlert('No se crearon las tareas: '+(e?.message||e)) }
     setSending(false)
   }
 
@@ -1042,6 +1047,20 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
   const nIncl = items.filter(it=>it.incluir && it.titulo.trim()).length
   const inp = {width:'100%',padding:'7px 9px',borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,color:C.text,boxSizing:'border-box',background:'#fff'}
 
+  if(resultado) return (
+    <div>
+      <div style={{fontSize:15,fontWeight:700,color:C.greenText,marginBottom:4}}>{resultado.n} tarea{resultado.n!==1?'s':''} creada{resultado.n!==1?'s':''}</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{esc(sale?.title||'Encargo')} · {esc(cliName)}</div>
+      <div style={{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',marginBottom:14}}>
+        {resultado.envios.map((e,i)=>(
+          <div key={e.persona} style={{display:'flex',gap:10,justifyContent:'space-between',alignItems:'flex-start',padding:'10px 12px',borderTop:i?`1px solid ${C.bgSoft}`:'none'}}>
+            <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{e.persona}</div><div style={{fontSize:12,color:C.muted}}>{e.n} tarea{e.n!==1?'s':''}</div></div>
+            <div style={{fontSize:12,color:e.ok?C.greenText:C.overdueText,textAlign:'right',maxWidth:'62%',whiteSpace:'pre-line'}}>{e.texto}</div>
+          </div>))}
+      </div>
+      <button type='button' onClick={onClose} style={{width:'100%',fontSize:14,fontWeight:700,color:'#fff',background:C.accent,border:'none',borderRadius:10,padding:'11px 17px',cursor:'pointer'}}>Volver a Ventas</button>
+    </div>
+  )
   if(loading) return (
     <div style={{padding:'34px 12px',textAlign:'center'}}>
       <div style={{display:'inline-flex'}}><Spin/></div>
@@ -1059,7 +1078,7 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
           <option value=''>Elige…</option>
           {WHO.map(w=><option key={w} value={w}>{w}</option>)}
         </select>
-        <span style={{fontSize:11,color:C.textSoft}}>· se le asignan las tareas y recibe el correo</span>
+        <span style={{fontSize:11,color:C.textSoft}}>· por defecto; cada tarea puede ir a otra persona, y cada una recibe un correo con las suyas</span>
         {miEmail && (EMAIL_BY_NAME[responsable]||'').toLowerCase()!==miEmail.toLowerCase() &&
           <label style={{marginLeft:'auto',display:'inline-flex',alignItems:'center',gap:6,fontSize:12,color:C.muted,cursor:'pointer',fontWeight:600}}>
             <input type='checkbox' checked={copiarme} onChange={e=>setCopiarme(e.target.checked)} style={{width:15,height:15,accentColor:C.accent}}/>Copiarme
@@ -1078,7 +1097,8 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
                 {it.esFondo
                   ? <><select value={it.asignado||''} onChange={e=>upItem(i,'asignado',e.target.value)} title='A quién de la oficina se le asigna pedir el fondo' style={{...inp,width:'auto',padding:'5px 8px',fontSize:12,fontWeight:600,color:C.greenText}}><option value=''>Asignar a…</option>{WHO.map(w=><option key={w} value={w}>{w}</option>)}</select>
                      <span style={{display:'inline-flex',alignItems:'center',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff'}}><span style={{fontSize:12,color:C.muted,padding:'0 2px 0 8px'}}>$</span><input value={it.monto||''} onChange={e=>upItem(i,'monto',e.target.value.replace(/[^\d]/g,''))} inputMode='numeric' placeholder='Monto del fondo' style={{border:'none',outline:'none',padding:'5px 8px 5px 2px',fontSize:12,width:110,color:C.text}}/></span></>
-                  : <input value={it.nota} onChange={e=>upItem(i,'nota',e.target.value)} placeholder='Nota breve (opcional)' style={{...inp,flex:1,minWidth:120,padding:'5px 8px',fontSize:12,color:C.muted}}/>}
+                  : <><select value={it.asignado||''} onChange={e=>upItem(i,'asignado',e.target.value)} title='A quién se le asigna esta tarea' style={{...inp,width:'auto',padding:'5px 8px',fontSize:12,fontWeight:600,color:C.accent}}><option value=''>{responsable?`Para ${responsable}`:'Asignar a…'}</option>{WHO.map(w=><option key={w} value={w}>{w}</option>)}</select>
+                     <input value={it.nota} onChange={e=>upItem(i,'nota',e.target.value)} placeholder='Nota breve (opcional)' style={{...inp,flex:1,minWidth:120,padding:'5px 8px',fontSize:12,color:C.muted}}/></>}
                 <button type='button' onClick={()=>delItem(i)} title='Eliminar' style={{flexShrink:0,background:'none',border:'none',color:C.textSoft,fontSize:17,cursor:'pointer',lineHeight:1,padding:'0 4px'}}><Gl n='x'/></button>
               </div>
               {it.esFondo&&<div style={{fontSize:10,color:C.greenText,fontWeight:600}}>Fondo por rendir · el monto viaja al correo de solicitud al cliente</div>}
@@ -1101,7 +1121,7 @@ function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfi
       <div style={{display:'flex',gap:9,marginTop:16,alignItems:'center'}}>
         <button type='button' onClick={onClose} disabled={busy} style={{fontSize:13,fontWeight:600,color:C.muted,background:'#fff',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 15px',cursor:busy?'default':'pointer'}}>Cancelar</button>
         <button type='button' onClick={confirmar} disabled={busy||!nIncl||!responsable} style={{marginLeft:'auto',fontSize:13,fontWeight:700,color:'#fff',background:C.greenText,border:'none',borderRadius:10,padding:'9px 17px',cursor:(busy||!nIncl||!responsable)?'default':'pointer',opacity:(busy||!nIncl||!responsable)?.6:1,display:'inline-flex',alignItems:'center',gap:8}}>
-          {busy&&<Spin/>}{busy?'Creando…':`Crear ${nIncl} y avisar${responsable?` a ${responsable}`:''}`}
+          {busy&&<Spin/>}{busy?'Creando…':`Crear ${nIncl} tarea${nIncl!==1?'s':''} y avisar`}
         </button>
       </div>
     </div>
@@ -6566,7 +6586,10 @@ export default function App() {
     }catch(_){ /* Drive es best-effort: nunca bloquea el guardado del cliente */ }
   },[])
 
+  const guardandoVentaRef=useRef(false)   // un solo guardado de venta a la vez: el segundo clic no crea otra
   const handleSaveSale=useCallback(async(f)=>{
+    if(guardandoVentaRef.current) return
+    guardandoVentaRef.current=true
     setSaving(true)
     try{
       const {cobros, cobroType, _actualizarPago, _regenProg, _activandoPropuesta, _propAmountUF, _propAmountCLP, _thenPrimerasTareas, repartoTerceros, ...saleData} = f
@@ -6579,10 +6602,12 @@ export default function App() {
       const p={...saleData,area:saleData.area||'Corporativo',entity_id:entIdRaw,moneda:f.moneda||'UF',amount_uf:esCLP?null:(parseFloat(f.amount_uf)>0?parseFloat(f.amount_uf):null),cost_uf:esCLP?null:(parseFloat(f.cost_uf)||null),uf_value:esCLP?((parseFloat(f.uf_value)||ufHoyCache)||null):(parseFloat(f.uf_value)||null),amount_clp:esCLP?(parseFloat(f.amount_clp)>0?parseFloat(f.amount_clp):null):(saleData.amount_clp||null),cost_clp:esCLP?(parseFloat(f.cost_clp)||null):null,updated_at:new Date().toISOString()}
       // Estado anterior (de la base, no del estado local): la bitácora registra quién crea, activa o cambia monto/año de una venta,
       // porque eso mueve «Vendido» (antes una activación no dejaba rastro: 26-10-2026).
+      // Una venta NUEVA que repite cliente y título de otra creada hace minutos es el mismo guardado repetido (pasó con dos propuestas, de 50 UF y de 290 UF, creadas con 8 segundos de diferencia): se actualiza esa, no se crea otra.
+      if(!f.id&&!DEMO&&p.client_id){ const {data:rec}=await supabase.from('sales').select('id').eq('client_id',p.client_id).eq('title',p.title||'').gte('created_at',new Date(Date.now()-15*60000).toISOString()).order('created_at',{ascending:false}).limit(1); if(rec&&rec[0]) p.id=rec[0].id }
       const {data:antes}= f.id&&!DEMO ? await supabase.from('sales').select('status,amount_uf,amount_clp,year,title').eq('id',f.id).maybeSingle() : {data:null}
       const{data,error}=await supabase.from('sales').upsert(p).select().single()
       if(error)throw error
-      setSales(p=>f.id?p.map(x=>x.id===data.id?data:x):[data,...p])
+      setSales(prev=>prev.some(x=>x.id===data.id)?prev.map(x=>x.id===data.id?data:x):[data,...prev])
       { const cli=clients.find(c=>String(c.id)===String(data.client_id))?.name||''
         const monto=data.moneda==='CLP'?`$${Math.round(Number(data.amount_clp)||0).toLocaleString('es-CL')}`:`UF ${Number(data.amount_uf)||0}`
         const cambios=[]
@@ -6631,7 +6656,9 @@ export default function App() {
       // REGLA: una PROPUESTA nunca genera facturación; solo una venta ACEPTADA (status 'Activo') crea programadas.
       // A) Venta NUEVA: crear las cuotas directamente — solo si nace Activa
       if(cobros&&cobros.length>0&&!f.id&&data.status==='Activo'){
-        await insertarCuotas()
+        // Si el guardado repetido reutilizó una venta que ya tenía cuotas, no se crean de nuevo.
+        const {count:yaTiene}=(p.id&&!DEMO)?await supabase.from('billing').select('id',{count:'exact',head:true}).eq('sale_id',data.id):{count:0}
+        if(!yaTiene) await insertarCuotas()
       }
       // A2) Propuesta/Borrador editada o activada: se LIMPIAN las programadas previas; se REGENERAN solo si quedó Activa (al activar). Si sigue Propuesta, quedan sin cuotas.
       if(f.id&&_regenProg){
@@ -6756,13 +6783,16 @@ export default function App() {
       }
       // Recién activada (o botón "Primeras tareas con IA" en venta activa): guardamos y abrimos la compuerta de tareas.
       if(_activandoPropuesta||_thenPrimerasTareas) setModal({type:'primerasTareas',data})
-      else setModal(null)
+      else{ setModal(null)
+        // Al crear una venta nueva se avisa que quedó guardada (antes se cerraba sin decir nada y se podía volver a guardar por duda).
+        if(!f.id){ const cn=clients.find(c=>String(c.id)===String(data.client_id))?.name||''; appAlert(`Venta creada: «${data.title||'Venta'}»${cn?` de ${cn}`:''}, ${data.moneda==='CLP'?`$${Math.round(Number(data.amount_clp)||0).toLocaleString('es-CL')}`:`UF ${Number(data.amount_uf)||0}`}, en estado ${data.status}.`) } }
     }catch(e){appAlert('Error: '+e.message)}
+    guardandoVentaRef.current=false
     setSaving(false)
   },[clients,clientEntities,terceros,proveedores,user])
 
   // Crea las primeras tareas confirmadas (asignadas al abogado) + UN correo consolidado + aprende el set por área.
-  const handleCrearPrimerasTareas=useCallback(async({sale, items, responsable, to, cc, subject, html, text, area})=>{
+  const handleCrearPrimerasTareas=useCallback(async({sale, items, responsable, correos, area})=>{
     setSaving(true)
     try{
       const rows = items.map(it=>{ const asig = it.asignado||responsable; return ({
@@ -6774,18 +6804,21 @@ export default function App() {
       const {data:ins,error} = await supabase.from('tasks').insert(rows).select()
       if(error) throw error
       if(ins&&ins.length) setTasks(p=>[...ins,...p])
-      let via=null
-      if(to){ try{ via = await enviarComoUsuario({to, cc:(cc&&cc.length)?cc:null, subject, html, text, sinAviso:true}) }catch(e){ via=null } }
+      // Un correo por persona con sus tareas; el resultado de cada uno se devuelve a la pantalla (nunca queda la duda de si salió).
+      const envios=[]
+      for(const c of correos){
+        let via=null
+        if(c.to){ try{ via = await enviarComoUsuario({to:c.to, cc:(c.cc&&c.cc.length)?c.cc:null, subject:c.subject, html:c.html, text:c.text, sinAviso:true}) }catch(e){ via=null } }
+        envios.push({persona:c.persona, n:c.n, ok:!!via, texto: via?txtEnviado(via,{que:'Correo', para:c.to}):c.to?`El correo NO se envió.\n${TXT_REINGRESO()}`:'Sin correo: no tiene correo registrado.'})
+      }
       // Aprende: guarda el set confirmado por área (días desde hoy) para mejorar la próxima propuesta.
       try{
         const hoy = Date.parse(new Date().toISOString().slice(0,10))
         const learn = items.map(it=>({ titulo:it.titulo, dias: it.due?Math.round((Date.parse(it.due)-hoy)/86400000):null, nota:it.nota||'' }))
         await setLearningKV('propuesta_tareas', String(area||'General'), JSON.stringify(learn))
       }catch(e){registrarError({origen:'accion',vista:'propuesta_tareas',err:e})}
-      setModal(null)
-      appAlert(`${rows.length} tarea${rows.length!==1?'s':''} creada${rows.length!==1?'s':''} para ${responsable}.\n`+(via?txtEnviado(via,{que:'Correo', para:to}):to?`El correo NO se envió.\n\n${TXT_REINGRESO()}`:'Sin correo: el responsable no tiene correo registrado.'))
-    }catch(e){ appAlert('Error: '+(e?.message||e)) }
-    setSaving(false)
+      return {n:rows.length, envios}
+    } finally { setSaving(false) }
   },[user])
 
   // Rechazar = abrir el selector de MOTIVO (por qué perdimos). El motivo alimenta la métrica y se aprende.
