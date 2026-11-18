@@ -18,6 +18,7 @@ import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { guardarLibro, cargarXlsx, descargarTabla } from '../lib/archivos.js'
+import { descargarGastosCliente } from '../lib/gastosClienteExcel.js'
 
 // Igual que fmtDate pero para TIMESTAMPS completos (created_at/sent_at): usa la fecha LOCAL (Chile), no la UTC.
 // fmtDate corta el ISO en UTC y correría el día en registros nocturnos; este respeta la hora local.
@@ -2589,6 +2590,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={b(C.greenBg,C.greenText)}>+ Fondo</button>
       <button type='button' onClick={()=>onAdd(selectedClient)} style={b(C.border,C.accent)}>+ Gasto</button>
       {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(C.surface,C.accent,C.border)}>Rendir <span style={{color:C.textSoft}}>{n}</span></button>}
+      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,flexShrink:0}}><BtnDescarga onClick={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))} titulo='Descargar Excel de gastos' n='sheet'/></span>
     </div>)
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
