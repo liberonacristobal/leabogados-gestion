@@ -46,6 +46,15 @@ export const abonoConResto = m => !!m && m.tipo==='abono' && !m.es_interno && St
 
 export const restoAbono = m => abonoConResto(m) ? Math.abs(Number(m.monto)||0)-(Number(m.monto_conciliado)||0) : (Number(m?.monto)||0)
 
+// estado y monto_conciliado de un movimiento los deriva la base (conciliacion + caja chica, trigger conciliacion_sync_mov); la app NO los escribe:
+// guarda solo lo que no se deriva (categoría, cliente) y lee de vuelta lo que la base dejó. Escribir un valor calculado en pantalla pisaba
+// lo que otra persona o el agente habían conciliado mientras tanto (caso del 12-11-2026, aseo $276.000 contado dos veces).
+export async function sincMov(id, extra=null){
+  if(extra && Object.keys(extra).length){ const {error}=await supabase.from('cartola_movimientos').update(extra).eq('id',id); if(error) return {error} }
+  const {data,error}=await supabase.from('cartola_movimientos').select('estado,monto_conciliado').eq('id',id).single()
+  return {error, estado:data?.estado, monto_conciliado:Number(data?.monto_conciliado)||0}
+}
+
 // Marca en terceros_pagos.referencia de un costo registrado directo desde un cargo de Banco (su Deshacer lo borra).
 export const REF_COSTO_BANCO = 'Registrado desde Banco'
 
@@ -58,9 +67,7 @@ export async function conciliarPagoComisiones(m, ids, sum){
   if(e2){ await supabase.from('conciliacion').delete().eq('id',cc.id); throw e2 }
   try{ const {data:rs}=await supabase.from('terceros_pagos').select('id,monto,liquido,retencion,bhe_id').in('id',ids)
     for(const t of (rs||[])){ const pt=reajusteBHEPago(t,m.fecha); if(pt) await supabase.from('terceros_pagos').update(pt).eq('id',t.id) } }catch(e){registrarError({origen:'accion',vista:'terceros_pagos',err:e})}
-  const aplicado=(Number(m.monto_conciliado)||0)+sum
-  const estado=(Math.abs(Number(m.monto)||0)-aplicado)<=1?'conciliado':'parcial'
-  const {error:e3}=await supabase.from('cartola_movimientos').update({categoria:m.categoria||'Proveedor',monto_conciliado:aplicado,estado}).eq('id',m.id)
+  const {error:e3, estado, monto_conciliado:aplicado}=await sincMov(m.id,{categoria:m.categoria||'Proveedor'})
   if(e3){ await supabase.from('terceros_pagos').update({estado:'por_pagar',pagado_at:null,movimiento_id:null}).in('id',ids); await supabase.from('conciliacion').delete().eq('id',cc.id); throw e3 }
   return {conc:cc, aplicado, estado}
 }
@@ -947,9 +954,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ins.error) throw ins.error
       cr=ins.data; marcaQuien(cr.id)
       await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
-      const movAplicado = (mov.monto_conciliado||0)+aplicado
-      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      let movAplicado = (mov.monto_conciliado||0)+aplicado
+      let estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me, estado:_e1, monto_conciliado:_m1 } = await sincMov(mov.id, null); if(!me){ estado=_e1; movAplicado=_m1 }
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
       if(origen!=='lote') logActividad('banco.conciliado',{tabla:'conciliacion',id:cr.id,detalle:{folio:factura.invoice_no,name:cmap[factura.client_id]||mov.nombre_contraparte||null,monto:aplicado}})   // el lote deja una sola línea (banco.conciliar_varias)
@@ -1002,8 +1009,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         await persistPagoFactura(factura, aplTot, mov.fecha, mov.n_operacion)
         aplicLocal[factura.id]=(aplicLocal[factura.id]||0)+aplicado; movAplicado += aplicado
       }
-      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      let estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me, estado:_e2, monto_conciliado:_m2 } = await sincMov(mov.id, null); if(!me){ estado=_e2; movAplicado=_m2 }
       if(me) throw me
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
     }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar combinación: '+e.message) }
@@ -1122,7 +1129,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         }
       }
       const ups=[]
-      for(const tr of ts){ const movAplicado=(tr.monto||0)-(restoMov[tr.id]||0); const estado=((tr.monto||0)-movAplicado)<=TOL?'conciliado':'parcial'; const { error:me }=await supabase.from('cartola_movimientos').update({estado,monto_conciliado:movAplicado}).eq('id',tr.id); if(me) throw me; ups.push({id:tr.id,estado,monto_conciliado:movAplicado}) }
+      for(const tr of ts){ let movAplicado=(tr.monto||0)-(restoMov[tr.id]||0); let estado=((tr.monto||0)-movAplicado)<=TOL?'conciliado':'parcial'; const { error:me, estado:_e3, monto_conciliado:_m3 } = await sincMov(tr.id, null); if(!me){ estado=_e3; movAplicado=_m3 }; if(me) throw me; ups.push({id:tr.id,estado,monto_conciliado:movAplicado}) }
       setConc(p=>[...p,...nuevas]); setMovs(p=>p.map(x=>{ const u=ups.find(z=>z.id===x.id); return u?{...x,estado:u.estado,monto_conciliado:u.monto_conciliado}:x })); setModalMov(null)
     }catch(e){ for(const cr of nuevas) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('Error al conciliar el grupo: '+e.message) }
     setBusy(null)
@@ -1148,8 +1155,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         const insG = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:excess, origen:'manual' }).select().single()
         if(insG.error) throw insG.error; crG=insG.data; marcaQuien(crG.id); movAplicado+=excess
       }
-      const estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplicado }).eq('id',mov.id)
+      let estado = ((mov.monto||0)-movAplicado) <= TOL ? 'conciliado' : 'parcial'
+      const { error:me, estado:_e4, monto_conciliado:_m4 } = await sincMov(mov.id, null); if(!me){ estado=_e4; movAplicado=_m4 }
       if(me) throw me
       if(fondo) setExpenses&&setExpenses(p=>[fondo,...p])
       setConc(p=>[...p,crF,...(crG?[crG]:[])]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplicado}:x)); setPickFor(null)
@@ -1208,8 +1215,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ins.error) throw ins.error; fondo=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:resto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const nuevoConc=(mov.monto_conciliado||0)+resto
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
+      let nuevoConc=(mov.monto_conciliado||0)+resto
+      const { error:me, estado:_e5, monto_conciliado:_m5 } = await sincMov(mov.id, null); if(!me){ nuevoConc=_m5 }
       if(me) throw me
       await marcarGastosReembolsados(fondo.id, gastoIds)
       setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x)); setDevolFor(null)
@@ -1255,7 +1262,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:resto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error
       cr=ic.data
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
+      const { error:me, estado:_e6, monto_conciliado:_m6 } = await sincMov(mov.id, null)
       if(me) throw me
       setAnticipos&&setAnticipos(p=>[ant,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setPickFor(null)
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(ant) await supabase.from('anticipos').delete().eq('id',ant.id); appAlert('Error al crear saldo a favor: '+e.message) }
@@ -1286,7 +1293,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         const icF = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:fond, origen:'manual' }).select().single()
         if(icF.error) throw icF.error; crs.push(icF.data)
       }
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:(mov.monto||0) }).eq('id',mov.id)
+      const { error:me, estado:_e7, monto_conciliado:_m7 } = await sincMov(mov.id, null)
       if(me) throw me
       if(ant) setAnticipos&&setAnticipos(p=>[ant,...p]); if(fondo) setExpenses&&setExpenses(p=>[fondo,...p])
       setConc(p=>[...p,...crs]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:(mov.monto||0)}:x)); setSplitMov(null)
@@ -1306,8 +1313,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     try{
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondoId, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error
-      const nuevoConc=(mov.monto_conciliado||0)+monto
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
+      let nuevoConc=(mov.monto_conciliado||0)+monto
+      const { error:me, estado:_e8, monto_conciliado:_m8 } = await sincMov(mov.id, null); if(!me){ nuevoConc=_m8 }
       if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
       setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x))
     }catch(e){ appAlert('Error al vincular el fondo: '+e.message) }
@@ -1326,8 +1333,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     try{
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:anticipoId, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error
-      const nuevoConc=(mov.monto_conciliado||0)+monto
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConc }).eq('id',mov.id)
+      let nuevoConc=(mov.monto_conciliado||0)+monto
+      const { error:me, estado:_e9, monto_conciliado:_m9 } = await sincMov(mov.id, null); if(!me){ nuevoConc=_m9 }
       if(me){ await supabase.from('conciliacion').delete().eq('id',ic.data.id); throw me }
       setConc(p=>[...p,ic.data]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConc}:x)); setPickFor(null)
     }catch(e){ appAlert('Error al vincular el anticipo: '+e.message) }
@@ -1355,8 +1362,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:resto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error
       cr=ic.data
-      const nuevoConciliado = (mov.monto_conciliado||0) + resto
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConciliado }).eq('id',mov.id)
+      let nuevoConciliado = (mov.monto_conciliado||0) + resto
+      const { error:me, estado:_e10, monto_conciliado:_m10 } = await sincMov(mov.id, null); if(!me){ nuevoConciliado=_m10 }
       if(me) throw me
       setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConciliado}:x))
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); if(fondo) await supabase.from('expenses').delete().eq('id',fondo.id); appAlert('Error al crear fondo: '+e.message) }
@@ -1378,8 +1385,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ins.error) throw ins.error; fondo=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'fondo', gasto_id:fondo.id, monto_aplicado:resto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data
-      const nuevoConciliado = (mov.monto_conciliado||0) + resto
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'conciliado', monto_conciliado:nuevoConciliado }).eq('id',mov.id)
+      let nuevoConciliado = (mov.monto_conciliado||0) + resto
+      const { error:me, estado:_e11, monto_conciliado:_m11 } = await sincMov(mov.id, null); if(!me){ nuevoConciliado=_m11 }
       if(me) throw me
       setExpenses&&setExpenses(p=>[fondo,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'conciliado',monto_conciliado:nuevoConciliado}:x))
       logActividad('banco.fondo_equipo',{tabla:'cartola_movimientos',id:mov.id,detalle:{persona,title:mov.nombre_contraparte||null,monto:mov.monto}})
@@ -1400,9 +1407,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ins.error) throw ins.error; gasto=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const movAplic=(mov.monto_conciliado||0)+monto
-      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, cliente_id:clientId }).eq('id',mov.id)
+      let movAplic=(mov.monto_conciliado||0)+monto
+      let estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e12, monto_conciliado:_m12 } = await sincMov(mov.id, { cliente_id:clientId }); if(!me){ estado=_e12; movAplic=_m12 }
       if(me) throw me
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,cliente_id:clientId}:x))
       const gk=glosaGenerica(mov.descripcion)?null:glosaKey(mov.descripcion); if(gk){ learnPut('cargo_cliente',gk,clientId,{category:category||null}); setCargoCliLearn(p=>({...p,[gk]:String(clientId)})) }
@@ -1442,9 +1449,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ins.error) throw ins.error; gasto=ins.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'gasto', gasto_id:gasto.id, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const movAplic=(mov.monto_conciliado||0)+monto
-      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id)
+      let movAplic=(mov.monto_conciliado||0)+monto
+      let estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e13, monto_conciliado:_m13 } = await sincMov(mov.id, { categoria:'Gastos Oficina' }); if(!me){ estado=_e13; movAplic=_m13 }
       if(me) throw me
       setExpenses&&setExpenses(p=>[gasto,...p]); setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x))
       const gko=glosaGenerica(mov.descripcion)?null:glosaKey(mov.descripcion); if(gko&&category){ learnPut('costo_oficina',gko,category,{subcategory:subcategory||null}); setCostoOfiLearn(p=>({...p,[gko]:{category,subcategory:subcategory||null}})) }   // aprende: el mismo cargo (arriendo/sueldos) el próximo mes se auto-sugiere
@@ -1472,9 +1479,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         creados.push({gasto:ins.data.id,conc:ic.data.id})
         setExpenses&&setExpenses(p=>[ins.data,...p]); setConc(p=>[...p,ic.data]); aplicadoTot+=it.monto
       }
-      const movAplic=(mov.monto_conciliado||0)+aplicadoTot
-      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Gastos Oficina' }).eq('id',mov.id); if(me) throw me
+      let movAplic=(mov.monto_conciliado||0)+aplicadoTot
+      let estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e14, monto_conciliado:_m14 } = await sincMov(mov.id, { categoria:'Gastos Oficina' }); if(!me){ estado=_e14; movAplic=_m14 }; if(me) throw me
       setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Gastos Oficina'}:x)); setOfiFor&&setOfiFor(null)
     }catch(e){ for(const c of creados){ try{ await supabase.from('conciliacion').delete().eq('id',c.conc); await supabase.from('expenses').delete().eq('id',c.gasto) }catch(e){registrarError({origen:'accion',vista:'expenses',err:e})} } appAlert('No se pudo repartir: '+(e.message||e)) }
     setBusy(null)
@@ -1516,10 +1523,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         marcaQuien(ca.id); marcaQuien(cc.id) }
       const upd=x=>{ const ap=(x.monto_conciliado||0)+monto; return {...x,monto_conciliado:ap,estado:((x.monto||0)-ap)<=TOL?'conciliado':'parcial'} }
       // Si falla un movimiento a medias, se deshace todo (las dos filas y el movimiento ya actualizado).
-      if(!DEMO){ const hechos=[]
-        for(const x of [abono,cargo]){ const u=upd(x); const {error}=await supabase.from('cartola_movimientos').update({estado:u.estado,monto_conciliado:u.monto_conciliado}).eq('id',x.id)
-          if(error){ for(const h of hechos) await supabase.from('cartola_movimientos').update({estado:h.estado,monto_conciliado:h.monto_conciliado||0}).eq('id',h.id); await supabase.from('conciliacion').delete().in('id',[ca.id,cc.id]); throw error }
-          hechos.push(x) } }
+      // estado y monto_conciliado de ambos movimientos los deriva la base al insertar las dos conciliaciones
       setConc(p=>[...p,ca,cc]); setMovs(p=>p.map(x=>x.id===abono.id||x.id===cargo.id?upd(x):x))
       logActividad('banco.devolucion',{tabla:'cartola_movimientos',id:abono.id,detalle:{title:`Devolución del cargo del ${fmtFechaDMY(cargo.fecha)}`,name:abono.nombre_contraparte||null,monto,abono:abono.id,cargo:cargo.id},completo:true})
     }catch(e){ appAlert('No se pudo registrar la devolución: '+(e.message||e)) }
@@ -1541,8 +1545,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         const ins=await supabase.from('billing').insert(row).select().single(); if(ins.error) throw ins.error; fac=ins.data
         const ic=await supabase.from('conciliacion').insert({movimiento_id:mov.id, tipo_destino:'factura', factura_id:fac.id, monto_aplicado:monto, origen:auto?'auto':'manual', marco_pago:true}).select().single()
         if(ic.error){ await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw ic.error } cr=ic.data; marcaQuien(cr.id)
-        const movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-        const {error:me}=await supabase.from('cartola_movimientos').update({estado, monto_conciliado:movAplic, cliente_id:mov.cliente_id||clientId}).eq('id',mov.id)
+        let movAplic=(mov.monto_conciliado||0)+monto, estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+        const { error:me, estado:_e17, monto_conciliado:_m17 } = await sincMov(mov.id, { cliente_id:mov.cliente_id||clientId }); if(!me){ estado=_e17; movAplic=_m17 }
         if(me){ await supabase.from('conciliacion').delete().eq('id',cr.id); await supabase.from('billing').update({deleted_at:new Date().toISOString()}).eq('id',fac.id); throw me }   // nada a medias
         if(socio) await setLearningKV('socio_factura',fac.id,socio)
       }
@@ -1568,9 +1572,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(insI.error) throw insI.error; ing=insI.data
       const ic = await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'ingreso', monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const movAplic=(mov.monto_conciliado||0)+monto
-      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Ingresos Oficina' }).eq('id',mov.id)
+      let movAplic=(mov.monto_conciliado||0)+monto
+      let estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e18, monto_conciliado:_m18 } = await sincMov(mov.id, { categoria:'Ingresos Oficina' }); if(!me){ estado=_e18; movAplic=_m18 }
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado,monto_conciliado:movAplic,categoria:'Ingresos Oficina'}:x))
       logActividad('banco.ingreso_oficina',{tabla:'cartola_movimientos',id:mov.id,detalle:{title:sub,name:mov.nombre_contraparte||null,monto:mov.monto}})
@@ -1604,9 +1608,9 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(ia.error) throw ia.error; ant=ia.data
       const ic=await supabase.from('conciliacion').insert({ movimiento_id:mov.id, tipo_destino:'anticipo', anticipo_id:ant.id, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const movAplic=(mov.monto_conciliado||0)+monto
-      const estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me }=await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Subarriendo', cliente_id:mov.cliente_id||sale.client_id }).eq('id',mov.id)
+      let movAplic=(mov.monto_conciliado||0)+monto
+      let estado=((mov.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e19, monto_conciliado:_m19 } = await sincMov(mov.id, { categoria:'Subarriendo', cliente_id:mov.cliente_id||sale.client_id }); if(!me){ estado=_e19; movAplic=_m19 }
       if(me) throw me
       if(cuota){ const { error:be }=await supabase.from('billing').update({ status:'Anticipada', prepaid_anticipo_id:ant.id, updated_at:new Date().toISOString() }).eq('id',cuota.id); if(be) throw be
         setBilling&&setBilling(p=>p.map(b=>b.id===cuota.id?{...b,status:'Anticipada',prepaid_anticipo_id:ant.id}:b)) }
@@ -1672,8 +1676,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
           // Devolución: se suelta también el tramo del otro movimiento (el cargo devuelto o el abono que lo devolvió).
           const {error:pe}=await supabase.from('conciliacion').delete().eq('movimiento_id',r.devuelve_mov_id).eq('devuelve_mov_id',mov.id).eq('tipo_destino','devolucion'); if(pe) throw pe
           const otro=(movs||[]).find(x=>String(x.id)===String(r.devuelve_mov_id))
-          if(otro){ const ap=Math.max(0,(otro.monto_conciliado||0)-(Number(r.monto_aplicado)||0)), est=ap<=TOL?'pendiente':((otro.monto||0)-ap)<=TOL?'conciliado':'parcial'
-            const {error:oe}=await supabase.from('cartola_movimientos').update({estado:est,monto_conciliado:ap}).eq('id',otro.id); if(oe) throw oe
+          if(otro){ let ap=Math.max(0,(otro.monto_conciliado||0)-(Number(r.monto_aplicado)||0)), est=ap<=TOL?'pendiente':((otro.monto||0)-ap)<=TOL?'conciliado':'parcial'
+            const { error:oe, estado:_e20, monto_conciliado:_m20 } = await sincMov(otro.id, null); if(!oe){ ap=_m20 }; if(oe) throw oe
             setMovs(p=>p.map(x=>x.id===otro.id?{...x,estado:est,monto_conciliado:ap}:x)) }
           setConc(p=>p.filter(c=>!(String(c.movimiento_id)===String(r.devuelve_mov_id)&&String(c.devuelve_mov_id)===String(mov.id)&&c.tipo_destino==='devolucion')))
         } else if(r.tipo_destino==='ingreso'){
@@ -1682,7 +1686,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         }
         const { error:de } = await supabase.from('conciliacion').delete().eq('id',r.id); if(de) throw de
       }
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0 }).eq('id',mov.id); if(me) throw me
+      const { error:me, estado:_e21, monto_conciliado:_m21 } = await sincMov(mov.id, null); if(me) throw me
       setConc(p=>p.filter(c=>c.movimiento_id!==mov.id)); setMovs(p=>p.map(x=>x.id===mov.id?{...x,estado:'pendiente',monto_conciliado:0}:x))
       logActividad('banco.deshecho',{tabla:'cartola_movimientos',id:mov.id,detalle:{folio:(billing.find(b=>rows.some(r=>r.factura_id===b.id))||{}).invoice_no||null,name:cmap[mov.cliente_id]||mov.nombre_contraparte||null,monto:mov.monto}})
     }catch(e){ appAlert('Error al deshacer: '+e.message) }
@@ -1807,8 +1811,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       const monto=(m.monto||0)-(m.monto_conciliado||0)
       const ic=await supabase.from('conciliacion').insert({ movimiento_id:m.id, tipo_destino:'gasto', gasto_id:g.id, monto_aplicado:monto, origen:'manual' }).select().single()
       if(ic.error) throw ic.error; cr=ic.data; marcaQuien(cr.id)
-      const movAplic=(m.monto_conciliado||0)+monto, estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, cliente_id:g.client_id, categoria:'Cliente' }).eq('id',m.id)
+      let movAplic=(m.monto_conciliado||0)+monto, estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+      const { error:me, estado:_e22, monto_conciliado:_m22 } = await sincMov(m.id, { cliente_id:g.client_id, categoria:'Cliente' }); if(!me){ estado=_e22; movAplic=_m22 }
       if(me) throw me
       setConc(p=>[...p,cr]); setMovs(p=>p.map(x=>x.id===m.id?{...x,estado,monto_conciliado:movAplic,cliente_id:g.client_id,categoria:'Cliente'}:x))
     }catch(e){ if(cr) await supabase.from('conciliacion').delete().eq('id',cr.id); appAlert('No se pudo ligar el cargo al gasto: '+e.message) }
@@ -1840,7 +1844,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     try{
       if(!DEMO){
         const {error:e1}=await supabase.from('rendiciones').update({movimiento_id:m.id}).eq('id',liq.id); if(e1) throw e1
-        const {error:e2}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:m.monto,categoria:'Notaría'}).eq('id',m.id); if(e2) throw e2
+        const {error:e2}=await supabase.from('cartola_movimientos').update({estado:'conciliado',monto_conciliado:m.monto,categoria:'Notaría'}).eq('id',m.id); if(e2) throw e2   // lo respalda una rendición, sin fila de conciliación: la base no lo deriva
         // El cargo del banco es la prueba del pago: las OT de la liquidación quedan pagadas con la fecha del cargo (si aún no lo estaban).
         const pagadoAt=String(m.fecha).slice(0,10)+'T12:00:00Z'
         const {error:e3}=await supabase.from('expenses').update({notaria_liquidado_at:pagadoAt}).eq('notaria_render_id',liq.id).is('notaria_liquidado_at',null); if(e3) throw e3
@@ -1887,8 +1891,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     if(busy) return
     if(!persona){ appAlert('Elige a quién le pasaste la caja chica.'); return }
     const monto=(m.monto||0)-(m.monto_conciliado||0)
-    const movAplic=(m.monto_conciliado||0)+monto
-    const estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
+    let movAplic=(m.monto_conciliado||0)+monto
+    let estado=((m.monto||0)-movAplic)<=TOL?'conciliado':'parcial'
     const match=cajaChicaMatch(persona, monto)
     if(match){
       const vincular = await appConfirm(`Ya ingresaste ${fmtM(match.amount)} a la caja chica de ${persona}${match.notes?` (${match.notes})`:''}. ¿Es este mismo movimiento? Se vincula para NO duplicar.`)
@@ -1897,7 +1901,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         try{
           const nota=`${match.notes||''} · mov:${m.id}`.trim()
           const { error:pe } = await supabase.from('petty_cash').update({ notes:nota, movimiento_id:m.id }).eq('id',match.id); if(pe) throw pe   // enlace real 1:1 (columna, no solo el texto)
-          const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
+          const { error:me, estado:_e25, monto_conciliado:_m25 } = await sincMov(m.id, { categoria:'Caja chica' }); if(!me){ estado=_e25; movAplic=_m25 }; if(me) throw me
           setPettyCash&&setPettyCash(p=>p.map(x=>x.id===match.id?{...x,notes:nota,movimiento_id:m.id}:x)); _cierraCaja(m,movAplic,estado)
         }catch(e){ appAlert('Error al vincular caja chica: '+e.message) }
         setBusy(null); return
@@ -1909,7 +1913,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
     try{
       const ins = await supabase.from('petty_cash').insert({ user_name:persona, amount:monto, delivered_at:m.fecha||null, movimiento_id:m.id, notes:`Abono caja chica (banco) · mov:${m.id}` }).select().single()   // creada desde el banco: fecha de entrega = fecha de la transferencia + enlace real
       if(ins.error) throw ins.error; pc=ins.data
-      const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',m.id); if(me) throw me
+      const { error:me, estado:_e26, monto_conciliado:_m26 } = await sincMov(m.id, { categoria:'Caja chica' }); if(!me){ estado=_e26; movAplic=_m26 }; if(me) throw me
       setPettyCash&&setPettyCash(p=>[pc,...p]); _cierraCaja(m,movAplic,estado)
     }catch(e){ if(pc) await supabase.from('petty_cash').delete().eq('id',pc.id); appAlert('Error al abonar caja chica: '+e.message) }
     setBusy(null)
@@ -1923,7 +1927,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         if(/\(banco\)/.test(pc.notes||'')){ const {error:pe}=await supabase.from('petty_cash').delete().eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.filter(x=>x.id!==pc.id)) }   // lo creó la conciliación → borrar
         else { const nota=String(pc.notes||'').replace(new RegExp(`\\s*·\\s*mov:${m.id}`),'').trim(); const {error:pe}=await supabase.from('petty_cash').update({notes:nota, movimiento_id:null}).eq('id',pc.id); if(pe) throw pe; setPettyCash&&setPettyCash(p=>p.map(x=>x.id===pc.id?{...x,notes:nota,movimiento_id:null}:x)) }   // era manual → desvincular (limpia el enlace real)
       }
-      const { error } = await supabase.from('cartola_movimientos').update({ estado:'pendiente', monto_conciliado:0, categoria:null }).eq('id',m.id)
+      const { error:error, estado:_e27, monto_conciliado:_m27 } = await sincMov(m.id, { categoria:null })
       if(error) throw error
       setMovs(p=>p.map(x=>x.id===m.id?{...x,estado:'pendiente',monto_conciliado:0,categoria:null}:x))
     }catch(e){ appAlert('Error al deshacer: '+e.message) }
@@ -1979,7 +1983,7 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(!DEMO){ for(const e of gs){ await logActividad('proveedores.gasto_a_comision',{tabla:'expenses',id:e.id,detalle:{title:`Gasto de oficina pasa a pago de comisión · ${e.subcategory||e.category}`,monto:Number(e.amount)||0,gasto:e}})
           await supabase.from('conciliacion').delete().eq('movimiento_id',m.id).eq('gasto_id',e.id)
           await supabase.from('expenses').update({deleted_at:new Date().toISOString()}).eq('id',e.id) }
-        await supabase.from('cartola_movimientos').update({monto_conciliado:0,estado:'pendiente'}).eq('id',m.id) }
+        }
       setConc(p=>p.filter(c=>!(String(c.movimiento_id)===String(m.id)&&c.tipo_destino==='gasto')))
       setExpenses&&setExpenses(p=>p.filter(e=>!gs.some(g=>g.id===e.id)))
       m={...m,monto_conciliado:0,estado:'pendiente'}
@@ -2009,7 +2013,6 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
         if(desdeBanco.length) await supabase.from('terceros_pagos').delete().in('id',desdeBanco)
         if(ids.length) await supabase.from('terceros_pagos').update({estado:'por_pagar',pagado_at:null,movimiento_id:null}).in('id',ids)
         await supabase.from('conciliacion').delete().eq('movimiento_id',m.id).eq('tipo_destino','tercero')
-        { const ap=Math.max(0,(m.monto_conciliado||0)-sum); await supabase.from('cartola_movimientos').update({monto_conciliado:ap,estado:ap>0?'parcial':'pendiente'}).eq('id',m.id) }
       }
       setTerc(p=>p.filter(t=>!desdeBanco.includes(t.id)).map(t=>ids.includes(t.id)?{...t,estado:'por_pagar',pagado_at:null,movimiento_id:null}:t))
       setTercerosRoot&&setTercerosRoot(p=>p.filter(t=>!desdeBanco.includes(t.id)).map(t=>ids.includes(t.id)?{...t,estado:'por_pagar',pagado_at:null,movimiento_id:null}:t))
@@ -2040,8 +2043,8 @@ export function useConciliacionModel({setTercerosRoot=null,clients=[],clientEnti
       if(!DEMO){
         const r1=await supabase.from('terceros_pagos').insert(fila).select().single(); if(r1.error) throw r1.error; tp=r1.data
         const r2=await supabase.from('conciliacion').insert({movimiento_id:m.id,tipo_destino:'tercero',monto_aplicado:monto,origen:'manual'}).select().single(); if(r2.error) throw r2.error; cc=r2.data; marcaQuien(cc.id)
-        const ap=(m.monto_conciliado||0)+monto
-        const { error:me }=await supabase.from('cartola_movimientos').update({monto_conciliado:ap,estado:ap>=(m.monto||0)?'conciliado':'parcial',categoria:'Proveedor'}).eq('id',m.id); if(me) throw me
+        let ap=(m.monto_conciliado||0)+monto
+        const { error:me, estado:_e30, monto_conciliado:_m30 } = await sincMov(m.id, { categoria:'Proveedor' }); if(!me){ ap=_m30 }; if(me) throw me
       } else tp={...fila,id:'demo-t-'+m.id}
       setTerc(p=>[...p,tp]); setTercerosRoot&&setTercerosRoot(p=>[tp,...p]); setConc(p=>[...p,{id:cc.id,movimiento_id:m.id,tipo_destino:'tercero',monto_aplicado:monto,origen:'manual'}])
       setMovs(p=>p.map(x=>{ if(x.id!==m.id) return x; const ap=(x.monto_conciliado||0)+monto; return {...x,monto_conciliado:ap,estado:ap>=(x.monto||0)?'conciliado':'parcial',categoria:'Proveedor'} }))
@@ -2617,7 +2620,7 @@ export function ConciliacionView({setTercerosRoot=null,openCajaChicaRev=false,on
       if(!DEMO){
         const nota=`${petty.notes||''} · mov:${cargo.id}`.trim()
         const { error:pe } = await supabase.from('petty_cash').update({ notes:nota, movimiento_id:cargo.id }).eq('id',petty.id); if(pe) throw pe
-        const { error:me } = await supabase.from('cartola_movimientos').update({ estado, monto_conciliado:movAplic, categoria:'Caja chica' }).eq('id',cargo.id); if(me) throw me
+        const { error:me, estado:_e31, monto_conciliado:_m31 } = await sincMov(cargo.id, { categoria:'Caja chica' }); if(!me){ estado=_e31; movAplic=_m31 }; if(me) throw me
         setPettyCash&&setPettyCash(p=>p.map(x=>x.id===petty.id?{...x,notes:nota,movimiento_id:cargo.id}:x))
       }
       _cierraCaja(cargo,movAplic,estado)
