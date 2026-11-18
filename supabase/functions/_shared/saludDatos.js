@@ -42,6 +42,7 @@ export function folioDup(billing) {
 
 // Cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, sin anuladas por nota de crédito.
 // Dos entidades distintas con el mismo monto no se marcan; solo la MISMA entidad con la misma cuota repetida.
+const nombraMes = c => /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i.test(String(c || ''))
 export function facDup(billing) {
   const m = {}
   ;(billing || []).forEach(b => { if (b.deleted_at || b.status === 'Anulada' || ['reembolso', 'nota_credito'].includes(b.billing_type || '')) return
@@ -53,7 +54,7 @@ export function facDup(billing) {
     const fx = folioN(x.invoice_no), fy = folioN(y.invoice_no)
     if (fx && fy && fx !== fy) {
       if (x.status === 'Pagado' && y.status === 'Pagado') return false
-      if (x.issued_at && y.issued_at && Math.abs(_dias(x.issued_at, y.issued_at)) >= 20) return false
+      if (x.issued_at && y.issued_at && Math.abs(_dias(x.issued_at, y.issued_at)) >= 20 && !(x.sale_id && x.sale_id === y.sale_id && nombraMes(x.concept))) return false
       if (String(x.issued_at || '') < APP_DESDE && String(y.issued_at || '') < APP_DESDE) return false
     }
     return true
@@ -183,7 +184,7 @@ export function terminadaConGastos(sales, expenses, hoy, { dias = 30, ok = {} } 
   const lim = new Date(new Date(String(hoy).slice(0, 10) + 'T12:00:00').getTime() - dias * 864e5).toISOString().slice(0, 10)
   const term = new Map((sales || []).filter(s => s && !s.deleted_at && s.status === 'Terminado').map(s => [String(s.id), s]))
   const g = {}
-  ;(expenses || []).forEach(e => { if (!e || e.deleted_at || !e.sale_id || !term.has(String(e.sale_id))) return
+  ;(expenses || []).forEach(e => { if (!e || e.deleted_at || e.type === 'fondo' || e.apertura_id || !e.sale_id || !term.has(String(e.sale_id))) return   // un fondo es plata que entra, no un gasto
     const f = String(e.date || '').slice(0, 10), c = String(e.created_at || f).slice(0, 10), k = String(e.sale_id)
     if (!f || f < lim || f > String(hoy).slice(0, 10) || (ok[k] && c <= String(ok[k]).slice(0, 10))) return
     const x = g[k] = g[k] || { s: term.get(k), gastos: [], monto: 0, ultimo: '' }; x.gastos.push(e); x.monto += Number(e.amount) || 0; if (f > x.ultimo) x.ultimo = f })
@@ -283,7 +284,7 @@ export const cuotaNeDte = billing => (billing || []).filter(b => !b.deleted_at &
 export function honorarioDescuadrado(saludRows, billing, sales) {
   const ult = {}; (billing || []).forEach(b => { if (!b.sale_id || b.deleted_at) return; const k = String(b.sale_id), f = String(b.issued_at || b.due || ''); if (!ult[k] || f > ult[k]) ult[k] = f })
   const st = {}; (sales || []).forEach(s => { st[String(s.id)] = s.status })
-  return (saludRows || []).filter(v => v.honorario_descuadrado && !(st[String(v.id)] === 'Terminado' && (ult[String(v.id)] || '') < APP_DESDE))
+  return (saludRows || []).filter(v => v.honorario_descuadrado && Number(v.amount_clp) > 0 && !(st[String(v.id)] === 'Terminado' && (ult[String(v.id)] || '') < APP_DESDE))
 }
 
 // Resumen para el auditor nocturno: un caso por fila de cada detector, con una clave estable (para saber si es nuevo, sigue o se

@@ -1,7 +1,7 @@
 // Pruebas de los detectores de Salud de datos (_shared/saludDatos): cada uno marca lo que es y deja pasar lo esperable.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dteMontoTotal, montoFactura, bancoChk, ventasDup, huerfanas, vencIncoh, perTexto, antDup, ventasBorradorCobrado, honorarioDescuadrado } from './../supabase/functions/_shared/saludDatos.js'
+import { dteMontoTotal, montoFactura, bancoChk, ventasDup, huerfanas, vencIncoh, perTexto, antDup, ventasBorradorCobrado, honorarioDescuadrado, terminadaConGastos, facDup } from './../supabase/functions/_shared/saludDatos.js'
 
 test('monto de una factura: manda el total del XML del DTE; sin XML, el monto cargado', () => {
   assert.equal(dteMontoTotal('<Totales><MntTotal>1190000</MntTotal></Totales>'), 1190000)
@@ -77,7 +77,7 @@ test('venta en borrador o propuesta con facturas emitidas: suma lo emitido y lo 
 })
 
 test('honorario descuadrado: no se marca una venta terminada cuya última factura es anterior a la app', () => {
-  const rows = [{ id: 1, honorario_descuadrado: true }, { id: 2, honorario_descuadrado: true }, { id: 3, honorario_descuadrado: false }]
+  const rows = [{ id: 1, honorario_descuadrado: true, amount_clp: 900000 }, { id: 2, honorario_descuadrado: true, amount_clp: 900000 }, { id: 3, honorario_descuadrado: false, amount_clp: 900000 }]
   const sales = [{ id: 1, status: 'Terminado' }, { id: 2, status: 'Terminado' }]
   const bs = [{ sale_id: 1, issued_at: '2026-01-10' }, { sale_id: 2, issued_at: '2026-08-10' }]
   assert.deepEqual(honorarioDescuadrado(rows, bs, sales).map(v => v.id), [2])
@@ -114,4 +114,22 @@ test('revisión: pago sin factura de más de 60 días; propone la cuota programa
   assert.deepEqual(r.map(x => [x.a.id, x.cuota ? x.cuota.id : null]), [['a2', null], ['a1', 'c1']])   // recientes, consumidos y ya ligados a factura no cuentan; la cuota es la primera del mismo trabajo
   const h = hallazgos({ anticipos: an, billing: bs, hoy: '2026-11-18', clientName: id => 'Cliente ' + id }).filter(x => x.detector === 'anticipo_sin_imputar')
   assert.equal(h.length, 2); assert.match(h[1].titulo, /podría cubrir una cuota programada/); assert.match(h[0].titulo, /sin cuota a la que imputarlo/)
+})
+
+test('trabajo terminado con gastos: un fondo o una apertura no es un gasto', () => {
+  const sales = [{ id: 's1', status: 'Terminado' }]
+  const e = (o) => ({ id: o.id, sale_id: 's1', date: '2026-11-09', amount: 1000, ...o })
+  assert.equal(terminadaConGastos(sales, [e({ id: 'a', type: 'fondo' }), e({ id: 'b', apertura_id: 'x' })], '2026-11-18').length, 0)
+  assert.equal(terminadaConGastos(sales, [e({ id: 'c', type: 'gasto' })], '2026-11-18').length, 1)
+})
+
+test('honorario descuadrado: una venta con honorario 0 (por horas) no se cuadra contra sus cuotas', () => {
+  const rows = [{ id: 'v1', honorario_descuadrado: true, amount_clp: 0, suma_cuotas: 500000 }, { id: 'v2', honorario_descuadrado: true, amount_clp: 800000, suma_cuotas: 500000 }]
+  assert.deepEqual(honorarioDescuadrado(rows, [], []).map(v => v.id), ['v2'])
+})
+
+test('facturas duplicadas: mismo trabajo, monto y mes en la glosa es el mismo cobro aunque pasen más de 20 días; sin mes en la glosa es una serie', () => {
+  const f = (id, no, iso, concept) => ({ id, invoice_no: no, sale_id: 's1', client_id: 'c1', receptor_rut: '11111111-1', status: 'Pendiente', billing_type: 'honorarios', issued_at: iso, amount: 450000, concept })
+  assert.equal(facDup([f('a', '422', '2026-08-03', 'Asesoría — Mensual Agosto 2026'), f('b', '440', '2026-09-01', 'Asesoría — Mensual Agosto 2026')]).length, 1)
+  assert.equal(facDup([f('a', '422', '2026-08-03', 'Asesoría permanente'), f('b', '440', '2026-09-01', 'Asesoría permanente')]).length, 0)
 })
