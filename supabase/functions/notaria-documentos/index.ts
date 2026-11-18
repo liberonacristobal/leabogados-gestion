@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(body.desde || "")) ? body.desde : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
     const [ots, clients, ents, previos, contactos, aprendidos, rutsAprendidos, miembrosRut] = await Promise.all([
-      todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
+      todas("expenses?select=id,client_id,entity_id,date,concept,materia,ot_number,amount,deleted_at&ot_number=not.is.null&deleted_at=is.null"),
       todas("clients?select=id,name,rut,drive_folder_id,is_internal,is_colaborador,abogado_responsable"),
       todas("client_entities?select=id,client_id,name,rut"),
       todas("documentos_notaria?select=id,gmail_id,thread_id,archivo_nombre,codigo_validacion,estado,tipo_documento,repertorio,fecha_documento,asunto,mime,cliente_id,expense_id,ot_number,drive_file_id,drive_nombre,leido_at,motivo&origen=eq.notaria"),

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { disponibleNotaria } from '../supabase/functions/_shared/notariaReglas.js'
+import { disponibleNotaria, notariaPendientes, otNoValida } from '../supabase/functions/_shared/notariaReglas.js'
 
 const fondo = (id, amount, project, date = '2026-09-01') => ({ id, client_id: 'c', type: 'fondo', amount, project, date })
 const ot = (id, amount, project) => ({ id, client_id: 'c', type: 'gasto', category: 'Notaria', ot_number: String(400000 + id), amount, project, date: '2026-10-01' })
@@ -27,4 +27,11 @@ test('notaría por trabajo: nunca supera al disponible del cliente completo ni c
   const d = disponibleNotaria([fondo(1, 100000, 'Trabajo A'), gasto, ot(2, 5000, 'Trabajo A')], 'c')
   assert.equal(d.completo, 10000); assert.equal(d.disp, 10000)
   assert.equal(disponibleNotaria([fondo(1, 300000, 'Trabajo A')], 'c').disp, 300000)
+})
+
+test('OT de $1 = OT no válida (repertorio no usado o anulado): no es deuda ni pendiente; con monto real sí', () => {
+  const g = [ot(1, 1, 'T'), ot(2, 0, 'T'), ot(3, 35000, 'T')]
+  assert.equal(otNoValida(g[0]), true)
+  assert.equal(otNoValida(g[2]), false)
+  assert.deepEqual(notariaPendientes(g).map(e => e.id), [3])
 })

@@ -20,9 +20,14 @@ export function liqParaCargo(m, liqs, rutsNota) {
 }
 
 // Deuda con la notaría = OT (la OT es la fuente de la verdad): gasto de categoría Notaría con N° de OT, sin rendir ni liquidar.
-// Un gasto de Notaría sin N° de OT no es deuda con la notaría; los de $1 o menos son escrituras anuladas (solo orden).
+// Un gasto de Notaría sin N° de OT no es deuda con la notaría.
+// OT DE $1 = OT NO VÁLIDA (regla del usuario, 18-11-2026): la notaría registra por un peso las OT de repertorios que no se usaron o que se
+// anularon; solo ocupan un número de la serie. No son deuda, no esperan un precio, no se cargan «porque falten» ni sirven para calzar un
+// documento. Si la notaría cambia el monto (de $1 a un valor real) pasa a ser una OT normal. Toda regla de OT pasa por `otNoValida`.
+export const OT_NO_VALIDA_MONTO = 1
+export const otNoValida = e => !!e && e.amount != null && (Number(e.amount) || 0) <= OT_NO_VALIDA_MONTO
 export const esNotaPend = e => !!e && e.type !== 'fondo' && e.category === 'Notaria' && /\d/.test(String(e.ot_number || '')) && !e.notaria_render_id && !e.notaria_liquidado_at
-export const notariaPendientes = expenses => (expenses || []).filter(e => !e.deleted_at && esNotaPend(e) && (Number(e.amount) || 0) > 1)
+export const notariaPendientes = expenses => (expenses || []).filter(e => !e.deleted_at && esNotaPend(e) && !otNoValida(e) && (Number(e.amount) || 0) > OT_NO_VALIDA_MONTO)
 const _enSaldo = e => !e?.apertura_id
 // Disponible REAL para pagar notaría de un cliente = fondo − ya pagado (rendido o notaría liquidada) − reservado para OTROS gastos
 // pendientes del cliente (no la notaría que se está liquidando). esOficina(cid): la oficina siempre cubre sus gastos.

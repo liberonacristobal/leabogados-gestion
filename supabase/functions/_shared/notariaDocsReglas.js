@@ -33,7 +33,8 @@ export function otParaDocumento(doc, ots) {
   if (!doc?.fecha || !doc?.tipo) return null
   const tt = [...new Set(toks(doc.tipo))]; if (!tt.length) return null
   const necesita = tt.length <= 2 ? tt.length : Math.ceil(tt.length * 2 / 3)
-  const vivas = (ots || []).filter(o => !o.deleted_at && o.ot_number && o.date)
+  // Una OT de $1 es una OT no válida (repertorio no usado o anulado): no calza con ningún documento (ver notariaReglas.otNoValida).
+  const vivas = (ots || []).filter(o => !o.deleted_at && o.ot_number && o.date && !(o.amount != null && (Number(o.amount) || 0) <= 1))
   const puntaje = o => { const ct = new Set(toks(`${o.concept || ''} ${o.materia || ''}`)); return tt.filter(w => ct.has(w)).length }
   const mismoDia = vivas.filter(o => String(o.date).slice(0, 10) === doc.fecha).map(o => ({ o, p: puntaje(o) })).filter(x => x.p >= necesita)
   if (mismoDia.length) { const max = Math.max(...mismoDia.map(x => x.p)), top = mismoDia.filter(x => x.p === max); return top.length === 1 ? top[0].o : null }

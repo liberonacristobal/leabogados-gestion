@@ -105,3 +105,11 @@ test('paginación REST: pide páginas de 1.000 con orden estable hasta que una v
 test('firma de la notaría: un nombre corto de menos de 5 letras no vale como firma', () => {
   assert.equal(firmadoPorNotaria('Saludos, Ana', ['Ana']), false)
 })
+
+test('OT de $1 = OT no válida (repertorio no usado o anulado): no calza con ningún documento', () => {
+  const ot = (n, monto) => ({ id: n, ot_number: n, date: '2026-10-27', concept: 'Gastos notariales — Reducción a escritura pública acta junta extraordinaria', materia: '', client_id: 'c1', amount: monto })
+  const doc = { fecha: '2026-10-27', tipo: 'REDUCCION A ESCRITURA PUBLICA ACTA JUNTA EXTRAORDINARIA' }
+  assert.equal(otParaDocumento(doc, [ot('504146', 1)]), null)
+  assert.equal(otParaDocumento(doc, [ot('504146', 350000)]).ot_number, '504146')
+  assert.equal(otParaDocumento(doc, [ot('504146', 1), ot('504200', 80000)]).ot_number, '504200')
+})
