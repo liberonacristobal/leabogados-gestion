@@ -743,6 +743,8 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
   const u=iso=>ufDelDia(ufd, iso, ufFb||UF_FALLBACK), ufFin=u(finMesOHoy(ym))
   const bById={}; (billing||[]).forEach(b=>{ if(b) bById[String(b.id)]=b })
   const extIds=new Set((terceros||[]).filter(t=>t&&t.comision_pct!=null&&t.billing_id).map(t=>String(t.billing_id)))
+  // Reembolso incluido en una factura de honorarios (fondo del cliente ligado a la factura): no es ingreso, igual que en Por socio (partidasPorSocio). Baja el Facturado y sube la línea «reembolsos» de la cascada; el total emitido no cambia.
+  const fondoEn={}; (expenses||[]).forEach(e=>{ if(e&&!e.deleted_at&&e.type==='fondo'&&e.invoice_id) fondoEn[String(e.invoice_id)]=(fondoEn[String(e.invoice_id)]||0)+(Number(e.amount)||0) })
   let fac=0, facUF=0; const facDocs=[], sinReg=[]
   // De lo emitido a lo facturado: lo que se excluye del Facturado propio (se muestra como cascada «Total emitido − … = Facturado»).
   const facExc={reemb:0,subarr:0,ext:0,nc:0}, facExcUF={reemb:0,subarr:0,ext:0,nc:0}   // UF con la UF del día de cada documento
@@ -755,7 +757,9 @@ export function resultadoMes(fu, {billing=[], terceros=[], costosOfiRows=[], exp
     if(extIds.has(String(d.billing_id))){ facExc.ext+=m; facExcUF.ext+=m/u(d.fecha_emision); return }
     if(b&&b.billing_type==='reembolso'){ facExc.reemb+=m; facExcUF.reemb+=m/u(d.fecha_emision); return }   // gasto facturado al cliente: nunca es ingreso
     if(docDeSubarriendo(b,bById)){ facExc.subarr+=m; facExcUF.subarr+=m/u(d.fecha_emision); return }   // la factura de subarriendo no es ingreso ni honorario: su monto fijo ya baja el costo de oficina
-    fac+=m; facUF+=m/u(d.fecha_emision); facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
+    const fe=Math.min(m,b?(fondoEn[String(b.id)]||0):0)   // parte de la factura que es reembolso de gastos
+    if(fe>0){ facExc.reemb+=fe; facExcUF.reemb+=fe/u(d.fecha_emision) }
+    fac+=m-fe; facUF+=(m-fe)/u(d.fecha_emision); facDocs.push({...d,b}); if(!d.billing_id) sinReg.push(d) })
   const [Y,Mo]=String(ym).split('-').map(Number)
   // Remuneraciones: lo pagado en el banco para ese mes; si aún no hay pagos (mes en curso), la planilla.
   const remB=remuneracionesBancoMes(expenses,clients,ym,fu?.boleta), remEst=!(remB.total>0)
