@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
       todas("learnings?select=id,key&kind=eq.compra_sin_reclamo"),
       todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,periodo,observado_iva,observado_sii&observado_sii=is.true"),
       todas("learnings?select=id,key&kind=eq.compra_observada_vista"),
-      todas("expenses?select=id,client_id,date,entity_id,sale_id,created_at,amount,concept&deleted_at=is.null&order=id"),
+      todas("expenses?select=id,client_id,date,entity_id,sale_id,created_at,amount,concept,type,apertura_id&deleted_at=is.null&order=id"),
       todas("tasks?select=client_id,created_at,completed_at"),
       todas("horas?select=client_id,fecha"),
       todas("learnings?select=key,value&kind=eq.trabajo_activo_ok"),

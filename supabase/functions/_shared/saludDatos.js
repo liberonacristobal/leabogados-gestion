@@ -153,6 +153,19 @@ export const gastoRsAjena = (expenses, ents) => {
 // Trabajo Terminado que sigue recibiendo gastos: gastos con FECHA en los últimos `dias` → reabrirlo o pasarlos a otro trabajo.
 // No por fecha de carga: las reimportaciones dejan created_at reciente en gastos antiguos (falso positivo 25-10-2026). ok =
 // { sale_id: fecha «Sigue terminado» }: vuelve a aparecer solo con gastos cargados después de esa fecha.
+// Gastos sin fecha (carga masiva o captura incompleta): sin fecha no entran a ningún mes ni a la antigüedad de lo pendiente. Un caso por cliente
+// (no uno por gasto) para no llenar la revisión. Fondos y aperturas no cuentan.
+/** @param {any[]} expenses @returns {{cid:string, gastos:any[], monto:number}[]} */
+export function gastosSinFecha(expenses) {
+  /** @type {Map<string,{cid:string,gastos:any[],monto:number}>} */ const g = new Map()
+  for (const e of expenses || []) {
+    if (!e || e.deleted_at || e.type === 'fondo' || e.apertura_id || String(e.date || '').trim()) continue
+    const k = String(e.client_id || '—'), x = g.get(k) || { cid: k, gastos: [], monto: 0 }
+    x.gastos.push(e); x.monto += Number(e.amount) || 0; g.set(k, x)
+  }
+  return [...g.values()].sort((a, b) => b.monto - a.monto)
+}
+
 export function terminadaConGastos(sales, expenses, hoy, { dias = 30, ok = {} } = {}) {
   const lim = new Date(new Date(String(hoy).slice(0, 10) + 'T12:00:00').getTime() - dias * 864e5).toISOString().slice(0, 10)
   const term = new Map((sales || []).filter(s => s && !s.deleted_at && s.status === 'Terminado').map(s => [String(s.id), s]))
@@ -297,6 +310,7 @@ export function hallazgos(d) {
   comprasEnPlazoReclamo(d.compras, d.hoy || new Date().toISOString().slice(0, 10), d.comprasVistas, { terceros: d.terceros || null, historial: d.comprasTodas || null }).forEach(x => add('compra_plazo_reclamo', x.d.id, x.calce ? `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · calza con ${x.calce.length} comisi${x.calce.length === 1 ? 'ón' : 'ones'} sin factura · enlazar antes del ${x.vence.split('-').reverse().join('-')}` : `Factura N° ${x.d.folio} de ${x.d.emisor_name || 'proveedor'} · plazo de reclamo hasta el ${x.vence.split('-').reverse().join('-')}`, x.d.monto, { compra: x.d.id, vence: x.vence }))
   gastoRsAjena(d.gastos, d.clientEntities).forEach(e => add('gasto_rs_ajena', e.id, `Gasto con razón social de otro cliente · ${nom(e.client_id)} · ${String(e.concept || '').slice(0, 60)}`.trim(), e.amount, { gasto: e.id, entidad: e.entity_id, fecha: e.date }))
   terminadaConGastos(d.sales, d.gastos, d.hoy || new Date().toISOString().slice(0, 10), { ok: d.terminadaOk || {} }).forEach(x => add('terminada_con_gastos', x.s.id, `Trabajo terminado que sigue recibiendo gastos · ${nom(x.s.client_id)} · ${x.s.title || ''}`.trim(), x.monto, { venta: x.s.id, gastos: x.gastos.map(e => e.id), ultimo: x.ultimo }))
+  gastosSinFecha(d.gastos).forEach(x => add('gasto_sin_fecha', x.cid, `${x.gastos.length} gasto${x.gastos.length === 1 ? '' : 's'} sin fecha · ${x.cid === '—' ? 'sin cliente' : nom(x.cid)}`, x.monto, { gastos: x.gastos.slice(0, 50).map(e => e.id), total: x.gastos.length }))
   // Permisos de la base fuera de la regla (rpc auditoria_permisos): la consola de Supabase crea tablas abiertas al rol sin sesión.
   const PERM_TXT = { tabla_sin_sesion: x => `Tabla ${x.objeto} con permisos para usuarios sin sesión (${x.detalle})`, tabla_sin_rls: x => `Tabla ${x.objeto} sin RLS`, funcion_sin_sesion: x => `Función ${x.objeto} ejecutable sin sesión` }
   ;(d.permisos || []).forEach(x => add('permiso_sin_sesion', `${x.tipo}:${x.objeto}`, (PERM_TXT[x.tipo] || (y => `${y.tipo} ${y.objeto}`))(x), null, { tipo: x.tipo, objeto: x.objeto, detalle: x.detalle }))
@@ -308,6 +322,7 @@ export function hallazgos(d) {
 }
 
 export const DETECTOR_LBL = {
+  gasto_sin_fecha: 'Gastos sin fecha',
   plantilla_con_numeros: 'Plantillas de correo con números escritos a mano',
   nc_sin_registrar: 'Notas de crédito del SII sin registrar',
   permiso_sin_sesion: 'Permisos de la base fuera de la regla',

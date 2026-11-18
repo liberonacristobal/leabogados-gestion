@@ -93,3 +93,14 @@ test('hallazgos: una nota de crédito del SII sin registrar aparece como nc_sin_
   assert.match(r[0].titulo, /Nota de crédito N° 13/)
   assert.equal(hallazgos({ billing, siiNC: [] , clientName: () => '' }).filter(h => h.detector === 'nc_sin_registrar').length, 0)
 })
+
+test('revisión: gastos sin fecha, un caso por cliente; fondos, aperturas y borrados no cuentan', async () => {
+  const { gastosSinFecha, hallazgos } = await import('../supabase/functions/_shared/saludDatos.js')
+  const ex = [{ id: 1, client_id: 'A', date: null, amount: 1000, type: 'gasto' }, { id: 2, client_id: 'A', date: '', amount: 500, type: 'gasto' }, { id: 3, client_id: 'B', date: null, amount: 9000, type: 'gasto' },
+    { id: 4, client_id: 'A', date: null, amount: 7, type: 'fondo' }, { id: 5, client_id: 'A', date: null, amount: 7, type: 'gasto', apertura_id: 'x' }, { id: 6, client_id: 'A', date: null, amount: 7, type: 'gasto', deleted_at: '2026-01-01' },
+    { id: 7, client_id: 'A', date: '2026-06-15', amount: 7, type: 'gasto' }]
+  const r = gastosSinFecha(ex)
+  assert.deepEqual(r.map(x => [x.cid, x.gastos.length, x.monto]), [['B', 1, 9000], ['A', 2, 1500]])
+  const h = hallazgos({ gastos: ex, clientName: id => 'Cliente ' + id }).filter(x => x.detector === 'gasto_sin_fecha')
+  assert.equal(h.length, 2); assert.equal(h[1].clave, 'gasto_sin_fecha:A'); assert.equal(h[1].monto, 1500)
+})
