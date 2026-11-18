@@ -215,7 +215,7 @@ export function comisionesQueCalzan(doc, terceros = []) {
 // terceros: si calza con comisiones sin factura del emisor, va con su calce (la acción es enlazarlas, no reclamar). Con historial
 // (todas las compras): un proveedor habitual (3 facturas anteriores o más) con un monto dentro de lo suyo no se muestra.
 export function comprasEnPlazoReclamo(docs, hoy, vistas = new Set(), { terceros = /** @type {any} */ (null), historial = /** @type {any} */ (null) } = {}) {
-  return (docs || []).filter(d => d && d.sii_estado === 'PENDIENTE' && d.fecha_recepcion && !vistas.has(String(d.id)) && Number(d.tipo_dte) !== 61)
+  return (docs || []).filter(d => d && d.sii_estado === 'PENDIENTE' && d.fecha_recepcion && !d.movimiento_id && !vistas.has(String(d.id)) && Number(d.tipo_dte) !== 61)   // con movimiento del banco enlazado ya está pagada y reconocida: no hay nada que reclamar
     .map(d => { const rec = _fechaCL(d.fecha_recepcion), vence = new Date(new Date(rec + 'T12:00').getTime() + PLAZO_RECLAMO_DIAS * 864e5).toISOString().slice(0, 10); return { d, rec, vence, quedan: _dias(vence, hoy), calce: terceros ? comisionesQueCalzan(d, terceros) : null } })
     .filter(x => x.quedan >= 0)
     .filter(x => { if (x.calce || !historial) return true

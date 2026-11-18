@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       todas("clients?select=id,name"),
       todas("proveedores?select=id,nombre"),
       todas("auditoria_hallazgos?select=id,clave,estado,avisado_at,detector,primera_vez&estado=eq.abierto"),
-      todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,proveedor_id,fecha_emision,monto,sii_estado,fecha_recepcion&sii_estado=eq.PENDIENTE"),
+      todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,proveedor_id,movimiento_id,fecha_emision,monto,sii_estado,fecha_recepcion&sii_estado=eq.PENDIENTE"),
       todas("learnings?select=id,key&kind=eq.compra_sin_reclamo"),
       todas("sii_compras_docs?select=id,folio,tipo_dte,emisor_name,emisor_rut,periodo,observado_iva,observado_sii&observado_sii=is.true"),
       todas("learnings?select=id,key&kind=eq.compra_observada_vista"),
