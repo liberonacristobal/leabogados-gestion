@@ -1,6 +1,6 @@
 // Facturas enviadas FUERA de la app. Se reconocen en los enviados de quien abre la app (solo encabezados, nombres de adjuntos y el
 // inicio del texto) con la regla estricta de _shared/facturaEnvioReglas.js: el correo debe ir a un contacto del MISMO cliente de la
-// factura y nombrarla. Se propone y se marca con un toque; nada se marca solo. Misma mecánica que fondosCorreo.jsx.
+// factura y nombrarla. Se propone y se marca con un toque; nada se marca solo.
 import { supabase, DEMO } from '../supabase'
 import { BRAND } from './base.jsx'
 import { driveToken, logActividad, okDB, registrarError, setLearningKV } from './compartido.jsx'

@@ -12,7 +12,6 @@ import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesI
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
-import { SolicitudesFondos } from '../lib/fondosCorreo.jsx'
 import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
@@ -2368,8 +2367,6 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
   // Abogado del cliente — MISMA fuente que la ficha de Clientes: abogado_responsable, y si no, el responsable de su venta más reciente.
   const respByClienteFull = useMemo(()=>{ const m={}; (clients||[]).forEach(c=>{ if(c.abogado_responsable) m[String(c.id)]=c.abogado_responsable }); [...(sales||[])].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).forEach(s=>{ if(s.responsible&&s.client_id&&!m[String(s.client_id)]) m[String(s.client_id)]=s.responsible }); return m },[clients,sales])
   // Pedir fondos: clientes que la oficina financia (saldo<0), agrupados por su abogado a cargo, para pedirle provisión.
-  const [showSolicitudes,setShowSolicitudes] = useState(false)   // página «Solicitudes de fondos» (compuerta + esperando + recibidas)
-  const [solRes,setSolRes] = useState(null)   // conteos de solicitudes {reg,esp,rec} para la tarjeta del hub
   const [pedirOpen,setPedirOpen] = useState(false)   // modal "pedir fondos a los abogados"
   const [pedirSent,setPedirSent] = useState({})      // estado de envío por correo de abogado
   const PEDIR_EMAILS=equipoPorNombre()
@@ -3147,8 +3144,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:isDesktop?12:8}}>
             <HubTile ic='receipt' bg={C.azulBg} col={C.accent} t='Rendir a cliente' s={txtBorr||'rendir, pedir y enviar'} sM={misBorr.arm>0?`${misBorr.arm} borrador${misBorr.arm!==1?'es':''}`:(txtBorr||'rendir y pedir')} onClick={()=>{setQ('');const hay=misBorr.arm>0||rendicionesEnCurso(clients,expenses).length>0;setRendGrupo(hay?'env':null);setRendAbg(null);setRendSub('rendir')}}/>
             <HubTile ic='tEspera' bg={C.soonBg} col={C.soonText} t='Esperando depósito' tM='Esperando' s='rendido y en contra' sM='en contra' onClick={()=>{setQ('');setRendGrupo('dep');setRendSub('rendir')}}/>
-            <HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/>
-            <HubTile ic='mail' bg={C.soonBg} col={C.soonText} t='Solicitar fondos' s='pedir provisión' onClick={()=>onSolicitarFondos&&onSolicitarFondos()}/>
+            <div style={{gridColumn:'1 / -1'}}><HubTile ic='clock' bg={C.azulBg} col={C.accent} t='Historial' s='rendiciones enviadas' sM='enviadas' onClick={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/></div>
           </div>
         )
       })()}
@@ -4365,8 +4361,6 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       </div>}
     </FlujoPagina>)
     return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pg}</div>:pg }
-  if(showSolicitudes){ const solPage=<FlujoPagina origen='Gastos' titulo='Solicitudes de fondos' onBack={()=>setShowSolicitudes(false)} maxW={960}><SolicitudesFondos modo='pagina' clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/></FlujoPagina>
-    return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{solPage}</div>:solPage }
   if(pedirOpen) return isDesktop?<div style={{height:'calc(100vh - 66px)',overflowY:'auto',background:C.bg}}>{pedirModal}</div>:pedirModal
   // ── HUB de Gastos (cara de entrada). Presentación pura: mismas cifras auditadas, sin recalcular nada.
   const showHub = hubOpen && !selectedClient && !showOrphans && !showNotaria && !showHistorial
@@ -4458,7 +4452,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
-    if(solRes&&(solRes.reg+solRes.esp+solRes.rec)>0){ const sr=solRes, pend=sr.reg>0; cards.push({t:'Solicitudes de fondos', tM:'Solicitudes', ic:'mail', s:pend?`${sr.reg} por registrar · ${sr.esp} en curso`:`${sr.esp} en curso · ${sr.rec} recibidas`, sM:pend?`${sr.reg} por registrar`:`${sr.esp} en curso`, sCol:pend?C.soonText:undefined, col:pend?C.soonText:C.accent, bg:pend?C.soonBg:C.azulBg, go:()=>setShowSolicitudes(true)}) }
+    cards.push({t:'Solicitar fondos', tM:'Solicitar', ic:'mail', s:'fondo inicial de clientes nuevos', sM:'clientes nuevos', col:C.accent, bg:C.azulBg, go:()=>onSolicitarFondos&&onSolicitarFondos()})
     if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sM:(revisarRes.resumen||'al día').split(' · ').slice(0,2).join(' · '), sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>
@@ -4468,7 +4462,6 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           </div>
           <div style={{display:'flex',gap:8}}><button type='button' onClick={()=>{setHubOpen(false);setNotaMenuOpen(true)}} style={chipBtn('primary')}>+ Cargar</button></div>
         </div>
-        <SolicitudesFondos modo='resumen' onResumen={setSolRes} clients={clients} expenses={expenses} user={{name:currentUserName,email:currentUser?.email}} onOpenClientFicha={onOpenClientFicha}/>
         <div style={{display:'grid',gridTemplateColumns:D?`repeat(${cards.length>3?2:cards.length},minmax(0,1fr))`:'1fr 1fr',gap:D?12:8,marginBottom:12}}>
           {cards.map((c,i)=><div key={c.t} style={{minWidth:0,gridColumn:(!D&&i===cards.length-1&&cards.length%2)?'1 / -1':undefined}}><HubTile ic={c.ic} t={c.t} tM={c.tM} s={c.s} sM={c.sM} sCol={c.sCol} col={c.col} bg={c.bg} onClick={c.go}/></div>)}
         </div>
