@@ -218,6 +218,16 @@ Deno.serve(async (req) => {
       }
       return json({ ok: true, dryRun, renombrados: out.length, muestra: out.slice(0, 15) });
     }
+    // Un documento que espera su OT y ya está en «Por asignar» (tiene su archivo en Drive) no necesita volver a leer el correo: cuando
+    // aparece su OT se asigna con lo guardado y el paso siguiente lo mueve. Antes se releía el correo, y si había desaparecido de Gmail
+    // fallaba (404) en cada corrida sin poder asignarse nunca (17-11-2026: 3 documentos, la vigilancia de procesos avisó).
+    for (const p of previos.filter((x) => x.estado === "pendiente_ot" && x.drive_file_id && !x.cliente_id)) {
+      const ot = otParaDocumento({ tipo: p.tipo_documento, fecha: String(p.fecha_documento || "").slice(0, 10) }, ots);
+      if (!ot?.client_id) continue;
+      const cambios = { cliente_id: ot.client_id, expense_id: ot.id, ot_number: ot.ot_number, metodo: "ot_tipo_fecha", estado: "asignado", motivo: null, updated_at: new Date().toISOString() };
+      if (!dryRun) await rest(`documentos_notaria?id=eq.${p.id}`, { method: "PATCH", body: JSON.stringify(cambios) });
+      Object.assign(p, cambios);
+    }
     // Asignados que ya están en «Por asignar»: se MUEVEN a la carpeta del cliente (no se vuelve a leer el correo).
     const movidos: unknown[] = [];
     for (const p of previos.filter((x) => x.estado === "asignado" && x.drive_file_id && x.cliente_id)) {
