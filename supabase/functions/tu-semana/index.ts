@@ -328,7 +328,9 @@ serve(async (req) => {
       if (d.caja && d.caja.nLiq) t.push(tile("Caja chica", fmt(d.caja.montoLiq), `${d.caja.nLiq} gasto${d.caja.nLiq!==1?"s":""} por liquidar`, "Liquidar", "cajachica"));
       const c=d.cartera;
       if (c && c.bills.length) { const venc=c.bills.filter((x:any)=> x.vence < hoyCL).length;
-        t.push(tile("Por cobrar", fmt(c.bills.reduce((a:number,x:any)=>a+x.saldo,0)), venc ? `<b style="color:${RED};">${venc} vencida${venc!==1?"s":""}</b> de ${c.bills.length}` : `${c.bills.length} factura${c.bills.length!==1?"s":""} por vencer`, "Ver cobranza", d.socio?"cobranza":"porcobrar", venc?RED:INK)); }
+        // Las de más de 90 días vencidas salen aparte: sin esto una factura de hace un año se leía igual que una de ayer (15 facturas, $19,5M al 18-11-2026).
+        const lim90=new Date(new Date(hoyCL+"T12:00:00").getTime()-90*864e5).toISOString().slice(0,10), viejas=c.bills.filter((x:any)=> x.vence < lim90).length;
+        t.push(tile("Por cobrar", fmt(c.bills.reduce((a:number,x:any)=>a+x.saldo,0)), venc ? `<b style="color:${RED};">${venc} vencida${venc!==1?"s":""}</b> de ${c.bills.length}${viejas?`, ${viejas} con más de 90 días`:""}` : `${c.bills.length} factura${c.bills.length!==1?"s":""} por vencer`, "Ver cobranza", d.socio?"cobranza":"porcobrar", venc?RED:INK)); }
       if (c && c.com && c.com.nListas) t.push(tile("Comisiones", fmt(c.com.liqListas), `${c.com.nListas} por pagar`, "Registrar boleta", "comisiones"));
       if (d.socio && of) { const a=of.an;
         if (primerLunes && a.largas.length) t.push(tile(`OT de más de ${a.demora?.max} días`, String(a.largas.length), fmt(a.largas.reduce((s:number,e:any)=>s+(Number(e.amount)||0),0)), "Pedir fondos o castigar", "notaria", AMB));
