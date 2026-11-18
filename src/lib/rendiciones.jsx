@@ -71,7 +71,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const verModoFondo = !esEdicion && !navBorr && fondosRS.length>=2
   const [modoR,setModoR] = useState(editRend?.fondo_id?'fondo':'gastos')
   const [fondoSel,setFondoSel] = useState(editRend?.fondo_id||null)
-  const [addSinFondo,setAddSinFondo] = useState(false)
+  const [addSinFondo,setAddSinFondo] = useState(true)   // los gastos sin fondo entran por defecto: es lo que falta pedir al cliente
   const enFondo = !!fondoSel && modoR==='fondo' && (esEdicion?!!editRend?.fondo_id:verModoFondo)
   const fondoObj = enFondo ? ((expenses||[]).find(e=>String(e.id)===String(fondoSel))||null) : null
   const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, esEdicion?editRend.id:null, null, enFondo?fondoSel:null)
@@ -491,7 +491,8 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const _uno = porTrabajoUno&&porT[0]
   // ── Qué se rinde (solo con 2+ fondos): gastos (por proyecto) o un fondo entregado (lo que cubrió).
   const pendFondo = x => x.gastos.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g))
-  const elegirFondo = x => { setModoR('fondo'); setFondoSel(x.f.id); setAddSinFondo(false); setWipRec(false); setSelected(new Set(pendFondo(x).map(g=>g.id))) }
+  const pendSinFondo = repF.sinFondo.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g))
+  const elegirFondo = x => { setModoR('fondo'); setFondoSel(x.f.id); setAddSinFondo(true); setWipRec(false); setSelected(new Set([...pendFondo(x),...pendSinFondo].map(g=>g.id))) }
   const totPendG = (cntProy.__todos||{n:0,m:0})
   const totFondosRS = fondosRS.reduce((a,x)=>a+(Number(x.f.amount)||0),0)
   const cardModo = (k,ic,bg,col,t,sub,der,on,onClick) => <div key={k} onClick={onClick} style={{display:'flex',alignItems:'center',gap:isDesktop?10:8,background:C.surface,border:`1px solid ${on?C.accent:C.border}`,boxShadow:on?`inset 0 0 0 1px ${C.accent}`:'none',borderRadius:12,padding:isDesktop?'11px 13px':'9px 10px',cursor:'pointer',minWidth:0}}>
@@ -587,7 +588,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         <span style={{flex:1,minWidth:0,fontSize:12,color:C.accent,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
         <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
-      {enFondo&&(()=>{ const nSin=repF.sinFondo.filter(g=>g.type==='gasto'&&!g.client_rendered_at&&inScope(g)).length
+      {enFondo&&(()=>{ const nSin=pendSinFondo.length
         return <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
           <span style={{fontSize:11,color:C.muted}}>Gastos del fondo del {fmtFechaDMY(fondoObj?.date)}</span>
           {nSin>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${nSin})`}</button>}
@@ -621,7 +622,14 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             </div>
             {!gr.k&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(gr.gs,proyectoSugerido)} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {gr.gs.length===1?'a':'los '+gr.gs.length+' a'} {proyectoSugerido}</button>}
             {gr.gs.map(filaG)}
-          </Fragment>)) : disponibles.map(filaG)}
+          </Fragment>)) : (()=>{ const sinF=enFondo?disponibles.filter(e=>repF.deGasto[e.id]==null):[]
+            if(!sinF.length) return disponibles.map(filaG)
+            return <>{disponibles.filter(e=>repF.deGasto[e.id]!=null).map(filaG)}
+              <div onClick={()=>toggleGrupo({gs:sinF})} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,margin:'10px 2px 5px',cursor:'pointer'}}>
+                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.soonText,minWidth:0}}>Sin fondo, a pedir al cliente</span>
+                <span style={{fontSize:12,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{sinF.length} · {fmtN(sinF.reduce((a,e)=>a+(Number(e.amount)||0),0))}</span>
+              </div>
+              {sinF.map(filaG)}</> })()}
       </div>
   </>)
   const bResumen = null
