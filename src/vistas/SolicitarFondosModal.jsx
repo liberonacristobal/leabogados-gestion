@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, diaGrande, fmt, fmtN, fmtRutCL, fmtFechaDMY, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { ActBtn, Buscador, CUENTA_GASTOS_DEFAULT, Modal, chipBtn, depositoDeSolicitud, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esPersona, estadoSolicitud, facturaCorreoShell, logActividad, registrarError, setLearningKV, txtEnviado } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, CUENTA_GASTOS_DEFAULT, Modal, chipBtn, depositoDeSolicitud, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esPersona, estadoSolicitud, facturaCorreoShell, firmaDefault, logActividad, registrarError, setLearningKV, txtEnviado } from '../lib/compartido.jsx'
 import { entregarArchivo } from '../lib/archivos.js'
 
 // Solicitar fondos al cliente: el FONDO INICIAL de un cliente nuevo (lo que se pide a un cliente antiguo va dentro de la rendición y se ve en Rendiciones).
@@ -34,7 +34,6 @@ export function SolicitarFondosModal({ client: clientProp, clients = [], sale, m
   const [msg, setMsg] = useState('')
   const [sending, setSending] = useState(false)
   const [desde, setDesde] = useState('usuario')   // de quién sale: tu cuenta o la de la oficina
-  const [mas, setMas] = useState(false)           // «Más opciones»: copia, asunto, saludo, cuenta, adjuntos, de quién sale
   const [enviada, setEnviada] = useState(null)    // confirmación en la misma página
   const bodyTocado = useRef(false)
   const [extras, setExtras] = useState([])
@@ -75,9 +74,10 @@ export function SolicitarFondosModal({ client: clientProp, clients = [], sale, m
   }
   const buildHtml = () => {
     const ctaBox = `<div style="margin:14px 0;padding:12px 16px;background:#F7F9FA;border:1px solid #E4E8EB;border-radius:8px;font-size:13px;line-height:1.7"><div style="color:#537281;font-weight:600;margin-bottom:3px">Cuenta destinada a gastos</div><div>${esc(cta.razon)}</div><div><span style="color:#537281">RUT:</span> <b>${esc(cta.rut)}</b></div><div><span style="color:#537281">${esc(cta.banco)} · Cuenta corriente:</span> <b>${esc(cta.cuenta)}</b></div>${cta.email ? `<div><span style="color:#537281">Confirmación a:</span> ${esc(cta.email)}</div>` : ''}</div>`
-    // Mismo cascarón que los correos de facturas (header navy con logo + pie de firma con logo/dirección/web), pero lo firma Administración.
+    // Mismo cascarón que los correos de facturas (header navy con logo + pie de firma con logo/dirección/web), pero lo firma quien lo envía (tu cuenta) o Administración (cuenta de la oficina).
     const inner = `${esc(saludo)}<br><br>${esc(msg).replace(/\n/g, '<br>')}${ctaBox}<div style="margin-top:16px">Saludos cordiales,</div>`
-    return facturaCorreoShell(inner, { nombre: 'Administración', cargo: BRAND.nombre, telefono: '' }, 'es')
+    const firma = (desde === 'usuario' && firmaDefault(user?.email)) || { nombre: 'Administración', cargo: BRAND.nombre, telefono: '' }
+    return facturaCorreoShell(inner, firma, 'es')
   }
 
   // La tarea «Solicitar fondos al cliente» queda hecha cuando la solicitud sale o se registra.
@@ -258,36 +258,49 @@ export function SolicitarFondosModal({ client: clientProp, clients = [], sale, m
         {cq.trim() && <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, marginTop: 6, overflow: 'hidden', maxHeight: 260, overflowY: 'auto', background: '#fff' }}>{(clients || []).filter(c => !c.is_internal && (`${c.name || ''} ${c.rut || ''}`).toLowerCase().includes(cq.trim().toLowerCase())).slice(0, 12).map(c => <div key={c.id} onClick={() => pickClient(c)} style={{ padding: '9px 12px', fontSize: 13, color: C.text, cursor: 'pointer', borderTop: `1px solid ${C.border}` }}>{c.name}</div>)}</div>}
       </div>)
     const ventas = (sales || []).filter(s => String(s.client_id) === String(client.id) && s.status === 'Activo')
+    // Sugeridos para «Con copia»: el equipo, la casilla de la oficina y los contactos del cliente que aún no están en el correo.
+    const yaEn = new Set([...(cc || []), (para || '').trim().toLowerCase()].map(x => String(x).toLowerCase()))
+    const sugCc = []; const vistos = new Set()
+    const addSug = (email, rotulo) => { const e = String(email || '').trim().toLowerCase(); if (!e || !e.includes('@') || yaEn.has(e) || vistos.has(e) || e === (user?.email || '').toLowerCase()) return; vistos.add(e); sugCc.push({ email: e, rotulo }) }
+    if (respEmail) addSug(respEmail, `${resp}, responsable`)
+    if (BRAND.casillaAgente) addSug(BRAND.casillaAgente, 'oficina')
+    Object.entries(EMAIL_BY_NAME).forEach(([nombre, em]) => addSug(em, nombre))
+    contacts.forEach(c => addSug(c.email, c.nombre ? `${c.nombre}, cliente` : 'cliente'))
+    const seccion = t => <div style={{ fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 4 }}>{t}</div>
     const formEl = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+        {seccion('1. Fondo')}
         <div><div style={lbl}>CLIENTE</div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, fontWeight: 700, background: C.azulBg, color: C.accent, borderRadius: 20, padding: '3px 6px 3px 11px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{client.name}{proyecto ? `, ${proyecto}` : ''}<button type='button' onClick={() => { setClient(null); setVentaSel(null); setPara('') }} title='Cambiar cliente' style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontWeight: 700, padding: '0 4px' }}><Gl n='x' /></button></span>
             {ventas.length > 1 && <select value={ventaSel?.id || ''} onChange={e => setVentaSel(ventas.find(v => String(v.id) === e.target.value) || null)} style={{ ...fInp, width: 'auto', padding: '4px 8px', fontSize: 12 }}><option value=''>Sin trabajo</option>{ventas.map(v => <option key={v.id} value={v.id}>{v.title}</option>)}</select>}
           </div></div>
         <div><div style={lbl}>MONTO DEL FONDO</div><span style={{ display: 'flex', alignItems: 'center', border: `1px solid ${C.border}`, borderRadius: 8, background: '#fff' }}><span style={{ fontSize: 13, color: C.muted, padding: '0 2px 0 10px' }}>$</span><input value={monto ? Number(monto).toLocaleString('es-CL') : ''} onChange={e => setMonto(e.target.value.replace(/[^\d]/g, ''))} placeholder='0' style={{ flex: 1, border: 'none', outline: 'none', padding: '9px 10px', fontSize: 14, fontWeight: 700, textAlign: 'right', background: 'none', fontVariantNumeric: 'tabular-nums' }} /></span></div>
+        {seccion('2. Destinatarios')}
+        <div><div style={lbl}>ENVIAR DESDE</div>{sel(desde, setDesde, [['usuario', `Tu cuenta${user?.email ? ` (${user.email})` : ''}`], ['oficina', `Cuenta de la oficina${BRAND.casillaAgente ? ` (${BRAND.casillaAgente})` : ''}`]])}</div>
         <div><div style={lbl}>PARA</div><input value={para} onChange={e => setPara(e.target.value)} placeholder='correo@cliente.cl' style={fInp} />
           {contacts.length > 0 && <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>{contacts.map(c => { const isTo = (c.email || '').toLowerCase() === (para || '').toLowerCase(); return <button key={c.email} type='button' title={c.email} onClick={() => { if (isTo) return; if (!para.trim()) setPara(c.email); else addCc(c.email) }} style={{ fontSize: 10, border: `0.5px solid ${isTo ? C.accent : C.border}`, background: isTo ? C.azulBg : '#fff', color: isTo ? C.accent : C.muted, borderRadius: 20, padding: '2px 9px', cursor: 'pointer' }}>{c.nombre || c.email}</button> })}</div>}
         </div>
+        <div><div style={lbl}>CON COPIA</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>{cc.map(e => <span key={e} style={{ fontSize: 10, background: C.greenBg, color: C.greenText, borderRadius: 20, padding: '2px 4px 2px 9px', display: 'inline-flex', alignItems: 'center' }}>{e}<button type='button' onClick={() => removeCc(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontWeight: 700, padding: '0 4px' }}><Gl n='x' /></button></span>)}
+            <input value={ccInput} onChange={e => setCcInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addCc(ccInput) } }} onBlur={() => addCc(ccInput)} placeholder='+ escribir otro correo' style={{ flex: 1, minWidth: 130, padding: '6px 8px', border: `1px dashed ${C.border}`, borderRadius: 8, fontSize: 12 }} /></div>
+          {sugCc.length > 0 && <><div style={{ fontSize: 10, color: C.muted, marginTop: 6 }}>Sugeridos, un toque para agregar</div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>{sugCc.slice(0, 8).map(x => <button key={x.email} type='button' title={x.email} onClick={() => addCc(x.email)} style={{ fontSize: 10, border: `0.5px solid ${C.border}`, background: '#fff', color: C.muted, borderRadius: 20, padding: '2px 9px', cursor: 'pointer' }}>+ {x.rotulo}</button>)}</div></>}
+        </div>
+        {seccion('3. Correo')}
+        <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e => setAsunto(e.target.value)} style={fInp} /></div>
+        <div><div style={lbl}>SALUDO</div><input value={saludo} onChange={e => setSaludo(e.target.value)} style={fInp} /></div>
         <div><div style={lbl}>MENSAJE</div><textarea value={msg} onChange={e => { bodyTocado.current = true; setMsg(e.target.value) }} rows={7} style={{ ...fInp, minHeight: isDesktop ? 150 : 130, lineHeight: 1.6, resize: 'vertical', fontFamily: 'inherit' }} /></div>
-        <button type='button' onClick={() => setMas(v => !v)} style={{ fontSize: 12, fontWeight: 700, color: C.azulInfo, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>{mas ? 'Ocultar más opciones' : 'Más opciones'} <span style={{ fontWeight: 400, color: C.muted }}>{mas ? '' : 'de quién sale, copia, asunto, cuenta y adjuntos'}</span></button>
-        {mas && <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          <div><div style={lbl}>ENVIAR DESDE</div>{sel(desde, setDesde, [['usuario', `Tu cuenta${user?.email ? ` (${user.email})` : ''}`], ['oficina', `Cuenta de la oficina${BRAND.casillaAgente ? ` (${BRAND.casillaAgente})` : ''}`]])}</div>
-          <div><div style={lbl}>CON COPIA {resp && <span style={{ fontWeight: 400, textTransform: 'none', color: C.textSoft }}>abogado responsable ({resp})</span>}</div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>{cc.map(e => <span key={e} style={{ fontSize: 10, background: C.greenBg, color: C.greenText, borderRadius: 20, padding: '2px 4px 2px 9px', display: 'inline-flex', alignItems: 'center' }}>{e}<button type='button' onClick={() => removeCc(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontWeight: 700, padding: '0 4px' }}><Gl n='x' /></button></span>)}
-              <input value={ccInput} onChange={e => setCcInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addCc(ccInput) } }} onBlur={() => addCc(ccInput)} placeholder='+ correo' style={{ flex: 1, minWidth: 90, padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} /></div></div>
-          <div><div style={lbl}>ASUNTO</div><input value={asunto} onChange={e => setAsunto(e.target.value)} style={fInp} /></div>
-          <div><div style={lbl}>SALUDO</div><input value={saludo} onChange={e => setSaludo(e.target.value)} style={fInp} /></div>
-          <div style={{ background: C.soonBg, border: '1px solid #F0E4B8', borderRadius: 10, padding: '9px 11px' }}>
-            <div style={{ fontSize: 10, color: C.soonText, fontWeight: 700, marginBottom: 6 }}>Cuenta destinada a gastos (se recuerda)</div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}><input value={cta.banco} onChange={e => setCta(p => ({ ...p, banco: e.target.value }))} placeholder='Banco' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /><input value={cta.cuenta} onChange={e => setCta(p => ({ ...p, cuenta: e.target.value }))} placeholder='N° cuenta' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /></div>
-            <div style={{ display: 'flex', gap: 6 }}><input value={cta.razon} onChange={e => setCta(p => ({ ...p, razon: e.target.value }))} placeholder='Razón social' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 2 }} /><input value={cta.rut} onChange={e => setCta(p => ({ ...p, rut: e.target.value }))} placeholder='RUT' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /></div>
-          </div>
-          <div><div style={lbl}>ADJUNTOS <span style={{ fontWeight: 400, textTransform: 'none', color: C.textSoft }}>opcional (presupuesto, cotización)</span></div>
-            <label style={dz}><input type='file' multiple onChange={e => { onExtras(e.target.files); e.target.value = '' }} style={{ display: 'none' }} /><span style={{ fontSize: 12, color: C.muted }}>Agregar archivos</span></label>
-            {extras.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{extras.map(a => <span key={a.name + a.size} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.accent, background: C.azulBg, borderRadius: 8, padding: '5px 9px' }}>{a.name}<span style={{ color: C.muted }}>{fmtBytes(a.size)}</span><button type='button' onClick={() => removeExtra(a.name, a.size)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontWeight: 700, padding: 0 }}><Gl n='x' /></button></span>)}</div>}
-          </div>
-        </div>}
+        {seccion('4. Cuenta y adjuntos')}
+        <div style={{ background: C.soonBg, border: '1px solid #F0E4B8', borderRadius: 10, padding: '9px 11px' }}>
+          <div style={{ fontSize: 10, color: C.soonText, fontWeight: 700, marginBottom: 6 }}>Cuenta destinada a gastos (se recuerda)</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}><input value={cta.banco} onChange={e => setCta(p => ({ ...p, banco: e.target.value }))} placeholder='Banco' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /><input value={cta.cuenta} onChange={e => setCta(p => ({ ...p, cuenta: e.target.value }))} placeholder='N° cuenta' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /></div>
+          <div style={{ display: 'flex', gap: 6 }}><input value={cta.razon} onChange={e => setCta(p => ({ ...p, razon: e.target.value }))} placeholder='Razón social' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 2 }} /><input value={cta.rut} onChange={e => setCta(p => ({ ...p, rut: e.target.value }))} placeholder='RUT' style={{ ...fInp, padding: '6px 8px', fontSize: 12, flex: 1 }} /></div>
+        </div>
+        <div><div style={lbl}>ADJUNTOS <span style={{ fontWeight: 400, textTransform: 'none', color: C.textSoft }}>opcional (presupuesto, cotización)</span></div>
+          <label style={dz}><input type='file' multiple onChange={e => { onExtras(e.target.files); e.target.value = '' }} style={{ display: 'none' }} /><span style={{ fontSize: 12, color: C.muted }}>Agregar archivos</span></label>
+          {extras.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>{extras.map(a => <span key={a.name + a.size} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.accent, background: C.azulBg, borderRadius: 8, padding: '5px 9px' }}>{a.name}<span style={{ color: C.muted }}>{fmtBytes(a.size)}</span><button type='button' onClick={() => removeExtra(a.name, a.size)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontWeight: 700, padding: 0 }}><Gl n='x' /></button></span>)}</div>}
+        </div>
       </div>)
     const previewEl = (
       <div>
