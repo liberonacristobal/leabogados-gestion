@@ -209,7 +209,7 @@ serve(async (req) => {
     };
     const quienesBase = testTo ? [ NAME_OF_EMAIL[testTo] || "Martín" ] : [...SOCIOS, ...LIMITADOS];
     const of = quienesBase.some((n:string)=> SOCIOS.includes(n)) ? await cargarOficina() : null;
-    // Procesos con fallas en la semana (aunque hoy estén bien: la vigilancia solo avisa tras 6 fallos seguidos) y consumo de IA desde el 80 % del
+    // Procesos con fallas en la semana (aunque hoy estén bien: la vigilancia solo avisa si la falla sigue tras 2 revisiones) y consumo de IA desde el 80 % del
     // tope mensual. Solo para quien recibe los avisos de la vigilancia (learnings config vigilancia_avisar_a).
     const mesIA = hoyCL.slice(0,7);
     const [corridasFalla, cfgVig, usoIA, cfgTope] = await Promise.all([

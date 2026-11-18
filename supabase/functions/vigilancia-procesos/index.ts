@@ -1,9 +1,10 @@
 // vigilancia-procesos — revisa que cada proceso automático haya corrido y terminado bien.
 // Fuente: procesos_estado() sobre procesos_corridas (registro permanente: lanzar_proceso anota cada corrida y
 // recoger_corridas guarda la respuesta real de la función antes de que pg_net la borre).
-// Corre cada hora. Si un proceso falló, no respondió o no corrió en su plazo: lo REINTENTA (solo los marcados reintentable en
-// procesos_catalogo: los que no mandan correos a personas) y cuenta el intento. Recién después de 6 intentos fallidos seguidos
-// avisa UNA vez, solo a learnings config 'vigilancia_avisar_a' (hoy Cristóbal). Estado por proceso: learnings 'vigilancia_reintento'.
+// Corre dos veces al día (15:00 y 23:00 UTC, ver cron vigilancia-procesos-diario). Si un proceso falló, no respondió o no corrió en su
+// plazo: lo REINTENTA (solo los marcados reintentable en procesos_catalogo: los que no mandan correos a personas) y cuenta la revisión.
+// Avisa UNA vez, tras AVISAR_TRAS revisiones seguidas en falla (unas 8 a 12 horas), solo a learnings config 'vigilancia_avisar_a' (hoy
+// Cristóbal). Estado por proceso: learnings 'vigilancia_reintento'.
 // Interruptor del correo: learnings config 'vigilancia_procesos' = 'on'.
 // Auth: CRON_SECRET en body.secret, o JWT @leabogados.cl. body.dryRun = no envía ni marca avisos.
 import { SMTPClient } from "../_shared/envios.ts";
@@ -45,7 +46,8 @@ Deno.serve(async (req) => {
     if (!u?.email || !esDelDominio(u.email)) return json({ error: "No autorizado" }, 403);
   }
   const dryRun = !!body.dryRun;
-  const MAX = 6;   // reintentos antes de avisar
+  const MAX = 6;           // reintentos automáticos como máximo (uno por revisión)
+  const AVISAR_TRAS = 2;   // revisiones seguidas en falla antes de avisar: con dos revisiones al día, 6 eran unos 3 días y una falla que sanaba antes nunca avisaba
   try {
     // deno-lint-ignore no-explicit-any
     const procs: any[] = await rest("rpc/procesos_estado", { method: "POST", body: "{}" });
@@ -72,9 +74,9 @@ Deno.serve(async (req) => {
       if (p.reintentable && st.n <= MAX && !dryRun) {
         try { reintento = await rest("rpc/reintentar_proceso", { method: "POST", body: JSON.stringify({ p_job: p.jobname }) }); } catch (e) { reintento = "error: " + String((e as Error).message || e).slice(0, 120); }
       }
-      if (st.n > MAX && !st.avisado) avisar.push({ ...p, st });
+      if (st.n >= AVISAR_TRAS && !st.avisado) avisar.push({ ...p, st });
       // Bitácora resumida: una línea al detectar la falla (no una por reintento); otra al resolverse o al avisar.
-      if (st.n === 1 && !dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_detectada", table_name: "procesos_corridas", detail: JSON.stringify({ title: `${p.nombre}: ${st.motivo}`, name: p.reintentable ? "se reintenta cada hora" : "no se reintenta solo (envía correos)" }) }) }).catch(() => null);
+      if (st.n === 1 && !dryRun) await rest("activity_log", { method: "POST", body: JSON.stringify({ user_email: "vigilancia-procesos", action: "procesos.falla_detectada", table_name: "procesos_corridas", detail: JSON.stringify({ title: `${p.nombre}: ${st.motivo}`, name: p.reintentable ? "se reintenta en cada revisión" : "no se reintenta solo (envía correos)" }) }) }).catch(() => null);
       await guardar(p.jobname, st);
       detalle.push({ job: p.jobname, intento: st.n, reintentable: !!p.reintentable, reintento });
     }
@@ -98,9 +100,9 @@ Deno.serve(async (req) => {
     const para = String((cfg || []).find((c) => c.key === "vigilancia_avisar_a")?.value || "").split(/[,;\s]+/).map((x) => x.trim().toLowerCase()).filter((e) => e && dom && e.endsWith("@" + dom));
     if (dryRun || !encendido || !para.length) return json({ ...resumen, enviado: false, motivo: dryRun ? "prueba" : !encendido ? "apagado" : "sin destinatarios" });
 
-    const filas = avisar.map((p) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#003C50;font-weight:bold">${esc(p.nombre)}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#3D3D3D">${esc(p.st.motivo)}${p.st.detalle ? `<div style="font-size:11px;color:#537281;margin-top:3px">${esc(p.st.detalle)}</div>` : ""}<div style="font-size:11px;color:#537281;margin-top:3px">${p.reintentable ? `${MAX} reintentos sin resultado` : "No se reintenta solo (envía correos)"} · en falla desde ${esc(fechaCL(p.st.desde))}</div></td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:12px;color:#537281;white-space:nowrap;text-align:right">Última: ${esc(fechaCL(p.ultima))}<br>Última correcta: ${esc(fechaCL(p.ultima_ok))}</td></tr>`).join("");
+    const filas = avisar.map((p) => `<tr><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#003C50;font-weight:bold">${esc(p.nombre)}</td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:13px;color:#3D3D3D">${esc(p.st.motivo)}${p.st.detalle ? `<div style="font-size:11px;color:#537281;margin-top:3px">${esc(p.st.detalle)}</div>` : ""}<div style="font-size:11px;color:#537281;margin-top:3px">${p.reintentable ? `${p.st.n} reintentos sin resultado` : "No se reintenta solo (envía correos)"} · en falla desde ${esc(fechaCL(p.st.desde))}</div></td><td style="padding:8px 10px;border-top:1px solid #E4E8EB;font-size:12px;color:#537281;white-space:nowrap;text-align:right">Última: ${esc(fechaCL(p.ultima))}<br>Última correcta: ${esc(fechaCL(p.ultima_ok))}</td></tr>`).join("");
     const mm = await rest("miembros?select=email,nombre").catch(() => []);
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(para, mm))}:</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${avisar.length === 1 ? "Un proceso automático de la app sigue con falla después de 6 horas:" : `${avisar.length} procesos automáticos de la app siguen con falla después de 6 horas:`}</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Detalle en Oficina › Procesos automáticos.</p></div></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;border:1px solid #e4e8eb;padding:20px"><p style="font-size:14px;color:#3D3D3D;margin:0 0 12px">${esc(holaEquipo(para, mm))}:</p><p style="font-size:14px;color:#3D3D3D;margin:0 0 14px">${avisar.length === 1 ? "Un proceso automático de la app sigue con falla:" : `${avisar.length} procesos automáticos de la app siguen con falla:`}</p><table style="width:100%;border-collapse:collapse">${filas}</table><p style="font-size:12px;color:#537281;margin:16px 0 0">Detalle en Oficina › Procesos automáticos.</p></div></body></html>`;
     const asunto = avisar.length === 1 ? `Proceso automatico con falla: ${avisar[0].nombre}` : `${avisar.length} procesos automaticos con falla`;
     const client = new SMTPClient({ connection: { hostname: "smtp.gmail.com", port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_PASS } } });
     await client.send({ from: `Oficina <${GMAIL_USER}>`, to: para, subject: toAscii(asunto), content: avisar.map((p) => `${p.nombre}: ${p.st.motivo}`).join("\n"), html: html.replace(/[ \t]+$/gm, "") });
