@@ -12,7 +12,7 @@ import { normRut as crNormRut } from '../cartola.js'
 import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { brutoDeLiquido, pagosConBoleta, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_shared/facturacionReglas.js'
-import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
+import { fgCliente, repartoFondos, rendicionDeGasto } from '../../supabase/functions/_shared/gastosReglas.js'
 import { pagoDeGasto } from '../../supabase/functions/_shared/gastosClienteExcel.js'
 import { otNoValida } from '../../supabase/functions/_shared/notariaReglas.js'
 import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
@@ -1552,15 +1552,15 @@ export { repartoFondos }
 
 // trabajo (= proyecto): si viene, fondos, gastos y rendiciones previas se acotan a ese proyecto (rendición por trabajo).
 // fondoId: rendición de UN fondo → el fondo y los gastos que le tocan en el reparto (repartoFondos).
-export function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null, trabajo=null, fondoId=null){
+export function rendicionFondo(expenses, clientId, scopeEntId=null, excludeRenderId=null, trabajo=null, fondoId=null, rendiciones=null){
   const _b=fondoId?repartoFondos(expenses, clientId).fondos.find(x=>String(x.f.id)===String(fondoId)):null
   const movs=fondoId ? (_b?[_b.f,..._b.gastos]:[]) : (expenses||[]).filter(e=>e.client_id===clientId && cuentaEnSaldo(e) && (!scopeEntId || e.entity_id===scopeEntId || !e.entity_id) && (trabajo==null || (e.project||'')===trabajo))
   const fondos=movs.filter(e=>e.type==='fondo').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
   const totFondos=fondos.reduce((a,e)=>a+(e.amount||0),0)
   const descuentan=movs.filter(e=>!(e.type==='gasto'&&e.no_descuenta_saldo))
   // excludeRenderId: la rendición que se está editando no cuenta como «ya rendido» (si no, sus gastos se restarían dos veces).
-  const rendido=descuentan.filter(e=>e.type==='gasto'&&e.client_rendered_at&&!(excludeRenderId&&String(e.client_render_id)===String(excludeRenderId))).reduce((a,e)=>a+(e.amount||0),0)
-  const {previas, rendidoAntes}=rendicionesPreviasDe(descuentan, excludeRenderId)
+  const rendido=descuentan.filter(e=>e.type==='gasto'&&e.client_rendered_at&&!rendicionDeGasto(e,rendiciones)?.borrador&&!(excludeRenderId&&String(e.client_render_id)===String(excludeRenderId))).reduce((a,e)=>a+(e.amount||0),0)
+  const {previas, rendidoAntes}=rendicionesPreviasDe(descuentan, excludeRenderId, rendiciones)
   return {fondos, totFondos, rendido, saldo:totFondos-rendido, previas, rendidoAntes}
 }
 
@@ -1627,9 +1627,10 @@ export const fondoDeRend = (r, expenses, clientEntities) => { const det=gastosDe
 
 // Rendiciones ANTERIORES (para el desglose "Resumen del fondo"): agrupa gastos ya rendidos por rendición,
 // excluyendo la actual. Recibe movimientos ya acotados a la RS. Devuelve [{total,fecha}] y la suma.
-export function rendicionesPreviasDe(scopedMovs, excludeRenderId){
+// Un gasto en un borrador sin enviar no cuenta como rendido antes (rendiciones = las cargadas; sin ellas se respeta la marca).
+export function rendicionesPreviasDe(scopedMovs, excludeRenderId, rendiciones=null){
   const grupos={}
-  ;(scopedMovs||[]).forEach(e=>{ if(e.type==='gasto'&&e.client_rendered_at&&e.client_render_id&&e.client_render_id!==excludeRenderId){ const g=grupos[e.client_render_id]||(grupos[e.client_render_id]={total:0,fecha:e.client_rendered_at}); g.total+=(e.amount||0); if((e.client_rendered_at||'')<(g.fecha||'')) g.fecha=e.client_rendered_at } })
+  ;(scopedMovs||[]).forEach(e=>{ if(e.type==='gasto'&&e.client_rendered_at&&e.client_render_id&&e.client_render_id!==excludeRenderId&&!rendicionDeGasto(e,rendiciones)?.borrador){ const g=grupos[e.client_render_id]||(grupos[e.client_render_id]={total:0,fecha:e.client_rendered_at}); g.total+=(e.amount||0); if((e.client_rendered_at||'')<(g.fecha||'')) g.fecha=e.client_rendered_at } })
   const previas=Object.values(grupos).sort((a,b)=>(a.fecha||'')>(b.fecha||'')?1:-1)
   return {previas, rendidoAntes:previas.reduce((a,g)=>a+g.total,0)}
 }
@@ -1689,7 +1690,7 @@ export function firmaCorreoHtml(f, logoSrc, lang){
   return `<table cellpadding="0" cellspacing="0" style="margin-top:22px;max-width:100%"><tbody><tr><td style="vertical-align:middle;padding-right:16px"><img src="${logoSrc}" alt="${BRAND.nombre}" width="150" style="display:block;width:150px;max-width:100%;height:auto;border:0;outline:none"/></td><td style="vertical-align:middle;border-left:1px solid #B9C2C8;padding-left:16px">${f.nombre?`<div style="font-size:13px;font-weight:700;color:${TXT};text-transform:uppercase;letter-spacing:.3px;line-height:1.35">${f.nombre}</div>`:''}${cargo?`<div style="font-size:11px;color:${MUTED};line-height:1.5">${cargo}</div>`:''}${f.telefono?`<div style="font-size:11px;color:${MUTED};margin-top:10px;line-height:1.5">${f.telefono}</div>`:''}<div style="font-size:11px;color:${MUTED};line-height:1.5">${BRAND.direccionFirma}</div><div style="font-size:11px;color:${MUTED};line-height:1.5">${BRAND.ciudad} - Chile</div><a href="https://${BRAND.web}" style="font-size:11px;color:#5E8088;text-decoration:none;display:inline-block;line-height:1.5">www.${BRAND.web}</a></td></tr></tbody></table>`
 }
 
-export function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es'){
+export function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet, lang='es', rendiciones=null){
   const gastos = gastosDeRend(r, expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))).map(e=>attachSet?({...e,respaldo:attachSet.has(String(e.id))}):e)
   const _entsC = (clientEntities||[]).filter(x=>x.client_id===(client&&client.id))
   const _gEnt = (gastos.find(e=>e.entity_id)||{}).entity_id
@@ -1697,7 +1698,7 @@ export function rendicionPdfHtml(r, client, expenses, clientEntities, attachSet,
   const entId = _entsC.length>1 ? _gEnt : null
   const ent = _entsC.length===1 ? _entsC[0] : (_gEnt ? (clientEntities||[]).find(x=>x.id===_gEnt) : null)
   const trab = r.por_trabajo ? (r.project||'') : null
-  const {fondos, totFondos, previas, rendidoAntes} = rendicionFondo(expenses, client&&client.id, entId, r.id, trab, r.fondo_id||null)
+  const {fondos, totFondos, previas, rendidoAntes} = rendicionFondo(expenses, client&&client.id, entId, r.id, trab, r.fondo_id||null, rendiciones)
   return rendicionDocHtml({
     razon: (ent&&ent.name) || (client&&client.name) || '—',
     rut: (ent&&ent.rut) || (client&&client.rut) || '',

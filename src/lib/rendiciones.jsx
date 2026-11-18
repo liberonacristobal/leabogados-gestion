@@ -74,7 +74,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const [addSinFondo,setAddSinFondo] = useState(true)   // los gastos sin fondo entran por defecto: es lo que falta pedir al cliente
   const enFondo = !!fondoSel && modoR==='fondo' && (esEdicion?!!editRend?.fondo_id:verModoFondo)
   const fondoObj = enFondo ? ((expenses||[]).find(e=>String(e.id)===String(fondoSel))||null) : null
-  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, esEdicion?editRend.id:null, null, enFondo?fondoSel:null)
+  const _fondoRend = rendicionFondo(expenses, client.id, singleRS?null:selEnt, esEdicion?editRend.id:null, null, enFondo?fondoSel:null, rendiciones)
   const fondosDisp = _fondoRend.totFondos
   const saldoActual = _fondoRend.saldo
   // Correlativo por cliente: se cuenta solo sobre las rendiciones ENVIADAS (correlativo grabado). Tentativo = max + 1.
@@ -239,7 +239,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   useEffect(()=>{ if(DEMO) return; let on=true; supabase.from('learnings').select('value').eq('kind','rendicion_modo').eq('key',String(client.id)).order('updated_at',{ascending:false}).limit(1).maybeSingle().then(({data})=>{ if(on&&['junto','sep1','sepN'].includes(data?.value)) setModo(data.value) },()=>{}); return ()=>{on=false} },[client.id])
   const elegirModo = m => { setModo(m); if(!DEMO) setLearningKV('rendicion_modo',String(client.id),m).catch(()=>{}) }
   const modoEf = puedeSeparar ? modo : 'junto'
-  const cifrasT = t => { const f=rendicionFondo(expenses, client.id, scopeEnt, esEdicion?editRend.id:null, t); const gs=gastosSel.filter(e=>keyT({...e,...proyPatch(e)})===t); const tg=gs.reduce((a,e)=>a+(e.amount||0),0); return {t, f, gs, tg, saldo:f.totFondos-f.rendido-tg} }
+  const cifrasT = t => { const f=rendicionFondo(expenses, client.id, scopeEnt, esEdicion?editRend.id:null, t, null, rendiciones); const gs=gastosSel.filter(e=>keyT({...e,...proyPatch(e)})===t); const tg=gs.reduce((a,e)=>a+(e.amount||0),0); return {t, f, gs, tg, saldo:f.totFondos-f.rendido-tg} }
   const porT = (multiT||porTrabajoUno) ? trabajosSel.map(cifrasT) : []
   const periodoDe = gs => { const _fs=gs.map(e=>e.date).filter(Boolean).sort(); const _ma=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const _di=d=>fmtFechaDMY(d); return _fs.length ? (_ma(_fs[0])===_ma(_fs[_fs.length-1]) ? _ma(_fs[0]) : `${_di(_fs[0])} – ${_di(_fs[_fs.length-1])}`) : new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}) }
   // Una sola forma de crear la rendición (borrador, vista previa del correo, separadas): registra la fila, marca los gastos y la devuelve con sus gastos.
@@ -825,7 +825,7 @@ export function DevolucionEmailModal({client, rend, rendN, amount, fecha, user, 
   return asPage ? _page : (<Modal fullscreen fsMaxWidth={isDesktop?960:720} title={<><span style={{color:C.accent}}>Enviar devolución</span>{client&&<><span style={{color:C.textSoft,fontWeight:400,margin:'0 7px'}}>|</span><span style={{color:C.muted}}>{client.name}</span></>}</>} onClose={onClose} closeOnBackdrop={false}>{_body}</Modal>)
 }
 
-export function RendicionEmailModal({r, client, user, expenses, clientEntities=[], sales=[], setExpenses=null, onSent, onClose, onPatch, onNext, asPage=false}) {
+export function RendicionEmailModal({r, client, user, expenses, rendiciones=[], clientEntities=[], sales=[], setExpenses=null, onSent, onClose, onPatch, onNext, asPage=false}) {
   const isDesktop = useIsDesktop()
   // Varias rendiciones en un mismo correo (separadas por trabajo): r es la primera y r._hermanas las demás.
   const _todas = [r, ...((r&&r._hermanas)||[])]
@@ -850,7 +850,7 @@ export function RendicionEmailModal({r, client, user, expenses, clientEntities=[
   // 2+ proyectos: el correo los nombra y explica la imputación de saldos (misma fuente que el PDF).
   const _grp = (_trab!=null||r.fondo_id) ? null : rendGruposProyecto({expenses, clientId:r.client_id, scopeEntId:entId, gastos:det, excludeRenderId:r.id, clientEntities})
   // Saldo de cada rendición del correo (por trabajo cuando corresponde; en la vista previa se descuentan sus gastos).
-  const saldoDeR = x => { const g=gastosDeRend(x, expenses); const f=rendicionFondo(expenses, x.client_id, entId, null, x.por_trabajo?(x.project||''):null, x.fondo_id||null); const sg=g.reduce((a,e)=>a+(e.amount||0),0); return x._virtual ? f.saldo-sg : f.saldo }
+  const saldoDeR = x => { const g=gastosDeRend(x, expenses); const f=rendicionFondo(expenses, x.client_id, entId, null, x.por_trabajo?(x.project||''):null, x.fondo_id||null, rendiciones); const sg=g.reduce((a,e)=>a+(e.amount||0),0); return x._virtual ? f.saldo-sg : f.saldo }
   const _saldosM = _multi ? _todas.map(x=>({x, saldo:saldoDeR(x), trabajo:x.project||'sin trabajo', corr:x.correlativo})) : null
   // Trabajos con saldos de distinto signo en el mismo correo: por defecto se pide el NETO (el saldo a favor de uno abona al que debe y al
   // enviar queda registrada la imputación); «Devolver el saldo a favor» cobra lo adeudado y devuelve aparte. Se recuerda por cliente.
@@ -1051,7 +1051,7 @@ Saludos cordiales,`
   }
   const verPDF = (x=r) => {
     const w=window.open('','_blank'); if(!w){ appAlert('Permite las ventanas emergentes para ver el PDF.'); return }
-    w.document.write(rendicionPdfHtml(x, client, expenses, clientEntities, attachSet, lang))   // diseño rico A (mismo que "Ver PDF" del historial)
+    w.document.write(rendicionPdfHtml(x, client, expenses, clientEntities, attachSet, lang, rendiciones))   // diseño rico A (mismo que "Ver PDF" del historial)
     w.document.close()
   }
   // La vista previa no registra nada: recién al guardar o enviar se crea(n) la(s) rendición(es) y se marcan sus gastos.
@@ -1291,7 +1291,7 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
   const scopeEntId = entsClient.length>1 ? gEnt : null
   const ent = entsClient.length===1 ? entsClient[0] : (gEnt ? (clientEntities||[]).find(x=>x.id===gEnt) : null)
   const trab = r.por_trabajo ? (r.project||'') : null
-  const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id, trab, r.fondo_id||null)
+  const { fondos, totFondos, previas, rendidoAntes } = rendicionFondo(expenses, client&&client.id, scopeEntId, r.id, trab, r.fondo_id||null, rendiciones)
   const grp = (trab!=null||r.fondo_id) ? null : rendGruposProyecto({expenses, clientId:client&&client.id, scopeEntId, gastos, excludeRenderId:r.id, clientEntities})
   const razon = (ent&&ent.name) || (client&&client.name) || '—'
   const rut = (ent&&ent.rut) || (client&&client.rut) || ''

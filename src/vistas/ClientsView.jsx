@@ -77,7 +77,7 @@ export function ClientFicha({pend=null,onPendGo=null,setExpenses=null,onAsociarT
   const Chev = ({mt=0}) => <span className="lf-chev" aria-hidden="true" style={{fontSize:18,lineHeight:1,flexShrink:0,marginLeft:6,marginTop:mt,fontWeight:400}}><Gl n='chevron'/></span>
 
   // Correo de rendición = PÁGINA (igual que en Gastos): "‹ cliente" vuelve a la ficha. Va después de todos los hooks.
-  if(emailRend) return <FlujoPagina origen={client.name} titulo='Enviar rendición' ctx={emailRend.correlativo?`N° ${emailRend.correlativo}`:null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal asPage r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={onRendicionSent} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)}/></FlujoPagina>
+  if(emailRend) return <FlujoPagina origen={client.name} titulo='Enviar rendición' ctx={emailRend.correlativo?`N° ${emailRend.correlativo}`:null} onBack={()=>setEmailRend(null)} maxW={1180}><RendicionEmailModal rendiciones={rendiciones} asPage r={emailRend} client={client} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={onRendicionSent} onNext={x=>setEmailRend(x)} onClose={()=>setEmailRend(null)}/></FlujoPagina>
 
   return (
     <div style={{paddingBottom:100}}>
@@ -146,7 +146,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
     try {
       const now = new Date().toISOString()
       let pdf = r.pdf_html
-      if(!pdf){ try{ const cl=clients.find(c=>c.id===r.client_id); pdf=rendicionPdfHtml(r,cl,expenses,clientEntities) }catch(_){} }
+      if(!pdf){ try{ const cl=clients.find(c=>c.id===r.client_id); pdf=rendicionPdfHtml(r,cl,expenses,clientEntities,undefined,'es',rendiciones) }catch(_){} }
       const {error:ue}=await supabase.from('expenses').update({client_rendered_at:null,client_render_id:null}).eq('client_render_id',r.id)
       if(ue) throw ue   // si no se liberan los gastos, NO borrar la rendici\u00f3n (quedar\u00edan hu\u00e9rfanos)
       const reembolsos=await anularReembolsoDeRendicion(r, billing)
@@ -276,7 +276,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   if(rendicionClient){ const cerrar=()=>{setRendicionClient(null);setRendEdit(null)}
     return <FlujoPagina origen={rendicionClient.name||'Clientes'} titulo={rendEdit?'Editar rendición':'Rendición'} onBack={cerrar} maxW={1180}><RendicionModal client={rendicionClient} expenses={expenses} clientEntities={clientEntities} sales={sales} rendiciones={rendiciones} onClose={()=>{setRendicionClient(null);setRendEdit(null)}} setExpenses={setExpenses} setRendiciones={setRendiciones} billing={billing} setBilling={setBilling} editRend={rendEdit} onRendicionComplete={onRendicionComplete||((r)=>setRendiciones(p=>[r,...p]))} onEnviar={r=>{setRendicionClient(null);setRendEdit(null);setEmailRendCV(r)}} asPage/></FlujoPagina> }
   if(emailRendCV){ const cli=clients.find(c=>String(c.id)===String(emailRendCV.client_id))
-    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
+    return <FlujoPagina origen={cli?.name||'Clientes'} titulo='Enviar rendición' ctx={emailRendCV.correlativo?`N° ${emailRendCV.correlativo}`:null} onBack={()=>setEmailRendCV(null)} maxW={1180}><RendicionEmailModal rendiciones={rendiciones} asPage r={emailRendCV} client={cli} user={user} expenses={expenses} clientEntities={clientEntities} sales={sales} setExpenses={setExpenses} onSent={(id,at,corr)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,sent_at:at,correlativo:corr??x.correlativo}:x))} onPatch={(id,patch)=>setRendiciones(p=>p.map(x=>x.id===id?{...x,...patch}:x))} onNext={x=>setEmailRendCV(x)} onClose={()=>setEmailRendCV(null)}/></FlujoPagina> }
 
   // Lista: UNA fila por cliente con los mismos datos en escritorio y móvil (responsable, tareas, por cobrar, fondos).
   const esEmpresaC = c => /\b(spa|s\.?p\.?a|ltda|limitada|s\.?a|sociedad|inversiones|comercial|constructora|consultores|holding|cia|cía|asociados|partners)\b/i.test(c.name||'')||/empresa|corp|sociedad/i.test(c.type||'')
