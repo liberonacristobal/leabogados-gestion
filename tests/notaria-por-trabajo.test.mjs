@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { disponibleNotaria, notariaPendientes, otNoValida } from '../supabase/functions/_shared/notariaReglas.js'
+import { disponibleNotaria, notariaPendientes, otNoValida, revisionCargaNotaria } from '../supabase/functions/_shared/notariaReglas.js'
 
 const fondo = (id, amount, project, date = '2026-09-01') => ({ id, client_id: 'c', type: 'fondo', amount, project, date })
 const ot = (id, amount, project) => ({ id, client_id: 'c', type: 'gasto', category: 'Notaria', ot_number: String(400000 + id), amount, project, date: '2026-10-01' })
@@ -34,4 +34,20 @@ test('OT de $1 = OT no válida (repertorio no usado o anulado): no es deuda ni p
   assert.equal(otNoValida(g[0]), true)
   assert.equal(otNoValida(g[2]), false)
   assert.deepEqual(notariaPendientes(g).map(e => e.id), [3])
+})
+
+test('revisión de una carga de la notaría: sin cliente, sin trabajo y por confirmar; las OT de $1 y las personales no cuentan', () => {
+  const g = [
+    { id: 1, amount: 30000, client_id: null, personal_de: null, project: null },        // sin cliente
+    { id: 2, amount: 90000, client_id: null, personal_de: 'Martín', project: null },    // personal: no se identifica
+    { id: 3, amount: 20000, client_id: 'c', project: '' },                              // sin trabajo
+    { id: 4, amount: 50000, client_id: 'c', project: 'Trabajo A' },                     // en orden
+    { id: 5, amount: 1, client_id: null, personal_de: null, project: null },            // OT no válida
+  ]
+  const r = revisionCargaNotaria(g, { cargadas: 4, noNuestras: [{ monto: 20000 }, { monto: 1 }] })
+  assert.deepEqual(r.sinCliente, { n: 1, m: 30000 })
+  assert.deepEqual(r.sinTrabajo, { n: 1, m: 20000 })
+  assert.deepEqual(r.porConfirmar, { n: 1, m: 20000 })
+  assert.equal(r.porRevisar, 3)
+  assert.equal(r.cargadas, 4)
 })

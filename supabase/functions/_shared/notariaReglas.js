@@ -120,3 +120,22 @@ export function notariaPorLiquidar(expenses = [], { esOficina = /** @type {(cid:
   const suma = xs => xs.reduce((a, e) => a + (Number(e.amount) || 0), 0)
   return { pagables, esperan, sinCliente, montoPagables: suma(pagables), montoEsperan: suma(esperan), montoSinCliente: suma(sinCliente) }
 }
+
+/**
+ * Qué debe revisar quien carga una liquidación de la notaría, apenas se carga. Tres partidas, cada una con su acción:
+ *  sinCliente (OT sin cliente ni miembro: hay que identificarla) · sinTrabajo (OT con cliente sin trabajo: sin él no se paga con el fondo del cliente) ·
+ *  porConfirmar (OT que la notaría cobra y marcamos «no nuestra»: se confirma con la notaría). Las OT de $1 son OT no válidas y no cuentan.
+ * `gastos` = las OT que creó la carga (expenses con su bulk_import_id); `resumen` = bulk_imports.resumen de la carga.
+ * @param {any[]} gastos
+ * @param {{cargadas?:number, noNuestras?:{monto?:number}[]}} [resumen]
+ */
+export function revisionCargaNotaria(gastos = [], resumen = {}) {
+  const vivas = (gastos || []).filter(e => e && !e.deleted_at && !otNoValida(e))
+  const suma = xs => xs.reduce((a, e) => a + (Number(e.amount ?? e.monto) || 0), 0)
+  const sinCliente = vivas.filter(e => !e.client_id && !e.personal_de)
+  const sinTrabajo = vivas.filter(e => e.client_id && !String(e.project || '').trim())
+  const noNuestras = ((resumen && resumen.noNuestras) || []).filter(x => (Number(x.monto) || 0) > OT_NO_VALIDA_MONTO)
+  const parte = xs => ({ n: xs.length, m: suma(xs) })
+  const r = { cargadas: Number(resumen && resumen.cargadas) || vivas.length, monto: suma(vivas), sinCliente: parte(sinCliente), sinTrabajo: parte(sinTrabajo), porConfirmar: parte(noNuestras) }
+  return { ...r, porRevisar: r.sinCliente.n + r.sinTrabajo.n + r.porConfirmar.n }
+}

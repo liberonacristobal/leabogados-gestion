@@ -10,6 +10,7 @@ import { esDelDominio } from "../_shared/estudio.ts";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cargarEquipo } from "../_shared/equipo.js";
+import { holaEquipo } from "../_shared/correoEquipo.js";
 
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
@@ -19,6 +20,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 // Destinatarios: quien carga la notaría (learnings config notaria_alerta_a) + los admins del estudio.
 let DEST: string[] = [];
+// deno-lint-ignore no-explicit-any
+let MIEMBROS: any[] = [];
 const DIAS_ALARMA = 3;
 
 const toAscii = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[–—]/g, "-").replace(/[^\x20-\x7E]/g, "");
@@ -35,7 +38,7 @@ async function sendMail(to: string[], subject: string, html: string) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, content-type" } });
-  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); const r = await fetch(`${SUPABASE_URL}/rest/v1/learnings?select=value&kind=eq.config&key=eq.notaria_alerta_a`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }).then((x) => x.ok ? x.json() : []).catch(() => []); const extra = String(r?.[0]?.value || "").split(/[,;\s]+/).filter((x: string) => x.includes("@")).map((x: string) => x.toLowerCase()); DEST = [...new Set([...extra, ...eq.admins])]; }   // equipo del estudio (miembros)
+  { const eq = await cargarEquipo(SUPABASE_URL, SERVICE_KEY); const r = await fetch(`${SUPABASE_URL}/rest/v1/learnings?select=value&kind=eq.config&key=eq.notaria_alerta_a`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }).then((x) => x.ok ? x.json() : []).catch(() => []); const extra = String(r?.[0]?.value || "").split(/[,;\s]+/).filter((x: string) => x.includes("@")).map((x: string) => x.toLowerCase()); DEST = [...new Set([...extra, ...eq.admins])]; MIEMBROS = eq.miembros || []; }   // equipo del estudio (miembros)
   try {
     const body = await req.json().catch(() => ({}));
     const sb = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -73,7 +76,7 @@ serve(async (req) => {
 
     const total = pend.reduce((a: number, e: any) => a + (Number(e.amount) || 0), 0);
     const filas = pend.map((e: any) => `<tr><td style="padding:6px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(e.ot_number || "s/OT")}</td><td style="padding:6px 8px;font-size:12px;color:#3D3D3D">${esc((e.concept || "—").slice(0, 60))}</td><td style="padding:6px 0;font-size:11px;color:#A32D2D;font-weight:600;white-space:nowrap;text-align:center">${diasDe(e.created_at)} d</td><td style="padding:6px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">${fmt(e.amount)}</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:18px 26px"><div style="color:#fff;font-size:15px;font-weight:700">Notaría · OT por identificar</div><div style="color:#99ABB4;font-size:12px;margin-top:2px">${pend.length} OT sin cliente hace más de 3 días</div></div><div style="padding:24px 26px"><div style="font-size:13px;color:#666;margin:0 0 14px">OT de notaría <b>sin cliente</b> asignado: no se están cobrando.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:center">Días</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="3" style="padding:7px 0;font-size:12px;font-weight:bold">Total sin identificar</td><td style="padding:7px 0;font-size:12px;font-weight:bold;text-align:right">${fmt(total)}</td></tr></table><div style="font-size:12px;color:#666;margin:18px 0 0">Resuélvelas en la app: <b>Gastos › Notaría › Deuda › Sin cliente</b>.</div></div><div style="padding:14px 26px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl · aviso automático</div></div></body></html>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:18px 26px"><div style="color:#fff;font-size:15px;font-weight:700">Notaría: OT por identificar</div><div style="color:#99ABB4;font-size:12px;margin-top:2px">${pend.length} OT sin cliente hace más de 3 días</div></div><div style="padding:24px 26px"><div style="font-size:15px;color:#3D3D3D;font-weight:700;margin:0 0 10px">${esc(holaEquipo(testTo ? [testTo] : DEST, MIEMBROS))}</div><div style="font-size:13px;color:#666;margin:0 0 14px">OT de notaría <b>sin cliente</b> asignado: no se están cobrando.</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:center">Días</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}<tr style="border-top:1.5px solid #537281"><td colspan="3" style="padding:7px 0;font-size:12px;font-weight:bold">Total sin identificar</td><td style="padding:7px 0;font-size:12px;font-weight:bold;text-align:right">${fmt(total)}</td></tr></table><div style="font-size:12px;color:#666;margin:18px 0 0">Resuélvelas en la app: <b>Gastos › Notaría › Deuda › Sin cliente</b>.</div></div><div style="padding:14px 26px;border-top:1px solid #eee;font-size:11px;color:#999">gestion.leabogados.cl · aviso automático</div></div></body></html>`;
     const subject = `Notaría: ${pend.length} OT por identificar (más de 3 días)`;
 
     const to = testTo ? [testTo] : DEST;

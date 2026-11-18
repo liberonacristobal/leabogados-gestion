@@ -1,4 +1,5 @@
 import { SMTPClient } from "../_shared/envios.ts";
+import { revisionCargaNotaria } from "../_shared/notariaReglas.js";
 
 // notaria-pedir-liquidacion — recordatorio para pedir a la notaría su liquidación (días de config, hoy 15 y 30 de cada mes).
 // Si el día cae sábado, domingo o feriado (tabla `feriados`), sale el DÍA HÁBIL SIGUIENTE. Corre por cron cada día hábil;
@@ -9,6 +10,8 @@ import { SMTPClient } from "../_shared/envios.ts";
 // (Martina y Martín). Bitácora: notaria.pedido_liquidacion (envío, con message_id para el hilo), .._fallido, .._prueba,
 // notaria.pedido_sin_respuesta (3 días hábiles sin respuesta → tarea a quien va en "seguimiento_a"), y
 // notaria.seguimiento_liquidacion (body.seguimiento, lo envía una persona desde la app, en el mismo hilo).
+// Cada vez que se CARGA una liquidación (bulk_imports de notaría) avisa a quien revisa (seguimiento_a) con lo que hay por revisar o confirmar
+// (cron cada 20 min, body.avisoCarga; una vez por carga; solo cargas posteriores a learnings config notaria_aviso_carga_desde).
 // La respuesta de la notaría la registra agente-correo (notaria.respuesta_liquidacion). Logo: el publicado en APP_URL.
 // Auth: cron con secreto. JWT @dominio = simulación. body.dryRun=true arma sin enviar; body.testTo=correo prueba a uno;
 // body.fecha='YYYY-MM-DD' simula el día (para probar el corrimiento a día hábil).
@@ -151,6 +154,43 @@ Deno.serve(async (req) => {
         note: `Llegó la liquidación${av.nombre ? ` «${av.nombre}»` : ""}. En Gastos › Notaría › Pedidos, toca «Revisar liquidación».`, estudio_id: "lea" });
       await log("notaria.aviso_liquidacion", { slot: av.slot, gmail_id: av.gmail_id, title: `Aviso a ${nombres} · tarea a ${quienRev}`, to: para });
       return json({ ok: true, enviado: true, para });
+    }
+    // (0b) Se cargó una liquidación: aviso SIEMPRE a quien revisa, una vez por carga, con lo que hay por revisar o confirmar.
+    if (body.avisoCarga && esCron) {
+      const clp = (n: number) => "$" + Math.round(n || 0).toLocaleString("es-CL");
+      const desdeCfg = String((await sb("learnings?select=value&kind=eq.config&key=eq.notaria_aviso_carga_desde&limit=1"))?.[0]?.value || "2999-01-01");
+      // deno-lint-ignore no-explicit-any
+      const cargas = ((await sb(`bulk_imports?select=id,created_at,filename,status,resumen&status=eq.active&created_at=gte.${encodeURIComponent(desdeCfg)}&order=created_at.asc`)) || []).filter((b: any) => b.resumen && b.resumen.notaria === true);
+      const quienRev = String(cfg.seguimiento_a || "Martina");
+      const mm = await sb(`miembros?select=email,nombre&nombre=ilike.${encodeURIComponent(quienRev)}*&principal=is.true&limit=1`);
+      const para = testTo ? [testTo] : mm?.[0]?.email ? [String(mm[0].email)] : cc;
+      const avisados: unknown[] = [];
+      for (const c of cargas) {
+        if (!testTo) { const ya = await sb(`activity_log?select=id&action=eq.notaria.aviso_carga&detail=like.*${c.id}*&limit=1`); if (ya?.length) continue; }
+        const gastos = await sb(`expenses?select=id,amount,client_id,personal_de,project,deleted_at&bulk_import_id=eq.${c.id}&deleted_at=is.null`);
+        const r = revisionCargaNotaria(gastos, c.resumen);
+        // Fecha de la liquidación = la de la respuesta de la notaría anterior a la carga (hasta 14 días antes); si no hay, la de la carga.
+        const resps = await sb(`activity_log?select=created_at&action=eq.notaria.respuesta_liquidacion&created_at=lte.${encodeURIComponent(c.created_at)}&order=created_at.desc&limit=1`);
+        const fechaLiq = resps?.[0] && (+new Date(c.created_at) - +new Date(resps[0].created_at)) < 14 * 864e5 ? resps[0].created_at : c.created_at;
+        const lineas = [
+          r.sinCliente.n ? `<b>${r.sinCliente.n}</b> sin cliente (${clp(r.sinCliente.m)})` : "",
+          r.sinTrabajo.n ? `<b>${r.sinTrabajo.n}</b> sin trabajo (${clp(r.sinTrabajo.m)})` : "",
+          r.porConfirmar.n ? `<b>${r.porConfirmar.n}</b> por confirmar con la notaría, cobradas y no son nuestras (${clp(r.porConfirmar.m)})` : "",
+        ].filter(Boolean);
+        const html = shell(`<p>Hola ${esc(quienRev)}:</p><p>Se cargó la liquidación de la notaría del ${dmy(String(fechaLiq))}${c.filename ? `, «${esc(String(c.filename))}»` : ""}: ${r.cargadas} OT nuevas por ${clp(r.monto)}.</p>${lineas.length ? `<p style="margin:0 0 6px">OT por revisar o confirmar:</p><ul style="margin:0 0 6px;padding-left:20px">${lineas.map((l) => `<li>${l}</li>`).join("")}</ul>` : "<p>No hay OT por revisar.</p>"}<p style="margin:18px 0"><a href="${APP_URL}" style="display:inline-block;background:#003C50;color:#fff;text-decoration:none;padding:10px 20px;border-radius:18px;font-size:13px;font-weight:bold">Revisar en la app</a></p><p style="margin:0;font-size:12px;color:#888">${esc(nombreEstudio)} · aviso automático</p>`);
+        if (dry && !testTo) { avisados.push({ carga: c.id, para, ...r, html }); continue; }
+        try { await enviar({ to: para, cc: [], subject: `Liquidación de notaría cargada${r.porRevisar ? `, ${r.porRevisar} OT por revisar` : ""}${testTo ? " (prueba)" : ""}`, html }); }
+        catch (e) { if (!testTo) await log("notaria.aviso_carga_fallido", { carga: c.id, title: "El aviso de la carga NO se envió", error: String((e as Error).message || e) }); return json({ ok: false, error: "SMTP: " + String((e as Error).message || e) }, 500); }
+        if (testTo) { avisados.push({ carga: c.id, para, ...r }); break; }
+        if (r.porRevisar) {
+          const ofi = await sb(`clients?select=id&name=ilike.*liberona*escala*&limit=1`);
+          await sbInsert("tasks", { title: "Revisar las OT de la liquidación cargada", who: quienRev, assignees: [quienRev], assigned_by: "App", status: "Activo", client_id: ofi?.[0]?.id || null, due: iso(hoy),
+            note: `Liquidación del ${dmy(String(fechaLiq))}: ${r.porRevisar} OT por revisar o confirmar. En Gastos › Notaría › Deuda.`, estudio_id: "lea" });
+        }
+        await log("notaria.aviso_carga", { carga: c.id, title: `Aviso a ${quienRev} · ${r.cargadas} OT cargadas, ${r.porRevisar} por revisar`, to: para, ...r });
+        avisados.push({ carga: c.id, para, ...r });
+      }
+      return json({ ok: true, dryRun: dry, cargas: cargas.length, avisados: avisados.length, detalle: dry ? avisados : undefined });
     }
     // Prueba del seguimiento (cron + testTo + body.seguimientoPrueba = email de quien firma): mismo correo, solo a testTo.
     if (body.seguimientoPrueba && testTo && esCron) { body.seguimiento = { slot: "__prueba__" }; body.__quien = String(body.seguimientoPrueba); }

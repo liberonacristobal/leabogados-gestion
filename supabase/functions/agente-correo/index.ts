@@ -335,7 +335,8 @@ Deno.serve(async (req) => {
       if (!txtPdf.trim() && !esInterno && /comprobante|transferencia|transfer|pago|abono|dep[oó]sito/i.test(`${asunto} ${cuerpo.slice(0, 600)} ${adj.map((a: { name: string }) => a.name).join(" ")}`))
         for (const a of adj.filter((x: { mime: string; name: string; b64: string }) => x.b64 && IMG_OK.test(mimeDe(x.name, x.mime))).slice(0, 2)) { const ti = await textoImagen(a.b64, mimeDe(a.name, a.mime)); if (ti) { txtPdf += ti + "\n"; deImagen = true; } }
       const ia = esInterno ? null : await clasificarIA({ de: m.from, asunto, cuerpo, adjuntos: adj.map((a: { name: string }) => a.name) });
-      const respPedido = !esInterno && /liquidaci[oó]n de gastos notariales/i.test(asunto);
+      // Respuesta a nuestro pedido: por el asunto del pedido o, si la notaría contesta en un correo nuevo («DEUDA LIBERONA…»), por venir de la notaría con un Excel de deuda o liquidación.
+      const respPedido = !esInterno && (/liquidaci[oó]n de gastos notariales/i.test(asunto) || ((dominiosNotaria.has(dom) || correosNotaria.has(de)) && adj.some((a: { name: string }) => /\.xlsx?$/i.test(a.name || "")) && /deuda|liquidaci[oó]n|saldo pendiente|estado de cuenta/i.test(`${asunto} ${cuerpo.slice(0, 600)}`)));
       const esNotaria = dominiosNotaria.has(dom) || correosNotaria.has(de) || respPedido;
       const tieneXlsx = adj.some((a: { name: string }) => /\.xlsx?$/i.test(a.name || ""));
       // Adjuntos al bucket privado (se abren desde la tarjeta de la bandeja); en prueba no se sube nada.
