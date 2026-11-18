@@ -2590,7 +2590,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       <button type='button' onClick={()=>onIrConciliacion?onIrConciliacion():onAddFondo()} title='Los fondos entran desde la conciliación bancaria' style={b(C.greenBg,C.greenText)}>+ Fondo</button>
       <button type='button' onClick={()=>onAdd(selectedClient)} style={b(C.border,C.accent)}>+ Gasto</button>
       {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(C.surface,C.accent,C.border)}>Rendir <span style={{color:C.textSoft}}>{n}</span></button>}
-      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,flexShrink:0}}><BtnDescarga onClick={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))} titulo='Descargar Excel de gastos' n='sheet'/></span>
+      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,flexShrink:0}}><BtnDescarga onClick={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))} titulo='Descargar Excel de gastos' n='download'/></span>
     </div>)
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
