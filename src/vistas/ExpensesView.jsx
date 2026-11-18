@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { notariaPendientes, disponibleNotaria, revisionCargaNotaria, clienteSugeridoPorGlosa } from '../../supabase/functions/_shared/notariaReglas.js'
 import { sugerenciasDocumento, indiceNombres, rsBonita, repertoriosDoc } from '../../supabase/functions/_shared/notariaDocsReglas.js'
-import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir } from '../../supabase/functions/_shared/gastosReglas.js'
+import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, rendicionDeGasto } from '../../supabase/functions/_shared/gastosReglas.js'
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { AsignarProyectoRS } from '../lib/fichaCliente.jsx'
 import { PaginaSobre, subproyectosCliente, useAprendidosVenta, useIaVenta } from '../lib/compartido.jsx'
@@ -1502,7 +1502,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
               {!isFondo&&e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}{e.subcategory?`: ${e.subcategory}`:''}</span>}
               {!isFondo&&otConSello(e, onEdit?()=>onEdit(e):null)}
               {isFondo&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.normal,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>}
-              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:11,padding:0,background:'none',color:C.textSoft,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)} <span style={{fontSize:10,lineHeight:1,opacity:.7}}><Gl n='x'/></span></button>}
+              {!isFondo&&e.client_rendered_at&&<button onClick={ev=>anularGastoRendido(e,ev)} title='Anular la rendición de este gasto' style={{fontSize:11,padding:0,background:'none',color:C.textSoft,fontWeight:600,border:'none',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>{(()=>{ const rd=rendicionDeGasto(e,rendiciones); return rd&&rd.borrador?<>En borrador de rendición</>:<><CheckMini s={10}/>Rendido {fmtFechaDMY(isoLocal(rd?.fecha||e.client_rendered_at))}</> })()} <span style={{fontSize:10,lineHeight:1,opacity:.7}}><Gl n='x'/></span></button>}
               {/* Detalle al desplegar (la fila queda limpia): pagado a la notaría manual (deshacer) y liquidación de caja chica. */}
               {movExp===e.id&&!isFondo&&e.notaria_liquidado_at&&isAdmin&&!e.notaria_render_id&&<button onClick={ev=>{ev.stopPropagation();marcarNotariaPagado(e,ev)}} title='Marcado a mano como pagado a la notaría · tocar para deshacer' style={{fontSize:11,padding:0,background:'none',color:C.textSoft,fontWeight:600,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Pagada a la notaría {fmtFechaDMY(e.notaria_liquidado_at)} <span style={{opacity:.7}}><Gl n='x'/></span></button>}
               {movExp===e.id&&!isFondo&&e.rendered_at&&<button onClick={ev=>{ev.stopPropagation(); const r=(rendiciones||[]).find(x=>String(x.id)===String(e.render_id)); r?setLiqDetail(r):appAlert('No se encontró la liquidación de este gasto.')}} title='Ver la liquidación de caja chica' style={{fontSize:11,padding:0,background:'none',color:C.accent,fontWeight:600,border:'none',cursor:'pointer',whiteSpace:'nowrap'}}>Liquidación de caja chica <Gl n='chevron'/></button>}
@@ -2594,7 +2594,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       <button type='button' onClick={()=>onAdd(selectedClient)} style={b(C.border,C.accent)}>+ Gasto</button>
       {n>0&&<button type='button' onClick={()=>{setRendEdit(null);setRendEntityIds([]);setRendicionClient(selectedClient)}} title={`Por rendir al cliente: ${n} gasto${n!==1?'s':''} · ${fmt(monto)}`} style={b(C.surface,C.accent,C.border)}>Rendir <span style={{color:C.textSoft}}>{n}</span></button>}
       <button type='button' onClick={()=>setShowCartola(true)} title='Fondos, gastos y pagos con el saldo después de cada movimiento' style={b(C.surface,C.accent,C.border)}>Cartola</button>
-      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,flexShrink:0}}><BtnDescarga onClick={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))} titulo='Descargar Excel de gastos' n='download'/></span>
+      <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,flexShrink:0}}><BtnDescarga onClick={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,rendiciones,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))} titulo='Descargar Excel de gastos' n='download'/></span>
     </div>)
   }
   // Lista de clientes de Gastos (buscador · Por cobrar/A favor/Todos · por abogado · orden). FUENTE ÚNICA: pantalla "Buscar clientes"
@@ -2818,7 +2818,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
             </div>
           )
         })()}
-        {selectedClient&&showCartola&&!esOficina(selectedClient.id)&&<CartolaPagina client={selectedClient} expenses={expenses} onBack={()=>setShowCartola(false)} onVerGasto={id=>{ const e=(expenses||[]).find(x=>String(x.id)===String(id)); setShowCartola(false); if(e&&onEdit) onEdit(e) }} onDescargar={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))}/>}
+        {selectedClient&&showCartola&&!esOficina(selectedClient.id)&&<CartolaPagina client={selectedClient} expenses={expenses} onBack={()=>setShowCartola(false)} onVerGasto={id=>{ const e=(expenses||[]).find(x=>String(x.id)===String(id)); setShowCartola(false); if(e&&onEdit) onEdit(e) }} onDescargar={()=>descargarGastosCliente({cliente:selectedClient,expenses,entidades:selEnts,ventas:sales,rendiciones,pagadoPor:pagadoPorGasto}).catch(err=>appAlert('No se pudo descargar el Excel: '+err.message))}/>}
         {/* Vista cliente seleccionado: KPIs (totales de todas las RS). Oficina = la firma: NO es cliente (sin saldo, sin Rendir/Por pagar) — estado de costos con lente Estructural ⇄ Gestión */}
         {selectedClient&&rb&&(()=>{
           if(esOficina(selectedClient.id)){

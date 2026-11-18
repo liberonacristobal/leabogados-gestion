@@ -2,6 +2,16 @@
 // Funciones puras. Corte de apertura: lo que tiene apertura_id quedó resumido en el «Saldo de apertura» y no suma.
 export const cuentaEnSaldo = e => !e?.apertura_id
 
+// Estado de rendición al cliente de un gasto. Un gasto en un BORRADOR (rendición sin enviar) tiene client_rendered_at, pero NO está rendido:
+// nunca se muestra ni se cuenta como enviado. Rendido = su rendición se envió (o se registró hecha fuera de la app); fecha = la del envío.
+// Sin la rendición a mano (no cargada) se respeta client_rendered_at. Devuelve null si el gasto no está en ninguna rendición.
+export function rendicionDeGasto(e, rendiciones) {
+  if (!e?.client_rendered_at) return null
+  const r = (rendiciones || []).find(x => String(x.id) === String(e.client_render_id))
+  if (r && !r.sent_at) return { borrador: true, fecha: null }
+  return { borrador: false, fecha: (r && r.sent_at) || e.client_rendered_at }
+}
+
 // Fondos − gastos de un cliente. Excluye solo los gastos no_descuenta_saldo (histórico ya saldado fuera de la app).
 export function fgCliente(expenses, clientId) {
   let fondos = 0, gastos = 0

@@ -203,7 +203,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
         </div>
         {effTab==='contacto'&&<ContactoTab client={cl} entities={entities} onSaveFields={onSaveFields}/>}
         {esResp&&effTab==='financiero'&&<FinancieroTab client={cl} clientBilling={clientBilling} entities={entities} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(cl)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(cl)} onConciliar={()=>onConciliar&&onConciliar(cl)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-        {esResp&&effTab==='documentos'&&<EstadoCuentaTab onAsociarTrabajo={onAsociarTrabajo} client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onAjuste={onAjuste}/>}
+        {esResp&&effTab==='documentos'&&<EstadoCuentaTab rendiciones={rendiciones} onAsociarTrabajo={onAsociarTrabajo} client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onAjuste={onAjuste}/>}
       </div>
     )
   }

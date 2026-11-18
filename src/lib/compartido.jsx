@@ -13,6 +13,8 @@ import { tasaBHE } from '../../supabase/functions/_shared/comisionesReglas.js'
 import { brutoDeLiquido, pagosConBoleta, idOficina } from '../../supabase/functions/_shared/impuestosMensuales.js'
 import { ultimoDiaHabilMesEmision as _udhme } from '../../supabase/functions/_shared/facturacionReglas.js'
 import { fgCliente, repartoFondos } from '../../supabase/functions/_shared/gastosReglas.js'
+import { pagoDeGasto } from '../../supabase/functions/_shared/gastosClienteExcel.js'
+import { otNoValida } from '../../supabase/functions/_shared/notariaReglas.js'
 import { periodoDe } from '../../supabase/functions/_shared/correoFacturaTexto.js'
 import { partesMes } from '../../supabase/functions/_shared/correoFacturaPlantilla.js'
 import { FACTURACION_ROOT } from '../../supabase/functions/_shared/pdfOficialReglas.js'
@@ -1510,8 +1512,14 @@ export function estadoSolicitud(r, expenses){
 export const CheckMini = ({s=9,c}) => <svg width={s} height={s} viewBox='0 0 24 24' fill='none' stroke={c||'currentColor'} strokeWidth='3.2' strokeLinecap='round' strokeLinejoin='round' style={{flexShrink:0}} aria-hidden='true'><polyline points='20 6 9 17 4 12'/></svg>
 
 // OT de notaría con su sello (sutil): check verde chico si ya se le pagó a la notaría; sin sello = por pagar. Una sola marca para la ficha de Gastos y la de Clientes.
-export const otConSello = (e, onClick) => { if(!e?.ot_number) return null; const ot=String(e.ot_number).toUpperCase().startsWith('OT')?String(e.ot_number):`OT ${e.ot_number}`; const pag=!!e.notaria_liquidado_at
-  return <span onClick={onClick?(ev=>{ev.stopPropagation();onClick(e)}):undefined} title={pag?`Pagada a la notaría el ${fmtFechaDMY(e.notaria_liquidado_at)}`:'Aún no pagada a la notaría'} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:C.muted,cursor:onClick?'pointer':'default',whiteSpace:'nowrap'}}>{pag&&<span style={{width:13,height:13,borderRadius:'50%',border:`1.3px solid ${C.greenText}`,display:'inline-flex',alignItems:'center',justifyContent:'center',boxSizing:'border-box'}}><CheckMini s={8} c={C.greenText}/></span>}{ot}</span> }
+// Estado de pago de una OT junto a su número, en una sola línea: «OT 444993 - Pagada 19-06-2026» en verde, «OT 483730 - Por pagar» en ámbar.
+// Mismo criterio que la Cartola y el Excel del cliente (pagoDeGasto): liquidada a la notaría o rendida por caja chica. Una OT de $1 o $0 es no válida (no se debe).
+export const otConSello = (e, onClick) => { if(!e?.ot_number) return null
+  const ot=String(e.ot_number).toUpperCase().startsWith('OT')?String(e.ot_number):`OT ${e.ot_number}`, p=pagoDeGasto(e), nv=otNoValida(e)
+  const txt=nv?`${ot} - No válida`:p.pagado?`${ot} - Pagada ${fmtFechaDMY(isoLocal(p.fecha))}`:`${ot} - Por pagar`
+  const col=nv?C.muted:p.pagado?C.greenText:C.soonText
+  const tit=nv?'OT no válida (repertorio no usado o anulado): no se debe':p.pagado?`${p.medio} el ${fmtFechaDMY(isoLocal(p.fecha))}`:'Aún no pagada a la notaría'
+  return <span onClick={onClick?(ev=>{ev.stopPropagation();onClick(e)}):undefined} title={tit} style={{fontSize:11,fontWeight:700,color:col,cursor:onClick?'pointer':'default',whiteSpace:'nowrap'}}>{txt}</span> }
 
 // FUENTE ÚNICA del fondo de un cliente para RENDICIONES (armar tanda, correo, Ver PDF y PDF adjunto usan ESTA).
 // saldo = fondos recibidos − gastos YA RENDIDOS. Los no rendidos aún no descuentan. Mismas reglas que fgCliente:

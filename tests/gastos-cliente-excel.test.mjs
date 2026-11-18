@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hojasGastosCliente, cartolaCliente, pagoDeGasto, descuentaSaldo, fechaExcel } from '../supabase/functions/_shared/gastosClienteExcel.js'
-import { fgCliente } from '../supabase/functions/_shared/gastosReglas.js'
+import { fgCliente, rendicionDeGasto } from '../supabase/functions/_shared/gastosReglas.js'
 
 const cli = { id: 'c1', name: 'Cliente de prueba' }
 const g = (id, amount, extra = {}) => ({ id, client_id: 'c1', type: 'gasto', amount, date: '2026-09-01', created_at: `2026-09-0${id}T12:00:00Z`, concept: `Glosa ${id}`, category: 'Notaria', ...extra })
@@ -77,4 +77,15 @@ test('fechaExcel: la fecha de un timestamp es la de Chile, no la UTC', () => {
   assert.equal(fechaExcel('2026-09-20T02:00:00Z'), fechaExcel('2026-09-19'))   // 23:00 del 19 en Chile
   assert.equal(fechaExcel('2026-09-20'), 46285)
   assert.equal(fechaExcel(null), null)
+})
+
+test('Un gasto en un borrador de rendición no figura como rendido: ni en la regla ni en el Excel', () => {
+  const borr = { id: 'r1', client_id: 'c1', tipo: 'cliente', sent_at: null }, env = { id: 'r2', client_id: 'c1', tipo: 'cliente', sent_at: '2026-11-17T15:00:00Z' }
+  const gb = g(1, 10000, { client_rendered_at: '2026-11-16T10:00:00Z', client_render_id: 'r1' }), ge = g(2, 20000, { client_rendered_at: '2026-11-16T10:00:00Z', client_render_id: 'r2' })
+  assert.deepEqual(rendicionDeGasto(gb, [borr, env]), { borrador: true, fecha: null })
+  assert.deepEqual(rendicionDeGasto(ge, [borr, env]), { borrador: false, fecha: '2026-11-17T15:00:00Z' })   // la fecha es la del envío, no la de armado
+  assert.equal(rendicionDeGasto(g(3, 1), [borr, env]), null)
+  assert.equal(rendicionDeGasto({ ...gb, client_render_id: 'x' }, []).borrador, false)                    // sin la rendición cargada se respeta la marca
+  const h = hojasGastosCliente({ cliente: cli, expenses: [gb, ge, g(3, 5000)], rendiciones: [borr, env] }), enc = h.gastos[0], col = enc.indexOf('Rendido al cliente')
+  assert.deepEqual(h.gastos.slice(1, 4).map(r => celda(r[col])), ['En borrador, sin enviar', fechaExcel('2026-11-17'), ''])
 })

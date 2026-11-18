@@ -1,6 +1,6 @@
 // Cartola y Excel de gastos de UN cliente: cada gasto con su OT, todas sus glosas sin resumir, su estado de pago y la fecha de pago.
 // Funciones puras: la página Cartola, el Excel y las pruebas usan las mismas; el saldo sale de fgCliente (la misma regla de la ficha).
-import { fgCliente, cuentaEnSaldo, repartoFondos } from './gastosReglas.js'
+import { fgCliente, cuentaEnSaldo, repartoFondos, rendicionDeGasto } from './gastosReglas.js'
 
 const PESOS = '#,##0', FECHA = 'dd-mm-yyyy'
 const DIA = 86400000
@@ -71,9 +71,9 @@ export function cartolaCliente({ expenses, clientId, zona = 'America/Santiago' }
 /**
  * Las hojas del libro de un cliente (cada hoja es una tabla; la fila «Total…» va en negrita):
  *  Cartola · Pagos (qué se pagó, cuándo y por quién) · Fondos (qué cubrió cada fondo) · Gastos (el detalle completo, sin resumir).
- * @param {{ cliente: any, expenses: any[], entidades?: any[], ventas?: any[], pagadoPor?: (e:any)=>string, zona?: string }} p
+ * @param {{ cliente: any, expenses: any[], entidades?: any[], ventas?: any[], rendiciones?: any[], pagadoPor?: (e:any)=>string, zona?: string }} p
  */
-export function hojasGastosCliente({ cliente, expenses, entidades = [], ventas = [], pagadoPor = () => '', zona = 'America/Santiago' }) {
+export function hojasGastosCliente({ cliente, expenses, entidades = [], ventas = [], rendiciones = [], pagadoPor = () => '', zona = 'America/Santiago' }) {
   const cid = cliente?.id
   const propios = (expenses || []).filter(e => !e.deleted_at && String(e.client_id) === String(cid))
   const ck = (/** @type {any} */ e) => `${String(e.date || '')}|${String(e.created_at || '')}|${String(e.id || '')}`
@@ -85,13 +85,14 @@ export function hojasGastosCliente({ cliente, expenses, entidades = [], ventas =
   const reparto = repartoFondos(propios.filter(cuentaEnSaldo), cid)
   const fondoDe = (/** @type {any} */ e) => { const d = reparto.deGasto[e.id]; if (d === undefined) return ''; if (d == null) return 'Sin fondo'; const f = fondos.find(x => x.id === d); return f ? `Fondo del ${dmy(diaISO(f.date, zona))}` : '' }
 
+  const rendidoAlCliente = (/** @type {any} */ e) => { const r = rendicionDeGasto(e, rendiciones); return !r ? '' : r.borrador ? 'En borrador, sin enviar' : fecha(r.fecha, zona) }
   // Gastos: el detalle completo, una fila por gasto.
   const encG = ['Fecha del gasto', 'OT', 'Concepto', 'Monto', 'Estado de pago', 'Fecha de pago', 'Pagado por', 'Medio de pago', 'Fondo', 'Categoría', 'Subcategoría', 'Subconcepto', 'Descripción', 'Asunto', 'Materia', 'Requirente', 'Nota', 'Razón social', 'Trabajo', 'Subtrabajo', 'Venta', 'Rendido al cliente', 'Saldado por el cliente', 'Descuenta saldo', 'Cargado por', 'Cargado el']
   const filasG = gastos.map(e => {
     const p = pagoDeGasto(e)
     return [fecha(e.date, zona), txt(e.ot_number), txt(e.concept), monto(e.amount), p.pagado ? 'Pagado' : 'Sin pago', fecha(p.fecha, zona), txt(pagadoPor(e)), p.medio, fondoDe(e),
       txt(e.category), txt(e.subcategory), txt(e.subconcept), txt(e.description), txt(e.matter), txt(e.materia), txt(e.requirente), txt(e.notas), rs(e.entity_id), txt(e.project), txt(e.subproject), venta(e.sale_id),
-      fecha(e.client_rendered_at, zona), fecha(e.pagado_cliente_at, zona), e.incobrable_at ? 'Incobrable' : descuentaSaldo(e), txt(e.created_by), fecha(e.created_at, zona)]
+      rendidoAlCliente(e), fecha(e.pagado_cliente_at, zona), e.incobrable_at ? 'Incobrable' : descuentaSaldo(e), txt(e.created_by), fecha(e.created_at, zona)]
   })
   const totG = suma(gastos)
   const gastosHoja = [encG, ...filasG, ['Total', '', '', monto(totG), ...Array(encG.length - 4).fill('')]]

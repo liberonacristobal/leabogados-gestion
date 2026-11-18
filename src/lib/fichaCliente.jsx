@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll, DEMO } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
-import { fgCliente } from '../../supabase/functions/_shared/gastosReglas.js'
+import { fgCliente, rendicionDeGasto } from '../../supabase/functions/_shared/gastosReglas.js'
 import { C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, appConfirm, diaGrande, fmt, fmtFechaDMY, fmtRutCL, folioN, isoLocal, useIsDesktop, BtnDescarga } from './base.jsx'
 import { VENTA_REAL } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { Fragment } from 'react'
@@ -283,7 +283,7 @@ export function ContactoTab({client, entities, onSaveFields, clientBilling=[], o
 
 // Pestaña "Estado de cuenta" (ex Documentos): vista unificada y trazable del cliente. Lee conciliacion +
 // cartola_movimientos para el sello "verificado en banco" y enlazar cada pago con su movimiento bancario.
-export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], tasks=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion, onAsociarTrabajo}){
+export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[], expenses=[], rendiciones=[], tasks=[], clientEntities=[], onEditExpense, onEditBilling, onOpenSale, onOpenConciliacion, onAjuste, onRendicion, onAsociarTrabajo}){
   const isDesktop = useIsDesktop()   // desktop: ancho acotado y centrado (no estirado a toda la pantalla)
   const aprVenta = useAprendidosVenta(), iaVenta = useIaVenta()
   const [sec,setSec]=useState({})   // secciones-icono (Honorarios/Fondos/Movimientos/Anticipos), colapsadas por defecto
@@ -465,7 +465,7 @@ export function EstadoCuentaTab({client, clientBilling=[], sales=[], anticipos=[
             {diaGrande(e.date)}
             <div style={{flex:1,minWidth:0}}>
               {/* Fila limpia (regla sutil): tipo o categoría + OT con su sello de pagada; caja chica, banco y rendición quedan en el detalle (recorridoGasto). */}
-              {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}><CheckMini s={10}/>Rendido {fmtFechaDMY(e.client_rendered_at)}</span>}</div>:null}
+              {(signo>0||e.category||e.ot_number||e.client_rendered_at)?<div style={{display:'flex',gap:6,alignItems:'center',marginBottom:2,flexWrap:'wrap'}}>{signo>0?<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:isDev?C.azulBg:C.greenBg,color:isDev?C.azulInfo:C.greenText,fontWeight:700,whiteSpace:'nowrap'}}>{isDev?'Devolución':'Fondo'}</span>:(e.category&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:20,background:C.bgWarm,color:C.muted,fontWeight:700,whiteSpace:'nowrap'}}>{e.category}</span>)}{signo<0&&otConSello(e)}{signo<0&&e.client_rendered_at&&(()=>{ const rd=rendicionDeGasto(e,rendiciones); return <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:C.textSoft,whiteSpace:'nowrap'}}>{rd&&rd.borrador?'En borrador de rendición':<><CheckMini s={10}/>Rendido {fmtFechaDMY(isoLocal(rd?.fecha||e.client_rendered_at))}</>}</span> })()}</div>:null}
               <div style={{fontSize:12,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{e.concept||e.category||(signo>0?(isDev?'Devolución':'Fondo'):'Gasto')}</div>
             </div>
             <div style={{fontSize:13,fontWeight:600,textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums',color:isDev?C.muted:col,flexShrink:0}}>{isDev?'−'+fmt(Math.abs(e.amount)):(signo>0?'+':'−')+fmt(e.amount)}</div>
