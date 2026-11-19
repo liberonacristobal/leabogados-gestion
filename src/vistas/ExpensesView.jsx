@@ -3186,7 +3186,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
         return (
           <div style={{padding:D?'8px 22px 44px':'6px 12px 30px',maxWidth:D?760:undefined,margin:'0 auto'}}>
             {(()=>{ const sinCli=notaGroups.sin||[]; if(!sinCli.length) return null; const diasDe=e=>e.created_at?Math.floor((Date.now()-new Date(e.created_at).getTime())/86400000):0; const venc=sinCli.filter(e=>diasDe(e)>=3); const alerta=venc.length>0; return (
-              <div onClick={()=>setNotaTab('pend')} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
+              <div onClick={()=>{ setNotaQ(''); setDeudaEstF(null); setNotaCliOpen(p=>new Set(p).add('__sinasignar__')); setNotaTab('pend'); setTimeout(()=>document.getElementById('nota-sin-asignar')?.scrollIntoView({behavior:'smooth',block:'start'}),120) }} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:11,background:alerta?C.overdueBg:C.soonBg,border:`1px solid ${alerta?'#F3C9C4':'#F0D88A'}`,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
                 <span style={{width:30,height:30,borderRadius:10,background:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><SIcon n='clock' s={16} c={alerta?C.overdueText:C.soonText}/></span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:alerta?C.overdueText:C.soonText}}>{sinCli.length} OT sin identificar{alerta?` · ${venc.length} llevan +3 días`:''}</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Asígnales cliente para cargarlas a quien las paga{alerta?' — ya deberían estar resueltas':''}</div></div>
                 <span style={{color:C.textSoft,fontSize:14}}><Gl n='chevron'/></span>
@@ -3714,7 +3714,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           </div>) })()
         const sinGs=qq?notaGroups.sin.filter(e=>matchE(e)):notaGroups.sin
         const sinBlock=!notaResp&&sinGs.length>0&&(!deudaEstF||deudaEstF==='pers'||(deudaEstF==='sel'&&sinGs.some(x=>selNota.has(x.id))))&&(()=>{ const k='__sinasignar__'; const open=!!qq||notaCliOpen.has(k); const tot=notaGroups.sin.reduce((a,e)=>a+(e.amount||0),0); return (
-          <div style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
+          <div id='nota-sin-asignar' style={{border:`1px dashed ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:8,background:C.surface}}>
             <div onClick={()=>setNotaCliOpen(p=>{const n=new Set(p);n.has(k)?n.delete(k):n.add(k);return n})} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',cursor:'pointer'}}>
               <span style={{display:'inline-flex',transform:open?'rotate(90deg)':'none',transition:'transform .15s',flexShrink:0}}><SIcon n='chevron' s={13} c={C.muted}/></span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>Sin cliente ni persona</div><div style={{fontSize:11,color:C.muted,marginTop:1}}>Asígnales cliente o márcalos como personal · {notaGroups.sin.length} OT</div></div>
