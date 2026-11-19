@@ -93,10 +93,10 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
 
   const visibles = useMemo(() => { const t = q.trim().toLowerCase()
     return filas.filter(r => (!fam || r.fam === fam) && (!t || `${r.ot} ${r.mat} ${r.cliTxt} ${r.tr} ${r.nombre || ''} ${r.req} ${r.m}`.toLowerCase().includes(t))) }, [filas, fam, q])
-  const claveGrupo = r => grp === 'cli' ? (r.tipo === 'n' ? 'No son nuestras' : r.tipo === 'e' ? 'Sin cargo' : r.tipo === 'r' ? (r.cliTxt || 'Repetidas') : (r.cliTxt || 'Sin cliente')) : grp === 'resp' ? (r.cli ? (respDe(r.cli) || 'Sin responsable') : 'Sin responsable') : grp === 'est' ? r.est : 'Todas'
+  const claveGrupo = r => grp === 'cli' ? (r.tipo === 'n' ? 'No son nuestras' : r.tipo === 'e' ? 'Sin cargo' : r.tipo === 'r' ? (r.cliTxt || 'Repetidas') : (r.cliTxt || 'Sin cliente')) : grp === 'resp' ? (r.cli ? (respDe(r.cli) || 'Sin responsable') : 'Sin responsable') : grp === 'est' ? r.est : grp === 'tra' ? (r.tipo === 'n' ? 'No son nuestras' : r.tipo === 'e' ? 'Sin cargo' : (r.tr || 'Sin trámite')) : 'Todas'
   // Orden: alfabético (grupos por nombre con los especiales al final, filas por cliente y trámite) o por fecha (la más reciente primero).
   const _es = (a, b) => String(a || '').localeCompare(String(b || ''), 'es', { sensitivity: 'base' })
-  const _ESP = ['Sin cliente', 'Sin responsable', 'No son nuestras', 'Sin cargo']
+  const _ESP = ['Sin cliente', 'Sin responsable', 'Sin trámite', 'No son nuestras', 'Sin cargo']
   const grupos = useMemo(() => { const m = new Map(); const base = [...visibles].sort((a, b) => orden === 'fecha' ? String(b.f || '').localeCompare(String(a.f || '')) : (_es(a.cliTxt, b.cliTxt) || _es(a.mat, b.mat)))
     base.forEach(r => { const k = claveGrupo(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r) })
     const arr = [...m.entries()]; if (orden === 'az') arr.sort((a, b) => (_ESP.includes(a[0]) - _ESP.includes(b[0])) || _es(a[0], b[0])); return arr }, [visibles, grp, orden])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -199,7 +199,7 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
             {[['az', 'A–Z'], ['fecha', 'Fecha']].map(([k, l]) => <span key={k} onClick={() => setOrden(k)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: orden === k ? C.accent : 'transparent', color: orden === k ? '#fff' : C.muted, borderLeft: k !== 'az' ? `1px solid ${C.border}` : 'none' }}>{l}</span>)}
           </div>
           <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: C.surface }}>
-            {[['cli', 'Cliente'], ['resp', 'Resp.'], ['est', 'Estado'], ['pl', 'Plana']].map(([k, l]) => <span key={k} onClick={() => setGrp(k)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: grp === k ? C.accent : 'transparent', color: grp === k ? '#fff' : C.muted, borderLeft: k !== 'cli' ? `1px solid ${C.border}` : 'none' }}>{l}</span>)}
+            {[['cli', 'Cliente'], ['tra', 'Trámite'], ['resp', 'Resp.'], ['est', 'Estado'], ['pl', 'Plana']].map(([k, l]) => <span key={k} onClick={() => setGrp(k)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: grp === k ? C.accent : 'transparent', color: grp === k ? '#fff' : C.muted, borderLeft: k !== 'cli' ? `1px solid ${C.border}` : 'none' }}>{l}</span>)}
           </div>
         </div>
         <div style={{ borderTop: `1px solid ${C.border}` }}>
