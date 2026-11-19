@@ -1,5 +1,5 @@
 // Revisión de una liquidación de la notaría (la carga hecha desde su Excel): todas las OT de la carga con su estado, para revisarla completa,
-// corregir cliente y trabajo (una o varias a la vez), consultar las que no son nuestras y marcarla revisada o volver a abrirla.
+// corregir cliente y trabajo (una o varias a la vez) y consultar las que no son nuestras. Siempre se puede volver a abrir desde su solicitud.
 // Fuente: las OT que creó la carga (expenses.bulk_import_id), su resumen (no nuestras, de registro o con error, repetidas) y notaria_no_nuestras.
 // Las repetidas ya pagadas solo se cuentan (resumen.omitidas): el detalle no se guarda con la carga.
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -9,8 +9,7 @@ import { Buscador, PaginaSobre, logActividad, registrarError, setLearningKV } fr
 import { clienteSugeridoPorGlosa, otNoValida } from '../../supabase/functions/_shared/notariaReglas.js'
 import { pagoDeGasto } from '../../supabase/functions/_shared/gastosClienteExcel.js'
 
-const KIND_REV = 'carga_notaria_revisada'
-const ACC = ['notaria.carga_editada', 'notaria.carga_revisada', 'notaria.carga_reabierta']
+const ACC = ['notaria.carga_editada']
 const otTxt = o => { const s = String(o || '').trim(); return !s ? 's/OT' : /^OT/i.test(s) ? s.toUpperCase() : 'OT-' + s }
 const NN_TXT = { pendiente: 'Por consultar', consultada: 'Consultada', resuelta: 'Respondida' }
 
@@ -29,7 +28,6 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
   const [orden, setOrden] = useState('az')   // 'az' alfabético (grupos y filas) | 'fecha' más reciente primero
   const [sel, setSel] = useState(() => new Set()), [edit, setEdit] = useState(null), [busy, setBusy] = useState(false)
   const [nn, setNn] = useState({})            // estado de las «no son nuestras» (notaria_no_nuestras) por OT
-  const [revisada, setRevisada] = useState(null)   // {por, at} cuando se marcó revisada
   const [bitacora, setBitacora] = useState(null), [verLog, setVerLog] = useState(false)
   const resumen = carga.resumen || {}
   const cid = String(carga.id)
@@ -42,7 +40,6 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
     let vivo = true
     const ots = (resumen.noNuestras || []).map(x => x.ot).filter(Boolean)
     if (ots.length) supabase.from('notaria_no_nuestras').select('ot,estado').in('ot', ots).then(({ data }) => { if (vivo) setNn(Object.fromEntries((data || []).map(r => [String(r.ot), r.estado]))) }, () => {})
-    supabase.from('learnings').select('value').eq('kind', KIND_REV).eq('key', cid).maybeSingle().then(({ data }) => { if (vivo && data?.value) { try { setRevisada(JSON.parse(data.value)) } catch (_) { /* valor ilegible: queda abierta */ } } }, () => {})
     cargarLog()
     return () => { vivo = false }
   }, [cid])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -88,18 +85,6 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
   const grupos = useMemo(() => { const m = new Map(); const base = [...visibles].sort((a, b) => orden === 'fecha' ? String(b.f || '').localeCompare(String(a.f || '')) : (_es(a.cliTxt, b.cliTxt) || _es(a.mat, b.mat)))
     base.forEach(r => { const k = claveGrupo(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r) })
     const arr = [...m.entries()]; if (orden === 'az') arr.sort((a, b) => (_ESP.includes(a[0]) - _ESP.includes(b[0])) || _es(a[0], b[0])); return arr }, [visibles, grp, orden])   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const guardarRevision = async (valor) => {
-    if (busy) return; setBusy(true)
-    try {
-      if (!DEMO) await setLearningKV(KIND_REV, cid, valor ? JSON.stringify(valor) : '')
-      setRevisada(valor)
-      logActividad(valor ? 'notaria.carga_revisada' : 'notaria.carga_reabierta', { tabla: 'bulk_imports', id: carga.id, detalle: { carga: cid, title: valor ? 'Liquidación marcada como revisada' : 'Liquidación vuelta a abrir' } })
-      setTimeout(cargarLog, 600)
-    } catch (e) { registrarError({ origen: 'accion', vista: 'carga_notaria_revisada', err: e }); appAlert('No se pudo guardar: ' + (e.message || e)) }
-    setBusy(false)
-  }
-  const marcarRevisada = () => guardarRevision({ por: 'admin', at: new Date().toISOString() })
 
   // ── Guardar una edición: cliente y trabajo de las OT elegidas (o la consulta a la notaría de una no nuestra).
   const guardar = async (cambios) => {
@@ -180,7 +165,6 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, padding: D ? '9px 16px 0' : '9px 12px 0' }}>
           {link('Historial', () => setVerLog(v => !v))}
-          {revisada ? link(`Revisada ${fmtFechaDMY(isoLocal(revisada.at))}, volver a abrir`, () => guardarRevision(null)) : link('Marcar revisada', marcarRevisada, pendientes > 0 || busy)}
         </div>
         {verLog && <div style={{ padding: '8px 16px', borderBottom: `1px solid ${C.border}` }}>
           {(bitacora || []).length ? bitacora.slice(0, 8).map((l, i) => <div key={i} style={{ fontSize: 12, color: C.text, padding: '5px 0', borderTop: i ? `1px solid ${C.track}` : 'none' }}>{l.d.title || l.d.detalle?.title || l.action}<div style={{ fontSize: 11, color: C.muted }}>{fmtFechaDMY(isoLocal(l.created_at))} · {String(l.user_email || '').split('@')[0]}</div></div>) : <div style={{ fontSize: 12, color: C.muted }}>Sin movimientos todavía.</div>}</div>}
