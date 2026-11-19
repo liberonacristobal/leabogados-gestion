@@ -23,7 +23,7 @@ const TONO = {
 }
 const chipDe = f => f.chip === 'rojo' ? { bg: C.overdueBg, col: C.overdueText } : f.chip === 'ambar' ? { bg: C.soonBg, col: C.soonText } : f.chip === 'azul' ? { bg: C.azulBg, col: C.azulInfo } : f.chip === 'verde' ? { bg: C.greenBg, col: C.greenText } : { bg: C.bgSoft, col: C.grisText }
 
-export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = [], sales = [], setExpenses, onAssignClientToExpense, onVerNoNuestras, onOpenClientFicha, onBack }) {
+export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = [], sales = [], setExpenses, onAssignClientToExpense, usuario = '', onVerNoNuestras, onOpenClientFicha, onBack }) {
   const D = isDesktop
   const [grp, setGrp] = useState('cli'), [fam, setFam] = useState(null), [q, setQ] = useState('')
   const [orden, setOrden] = useState('az')   // 'az' alfabético (grupos y filas) | 'fecha' más reciente primero
@@ -110,7 +110,7 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
         let patch = {}
         const cambiaCli = cambios.cli && String(cambios.cli) !== String(g.client_id || '')
         if (cambiaCli) {
-          if (onAssignClientToExpense) await onAssignClientToExpense(g, cambios.cli)
+          if (onAssignClientToExpense) await onAssignClientToExpense(g.id, cambios.cli)
           else if (!DEMO) { const { error } = await supabase.from('expenses').update({ client_id: cambios.cli }).eq('id', g.id); if (error) throw error }
           patch = { client_id: cambios.cli, project: null, sale_id: null }
         }
@@ -123,7 +123,7 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
       }
       const n = edit.filas.find(r => r.tipo === 'n')
       if (n && cambios.nn && cambios.nn !== n.nnEstado) {
-        const ahora = new Date().toISOString(), yo = 'admin'
+        const ahora = new Date().toISOString(), yo = usuario || 'Equipo'
         const patch = cambios.nn === 'consultada' ? { estado: 'consultada', consultada_at: ahora, consultada_por: yo } : cambios.nn === 'resuelta' ? { estado: 'resuelta', resuelta_at: ahora, resuelta_por: yo } : { estado: 'pendiente' }
         if (!DEMO) { const { error } = await supabase.from('notaria_no_nuestras').update(patch).eq('ot', n.x.ot); if (error) throw error }
         setNn(p => ({ ...p, [String(n.x.ot)]: cambios.nn }))

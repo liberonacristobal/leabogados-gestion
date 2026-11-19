@@ -11,7 +11,7 @@ import { PaginaSobre, subproyectosCliente, useAprendidosVenta, useIaVenta } from
 import { useRebotes, enviosRecientes } from '../lib/rebotesCorreo.jsx'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
-import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError , setLearningKV } from '../lib/compartido.jsx'
 import { DevolucionEmailModal, RendicionEmailModal, RendicionModal, liquidacionPdfBase64 } from '../lib/rendiciones.jsx'
 import { DiarioOficialIndice } from './DiarioOficialIndice.jsx'
 import { useOrden, alternarSel, selAttrs } from '../lib/orden.jsx'
@@ -70,6 +70,13 @@ export const anexoCajaChica = (expenses, clients, persona, gastosLiq, hasta) => 
 // Pedidos de liquidación a la notaría (edge notaria-pedir-liquidacion + agente-correo): cada pedido con su recorrido
 // (envío, tarea de seguimiento, seguimiento, respuesta). Fuente única para la tarjeta de Notaría y la vista Pedidos.
 export const _PED_ACC=['notaria.pedido_liquidacion','notaria.pedido_liquidacion_fallido','notaria.pedido_sin_respuesta','notaria.seguimiento_liquidacion','notaria.seguimiento_liquidacion_fallido','notaria.respuesta_liquidacion','notaria.aviso_liquidacion','notaria.aviso_liquidacion_fallido','notaria.aviso_carga','notaria.aviso_carga_fallido']
+
+// Marca pagadas las OT de una liquidación (fuente única de «pagada» al enviar con comprobante o marcar sin correo). Lanza si la base falla.
+export async function marcarOtPagadasBD(renderId, at, setExpenses){
+  const {error}=await supabase.from('expenses').update({notaria_liquidado_at:at}).eq('notaria_render_id',renderId).is('notaria_liquidado_at',null)
+  if(error) throw error
+  setExpenses&&setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(renderId)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:at}:e))
+}
 
 export function usePedidosNotaria(bulkImports=[]){
   const [rows,setRows]=useState(null), [rev,setRev]=useState(0)
@@ -449,7 +456,7 @@ export function DocumentosNotaria({isDesktop, clients=[], clientEntities=[], exp
 
 export function PedidosTile({render, bulkImports}){ const {pedidos}=usePedidosNotaria(bulkImports); return render(pedidos===null?undefined:(pedidos[0]||null)) }
 
-export function PedidosNotaria({isDesktop, bulkImports, onRevisar, expenses=[], clients=[], sales=[], setExpenses, onAssignClientToExpense, onVerNoNuestras, onOpenClientFicha}){
+export function PedidosNotaria({isDesktop, bulkImports, onRevisar, expenses=[], clients=[], sales=[], setExpenses, onAssignClientToExpense, usuario='', onVerNoNuestras, onOpenClientFicha}){
   const {pedidos,recargar}=usePedidosNotaria(bulkImports)
   const [revCarga,setRevCarga]=useState(null)   // carga de la notaría que se está revisando (página «Revisar OT cargadas»)
   const [busy,setBusy]=useState(null)
@@ -526,7 +533,7 @@ export function PedidosNotaria({isDesktop, bulkImports, onRevisar, expenses=[], 
           </div>
         </div> })}
     </div>
-    {revCarga&&<RevisarLiquidacion carga={revCarga} isDesktop={D} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} onVerNoNuestras={onVerNoNuestras} onOpenClientFicha={onOpenClientFicha} onBack={()=>setRevCarga(null)}/>}
+    {revCarga&&<RevisarLiquidacion carga={revCarga} isDesktop={D} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} usuario={usuario} onVerNoNuestras={onVerNoNuestras} onOpenClientFicha={onOpenClientFicha} onBack={()=>setRevCarga(null)}/>}
   </div>)
 }
 
@@ -1154,6 +1161,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
   const notaSinFondosSel = notaSel.filter(e=>e.client_id && !e.incobrable_at && saldoCliente(expenses,e.client_id)<0)
   const periodoNota = gs => { const fs=gs.map(e=>e.date).filter(Boolean).sort(); if(!fs.length) return new Date().toLocaleDateString('es-CL',{month:'long',year:'numeric'}); const mY=d=>new Date(d+'T12:00').toLocaleDateString('es-CL',{month:'long',year:'numeric'}); return mY(fs[0])===mY(fs[fs.length-1])?mY(fs[0]):`${fmtFechaDMY(fs[0])} – ${fmtFechaDMY(fs[fs.length-1])}` }
 
+  const marcarOtPagadas = (renderId, at) => marcarOtPagadasBD(renderId, at, setExpenses)
   // Liquidar = GUARDAR la liquidación como 'por_enviar' (sin correo). El envío a la notaría es un 2º paso (enviarNotaria).
   const liquidarNotaria = async() => {
     if(!notaSel.length) return
@@ -1170,8 +1178,13 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       const {error:rErr}=await supabase.from('rendiciones').insert(row)
       if(rErr) throw rErr
       // Liquidar = «en liquidación». La OT queda PAGADA recién al enviar el aviso con el comprobante, al marcarla pagada sin correo o al enlazar el cargo del banco.
-      const {error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId}).in('id',ids).is('notaria_render_id',null)
-      if(uErr) throw uErr
+      const {data:tomadas,error:uErr}=await supabase.from('expenses').update({notaria_render_id:renderId}).in('id',ids).is('notaria_render_id',null).select('id')
+      if(uErr||(tomadas||[]).length!==ids.length){
+        // Alguien se interpuso o falló la base: se deshace lo hecho para no dejar una liquidación con total y OT que no calzan.
+        await supabase.from('expenses').update({notaria_render_id:null}).eq('notaria_render_id',renderId)
+        await supabase.from('rendiciones').delete().eq('id',renderId)
+        throw uErr||new Error(`solo se pudieron tomar ${(tomadas||[]).length} de ${ids.length} OT (alguien las liquidó recién). No se creó la liquidación; actualiza la página y vuelve a seleccionar`)
+      }
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set()); setNotaConfirm(false)
@@ -1196,6 +1209,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       setExpenses(p=>p.map(e=>ids.includes(e.id)?{...e,notaria_render_id:renderId,notaria_liquidado_at:now}:e))
       if(setRendiciones) setRendiciones(p=>[{...row,created_at:now},...p])
       setSelNota(new Set())
+      logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:renderId,detalle:{title:`${ids.length} OT · ${periodo}`,monto:notaTotal}})
     }catch(e){appAlert('Error: '+e.message)}
   }
   // Estado de envío de una liquidación (compat filas viejas sin estado_envio: con sent_at→enviada, si no→pagado).
@@ -1211,9 +1225,12 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
     // CC fijo: todo el estudio en copia, SIEMPRE, menos Rodrigo.
     const ccEstudio=BRAND.ccNotaria||undefined
     try{
+      // Candado: la pantalla puede estar desactualizada. Si ya salió (otra persona o este mismo envío), no se manda otro correo.
+      if(!DEMO){ const {data:act}=await supabase.from('rendiciones').select('estado_envio,sent_at,anulada_at').eq('id',r.id).maybeSingle()
+        if(act&&(act.anulada_at||(act.estado_envio&&act.estado_envio!=='por_enviar'))){ appAlert(act.anulada_at?'Esta liquidación fue anulada. No se envió el correo.':'Esta liquidación ya fue enviada o marcada como pagada. No se envió otro correo.'); setNotaSending(false); setNotaSend(null); return } }
       try{ localStorage.setItem('notaria_email',dest) }catch(_){}
       // Aprende el/los correo(s) de la notaría: compartido para todo el equipo (una sola fila en learnings).
-      try{ await supabase.from('learnings').delete().eq('kind','notaria_email'); await supabase.from('learnings').insert({kind:'notaria_email',key:'dest',value:dest,meta:{}}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
+      try{ await setLearningKV('notaria_email','dest',dest) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})}
       const gs=(expenses||[]).filter(e=>String(e.notaria_render_id)===String(r.id))
       const total=gs.reduce((a,e)=>a+(e.amount||0),0)
       const periodo=r.periodo||periodoNota(gs)
@@ -1223,7 +1240,7 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       const compMime = compFile.type||'application/octet-stream'
       const compName = (compFile.name||'Comprobante transferencia').replace(/[^\w.\s-]/g,'').trim()
       let comprobanteUrl=null
-      try{ const tk=await driveToken(); if(tk){ const folders=await driveAdjuntosFolders(tk); const up=await driveUpload(tk,folders.gastos,compFile,`Comprobante notaría ${periodo} · ${compName}`); comprobanteUrl=up?.webViewLink||null } }catch(_){}
+      try{ const tk=await driveToken(); if(tk){ const folders=await driveAdjuntosFolders(tk); const up=await driveUpload(tk,folders.gastos,compFile,`Comprobante notaría ${periodo} · ${compName}`); comprobanteUrl=up?.webViewLink||null } }catch(e){ registrarError({origen:'accion',vista:'notaria_comprobante',err:e}) }
       // Correo: usa el BORRADOR EDITABLE (mensaje + asunto); el detalle de OT + total se anexa solo (builder único).
       const mensaje=(notaMsg||'').trim()||notaDefaultMsg(periodo, notaBolRS||BRAND.nombreLegal, notaBolRUT||BRAND.rut)
       const html=notaEmailHtml(mensaje, gs, total, clients)
@@ -1246,14 +1263,16 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       if(!sent){ avisoNoEnviado('El aviso a la notaría', errNota?.message||null); setNotaSending(false); return }
       const now=new Date().toISOString()
       const correoNota={asunto:subjectNota,cuerpo:mensaje,rs:notaBolRS||BRAND.nombreLegal,rut:notaBolRUT||BRAND.rut,para:dest}
-      const {error:sErr}=await supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}).eq('id',r.id)
-      if(sErr) appAlert('El correo salió, pero no se pudo registrar el envío: '+sErr.message)
+      // El correo ya salió: el registro se reintenta una vez; si aun así falla, la pantalla igual queda como enviada y se avisa NO reenviar.
+      const regEnv=()=>supabase.from('rendiciones').update({estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}).eq('id',r.id)
+      let {error:sErr}=await regEnv(); if(sErr) ({error:sErr}=await regEnv())
       // Transferida con comprobante y avisada = pagada a la notaría.
-      await supabase.from('expenses').update({notaria_liquidado_at:now}).eq('notaria_render_id',r.id).is('notaria_liquidado_at',null)
-      setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(r.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:now}:e))
+      let pErr=null; try{ await marcarOtPagadas(r.id,now) }catch(e){ pErr=e }
+      if(sErr||pErr) appAlert(`El correo SÍ salió a la notaría; no lo reenvíes. Pero la app no pudo registrar ${sErr?'el envío':'las OT como pagadas'} (${(sErr||pErr).message}). Avísale a soporte para dejarlo registrado.`)
+      else logActividad('notaria.liquidacion_enviada',{tabla:'rendiciones',id:r.id,detalle:{title:`${r.n_gastos||gs.length} OT · ${periodo}`,monto:r.total||total,para:dest}})
       if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===r.id?{...x,estado_envio:'enviada',sent_at:now,comprobante_url:comprobanteUrl,correo:correoNota}:x))
       setNotaSend(null); setCompFile(null)
-      appAlert(txtEnviado(viaNota,{que:'Aviso de pago a la notaría', para:dest}))
+      appAlert(txtEnviado(viaNota,{que:'Aviso de pago a la notaría', para:dest})+(comprobanteUrl?'':' El comprobante no quedó guardado en Drive; queda solo en el correo.'))
     }catch(e){appAlert('Error al enviar: '+e.message)}
     setNotaSending(false)
   }
@@ -1292,13 +1311,14 @@ export function useExpensesModel({expenses,clients,clientEntities,sales=[],onAdd
       let viaR=null, errR=null
       try{ viaR=await enviarComoUsuario({to:dest,cc:ccEstudio,subject:subjectNota,html,text:texto,attachments:adjuntos,que:'El reenvío a la notaría'}); if(viaR===null){ setReenviando(null); return } sent=true }catch(e){ sent=false; errR=e }
       if(!sent){ avisoNoEnviado('El reenvío a la notaría', errR?.message||null); setReenviando(null); return }
+      logActividad('notaria.liquidacion_reenviada',{tabla:'rendiciones',id:r.id,detalle:{title:`${r.n_gastos||''} OT · ${r.periodo||''}`,monto:r.total,para:dest}})
       appAlert(txtEnviado(viaR,{que:'Liquidación', verbo:'reenviad', g:'a', para:`la notaría (${dest})`})+(conComp?'\nCon el comprobante adjunto.':'\nNo se pudo recuperar el comprobante de Drive: se reenvió solo el detalle.'))
     }catch(e){ appAlert('Error al reenviar: '+e.message) }
     setReenviando(null)
   }
   // Anular (antes BORRABA la liquidación): los gastos vuelven a pendientes y la liquidación queda registrada como anulada (quién/cuándo) + bitácora.
   const deshacerNotaria = async(r) => {
-    const est=r.estado_envio||'por_enviar'
+    const est=notaEstado(r)
     const msg = est==='por_enviar'
       ? '¿Anular esta liquidación de notaría? Las OT vuelven a pendientes.'
       : `Esta liquidación ya se ${est==='pagado'?'pagó':'envió'} a la notaría. Anularla devuelve las ${r.n_gastos||''} OT a pendientes, pero no revierte el pago ni el correo. ¿Anular igual?`
@@ -3299,7 +3319,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {/* Vista "No son nuestras": OT no reconocidas acumuladas de las cargas — se consultan a la notaría cuando quieras (no solo en la carga) */}
       {showNotaria&&notaTab==='recordatorios'&&(
         <div style={{padding:isDesktop?'8px 22px 44px':'6px 12px 30px',maxWidth:isDesktop?760:undefined,margin:'0 auto'}}>
-          <PedidosNotaria isDesktop={isDesktop} bulkImports={bulkImports} onRevisar={arch=>onBulk&&onBulk(true,arch)} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} onVerNoNuestras={()=>setNotaTab('nn')} onOpenClientFicha={onOpenClientFicha}/>
+          <PedidosNotaria usuario={currentUserName} isDesktop={isDesktop} bulkImports={bulkImports} onRevisar={arch=>onBulk&&onBulk(true,arch)} expenses={expenses} clients={clients} sales={sales} setExpenses={setExpenses} onAssignClientToExpense={onAssignClientToExpense} onVerNoNuestras={()=>setNotaTab('nonuestras')} onOpenClientFicha={onOpenClientFicha}/>
         </div>
       )}
       {showNotaria&&notaTab==='documentos'&&(
@@ -3793,7 +3813,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           if(!await appConfirm(`¿Enviar a la notaría (${dest}) el aviso de pago de ${gsS.length} OT por ${fmt(totS)} con tu comprobante, pidiendo emitir las boletas a nombre de ${notaBolRS} · ${notaBolRUT}? La oficina queda en copia.`)) return
           await enviarNotaria(notaSend); setNotaTab('pagados') }
         const guardarDespues=async()=>{ if(!await appConfirm('¿Guardar como pendiente de enviar? Todavía NO se avisa a la notaría; el correo lo mandas desde "Pagos realizados" cuando tengas el comprobante.')) return; setNotaSend(null); setNotaTab('pagados') }
-        const marcarSinCorreo=async()=>{ if(!await appConfirm('¿Marcar esta liquidación como YA PAGADA, sin enviar correo? La notaría NO recibe aviso — solo para OT que ya pagaste antes.')) return; try{ const {error}=await supabase.from('rendiciones').update({estado_envio:'pagado'}).eq('id',notaSend.id); if(error) throw error; const hoyN=new Date().toISOString(); await supabase.from('expenses').update({notaria_liquidado_at:hoyN}).eq('notaria_render_id',notaSend.id).is('notaria_liquidado_at',null); setExpenses(p=>p.map(e=>String(e.notaria_render_id)===String(notaSend.id)&&!e.notaria_liquidado_at?{...e,notaria_liquidado_at:hoyN}:e)); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===notaSend.id?{...x,estado_envio:'pagado'}:x)); logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:notaSend.id,detalle:{title:`${notaSend.n_gastos||0} OT · ${notaSend.periodo||''}`,monto:notaSend.total}}) }catch(err){ appAlert('No se pudo marcar como pagada: '+(err.message||err)); return }; setNotaSend(null); setNotaTab('pagados') }   // antes el error se tragaba en silencio y la pantalla la mostraba pagada igual
+        const marcarSinCorreo=async()=>{ if(!await appConfirm('¿Marcar esta liquidación como YA PAGADA, sin enviar correo? La notaría NO recibe aviso — solo para OT que ya pagaste antes.')) return; try{ const {error}=await supabase.from('rendiciones').update({estado_envio:'pagado'}).eq('id',notaSend.id); if(error) throw error; await marcarOtPagadasBD(notaSend.id,new Date().toISOString(),setExpenses); if(setRendiciones) setRendiciones(p=>p.map(x=>x.id===notaSend.id?{...x,estado_envio:'pagado'}:x)); logActividad('notaria.liquidacion_pagada_sin_correo',{tabla:'rendiciones',id:notaSend.id,detalle:{title:`${notaSend.n_gastos||0} OT · ${notaSend.periodo||''}`,monto:notaSend.total}}) }catch(err){ appAlert('No se pudo marcar como pagada: '+(err.message||err)); return }; setNotaSend(null); setNotaTab('pagados') }   // antes el error se tragaba en silencio y la pantalla la mostraba pagada igual
         return (
         <div style={{padding:isDesktop?'8px 20px 70px':'6px 16px 70px',maxWidth:isDesktop?680:undefined,margin:'0 auto'}}>
           <div style={{background:C.accent,borderRadius:12,padding:'13px 16px',color:'#fff',textAlign:'center',marginBottom:14}}>
