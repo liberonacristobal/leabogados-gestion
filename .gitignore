@@ -15,3 +15,6 @@ docs/render-*.html
 
 # Archivos locales de la CLI de Supabase (se recrean al usarla)
 supabase/.temp/
+
+# Archivos de trabajo (renders y scripts con datos reales): nunca al repo público
+.claude/scratch/
