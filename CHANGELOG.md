@@ -1,3 +1,5 @@
+- 2026-11-19 · Facturación: chip «No entregado» en el historial de facturas enviadas y en «Correo» del checklist, cuando llega el rebote al Gmail de quien envió (mismo estado que en rendiciones; un reenvío posterior lo apaga). La lectura de rebotes se hace una vez por sesión y la comparten ambas pantallas.
+
 - 2026-11-19 · Rendiciones › correo: aviso «no aparece en tus correos» cuando una dirección del Para o Cc no figura en tu Gmail con ese cliente y hay una parecida que solo difiere en los puntos (botón «Usar …», que también corrige el contacto de la ficha). Y estado «No entregado» en Rendir a cliente (columna Seguimiento y detalle) cuando llega el rebote al Gmail de quien envió; un reenvío posterior lo apaga. Reglas en `_shared/direccionesReglas.js`, con prueba.
 
 - 2026-11-19 · Rendiciones › «Ver correo · reenviar»: al reenviar un correo que llevaba varias rendiciones (N° 1 y N° 2), vuelve a abrirlas juntas con sus mismos números.

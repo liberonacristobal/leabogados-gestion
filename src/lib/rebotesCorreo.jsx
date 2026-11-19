@@ -12,7 +12,8 @@ const KIND = 'envio_rebotado'   // key = «tipo:id del envío», value = JSON {d
 const DIAS = 14
 
 let _mapa = new Map()
-let _cargado = false, _corriendo = false
+let _cargado = false
+const _enviados = new Set()   // envíos ya cruzados en esta sesión
 const _subs = new Set()
 const _emitir = () => _subs.forEach(f => f(_mapa))
 
@@ -24,12 +25,15 @@ async function cargarMapa() {
   _mapa = m; _cargado = true; _emitir()
 }
 
-async function detectar(envios) {
-  if (!envios.length) return
-  const token = await driveToken(); if (!token) return
+// Los correos de rebote se leen una sola vez por sesión; cada pantalla que declara envíos (rendiciones, facturas) los cruza con los suyos.
+let _correosP = null
+const leerCorreos = () => (_correosP ||= leerRebotesGmail().catch(e => { _correosP = null; throw e }))
+
+async function leerRebotesGmail() {
+  const token = await driveToken(); if (!token) return []
   const q = encodeURIComponent(`(from:mailer-daemon OR from:postmaster) newer_than:${DIAS}d`)
   const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=40`, { headers: { Authorization: 'Bearer ' + token } })
-  if (!r.ok) return
+  if (!r.ok) return []
   const ids = ((await r.json()).messages || []).map(m => m.id)
   const correos = []
   for (const id of ids) {
@@ -43,6 +47,12 @@ async function detectar(envios) {
       correos.push({ id, fecha_ms: Number(j.internalDate), fallidos: fallidos.length ? fallidos : emailsDe(snip), motivo: motivoDeRebote(snip) })
     } catch (_) { /* un correo ilegible no frena el resto */ }
   }
+  return correos
+}
+
+async function detectar(envios) {
+  if (!envios.length) return
+  const correos = await leerCorreos()
   for (const h of rebotesDe({ correos, envios })) {
     const key = `${h.tipo}:${h.envio_id}`
     const previo = _mapa.get(key)
@@ -74,9 +84,10 @@ export function useRebotes(envios) {
     return () => { _subs.delete(setM) }
   }, [])
   useEffect(() => {
-    if (DEMO || _corriendo || !envios?.length) return
-    _corriendo = true
-    ;(async () => { try { if (!_cargado) await cargarMapa(); await detectar(envios) } catch (e) { registrarError({ origen: 'carga', vista: 'rebotes', err: e }) } })()
+    const nuevos = (envios || []).filter(e => !_enviados.has(`${e.tipo}:${e.id}`))
+    if (DEMO || !nuevos.length) return
+    nuevos.forEach(e => _enviados.add(`${e.tipo}:${e.id}`))
+    ;(async () => { try { if (!_cargado) await cargarMapa(); await detectar(nuevos) } catch (e) { registrarError({ origen: 'carga', vista: 'rebotes', err: e }) } })()
   }, [envios?.length])   // eslint-disable-line react-hooks/exhaustive-deps
   return (tipo, id, sentAt) => { const v = m.get(`${tipo}:${id}`); return v && (!sentAt || new Date(v.en).getTime() >= new Date(sentAt).getTime() - 60000) ? v : null }
 }
