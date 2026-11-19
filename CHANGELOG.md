@@ -1,3 +1,5 @@
+- 2026-11-19 · Rendición: se quitan dos variables sin uso (`proyOpen`, `prefilled`) del módulo de rendiciones; sin cambio visible.
+
 - 2026-11-18 · Rendición: la tabla de gastos del PDF (Ver PDF y el adjunto del correo) suma la columna «Saldo»: parte con la fila «Fondos disponibles» y baja con cada gasto, en rojo si pasa a negativo; con varios proyectos, cada bloque parte con sus fondos menos lo rendido antes.
 
 - 2026-11-18 · Notaría › Carga de la liquidación: cada carga guarda ahora el detalle de las OT repetidas (las que ya estaban en la app: OT, fecha, trámite, compareciente, requirente, monto y estado) y el total del archivo, junto con el monto de las de registro o con error. La revisión de la liquidación muestra esas repetidas con su cliente, trabajo y pago (sin subir el Excel de nuevo), la tarjeta «Total del archivo» y una línea que confirma si las tarjetas suman el total del archivo («Diferencia $0») o cuánto difiere. Las cargas anteriores no tienen ese detalle: muestran la cantidad de repetidas, «Total cargado» y un aviso de que no se pueden cuadrar.

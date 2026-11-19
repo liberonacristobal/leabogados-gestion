@@ -24,7 +24,6 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const [fHasta, setFHasta] = useState('')
   const [contacts, setContacts] = useState([])
   const [atencion, setAtencion] = useState(editRend?.dirigido_a||wip0?.atencion||'')
-  const [prefilled, setPrefilled] = useState(false)   // "Dirigido a" precargado de rendición anterior
   const [limpiandoIA, setLimpiandoIA] = useState(false)
   const [editDet, setEditDet] = useState(null)   // detalle de un gasto en edición {id, v}: tocar el texto lo corrige a mano (mismo campo que «Mejorar descripciones con IA»)
   const [atencionEmail, setAtencionEmail] = useState(editRend?.dirigido_email||'')
@@ -50,7 +49,6 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const [proyF,setProyF] = useState(()=>{ const p=editRend?.project||wip0?.proyecto||''; return new Set(p?[p]:[]) })
   const proyecto = proyF.size===1&&!proyF.has('__sin__') ? [...proyF][0] : ''
   const setProyecto = p => setProyF(new Set(p?[p]:[]))
-  const [proyOpen,setProyOpen] = useState(false)   // desplegable de proyectos abierto
   const [subproyecto,setSubproyecto] = useState(editRend?.subproject||wip0?.subproyecto||'')
   useEffect(()=>{ if(esEdicion) return; try{ localStorage.removeItem(`fd_rend_wip_${client.id}`); if(selected.size) localStorage.setItem(wipKey,JSON.stringify({sel:[...selected],proyecto,subproyecto,atencion,at:Date.now()})); else localStorage.removeItem(wipKey) }catch(_){} },[selected,proyecto,subproyecto,atencion])   // eslint-disable-line react-hooks/exhaustive-deps
   const headEnt = entsCli.length===1 ? entsCli[0] : (entsCli.find(e=>e.id===selEnt)||null)
@@ -139,7 +137,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
     supabase.from('contacts').select('*').eq('client_id',client.id).order('created_at').then(({data})=>{
       if(!alive||!data) return
       setContacts(data)
-      if(!esEdicion && data[0]?.nombre){ setAtencion(data[0].nombre); setPrefilled(true) }
+      if(!esEdicion && data[0]?.nombre){ setAtencion(data[0].nombre) }
       if(!esEdicion && data[0]?.email){ setAtencionEmail(data[0].email) }
     })
     return ()=>{alive=false}
@@ -431,11 +429,11 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             : <div style={{...flBox(!!proyecto),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{})}}><div style={flLbl}>Proyecto{faltaProyR?' *':''}</div><input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/></div>}
           {esEdicion&&<div style={flBox(false)}>
             <div style={flLbl}>Dirigido a</div>
-            <input value={atencion} onChange={e=>{setAtencion(e.target.value);setAtencionEmail('');setPrefilled(false)}} placeholder='Persona (opcional)' style={flInp}/>
+            <input value={atencion} onChange={e=>{setAtencion(e.target.value);setAtencionEmail('')}} placeholder='Persona (opcional)' style={flInp}/>
           </div>}
         </div>
         {!enFondo&&proyF.size===0&&nSinProyR>0&&proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
-        {esEdicion&&sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:10,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
+        {esEdicion&&sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:10,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'')}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
         {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginBottom:8}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
         {!showSub && !subproyecto && <div onClick={()=>setShowSub(true)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',marginBottom:12,width:'fit-content'}}>+ Subproyecto</div>}
         {(showSub||subproyecto)&&<div style={{...flBox(false),marginBottom:12}}>
