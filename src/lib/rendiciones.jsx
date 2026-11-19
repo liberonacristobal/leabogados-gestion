@@ -6,7 +6,7 @@ import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, appConfirm, fmt, fmtFechaDMY, f
 import { Fragment } from 'react'
 import logoBlanco from '../le-logo-blanco.png'
 import { Spin } from './base.jsx'
-import { Buscador, CAT_COLORS, Lbl, MAIL_OFICINA_CONFIRM, Modal, PasosRend, RENDCAT, Switch, TXT_REINGRESO, avisoNoEnviado, chipBtn, claudeCall, corrSiguiente, cuentaEnRecuadro, driveToken, equipoPorNombre, esPersona, estadoSolicitud, firmaCorreoHtml, firmaDefault, fmtSaldoG, fondoDeRend, fondosSinTrabajo, gastosDeRend, glosaCliente, gmailParticipantesCliente, imputarSaldosTrabajos, logActividad, logEvent, logoColor, okDB, posiblesDuplicadosGastos, registrarError, rendGruposProyecto, rendicionDocHtml, rendicionFondo, rendicionPdfHtml, repartoFondos, saldoCliente, saludoCli, sendGmailWithPdf, sendMailServer, setLearningKV, txtEnviado } from './compartido.jsx'
+import { Buscador, CAT_COLORS, Lbl, MAIL_OFICINA_CONFIRM, Modal, PasosRend, RENDCAT, Switch, TXT_REINGRESO, avisoNoEnviado, chipBtn, claudeCall, corrSiguiente, cuentaEnRecuadro, driveToken, equipoPorNombre, esPersona, estadoSolicitud, firmaCorreoHtml, firmaDefault, fmtSaldoG, fondoDeRend, fondosSinTrabajo, gastosDeRend, glosaCliente, gmailParticipantesCliente, imputarSaldosTrabajos, logActividad, logEvent, logoColor, okDB, posiblesDuplicadosGastos, registrarError, rendGruposProyecto, rendicionDocHtml, rendicionFondo, rendicionPdfHtml, repartoFondos, saldoCliente, saludoCli, sendGmailWithPdf, sendMailServer, setLearningKV, subirAdjuntoDrive, txtEnviado } from './compartido.jsx'
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
 export function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false, preSel=false, navBorr=null, onRevisada=null}) {
@@ -540,10 +540,17 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
     return fondosRS.length>=2 ? <select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); const v=ev.target.value; moverAFondo(e,v&&v!=='__auto'?v:null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF?<option value=''>Sin fondo</option>:e.reembolso_fondo_id?<option value='__auto'>Reparto automático</option>:null}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select> : null }
   const chipsG = e => (<>{selProyG(e)}{selFondoG(e)}</>)
   // «No lo es»: el gasto deja de marcarse como posible duplicado, y la app lo recuerda (learnings gasto_no_duplicado).
+  // «Adjuntar»: el comprobante queda como respaldo del gasto (Drive + expense_attachments), igual que al cargarlo.
+  const [subiendo,setSubiendo] = useState(null)
+  const adjuntarRespaldo = async(e,file)=>{ if(!file) return; setSubiendo(e.id)
+    try{ if(!DEMO) await subirAdjuntoDrive({table:'expense_attachments',idField:'expense_id',entityId:e.id,folderKind:'gastos',namePrefix:`${client?.name||'Sin cliente'} · ${String(e.concept||'Gasto').slice(0,50)}`,file,user:{name:currentUserName}})
+      setConRespaldo(p=>new Set([...p,String(e.id)])); logActividad('gastos.respaldo_adjuntado',{tabla:'expenses',id:e.id,detalle:{cliente:client?.name,title:'Comprobante adjuntado desde la rendición',archivo:file.name}})
+    }catch(err){ appAlert('No se pudo adjuntar el comprobante: '+(err?.message||err)) }
+    setSubiendo(null) }
   const noEsDup = e => { setNoDup(p=>new Set([...p,String(e.id)])); if(!DEMO) setLearningKV('gasto_no_duplicado',String(e.id),'1').catch(()=>{}) }
   const badgesG = e => (<>
       {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <><span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span><span onClick={ev=>{ _stop(ev); noEsDup(e) }} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>No lo es</span></> })()}
-      {respListo&&selected.has(e.id)&&!conRespaldo.has(String(e.id))&&<span style={{padding:'2px 8px',borderRadius:20,background:C.soonBg,color:C.soonText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>Sin respaldo</span>}
+      {respListo&&selected.has(e.id)&&!conRespaldo.has(String(e.id))&&<><span style={{padding:'2px 8px',borderRadius:20,background:C.soonBg,color:C.soonText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>Sin respaldo</span><label onClick={_stop} title='Adjuntar el comprobante (PDF o foto)' style={{fontSize:10,fontWeight:700,color:C.accent,border:`1px dashed ${C.done}`,borderRadius:20,padding:'1px 8px',cursor:'pointer',whiteSpace:'nowrap',background:'#fff'}}>{subiendo===e.id?'Subiendo…':'Adjuntar'}<input type='file' accept='application/pdf,image/*' style={{display:'none'}} onClick={_stop} onChange={ev=>{ _stop(ev); adjuntarRespaldo(e,ev.target.files&&ev.target.files[0]); ev.target.value='' }}/></label></>}
     </>)
   // Grupos de la lista: por proyecto (con 2+ proyectos), o por fondo («Sin fondo, a pedir al cliente») al rendir un fondo; un solo grupo no lleva cabecera.
   const _qq = q.trim().toLowerCase()
@@ -672,7 +679,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
       {itemA(_cuadra,_cuadra?'Cuadra con la ficha':'No cuadra con la ficha',`fondos ${fmtN(_fgC.fondos)} − gastos ${fmtN(_fgC.gastos)} = ${fmtSaldoG(_fgC.saldo)}`)}
       {nSinProyR>0&&itemA(false,`${nSinProyR} gasto${nSinProyR!==1?'s':''} sin proyecto`,faltaProyR?'elige el proyecto para poder rendirlos':`se les asigna ${enFondo?proyFondo:proyecto}`,enFondo?null:()=>irProy(new Set(['__sin__'])))}
       {nDupR>0&&itemA(false,`${nDupR} posible${nDupR!==1?'s':''} duplicado${nDupR!==1?'s':''}`,'márcalos «No lo es» y la app lo recuerda',()=>setFExtra('dup'))}
-      {nSinResp>0&&itemA(false,`${nSinResp} sin respaldo`,'sin comprobante adjunto',()=>setFExtra('resp'))}
+      {nSinResp>0&&itemA(false,`${nSinResp} sin respaldo`,'adjunta el comprobante (PDF o foto) en cada fila',()=>setFExtra('resp'))}
       {gastosSel.length===0&&itemA(false,'Marca los gastos que quieres rendir','aún no hay ninguno seleccionado')}
       {gastosSel.length>0&&nSinProyR===0&&nDupR===0&&nSinResp===0&&itemA(true,'Todo en orden','puedes continuar')}
     </div>)
@@ -1229,12 +1236,15 @@ Saludos cordiales,`
   const _body = (<>
       <PasosRend paso={2}/>
       {!para.trim() && <div style={{padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soon,fontSize:12,marginBottom:12}}>Falta el destinatario. Escríbelo abajo o complétalo en la ficha del cliente.</div>}
-      <div style={{fontSize:11,color:C.textSoft,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span></div>
+      <div style={{fontSize:11,color:C.textSoft,marginBottom:10}}>De <span style={{color:C.muted}}>{user?.email||''}</span>{(firma.nombre||firma.cargo)&&<span> · firma: {[firma.nombre,firma.cargo].filter(Boolean).join(', ')}</span>} <span onClick={()=>setShowFirma(true)} style={{color:C.azulInfo,fontWeight:600,cursor:'pointer'}}>Editar firma</span></div>
       {/* Destinatarios: un solo bloque con chips (Para = principal navy, Cc = copias azules). Si Para está vacío, lo que escribes/eliges entra como Para. */}
       {(()=>{
         const flLbl={fontSize:10,color:C.textSoft,textTransform:'uppercase',letterSpacing:.5}
         const addOne = em => { const e=String(em||'').trim(); if(!e) return; if(!para.trim()) setPara(e); else addCc(e); setCcInput('') }
-        const sug=fichaContacts.filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase()))
+        // Sugeridos con un toque: contactos del cliente y del equipo (menos quien envía y la copia a la oficina, que tiene su interruptor).
+        const _yo=String(user?.email||'').toLowerCase(), _of=studioEmails.map(x=>String(x).toLowerCase())
+        const _equipo=Object.entries(equipoPorNombre()).map(([nombre,email])=>({nombre,email})).filter(t=>t.email&&t.email.toLowerCase()!==_yo&&!_of.includes(t.email.toLowerCase())&&!fichaContacts.some(c=>(c.email||'').toLowerCase()===t.email.toLowerCase()))
+        const sug=[...fichaContacts,..._equipo].filter(c=>(c.email||'').toLowerCase()!==(para||'').toLowerCase()&&!cc.includes((c.email||'').toLowerCase()))
         return (
         <div style={{marginBottom:12}}>
           <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'7px 9px'}}>

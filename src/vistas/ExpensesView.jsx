@@ -1832,7 +1832,7 @@ export const _RENDIR_G = [
   {k:'envd',  t:'Enviadas', ic:'check', bg:C.greenBg, col:C.greenText, btn:'Ver PDF'},
 ]
 
-export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onVerRend, onEditarRend, onEliminarBorr, detInicial=null, onDetInicialUsado, onSolicitar, onOpenMovBanco, onOpenClientFicha}){
+export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onVerRend, onEditarRend, onEliminarBorr, detInicial=null, onDetInicialUsado, onSolicitar, onOpenMovBanco, onOpenClientFicha, onVerHistorial=null}){
   const D=useIsDesktop()
   const prefKey=`fd_rendir_${currentUserName||'x'}`
   const pref=(()=>{ try{ return JSON.parse(localStorage.getItem(prefKey)||'null')||{} }catch(_){ return {} } })()
@@ -2230,7 +2230,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       {D&&!verLista&&<BtnDescarga onClick={exportar} titulo='Descargar Excel' n='sheet' />}
       {D&&verBorr&&selArm.length>0&&<button onClick={()=>setConfEnv(true)} style={{fontSize:13,fontWeight:700,border:'none',borderRadius:10,padding:'8px 16px',cursor:'pointer',background:C.normal,color:'#fff',whiteSpace:'nowrap',marginLeft:'auto'}}>{txtEnviar()}</button>}
     </div>
-    {verBorr ? borrTable : verLista ? envTable : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
+    {verBorr ? borrTable : verLista ? <>{envTable}{verEnv&&onVerHistorial&&<div onClick={onVerHistorial} role='button' tabIndex={0} style={{marginTop:10,fontSize:12,fontWeight:700,color:C.azulInfo,cursor:'pointer',textAlign:'center'}}>Historial completo, con liquidaciones de notaría y exportación <Gl n='chevron'/></div>}</> : <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><style>{`@media (max-width:1149px){.rend-abg{display:none}}`}</style><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>{['Cliente','Abogado','Gastos','Desde','Por rendir','Saldo',''].map((h,i)=>thRows(h,{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i>=4?'right':(i===2?'right':'left'),padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'},{className:i===1||i===3?'rend-abg':undefined}))}</tr></thead>
         <tbody>{rowsOrd.map((f,i)=>{ const pc=personChip(f.abg); const ch=chips(f); return (
@@ -2418,7 +2418,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
     if(navTo==='cajasEquipo'){ setHubOpen(false); setShowRevisar(true); setRevCaja(true) }
     if(navTo==='orphans') setShowOrphans(true)
     else if(navTo==='deuda'){ setShowNotaria(true); setNotaTab('pend') }
-    else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setRendSub(null) }
+    else if(navTo==='rendir'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendAbg(null); setRendSub('rendir') }
     else if(navTo==='rendirCli'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('env'); setRendAbg('Todos'); setRendSub('rendir') }
     else if(navTo==='rendirFavor'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('favor'); setRendAbg('Todos'); setRendSub('rendir') }   // Panel de socios › Fondos de clientes (a favor)
     else if(navTo==='rendirPedir'){ setHubOpen(false); setShowRendiciones(true); setQ(''); setRendGrupo('pedir'); setRendAbg('Todos'); setRendSub('rendir') }   // correo de cierre › «Rendir y pedir»   // Inicio › Rendiciones por hacer: directo a Rendir a cliente › Borradores
@@ -2766,15 +2766,15 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
                 if(showRevision){ if(revSub){setRevSub(null);setRevSel(new Set());return} setShowRevision(false);return }  // categoría → 3 tarjetas ; 3 tarjetas → Clientes
                 if(showReasignar){setShowReasignar(false);setReasignFrom(null);setRevSel(new Set());return}   // → Clientes
                 if(showBuscarClientes){setShowBuscarClientes(false);setQ('');return}                          // → Clientes
-                if(showRendiciones){ if(rendSub){setRendSub(null);setQ('');return} setShowRendiciones(false);setHubOpen(true);return }   // sub → Rendiciones ; Rendiciones → hub
+                if(showRendiciones){ if(rendSub&&rendSub!=='rendir'){setRendSub(null);setQ('');return} setShowRendiciones(false);setRendSub(null);setQ('');setHubOpen(true);return }   // Rendir a cliente → hub de Gastos
                 if(showCargaPag){setShowCargaPag(false);setHubOpen(true);return}                              // Carga masiva → hub
                 if(notaMenuOpen){setNotaMenuOpen(false);setHubOpen(true);return}                              // Cargar → hub
                 if(showGastosOficina){setShowGastosOficina(false);setHubOpen(true);return}                    // Gastos oficina → hub
-                if(showHistorial){setShowHistorial(false);setShowRendiciones(true);setRendSub(null);return}   // Historial (de rendiciones) → Rendiciones
+                if(showHistorial){setShowHistorial(false);setShowRendiciones(true);setRendGrupo('envd');setRendSub('rendir');return}   // Historial → Rendir a cliente (Enviadas)
                 if(showNotaria){ if(notaTab==='enviar'){ setNotaSend(null); if(notaOrigen==='historial'){ setNotaOrigen(null); setShowNotaria(false); setNotaTab('hub'); setShowHistorial(true); return } setNotaTab('pagados');return} if(notaTab==='documentos'&&docSub){setDocSub(null);return} if(notaTab!=='hub'){setNotaTab('hub');return} setShowNotaria(false);setHubOpen(true);return }   // enviar → Pagos ; subcategoría → Documentos ; sub → Notaría ; Notaría → hub
                 setHubOpen(true)                                                                              // Clientes (default) → hub
               }} style={{background:'none',border:'none',cursor:'pointer',padding:0,display:'inline-flex',alignItems:'center',gap:8}}><BackBtn origen={
-                selectedClient?'Gastos':showOrphans?(showRevision?'Revisión':showRevisar?'Revisar':'Gastos'):showRevision?(revSub?'Revisión':'Clientes'):(showReasignar||showBuscarClientes)?'Clientes':showRendiciones?(rendSub?'Rendiciones':'Gastos'):showHistorial?'Rendiciones':showNotaria?(notaTab==='enviar'?'Historial':notaTab==='documentos'&&docSub?'Documentos':notaTab!=='hub'?'Notaría':'Gastos'):'Gastos'}/><span style={{color:C.textSoft,fontWeight:400}}>|</span></button>
+                selectedClient?'Gastos':showOrphans?(showRevision?'Revisión':showRevisar?'Revisar':'Gastos'):showRevision?(revSub?'Revisión':'Clientes'):(showReasignar||showBuscarClientes)?'Clientes':showRendiciones?((rendSub&&rendSub!=='rendir')?'Rendiciones':'Gastos'):showHistorial?'Rendir a cliente':showNotaria?(notaTab==='enviar'?'Historial':notaTab==='documentos'&&docSub?'Documentos':notaTab!=='hub'?'Notaría':'Gastos'):'Gastos'}/><span style={{color:C.textSoft,fontWeight:400}}>|</span></button>
             )}
             <div style={{minWidth:0}}>
               <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',minWidth:0}}>
@@ -3118,7 +3118,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
           return <div style={{padding:isDesktop?'4px 22px 100px':'4px 12px 100px',...(isDesktop?{maxWidth:1180,margin:'0 auto'}:{})}}> <RendirClientesPage grupoInicial={rendGrupo} abgInicial={rendAbg} clients={clients} expenses={expenses} rendiciones={rendiciones} clientEntities={clientEntities} sales={sales} currentUserName={currentUserName} isAdmin={isAdmin}
             onRendir={(c,lista)=>{setRendEdit(null);setRendEntityIds([]);setRendNav(lista&&lista.length?{ids:lista,i:Math.max(0,lista.findIndex(id=>String(id)===String(c.id)))}:null);setRendicionClient(c)}} onEnviarRend={r=>{ const base=corrSiguiente(rendiciones,r.client_id); setEmailRend({...(r.correlativo?r:{...r,correlativo:base}), _hermanas:(r._hermanas||[]).map((h,i)=>h.correlativo?h:{...h,correlativo:base+1+i})}) }} onVerRend={verPdfRend}
             onEditarRend={r=>{const c=clients.find(x=>String(x.id)===String(r.client_id)); if(c){setRendDetIni(r.id);setRendEdit(r);setRendEntityIds([]);setRendNav(null);setRendicionClient(c)}}} detInicial={rendDetIni} onDetInicialUsado={()=>setRendDetIni(null)} onEliminarBorr={handleEliminarBorrador}
-            onSolicitar={(c,monto,resp)=>onSolicitarFondos&&onSolicitarFondos(c,null,monto||null,resp||null)} onOpenMovBanco={onOpenMovBanco} onOpenClientFicha={onOpenClientFicha}/></div>
+            onSolicitar={(c,monto,resp)=>onSolicitarFondos&&onSolicitarFondos(c,null,monto||null,resp||null)} onOpenMovBanco={onOpenMovBanco} onOpenClientFicha={onOpenClientFicha} onVerHistorial={()=>{setShowRendiciones(false);setRendSub(null);setHistTab('clientes');setShowHistorial(true)}}/></div>
         }
         if(rendSub==='pend'){
           return wrap(<>
@@ -4449,7 +4449,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
     const activos = clientsWithMovs.filter(c=>c.status!=='Terminado')
     const nSin = orphans.length + revN(revNoActivo) + revN(revOcasional)
     const cards = [
-      {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
+      {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setQ('');const hay=misBorr.arm>0||rendicionesEnCurso(clients,expenses).length>0;setRendGrupo(hay?'env':null);setRendAbg(null);setRendSub('rendir')}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
     cards.push({t:'Solicitar fondos', tM:'Solicitar', ic:'mail', s:'fondo inicial de trabajos nuevos', sM:'trabajos nuevos', col:C.accent, bg:C.azulBg, go:()=>onSolicitarFondos&&onSolicitarFondos()})
