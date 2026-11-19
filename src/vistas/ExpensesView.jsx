@@ -4452,7 +4452,7 @@ export function ExpensesView({onAsociarTrabajo,onEntregarCaja,onIrCajaChica,onRe
       {t:'Rendiciones', ic:'receipt', s:txtBorr||(rendirPend.length?`${fmtShort(rendirPend.reduce((a,x)=>a+(x.monto||0),0))} por rendir`:'al día'), col:C.accent, bg:C.azulBg, go:()=>{setHubOpen(false);setShowRendiciones(true);setRendSub(null)}},
       {t:'Notaría', ic:'building', s:notariaPend.length?`${fmtShort(notaPendTotal)} por pagar`:'al día', col:C.tealText, bg:C.tealBg, go:()=>{setNotaTab('hub');setShowNotaria(true)}},
     ]
-    cards.push({t:'Solicitar fondos', tM:'Solicitar', ic:'mail', s:'fondo inicial de clientes nuevos', sM:'clientes nuevos', col:C.accent, bg:C.azulBg, go:()=>onSolicitarFondos&&onSolicitarFondos()})
+    cards.push({t:'Solicitar fondos', tM:'Solicitar', ic:'mail', s:'fondo inicial de trabajos nuevos', sM:'trabajos nuevos', col:C.accent, bg:C.azulBg, go:()=>onSolicitarFondos&&onSolicitarFondos()})
     if(revisarRes) cards.push({t:'Revisar', ic:'check', s:revisarRes.resumen||'al día', sM:(revisarRes.resumen||'al día').split(' · ').slice(0,2).join(' · '), sCol:revisarRes.col, col:C.soonText, bg:C.soonBg, go:()=>setShowRevisar(true)})
     const hubInner = (
       <div style={{maxWidth:D?960:undefined,margin:'0 auto',padding:D?'8px 22px 44px':'2px 6px 30px'}}>

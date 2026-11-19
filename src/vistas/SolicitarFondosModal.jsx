@@ -5,7 +5,7 @@ import { ActBtn, Buscador, CUENTA_GASTOS_DEFAULT, Modal, chipBtn, depositoDeSoli
 import { entregarArchivo } from '../lib/archivos.js'
 
 // Solicitar fondos al cliente: el FONDO INICIAL de un cliente nuevo (lo que se pide a un cliente antiguo va dentro de la rendición y se ve en Rendiciones).
-// Dos pestañas: «Por solicitar» (clientes nuevos, desde la tarea «Solicitar fondos al cliente») e «Historial» (desde la app o registradas con «Ya la pedí»),
+// Dos pestañas: «Trabajos nuevos» (ventas activadas, desde la tarea «Solicitar fondos al cliente») e «Historial» (desde la app o registradas con «Ya la pedí»),
 // y «+ Nueva solicitud» para cualquier cliente. El correo es auto-redactado: PARA = contactos del cliente, CC = abogado responsable (y la casilla de la oficina),
 // con los correos ingresados APRENDIDOS (factura_to/cc + contacts) para todo correo futuro al cliente. El correo enviado queda guardado (fund_requests.correo).
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -338,7 +338,7 @@ export function SolicitarFondosModal({ client: clientProp, clients = [], sale, m
   const _body = (<>
     {enviada ? bloqueEnviada : <>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12, borderBottom: `1px solid ${C.border}` }}>
-        <button onClick={() => setTab('porsol')} style={tabBtn(tab === 'porsol')}>Por solicitar{porSolicitar.length ? ` · ${porSolicitar.length}` : ''}</button>
+        <button onClick={() => setTab('porsol')} style={tabBtn(tab === 'porsol')}>Trabajos nuevos{porSolicitar.length ? ` · ${porSolicitar.length}` : ''}</button>
         <button onClick={() => setTab('historial')} style={tabBtn(tab === 'historial')}>Historial{histBase.length ? ` · ${histBase.length}` : ''}</button>
         <span style={{ flex: 1 }} />
         {tab !== 'nueva' && <button type='button' onClick={() => { setClient(null); setVentaSel(null); setPara(''); setMonto(''); bodyTocado.current = false; setTab('nueva') }} style={{ ...chipBtn('primary'), marginBottom: 6 }}>+ Nueva solicitud</button>}
@@ -347,9 +347,9 @@ export function SolicitarFondosModal({ client: clientProp, clients = [], sale, m
         <div style={{ marginBottom: 10 }}><Buscador value={q} onChange={setQ} placeholder='Buscar cliente o monto…' /></div>
         {tab === 'historial' ? bloqueLista
           : <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 14px' }}>
-            <div style={{ ...SEC_LBL, marginBottom: 2 }}>Clientes nuevos</div>
+            <div style={{ ...SEC_LBL, marginBottom: 2 }}>Trabajos nuevos</div>
             {porSolicitar.length === 0
-              ? <div style={{ fontSize: 12.5, color: C.muted, padding: '10px 0' }}>{q.trim() ? 'Sin clientes con ese filtro.' : 'No hay fondos por solicitar. Aparecen aquí cuando se activa una venta y se crean sus primeras tareas.'}</div>
+              ? <div style={{ fontSize: 12.5, color: C.muted, padding: '10px 0' }}>{q.trim() ? 'Sin trabajos con ese filtro.' : 'No hay trabajos nuevos con fondo por solicitar. Aparecen aquí cuando se activa una venta y se crean sus primeras tareas.'}</div>
               : porSolicitar.map(filaSol)}
             {porSolicitar.length > 0 && <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>El monto es el de la tarea de fondos de las primeras tareas. Se puede cambiar en el borrador.</div>}
           </div>}
