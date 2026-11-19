@@ -1,3 +1,5 @@
+- 2026-11-19 · Rendiciones › correo: aviso «no aparece en tus correos» cuando una dirección del Para o Cc no figura en tu Gmail con ese cliente y hay una parecida que solo difiere en los puntos (botón «Usar …», que también corrige el contacto de la ficha). Y estado «No entregado» en Rendir a cliente (columna Seguimiento y detalle) cuando llega el rebote al Gmail de quien envió; un reenvío posterior lo apaga. Reglas en `_shared/direccionesReglas.js`, con prueba.
+
 - 2026-11-19 · Rendiciones › «Ver correo · reenviar»: al reenviar un correo que llevaba varias rendiciones (N° 1 y N° 2), vuelve a abrirlas juntas con sus mismos números.
 
 - 2026-11-19 · Notaría › Revisar liquidación: nuevo grupo «Trámite» junto a Cliente, Resp., Estado y Plana; reúne las OT del mismo trámite con su cantidad y total, y deja «Sin trámite», «No son nuestras» y «Sin cargo» al final.

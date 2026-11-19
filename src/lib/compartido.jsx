@@ -2016,7 +2016,7 @@ export const ME_DOMAIN = BRAND.web
 // Destinatarios sugeridos para la rendición: quién ha escrito o recibido correos sobre este cliente (solo encabezados, nunca el cuerpo).
 export const _addrsMail = h => (h||'').split(',').map(x=>x.trim()).map(x=>{ const m=x.match(/^(.*?)<(.+?)>$/); return m?{name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}:{name:'', email:x.toLowerCase()} }).filter(x=>x.email.includes('@'))
 
-export async function gmailParticipantesCliente(token, terms, cap=40){
+export async function gmailParticipantesCliente(token, terms, cap=40, max=6){
   const ts=[...new Set((terms||[]).filter(Boolean).map(t=>String(t).trim()).filter(t=>t.length>=4))].slice(0,8)
   if(!ts.length) return []
   const q=encodeURIComponent(`(${ts.map(t=>t.includes('@')?t:`"${t.replace(/"/g,'')}"`).join(' OR ')}) newer_than:18m`)
@@ -2038,7 +2038,7 @@ export async function gmailParticipantesCliente(token, terms, cap=40){
     ;[..._addrsMail(H['to']),..._addrsMail(H['cc'])].forEach(p=>add(p, nuestro?'recibio':'copia'))
   }catch(_){} }
   for(let i=0;i<ids.length;i+=6) await Promise.all(ids.slice(i,i+6).map(meta))
-  return Object.values(agg).sort((a,b)=>b.n-a.n||String(b.last).localeCompare(String(a.last))).slice(0,6)
+  return Object.values(agg).sort((a,b)=>b.n-a.n||String(b.last).localeCompare(String(a.last))).slice(0,max)
 }
 
 // Buscador de cliente (escribe para filtrar) — para asignar contactos sin cliente claro.

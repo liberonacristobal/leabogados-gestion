@@ -7,6 +7,7 @@ import { Fragment } from 'react'
 import logoBlanco from '../le-logo-blanco.png'
 import { Spin } from './base.jsx'
 import { Buscador, CAT_COLORS, Lbl, MAIL_OFICINA_CONFIRM, Modal, PasosRend, RENDCAT, Switch, TXT_REINGRESO, avisoNoEnviado, chipBtn, claudeCall, corrSiguiente, cuentaEnRecuadro, driveToken, equipoPorNombre, esPersona, estadoSolicitud, firmaCorreoHtml, firmaDefault, fmtSaldoG, fondoDeRend, fondosSinTrabajo, gastosDeRend, glosaCliente, gmailParticipantesCliente, imputarSaldosTrabajos, logActividad, logEvent, logoColor, okDB, posiblesDuplicadosGastos, registrarError, rendGruposProyecto, rendicionDocHtml, rendicionFondo, rendicionPdfHtml, repartoFondos, saldoCliente, saludoCli, sendGmailWithPdf, sendMailServer, setLearningKV, subirAdjuntoDrive, txtEnviado } from './compartido.jsx'
+import { direccionDudosa } from '../../supabase/functions/_shared/direccionesReglas.js'
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
 export function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false, preSel=false, navBorr=null, onRevisada=null}) {
@@ -948,17 +949,24 @@ export function RendicionEmailModal({r, client, user, expenses, rendiciones=[], 
   // las sugerencias quedan detrás de un enlace y se buscan solo si se piden.
   const [verSug,setVerSug] = useState(false)
   const [sugMail,setSugMail] = useState(null)
+  const [conocidas,setConocidas] = useState(null)   // direcciones que han escrito o recibido correos de este cliente en tu Gmail (para el aviso de dirección dudosa)
   const [primeraVez,setPrimeraVez] = useState(false)
   useEffect(()=>{ if(DEMO||!r?.client_id||_borr) return; let on=true
     supabase.from('learnings').select('value').eq('kind','rendicion_para').eq('key',String(r.client_id)).maybeSingle().then(({data})=>{ if(on&&!data?.value){ setPrimeraVez(true); setVerSug(true) } },()=>{})
     return ()=>{on=false} },[r?.client_id])   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>{ if(!verSug||sugMail!==null||DEMO) return; let on=true
+  useEffect(()=>{ if((!verSug&&!para.trim())||sugMail!==null||DEMO) return; let on=true
     ;(async()=>{ try{ const token=await driveToken(); if(!token){ if(on) setSugMail([]); return }
       const terms=[client?.name, ...(clientEntities||[]).filter(x=>x.client_id===r.client_id).map(x=>x.name), ...fichaContacts.map(c=>c.email)]
-      const out=await gmailParticipantesCliente(token, terms); if(on) setSugMail(out) }catch(_){ if(on) setSugMail([]) } })()
-    return ()=>{on=false} },[verSug])   // eslint-disable-line react-hooks/exhaustive-deps
+      const out=await gmailParticipantesCliente(token, terms, 25, 80); if(on){ setConocidas(out); setSugMail(out.slice(0,6)) } }catch(_){ if(on){ setSugMail([]); setConocidas([]) } } })()
+    return ()=>{on=false} },[verSug,!!para.trim()])   // eslint-disable-line react-hooks/exhaustive-deps
   const motivoSug = x => `${x.rol==='escribio'?'Escribió':x.rol==='recibio'?'Le escribimos':'Estuvo en copia'} el ${fmtFechaDMY(x.last)}${x.subj?`: «${x.subj.length>48?x.subj.slice(0,48)+'…':x.subj}»`:''}`
   const ponerPara = em => { const e=String(em).toLowerCase(); if(para.trim()&&para.trim().toLowerCase()!==e) setCc(p=>[...new Set([...p,para.trim().toLowerCase()])].filter(x=>x!==e)); else setCc(p=>p.filter(x=>x!==e)); setPara(e) }
+  // Cambia la dirección dudosa por la que sí aparece en tu Gmail y corrige el contacto de la ficha, para que no vuelva a salir mal.
+  const usarDireccion = (mala,buena)=>{ const m=String(mala).toLowerCase(), b=String(buena).toLowerCase()
+    const paraNuevo=(para||'').trim().toLowerCase()===m?b:(para||'').trim().toLowerCase()
+    setPara(paraNuevo); setCc(prev=>[...new Set(prev.map(x=>x===m?b:x))].filter(x=>x!==paraNuevo))
+    setFichaContacts(prev=>prev.map(c=>(c.email||'').toLowerCase()===m?{...c,email:b}:c))
+    if(!DEMO&&client?.id) supabase.from('contacts').update({email:b}).eq('client_id',client.id).ilike('email',m).then(({error})=>{ if(error) registrarError({origen:'accion',vista:'contacts_direccion',err:error}) },()=>{}) }
   const removeCc = em => setCc(prev=>prev.filter(x=>x!==em))
   const asuntoMulti = lang => lang==='en' ? `Expense Reports ${_todas.map(x=>`No. ${x.correlativo||'?'}`).join(' and ')} — ${client?.name||''}` : `Rendiciones de gastos ${_todas.map(x=>`N° ${x.correlativo||'?'}`).join(' y ')} — ${client?.name||''}`
   const [asunto,setAsunto] = useState(_txt?.asunto || (_multi ? asuntoMulti('es') : `Rendición de gastos${r.correlativo?` N° ${r.correlativo}`:''} — ${r.project||client?.name||''}`))
@@ -1268,6 +1276,11 @@ Saludos cordiales,`
               <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addOne(ccInput) } }} onBlur={()=>ccInput.trim()&&addOne(ccInput)} placeholder={para.trim()?'+ agregar copia…':'correo del cliente…'} style={{flex:1,minWidth:130,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
             </div>
           </div>
+          {(conocidas||[]).length>0&&[para.trim(),...cc].filter(Boolean).map(a=>({a,d:direccionDudosa(a,conocidas.map(x=>x.email),BRAND.emailDominio)})).filter(x=>x.d).map(({a,d})=>(
+            <div key={a} style={{marginTop:6,padding:'8px 10px',borderRadius:8,background:'#FEF6EE',border:'1px solid #F5E2CC',color:C.soonText,fontSize:12,display:'flex',flexWrap:'wrap',gap:'6px 10px',alignItems:'center'}}>
+              <span style={{flex:'1 1 180px',minWidth:0,overflowWrap:'anywhere'}}><b>{a.split('@')[0]}@</b> no aparece en tus correos.</span>
+              <button onClick={()=>usarDireccion(a,d.sugerida)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:10,padding:'6px 12px',cursor:'pointer',background:C.azulBg,color:C.accent,overflowWrap:'anywhere'}}>Usar {d.sugerida}</button>
+            </div>))}
           <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginTop:6}}>
             <div style={flLbl}>Dirigido a</div>
             <input value={dirigido} onChange={e=>{ setDirigido(e.target.value); setDirTocado(true) }} placeholder='Persona (opcional)' style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>

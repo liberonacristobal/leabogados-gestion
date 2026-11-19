@@ -8,6 +8,7 @@ import { cuentaEnSaldo, fgCliente, gastosPorRendirCli, grupoRendir, rendicionDeG
 import { VENTA_REAL, glosaKey } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { AsignarProyectoRS } from '../lib/fichaCliente.jsx'
 import { PaginaSobre, subproyectosCliente, useAprendidosVenta, useIaVenta } from '../lib/compartido.jsx'
+import { useRebotes, enviosRecientes } from '../lib/rebotesCorreo.jsx'
 import { listaClientesIA } from '../../supabase/functions/_shared/listaClientesIA.js'
 import { BRAND, C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, appConfirm, appPrompt, diaGrande, fmt, fmtFechaDMY, fmtN, fmtRutCL, isoLocal, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
 import { ActBtn, AsignarClienteInline, BackBtn, BitacoraLista, Buscador, CATS_DE_CLIENTE, CATS_LEGALES, CATS_OFICINA_NUEVAS, CAT_COLORS, CheckMini, ChipSearch, ClientePicker, EQUIPO_CFG, FlujoPagina, HubTile, INICIALES_RESP, Inp, KpiIco, MESES, MES_C, Modal, MovIcon, MovilizacionView, NOMBRE_CLI, NOTA_DIRIGIDO, RENDCAT, SOCIOS_CFG, SUBCATS_OFICINA, Switch, _DEMO_BANDEJA, _diasEntre, _esOfiCliR, _fechaISO, _mesLabelOf, _nombresMiembrosCache, alertasCajaChica, anularReembolsoDeRendicion, aprenderRS, avisoNoEnviado, bigDate, calceCajaChica, canonOtNN, catOficinaNueva, chipBtn, claudeCall, corrSiguiente, driveAdjuntosFolders, driveCall, driveGet, driveToken, driveUpload, enviarComoUsuario, equipoPorNombre, esCorreoOficina, esGestionGasto, estadoSolicitud, fmtDate, fmtMill, fmtSaldoG, fmtShort, fondoDeRend, glosaSinDetalle, learnPut, loadXLSXStyle, logActividad, lunesSemanaISO, mesCorto, mesTitulo, modoEnvioLote, movilizacionDatos, nombresMiembros, otConSello, pillPersonaSty, registrarFondoPropuesto, rendicionPdfHtml, resolverClienteSII, rsDisplay, rsLabel, saldoCajaChica, saldoCliente, titleCase, txtEnviado, txtResumenEnvio, usePersisted, usePersistedState, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
@@ -1773,6 +1774,8 @@ export const _RENDIR_G = [
 
 export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=[], expenses=[], rendiciones=[], clientEntities=[], sales=[], currentUserName, isAdmin, onRendir, onEnviarRend, onVerRend, onEditarRend, onEliminarBorr, detInicial=null, onDetInicialUsado, onSolicitar, onOpenMovBanco, onOpenClientFicha, onVerHistorial=null}){
   const D=useIsDesktop()
+  const _envRec=useMemo(()=>enviosRecientes({rendiciones}),[rendiciones])
+  const rebotado=useRebotes(_envRec)   // «No entregado»: rebote llegado al Gmail de quien envió, posterior al último envío
   const prefKey=`fd_rendir_${currentUserName||'x'}`
   const pref=(()=>{ try{ return JSON.parse(localStorage.getItem(prefKey)||'null')||{} }catch(_){ return {} } })()
   const [g,setG]=useState(grupoInicial||pref.g||'pedir')
@@ -1903,7 +1906,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   // Tabla de borradores (las «en curso» van siempre arriba; se ordenan los borradores).
   const { filas:borrOrd, th:thBorr } = useOrden(envRows, {
     Cliente:x=>x.c.name, Abogado:x=>x.abg, 'Hecho por':x=>x.autor, Armada:x=>x.at, Gastos:x=>x.n, 'Por rendir':x=>x.m })
-  const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
+  const segTxt = x => x.r.estado_envio==='externa' ? {t:'rendida por fuera',c:C.textSoft} : rebotado('rendicion',x.r.id,x.r.sent_at) ? {t:'No entregado',c:C.overdueText} : x.st ? (x.st.k==='rec' ? {t:`depósito ${fmtFechaDMY(String(x.req.recibido_at||x.st.dep?.date||'').slice(0,10))}`,c:C.greenText} : {t:`pedido · ${x.st.dias} d`,c:x.st.k==='sin'?C.overdueText:C.soonText}) : {t:'—',c:C.textSoft}
   const envTable = verEnv && (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
       {D ? (<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
         <thead><tr>{(verBorr?['Cliente','Abogado','Trabajo','Armada','Gastos','Total','Correo','']:['Cliente','Abogado','N°','Enviada','Gastos','Total','Seguimiento','']).map((h,i)=>thEnv(h,{fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:i===4||i===5?'right':'left',padding:'9px 12px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}))}</tr></thead>
@@ -2067,7 +2070,8 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
       const desde=String(r.sent_at||r.created_at||'').slice(0,10)
       const req=(reqs||[]).filter(q=>String(q.client_id)===String(r.client_id)&&String(q.enviada_at||'').slice(0,10)>=desde).sort((a,b)=>String(a.enviada_at).localeCompare(String(b.enviada_at)))[0]||null
       const st=req?estadoSolicitud(req,expenses):null
-      const est=r.estado_envio==='externa'?{t:'Rendida por fuera de la app',c:C.textSoft,bg:C.bgSoft}:r.sent_at?{t:'Enviada',c:C.greenText,bg:C.greenBg}:{t:'Borrador',c:C.soonText,bg:C.soonBg}
+      const reb=r.sent_at&&r.estado_envio!=='externa'?rebotado('rendicion',r.id,r.sent_at):null
+      const est=r.estado_envio==='externa'?{t:'Rendida por fuera de la app',c:C.textSoft,bg:C.bgSoft}:r.sent_at?(reb?{t:'No entregado',c:C.overdueText,bg:C.overdueBg}:{t:'Enviada',c:C.greenText,bg:C.greenBg}):{t:'Borrador',c:C.soonText,bg:C.soonBg}
       const card={background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}
       const paso=(ok,t,sub,extra)=>(<div style={{display:'flex',gap:10,alignItems:'flex-start',padding:'7px 0'}}>
         <span style={{width:10,height:10,borderRadius:'50%',marginTop:5,flexShrink:0,background:ok?C.greenText:C.surface,border:`1.5px solid ${ok?C.greenText:C.done}`}}/>
@@ -2085,6 +2089,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
             {onEnviarRend&&r.estado_envio!=='externa'&&<button onClick={()=>abrirCorreo(r)} style={{fontSize:12,fontWeight:700,border:'none',borderRadius:10,padding:'6px 12px',cursor:'pointer',background:r.sent_at?C.azulBg:C.accent,color:r.sent_at?C.accent:'#fff'}}>{r.sent_at?'Ver correo · reenviar':'Ver correo y enviar'}</button>}
           </span>
         </div>
+        {reb&&<div style={{padding:'8px 10px',borderRadius:8,background:C.overdueBg,border:`1px solid ${C.overdueBd}`,color:C.overdueText,fontSize:12,marginBottom:12,overflowWrap:'anywhere'}}>No llegó a {reb.dir}: {reb.motivo}.</div>}
         <div style={{display:'grid',gridTemplateColumns:D?'repeat(3,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:8,marginBottom:12}}>
           {[['Rendido',fmt(r.total||0),`${r.n_gastos||gs.length} gastos`],['Pedido',req?fmt(req.monto||0):'—',req?(st?.k==='rec'?'depósito recibido':`sin depósito · ${st?.dias||0} d`):'no se pidieron fondos'],['Período',r.periodo||'—',r.project?(r.subproject?`${r.project} · ${r.subproject}`:r.project):'sin proyecto']].map(([l,v,sub])=>(
             <div key={l} style={{...card,padding:'10px 12px',minWidth:0,...(!D&&l==='Período'?{gridColumn:'1 / -1'}:{})}}><div style={{fontSize:10.5,fontWeight:700,color:C.accent,textTransform:'uppercase',letterSpacing:.5}}>{l}</div><div style={{fontSize:D?18:14,fontWeight:700,color:C.text,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25,fontVariantNumeric:'tabular-nums'}}>{v}</div><div style={{fontSize:11,color:C.textSoft,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>{sub}</div></div>))}
