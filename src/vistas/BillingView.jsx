@@ -4635,6 +4635,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
   const [saludo,setSaludo]=useState('Estimados,')     // saludo del correo (se adapta a hombre/mujer/varios/idioma)
   const [saludoAuto,setSaludoAuto]=useState(true)      // mientras no lo edites a mano, se recalcula solo
   const [trato,setTrato]=useState(null)   // 'usted' | 'tu' aprendido para la persona del «Para» (null = tú)
+  const tratoElegido=useRef(false)   // eligió Tú/Usted/Ustedes a mano: se aprende para esa persona al enviar
   const foliosPag=listF.filter(f=>f.status==='Pagado').map(f=>folioN(f.invoice_no||'')||f.invoice_no||'')   // facturas de este envío que ya están pagadas: se ofrece avisarlo, nunca se agrega solo
   const singular = esSaludoSingular(saludo)   // «Estimado Agustín» / «Estimada Carolina»: el cuerpo habla de tú; con «Estimados» sigue de ustedes
   // genBody usa amountOf (monto real del DTE cuando ya se generó el PDF; si no, el del sistema). Solo se llama en efectos (amountOf ya existe).
@@ -4820,7 +4821,7 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
       if(client?.id){
         if(asuntoTocado.current&&!multi) try{ await setLearningKV('factura_asunto',msgKey('es'),tokenizar(asunto,_vals('es'))) }catch(e){registrarError({origen:'accion',vista:'factura_asunto',err:e})}
         if(!saludoAuto&&saludo.trim()&&paraLista.length===1) try{ await setLearningKV('factura_saludo_dest',paraLista[0],saludo.trim()) }catch(e){registrarError({origen:'accion',vista:'factura_saludo_dest',err:e})}   // aprende el saludo de ESA persona
-        { const tr=bodyTocado.current&&lang==='es'&&singular&&paraLista.length===1?tratoDeTexto(body):null; if(tr) try{ await setLearningKV('factura_trato_dest',paraLista[0],tr) }catch(e){registrarError({origen:'accion',vista:'factura_trato_dest',err:e})} }   // aprende el trato (esté/estés) de ESA persona
+        { const tr=(bodyTocado.current||tratoElegido.current)&&lang==='es'&&singular&&paraLista.length===1?tratoDeTexto(body):null; if(tr) try{ await setLearningKV('factura_trato_dest',paraLista[0],tr) }catch(e){registrarError({origen:'accion',vista:'factura_trato_dest',err:e})} }   // aprende el trato (esté/estés) de ESA persona
         try{ await setLearningKV('factura_opts',String(client.id),JSON.stringify({incPago:!!incPago,recordarSaldo:!!recordarSaldo})) }catch(e){registrarError({origen:'accion',vista:'factura_opts',err:e})}
       }
       appAlert(txtEnviado(via,{que:multi?`${listF.length} facturas`:'Factura', g:multi?'as':'a', para:[para.trim(),...cc].filter(Boolean).join(', ')})); onClose()
@@ -4857,6 +4858,12 @@ export function FacturaEmailModal({factura, facturas, sales=[], client, user, sa
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
           <span style={{fontSize:10,color:C.muted,fontWeight:600}}>MENSAJE</span>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {lang==='es'&&<div style={{display:'inline-flex',border:`0.5px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>{(()=>{ const act=!singular?'ustedes':(trato==='usted'?'usted':'tu'); const n1=(destNombre||'').trim().split(/\s+/)[0]
+              const elegir=k=>{ tratoElegido.current=true
+                if(k==='ustedes'){ setSaludoAuto(false); setSaludo('Estimados,'); return }
+                if(!singular){ setSaludoAuto(false); setSaludo(`${n1&&generoF(destNombre)?'Estimada':'Estimado'}${n1?' '+n1:''},`) }
+                setTrato(k) }
+              return [['tu','Tú'],['usted','Usted'],['ustedes','Ustedes']].map(([k,l])=><button key={k} type='button' onClick={()=>elegir(k)} style={{fontSize:10,fontWeight:600,padding:'3px 9px',border:'none',cursor:'pointer',background:act===k?C.accent:'transparent',color:act===k?'#fff':C.muted}}>{l}</button>) })()}</div>}
             <button type='button' onClick={()=>{ bodyTocado.current=false; setBody(genBody(lang)) }} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>↺ texto sugerido</button>
             {!multi&&<button type='button' disabled={iaBusy} onClick={redactarIA} style={{fontSize:10,color:C.coralText,background:C.ambarBg,border:'none',borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:iaBusy?'default':'pointer'}}>{iaBusy?'Redactando…':<><Sparkle/> Redactar con IA</>}</button>}
           </div>

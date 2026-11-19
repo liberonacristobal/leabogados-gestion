@@ -424,18 +424,18 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}
         const sug = contacts.filter(c=>c.email)
         return (<>
-        <div style={{display:'grid',gridTemplateColumns:(enFondo||proyectosDisp.length===0)?'1fr 1fr':'1fr',gap:8,marginBottom:6}}>
+        <div style={{display:'grid',gridTemplateColumns:(esEdicion&&(enFondo||proyectosDisp.length===0))?'1fr 1fr':'1fr',gap:8,marginBottom:(esEdicion||enFondo||proyectosDisp.length===0)?6:0}}>
           {enFondo
             ? <div style={flBox(false)}><div style={flLbl}>Proyecto del fondo{faltaProyR?' *':''}</div><div style={{fontSize:13,color:proyFondo?C.text:C.soonText,minHeight:22,display:'flex',alignItems:'center'}}>{proyFondo||'Sin proyecto'}</div></div>
             : proyectosDisp.length>0 ? null   // el proyecto se elige con los chips sobre la lista
             : <div style={{...flBox(!!proyecto),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{})}}><div style={flLbl}>Proyecto{faltaProyR?' *':''}</div><input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/></div>}
-          <div style={flBox(false)}>
+          {esEdicion&&<div style={flBox(false)}>
             <div style={flLbl}>Dirigido a</div>
             <input value={atencion} onChange={e=>{setAtencion(e.target.value);setAtencionEmail('');setPrefilled(false)}} placeholder='Persona (opcional)' style={flInp}/>
-          </div>
+          </div>}
         </div>
         {!enFondo&&proyF.size===0&&nSinProyR>0&&proyectoSugerido&&<div style={{marginBottom:6}}><button onClick={()=>setProyecto(proyectoSugerido)} style={{fontSize:10,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Sugerido: {proyectoSugerido}</button></div>}
-        {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:10,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
+        {esEdicion&&sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',marginBottom:8}}><span style={{fontSize:10,color:C.textSoft}}>Sugeridos:</span>{sug.map(c=><button key={c.id} onClick={()=>{setAtencion(c.nombre||c.email);setAtencionEmail(c.email||'');setPrefilled(false)}} style={{fontSize:10,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'2px 9px',cursor:'pointer'}}>{c.nombre?c.nombre+' · ':''}{c.email}</button>)}</div>}
         {gastosPend.length===0 && <div style={{fontSize:10,color:C.soon,marginBottom:8}}>Esta razón social aún no tiene gastos por rendir{proyVentas.length>0?` (el proyecto viene de la venta)`:'. Cambia de razón social o ingresa gastos primero'}.</div>}
         {!showSub && !subproyecto && <div onClick={()=>setShowSub(true)} style={{fontSize:11,color:C.azulInfo,cursor:'pointer',marginBottom:12,width:'fit-content'}}>+ Subproyecto</div>}
         {(showSub||subproyecto)&&<div style={{...flBox(false),marginBottom:12}}>
@@ -881,6 +881,11 @@ export function RendicionEmailModal({r, client, user, expenses, rendiciones=[], 
   const _todas = [r, ...((r&&r._hermanas)||[])]
   const _multi = _todas.length>1
   const _borr = (r?.correo&&(r.correo.asunto||r.correo.cuerpo||r.correo.para))?r.correo:null   // borrador guardado: se retoma (el que solo agrupa no trae nada)
+  // «Dirigido a»: la persona a la que va la rendición (aparece en el PDF). Sigue al destinatario elegido en «Para» si es un contacto con nombre; se puede corregir.
+  const [dirigido,setDirigido] = useState(_borr?.dirigido ?? r?.dirigido_a ?? '')
+  const [dirTocado,setDirTocado] = useState(!!_borr?.dirigido)
+  const _dirEf = (dirigido||'').trim()||null
+  const _todasD = _todas.map(x=>({...x,dirigido_a:_dirEf}))
   // El texto (asunto/cuerpo) solo vale si es del mismo tipo de correo: si la hermana se eliminó, el texto que nombra dos rendiciones no sirve.
   const _txt = _borr && ((_borr.modo==='sep1')===_multi) ? _borr : null
   const det = gastosDeRend(r, expenses).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')))
@@ -930,6 +935,7 @@ export function RendicionEmailModal({r, client, user, expenses, rendiciones=[], 
   // El saludo nombra a la persona elegida en «Para» (Estimada Paulina), no a la empresa; si el destinatario no es un contacto con nombre, queda el del cliente.
   const _destNombre = (fichaContacts.find(c=>(c.email||'').toLowerCase()===String(para||'').trim().toLowerCase())||{}).nombre||''
   const _nomSaludo = _destNombre&&esPersona(_destNombre) ? _destNombre : client?.name
+  useEffect(()=>{ if(!dirTocado&&_destNombre) setDirigido(_destNombre) },[_destNombre])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{ if(!client?.id) return; let alive=true
     supabase.from('contacts').select('nombre,email').eq('client_id',client.id).then(({data})=>{ if(alive) setFichaContacts((data||[]).filter(c=>c.email)) },()=>{})
     supabase.from('learnings').select('value').eq('kind','rendicion_cc').eq('key',String(client.id)).maybeSingle().then(({data})=>{ if(alive&&data&&data.value){ const ems=String(data.value).split(/[,;]/).map(s=>s.trim().toLowerCase()).filter(Boolean); setCc(prev=>[...new Set([...prev,...ems])]) } },()=>{})
@@ -1106,15 +1112,24 @@ Saludos cordiales,`
     }catch(e){ appAlert('Error al redactar con IA: '+(e?.message||e)) }
     setAiBusy(false)
   }
-  const verPDF = (x=r) => {
+  const verPDF = (x=_todasD[0]) => {
     const w=window.open('','_blank'); if(!w){ appAlert('Permite las ventanas emergentes para ver el PDF.'); return }
     w.document.write(rendicionPdfHtml(x, client, expenses, clientEntities, attachSet, lang, rendiciones))   // diseño rico A (mismo que "Ver PDF" del historial)
     w.document.close()
   }
   // La vista previa no registra nada: recién al guardar o enviar se crea(n) la(s) rendición(es) y se marcan sus gastos.
-  const persistir = async() => { const out=[]; for(const x of _todas){ out.push(x._virtual ? await x._crear() : x) } return out }
+  // Aprende la relación nombre ↔ correo del destinatario (contacts) para la próxima rendición de este cliente.
+  const aprenderDirigido = async()=>{ const em=(para||'').trim().toLowerCase(); if(!_dirEf||!em||!client?.id||DEMO) return
+    try{ const ya=fichaContacts.find(c=>(c.email||'').toLowerCase()===em)
+      if(ya){ if(!ya.nombre) await supabase.from('contacts').update({nombre:_dirEf}).eq('client_id',client.id).eq('email',ya.email) }
+      else await supabase.from('contacts').insert({client_id:client.id,nombre:_dirEf,email:em})
+    }catch(e){ registrarError({origen:'accion',vista:'contacts_dirigido',err:e}) } }
+  const persistir = async() => { const out=[]; for(const x of _todas){ let c=x._virtual ? await x._crear() : x
+      if((c.dirigido_a||null)!==_dirEf){ await supabase.from('rendiciones').update({dirigido_a:_dirEf}).eq('id',c.id); c={...c,dirigido_a:_dirEf}; onPatch&&onPatch(c.id,{dirigido_a:_dirEf}) }
+      out.push(c) }
+    aprenderDirigido(); return out }
   const _modoCorreo = _multi ? 'sep1' : (r._cola?.length ? 'sepN' : 'junto')
-  const correoDatos = (extra, saved) => ({para:para.trim(), cc, asunto, cuerpo:body, trato, lang, studioOn, adic:adicRaw, por:user?.name||null, modo:_modoCorreo, grupo:(saved||[]).map(x=>x.id), devolver_favor:_netoAplica?devolverFav:null, pedir_devolucion:pedirDev, ...extra})
+  const correoDatos = (extra, saved) => ({para:para.trim(), cc, asunto, cuerpo:body, trato, lang, studioOn, adic:adicRaw, por:user?.name||null, modo:_modoCorreo, grupo:(saved||[]).map(x=>x.id), devolver_favor:_netoAplica?devolverFav:null, pedir_devolucion:pedirDev, dirigido:_dirEf, ...extra})
   const guardarBorrador = async() => {
     setSending(true)
     try{
@@ -1255,6 +1270,10 @@ Saludos cordiales,`
               <input value={ccInput} onChange={e=>setCcInput(e.target.value)} onKeyDown={e=>{ if((e.key==='Enter'||e.key===',')&&ccInput.trim()){ e.preventDefault(); addOne(ccInput) } }} onBlur={()=>ccInput.trim()&&addOne(ccInput)} placeholder={para.trim()?'+ agregar copia…':'correo del cliente…'} style={{flex:1,minWidth:130,border:'none',outline:'none',fontSize:13,color:C.text,background:'none'}}/>
             </div>
           </div>
+          <div style={{background:C.bgSoft,border:`0.5px solid ${C.border}`,borderRadius:8,padding:'6px 11px',marginTop:6}}>
+            <div style={flLbl}>Dirigido a</div>
+            <input value={dirigido} onChange={e=>{ setDirigido(e.target.value); setDirTocado(true) }} placeholder='Persona (opcional)' style={{width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}}/>
+          </div>
           {sug.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}>
             {sug.map(c=><button key={c.email} onClick={()=>addOne(c.email)} style={{fontSize:11,border:`0.5px solid ${C.border}`,color:C.muted,background:'none',borderRadius:12,padding:'3px 10px',cursor:'pointer'}}>+ {c.nombre?c.nombre+' · ':''}{c.email}</button>)}
           </div>}
@@ -1331,7 +1350,7 @@ Saludos cordiales,`
       {!(asPage&&isDesktop)&&<details style={{marginBottom:14}} open><summary style={{fontSize:11,color:C.muted,cursor:'pointer'}}>Vista previa del correo</summary><div style={{border:`1px solid ${C.border}`,borderRadius:8,padding:12,maxHeight:300,overflowY:'auto',marginTop:8,background:'#fff'}} dangerouslySetInnerHTML={{__html:buildEmailHtml(body, lang)}}/></details>}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
-        {_todas.map((x,i)=><button key={i} onClick={()=>verPDF(x)} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{_multi?`PDF N° ${x.correlativo||i+1}`:'Ver PDF'}</button>)}
+        {_todasD.map((x,i)=><button key={i} onClick={()=>verPDF(x)} style={{flex:1,padding:'9px 10px',borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.accent,fontSize:13,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>{_multi?`PDF N° ${x.correlativo||i+1}`:'Ver PDF'}</button>)}
         <button onClick={guardarBorrador} disabled={sending} style={{flex:(!isDesktop&&_multi)?'1 1 100%':1.3,padding:'9px 10px',borderRadius:10,border:'none',background:C.azulBg,color:C.accent,fontSize:13,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap',opacity:sending?.6:1}}>Guardar borrador</button>
       </div>
       <button onClick={enviar} disabled={sending||!para.trim()} style={{width:'100%',marginTop:10,padding:'11px 14px',borderRadius:10,border:'none',background:C.normal,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',opacity:(sending||!para.trim())?.6:1}}>{sending?'Enviando...':(_multi?`Enviar en un correo · ${_todas.length} PDF`:(r._cola?.length?(r._cola[0]._cliName&&String(r._cola[0].client_id)!==String(r.client_id)?`Enviar y seguir con ${r._cola[0]._cliName}`:`Enviar y seguir con la N° ${r._cola[0].correlativo||'siguiente'}`):'Enviar'))}</button>
