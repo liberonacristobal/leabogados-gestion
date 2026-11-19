@@ -7163,7 +7163,7 @@ export default function App() {
     if(notaResumen?.noNuestras?.length){ try{ await registrarNoNuestras(notaResumen.noNuestras,{batchId:payloads.length?batchId:null,filename,por:user?.name||null}) }catch(e){ console.error('registrarNoNuestras',e) } }   // nunca se pierden (aunque no haya nada que cargar)
     if(payloads.length===0) return {imported:0,dupOmit,otDupOmit,sinCliente:0,sinFecha:0,batchId:null,filename}
     // Resumen permanente de la carga (nada sin rastro): cargadas + con error (no entraron) + ya en la app; guarda las filas con error.
-    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:notaResumen.cargadas??payloads.length, pendientes:notaResumen.pendientes||0, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]), noNuestras:(notaResumen.noNuestras||[]), notaria:true } : null
+    const resumen = notaResumen ? { leidas:notaResumen.leidas??payloads.length, cargadas:notaResumen.cargadas??payloads.length, pendientes:notaResumen.pendientes||0, error:notaResumen.error||0, omitidas:notaResumen.omitidas??(dupOmit+otDupOmit), erroresDet:(notaResumen.erroresDet||[]), noNuestras:(notaResumen.noNuestras||[]), ...(Array.isArray(notaResumen.repetidasDet)?{repetidasDet:notaResumen.repetidasDet,totalArchivo:Number(notaResumen.totalArchivo)||0}:{}), notaria:true } : null
     const {error:bErr} = await supabase.from('bulk_imports').insert({id:batchId,created_by:user?.name||null,row_count:payloads.length,filename:filename||null,...(resumen?{resumen}:{})})
     if(bErr) throw bErr
     const inserted=[]

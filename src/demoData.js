@@ -288,7 +288,7 @@ export const demoData = {
   ],
   // Cargas masivas de notaría (Carga masiva / historial). El resumen guarda las "no son nuestras" para el panel dedicado.
   bulk_imports: [
-    { id:'bi10', created_at:'2026-10-22T10:05:00Z', created_by:'Martina', filename:'Liquidación (2).xlsx', row_count:3, status:'active', resumen:{ leidas:5, cargadas:2, pendientes:1, error:1, omitidas:1, notaria:true, noNuestras:[{ ot:'OT-49010', fecha:'2026-10-02', monto:20000, concepto:'Gastos notariales — Protocolización de certificado', nombre:'Dirección Regional', motivo:'PROTOCOLIZACION CERTIFICADO' }] } },
+    { id:'bi10', created_at:'2026-10-22T10:05:00Z', created_by:'Martina', filename:'Liquidación (2).xlsx', row_count:3, status:'active', resumen:{ leidas:5, cargadas:2, pendientes:1, error:1, omitidas:1, notaria:true, repetidasDet:[{ ot:'OT-48001', fecha:'2026-09-28', materia:'Poder especial', nombre:'Comercial Andes SpA', requirente:null, monto:40000, estado:'pagada' }], totalArchivo:170001, erroresDet:[{ ot:'OT-49011', nombre:'EXIMIN SpA', motivo:'De registro ($1) · no se cobra', monto:1 }], noNuestras:[{ ot:'OT-49010', fecha:'2026-10-02', monto:20000, concepto:'Gastos notariales — Protocolización de certificado', nombre:'Dirección Regional', motivo:'PROTOCOLIZACION CERTIFICADO' }] } },
     { id:'bi9', created_at:'2026-10-09T15:10:00Z', created_by:'Martina', filename:'Liquidación.xlsx', row_count:18, status:'active', resumen:{ leidas:19, cargadas:18, pendientes:0, error:0, omitidas:1, notaria:true } },
     { id:'bi1', created_at:'2026-08-21', created_by:'Martina', filename:'Notaría Lascar — agosto.xlsx', row_count:12, status:'active',
       resumen:{ leidas:16, cargadas:12, pendientes:0, error:1, omitidas:0, notaria:true,

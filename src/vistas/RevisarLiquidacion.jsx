@@ -19,6 +19,7 @@ const TONO = {
   carg: { bg: C.greenBg, col: C.greenText, t: 'Cargadas' },
   nn: { bg: C.overdueBg, col: C.overdueText, t: 'No son nuestras' },
   sin: { bg: C.bgSoft, col: C.grisText, t: 'Sin cargo' },
+  rep: { bg: C.azulBg, col: C.azulInfo, t: 'Repetidas' },
 }
 const chipDe = f => f.chip === 'rojo' ? { bg: C.overdueBg, col: C.overdueText } : f.chip === 'ambar' ? { bg: C.soonBg, col: C.soonText } : f.chip === 'azul' ? { bg: C.azulBg, col: C.azulInfo } : f.chip === 'verde' ? { bg: C.greenBg, col: C.greenText } : { bg: C.bgSoft, col: C.grisText }
 
@@ -68,17 +69,31 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
       const reg = /registro/i.test(x.motivo || ''), anu = /efecto|anulad/i.test(x.motivo || '')
       out.push({ key: 'e' + i, tipo: 'e', x, ot: otTxt(x.ot), f: '', mat: x.motivo || 'Con error', nombre: x.nombre, req: '', cli: null, cliTxt: '', tr: '', m: reg ? 1 : 0, pago: reg ? 'No se cobra' : '', pagoTono: 'gris', fam: 'sin', est: reg ? 'De registro' : anu ? 'Anulada' : 'Con error', chip: reg || anu ? 'gris' : 'rojo', editable: false })
     })
+    // Repetidas (ya estaban en la app): detalle guardado con la carga; cliente, trabajo y pago salen del gasto vivo por su OT.
+    if (Array.isArray(resumen.repetidasDet)) {
+      const normOt = o => String(o || '').replace(/^OT-?/i, '').trim()
+      const porOt = new Map(); (expenses || []).forEach(g => { if (!g.deleted_at && g.ot_number) porOt.set(normOt(g.ot_number), g) })
+      resumen.repetidasDet.forEach((x, i) => {
+        const g = porOt.get(normOt(x.ot)), c = g ? cliDe(g.client_id) : null, p = g ? pagoDeGasto(g) : null
+        out.push({ key: 'r' + i, tipo: 'r', x, ot: otTxt(x.ot), f: x.fecha, mat: x.materia || '—', nombre: x.nombre, req: x.requirente || '', cli: g?.client_id || null, cliTxt: c?.name || '', tr: g?.project || '', m: Number(x.monto) || 0,
+          pago: p ? (p.pagado ? `Pagada ${fmtFechaDMY(isoLocal(p.fecha))}` : 'Por pagar') : '', pagoTono: p ? (p.pagado ? 'verde' : 'ambar') : 'gris', fam: 'rep', est: 'Repetida', chip: 'gris', editable: false })
+      })
+    }
     return out
   }, [expenses, clients, resumen, nn, cid])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cuenta = f => filas.filter(r => r.fam === f), suma = xs => xs.reduce((a, r) => a + r.m, 0)
-  const cobrado = filas.filter(r => r.tipo !== 'e')
+  const hayDetalle = Array.isArray(resumen.repetidasDet)
+  const cobrado = filas.filter(r => r.tipo !== 'e' && r.tipo !== 'r')
+  const totalFilas = suma(filas)
+  const totalArchivo = Number(resumen.totalArchivo) || 0
+  const diferencia = hayDetalle ? Math.round(totalArchivo - totalFilas) : null
   const pendientes = cuenta('rev').length + filas.filter(r => r.tipo === 'n' && r.nnEstado === 'pendiente').length
   const repetidas = Number(resumen.omitidas) || 0
 
   const visibles = useMemo(() => { const t = q.trim().toLowerCase()
     return filas.filter(r => (!fam || r.fam === fam) && (!t || `${r.ot} ${r.mat} ${r.cliTxt} ${r.tr} ${r.nombre || ''} ${r.req} ${r.m}`.toLowerCase().includes(t))) }, [filas, fam, q])
-  const claveGrupo = r => grp === 'cli' ? (r.tipo === 'n' ? 'No son nuestras' : r.tipo === 'e' ? 'Sin cargo' : (r.cliTxt || 'Sin cliente')) : grp === 'resp' ? (r.cli ? (respDe(r.cli) || 'Sin responsable') : 'Sin responsable') : grp === 'est' ? r.est : 'Todas'
+  const claveGrupo = r => grp === 'cli' ? (r.tipo === 'n' ? 'No son nuestras' : r.tipo === 'e' ? 'Sin cargo' : r.tipo === 'r' ? (r.cliTxt || 'Repetidas') : (r.cliTxt || 'Sin cliente')) : grp === 'resp' ? (r.cli ? (respDe(r.cli) || 'Sin responsable') : 'Sin responsable') : grp === 'est' ? r.est : 'Todas'
   // Orden: alfabético (grupos por nombre con los especiales al final, filas por cliente y trámite) o por fecha (la más reciente primero).
   const _es = (a, b) => String(a || '').localeCompare(String(b || ''), 'es', { sensitivity: 'base' })
   const _ESP = ['Sin cliente', 'Sin responsable', 'No son nuestras', 'Sin cargo']
@@ -138,7 +153,7 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
         <td style={{ width: 34, padding: '9px 10px', verticalAlign: 'top', borderTop: `1px solid ${C.track}` }}>{cbox(r)}</td>
         <td style={{ width: 104, padding: '9px 10px', verticalAlign: 'top', whiteSpace: 'nowrap', borderTop: `1px solid ${C.track}` }}><div style={{ fontWeight: 700, color: C.azulInfo, fontSize: 12 }}>{r.ot}</div><div style={{ fontSize: 11, color: C.muted }}>{r.f ? fmtFechaDMY(r.f) : ''}</div></td>
         <td style={{ padding: '9px 10px', verticalAlign: 'top', fontSize: 12, color: C.text, borderTop: `1px solid ${C.track}` }}>{r.mat}<div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{[r.nombre, r.req ? 'requiere ' + r.req : ''].filter(Boolean).join(' · ')}</div></td>
-        <td style={{ width: 250, padding: '9px 10px', verticalAlign: 'top', fontSize: 12, color: C.text, borderTop: `1px solid ${C.track}` }}>{[r.cliTxt, r.cli && r.tr ? r.tr : (r.cli ? 'Sin trabajo' : '')].filter(Boolean).join(' · ') || '—'}<div style={{ fontSize: 11, marginTop: 2 }}>{pagoEl(r)}</div></td>
+        <td style={{ width: 250, padding: '9px 10px', verticalAlign: 'top', fontSize: 12, color: C.text, borderTop: `1px solid ${C.track}` }}>{[r.cliTxt, r.tr ? r.tr : (r.cli && r.tipo !== 'r' ? 'Sin trabajo' : '')].filter(Boolean).join(' · ') || '—'}<div style={{ fontSize: 11, marginTop: 2 }}>{pagoEl(r)}</div></td>
         <td style={{ width: 130, padding: '9px 10px', verticalAlign: 'top', borderTop: `1px solid ${C.track}` }}>{chipEl(r)}</td>
         <td style={{ width: 104, padding: '9px 10px', verticalAlign: 'top', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, color: C.accent, fontSize: 13, fontVariantNumeric: 'tabular-nums', borderTop: `1px solid ${C.track}` }}>{r.tipo === 'e' && !r.m ? '—' : fmt(r.m)}</td></tr>
     : <div key={r.key} onClick={() => abrir(r)} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '11px 12px', borderTop: `1px solid ${C.track}`, cursor: r.editable ? 'pointer' : 'default' }}>
@@ -169,10 +184,15 @@ export function RevisarLiquidacion({ carga, isDesktop, expenses = [], clients = 
         {verLog && <div style={{ padding: '8px 16px', borderBottom: `1px solid ${C.border}` }}>
           {(bitacora || []).length ? bitacora.slice(0, 8).map((l, i) => <div key={i} style={{ fontSize: 12, color: C.text, padding: '5px 0', borderTop: i ? `1px solid ${C.track}` : 'none' }}>{l.d.title || l.d.detalle?.title || l.action}<div style={{ fontSize: 11, color: C.muted }}>{fmtFechaDMY(isoLocal(l.created_at))} · {String(l.user_email || '').split('@')[0]}</div></div>) : <div style={{ fontSize: 12, color: C.muted }}>Sin movimientos todavía.</div>}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: D ? 'repeat(6,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))', gap: D ? 10 : 6, padding: D ? '14px 16px' : '10px' }}>
-          {tile('tot', 'Total cobrado', fmt(suma(cobrado)), `${cobrado.length} OT`, { bg: C.azulBg, col: C.accent })}
+          {tile('tot', hayDetalle ? 'Total del archivo' : 'Total cargado', fmt(hayDetalle ? totalArchivo : suma(cobrado)), hayDetalle ? `${filas.length} OT` : `${cobrado.length} OT, sin repetidas`, { bg: C.azulBg, col: C.accent })}
           {['rev', 'carg', 'nn', 'sin'].map(f => tile(f, TONO[f].t, cuenta(f).length, fmt(suma(cuenta(f))), TONO[f], () => setFam(fam === f ? null : f), fam === f))}
-          {tile('rep', 'Repetidas pagadas', repetidas, 'ya en la app', { bg: C.azulBg, col: C.azulInfo })}
+          {hayDetalle ? tile('rep', 'Repetidas', cuenta('rep').length, fmt(suma(cuenta('rep'))), TONO.rep, () => setFam(fam === 'rep' ? null : 'rep'), fam === 'rep') : tile('rep', 'Repetidas', repetidas, 'ya en la app', TONO.rep)}
         </div>
+        {hayDetalle
+          ? <div style={{ margin: D ? '0 16px 10px' : '0 10px 10px', padding: '9px 14px', borderRadius: 12, background: diferencia === 0 ? C.greenBg : C.overdueBg, color: diferencia === 0 ? C.greenText : C.overdueText, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 12.5, fontWeight: 600 }}>
+              <span>{diferencia === 0 ? `Las tarjetas suman ${fmt(totalFilas)} y cuadran con el total del archivo` : `Las tarjetas suman ${fmt(totalFilas)}; el archivo trajo ${fmt(totalArchivo)}`}</span>
+              <b style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Diferencia {fmt(diferencia)}</b></div>
+          : <div style={{ margin: D ? '0 16px 10px' : '0 10px 10px', padding: '9px 14px', borderRadius: 12, background: C.bgSoft, color: C.muted, fontSize: 12.5 }}>Esta carga es anterior al detalle de las repetidas: no se puede cuadrar con el total del archivo.</div>}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: D ? '0 16px 10px' : '0 10px 10px' }}>
           <div style={{ flex: 1, minWidth: 150 }}><Buscador value={q} onChange={setQ} placeholder='Buscar OT o cliente…' /></div>
           <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: C.surface }}>

@@ -1279,8 +1279,11 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       // Pendientes por identificar = filas del target sin cliente ni miembro (se cargan como gasto sin cliente → van a la alarma de +3 días).
       const pendRows = target.filter(r=>!r.client_id&&!r.personal_de&&!r.error)
       const pagadores = target.filter(r=>(r.client_id||r.personal_de)&&!r.error)
-      if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const omitidas=(rows||[]).filter(r=>dupInfo[r.id]?.otState).length; const noNs=(rows||[]).filter(r=>r.noNuestra)
-        notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, erroresDet:errRows.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error})), noNuestras:noNs.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||'',fecha:_fechaISO(r.fecha),materia:r.materia||null,requirente:r.requirente||null,concepto:r.concepto||null,subconcepto:r.subconcepto||null})) } }
+      if(notaria){ const errRows=(rows||[]).filter(r=>r.error); const repRows=(rows||[]).filter(r=>dupInfo[r.id]?.otState); const omitidas=repRows.length; const noNs=(rows||[]).filter(r=>r.noNuestra)
+        // Detalle de las repetidas (ya en la app) y total del archivo: la revisión de la liquidación los muestra y cuadra sin volver a subir el Excel.
+        const repetidasDet=repRows.map(r=>({ot:otDe(r),fecha:_fechaISO(r.fecha),materia:r.materia||null,nombre:r.nombre||r.requirente||r.concepto||'—',requirente:r.requirente||null,monto:Number(r.monto)||0,estado:dupInfo[r.id]?.otState||null}))
+        const totalArchivo=(rows||[]).reduce((a,r)=>a+(Number(r.monto)||0),0)
+        notaResumen={ leidas:(rows||[]).length, cargadas:pagadores.length, pendientes:pendRows.length, error:errRows.length, omitidas, repetidasDet, totalArchivo, erroresDet:errRows.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',motivo:r.error,monto:Number(r.monto)||0})), noNuestras:noNs.map(r=>({ot:otDe(r),nombre:r.nombre||r.requirente||r.concepto||'—',monto:r.monto||0,motivo:r.materia||'',fecha:_fechaISO(r.fecha),materia:r.materia||null,requirente:r.requirente||null,concepto:r.concepto||null,subconcepto:r.subconcepto||null})) } }
       const ajN = (notaria&&ajustesNota.length&&onAjustarNotaria) ? await onAjustarNotaria(ajustesNota,{filename:fileName}) : 0
       const res = await onBulkImport(target, {tipo, filename:fileName, notaResumen})
       // Notaría: resumen REAL de lo cargado (usa lo efectivamente insertado tras dedup, no la intención pre-carga).
