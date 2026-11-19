@@ -1,3 +1,5 @@
+- 2026-11-19 · Equipo (rol limited) › Ficha del cliente: las facturas y ventas quedan solo en lectura; se quitan «+ Nueva factura», «Conciliar», «Editar» factura, anticipo, asignar series, «Ajustar saldo» y abrir la venta, que eran de Facturación (admin) y estaban disponibles para el equipo en los clientes donde es responsable. Los gastos de cliente no cambian.
+
 - 2026-11-19 · Rendición: se quitan dos variables sin uso (`proyOpen`, `prefilled`) del módulo de rendiciones; sin cambio visible.
 
 - 2026-11-18 · Rendición: la tabla de gastos del PDF (Ver PDF y el adjunto del correo) suma la columna «Saldo»: parte con la fila «Fondos disponibles» y baja con cada gasto, en rojo si pasa a negativo; con varios proyectos, cada bloque parte con sus fondos menos lo rendido antes.

@@ -18,6 +18,7 @@ export function ClientStatusTabs({value,onChange,activeN,endedN,prospectoN}){
   )
 }
 
+// El equipo ve las facturas y ventas del cliente solo en lectura: crear, editar, conciliar, anticipos, series y ajustes son de Facturación (admin), por eso esas funciones no se pasan a las pestañas.
 export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=null,onOpenedFicha=null,onAsociarTrabajo=null,clients,expenses,tasks,clientEntities,rendiciones,sales=[],billing=[],anticipos=[],currentUserName,onEdit,onAdd,onAddTask,onQuickTask,onAddGasto,onAddFondo,onAddSale,onAddBilling,onEditBilling,onNuevoAnticipo,onConciliar,onOpenSale,onAjuste,onAssignSeries,onStatusChange,onEditTask,onEditExpense,onSaveFields,onImportDrive,setExpenses,setRendiciones,setBilling,user,onRendicionComplete}) {
   const [q,setQ] = useState('')
   const [rendicionClient,setRendicionClient] = useState(null), [rendEdit,setRendEdit] = useState(null), [emailRendCV,setEmailRendCV] = useState(null)   // Rendir desde la ficha completa (responsable)
@@ -74,7 +75,7 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
         </div>
 
         <div style={{padding:'16px 20px 0',display:effTab==='resumen'?'block':'none'}}>
-          {esResp&&<FotoCliente client={cl} sales={sales} billing={billing} expenses={expenses} tasks={tasks} setFtab={setFtab} onRendicion={setRendicionClient?(c=>{setRendEdit(null);setRendicionClient(c)}):undefined} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onEditTask={onEditTask} onAddTask={onAddTask?()=>onAddTask(cl):undefined}/>}
+          {esResp&&<FotoCliente client={cl} sales={sales} billing={billing} expenses={expenses} tasks={tasks} setFtab={setFtab} onRendicion={setRendicionClient?(c=>{setRendEdit(null);setRendicionClient(c)}):undefined} onEditExpense={onEditExpense} onEditTask={onEditTask} onAddTask={onAddTask?()=>onAddTask(cl):undefined}/>}
 
           {entities.length>0&&(
             <div style={{marginBottom:16,padding:'4px 14px',borderRadius:10,background:C.bgSoft,border:'1px solid #E4E8EB'}}>
@@ -202,8 +203,8 @@ export function ClientsViewLimited({onContactos=null,onCausas=null,openFichaId=n
 
         </div>
         {effTab==='contacto'&&<ContactoTab client={cl} entities={entities} onSaveFields={onSaveFields}/>}
-        {esResp&&effTab==='financiero'&&<FinancieroTab client={cl} clientBilling={clientBilling} entities={entities} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} billing={billing} onNuevoAnticipo={()=>onNuevoAnticipo&&onNuevoAnticipo(cl)} onSaveFields={onSaveFields} onEditBilling={onEditBilling} onAddBilling={()=>onAddBilling&&onAddBilling(cl)} onConciliar={()=>onConciliar&&onConciliar(cl)} onAssignSeries={onAssignSeries} onStatusChange={onStatusChange}/>}
-        {esResp&&effTab==='documentos'&&<EstadoCuentaTab rendiciones={rendiciones} onAsociarTrabajo={onAsociarTrabajo} client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense} onEditBilling={onEditBilling} onOpenSale={onOpenSale} onAjuste={onAjuste}/>}
+        {esResp&&effTab==='financiero'&&<FinancieroTab client={cl} clientBilling={clientBilling} entities={entities} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} billing={billing} onSaveFields={onSaveFields}/>}
+        {esResp&&effTab==='documentos'&&<EstadoCuentaTab rendiciones={rendiciones} onAsociarTrabajo={onAsociarTrabajo} client={cl} clientBilling={clientBilling} sales={sales} anticipos={(anticipos||[]).filter(a=>a.client_id===cl.id)} expenses={expenses} clientEntities={entities} onEditExpense={onEditExpense}/>}
       </div>
     )
   }
