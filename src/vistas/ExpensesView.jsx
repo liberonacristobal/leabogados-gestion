@@ -1893,7 +1893,7 @@ export function RendirClientesPage({grupoInicial=null, abgInicial=null, clients=
   // Abrir el correo de un borrador: si se guardó junto con otras (separadas en un correo), vuelven todas.
   const abrirCorreo = r => { const gr=r.correo?.modo==='sep1'?(r.correo.grupo||[]):[]
     // Mismo orden en que se guardó (el texto del borrador nombra N° 1, N° 2… en ese orden), se abra desde la fila que se abra.
-    const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&!x.sent_at&&!x.anulada_at&&x.correo?.modo==='sep1'&&(x.correo.grupo||[]).includes(r.id))).filter(Boolean)
+    const grupo=gr.map(id=>id===r.id?r:(rendiciones||[]).find(x=>x.id===id&&(!x.sent_at||(r.sent_at&&x.sent_at===r.sent_at))&&!x.anulada_at&&x.correo?.modo==='sep1'&&(x.correo.grupo||[]).includes(r.id))).filter(Boolean)
     onEnviarRend&&onEnviarRend(grupo.length>1?{...grupo[0],_hermanas:grupo.slice(1)}:r) }
   const envRows = verLista ? (verEnv?enviadas:borrItems).filter(x=>(abgDef==='Todos'||x.abg===abgDef)&&(!q.trim()||nrm(x.c.name).includes(nrm(q.trim())))) : []
   // Columnas ordenables de la tabla de escritorio (un toque ordena, otro invierte, otro vuelve al orden original).

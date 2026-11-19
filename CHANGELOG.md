@@ -1,3 +1,5 @@
+- 2026-11-19 · Rendiciones › «Ver correo · reenviar»: al reenviar un correo que llevaba varias rendiciones (N° 1 y N° 2), vuelve a abrirlas juntas con sus mismos números.
+
 - 2026-11-19 · Notaría › Revisar liquidación: nuevo grupo «Trámite» junto a Cliente, Resp., Estado y Plana; reúne las OT del mismo trámite con su cantidad y total, y deja «Sin trámite», «No son nuestras» y «Sin cargo» al final.
 
 - 2026-11-19 · Equipo (rol limited) › Ficha del cliente: las facturas y ventas quedan solo en lectura; se quitan «+ Nueva factura», «Conciliar», «Editar» factura, anticipo, asignar series, «Ajustar saldo» y abrir la venta, que eran de Facturación (admin) y estaban disponibles para el equipo en los clientes donde es responsable. Los gastos de cliente no cambian.
