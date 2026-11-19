@@ -1379,10 +1379,12 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
   const saldo = totFondos - rendidoAntes - totGastos
   const fechaEmision = r.created_at ? new Date(r.created_at).toLocaleDateString(EN?'en-GB':'es-CL',{day:'2-digit',month:'long',year:'numeric'}) : ''
   const T = EN
-    ? {reportNo:'Report No.',issued:'Issued',exp:n=>`${n} expense${n!==1?'s':''}`,attn:'Attn',project:'PROJECT',funds:'Funds received',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',date:'DATE',concept:'DESCRIPTION',category:'CATEGORY',amount:'AMOUNT',totalExp:'Total expenses',fundsSection:'FUNDS RECEIVED',noFunds:'No funds recorded',fundSummary:'FUND SUMMARY',received:'Funds received',prev:'Report',thisRep:'This report',avail:'Available balance',due:'Balance due',footer:'Expense report'}
-    : {reportNo:'Rendición N°',issued:'Emisión',exp:n=>`${n} gasto${n!==1?'s':''}`,attn:'Dirigido a',project:'PROYECTO',funds:'Fondos recibidos',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',date:'FECHA',concept:'CONCEPTO',category:'CATEGORÍA',amount:'MONTO',totalExp:'Total gastos',fundsSection:'FONDOS RECIBIDOS',noFunds:'Sin fondos registrados',fundSummary:'RESUMEN DEL FONDO',received:'Fondos recibidos',prev:'Rendición',thisRep:'Esta rendición',avail:'Saldo disponible',due:'Saldo a su cargo',footer:'Rendición de gastos'}
+    ? {reportNo:'Report No.',issued:'Issued',exp:n=>`${n} expense${n!==1?'s':''}`,attn:'Attn',project:'PROJECT',funds:'Funds received',expPeriod:'Expenses (period)',balFavor:'Balance in your favor',balPending:'Outstanding balance',date:'DATE',concept:'DESCRIPTION',category:'CATEGORY',amount:'AMOUNT',balance:'BALANCE',availFunds:'Available funds',totalExp:'Total expenses',fundsSection:'FUNDS RECEIVED',noFunds:'No funds recorded',fundSummary:'FUND SUMMARY',received:'Funds received',prev:'Report',thisRep:'This report',avail:'Available balance',due:'Balance due',footer:'Expense report'}
+    : {reportNo:'Rendición N°',issued:'Emisión',exp:n=>`${n} gasto${n!==1?'s':''}`,attn:'Dirigido a',project:'PROYECTO',funds:'Fondos recibidos',expPeriod:'Gastos del período',balFavor:'Saldo a favor',balPending:'Saldo pendiente',date:'FECHA',concept:'CONCEPTO',category:'CATEGORÍA',amount:'MONTO',balance:'SALDO',availFunds:'Fondos disponibles',totalExp:'Total gastos',fundsSection:'FONDOS RECIBIDOS',noFunds:'Sin fondos registrados',fundSummary:'RESUMEN DEL FONDO',received:'Fondos recibidos',prev:'Rendición',thisRep:'Esta rendición',avail:'Saldo disponible',due:'Saldo a su cargo',footer:'Rendición de gastos'}
   const M=40, cNavy=[0,60,80], cMuted=[83,114,129], cTxt=[61,61,61], cA3=[153,171,180], cGreen=[15,110,86], cRed=[163,45,45], cGray=[228,232,235]
   const cMonto = W-M, cCat = W-196
+  // Tabla de gastos con saldo acumulado: Monto y Saldo a la derecha; el resto del documento sigue usando cMonto.
+  const cSaldo = W-M, cMontoG = W-M-90, cCatG = W-258
   // ===== Header navy =====
   doc.setFillColor(0,60,80); doc.rect(0,0,W,76,'F')
   try{ doc.addImage(logoBlanco, 'PNG', M, 25, 170, 26) }catch(_){ doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('LIBERONA ESCALA', M, 40) }
@@ -1405,6 +1407,9 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
   kcard(2,sPos?T.balFavor:T.balPending,(saldo<0?'-':'')+fmtN(Math.abs(saldo)),sPos?[225,245,238]:[252,235,235],sPos?cGreen:cRed)
   y+=bh+20
   const ensure=(n)=>{ if(y > H-70-n){ doc.addPage(); y=56 } }
+  let sAcum = 0
+  const fSaldo = v => (v<0?'-':'')+fmtN(Math.abs(v))
+  const filaInicial = ini => { ensure(24); doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(83,114,129); doc.text(T.availFunds, M+72, y); doc.setTextColor(61,61,61); doc.text(fSaldo(ini), cSaldo, y, {align:'right'}); y+=18; sAcum=ini }
   const filaG=e=>{
     ensure(24)
     const ot=e.ot_number?(String(e.ot_number).toUpperCase().startsWith('OT')?e.ot_number:'OT-'+e.ot_number):''
@@ -1412,8 +1417,10 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
     doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(61,61,61)
     doc.text(fmtFechaDMY(e.date), M, y)
     doc.text((glosaCliente(e.concept)||'—').slice(0,40), M+72, y)
-    doc.setFontSize(8.5); doc.setTextColor(83,114,129); doc.text(RENDCAT(e.category).slice(0,24), cCat, y)
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(fmtN(e.amount), cMonto, y, {align:'right'})
+    doc.setFontSize(8.5); doc.setTextColor(83,114,129); doc.text(RENDCAT(e.category).slice(0,18), cCatG, y)
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(fmtN(e.amount), cMontoG, y, {align:'right'})
+    sAcum -= Number(e.amount)||0   // saldo después de este gasto
+    doc.setFontSize(9.5); if(sAcum<0) doc.setTextColor(163,45,45); else doc.setTextColor(83,114,129); doc.text(fSaldo(sAcum), cSaldo, y, {align:'right'})
     if(seg2){ let sx=M+72; doc.setFont('helvetica','bold'); doc.setFontSize(7.5)
       if(ot){ doc.setTextColor(24,95,165); doc.text(ot, sx, y+11); sx+=doc.getTextWidth(ot)+10 }
       if(e.respaldo){ doc.setTextColor(15,110,86); doc.text(EN?'✓ receipt':'✓ respaldo', sx, y+11) }
@@ -1425,8 +1432,9 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
   if(r.project){ doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(83,114,129); doc.text(T.project, M, y); doc.setFont('helvetica','normal'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(String(r.project+(r.subproject?` · ${r.subproject}`:'')).slice(0,70), M+58, y); y+=20 }
   // ===== Tabla gastos =====
   doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
-  doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'})
+  doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCatG, y); doc.text(T.amount, cMontoG, y, {align:'right'}); doc.text(T.balance, cSaldo, y, {align:'right'})
   y+=7; doc.setDrawColor(228,232,235); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=16
+  filaInicial(totFondos-rendidoAntes)
   gastos.forEach(filaG)
   y+=2; doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=16
   doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(61,61,61); doc.text(T.totalExp, M, y); doc.text(fmtN(totGastos), cMonto, y, {align:'right'}); y+=28
@@ -1460,7 +1468,8 @@ export async function rendicionPdfBase64(r, client, expenses, clientEntities, us
       if(x.ent&&x.ent.rut){ doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(83,114,129); doc.text(fmtRutCL(x.ent.rut), W-M, y, {align:'right'}) }
       y+=7; doc.setDrawColor(0,60,80); doc.setLineWidth(1.2); doc.line(M,y,W-M,y); y+=14
       doc.setTextColor(83,114,129); doc.setFont('helvetica','bold'); doc.setFontSize(8)
-      doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCat, y); doc.text(T.amount, cMonto, y, {align:'right'}); y+=16
+      doc.text(T.date, M, y); doc.text(T.concept, M+72, y); doc.text(T.category, cCatG, y); doc.text(T.amount, cMontoG, y, {align:'right'}); doc.text(T.balance, cSaldo, y, {align:'right'}); y+=16
+      filaInicial(x.fondos.reduce((a,fo)=>a+(Number(fo.amount)||0),0)-(x.previo||0))
       x.gastos.forEach(filaG)
       y+=2; doc.setDrawColor(228,232,235); doc.setLineWidth(0.8); doc.line(M,y,W-M,y); y+=14
       doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(61,61,61); doc.text(L.exp, M, y); doc.text(fmtN(x.totGastos), cMonto, y, {align:'right'}); y+=18
