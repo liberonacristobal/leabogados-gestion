@@ -205,6 +205,15 @@ Deno.serve(async (req) => {
       if (dec.saleId && billingCli.some((b: { status: string; sale_id: string; amount: number }) => b.status === "Programada" && b.sale_id === dec.saleId && monto > 0 && Math.abs((Number(b.amount) || 0) - monto) / monto <= 0.06)) { await bandeja(d, "Reemplaza una cuota de su venta (hay que retirarla)", cli.cid); continue; }
       await crearFactura(dec.saleId);
     } catch (e) { (out as any).errores = [...((out as any).errores || []), { folio: d.folio, error: String((e as Error).message || e) }]; } }   // un documento con error no corta la corrida
+    // Recién registradas: se busca su XML en el SII en el mismo momento (antes esperaba la corrida de las 10:45 del día siguiente).
+    // Si falla o el SII lo rechaza, no afecta el registro: «xml-emitidos» lo reintenta en su corrida diaria.
+    if (!dryRun && out.registradas.length + out.a_bandeja.length > 0) {
+      try {
+        const r = await fetch(`${SB_URL}/functions/v1/sii-sync`, { method: "POST", headers: H, body: JSON.stringify({ action: "xml-emitidos", cronSecret: CRON_SECRET }), signal: AbortSignal.timeout(90000) });
+        const x = await r.json().catch(() => ({}));
+        (out as any).xml = { cargados: x.cargados ?? 0, pendientes: x.pendientes ?? 0, ...(x.error ? { error: String(x.error).slice(0, 160) } : {}) };
+      } catch (e) { (out as any).xml = { error: String((e as Error).message || e).slice(0, 160) }; }
+    }
     return json({ ok: true, dryRun, ...out });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);

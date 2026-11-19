@@ -6,7 +6,7 @@ import { BRAND, C, Gl, SEC_LBL, SIcon, appAlert, appConfirm, fmt, fmtFechaDMY, f
 import { Fragment } from 'react'
 import logoBlanco from '../le-logo-blanco.png'
 import { Spin } from './base.jsx'
-import { CAT_COLORS, Lbl, MAIL_OFICINA_CONFIRM, Modal, PasosRend, RENDCAT, Switch, TXT_REINGRESO, avisoNoEnviado, chipBtn, claudeCall, corrSiguiente, cuentaEnRecuadro, driveToken, equipoPorNombre, esPersona, estadoSolicitud, firmaCorreoHtml, firmaDefault, fmtSaldoG, fondoDeRend, fondosSinTrabajo, gastosDeRend, glosaCliente, gmailParticipantesCliente, imputarSaldosTrabajos, logActividad, logEvent, logoColor, okDB, posiblesDuplicadosGastos, registrarError, rendGruposProyecto, rendicionDocHtml, rendicionFondo, rendicionPdfHtml, repartoFondos, saldoCliente, saludoCli, sendGmailWithPdf, sendMailServer, setLearningKV, txtEnviado } from './compartido.jsx'
+import { Buscador, CAT_COLORS, Lbl, MAIL_OFICINA_CONFIRM, Modal, PasosRend, RENDCAT, Switch, TXT_REINGRESO, avisoNoEnviado, chipBtn, claudeCall, corrSiguiente, cuentaEnRecuadro, driveToken, equipoPorNombre, esPersona, estadoSolicitud, firmaCorreoHtml, firmaDefault, fmtSaldoG, fondoDeRend, fondosSinTrabajo, gastosDeRend, glosaCliente, gmailParticipantesCliente, imputarSaldosTrabajos, logActividad, logEvent, logoColor, okDB, posiblesDuplicadosGastos, registrarError, rendGruposProyecto, rendicionDocHtml, rendicionFondo, rendicionPdfHtml, repartoFondos, saldoCliente, saludoCli, sendGmailWithPdf, sendMailServer, setLearningKV, txtEnviado } from './compartido.jsx'
 
 // ─── EXPENSES VIEW ────────────────────────────────────────────────────────────
 export function RendicionModal({client, entityIds, expenses, clientEntities, sales=[], rendiciones=[], onClose, onRendicionComplete, setExpenses, currentUserName, onEnviar, editRend=null, setRendiciones, billing=[], setBilling, asPage=false, preSel=false, navBorr=null, onRevisada=null}) {
@@ -59,10 +59,16 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   const allMovs = expenses.filter(e=>e.client_id===client.id && inScope(e))
   // Comprobantes de respaldo: qué gastos del cliente tienen adjuntos (para referenciarlos en el PDF).
   const [conRespaldo,setConRespaldo] = useState(new Set())
+  const [respListo,setRespListo] = useState(false)   // ya se leyeron los adjuntos (para no marcar «sin respaldo» antes de tiempo)
+  const [noDup,setNoDup] = useState(()=>new Set())   // gastos que una persona marcó «No lo es» (learnings gasto_no_duplicado)
+  const [q,setQ] = useState('')
+  const [fExtra,setFExtra] = useState(null)   // 'dup' | 'resp': filtros de revisión sobre la lista
+  const [coll,setColl] = useState({})   // grupos plegados
+  useEffect(()=>{ if(DEMO) return; let alive=true; supabase.from('learnings').select('key').eq('kind','gasto_no_duplicado').limit(5000).then(({data})=>{ if(alive) setNoDup(new Set((data||[]).map(r=>String(r.key)))) },()=>{}); return ()=>{alive=false} },[])
   useEffect(()=>{
-    const ids=allMovs.filter(e=>e.type==='gasto').map(e=>e.id); if(!ids.length){ setConRespaldo(new Set()); return }
+    const ids=allMovs.filter(e=>e.type==='gasto').map(e=>e.id); if(!ids.length){ setConRespaldo(new Set()); setRespListo(true); return }
     let alive=true
-    supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive) setConRespaldo(new Set((data||[]).map(r=>String(r.expense_id)))) },()=>{})
+    supabase.from('expense_attachments').select('expense_id').in('expense_id',ids).then(({data})=>{ if(alive){ setConRespaldo(new Set((data||[]).map(r=>String(r.expense_id)))); setRespListo(true) } },()=>{})
     return ()=>{alive=false}
   },[client.id,selEnt])
   // Rendir un fondo: con 2+ fondos se elige primero qué se rinde (gastos o un fondo). El reparto dice qué gastos cubrió cada fondo.
@@ -101,7 +107,7 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
   // Gastos disponibles para rendir (no rendidos aun), acotados al proyecto elegido.
   // Un gasto pertenece al proyecto si tiene esa glosa de proyecto O está vinculado a su venta (sale_id).
   // Posibles duplicados del cliente (misma regla que caja chica): se comparan con todos sus gastos, también los ya rendidos.
-  const dupRend = posiblesDuplicadosGastos(allMovs.filter(e=>e.type==='gasto'))
+  const dupRend = new Map([...posiblesDuplicadosGastos(allMovs.filter(e=>e.type==='gasto'))].filter(([id])=>!noDup.has(String(id))))
   const keyP = e => e.project || (sales||[]).find(s=>String(s.id)===String(e.sale_id))?.title || ''
   // Chips del gasto (proyecto y fondo): se corrigen tocándolos, sin marcar ni desmarcar el gasto.
   const chipSty = warn => ({fontSize:10,fontWeight:700,color:warn?C.soonText:C.accent,background:warn?C.soonBg:C.bgSoft,border:`1px dashed ${warn?C.soonText:C.done}`,borderRadius:20,padding:'1px 6px',maxWidth:'100%',cursor:'pointer',fontFamily:'inherit'})
@@ -145,10 +151,6 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
     else { const {data}=await supabase.from('contacts').insert({client_id:client.id,nombre:v}).select().single(); if(data) setContacts([data]) }
   }
 
-  const toggleAll = () => {
-    if(gastosSel.length===disponibles.length) setSelected(new Set())
-    else setSelected(new Set(disponibles.map(e=>e.id)))
-  }
   const toggleOne = id => setSelected(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const CATS = CAT_COLORS
 
@@ -422,25 +424,10 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
         const flInp = {width:'100%',border:'none',background:'none',outline:'none',fontSize:13,color:C.text,padding:0,height:22}
         const sug = contacts.filter(c=>c.email)
         return (<>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:6}}>
+        <div style={{display:'grid',gridTemplateColumns:(enFondo||proyectosDisp.length===0)?'1fr 1fr':'1fr',gap:8,marginBottom:6}}>
           {enFondo
             ? <div style={flBox(false)}><div style={flLbl}>Proyecto del fondo{faltaProyR?' *':''}</div><div style={{fontSize:13,color:proyFondo?C.text:C.soonText,minHeight:22,display:'flex',alignItems:'center'}}>{proyFondo||'Sin proyecto'}</div></div>
-            : proyectosDisp.length>0
-            ? <div onClick={()=>setProyOpen(v=>!v)} style={{...flBox(proyF.size>0),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{}),position:'relative',cursor:'pointer'}}>
-                <div style={flLbl}>Proyectos{faltaProyR?' *':''}</div>
-                <div style={{fontSize:13,color:C.text,minHeight:22,display:'flex',alignItems:'center',gap:6}}><span style={{flex:1,minWidth:0}}>{proyF.size===0?'Todos':proyF.size===1?(proyF.has('__sin__')?'Sin proyecto':[...proyF][0]):`${proyF.size} proyectos`}</span><Gl n={proyOpen?'chevU':'chevD'}/></div>
-                {proyOpen&&<>
-                  <div onClick={ev=>{ev.stopPropagation();setProyOpen(false)}} style={{position:'fixed',inset:0,zIndex:29}}/>
-                  <div onClick={ev=>ev.stopPropagation()} style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:30,width:isDesktop?340:'calc(200% + 8px)',maxWidth:'calc(100vw - 32px)',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,boxShadow:'0 8px 22px rgba(0,60,80,.14)',padding:5}}>
-                    {[{k:'',t:'Todos los proyectos'},...proyectosDisp.map(p=>({k:p,t:p})),...(cntProy['']?[{k:'__sin__',t:'Sin proyecto'}]:[])].map(o=>{ const on=o.k?proyF.has(o.k):proyF.size===0, c=o.k==='__sin__'?cntProy['']:o.k?cntProy[o.k]:cntProy.__todos
-                      return <div key={o.k||'todos'} onClick={()=>{ if(!o.k){ setProyF(new Set()); return } setProyF(p=>{ const n=new Set(p); n.has(o.k)?n.delete(o.k):n.add(o.k); return n }) }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 8px',borderRadius:8,cursor:'pointer',background:on?C.azulBg:'transparent'}}>
-                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?C.accent:C.done}`,background:on?C.accent:C.surface,display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<SIcon n='check' s={10} c='#fff'/>}</span>
-                        <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:on?700:500,color:o.k==='__sin__'?C.soonText:C.accent}}>{o.t}</span>
-                        <span style={{fontSize:11,color:C.textSoft,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{c?`${c.n} · ${fmtN(c.m)}`:'0'}</span>
-                      </div> })}
-                  </div>
-                </>}
-              </div>
+            : proyectosDisp.length>0 ? null   // el proyecto se elige con los chips sobre la lista
             : <div style={{...flBox(!!proyecto),...(faltaProyR?{border:`0.5px solid ${C.overdue}`}:{})}}><div style={flLbl}>Proyecto{faltaProyR?' *':''}</div><input value={proyecto} onChange={e=>setProyecto(e.target.value)} placeholder={faltaProyR?'Escribe el trabajo':'Opcional'} style={flInp}/></div>}
           <div style={flBox(false)}>
             <div style={flLbl}>Dirigido a</div>
@@ -523,84 +510,141 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             </span>
           </div> })}
       </div>)
-  // Cuadratura del cliente con el reparto (fuente única): Σ fondos − gastos = saldo de la ficha. Si alguna vez no calza, se avisa.
+  // ── Cifras de la rendición (arriba) y cuadre con la ficha (fuente única): Σ fondos − gastos = saldo de la ficha.
   const _fgC = fgCliente(expenses, client.id), _cuadra = Math.round(_fgC.saldo)===Math.round(repF.saldo)
-  const bCuadra = verModoFondo && (
-      <div style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12,color:C.textSoft,padding:'8px 12px',background:C.bgSoft,borderRadius:10,marginBottom:12,flexWrap:'wrap'}}>
-        <span style={{fontVariantNumeric:'tabular-nums'}}>Fondos <b style={{color:C.text}}>{fmtN(_fgC.fondos)}</b> − gastos <b style={{color:C.text}}>{fmtN(_fgC.gastos)}</b> = <b style={{color:C.text}}>{fmtSaldoG(_fgC.saldo)}</b></span>
-        <span style={{fontWeight:700,color:_cuadra?C.greenText:C.overdueText}}>{_cuadra?'igual a la ficha':`no cuadra con la ficha (${fmtSaldoG(repF.saldo)})`}</span>
-      </div>)
-  const bKPIs = (<div style={{marginBottom:12}}>
-      <div style={{...SEC_LBL,margin:'0 2px 6px'}}>{enFondo?`Este fondo · ${fmtFechaDMY(fondoObj?.date)}`:_uno?`Este trabajo · ${_uno.t}`:'Esta rendición'}</div>
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 13px'}}>
-        {lnR(`${gastosSel.length} gasto${gastosSel.length!==1?'s':''} seleccionado${gastosSel.length!==1?'s':''}`, fmtN(totalSel), gastosSel.length?C.text:C.muted)}
-        {lnR(enFondo?'Fondo entregado':_uno?'Fondos de este trabajo':'Fondos', fmtN(_uno?_uno.f.totFondos:fondosDisp))}
-        {lnR(enFondo?'Ya rendido de este fondo':'Ya rendido', fmtN(_uno?_uno.f.rendido:_fondoRend.rendido))}
-        {(()=>{ const sal=_uno?_uno.saldo:saldoTrasRendicion; return <div style={{borderTop:`1px solid ${C.track}`,marginTop:4,paddingTop:5}}>{lnR(sal<0?'Saldo a cargo del cliente':'Saldo a favor del cliente', fmtN(Math.abs(sal)), sal<0?C.overdueText:C.greenText, true)}</div> })()}
-        {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:12,color:C.textSoft,marginTop:4}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
-      </div>
-    </div>
-  )
+  const _sal = _uno?_uno.saldo:saldoTrasRendicion
+  const _fondosK = _uno?_uno.f.totFondos:fondosDisp
+  const _rendK = _uno?_uno.f.rendido:_fondoRend.rendido
   const nDupR = disponibles.filter(e=>dupRend.has(e.id)).length
+  const nSinResp = respListo ? gastosSel.filter(e=>!conRespaldo.has(String(e.id))).length : 0
+  const tileK = (lab,val,sub,tono) => (
+    <div key={lab} style={{background:tono==='ok'?C.greenBg:tono==='mal'?C.overdueBg:C.surface,border:`1px solid ${tono?'transparent':C.border}`,borderRadius:14,padding:'10px 12px',minWidth:0}}>
+      <div style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:tono==='ok'?C.greenText:tono==='mal'?C.overdueText:C.muted}}>{lab}</div>
+      <div style={{fontSize:isDesktop?24:22,fontWeight:800,lineHeight:1.15,color:tono==='ok'?C.greenText:tono==='mal'?C.overdueText:C.accent,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{val}</div>
+      <div style={{fontSize:11,color:tono==='ok'?C.greenText:tono==='mal'?C.overdueText:C.muted,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{sub}</div>
+    </div>)
+  const bKpTop = (<div style={{marginBottom:12}}>
+      {(enFondo||_uno)&&<div style={{...SEC_LBL,margin:'0 2px 6px'}}>{enFondo?`Este fondo · ${fmtFechaDMY(fondoObj?.date)}`:`Este trabajo · ${_uno.t}`}</div>}
+      <div style={{display:'grid',gridTemplateColumns:isDesktop?'repeat(4,minmax(0,1fr))':'repeat(2,minmax(0,1fr))',gap:isDesktop?10:8}}>
+        {tileK(_sal<0?'Saldo a cargo':'Saldo a favor', fmtN(Math.abs(_sal)), _cuadra?'igual a la ficha':`no cuadra con la ficha (${fmtSaldoG(repF.saldo)})`, _sal<0?'mal':'ok')}
+        {tileK('Se rinde', fmtN(totalSel), `${gastosSel.length} de ${disponibles.length} gasto${disponibles.length!==1?'s':''}`)}
+        {isDesktop&&tileK(enFondo?'Fondo entregado':'Fondos', fmtN(_fondosK), enFondo?fmtFechaDMY(fondoObj?.date):`${fondosList.length} entregado${fondosList.length!==1?'s':''}`)}
+        {isDesktop&&tileK('Ya rendido', fmtN(_rendK), `${previasN} rendición${previasN!==1?'es':''} enviada${previasN!==1?'s':''}`)}
+      </div>
+      {_uno&&fondosDisp>_uno.f.totFondos&&<div style={{fontSize:12,color:C.textSoft,marginTop:6}}>Otros {fmtN(fondosDisp-_uno.f.totFondos)} en fondos del cliente están asignados a otro trabajo.</div>}
+    </div>)
   // Chips del gasto: su proyecto y su fondo, ambos se corrigen tocándolos (no marcan ni desmarcan el gasto).
-  const chipsG = e => { const k=keyP(e), opts=[...new Set([...(k?[k]:[]),...proyectosDisp])], dF=repF.deGasto[e.id]||''
-    return (<>
-      {(opts.length>0)&&<select value={k} onClick={_stop} onChange={ev=>{ _stop(ev); asignarProyGasto(e,ev.target.value) }} title='Proyecto del gasto' style={chipSty(!k)}>{!k&&<option value=''>Sin proyecto</option>}{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>}
-      {fondosRS.length>=2&&<select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); const v=ev.target.value; moverAFondo(e,v&&v!=='__auto'?v:null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF?<option value=''>Sin fondo</option>:e.reembolso_fondo_id?<option value='__auto'>Reparto automático</option>:null}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select>}
-    </>) }
-  // Lista agrupada por proyecto cuando se ven varios (Todos o varios marcados); «Sin proyecto» al final.
-  const gruposL = (()=>{ if(enFondo||proyecto) return null; const m=new Map(); disponibles.forEach(e=>{ const k=keyP(e); if(!m.has(k)) m.set(k,[]); m.get(k).push(e) })
-    if(m.size<2) return null; const ordK=k=>k?(proyectosDisp.indexOf(k)<0?999:proyectosDisp.indexOf(k)):1e6
-    return [...m.entries()].sort((a,b)=>ordK(a[0])-ordK(b[0])).map(([k,gs])=>({k,gs,tot:gs.reduce((a,e)=>a+(Number(e.amount)||0),0)})) })()
-  const toggleGrupo = gr => setSelected(p=>{ const n=new Set(p), todos=gr.gs.every(e=>n.has(e.id)); gr.gs.forEach(e=>todos?n.delete(e.id):n.add(e.id)); return n })
+  const selProyG = e => { const k=keyP(e), opts=[...new Set([...(k?[k]:[]),...proyectosDisp])]
+    return opts.length>0 ? <select value={k} onClick={_stop} onChange={ev=>{ _stop(ev); asignarProyGasto(e,ev.target.value) }} title='Proyecto del gasto' style={chipSty(!k)}>{!k&&<option value=''>Sin proyecto</option>}{opts.map(o=><option key={o} value={o}>{o}</option>)}</select> : null }
+  const selFondoG = e => { const dF=repF.deGasto[e.id]||''
+    return fondosRS.length>=2 ? <select value={dF} onClick={_stop} onChange={ev=>{ _stop(ev); const v=ev.target.value; moverAFondo(e,v&&v!=='__auto'?v:null) }} title='Fondo que cubre el gasto' style={chipSty(!dF)}>{!dF?<option value=''>Sin fondo</option>:e.reembolso_fondo_id?<option value='__auto'>Reparto automático</option>:null}{fondosRS.map(x=><option key={x.f.id} value={x.f.id}>{`Fondo ${fmtFechaDMY(x.f.date)} · ${fmtN(x.f.amount)}`}</option>)}</select> : null }
+  const chipsG = e => (<>{selProyG(e)}{selFondoG(e)}</>)
+  // «No lo es»: el gasto deja de marcarse como posible duplicado, y la app lo recuerda (learnings gasto_no_duplicado).
+  const noEsDup = e => { setNoDup(p=>new Set([...p,String(e.id)])); if(!DEMO) setLearningKV('gasto_no_duplicado',String(e.id),'1').catch(()=>{}) }
+  const badgesG = e => (<>
+      {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <><span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span><span onClick={ev=>{ _stop(ev); noEsDup(e) }} style={{fontSize:10,fontWeight:700,color:C.azulInfo,cursor:'pointer',whiteSpace:'nowrap'}}>No lo es</span></> })()}
+      {respListo&&selected.has(e.id)&&!conRespaldo.has(String(e.id))&&<span style={{padding:'2px 8px',borderRadius:20,background:C.soonBg,color:C.soonText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>Sin respaldo</span>}
+    </>)
+  // Grupos de la lista: por proyecto (con 2+ proyectos), o por fondo («Sin fondo, a pedir al cliente») al rendir un fondo; un solo grupo no lleva cabecera.
+  const _qq = q.trim().toLowerCase()
+  const visibles = disponibles.filter(e=>{ if(fExtra==='dup'&&!dupRend.has(e.id)) return false; if(fExtra==='resp'&&(!selected.has(e.id)||conRespaldo.has(String(e.id)))) return false
+    if(_qq&&!`${e.concept||''} ${e.category||''} ${keyP(e)} ${e.amount||''} ${e.date||''}`.toLowerCase().includes(_qq)) return false; return true })
+  const visSet = new Set(visibles.map(e=>e.id))
+  const grupos = (()=>{
+    if(enFondo){ const sinF=disponibles.filter(e=>repF.deGasto[e.id]==null), conF=disponibles.filter(e=>repF.deGasto[e.id]!=null)
+      return [...(conF.length?[{k:'f',n:`Gastos del fondo del ${fmtFechaDMY(fondoObj?.date)}`,gs:conF}]:[]),...(sinF.length?[{k:'sf',n:'Sin fondo, a pedir al cliente',warn:true,gs:sinF}]:[])] }
+    if(proyecto) return [{k:'_',n:null,gs:disponibles}]
+    const m=new Map(); disponibles.forEach(e=>{ const k=keyP(e); if(!m.has(k)) m.set(k,[]); m.get(k).push(e) })
+    if(m.size<2) return [{k:'_',n:null,gs:disponibles}]
+    const ordK=k=>k?(proyectosDisp.indexOf(k)<0?999:proyectosDisp.indexOf(k)):1e6
+    return [...m.entries()].sort((a,b)=>ordK(a[0])-ordK(b[0])).map(([k,gs])=>({k:k||'__sin__',n:k||'Sin proyecto',warn:!k,sinP:!k,gs})) })()
+  const toggleAll = () => { const todo=visibles.length>0&&visibles.every(e=>selected.has(e.id)); setSelected(p=>{ const n=new Set(p); visibles.forEach(e=>todo?n.delete(e.id):n.add(e.id)); return n }) }
+  const toggleGrupo = gs => setSelected(p=>{ const n=new Set(p), todos=gs.every(e=>n.has(e.id)); gs.forEach(e=>todos?n.delete(e.id):n.add(e.id)); return n })
   const asignarTodosSin = async(gs,pr) => { for(const e of gs){ await asignarProyGasto(e,pr) } }
+  const cbox = on => <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${on?C.accent:C.done}`,background:on?C.accent:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,verticalAlign:'middle'}}>{on&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}</span>
+  const detalleEl = e => editDet?.id===e.id
+    ? <input autoFocus value={editDet.v} onFocus={ev=>ev.target.select()} onClick={ev=>ev.stopPropagation()} onChange={ev=>setEditDet({id:e.id,v:ev.target.value})} onBlur={guardarDetalle}
+        onKeyDown={ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.currentTarget.blur() } else if(ev.key==='Escape'){ ev.preventDefault(); setEditDet(null) } }}
+        style={{width:'100%',boxSizing:'border-box',fontSize:12,fontWeight:600,color:C.text,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 6px',outline:'none',background:'#fff',fontFamily:'inherit'}}/>
+    : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:600,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>
+  // Fila de celular (tarjeta de dos líneas, monto a la derecha).
   const filaG = e => {
-    const isSel=selected.has(e.id)
-    const catBg=CATS[e.category]||CATS['Otro']
+    const isSel=selected.has(e.id), catBg=CATS[e.category]||CATS['Otro']
     return (
-      <div key={e.id} onClick={()=>toggleOne(e.id)}
-        style={{background:isSel?C.azulBg:'#fff',borderRadius:8,padding:'8px 10px',marginBottom:5,
-          border:`1px solid ${isSel?C.accent:C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?C.accent:C.done}`,
-          background:isSel?C.accent:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-          {isSel&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}
-        </div>
+      <div key={e.id} onClick={()=>toggleOne(e.id)} style={{background:isSel?C.azulBg:'#fff',borderRadius:8,padding:'8px 10px',marginBottom:5,border:`1px solid ${isSel?C.accent:C.border}`,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?C.accent:C.done}`,background:isSel?C.accent:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{isSel&&<span style={{color:'#fff',fontSize:10}}><Gl n='tick'/></span>}</div>
         <div style={{flex:1,minWidth:0}}>
-          {editDet?.id===e.id
-            ? <input autoFocus value={editDet.v} onFocus={ev=>ev.target.select()} onClick={ev=>ev.stopPropagation()} onChange={ev=>setEditDet({id:e.id,v:ev.target.value})} onBlur={guardarDetalle}
-                onKeyDown={ev=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.currentTarget.blur() } else if(ev.key==='Escape'){ ev.preventDefault(); setEditDet(null) } }}
-                style={{width:'100%',boxSizing:'border-box',fontSize:12,fontWeight:600,color:C.text,border:`1px solid ${C.accent}`,borderRadius:8,padding:'4px 6px',outline:'none',background:'#fff',fontFamily:'inherit'}}/>
-            : <div onClick={ev=>{ ev.stopPropagation(); setEditDet({id:e.id,v:e.concept||''}) }} title='Editar el detalle' style={{fontSize:12,fontWeight:600,color:C.text,cursor:'text',textDecoration:'underline dotted',textDecorationColor:C.border,textUnderlineOffset:3}}>{e.concept||'—'}</div>}
+          {detalleEl(e)}
           <div style={{fontSize:10,color:C.muted,marginTop:1,display:'flex',flexWrap:'wrap',gap:'3px 5px',alignItems:'center'}}>
             {e.date&&<span>{fmtFechaDMY(e.date)}</span>}
             {e.category&&<span style={{padding:'2px 8px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{e.category}</span>}
-            {chipsG(e)}
-            {dupRend.has(e.id)&&(()=>{ const r=dupRend.get(e.id); return <span title={`Mismo monto y fecha que «${r.concept||'—'}»${r.client_rendered_at?' (ya rendido)':''}`} style={{padding:'2px 8px',borderRadius:20,background:C.overdueBg,color:C.overdueText,fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>{r.client_rendered_at?'Posible duplicado · ya rendido':'Posible duplicado'}</span> })()}
+            {chipsG(e)}{badgesG(e)}
           </div>
         </div>
         <div style={{fontSize:13,fontWeight:600,color:C.text,flexShrink:0,fontVariantNumeric:'tabular-nums'}}>{fmtN(e.amount)}</div>
-      </div>
-    )
+      </div>)
   }
-  const bLista = (<>
-      {!isDesktop&&nDupR>0&&<div style={{fontSize:12,fontWeight:700,color:C.overdueText,marginBottom:6}}>{nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</div>}
+  // Fila de escritorio (tabla): fecha, detalle, proyecto, fondo, monto a la derecha.
+  const thS = {fontSize:10.5,letterSpacing:.6,textTransform:'uppercase',color:C.accent,fontWeight:700,textAlign:'left',padding:'8px 10px',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}
+  const tdS = {padding:'8px 10px',borderTop:`1px solid ${C.track}`,verticalAlign:'middle'}
+  const verFondoCol = fondosRS.length>=2
+  const filaT = e => { const isSel=selected.has(e.id), catBg=CATS[e.category]||CATS['Otro']
+    return (
+      <tr key={e.id} onClick={()=>toggleOne(e.id)} style={{cursor:'pointer',background:isSel?C.azulBg:'transparent'}}>
+        <td style={{...tdS,width:30}}>{cbox(isSel)}</td>
+        <td style={{...tdS,whiteSpace:'nowrap',fontSize:12,color:C.muted}}>{fmtFechaDMY(e.date)}</td>
+        <td style={tdS}>{detalleEl(e)}<div style={{fontSize:10,color:C.muted,marginTop:2,display:'flex',flexWrap:'wrap',gap:'3px 6px',alignItems:'center'}}>{e.category&&<span style={{padding:'1px 7px',borderRadius:20,background:catBg,color:C.muted,fontWeight:700}}>{e.category}</span>}{badgesG(e)}</div></td>
+        <td style={tdS}>{selProyG(e)||<span style={{color:C.textSoft}}>—</span>}</td>
+        {verFondoCol&&<td style={tdS}>{selFondoG(e)||<span style={{color:C.textSoft}}>—</span>}</td>}
+        <td style={{...tdS,textAlign:'right',fontSize:13,fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{fmtN(e.amount)}</td>
+      </tr>) }
+  const cabGrupo = g => { const vis=g.gs.filter(e=>visSet.has(e.id)), nSel=vis.filter(e=>selected.has(e.id)).length, tot=vis.reduce((a,e)=>a+(Number(e.amount)||0),0), cerrado=!!coll[g.k]
+    const col=g.warn?C.soonText:C.accent
+    return {vis, cerrado, nSel, tot, col} }
+  const bGrupos = (()=>{
+    const gv=grupos.map(g=>({g,...cabGrupo(g)})).filter(x=>x.vis.length)
+    if(!gv.length) return null
+    if(isDesktop){
+      return (<table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={{...thS,width:30}}/><th style={thS}>Fecha</th><th style={thS}>Detalle</th><th style={thS}>Proyecto</th>{verFondoCol&&<th style={thS}>Fondo</th>}<th style={{...thS,textAlign:'right'}}>Monto</th></tr></thead>
+        <tbody>{gv.map(({g,vis,cerrado,nSel,tot,col})=>(<Fragment key={g.k}>
+          {g.n&&<tr onClick={()=>setColl(p=>({...p,[g.k]:!p[g.k]}))} style={{cursor:'pointer'}}>
+            <td style={{...tdS,background:g.warn?C.soonBg:C.bgSoft}} onClick={ev=>{ ev.stopPropagation(); toggleGrupo(vis) }}>{cbox(nSel===vis.length)}</td>
+            <td colSpan={verFondoCol?4:3} style={{...tdS,background:g.warn?C.soonBg:C.bgSoft,fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:col}}><span style={{display:'inline-flex',verticalAlign:'middle',marginRight:6}}><Gl n={cerrado?'chevron':'chevD'}/></span>{g.n}{g.sinP&&proyectoSugerido&&<button onClick={ev=>{ ev.stopPropagation(); asignarTodosSin(vis,proyectoSugerido) }} style={{marginLeft:10,fontSize:11,fontWeight:600,textTransform:'none',letterSpacing:0,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer'}}>Asignar {vis.length===1?'a':'los '+vis.length+' a'} {proyectoSugerido}</button>}</td>
+            <td style={{...tdS,background:g.warn?C.soonBg:C.bgSoft,textAlign:'right',fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>{nSel} de {vis.length} · {fmtN(tot)}</td></tr>}
+          {!cerrado&&vis.map(filaT)}
+        </Fragment>))}</tbody></table>)
+    }
+    return gv.map(({g,vis,cerrado,nSel,tot,col})=>(<Fragment key={g.k}>
+      {g.n&&<div onClick={()=>setColl(p=>({...p,[g.k]:!p[g.k]}))} style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,margin:'10px 0 5px',cursor:'pointer',background:g.warn?C.soonBg:C.bgSoft,borderRadius:10,padding:'8px 10px'}}>
+        <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}><span onClick={ev=>{ ev.stopPropagation(); toggleGrupo(vis) }}>{cbox(nSel===vis.length)}</span><span style={{fontSize:11,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:col,minWidth:0}}>{g.n}</span></span>
+        <span style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{nSel} de {vis.length} · {fmtN(tot)}</span><span style={{color:C.muted,display:'inline-flex'}}><Gl n={cerrado?'chevron':'chevD'}/></span></span></div>}
+      {g.sinP&&!cerrado&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(vis,proyectoSugerido)} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {vis.length===1?'a':'los '+vis.length+' a'} {proyectoSugerido}</button>}
+      {!cerrado&&vis.map(filaG)}
+    </Fragment>)) })()
+  const chipF = (on,t,n,fn,warn) => <button key={t} type='button' onClick={fn} style={{fontSize:12.5,fontWeight:600,borderRadius:20,padding:'5px 12px',cursor:'pointer',border:`1px solid ${on?C.accent:(warn?'transparent':C.border)}`,background:on?C.accent:(warn?C.soonBg:C.surface),color:on?'#fff':(warn?C.soonText:C.muted),whiteSpace:'nowrap',fontFamily:'inherit',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',flexShrink:0}}>{t}{n!=null&&<b style={{fontWeight:600,marginLeft:5}}>{n}</b>}</button>
+  const irProy = set => { setFExtra(null); setProyF(set) }
+  const bChips = (()=>{ const arr=[]
+    if(!enFondo){ arr.push(chipF(!fExtra&&proyF.size===0,'Todos',cntProy.__todos?.n||0,()=>irProy(new Set())))
+      proyectosDisp.filter(p=>cntProy[p]).forEach(p=>arr.push(chipF(!fExtra&&proyF.size===1&&proyF.has(p),p,cntProy[p].n,()=>irProy(new Set([p])))))
+      if(cntProy['']?.n>0) arr.push(chipF(!fExtra&&proyF.has('__sin__'),'Sin proyecto',cntProy[''].n,()=>irProy(new Set(['__sin__'])),true)) }
+    if(nDupR>0) arr.push(chipF(fExtra==='dup','Duplicados',nDupR,()=>setFExtra(fExtra==='dup'?null:'dup'),true))
+    if(nSinResp>0) arr.push(chipF(fExtra==='resp','Sin respaldo',nSinResp,()=>setFExtra(fExtra==='resp'?null:'resp'),true))
+    return arr.length>1||enFondo&&arr.length ? <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2,marginBottom:8,scrollbarWidth:'none'}}>{arr}</div> : null })()
+  const bLista = (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:isDesktop?'12px 14px':'10px 10px'}}>
       {wipRec&&gastosSel.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,background:C.azulBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>
         <span style={{flex:1,minWidth:0,fontSize:12,color:C.accent,fontWeight:600,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.25}}>Selección recuperada · {gastosSel.length} gasto{gastosSel.length!==1?'s':''}</span>
         <button onClick={()=>{ setSelected(new Set()); setWipRec(false) }} style={{fontSize:12,fontWeight:600,color:C.accent,background:'none',border:'none',cursor:'pointer',padding:0,flexShrink:0}}>Descartar</button>
       </div>}
-      {enFondo&&(()=>{ const nSin=pendSinFondo.length
-        return <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6}}>
-          <span style={{fontSize:11,color:C.muted}}>Gastos del fondo del {fmtFechaDMY(fondoObj?.date)}</span>
-          {nSin>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${nSin})`}</button>}
-        </div> })()}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gastos disponibles{isDesktop&&nDupR>0&&<b style={{color:C.overdueText,fontWeight:700}}> · {nDupR} posible{nDupR!==1?'s':''} duplicado{nDupR!==1?'s':''}</b>}</span>
-          {!enFondo&&<button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:10,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Filtrar por fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>}
-        </div>
-        {disponibles.length>0&&<button onClick={toggleAll} style={{fontSize:10,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:600}}>
-          {disponibles.length&&gastosSel.length===disponibles.length?'Desmarcar todo':'Seleccionar todo'}
-        </button>}
+      {bChips}
+      {disponibles.length>8&&<div style={{marginBottom:8}}><Buscador value={q} onChange={setQ} placeholder='Buscar gasto o proyecto…'/></div>}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+        <span style={{fontSize:11,color:C.muted}}>{disponibles.length} gasto{disponibles.length!==1?'s':''} disponible{disponibles.length!==1?'s':''}{enFondo?` · del fondo del ${fmtFechaDMY(fondoObj?.date)}`:''}</span>
+        <span style={{display:'flex',alignItems:'center',gap:10}}>
+          {enFondo&&pendSinFondo.length>0&&<button onClick={()=>setAddSinFondo(v=>!v)} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>{addSinFondo?'Ocultar los sin fondo':`Agregar gastos sin fondo (${pendSinFondo.length})`}</button>}
+          {!enFondo&&<button onClick={()=>setShowFiltroFecha(v=>!v)} style={{fontSize:11,color:(fDesde||fHasta)?C.accent:C.azulInfo,background:'none',border:'none',cursor:'pointer'}}>Fecha{(fDesde||fHasta)?' ·':''} {showFiltroFecha?<Gl n='chevU'/>:<Gl n='chevD'/>}</button>}
+          {visibles.length>0&&<button onClick={toggleAll} style={{fontSize:11,color:C.accent,background:'none',border:'none',cursor:'pointer',fontWeight:700}}>{visibles.every(e=>selected.has(e.id))?'Desmarcar todo':'Seleccionar todo'}</button>}
+        </span>
       </div>
       {showFiltroFecha&&!enFondo&&<div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
         <input type='date' value={fDesde} onChange={e=>setFDesde(e.target.value)} style={{flex:1,padding:'5px 8px',borderRadius:8,border:`0.5px solid ${C.border}`,fontSize:11,outline:'none'}}/>
@@ -614,24 +658,24 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
             <button onClick={()=>{setProyecto('');setFDesde('');setFHasta('')}} style={{display:'block',margin:'8px auto 0',fontSize:11,fontWeight:600,color:C.accent,background:C.azulBg,border:'none',borderRadius:20,padding:'5px 12px',cursor:'pointer'}}>Ver todos los proyectos</button>
           </div>
         : <div style={{color:C.muted,textAlign:'center',padding:20,fontSize:12}}>No hay gastos pendientes de rendir</div>)}
-      <div style={{maxHeight:isDesktop?'calc(100vh - 320px)':(gruposL?460:280),overflowY:'auto',marginBottom:12}}>
-        {gruposL ? gruposL.map(gr=>(<Fragment key={gr.k||'__sin__'}>
-            <div onClick={()=>toggleGrupo(gr)} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,margin:'10px 2px 5px',cursor:'pointer'}}>
-              <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:gr.k?C.accent:C.soonText,minWidth:0}}>{gr.k||'Sin proyecto'}</span>
-              <span style={{fontSize:12,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{gr.gs.length} · {fmtN(gr.tot)}</span>
-            </div>
-            {!gr.k&&proyectoSugerido&&<button onClick={()=>asignarTodosSin(gr.gs,proyectoSugerido)} style={{fontSize:11,fontWeight:600,color:C.greenText,background:C.greenBg,border:'none',borderRadius:20,padding:'2px 9px',cursor:'pointer',margin:'0 0 6px 2px'}}>Asignar {gr.gs.length===1?'a':'los '+gr.gs.length+' a'} {proyectoSugerido}</button>}
-            {gr.gs.map(filaG)}
-          </Fragment>)) : (()=>{ const sinF=enFondo?disponibles.filter(e=>repF.deGasto[e.id]==null):[]
-            if(!sinF.length) return disponibles.map(filaG)
-            return <>{disponibles.filter(e=>repF.deGasto[e.id]!=null).map(filaG)}
-              <div onClick={()=>toggleGrupo({gs:sinF})} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:8,margin:'10px 2px 5px',cursor:'pointer'}}>
-                <span style={{fontSize:10.5,fontWeight:700,letterSpacing:.5,textTransform:'uppercase',color:C.soonText,minWidth:0}}>Sin fondo, a pedir al cliente</span>
-                <span style={{fontSize:12,fontWeight:700,color:C.text,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{sinF.length} · {fmtN(sinF.reduce((a,e)=>a+(Number(e.amount)||0),0))}</span>
-              </div>
-              {sinF.map(filaG)}</> })()}
-      </div>
-  </>)
+      {disponibles.length>0&&!visibles.length&&<div style={{color:C.muted,textAlign:'center',padding:20,fontSize:12}}>Ningún gasto con este filtro.</div>}
+      <div style={{maxHeight:isDesktop?'calc(100vh - 360px)':'none',overflowY:isDesktop?'auto':'visible',overflowX:'auto'}}>{bGrupos}</div>
+    </div>)
+  // «Antes de enviar»: lo que falta o conviene revisar, con «Ver» que filtra la misma lista.
+  const itemA = (ok,t,sub,ver) => (<div key={t} style={{display:'flex',gap:10,padding:'8px 0',borderTop:`1px solid ${C.track}`,alignItems:'flex-start'}}>
+      <span style={{width:20,height:20,borderRadius:'50%',flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,marginTop:1,background:ok?C.greenBg:C.soonBg,color:ok?C.greenText:C.soonText}}>{ok?'✓':'!'}</span>
+      <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontSize:13,fontWeight:600,color:C.text}}>{t}</span><span style={{fontSize:12,color:C.textSoft}}>{sub}</span></span>
+      {ver&&<button onClick={ver} style={{fontSize:12,fontWeight:700,color:C.azulInfo,background:'none',border:'none',cursor:'pointer',padding:0,whiteSpace:'nowrap',fontFamily:'inherit'}}>Ver</button>}
+    </div>)
+  const bAntes = (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:'10px 13px',marginBottom:12}}>
+      <div style={{...SEC_LBL,marginBottom:2}}>Antes de enviar</div>
+      {itemA(_cuadra,_cuadra?'Cuadra con la ficha':'No cuadra con la ficha',`fondos ${fmtN(_fgC.fondos)} − gastos ${fmtN(_fgC.gastos)} = ${fmtSaldoG(_fgC.saldo)}`)}
+      {nSinProyR>0&&itemA(false,`${nSinProyR} gasto${nSinProyR!==1?'s':''} sin proyecto`,faltaProyR?'elige el proyecto para poder rendirlos':`se les asigna ${enFondo?proyFondo:proyecto}`,enFondo?null:()=>irProy(new Set(['__sin__'])))}
+      {nDupR>0&&itemA(false,`${nDupR} posible${nDupR!==1?'s':''} duplicado${nDupR!==1?'s':''}`,'márcalos «No lo es» y la app lo recuerda',()=>setFExtra('dup'))}
+      {nSinResp>0&&itemA(false,`${nSinResp} sin respaldo`,'sin comprobante adjunto',()=>setFExtra('resp'))}
+      {gastosSel.length===0&&itemA(false,'Marca los gastos que quieres rendir','aún no hay ninguno seleccionado')}
+      {gastosSel.length>0&&nSinProyR===0&&nDupR===0&&nSinResp===0&&itemA(true,'Todo en orden','puedes continuar')}
+    </div>)
   const bResumen = null
   const bIA = selected.size>0&&<button onClick={mejorarDescripcionesIA} disabled={limpiandoIA} style={{...chipBtn('soft'),width:'100%',marginBottom:8,opacity:limpiandoIA?.6:1}}>{limpiandoIA?'Mejorando descripciones…':'Mejorar descripciones con IA'}</button>
   const bExterna = !esEdicion&&(extOpen
@@ -644,7 +688,6 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
           </div>
         : <button onClick={()=>setExtOpen(true)} disabled={!puedeRendir} style={{marginTop:8,background:'none',border:'none',padding:0,color:puedeRendir?C.accent:C.done,fontSize:12,fontWeight:600,cursor:puedeRendir?'pointer':'not-allowed'}}>Ya la rendí por fuera de la app</button>)
   const bBotones = navBorr&&!esEdicion ? (<>
-      {faltaProyR&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <button disabled={!puedeRendir||saving} onClick={()=>handleGenerar('borrador')}
         style={{width:'100%',padding:'11px 14px',borderRadius:10,border:'none',background:puedeRendir?C.accent:C.done,color:'#fff',fontSize:14,fontWeight:700,cursor:puedeRendir?'pointer':'not-allowed'}}>
         {saving?'Guardando…':(navBorr.i<navBorr.n-1?'Guardar borrador y continuar':'Guardar borrador')}
@@ -655,7 +698,6 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
       </div>
       {bExterna}
   </>) : (<>
-      {faltaProyR&&<div style={{fontSize:12,color:C.overdueText,background:C.overdueBg,borderRadius:8,padding:'7px 10px',marginBottom:8}}>{nSinProyR===1?'1 gasto seleccionado no tiene proyecto':`${nSinProyR} gastos seleccionados no tienen proyecto`}: elige a cuál van para poder rendir.</div>}
       <div style={{display:'flex',gap:8}}>
         {!asPage&&<button onClick={onClose} style={{flex:1,padding:'9px 14px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancelar</button>}
         {esEdicion ? (
@@ -695,15 +737,16 @@ export function RendicionModal({client, entityIds, expenses, clientEntities, sal
     <div>
       {!esEdicion&&(bNav?<div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}><PasosRend paso={1}/>{bNav}</div>:<PasosRend paso={1}/>)}
       {bElegir}
-      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.55fr) minmax(0,1fr)',gap:22,alignItems:'start'}}>
+      {bKpTop}
+      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 330px',gap:18,alignItems:'start'}}>
         <div style={{minWidth:0}}>{bFondos}{bLista}</div>
-        <div style={{minWidth:0}}>{bContinuidad}{bRS}{bProyecto}{bModo}{bKPIs}{bCuadra}{bResumen}{bIA}{bBotones}</div>
+        <div style={{minWidth:0,position:'sticky',top:12}}>{bContinuidad}{bRS}{bProyecto}{bAntes}{bModo}{bResumen}{bIA}{bBotones}</div>
       </div>
     </div>
   ) : (
     <div>
       {!esEdicion&&<PasosRend paso={1}/>}
-      {bElegir}{bContinuidad}{bFondos}{bRS}{bProyecto}{bKPIs}{bLista}{bModo}{bCuadra}{bResumen}{bIA}{bBotones}{bNav}
+      {bElegir}{bContinuidad}{bKpTop}{bFondos}{bLista}{bAntes}{bRS}{bProyecto}{bModo}{bResumen}{bIA}{bBotones}{bNav}
     </div>
   )
 }
