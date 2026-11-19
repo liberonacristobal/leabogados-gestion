@@ -1,5 +1,5 @@
 // Reglas de la notaría compartidas por la app (Banco) y el servidor (conciliacion-auto). Una sola fuente.
-import { repartoFondos } from './gastosReglas.js'
+import { repartoFondos, cuentaEnSaldo } from './gastosReglas.js'
 
 const _dias = (a, b) => Math.round((+new Date(String(a).slice(0, 10) + 'T12:00') - +new Date(String(b).slice(0, 10) + 'T12:00')) / 864e5)
 
@@ -107,18 +107,82 @@ export function analisisNotaria({ expenses = [], rendiciones = [], hoy, appDesde
   }
 }
 
-// Lo que de verdad le toca a quien liquida la notaría: OT pagables con los fondos del cliente (FIFO por fecha dentro del disponible,
-// o de la oficina) y OT sin cliente (por asignar). Las demás esperan fondos del cliente: eso es del aviso de fondos del abogado.
+const _porFecha = (/** @type {any} */ a, /** @type {any} */ b) => String(a.date || '9999').localeCompare(String(b.date || '9999')) || String(a.ot_number || '').localeCompare(String(b.ot_number || ''))
+
+// Cuenta personal de un miembro (gastos personal_de sin cliente): un fondo con gastos ligados (reembolso_fondo_id, p. ej. el que deja un tercero
+// para un socio) cubre SOLO esos gastos; el resto se cubre con el saldo propio (fondos de uso general menos gastos sin fondo).
+/** @param {any[]} expenses @param {string} persona */
+function _cuentaPersonal(expenses, persona) {
+  const mine = (expenses || []).filter(e => e.personal_de === persona && !e.client_id && !e.deleted_at && cuentaEnSaldo(e))
+  const fondos = mine.filter(e => e.type === 'fondo' && !e.no_descuenta_saldo)
+  const gastos = mine.filter(e => e.type !== 'fondo' && !e.no_descuenta_saldo)
+  const fondoDe = (/** @type {any} */ g) => (g.reembolso_fondo_id ? fondos.find(f => String(f.id) === String(g.reembolso_fondo_id)) : null)
+  const dedic = new Set(gastos.map(g => fondoDe(g)?.id).filter(Boolean).map(String))
+  return { fondos, gastos, fondoDe, dedic }
+}
+/** @param {any[]} expenses @param {string} persona */
+export function dispPersonaNotaria(expenses, persona) {
+  const { fondos, gastos, fondoDe, dedic } = _cuentaPersonal(expenses, persona)
+  const fondo = fondos.filter(f => !dedic.has(String(f.id))).reduce((a, e) => a + (Number(e.amount) || 0), 0)
+  const otros = gastos.filter(g => !fondoDe(g) && !esNotaPend(g)).reduce((a, e) => a + (Number(e.amount) || 0), 0)
+  return { fondo, otros, disp: Math.max(0, fondo - otros) }
+}
+// Cuánto de las OT `gs` (de una persona) se puede pagar con fondos: las ligadas a un fondo, con lo que le queda a ese fondo; las demás, con el saldo propio.
+/** @param {any[]} expenses @param {string} persona @param {any[]} gs */
+export function coberturaPersonaNotaria(expenses, persona, gs) {
+  const { gastos, fondoDe } = _cuentaPersonal(expenses, persona)
+  const general = dispPersonaNotaria(expenses, persona).disp
+  const quedaF = (/** @type {any} */ f) => Math.max(0, (Number(f.amount) || 0) - gastos.filter(g => String(g.reembolso_fondo_id) === String(f.id) && !esNotaPend(g)).reduce((a, e) => a + (Number(e.amount) || 0), 0))
+  /** @type {Map<string, {disp:number, items:any[]}>} */
+  const grupos = new Map()
+  ;(gs || []).forEach(e => { const f = fondoDe(e); const k = f ? String(f.id) : '__gen__'; let g = grupos.get(k); if (!g) { g = { disp: f ? quedaF(f) : general, items: [] }; grupos.set(k, g) } g.items.push(e) })
+  let con = 0, disp = 0, ap = 0
+  /** @type {any[]} */ const pagables = []
+  grupos.forEach(g => { const t = g.items.reduce((a, e) => a + (Number(e.amount) || 0), 0); ap += t; con += Math.min(t, g.disp); disp += g.disp; let used = 0
+    ;[...g.items].sort(_porFecha).forEach(e => { const m = Number(e.amount) || 0; if (used + m <= g.disp) { used += m; pagables.push(e) } }) })
+  if (!grupos.has('__gen__')) disp += general
+  return { con, ap, disp, pagables }
+}
+
+// Lo que de verdad le toca a quien liquida la notaría. UNA sola regla para Pagar, Panel de socios, resumen semanal y cierre de mes.
+// Cada OT pendiente cae en exactamente una partida: pagables (con el fondo de su cliente, FIFO por fecha dentro del disponible; con el fondo de la persona
+// si es personal; las del cliente oficina y las incobrables, que paga la oficina, van completas), esperan (cliente sin fondo que alcance) o sinCliente
+// (sin cliente ni persona, y las personales que su fondo no cubre). Las partidas suman el pendiente.
+/** @param {any[]} [expenses] @param {{esOficina?: (cid: any) => boolean}} [opts] */
 export function notariaPorLiquidar(expenses = [], { esOficina = /** @type {(cid: any) => boolean} */ (() => false) } = {}) {
-  const pend = notariaPendientes(expenses), porCli = {}
-  pend.forEach(e => { const k = e.client_id ? String(e.client_id) : '—'; (porCli[k] = porCli[k] || []).push(e) })
-  const pagables = [], esperan = [], sinCliente = porCli['—'] || []
-  Object.entries(porCli).forEach(([cid, ots]) => { if (cid === '—') return
+  const pend = notariaPendientes(expenses)
+  /** @type {Record<string, any[]>} */ const porCli = {}
+  /** @type {Record<string, any[]>} */ const porPersona = {}
+  /** @type {any[]} */ const asume = [], sinCliente = [], pagables = [], esperan = []
+  pend.forEach(e => {
+    if (e.incobrable_at) { asume.push(e); return }
+    if (e.client_id) { const k = String(e.client_id); (porCli[k] = porCli[k] || []).push(e) }
+    else if (e.personal_de) { (porPersona[e.personal_de] = porPersona[e.personal_de] || []).push(e) }
+    else sinCliente.push(e)
+  })
+  Object.entries(porCli).forEach(([cid, ots]) => {
     const d = disponibleNotaria(expenses, cid, { esOficina }); let usado = 0
-    ots.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).forEach(e => { const m = Number(e.amount) || 0
-      if (d.oficina || usado + m <= d.disp) { usado += m; pagables.push(e) } else esperan.push(e) }) })
-  const suma = xs => xs.reduce((a, e) => a + (Number(e.amount) || 0), 0)
-  return { pagables, esperan, sinCliente, montoPagables: suma(pagables), montoEsperan: suma(esperan), montoSinCliente: suma(sinCliente) }
+    ots.slice().sort(_porFecha).forEach(e => { const m = Number(e.amount) || 0
+      if (d.oficina || usado + m <= d.disp) { usado += m; pagables.push(e) } else esperan.push(e) })
+  })
+  Object.entries(porPersona).forEach(([persona, ots]) => {
+    const cb = coberturaPersonaNotaria(expenses, persona, ots)
+    const ok = new Set(cb.pagables.map(e => String(e.id)))
+    ots.forEach(e => { if (ok.has(String(e.id))) pagables.push(e); else sinCliente.push(e) })
+  })
+  asume.forEach(e => pagables.push(e))
+  const suma = (/** @type {any[]} */ xs) => xs.reduce((a, e) => a + (Number(e.amount) || 0), 0)
+  return { pagables, esperan, sinCliente, asume, montoPagables: suma(pagables), montoEsperan: suma(esperan), montoSinCliente: suma(sinCliente), montoAsume: suma(asume) }
+}
+
+// Selección de Pagar = lo que la regla sugiere, menos lo que la persona sacó, más lo que agregó (solo si la OT sigue pendiente). Devuelve los id de las OT.
+/** @param {any[]} pagables @param {{sacadas?: any[], agregadas?: any[]}} [ajustes] @param {any[]} [pendientes] @returns {any[]} */
+export function seleccionNotaria(pagables, ajustes = {}, pendientes = pagables) {
+  const sacadas = new Set((ajustes.sacadas || []).map(String)), agregadas = new Set((ajustes.agregadas || []).map(String))
+  const base = (pagables || []).filter(e => !sacadas.has(String(e.id))).map(e => e.id)
+  const ya = new Set(base.map(String))
+  const extra = (pendientes || []).filter(e => agregadas.has(String(e.id)) && !ya.has(String(e.id))).map(e => e.id)
+  return [...base, ...extra]
 }
 
 /**
