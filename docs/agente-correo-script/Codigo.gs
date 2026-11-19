@@ -54,7 +54,7 @@ function revisarCorreos() {
       payload: JSON.stringify({ idToken: ScriptApp.getIdentityToken(), dryRun: CONFIG.PRUEBA, messages: lote.slice(i, i + 10) }),
     });
     Logger.log(res.getResponseCode() + ' ' + res.getContentText().slice(0, CONFIG.PRUEBA ? 8000 : 400));
-    if (res.getResponseCode() !== 200) return;   // no avanza la marca: la próxima corrida reintenta
+    if (res.getResponseCode() !== 200) return;   // no [cliente] la marca: la próxima corrida reintenta
   }
   if (!CONFIG.PRUEBA) props.setProperty('ultimo_ok', String(inicio));
   Logger.log(lote.length + ' correos revisados');
