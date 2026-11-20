@@ -46,3 +46,11 @@ test('primeros días del mes siguiente: el arriendo (día habitual 1 a 3) entra 
   assert.deepEqual(gastosProximoMes(gs, '2026-11-20', 1), [])       // tope del día 1: el arriendo se paga el 2
   assert.equal(gastosProximoMes(gs, '2026-12-20')[0].fecha, '2027-01-02')   // cruza el año
 })
+
+// Caso real de noviembre 2026: el pago al aseo es una transferencia sin la palabra «aseo» en la glosa; la subcategoría lo identifica y entra a la proyección del 1 al 5.
+test('aseo: se reconoce por la subcategoría y se proyecta en los primeros días del mes siguiente', () => {
+  const T = 'Transf. a terceros vía Internet a cuenta'
+  const g = [['2026-09-01', 310500], ['2026-10-01', 241500], ['2026-11-09', 276000]].map(([date, amount]) => ({ date, category: 'Otros', subcategory: 'Aseo', concept: T, amount, type: 'gasto' }))
+  assert.equal(grupoDeGasto(g[0]), 'aseo')
+  assert.deepEqual(gastosProximoMes(g, '2026-11-20').map(x => [x.k, x.fecha, x.monto]), [['aseo', '2026-12-01', 276000]])
+})

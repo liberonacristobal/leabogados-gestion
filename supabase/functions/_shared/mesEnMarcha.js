@@ -31,7 +31,7 @@ export function grupoDeGasto(e) {
   if (c === 'impuestos y patentes') return /iva|ppm|f29/.test(k) ? 'f29' : 'impuestos'
   if (c === 'remuneraciones') return 'contadora'
   if (c === 'tarjeta de crédito' || c === 'software' || c === 'servicios') return 'tarjeta'
-  if (c === 'otros' && /aseo/.test(k)) return 'aseo'
+  if (c === 'otros' && /aseo/.test(`${k} ${t(e.subcategory)}`)) return 'aseo'   // el pago al aseo viene como transferencia: «Aseo» está en la subcategoría, no en la glosa
   return null
 }
 
