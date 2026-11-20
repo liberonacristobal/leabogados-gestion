@@ -228,3 +228,54 @@ export function clienteSugeridoPorGlosa(ot, gastos) {
   if (orden[1] && orden[1].palabras.length >= orden[0].palabras.length) return null
   return orden[0]
 }
+
+const _normOt = o => String(o || '').replace(/^OT-?/i, '').trim()
+const _liqPagada = (/** @type {any} */ r) => !!r && !r.anulada_at && ((r.estado_envio || (r.sent_at ? 'enviada' : 'pagado')) !== 'por_enviar' || !!r.movimiento_id)
+const _diaLiq = (/** @type {any} */ r) => String(r.sent_at || r.created_at || '').slice(0, 10)
+
+/**
+ * OT que el último Excel de la notaría todavía lista como deuda y que ya pagamos en una liquidación enviada (el listado se armó después del pago y no las rebajó).
+ * Fuente: la última carga activa de la notaría que guardó el detalle de sus repetidas (`resumen.repetidasDet`); el estado de pago sale del gasto vivo
+ * (`notaria_render_id` → liquidación enviada, marcada pagada o enlazada al banco, no anulada). Una liquidación posterior a la carga no cuenta: el listado aún no la veía.
+ * Una liquidación cuyo aviso ya salió para esa carga (`rendiciones.correo.listado = {carga, rendiciones[]}`) tampoco: no se vuelve a reclamar.
+ * Devuelve `{carga, grupos, n, total}`; cada grupo es una liquidación con sus OT, su monto, su fecha de pago y el comprobante guardado (o null).
+ * @param {{cargas?: any[], expenses?: any[], rendiciones?: any[]}} p
+ * @returns {{carga: any, grupos: {rendicion: any, id: string, fecha: string, n: number, total: number, ots: string[], comprobanteUrl: string|null}[], n: number, total: number}}
+ */
+export function otPagadasEnListado({ cargas = [], expenses = [], rendiciones = [] } = {}) {
+  const vacio = { carga: null, grupos: [], n: 0, total: 0 }
+  const carga = (cargas || []).filter(c => c && c.status !== 'undone' && c.resumen && c.resumen.notaria && Array.isArray(c.resumen.repetidasDet))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+  if (!carga) return vacio
+  const dCarga = String(carga.created_at || '').slice(0, 10)
+  const porOt = new Map(); (expenses || []).forEach(g => { if (g && !g.deleted_at && g.ot_number && g.notaria_render_id) porOt.set(_normOt(g.ot_number), g) })
+  const liqs = new Map((rendiciones || []).filter(r => r && r.tipo === 'notaria').map(r => [String(r.id), r]))
+  const avisadas = new Set(); ;(rendiciones || []).forEach(r => { const l = r?.correo?.listado; if (l && String(l.carga) === String(carga.id)) (l.rendiciones || []).forEach((/** @type {any} */ id) => avisadas.add(String(id))) })
+  /** @type {Map<string, {rendicion:any, id:string, fecha:string, n:number, total:number, ots:string[], comprobanteUrl:string|null}>} */ const por = new Map()
+  for (const x of carga.resumen.repetidasDet) {
+    const g = porOt.get(_normOt(x.ot)); if (!g) continue
+    const r = liqs.get(String(g.notaria_render_id)); if (!_liqPagada(r) || avisadas.has(String(r.id)) || _diaLiq(r) >= dCarga) continue
+    let k = por.get(String(r.id)); if (!k) { k = { rendicion: r, id: String(r.id), fecha: _diaLiq(r), n: 0, total: 0, ots: [], comprobanteUrl: r.comprobante_url || null }; por.set(String(r.id), k) }
+    k.n++; k.total += Number(g.amount) || 0; k.ots.push(_normOt(x.ot))
+  }
+  const grupos = [...por.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  return { carga, grupos, n: grupos.reduce((a, g) => a + g.n, 0), total: grupos.reduce((a, g) => a + g.total, 0) }
+}
+
+/**
+ * Párrafo del correo de pago sobre las OT ya pagadas que siguen en el listado de la notaría. `conComprobante` = si se adjunta el comprobante de cada pago.
+ * Registro formal, sin puntos medios. Cadena vacía si no hay nada que decir.
+ * @param {{grupos: {fecha: string, n: number, total: number}[]}} r
+ * @param {boolean} [conComprobante]
+ */
+export function parrafoYaPagadasEnListado(r, conComprobante = true) {
+  const gs = (r && r.grupos) || []; if (!gs.length) return ''
+  const dmy = (/** @type {string} */ f) => `${f.slice(8, 10)}-${f.slice(5, 7)}-${f.slice(0, 4)}`
+  const clp = (/** @type {number} */ n) => '$' + Math.round(n).toLocaleString('es-CL')
+  const n = gs.reduce((a, g) => a + g.n, 0), uno = gs.length === 1
+  const que = conComprobante ? (uno ? 'el comprobante y la liquidación de ese pago' : 'los comprobantes y las liquidaciones de esos pagos') : (uno ? 'la liquidación de ese pago' : 'las liquidaciones de esos pagos')
+  const cuerpo = uno
+    ? `${n === 1 ? 'La OT que sigue figurando' : `Las ${n} OT que siguen figurando`} en su último listado de deuda ya ${n === 1 ? 'fue pagada' : 'fueron pagadas'} el ${dmy(gs[0].fecha)}, por ${clp(gs[0].total)}.`
+    : `Hay ${n} OT que siguen figurando en su último listado de deuda y ya fueron pagadas:\n${gs.map(g => `• ${dmy(g.fecha)}: ${g.n} OT por ${clp(g.total)}`).join('\n')}`
+  return `${cuerpo} Adjuntamos ${que}, y les pedimos rebajar${n === 1 ? 'la' : 'las'} de nuestra deuda.`
+}

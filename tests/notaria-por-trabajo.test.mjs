@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { disponibleNotaria, notariaPendientes, otNoValida, revisionCargaNotaria, clienteSugeridoPorGlosa } from '../supabase/functions/_shared/notariaReglas.js'
+import { disponibleNotaria, notariaPendientes, otNoValida, revisionCargaNotaria, clienteSugeridoPorGlosa, otPagadasEnListado, parrafoYaPagadasEnListado } from '../supabase/functions/_shared/notariaReglas.js'
 
 const fondo = (id, amount, project, date = '2026-09-01') => ({ id, client_id: 'c', type: 'fondo', amount, project, date })
 const ot = (id, amount, project) => ({ id, client_id: 'c', type: 'gasto', category: 'Notaria', ot_number: String(400000 + id), amount, project, date: '2026-10-01' })
@@ -63,4 +63,42 @@ test('OT sin cliente: se sugiere el cliente con más palabras propias de la glos
   assert.equal(clienteSugeridoPorGlosa({ id: 9, concept: 'Gastos notariales — Compensación' }, g), null)          // una sola palabra y común
   const empate = [{ id: 1, client_id: 'a', concept: 'Mulet Modulares' }, { id: 2, client_id: 'b', concept: 'Modulares Mulet' }]
   assert.equal(clienteSugeridoPorGlosa({ id: 9, concept: 'X — Mulet Modulares' }, empate), null)                // empate entre dos clientes
+})
+
+// Caso real del 16-11-2026 (anonimizado): el listado de la notaría trajo como deuda las OT que ya se habían pagado el 20-10.
+test('OT ya pagadas que siguen en el listado de la notaría: solo las de liquidaciones enviadas antes de la carga, una vez por carga', () => {
+  const carga = { id: 'c1', status: 'active', created_at: '2026-11-16T14:14:00Z', resumen: { notaria: true, repetidasDet: [{ ot: 'OT-100', monto: 10000 }, { ot: 'OT-101', monto: 20000 }, { ot: 'OT-102', monto: 5000 }, { ot: 'OT-103', monto: 7000 }, { ot: 'OT-104', monto: 9000 }] } }
+  const expenses = [
+    { id: 'e1', ot_number: 'OT-100', amount: 10000, notaria_render_id: 'L1' }, { id: 'e2', ot_number: '101', amount: 20000, notaria_render_id: 'L1' },
+    { id: 'e3', ot_number: 'OT-102', amount: 5000, notaria_render_id: 'L2' },                    // liquidación por enviar: no está pagada
+    { id: 'e4', ot_number: 'OT-103', amount: 7000, notaria_render_id: 'L3' },                    // pagada DESPUÉS de la carga: el listado no la veía
+    { id: 'e5', ot_number: 'OT-104', amount: 9000 },                                             // sin liquidar
+  ]
+  const rend = [
+    { id: 'L1', tipo: 'notaria', estado_envio: 'enviada', sent_at: '2026-10-20T13:11:00Z', created_at: '2026-10-20T13:04:00Z', comprobante_url: 'https://drive/x' },
+    { id: 'L2', tipo: 'notaria', estado_envio: 'por_enviar', created_at: '2026-10-25T10:00:00Z' },
+    { id: 'L3', tipo: 'notaria', estado_envio: 'enviada', sent_at: '2026-11-17T10:00:00Z', created_at: '2026-11-17T09:00:00Z' },
+  ]
+  const r = otPagadasEnListado({ cargas: [carga], expenses, rendiciones: rend })
+  assert.equal(r.n, 2); assert.equal(r.total, 30000); assert.equal(r.grupos.length, 1)
+  assert.deepEqual(r.grupos[0].ots, ['100', '101']); assert.equal(r.grupos[0].fecha, '2026-10-20'); assert.equal(r.grupos[0].comprobanteUrl, 'https://drive/x')
+  // anulada o ya avisada para esa carga: no se vuelve a reclamar
+  assert.equal(otPagadasEnListado({ cargas: [carga], expenses, rendiciones: rend.map(x => x.id === 'L1' ? { ...x, anulada_at: '2026-11-01T00:00:00Z' } : x) }).n, 0)
+  assert.equal(otPagadasEnListado({ cargas: [carga], expenses, rendiciones: rend.map(x => x.id === 'L1' ? { ...x, correo: { listado: { carga: 'c1', rendiciones: ['L1'] } } } : x) }).n, 0)
+  // una carga sin detalle de repetidas, deshecha o sin datos no produce nada
+  assert.equal(otPagadasEnListado({ cargas: [{ ...carga, resumen: { notaria: true } }], expenses, rendiciones: rend }).n, 0)
+  assert.equal(otPagadasEnListado({ cargas: [{ ...carga, status: 'undone' }], expenses, rendiciones: rend }).n, 0)
+  assert.equal(otPagadasEnListado({}).n, 0)
+})
+
+test('párrafo de las OT ya pagadas: una liquidación o varias, con o sin comprobante, sin puntos medios', () => {
+  const uno = parrafoYaPagadasEnListado({ grupos: [{ fecha: '2026-10-20', n: 40, total: 1335000 }] })
+  assert.match(uno, /Las 40 OT que siguen figurando en su último listado de deuda ya fueron pagadas el 20-10-2026, por \$1\.335\.000\./)
+  assert.match(uno, /Adjuntamos el comprobante y la liquidación de ese pago, y les pedimos rebajarlas de nuestra deuda\./)
+  assert.match(parrafoYaPagadasEnListado({ grupos: [{ fecha: '2026-10-20', n: 40, total: 1335000 }] }, false), /Adjuntamos la liquidación de ese pago/)
+  const varios = parrafoYaPagadasEnListado({ grupos: [{ fecha: '2026-09-15', n: 18, total: 3199000 }, { fecha: '2026-10-20', n: 40, total: 1335000 }] })
+  assert.match(varios, /Hay 58 OT/); assert.match(varios, /• 15-09-2026: 18 OT por \$3\.199\.000\n• 20-10-2026: 40 OT por \$1\.335\.000/); assert.match(varios, /los comprobantes y las liquidaciones de esos pagos/)
+  assert.doesNotMatch(uno + varios, /·/)
+  assert.match(parrafoYaPagadasEnListado({ grupos: [{ fecha: '2026-10-20', n: 1, total: 10000 }] }), /La OT que sigue figurando .* ya fue pagada .* rebajarla de nuestra deuda/)
+  assert.equal(parrafoYaPagadasEnListado({ grupos: [] }), '')
 })
