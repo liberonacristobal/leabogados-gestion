@@ -5,6 +5,10 @@ Revisión detallada al 2026-07-03. Fuente: memoria del proyecto + código. Marca
 
 ---
 
+## A00. Anotados 2026-11-20
+
+- 🔨 **Oficina › Caja: «Mes en marcha» pasa a ser la primera tarjeta de la fila Caja y con un color que la destaque** (hoy es la cuarta, después de Flujo de caja, Proyección y Comisiones por pagar). Con tokens de `C`, en escritorio y móvil.
+
 ## A0. Anotados 2026-09-08
 
 - ✅ **[cliente] · Asesoría permanente a 20 UF/mes (jul–dic).** HECHO 2026-09-08: venta f251bd33 amount_uf 35→20; 6 cuotas Programadas jul–dic 2026 amount 1.426.915→815.380 (20 UF, ratio 20/35). Jul (vence 01-08) y Ago (vence 01-09) quedan Programadas y listas para emitir este mes (2 facturas de 20 UF). Factura 239 (ene–jun, Pagada) intacta. El monto exacto al emitir usa la UF del día.

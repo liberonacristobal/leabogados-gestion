@@ -5,6 +5,7 @@ import { C, Gl, SEC_LBL, appAlert, appConfirm, fmt, fmtFechaDMY, isoLocal, BtnDe
 import { redondearPartes } from '../lib/cifras.js'
 import { EscenariosRetiro } from './EscenariosRetiro.jsx'
 import { f29CajaDelAnio } from '../../supabase/functions/_shared/f29Caja.js'
+import { saldoActualCuenta } from '../../supabase/functions/_shared/saldoCuenta.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, MES_C, useImpuestosFuentes, SOCIOS_CFG, TH_BAND, _SOCIO_RET, _norm, fmtMill, fmtMillLR, resultadoMes, setLearningKV, useFuentesResultado, costoSociosAnio } from '../lib/compartido.jsx'
 import { descargarTabla } from '../lib/archivos.js'
@@ -40,10 +41,10 @@ export function DisponibleRetiroCard({ expenses=[], clients=[], billing=[], sale
       if(v&&lr&&lr[0]&&Number(lr[0].value)>=0) setReserva(Number(lr[0].value))
       const {data:cg}=await supabase.from('cartola_cargas').select('saldo_final,fecha_hasta,created_at').eq('rol_cuenta','honorarios').not('saldo_final','is',null).order('fecha_hasta',{ascending:false}).order('created_at',{ascending:false}).limit(1)
       const ult=cg&&cg[0]; if(!ult){ if(v) setBanco(null); return }
-      const movs=await selectAll(()=>supabase.from('cartola_movimientos').select('tipo,monto,fecha').eq('rol_cuenta','honorarios').gt('fecha',ult.fecha_hasta).order('id'))
+      // Desde el día de corte (no solo después): los traspasos y avisos de ese día cargados más tarde que la cartola también cuentan (regla única _shared/saldoCuenta.js).
+      const movs=await selectAll(()=>supabase.from('cartola_movimientos').select('tipo,monto,fecha,created_at').eq('rol_cuenta','honorarios').gte('fecha',ult.fecha_hasta).order('id'))
       const rows=(movs&&movs.data)||movs||[]
-      let saldo=Number(ult.saldo_final)||0, al=String(ult.fecha_hasta).slice(0,10)
-      ;(Array.isArray(rows)?rows:[]).forEach(m=>{ const x=Number(m.monto)||0; saldo+= m.tipo==='abono'?x:-x; const f=String(m.fecha||'').slice(0,10); if(f>al) al=f })
+      const {saldo,al}=saldoActualCuenta(ult,Array.isArray(rows)?rows:[])
       if(v) setBanco({saldo,al})
     }catch(_){ if(v) setBanco(null) } })()
     return ()=>{v=false} },[])
