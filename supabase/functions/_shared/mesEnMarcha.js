@@ -35,6 +35,23 @@ export function grupoDeGasto(e) {
   return null
 }
 
+/** @typedef {{id?:any, fecha?:string, tipo?:string, monto?:number|string|null, descripcion?:string|null, es_interno?:boolean|null}} MovTarjeta */
+
+/** ¿El cargo del banco es el pago de la tarjeta de crédito? @param {MovTarjeta} m */
+export const esPagoTarjeta = m => !!m && m.tipo === 'cargo' && !m.es_interno && /pago\s+tarjeta/i.test(String(m.descripcion || ''))
+
+/**
+ * Cada pago de la tarjeta de crédito en el banco, como un gasto del grupo «Tarjeta de crédito» por su monto completo, esté o no repartido en gastos
+ * (el reparto por categoría no cuenta aparte: el pago ya contiene Anthropic, Vercel, internet y demás). No repite uno que ya exista como gasto de esa categoría.
+ * @param {MovTarjeta[]} movs cargos del banco @param {Gasto[]} gastos gastos de la oficina
+ * @returns {Gasto[]}
+ */
+export function pagosTarjetaComoGastos(movs, gastos) {
+  const ya = new Set((gastos || []).filter(e => grupoDeGasto(e) === 'tarjeta').map(e => `${String(e.date).slice(0, 10)}|${Math.round(Number(e.amount) || 0)}`))
+  return (movs || []).filter(esPagoTarjeta).filter(m => !ya.has(`${String(m.fecha).slice(0, 10)}|${Math.round(Number(m.monto) || 0)}`))
+    .map(m => ({ id: 'mov:' + m.id, date: String(m.fecha).slice(0, 10), category: 'Tarjeta de crédito', concept: 'Pago tarjeta de crédito', amount: Number(m.monto) || 0, type: 'gasto' }))
+}
+
 const ymDe = (/** @type {any} */ iso) => String(iso || '').slice(0, 7)
 const dia = (/** @type {any} */ iso) => Number(String(iso || '').slice(8, 10)) || 0
 const num = (/** @type {any} */ n) => Number(n) || 0

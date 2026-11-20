@@ -8,7 +8,7 @@ import { C, Gl, SIcon, BtnDescarga, diaGrande, isoLocal, fmtFechaDMY } from '../
 import { descargarTabla } from '../lib/archivos.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, PageHeader, _esDiaHabil, fmtMillLR, resultadoMes, useFuentesResultado } from '../lib/compartido.jsx'
-import { cascadaCobertura, gastosPagados, gastosPorPagar, gastosProximoMes } from '../../supabase/functions/_shared/mesEnMarcha.js'
+import { cascadaCobertura, gastosPagados, gastosPorPagar, gastosProximoMes, esPagoTarjeta, pagosTarjetaComoGastos } from '../../supabase/functions/_shared/mesEnMarcha.js'
 import { finDeMes } from '../../supabase/functions/_shared/calendarioReglas.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -21,9 +21,24 @@ function useCargosSinClasificar(ym) {
   const [rows, setRows] = useState(/** @type {any[]} */ ([]))
   useEffect(() => {
     let vivo = true
-    const filtra = (/** @type {any[]} */ a) => (a || []).filter(m => m && m.tipo === 'cargo' && m.estado === 'pendiente' && !m.es_interno && String(m.fecha || '').slice(0, 7) === ym)
+    const filtra = (/** @type {any[]} */ a) => (a || []).filter(m => m && m.tipo === 'cargo' && m.estado === 'pendiente' && !m.es_interno && !esPagoTarjeta(m) && String(m.fecha || '').slice(0, 7) === ym)
     if (DEMO) { setRows(filtra(demoData.cartola_movimientos)); return }
     selectAll(() => supabase.from('cartola_movimientos').select('id,fecha,tipo,monto,estado,es_interno,nombre_contraparte,descripcion').eq('tipo', 'cargo').eq('estado', 'pendiente').gte('fecha', ym + '-01').lte('fecha', finDeMes(ym)).order('id'))
+      .then(r => { if (vivo) setRows(filtra((r && r.data) || r)) }, () => { if (vivo) setRows([]) })
+    return () => { vivo = false }
+  }, [ym])
+  return rows
+}
+
+/** Pagos de la tarjeta de crédito en el banco, del mes y de los tres anteriores (sirven de historia para proyectar la próxima cuota). Cuentan como el grupo «Tarjeta de crédito», estén o no repartidos. */
+function useCargosTarjeta(ym) {
+  const [rows, setRows] = useState(/** @type {any[]} */ ([]))
+  useEffect(() => {
+    let vivo = true
+    const desde = mesMas(ym, -3) + '-01'
+    const filtra = (/** @type {any[]} */ a) => (a || []).filter(m => esPagoTarjeta(m) && String(m.fecha || '').slice(0, 10) >= desde && String(m.fecha || '').slice(0, 7) <= ym)
+    if (DEMO) { setRows(filtra(demoData.cartola_movimientos)); return }
+    selectAll(() => supabase.from('cartola_movimientos').select('id,fecha,tipo,monto,es_interno,descripcion').eq('tipo', 'cargo').ilike('descripcion', '%pago tarjeta%').gte('fecha', desde).lte('fecha', finDeMes(ym)).order('id'))
       .then(r => { if (vivo) setRows(filtra((r && r.data) || r)) }, () => { if (vivo) setRows([]) })
     return () => { vivo = false }
   }, [ym])
@@ -36,10 +51,12 @@ export function useMesEnMarcha({ ym, expenses = [], clients = [], billing = [], 
   const fu = useFuentesResultado()
   const R = useResultadoAnio({ sales, billing, terceros, costosOfiRows, expenses, clients, anticipos, selYear: yr })
   const sinClas = useCargosSinClasificar(ym)
+  const tarjeta = useCargosTarjeta(ym)
   return useMemo(() => {
     const hoy = isoLocal(Date.now()), actual = ym === hoy.slice(0, 7)
     const ofi = (clients || []).find(c => c && (c.is_internal || /liberona\s+escala/i.test(c.name || '')))
-    const gastos = ofi ? (expenses || []).filter(e => e && String(e.client_id) === String(ofi.id)) : []
+    const gastosOfi = ofi ? (expenses || []).filter(e => e && String(e.client_id) === String(ofi.id)) : []
+    const gastos = [...gastosOfi, ...pagosTarjetaComoGastos(tarjeta, gastosOfi)]   // la tarjeta, por su pago en el banco; proyectada como los demás grupos
     const cobrado = Number(R.ingresosPorAnioVenta.byMonth?.[ym]) || 0
     const com = Number(resultadoMes(fu, { billing, terceros, costosOfiRows, expenses, clients }, ym).comPag) || 0
     const pag = gastosPagados(gastos, ym)
@@ -51,7 +68,7 @@ export function useMesEnMarcha({ ym, expenses = [], clients = [], billing = [], 
     // Lo que se paga en los primeros días del mes siguiente (hasta el 5), para «¿Cuánto se puede retirar?»
     const proximoFilas = actual ? gastosProximoMes(gastos, hoy) : [], proximo = proximoFilas.reduce((a, x) => a + x.monto, 0)
     return { ym, actual, hoy, cobrado, com, pagadosFilas, porPagarFilas, pagado, porPagar, proximoFilas, proximo, cas, gastos }
-  }, [ym, R, fu, sinClas, expenses, clients, billing, terceros, costosOfiRows])
+  }, [ym, R, fu, sinClas, tarjeta, expenses, clients, billing, terceros, costosOfiRows])
 }
 
 export function MesEnMarchaView({ expenses = [], clients = [], billing = [], sales = [], terceros = [], costosOfiRows = [], anticipos = [], isDesktop = true, backLabel = 'Oficina', onBack, onOpenGasto, onOpenCobradoMes, onOpenBanco, onOpenEstado }) {
@@ -76,7 +93,8 @@ export function MesEnMarchaView({ expenses = [], clients = [], billing = [], sal
   const nSin = M.pagadosFilas.filter(x => x.k === 'sinclas').length
   const fila = (/** @type {any} */ x, /** @type {boolean} */ proy, /** @type {number} */ i) => {
     const e = !proy && x.n === 1 && x.ids[0] != null ? gastoById[String(x.ids[0])] : null
-    const on = () => { if (x.k === 'sinclas') onOpenBanco && onOpenBanco(x.mov); else if (e && onOpenGasto) onOpenGasto(e); else onOpenEstado && onOpenEstado(ym) }
+    const movTarjeta = !proy && x.k === 'tarjeta' && x.n === 1 && String(x.ids[0]).startsWith('mov:')
+    const on = () => { if (x.k === 'sinclas') onOpenBanco && onOpenBanco(x.mov); else if (movTarjeta && onOpenBanco) onOpenBanco(String(x.ids[0]).slice(4)); else if (e && onOpenGasto) onOpenGasto(e); else onOpenEstado && onOpenEstado(ym) }
     const sub = x.k === 'sinclas' ? (x.sub || 'sin categoría') : x.n > 1 ? `${x.n} pagos` : proy ? 'según el último pago' : ''
     return <div key={x.k + x.fecha + i} onClick={on} role='button' className='er-c' style={{ display: 'flex', alignItems: 'center', gap: 10, padding: pad, borderTop: `1px solid ${C.border}`, cursor: 'pointer', color: proy ? C.muted : undefined }}>
       {diaGrande(x.fecha, proy ? C.muted : undefined)}

@@ -1,7 +1,7 @@
 // «Mes en marcha»: grupos de gasto, pagos del mes por fecha de pago, proyección de lo que falta y cascada de cobertura. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { grupoDeGasto, gastosPagados, gastosPorPagar, gastosProximoMes, cascadaCobertura, ultimoDiaHabil } from './../supabase/functions/_shared/mesEnMarcha.js'
+import { grupoDeGasto, gastosPagados, gastosPorPagar, gastosProximoMes, cascadaCobertura, ultimoDiaHabil, esPagoTarjeta, pagosTarjetaComoGastos } from './../supabase/functions/_shared/mesEnMarcha.js'
 
 const G = (id, date, category, amount, concept = '') => ({ id, date, category, amount, concept, type: 'gasto' })
 const habil = iso => { const d = new Date(iso + 'T12:00:00').getDay(); return d !== 0 && d !== 6 }   // sin feriados: lunes a viernes
@@ -53,4 +53,18 @@ test('aseo: se reconoce por la subcategoría y se proyecta en los primeros días
   const g = [['2026-09-01', 310500], ['2026-10-01', 241500], ['2026-11-09', 276000]].map(([date, amount]) => ({ date, category: 'Otros', subcategory: 'Aseo', concept: T, amount, type: 'gasto' }))
   assert.equal(grupoDeGasto(g[0]), 'aseo')
   assert.deepEqual(gastosProximoMes(g, '2026-11-20').map(x => [x.k, x.fecha, x.monto]), [['aseo', '2026-12-01', 276000]])
+})
+
+test('tarjeta: el pago del banco cuenta como gasto del grupo, esté o no repartido; se proyecta con el último pago', () => {
+  const M = (id, fecha, monto, extra = {}) => ({ id, fecha, tipo: 'cargo', monto, descripcion: 'Cargo por Pago Tarjeta VISA Nro. XXXX XXXX XXXX 0000.', ...extra })
+  const movs = [M('m1', '2026-10-06', 153619), M('m2', '2026-11-11', 367332), M('m3', '2026-11-12', 500, { descripcion: 'Transferencia a terceros' }), M('m4', '2026-11-13', 900, { es_interno: true })]
+  assert.equal(esPagoTarjeta(movs[0]), true); assert.equal(esPagoTarjeta(movs[2]), false); assert.equal(esPagoTarjeta(movs[3]), false)
+  const ps = pagosTarjetaComoGastos(movs, [])
+  assert.equal(ps.length, 2); assert.equal(grupoDeGasto(ps[0]), 'tarjeta')
+  const pag = gastosPagados(ps, '2026-11'); assert.equal(pag.length, 1); assert.equal(pag[0].monto, 367332); assert.equal(pag[0].k, 'tarjeta')
+  // diciembre: sin pago aún, se proyecta el último pago (nov) en el día habitual
+  const pp = gastosPorPagar(ps, '2026-12', '2026-12-01', habil).find(x => x.k === 'tarjeta')
+  assert.equal(pp.monto, 367332); assert.ok(pp.fecha > '2026-12-01')
+  // no repite un pago que ya existe como gasto de la categoría (misma fecha y monto)
+  assert.equal(pagosTarjetaComoGastos(movs, [G('g1', '2026-11-11', 'Tarjeta de crédito', 367332)]).length, 1)
 })
