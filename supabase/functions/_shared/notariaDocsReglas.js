@@ -17,7 +17,7 @@ export function leerCorreoNotaria(texto) {
   return { tipo: m[1].trim(), repertorio: rep || null, fecha: `${m[5]}-${m[4]}-${m[3]}`, codigo: c ? c[1] : null }
 }
 
-// ¿El correo lo firma la notaría? La firma (p. ej. «Mildred Gutiérrez», «Silvana Delgado») debe estar en el texto PROPIO del
+// ¿El correo lo firma la notaría? La firma (p. ej. el nombre de la secretaria de la notaría) debe estar en el texto PROPIO del
 // correo, antes de lo citado («De:», «El … escribió:»), para que un tercero que responde citando a la notaría no cuente.
 export function firmadoPorNotaria(texto, firmas) {
   const t = String(texto || ''); const corte = t.search(/^\s*(>|De:|From:|-----\s*Original|El .{0,120}escribi[oó]:|On .{0,120}wrote:)/mi)
@@ -44,7 +44,7 @@ export function otParaDocumento(doc, ots) {
 }
 
 // Nombre del archivo en Drive: la razón social primero (el usuario lo pidió así), luego el tipo, la fecha y el repertorio.
-// «GESMAQ SPA» → «GESMAQ SpA». Sin tipo (borrador, matriz): la razón social y el nombre original, salvo que ya la traiga.
+// «[cliente]» → «[cliente]». Sin tipo (borrador, matriz): la razón social y el nombre original, salvo que ya la traiga.
 export const rsBonita = rs => String(rs || '').replace(/\s+/g, ' ').trim().replace(/\bSPA\b/g, 'SpA')
 export function nombreArchivoNotaria(doc, ext = 'pdf', rs = '', original = '') {
   const R = rsBonita(rs)

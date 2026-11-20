@@ -38,7 +38,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   useEffect(()=>{ if(DEMO){ setCoRows(demoData.learnings_co||[]); return } supabase.from('learnings').select('key,value,hits,updated_at').eq('kind','costo_oficina').then(({data})=>{ if(data) setCoRows(data) },()=>{}) },[])
   const rutMulti=useMemo(()=>SD.rutMulti(clientEntities),[clientEntities])
   const folioDup=useMemo(()=>SD.folioDup(billing),[billing])
-  // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. Tarragona a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
+  // Facturas posiblemente duplicadas: cruce REAL por identidad del receptor (RUT > razón social > cliente) + concepto + monto, EXCLUYENDO las anuladas por nota de crédito (status Anulada / NC). Dos entidades distintas con el mismo monto (ej. [cliente] a 3 RS, o folios de RUT distinto) NO se marcan; solo la MISMA entidad con la misma cuota repetida. La NC deja la factura fuera automáticamente.
   const facDup=useMemo(()=>SD.facDup(billing),[billing])
   const montoNeDte=useMemo(()=>SD.montoNeDte(billing),[billing])
   const cuotaNeDte=useMemo(()=>SD.cuotaNeDte(billing),[billing])
@@ -118,7 +118,7 @@ export function RevisionDatosModal({onEnlazarComisiones, onConsumeAnticipos, bil
   },[saludRows,sales,billing,ufMapFechas])
   const honorarioDesc=useMemo(()=>SD.honorarioDescuadrado(saludRows,billing,sales),[saludRows,billing,sales])
   // Pago ya recibido (anticipo disponible, de UNA venta) que calza con sus cuotas programadas vencidas o del próximo mes
-  // (suma de las más antiguas ±2% o $1.000 = variación UF): esas cuotas ya están pagadas → «Cubrir» las deja Anticipadas. Caso Varas/Donoso/Cordomi.
+  // (suma de las más antiguas ±2% o $1.000 = variación UF): esas cuotas ya están pagadas → «Cubrir» las deja Anticipadas. Caso [cliente]/[cliente]/[cliente].
   const [cubiertasRD,setCubiertasRD]=useState(()=>new Set())
   // Subarriendo: pago de un mes ↔ su factura emitida (regla única SD.anticiposSubarriendo, la misma del auditor nocturno).
   const [antSubDone,setAntSubDone]=useState(()=>new Set())

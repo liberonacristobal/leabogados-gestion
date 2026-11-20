@@ -93,7 +93,7 @@ export function pedidoDeSolicitud(pedidos, sol) {
     .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0] || null;
 }
 
-// Cliente de un pedido interno: el nombre escrito («Geslog») dentro del nombre de un cliente vigente, o al revés; solo si es uno.
+// Cliente de un pedido interno: el nombre escrito («[cliente]») dentro del nombre de un cliente vigente, o al revés; solo si es uno.
 export function clienteDePedido(txt, clients) {
   const p = _nrm(txt);
   if (p.length < 4) return null;
@@ -108,7 +108,7 @@ export function clienteDeCorreo(emails, texto, clients, mapa) {
   (emails || []).forEach((e) => (mapa.get(e) || []).forEach((id) => ids.add(String(id))));
   if (ids.size === 1) return [...ids][0];
   if (ids.size > 1) return null;
-  // El nombre se busca como palabras completas (≥5 letras): «Ohana» en «Sociedad Hotelera y Turística Ohana Limitada» calza; «Lopez» dentro de «Lopezia», no.
+  // El nombre se busca como palabras completas (≥5 letras): «[cliente]» en «Sociedad Hotelera y Turística [cliente]» calza; «Lopez» dentro de «Lopezia», no.
   const solo = (x) => ' ' + _nrm(x).replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
   const t = solo(texto);
   const hits = (clients || []).filter((c) => c.status !== 'Terminado' && !c.is_internal && solo(c.name).trim().length >= 5 && t.includes(solo(c.name)));

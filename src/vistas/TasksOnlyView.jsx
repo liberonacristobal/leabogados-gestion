@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { BRAND, C, Gl, SEC_LBL, _normTxt, fmtFechaDMY, fmtN, isoLocal, personChip, useIsDesktop } from '../lib/base.jsx'
 import { FilaDeslizable } from '../lib/filaDeslizable.jsx'
-import { gastosPorLiquidarCaja, Buscador, MESES,   _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre } from '../lib/compartido.jsx'
+import { gastosPorLiquidarCaja, Buscador, MESES,   _esDiaHabil, agendarTareaCalendar, bigDate, daysLeft, enMiLista, escanearTareasGmail, fmtDate, fmtSaldoG, learnPut, saldoCajaChica, taskAssignees, urgencyColor, useArrastre , equipoNombres} from '../lib/compartido.jsx'
 
 // Archivo automatico de tareas: una tarea Terminada se considera archivada cuando se completo
 // hace mas de DAYS_TO_ARCHIVE dias. Las terminadas sin completed_at (historicas) cuentan como archivadas.
@@ -309,7 +309,7 @@ export function TasksOnlyView({tasks,clients,sales,expenses,pettyCash,rendicione
             <SubHeader label='Tareas que asigné' count={asignadas.length} open={openAsignadas} onToggle={()=>setOpenAsignadas(o=>!o)}/>
             {openAsignadas&&(()=>{
               const grp={}; asignadas.forEach(t=>{ (taskAssignees(t).length?taskAssignees(t):['—']).forEach(pn=>{ (grp[pn]=grp[pn]||[]).push(t) }) })
-              const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+              const orden=equipoNombres()
               const personas=Object.keys(grp).sort((a,b)=>{ const ia=orden.indexOf(a),ib=orden.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'es') })
               const esVenc=t=>{ const d=daysLeft(t.due); return d!=null&&d<0 }
               return personas.map(pn=>{

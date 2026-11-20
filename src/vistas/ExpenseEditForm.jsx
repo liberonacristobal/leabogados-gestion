@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { C, Gl, SEC_LBL, Spin, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop } from '../lib/base.jsx'
-import { Attachments, CATS_DE_CLIENTE, CATS_GASTO, ClientePicker, FloatFld, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, medioMovDe, subOtro, subproyectosCliente, useAprendidosVenta, useDeQueAprendido, useIaVenta } from '../lib/compartido.jsx'
+import { Attachments, CATS_DE_CLIENTE, CATS_GASTO, ClientePicker, FloatFld, MEDIOS_MOV, MEDIO_CON_DETALLE, deQueOpciones, esPermanente, fInp, glosaMovilizacion, glosaSinDetalle, medioMovDe, subOtro, subproyectosCliente, useAprendidosVenta, useDeQueAprendido, useIaVenta , equipoNombres} from '../lib/compartido.jsx'
 
 // La subcategoría es propia de «Otro» y de toda categoría de oficina (Sueldos, Remuneraciones, Impuestos, Otros…); los trámites del cliente no la usan.
 export const conSubcat = c => !!c && (c==='Otro' || !CATS_GASTO.includes(c))
@@ -94,7 +94,7 @@ export function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[
               <select autoFocus onChange={e=>{ const v=e.target.value; if(v==='__ofi'){ const ofi=clients.find(c=>c.is_internal||/liberona\s+escala/i.test(c.name||'')); if(ofi){ setF(p=>({...p,client_id:ofi.id,entity_id:null,personal_de:null})) } setShowPersonal(false) } else if(v){ up('personal_de',v);setShowPersonal(true) } setInternoOpen(false) }} style={{...fInp,cursor:'pointer'}} defaultValue=''>
                 <option value=''>Gasto interno · elegir…</option>
                 <optgroup label='Oficina'><option value='__ofi'>De la oficina</option></optgroup>
-                <optgroup label='Del equipo'>{['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=><option key={m} value={m}>{m}</option>)}</optgroup>
+                <optgroup label='Del equipo'>{equipoNombres().map(m=><option key={m} value={m}>{m}</option>)}</optgroup>
               </select>
             </div>
           : <button type='button' onClick={()=>setInternoOpen(true)} style={{marginBottom:8,fontSize:11,color:C.azulInfo,fontWeight:600,background:'none',border:'none',cursor:'pointer',padding:0}}>Gasto interno <Gl n='chevD'/></button>
@@ -205,7 +205,7 @@ export function ExpenseEditForm({expense,clients,clientEntities,expenses,sales=[
       {!isFondo&&(showPersonal||personalOn)&&(
         <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
           <span style={{fontSize:11,color:C.muted,fontWeight:600,marginRight:2}}>Personal de:</span>
-          {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:11,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:'none'}}>{m}</button>})}
+          {equipoNombres().map(m=>{const on=f.personal_de===m;const pc=personChip(m);return <button key={m} type='button' onClick={()=>up('personal_de',on?null:m)} style={{fontSize:11,borderRadius:20,padding:'2px 9px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:'none'}}>{m}</button>})}
           <button type='button' onClick={()=>{up('personal_de',null);setShowPersonal(false)}} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}><Gl n='x'/></button>
         </div>
       )}

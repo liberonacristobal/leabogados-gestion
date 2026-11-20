@@ -10,7 +10,7 @@ const clientes = [
   { id: 4, name: 'Prospecto Delta SpA', rut: '76.999.999-9', abogado_responsable: 'Cristóbal', status: 'Prospecto' },
 ]
 const entidades = [
-  { client_id: 1, name: 'ALFA INVERSIONES LIMITADA', rut: '78.231.749-0' },
+  { client_id: 1, name: 'ALFA INVERSIONES LIMITADA', rut: '76.888.999-0' },
   { client_id: 3, name: 'Gamma Servicios Limitada', rut: null },
 ]
 
@@ -23,7 +23,7 @@ test('rut y nombre se normalizan igual que la tabla', () => {
 })
 
 test('calza por RUT (ficha y razón social) y es seguro', () => {
-  const r = calzarPublicaciones([{ cve: '1', nombre: 'BETA COMERCIAL SpA 76.111.222-3*', rut: '76111222-3' }, { cve: '2', nombre: 'X 78.231.749-0', rut: '78231749-0' }], clientes, entidades)
+  const r = calzarPublicaciones([{ cve: '1', nombre: 'BETA COMERCIAL SpA 76.111.222-3*', rut: '76111222-3' }, { cve: '2', nombre: 'X 76.888.999-0', rut: '76888999-0' }], clientes, entidades)
   assert.deepEqual(r.map((x) => [x.cve ?? x.pub.cve, x.clientId, x.via, x.nota]), [['1', '2', 'rut', ''], ['2', '1', 'rut', '']])
 })
 
@@ -33,7 +33,7 @@ test('calza por nombre con aviso: RUT distinto, ficha sin RUT o publicación sin
     { cve: '4', nombre: 'GAMMA SERVICIOS LIMITADA', nombre_norm: 'gamma servicios limitada', rut: null },
     { cve: '5', nombre: 'Gamma Servicios Limitada 77.123.456-7*', nombre_norm: 'gamma servicios limitada', rut: '77123456-7' },
   ], clientes, entidades)
-  assert.equal(r[0].via, 'nombre'); assert.match(r[0].nota, /RUT 78\.231\.749-0/)
+  assert.equal(r[0].via, 'nombre'); assert.match(r[0].nota, /RUT 76\.888\.999-0/)
   assert.match(r[1].nota, /no trae RUT/)
   assert.match(r[2].nota, /ficha no tiene RUT/)
 })

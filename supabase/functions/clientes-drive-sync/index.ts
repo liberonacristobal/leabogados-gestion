@@ -68,7 +68,7 @@ const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").repla
 // Carpetas que NO son un cliente (plantillas/secciones del Drive). Mantener alineado con el importador de la app.
 const esTemplate = (name: string) => !name || name.toLowerCase().startsWith("1. clientes");
 // Distancia de edición (typos) y similitud [0..1]. Mismo criterio que el front (simNombre) para NO crear
-// a ciegas una carpeta que se parece demasiado a un cliente vivo (ej. "Migdley" vs "Midgley").
+// a ciegas una carpeta que se parece demasiado a un cliente vivo (ej. "Migdley" vs "[cliente]").
 function lev(a: string, b: string): number {
   const m = a.length, n = b.length;
   if (!m) return n; if (!n) return m;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, Component } from 'react'
 import { createPortal } from 'react-dom'
-import { _DEMO_PROCESOS, estadoProceso, cargarProcesos } from './lib/compartido.jsx'
+import { _DEMO_PROCESOS, estadoProceso, cargarProcesos , equipoNombres} from './lib/compartido.jsx'
 import { registrarNotaCredito } from './lib/notasCreditoRegistro.js'
 import { _SOCIO_RET } from './lib/compartido.jsx'
 import { tonoMargen } from './lib/compartido.jsx'
@@ -22,7 +22,7 @@ import { useTrabajosDetenidos, calendarioDeCliente, causasActivas } from './lib/
 import { TIT_PAG, isAssignee, ventaUFmesDe, margenDeSale } from './lib/compartido.jsx'
 import { cargarMammoth, useArrastre, esPermanente, PREC_FOLDERS, leerDriveTextoSA, CART_DOT, SEÑAL_COL, facturaEmitida, carteraMovimiento, cartDias, cartDiasPlazo } from './lib/compartido.jsx'
 import { daysLeftB, EstadoFacturaChip, cargarFeriadosCL, cuotaOrdOf, reconcileProgramada, rutsDeFactura, matchProgEmitidas, rolledDueMap, rsDeFactura, currentMonth, TIPOS_FACTURA, tipoFacturaLbl, fInp, WHO_LIST, restoreScroll, catSinClienteVenta, MESES_LG, _billingCambio, avisarBillingCambio, _ventaAprP, useVentaAprendida, aprenderVenta, asignarVentaFactura, AsignarVentaFactura, _noEmitirP, useNoEmitirSet, cuotasCubiertasVenta, FacturarBloqueModal, CubrirCuotasModal, CUENTA_GASTOS_DEFAULT, cuentaTxt, cuentaHtml, DATOS_PAGO_TXT, DATOS_PAGO_HTML, recordatorioCobro, facturaPdfAdjunto, facturaNombreArchivo, descargarPdfU8, verFacturaPdf, ventaNombre, mejorVenta, _RX_CUOTA, _esPagoLabel, facturaGlosaPartes, CORREO_DESPEDIDA, facturaCorreoBody, _correoToP, facturaCorreoShell, facturaCorreoHtml, driveCarpetaFacturacion } from './lib/compartido.jsx'
-import { logoColor, esCorreoOficina, cuentaEnRecuadro, glosaCliente, mesCorto, posiblesDuplicadosGastos, _numsGlosa, gastosParecidos, simTexto, NOTA_DIRIGIDO, titleCase, _ES_EMPRESA, esPersona, _NOMBRES_F, _NOMBRES_M, generoF, saludoCli, ChipSearch, pillPersonaSty, CAT_COLORS, CATS_OFICINA_ESTRUCTURAL, esGestionGasto, SUBCATS_OFICINA, saldoCajaChica, alertasCajaChica, corrSiguiente, depositoDeSolicitud, estadoSolicitud, CheckMini, otConSello, rendGruposProyecto, repartoFondos, rendicionFondo, fondosSinTrabajo, imputarSaldosTrabajos, gastosDeRend, fondoDeRend, rendicionesPreviasDe, anularReembolsoDeRendicion, rendicionDocHtml, firmaCorreoHtml, rendicionPdfHtml, Switch, usePersisted, aprenderRS, _DEMO_BANDEJA, registrarFondoPropuesto, _diasEntre, PasosRend, _mesLabelOf, lunesSemanaISO, _esOfiCliR, canonOtNN, _fechaISO, _GEN_DET, glosaSinDetalle, CATS_DE_CLIENTE, _NOM_MAIL, nombreCargador, MovIcon, movilizacionDatos, MovilizacionView, HubTile, FACTURACION_ROOT, ADJUNTOS_ROOT, modoEnvioLote, txtResumenEnvio, driveFindOrCreateFolder, driveAdjuntosFolders, driveUpload, ME_DOMAIN, _addrsMail, gmailParticipantesCliente, ClientePicker } from './lib/compartido.jsx'
+import { logoColor, esCorreoOficina, cuentaEnRecuadro, glosaCliente, mesCorto, posiblesDuplicadosGastos, _numsGlosa, gastosParecidos, simTexto, titleCase, _ES_EMPRESA, esPersona, _NOMBRES_F, _NOMBRES_M, generoF, saludoCli, ChipSearch, pillPersonaSty, CAT_COLORS, CATS_OFICINA_ESTRUCTURAL, esGestionGasto, SUBCATS_OFICINA, saldoCajaChica, alertasCajaChica, corrSiguiente, depositoDeSolicitud, estadoSolicitud, CheckMini, otConSello, rendGruposProyecto, repartoFondos, rendicionFondo, fondosSinTrabajo, imputarSaldosTrabajos, gastosDeRend, fondoDeRend, rendicionesPreviasDe, anularReembolsoDeRendicion, rendicionDocHtml, firmaCorreoHtml, rendicionPdfHtml, Switch, usePersisted, aprenderRS, _DEMO_BANDEJA, registrarFondoPropuesto, _diasEntre, PasosRend, _mesLabelOf, lunesSemanaISO, _esOfiCliR, canonOtNN, _fechaISO, _GEN_DET, glosaSinDetalle, CATS_DE_CLIENTE, _NOM_MAIL, nombreCargador, MovIcon, movilizacionDatos, MovilizacionView, HubTile, FACTURACION_ROOT, ADJUNTOS_ROOT, modoEnvioLote, txtResumenEnvio, driveFindOrCreateFolder, driveAdjuntosFolders, driveUpload, ME_DOMAIN, _addrsMail, gmailParticipantesCliente, ClientePicker } from './lib/compartido.jsx'
 import { _MESMAP_G, concPeriodoOf, ADMIN_NAMES, CATS_OFICINA_CAT, CATS_OFICINA_NUEVAS, CAT_OFICINA_ALIAS, catOficinaNueva, _ccDia, _glosaTransf, _ccFechas, _ccDias, _ccEsAjuste, calceCajaChica, MESES_ABR, _rutK, proyectoSeguro, CATS_LEGALES, acusePagoEmail, glosaFactura, parseDteFactura, extraerTextoGmail } from './lib/compartido.jsx'
 import { invalidarImpuestosFuentes, guardarFechaProgramada, montoFactura, dteMontoTotal, _pdfjsP, cargarPdfjs, tokenSesion, driveCall, claudeCall, promptConCache, fmtUF, fmtMill, fmtShort, UF_FALLBACK, RENDCAT, fmtFechaHora, fmtDate, nDias, TH_BAND, NOMBRE_CLI, MES_L, MES_C, mesTitulo, bigDate, _respaldoCache, setRespaldoCache, saldoBill, cobradoBill, cifrasCobroVenta, porCobrarBills, ESTADO_COBRO, venceBill, esVencidaB, estadoCobro, KpiIco, Sparkle, RESPALDO_CUTOFF, facturaRespaldo, estadoFacturaLabel, _ACT_VARIANT, ActBtn, Buscador, daysLeft, FERIADOS_CL, _esDiaHabil, ultimoDiaHabilMesEmision, dueFromIssued, cuotaNMof, ufDeTabla, _UF_FECHA_KEY, ufFechaCache, ufDelDia, finMesOHoy, redondearPartes, cascadaResultado, redondearA, fmtMillLR, nrmCliente, learnPut, okDB, setLearningKV, logEvent, rsLabel, rsDisplay, Copyable, chipBtn, currentYear, INICIALES_RESP, taskAssignees, _GV_EXCL, gastosVariosOfiItems, contadoraBancoItems, tipoFactura, esFacIngreso, _actorBitacora, setActorBitacora, resumenBitacora, logActividad, EQUIPO_RESPALDO, _equipo, cargarEquipo, equipoPorNombre, _nombresMiembrosCache, _nombresMiembrosP, nombresMiembros, BitacoraLista, saldoCliente, FIRMA_RESPALDO, firmaDefault, Inp, Lbl, Fld, Modal, BUILD_VERSION, _errVistos, _ERR_RUIDO, registrarError, esRecurrente, esSubarriendo, ventaUF, ventaCLP, costoVentaUF, comisionesVenta, UF_CACHE_KEY, ufTodayISO, readUFCache, _uiStore, usePersistedState, writeUFCache, fetchUF, useUF, AsignarClienteInline, SOCIOS_CFG, EQUIPO_CFG, _norm, setSociosCfg, setEquipoCfg, esPPMcosto, remuneracionesBancoMes, resultadoMes, _fuentesResP, _fuentesRes, useFuentesResultado, _ymPrev, margenPct, resolverClienteSII, fmtSaldoG, _viewMem, marcarVolviendo, viewMemLeer, viewMemGuardar, PageHeader, BackBtn, FlujoPagina, MESES, driveGet, DriveAuthError, driveToken, _bwipP, _loadBwip, NOMBRE_DTE, NOMBRE_DTE_CORTO, facturaDtePdfBase64, _resolDoc, splitSetDTE, loadXLSXStyle, MAIL_OFICINA_CONFIRM, TXT_REINGRESO, txtEnviado, txtNoEnviado, avisoNoEnviado, incrustarLogosCorreo, enviarComoUsuario, sendMailServer, sendGmailWithPdf } from './lib/compartido.jsx'
 import { kpisPorSocio } from './lib/cifras.js'
@@ -748,7 +748,7 @@ const _tokVenta = s => _normTxt(s||'').split(' ').filter(w=>w.length>=4 && !_GLO
 function matchVentaFactura(fac, ventasCliente, ufRef){
   const ventas=(ventasCliente||[]).filter(v=>v && !v.deleted_at && !['Borrador','Propuesta','Rechazada'].includes(v.status))
   if(!ventas.length) return {ok:false, reason:'sin ventas del cliente'}
-  // Clientes que abonan primero y piden la factura después: la venta es del año del PRIMER abono, no de la emisión (Barahona, Schroder)
+  // Clientes que abonan primero y piden la factura después: la venta es del año del PRIMER abono, no de la emisión ([cliente], [cliente])
   const refIso = fac._primerPago || fac.issued_at
   const issueY = refIso ? +String(refIso).slice(0,4) : null
   const amt = Math.abs(fac.amount||0)
@@ -972,7 +972,7 @@ function RechazoMotivoModal({sale,onConfirm,onCancel}){
 // y se manda UN correo consolidado. Aprende del set confirmado por área (learnings kind='propuesta_tareas').
 function PrimerasTareasModal({sale, clients=[], clientEntities=[], user, onConfirm, onClose, saving}){
   const EMAIL_BY_NAME=equipoPorNombre()
-  const WHO=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const WHO=equipoNombres()
   const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const cli = clients.find(c=>String(c.id)===String(sale?.client_id))
   const ent = sale?.entity_id ? clientEntities.find(e=>String(e.id)===String(sale.entity_id)) : null
@@ -3020,7 +3020,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-        <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.217.569-K'/></Fld>
+        <Fld label='RUT' mb={8}><Inp value={f.rut||''} onChange={e=>up('rut',e.target.value)} placeholder='76.123.456-0'/></Fld>
         <Fld label='Tipo' mb={8}><Sel value={f.type||''} onChange={e=>up('type',e.target.value)} options={['Corporativo','Tributario','Laboral']} placeholder='— Seleccionar —'/></Fld>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -3029,7 +3029,7 @@ function ClientForm({client,onSave,onClose,onDelete,saving,sales,clients=[],onOp
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         <Fld label='Estado' mb={8}><Sel value={f.status||'Activo'} onChange={e=>up('status',e.target.value)} options={['Activo','Prospecto','Terminado']}/></Fld>
-        <Fld label='Responsable' mb={8}><Sel value={f.abogado_responsable||''} onChange={e=>up('abogado_responsable',e.target.value)} options={['Cristóbal','Erasmo','Martín','Martina','Rodrigo']} placeholder='— Sin asignar —'/></Fld>
+        <Fld label='Responsable' mb={8}><Sel value={f.abogado_responsable||''} onChange={e=>up('abogado_responsable',e.target.value)} options={equipoNombres()} placeholder='— Sin asignar —'/></Fld>
       </div>
       {f.status==='Terminado'&&<Fld label='Fecha término' mb={8}><Inp type='date' value={f.ended_at||''} onChange={e=>up('ended_at',e.target.value)}/></Fld>}
       <Fld label='Contacto' mb={8}><Inp value={f.contact||''} onChange={e=>up('contact',e.target.value)} placeholder='Persona de contacto...'/></Fld>
@@ -4514,7 +4514,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
   useEffect(()=>{ supabase.from('learnings').select('key,value').eq('kind','dominio_cliente').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; const bad=[]; (data||[]).forEach(r=>{ if(!r.key||!r.value) return; if(PROV.test(String(r.key))) bad.push(String(r.key)); else m[String(r.key)]=String(r.value) }); domLearnedRef.current=m; if(bad.length) supabase.from('learnings').delete().eq('kind','dominio_cliente').in('key',bad).then(()=>{},()=>{}) },()=>{}) },[])
 
   const parseAddrs = h => (h||'').split(',').map(s=>s.trim()).map(s=>{ const m=s.match(/^(.*?)<(.+?)>$/); if(m) return {name:m[1].replace(/["']/g,'').trim(), email:m[2].trim().toLowerCase()}; return {name:'', email:s.toLowerCase()} }).filter(x=>x.email.includes('@'))
-  // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "tarragona" de @tarragona.cl) contra
+  // Match por EXTENSIÓN/dominio: la palabra clave del dominio (ej. "[cliente]" de @[cliente].cl) contra
   // el nombre del cliente o de su razón social. Ignora proveedores genéricos (gmail, hotmail…).
   const PROV = /^(gmail|hotmail|outlook|yahoo|icloud|live|me|proton|gmx|aol)\b/
   const clientByDomain = domain => {
@@ -4533,7 +4533,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
     const clientList = clients.filter(c=>c.status!=='Terminado').map(c=>{ const ents=(clientEntities||[]).filter(e=>e.client_id===c.id); return {id:c.id,nombre:c.name,rs:ents.map(e=>e.name).filter(Boolean),rut:c.rut||ents.map(e=>e.rut).filter(Boolean)[0]||''} })
     for(let i=0;i<ambig.length;i+=25){
       const batch=ambig.slice(i,i+25); setProg({done:i,total:ambig.length,label:'Asociando con IA…'})
-      const prompt=`Eres asistente del estudio de abogados ${BRAND.nombre} (@${BRAND.emailDominio}). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @tarragona.cl → "tarragona") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
+      const prompt=`Eres asistente del estudio de abogados ${BRAND.nombre} (@${BRAND.emailDominio}). Te paso CONTACTOS externos (email, nombre, dominio, asuntos de correo) y la lista de CLIENTES del estudio. Para cada contacto decide a qué cliente pertenece o null si no es claro. PRIORIZA la EXTENSIÓN/dominio del email: la palabra clave del dominio (ej. @ejemplo.cl → "ejemplo") suele ser el nombre del cliente o de su razón social — si calza, asócialo de inmediato. IMPORTANTE: si el dominio es genérico de proveedor (gmail.com, hotmail, outlook, yahoo, icloud, live, etc.) NO lo uses para asociar — en ese caso asígnalo SOLO si el NOMBRE del contacto o de la empresa que aparece en los asuntos coincide CLARAMENTE con un cliente de la lista; ante cualquier duda devuelve null (es mucho mejor dejarlo sin asignar que asignarlo al cliente equivocado). Si los asuntos sugieren un cargo (gerente, contador, abogado, asistente, etc.) infiérelo; si no, deja "". Devuelve SOLO un JSON array: [{"email":"...","client_id":"<id de la lista o null>","cargo":"..."}]. NUNCA inventes un client_id que no esté en la lista.\nCLIENTES:\n${JSON.stringify(clientList)}\nCONTACTOS:\n${JSON.stringify(batch.map(a=>({email:a.email,nombre:a.name,dominio:a.domain,asuntos:a.subjects})))}`
       try{
         const data=await claudeCall({feature:'App',model:'claude-opus-4-8',max_tokens:2500,messages:[{role:'user',content:promptConCache(prompt,'\nCONTACTOS:\n',ambig.length>25)}]})
         const arr=JSON.parse((data.content?.[0]?.text||'').replace(/```json|```/g,'').trim())
@@ -4617,7 +4617,7 @@ function GmailContactosModal({clients=[], clientEntities=[], onClose, onIrContac
             <div style={{fontSize:10,fontWeight:700,color:C.textSoft,letterSpacing:.3,padding:'6px 12px',background:C.bgPanel}}>ASÍ SE VERÁ CADA CONTACTO</div>
             <div style={{display:'flex',alignItems:'center',gap:9,padding:'10px 12px',borderTop:`1px solid #F1F3F5`}}>
               <div style={{width:30,height:30,borderRadius:'50%',background:C.azulBg,color:C.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>AF</div>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Agustín Ferrada</div><div style={{fontSize:10,color:C.muted}}>agustin@cavor.cl · Gerente (IA)</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:C.text}}>Agustín Ferrada</div><div style={{fontSize:10,color:C.muted}}>agustin@ejemplo.cl · Gerente (IA)</div></div>
               <span style={{fontSize:10,fontWeight:700,color:C.accent,background:C.azulBg,padding:'2px 8px',borderRadius:20,whiteSpace:'nowrap'}}>Agregar</span>
             </div>
           </div>

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { C, Gl, SIcon, _normTxt, appAlert, appConfirm, fmt, fmtN, fmtRutCL, fmtFechaDMY, folioN, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
-import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, saldosPorCliente, viewMemGuardar, viewMemLeer } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, CAT_COLORS, DriveIcon, FichaTabs, FlujoPagina, NOMBRE_CLI, TH_BAND, TIT_PAG, anularReembolsoDeRendicion, chipBtn, ddItem, detectarClientesDuplicados, driveBtn, fmtSaldoG, logActividad, porCobrarBills, rendicionPdfHtml, rsDisplay, rsLabel, saldoDelta, saldosPorCliente, viewMemGuardar, viewMemLeer , equipoNombres} from '../lib/compartido.jsx'
 import { RendicionEmailModal, RendicionModal } from '../lib/rendiciones.jsx'
 import { ContactoTab, EstadoCuentaTab, FinancieroTab, FotoCliente } from '../lib/fichaCliente.jsx'
 import { TIPOS_PENDIENTE, tiposDe, contables } from '../../supabase/functions/_shared/pendientesCliente.js'
@@ -114,7 +114,7 @@ export function ClientFicha({pend=null,onPendGo=null,setExpenses=null,onAsociarT
         {respPick&&(
           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
             <span style={{fontSize:10,color:C.textSoft,fontWeight:600,textTransform:'uppercase',letterSpacing:.4}}>Responsable</span>
-            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);const on=responsable===m;return <button key={m} onClick={()=>{onSaveFields&&onSaveFields(client.id,{abogado_responsable:m});setRespPick(false)}} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:`1px solid ${on?pc.color:pc.color+'33'}`}}>{m}</button>})}
+            {equipoNombres().map(m=>{const pc=personChip(m);const on=responsable===m;return <button key={m} onClick={()=>{onSaveFields&&onSaveFields(client.id,{abogado_responsable:m});setRespPick(false)}} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:on?pc.color:pc.bg,color:on?'#fff':pc.color,border:`1px solid ${on?pc.color:pc.color+'33'}`}}>{m}</button>})}
             {responsable&&<button onClick={()=>{onSaveFields&&onSaveFields(client.id,{abogado_responsable:null});setRespPick(false)}} style={{fontSize:11,background:'none',border:'none',color:C.muted,cursor:'pointer'}}>Quitar</button>}
           </div>
         )}
@@ -299,7 +299,7 @@ export function ClientsView({pendCli=null,pendIntent=null,onPendIntentUsed=null,
   }
   // Selección en lote: Excel, copiar nombres y asignar abogado (única acción que escribe; confirma y deja bitácora en cada cliente).
   const selFilas = filas.filter(c=>selC.has(c.id))
-  const quienes = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].filter((v,i,a)=>a.indexOf(v)===i)
+  const quienes = equipoNombres().filter((v,i,a)=>a.indexOf(v)===i)
   const barraC = <BarraSeleccion s={selC} n={selFilas.length} unidad={['cliente seleccionado','clientes seleccionados']} total={`Por cobrar ${fmt(selFilas.reduce((x,c)=>x+(porCobrarDe[c.id]||0),0))}`} acciones={[
     {ic:'download',label:'Descargar Excel',corto:'Excel',onClick:()=>exportarExcel(selFilas).then(()=>'Excel descargado')},
     {ic:'file',label:'Copiar nombres',corto:'Copiar',onClick:()=>copiarTexto(selFilas.map(c=>c.name).join('\n'),'Nombres copiados')},

@@ -1,5 +1,5 @@
 // xmlTexto.js — texto de un campo de un XML del SII tal como lo lee una persona. Fuente única (PDF de la factura y lectores).
-// Los XML llegan escapados («BARRA &amp; STROBEL»); el PDF los imprimía tal cual. &amp; va al final para no decodificar dos veces.
+// Los XML llegan escapados («BARRA &amp; [cliente]»); el PDF los imprimía tal cual. &amp; va al final para no decodificar dos veces.
 export function desescaparXml(v) {
   return String(v ?? '')
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))

@@ -84,7 +84,7 @@ export function ClienteDriveImporter({clients,onImported,onClose,onChanged}){
       // Clientes activos
       const resActivos=await driveGet(t,`https://www.googleapis.com/drive/v3/files?q='${CLIENTES_ROOT}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&orderBy=name&fields=files(id,name)`)
       // Dedup ROBUSTO = mismo criterio que el edge function clientes-drive-sync: colapsa espacios y quita acentos.
-      // (Antes .toLowerCase().trim() dejaba pasar "Fernando  Oliver" vs "Fernando Oliver" y "Survias" vs "Survías" → duplicados.)
+      // (Antes .toLowerCase().trim() dejaba pasar "Fernando  Oliver" vs "[cliente]" y "[cliente]" vs "[cliente]" → duplicados.)
       const activos=(resActivos.files||[]).filter(f=>!f.name.startsWith('1. CLIENTES'))
       const existingNames=new Set(clients.map(c=>nrmCliente(c.name)))
       // Alias aprendidos (folder→cliente): no volver a proponer lo que ya vinculaste.

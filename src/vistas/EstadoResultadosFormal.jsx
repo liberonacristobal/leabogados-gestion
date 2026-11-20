@@ -80,7 +80,7 @@ export function EstadoResultadosFormal({ billing = [], terceros = [], costosOfiR
     return { p, e, des, porCartola, porSaldo, difCobrado, cuadra, sinRespaldo: { n: sinRespaldo.length, monto: suma(sinRespaldo.map(x => x.dif)) }, sinIdentificar: IA.porIdentificar || 0 }
   }, [RA, A1, billing, curM, year])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Salud de datos › «Fecha de pago y depósito»: la fuente de la verdad de la fecha de cobro es el abono conciliado en el banco (regla de CLAUDE.md); una factura cuya fecha de pago difiere de la del último abono conciliado del año se avisa (caso Bustos: dos conciliaciones cruzadas).
+  // Salud de datos › «Fecha de pago y depósito»: la fuente de la verdad de la fecha de cobro es el abono conciliado en el banco (regla de CLAUDE.md); una factura cuya fecha de pago difiere de la del último abono conciliado del año se avisa (caso [cliente]: dos conciliaciones cruzadas).
   const checkFechas = useMemo(() => {
     const billById = {}; billing.forEach(b => { billById[String(b.id)] = b }); const abonoById = {}; RA.ingAbonos.forEach(m => { abonoById[String(m.id)] = m })
     const ultDep = {}

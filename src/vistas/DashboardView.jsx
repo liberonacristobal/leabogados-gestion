@@ -9,7 +9,7 @@ import { cascadaVendido } from '../lib/cifras.js'
 import { descargarResultadoAnioPdf } from '../lib/pdfResultadoAnio.js'
 import { alturaImagenResultado, dibujarImagenResultado } from '../lib/dibujoResultadoAnio.js'
 import { entregarArchivo } from '../lib/archivos.js'
-import { CifrasBrutoNeto, BrutoNetoPill } from '../lib/compartido.jsx'
+import { CifrasBrutoNeto, BrutoNetoPill , equipoNombres} from '../lib/compartido.jsx'
 import { fgCliente, gastosPorRendirCli } from '../../supabase/functions/_shared/gastosReglas.js'
 import { ventasFacturando } from '../../supabase/functions/_shared/ventasReglas.js'
 import { exposicionCartera } from '../../supabase/functions/_shared/cobranzaExposicion.js'
@@ -936,7 +936,7 @@ export function Dashboard({nPendCuentas=0,onRendirClientes=null,proyHitos=[],sal
 
       {tareasOpen&&(()=>{
         const activas=(tasks||[]).filter(t=>t.status!=='Terminado')
-        const orden=['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+        const orden=equipoNombres()
         const me=user?.name
         const corte=tareasCorte
         const base = corte==='delegaron' ? activas.filter(t=> taskAssignees(t).includes(me) && t.assigned_by && t.assigned_by!==me)

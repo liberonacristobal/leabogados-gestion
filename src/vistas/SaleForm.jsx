@@ -5,7 +5,7 @@ import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { avisoTarifa } from '../../supabase/functions/_shared/textosAvisos.js'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
-import { fetchUFFechas, fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError } from '../lib/compartido.jsx'
+import { fetchUFFechas, fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError , equipoNombres} from '../lib/compartido.jsx'
 
 export const equipoPorEmail = () => { const r={}; Object.entries(EQUIPO_RESPALDO).forEach(([n,e])=>{ r[e]=n }); return {...r, ...(_equipo?.pe||{})} }
 
@@ -182,7 +182,7 @@ export function SaleForm({asPage=false,afterHero=null,heroEl=undefined,sale,clie
   const [cubrirAnt,setCubrirAnt] = useState(null)
   const [facturarAntS,setFacturarAntS] = useState(null)
   const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const WHO_LIST = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const WHO_LIST = equipoNombres()
   // Si estamos activando una propuesta, guardar el honorario original antes de que el usuario lo edite
   const _activandoPropuesta = !!(sale?._activandoPropuesta)
   const _propAmountUF = sale?._propAmountUF ?? null
@@ -412,7 +412,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     try {
       let client = propClientMatch
       if(!client || propClientMode==='crear') {
-        // Previene el duplicado de ficha en el origen (lo de Eugenia/Saavedra): si el RUT ya está en otra ficha, avisa.
+        // Previene el duplicado de ficha en el origen (lo de Eugenia/[cliente]): si el RUT ya está en otra ficha, avisa.
         const _rut=propNewClient.rut.trim()
         if(_rut){ const _n=s=>(s||'').replace(/[.\s-]/g,'').toUpperCase(); const ya=(clients||[]).find(c=>c.rut&&_n(c.rut)===_n(_rut))||(clientEntities||[]).find(e=>e.rut&&_n(e.rut)===_n(_rut)); if(ya && !await appConfirm(`Ya existe una ficha con el RUT ${_rut}${ya.name?` · ${ya.name}`:''}. Un RUT debería estar en una sola ficha. ¿Crear otra de todas formas?`)){ setPropCreating(false); return } }
         // Nunca duplicar (regla de oro) — ALARMA + BLOQUEO: si ya existe una ficha igual o muy parecida, no crear a ciegas.
@@ -485,7 +485,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     }catch(e){ appAlert('No se pudo agregar la razón social: '+e.message) }
     setSavingRS(false)
   }
-  // Cobro mensual: el inicio se toma del Año/Mes de la venta por defecto (evita años distintos, como pasó con BM Soluciones).
+  // Cobro mensual: el inicio se toma del Año/Mes de la venta por defecto (evita años distintos, como ya pasó con un cliente).
   useEffect(()=>{ if(cobroType==='mensual' && !mensualInicio && f.year && f.month) setMensualInicio(`${f.year}-${String(f.month).padStart(2,'0')}-01`) },[cobroType,f.year,f.month])
   const moneda = f.moneda||'UF'
   const ufVal = parseFloat(f.uf_value)||0
@@ -605,7 +605,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
     // GUARD porcentaje: los tramos deben sumar 100% (si no, la venta se sub-facturaría permanentemente).
     if(cobroType==='porcentaje'){ const sp=(tramos||[]).reduce((a,t)=>a+(parseInt(t.pct)||0),0); if(sp!==100){ appAlert(`Los tramos "por porcentaje" deben sumar 100% (hoy suman ${sp} %).`); return } }
     // GUARD "venta Activa sin cuotas": una venta que NACE Activa (nueva, o al activar una propuesta) sin cuotas generadas
-    // quedaría contando en "Vendido" pero fuera de cobranza/proyección, en silencio (raíz de Tarragona/Masihy). Se bloquea.
+    // quedaría contando en "Vendido" pero fuera de cobranza/proyección, en silencio (raíz de [cliente]/[cliente]). Se bloquea.
     const naceActiva = _activandoPropuesta || (!sale?.id && saveF.status==='Activo')
     if(naceActiva && cobroType!=='hora' && (!cobros || cobros.length===0)){
       appAlert('Esta venta quedaría ACTIVA pero sin cuotas para facturar. Define el "Inicio de cobro" (y N° de cuotas / montos / fechas) para que se generen las cuotas antes de guardar.'); return

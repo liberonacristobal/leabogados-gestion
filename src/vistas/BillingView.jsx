@@ -270,7 +270,7 @@ export function ChecklistFacturacion({onVerPorEnviar, sinRegN=0, billing, fantas
   }
 
   // RS + RUT para export/listas: reusa rsDeFactura (nombre) y cruza entidad/ficha + lo YA FACTURADO al cliente para el RUT
-  // (la herramienta APRENDE de la historia). Ej.: Grupo Avanza no trae RS en la programada pero sí en su Factura 231.
+  // (la herramienta APRENDE de la historia). Ej.: un cliente no trae RS en la programada pero sí en su Factura 231.
   const rsRutExport = b => {
     const c = clients.find(x=>x.id===b.client_id)
     const ents = (clientEntities||[]).filter(e=>e.client_id===b.client_id)
@@ -836,7 +836,7 @@ export function SiiSyncModal({onClose,onRefresh,clients=[],clientEntities=[],bil
   const mesLargo = `${MESES_LG[mm-1]} ${yy}`
   const cambiarMes = d => { const dt=new Date(yy,mm-1+d,1); setMes(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`) }
 
-  // "96713940-8" -> "96.713.940-8" (solo formato visual)
+  // "76123456-0" -> "76.123.456-0" (solo formato visual)
   const fmtRut = r => { if(!r) return ''; const [n,dv]=String(r).replace(/\./g,'').split('-'); return n? n.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(dv!==undefined?'-'+dv:'') : String(r) }
   // Fuente única compartida con handleIngresarSII (RUT→nombre en vínculos, luego clientes).
   const resolverCliente = (rut,nombre) => resolverClienteSII(rut,nombre,clients,clientEntities)
@@ -4166,7 +4166,7 @@ export function BillingView({onOpenPorFacturar=null,gmailEst=null,onGmail=null,b
           const doXml=(e)=>pedir(e,'Adjuntar el XML firmado que está en la cola del SII.',async()=>{ await adjuntarXmlCola([e.b]); limpiar() })
           const sub={fontSize:10,fontWeight:600,color:C.muted,cursor:'pointer',whiteSpace:'nowrap'}
           // Si no es de honorarios (la venta se asigna arriba con AsignarVentaFactura): Gastos · Comisión → socio y origen · Por externo → externo y %.
-          // Sugerencia aprendida por cliente: el tipo de sus facturas anteriores (BDA → Comisión, Geslog → Por externo).
+          // Sugerencia aprendida por cliente: el tipo de sus facturas anteriores (BDA → Comisión, [cliente] → Por externo).
           const tipoPrevio=cid=>{ const ts=(billing||[]).filter(x=>!x.deleted_at&&x.status!=='Anulada'&&String(x.client_id)===String(cid)&&['comision','externo'].includes(x.billing_type)); if(!ts.length) return null; const c={}; ts.forEach(x=>{ c[x.billing_type]=(c[x.billing_type]||0)+1 }); return Object.keys(c).sort((a,z)=>c[z]-c[a])[0] }
           const tipoChips=(e,b,{ventaOpen,extOpen})=>{ const comOpen=anioPickFor===('com:'+b.id), sug=tipoPrevio(b.client_id)
             const ch=(k,lbl,on,fn,col)=><span key={k} onClick={fn} style={{fontSize:12,fontWeight:on?700:600,borderRadius:20,padding:'4px 11px',border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:C.surface,color:on?'#fff':C.accent,cursor:'pointer',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:on?'#fff':col}}/>{lbl}</span>

@@ -199,8 +199,8 @@ test('rendir a clientes: el grupo depende del saldo y de los gastos por rendir, 
 
 test('factura recibida de un colaborador que calza con sus comisiones sin factura; proveedor habitual no se muestra', async () => {
   const { comprasEnPlazoReclamo, comisionesQueCalzan } = await import('../supabase/functions/_shared/saludDatos.js')
-  const doc = { id: 'd1', folio: 323, tipo_dte: 34, sii_estado: 'PENDIENTE', fecha_recepcion: '2026-10-19T18:35:18Z', fecha_emision: '2026-10-19', emisor_rut: '78099865-2', proveedor_id: 'p1', monto: 4982883 }
-  const t = (id, monto, extra) => ({ id, monto, proveedor_id: 'p1', rut: '78.099.865-2', factura_numero: null, ...extra })
+  const doc = { id: 'd1', folio: 323, tipo_dte: 34, sii_estado: 'PENDIENTE', fecha_recepcion: '2026-10-19T18:35:18Z', fecha_emision: '2026-10-19', emisor_rut: '76555666-7', proveedor_id: 'p1', monto: 4982883 }
+  const t = (id, monto, extra) => ({ id, monto, proveedor_id: 'p1', rut: '76.555.666-7', factura_numero: null, ...extra })
   const terceros = [t(1, 434296), t(2, 1111800), t(3, 104231), t(4, 382662), t(5, 384038), t(6, 436400), t(7, 1047362), t(8, 1082284), t(9, 50000, { factura_numero: '300' })]
   assert.equal(comisionesQueCalzan(doc, terceros).length, 8)   // caso real: 8 comisiones, $190 de diferencia
   const r = comprasEnPlazoReclamo([doc], '2026-10-25', new Set(), { terceros, historial: [] })
@@ -256,7 +256,7 @@ test('venta del gasto: aprendido por venta o nombre, coherente, y la glosa gené
   const { sugerirVentaGasto, glosaKey } = await import('../supabase/functions/_shared/ventaGastoReglas.js')
   const V = [{ id: 'a', title: 'Puesta en marcha Ovalle', status: 'Activo' }, { id: 'b', title: 'Administración SPV', status: 'Activo' }, { id: 'c', title: 'Reorganización', status: 'Terminado' }]
   const k = c => `cli::${glosaKey(c)}`
-  const pat = 'Patente comercial Fortelio'
+  const pat = 'Patente comercial Ejemplo'
   // Aprendido: por id (nuevo) o por nombre (filas antiguas); dos decisiones = se aplica sola.
   let r = sugerirVentaGasto({ client_id: 'cli', concept: pat }, V, { aprendidos: [{ key: k(pat), value: 'Administración SPV' }, { key: k(pat), value: 'x', meta: { sale_id: 'b' } }] })
   assert.equal(r.regla, 'aprendido'); assert.equal(r.venta.id, 'b'); assert.equal(r.auto, true)
@@ -432,7 +432,7 @@ import { fgCliente as _fgC, gastosPorRendirCli as _gpr } from '../supabase/funct
 const _saldoB = b => (['Pagado', 'Anulada'].includes(b.status) ? 0 : Math.max(0, (b.amount || 0) - (b.paid_amount || 0)))
 const _porCobrarB = bs => bs.filter(b => b.invoice_no && ['Pendiente', 'Vencido'].includes(b.status) && !['reembolso', 'nota_credito'].includes(b.billing_type)).reduce((s, b) => s + _saldoB(b), 0)
 const _datosCopiloto = () => ({
-  clients: [{ id: 'c1', name: 'Familia Schroder' }, { id: 'c2', name: 'Comercial Andes SpA' }, { id: 'c3', name: 'Comercial Norte SpA' }, { id: 'o', name: 'Estudio (oficina)', is_internal: true }],
+  clients: [{ id: 'c1', name: 'Familia Ejemplo' }, { id: 'c2', name: 'Comercial Andes SpA' }, { id: 'c3', name: 'Comercial Norte SpA' }, { id: 'o', name: 'Estudio (oficina)', is_internal: true }],
   billing: [
     { id: 'b1', client_id: 'c1', invoice_no: '10', status: 'Pagado', amount: 250000, issued_at: '2026-10-16' },
     { id: 'b2', client_id: 'c2', invoice_no: '20', status: 'Vencido', amount: 1000000, paid_amount: 200000, issued_at: '2026-08-01', due: '2026-09-01' },
@@ -444,8 +444,8 @@ const _datosCopiloto = () => ({
 })
 test('Counsel AI: deuda de un cliente = facturas por cobrar + gastos por cubrir, con las funciones de la app', async () => {
   const ej = crearConsultas(_datosCopiloto())
-  const r = await ej('deuda_cliente', { cliente: 'Schröder' })       // sin tilde ni «Familia»: igual lo encuentra
-  assert.equal(r.resumen.cliente, 'Familia Schroder'); assert.equal(r.resumen.deuda_total, '$676.812')
+  const r = await ej('deuda_cliente', { cliente: 'Ejémplo' })       // sin tilde ni «Familia»: igual lo encuentra
+  assert.equal(r.resumen.cliente, 'Familia Ejemplo'); assert.equal(r.resumen.deuda_total, '$676.812')
   assert.equal(r.resumen.facturas_por_cobrar, '$0'); assert.equal(r.resumen.gastos_por_cubrir, '$676.812'); assert.equal(r.resumen.gastos_sin_rendir, '$40.000')
   assert.equal(r.tarjeta.total.valor, '$676.812'); assert.equal(r.tarjeta.lineas.length, 3)
   assert.match((await ej('deuda_cliente', { cliente: 'Comercial' })).error, /2 clientes/)   // ambiguo: pide precisar, no adivina
@@ -464,7 +464,7 @@ test('Counsel AI: tareas vencidas por responsable, sin las terminadas ni las de 
 test('Counsel AI: el bucle resuelve la consulta que pide la IA y devuelve la tarjeta; sin consulta responde directo', async () => {
   const ej = crearConsultas(_datosCopiloto()); let n = 0
   const llamar = async ({ messages, tools }) => { n++; assert.equal(tools.length, HERRAMIENTAS.length)
-    if (n === 1) return { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'u1', name: 'deuda_cliente', input: { cliente: 'Schroder' } }] }
+    if (n === 1) return { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'u1', name: 'deuda_cliente', input: { cliente: 'Ejemplo' } }] }
     const ultimo = messages[messages.length - 1].content[0]; assert.equal(ultimo.type, 'tool_result'); assert.match(ultimo.content, /676\.812/)
     return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Debe $676.812.' }] } }
   const r = await resolverConIA({ llamar, sistema: 's', mensajes: [{ role: 'user', content: '¿cuánto debe?' }], ejecutar: ej })
@@ -577,16 +577,16 @@ test('calendario de Google: tributario, causas en tabla, plazos, remates de la T
     plazos: [{ id: 'p1', titulo: 'Término del arriendo', fecha: '2026-12-15', estado: 'pendiente', client_id: 'k1' }, { id: 'p2', titulo: 'Hecho', fecha: '2026-12-16', estado: 'cumplido' }],
     props: [{ client_id: 'k1', comuna: 'Las Condes', rol: '1-2' }, { client_id: 'k1', comuna: 'Linares', rol: '1-3' }],
     remates: [{ sk: 'r1', rol_formato: 'LAS CONDES-00001-00002', dueno: 'Otro Nombre', juzgado: '1° Juzgado Civil', rol_judicial: 'C-10-2026', fecha_remate: '2026-12-02T14:00:00+00:00', tasacion: 50000000 },
-      { sk: 'r2', rol_formato: 'LAS CONDES-00099-00002', fecha_remate: '2026-12-03T14:00:00+00:00' }], clientes: [{ id: 'k1', name: 'Javiera Díaz' }],
+      { sk: 'r2', rol_formato: 'LAS CONDES-00099-00002', fecha_remate: '2026-12-03T14:00:00+00:00' }], clientes: [{ id: 'k1', name: 'Carla Ejemplo' }],
     docs: [{ id: 'd1', cliente_id: 'k1', do_estado: 'pendiente', do_publicacion: { vence: '2026-11-10' } }] })
   const por = t => ev.filter(e => e.tipo === t)   // r2 (otro rol) no es de un cliente
   assert.ok(por('tributario').some(e => e.clave === 'F29-2026-10' && e.fecha === '2026-11-20')); assert.ok(por('tributario').some(e => e.clave === 'COT-2026-10' && e.fecha === '2026-11-13'))
   assert.ok(!por('tributario').some(e => e.clave === 'F22-2026')); assert.ok(por('tributario').some(e => e.clave === 'F22-2027'))   // la ya presentada no entra
   assert.ok(por('tributario').some(e => /Declaraciones juradas 1948/.test(e.titulo) && e.fecha === '2027-03-16'))
   assert.deepEqual(por('causa').map(e => e.titulo), ['Vista en tabla · Rol 19-2025'])   // la de octubre ya pasó
-  assert.match(por('causa')[0].descripcion, /Cliente: Javiera Díaz/)
+  assert.match(por('causa')[0].descripcion, /Cliente: Carla Ejemplo/)
   assert.deepEqual(por('plazo').map(e => e.fecha), ['2026-12-15']); assert.deepEqual(por('diario_oficial').map(e => e.fecha), ['2026-11-10'])
-  assert.deepEqual(por('remate').map(e => e.clave), ['remate-r1']); assert.equal(por('remate')[0].fecha, '2026-12-02'); assert.match(por('remate')[0].titulo, /Javiera Díaz/)   // solo el que calza por rol
+  assert.deepEqual(por('remate').map(e => e.clave), ['remate-r1']); assert.equal(por('remate')[0].fecha, '2026-12-02'); assert.match(por('remate')[0].titulo, /Carla Ejemplo/)   // solo el que calza por rol
   assert.equal(por('contribuciones').length, 0)
   assert.ok(ev.every(e => e.fecha >= '2026-10-29'))
 })

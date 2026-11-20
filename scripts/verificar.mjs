@@ -24,6 +24,7 @@ if (!FORZAR && hTodo && previo.todo === hTodo) { console.log('✓ Verificación 
 const correrSmoke = FORZAR || !hApp || previo.app !== hApp
 const paso = (nombre, cmd, args, env = {}) => { console.log(`\n▶ ${nombre}`); const r = spawnSync(cmd, args, { stdio: 'inherit', env: { ...process.env, ...env } }); if (r.status !== 0) { console.error(`\n✗ Falló: ${nombre}`); process.exit(r.status || 1) } }
 
+paso('nombres de clientes', 'node', ['scripts/sin-nombres-de-clientes.mjs'])   // el repositorio es público; la lista de nombres vive fuera de él
 paso('build', 'npx', ['vite', 'build'])
 paso('lint', 'npm', ['run', 'lint', '--silent'])
 paso('tipos', 'npm', ['run', 'tipos', '--silent'])

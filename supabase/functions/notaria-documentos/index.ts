@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
     // Nombres ya usados por cliente: dos documentos distintos con el mismo tipo, fecha y repertorio (dos declaraciones juradas) no se pisan.
     const usados = new Set<string>(); (await todas("documentos_notaria?select=id,cliente_id,drive_nombre&drive_nombre=not.is.null")).forEach((p) => usados.add(`${p.cliente_id}|${p.drive_nombre}`));
     const nombreLibre = (cid: string, n: string) => { let x = n, i = 2; while (usados.has(`${cid}|${x}`)) x = n.replace(/(\.[a-z0-9]+)$/i, ` (${i++})$1`); usados.add(`${cid}|${x}`); return x; };
-    // Nombres de cliente y de sus razones sociales para el asunto («INMOBILIARIA SANTA GRACIA SpA»); solo nombres largos.
+    // Nombres de cliente y de sus razones sociales para el asunto («INMOBILIARIA EJEMPLO SpA»); solo nombres largos.
     const nombres = [...clients.filter((c) => !c.is_internal).map((c) => ({ n: norm(c.name), id: c.id })), ...ents.map((e) => ({ n: norm(e.name), id: e.client_id }))].filter((x) => x.n.length >= 8);
     // Razón social del documento: la de la OT; si no, la que nombra el asunto o el archivo; si no, la única del cliente; si no, su nombre.
     const entDe: Record<string, { name: string; client_id: string }> = Object.fromEntries(ents.map((e) => [e.id, e]));

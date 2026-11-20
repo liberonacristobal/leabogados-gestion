@@ -4,7 +4,7 @@ import { supabase, DEMO } from '../supabase'
 import { normRut as crNormRut } from '../cartola.js'
 import { VENTA_REAL, glosaKey, sugerirVentaGasto } from '../../supabase/functions/_shared/ventaGastoReglas.js'
 import { BRAND, C, Gl, SEC_LBL, Spin, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
-import { AsignarClienteInline, Modal, NOTA_DIRIGIDO, _fechaISO, canonOtNN, cargarAdminsEstudio, claudeCall, driveCall, enviarComoUsuario, learnPut, normRut, pillPersonaSty, proyectoSeguro, saldoCliente, setLearningKV, txtEnviado, useAprendidosVenta, registrarError } from '../lib/compartido.jsx'
+import { AsignarClienteInline, Modal, cargarSaludoNotaria, _fechaISO, canonOtNN, cargarAdminsEstudio, claudeCall, driveCall, enviarComoUsuario, learnPut, normRut, pillPersonaSty, proyectoSeguro, saldoCliente, setLearningKV, txtEnviado, useAprendidosVenta, registrarError , equipoNombres} from '../lib/compartido.jsx'
 import { descargarTabla } from '../lib/archivos.js'
 
 // Compareciente vacío o de relleno ("N/A", "S/N", "-"): no identifica a nadie → no se propaga ni se aprende como alias.
@@ -222,7 +222,7 @@ export function CargaMasivaModal({clients,clientEntities,expenses=[],sales=[],bi
       ]
       g.addRow({ot:'OT-1284',requirente:'Inmobiliaria Vista',materia:'Compraventa',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Lote 4, Chicureo',categoria:'Notaria'})
       g.addRow({ot:'OT-1290',requirente:'Inmob. Vista SpA',materia:'Constitución SpA',fecha:new Date(2026,2,12),monto:90000,concepto:'Escritura pública',subconcepto:'Sociedad por acciones',categoria:'Notaria'})
-      g.addRow({ot:'OT-1305',requirente:'Trans Alerce',materia:'Poder',fecha:new Date(2026,2,14),monto:14000,concepto:'Copia con vigencia',subconcepto:'Poder especial',categoria:'Notaria'})
+      g.addRow({ot:'OT-1305',requirente:'Inmobiliaria Ejemplo',materia:'Poder',fecha:new Date(2026,2,14),monto:14000,concepto:'Copia con vigencia',subconcepto:'Poder especial',categoria:'Notaria'})
       g.getColumn('fecha').numFmt='dd-mm-yyyy'; g.getColumn('monto').numFmt='#,##0'
       g.getRow(1).eachCell(c=>{ c.font=headFont; c.fill=headFill })
       // Validación: Categoría sugerida Notaria (lista de categorías válidas)
@@ -450,7 +450,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
 
   // Miembros de la oficina: un gasto "Personal · Martín" / "Personal: Martín" en la columna Cliente
   // se enruta a personal_de (no es cliente). Convención para la carga masiva de notaría.
-  const MIEMBROS_NOTA = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const MIEMBROS_NOTA = equipoNombres()
 
   // Sinónimos de columna (lowercased). El parser reconoce cualquiera de estos encabezados, en cualquier orden.
   const COLALIAS = {
@@ -765,13 +765,14 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
   const marcarNoNuestra = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:true, client_id:null, clientName:null, entity_id:null, personal_de:null, suggestion:null, candidates:null, suggestFrom:null, driveFolder:null, isInternal:false, matchMethod:undefined} : r)); setPersPick(null); flash('Marcada como no nuestra · no se carga, se registra') }
   const reactivarRow = (rowId) => { setRows(p=>p.map(r=> r.id===rowId ? {...r, noNuestra:false} : r)); flash('Reactivada · vuelve a la revisión') }
   // Consulta a la notaría por las OT que no reconocemos (marcadas "No es nuestra"): se seleccionan y se les pide detalle.
-  const NOTA_DEST_DEFAULT='sdelgado@notarialascar.cl'
+  const NOTA_DEST_DEFAULT=DEMO?'secretaria@notaria-ejemplo.cl':''   // el correo vigente lo guarda el equipo (learnings notaria_email); sin valor se pide al consultar
   const [notaDest,setNotaDest] = useState(NOTA_DEST_DEFAULT)
   useEffect(()=>{ if(!notaria) return; supabase.from('learnings').select('value').eq('kind','notaria_email').order('updated_at',{ascending:false}).limit(1).then(({data})=>{ const v=data&&data[0]&&data[0].value; if(v) setNotaDest(v) },()=>{}) },[notaria])
   const [notaConsultaSel,setNotaConsultaSel] = useState(()=>new Set())
   const [consultando,setConsultando] = useState(false)
   const toggleConsulta = id => setNotaConsultaSel(p=>{ const n=new Set(p); n.has(id)?n.delete(id):n.add(id); return n })
   const consultarNotaria = async(selRows) => {
+    const saludoN=await cargarSaludoNotaria()
     const dest=String(notaDest||NOTA_DEST_DEFAULT).split(/[,;]/).map(x=>x.trim()).filter(x=>x.includes('@')&&!/@leabogados\.cl$/i.test(x)).join(', ')
     if(!dest){ appAlert('Falta el correo de la notaría.'); return }
     if(!selRows.length){ appAlert('Selecciona al menos una OT para consultar.'); return }
@@ -781,8 +782,8 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const ccEstudio=BRAND.ccNotaria||undefined
       const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       const filas=selRows.map(r=>`<tr><td style="padding:5px 0;font-size:11px;color:#185FA5;font-weight:600;white-space:nowrap">${esc(otDe(r))}</td><td style="padding:5px 8px;font-size:12px;color:#3D3D3D">${esc(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` <span style="color:#99ABB4">· ${esc(r.nombre||r.requirente)}</span>`:''}</td><td style="padding:5px 0;font-size:12px;text-align:right;font-weight:600;white-space:nowrap">$${(r.monto||0).toLocaleString('es-CL')}</td></tr>`).join('')
-      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666;margin:0 0 6px">Estimadas ${NOTA_DIRIGIDO},</div><div style="font-size:14px;color:#666;margin:0 0 16px">Espero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que <b>no logramos reconocer</b> como trabajos de nuestra oficina. ¿Nos podrían dar más detalle (compareciente, materia, a qué corresponden) para poder identificarlas?</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle que tenemos</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}</table><div style="font-size:13px;color:#666;margin:16px 0 0">Quedamos atentos.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">${BRAND.nombre}</b></div></div><div style="padding:16px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
-      const texto=`Estimadas ${NOTA_DIRIGIDO},\n\nEspero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que no logramos reconocer como trabajos de nuestra oficina. ¿Nos podrían dar más detalle para identificarlas?\n\n`+selRows.map(r=>`• ${otDe(r)} · ${(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` · ${r.nombre||r.requirente}`:''} · $${(r.monto||0).toLocaleString('es-CL')}`).join('\n')+'\n\nQuedamos atentos.\nSaludos cordiales,\n'+BRAND.nombre
+      const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f2f4;margin:0;padding:20px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e8eb"><div style="background:#003C50;padding:20px 28px;text-align:center"><img src="${BRAND.logoUrl}${BRAND.logo.blanco}" alt="${BRAND.nombre}" height="28" width="184" style="height:28px;width:184px;display:inline-block;border:0"/></div><div style="padding:28px"><div style="font-size:14px;color:#666;margin:0 0 6px">${saludoN},</div><div style="font-size:14px;color:#666;margin:0 0 16px">Espero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que <b>no logramos reconocer</b> como trabajos de nuestra oficina. ¿Nos podrían dar más detalle (compareciente, materia, a qué corresponden) para poder identificarlas?</div><table style="width:100%;border-collapse:collapse"><tr style="border-bottom:1px solid #E4E8EB"><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0">OT</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 8px">Detalle que tenemos</td><td style="font-size:10px;color:#99ABB4;text-transform:uppercase;padding:4px 0;text-align:right">Monto</td></tr>${filas}</table><div style="font-size:13px;color:#666;margin:16px 0 0">Quedamos atentos.<br><br>Saludos cordiales,<br><b style="color:#1a1a1a">${BRAND.nombre}</b></div></div><div style="padding:16px 28px;border-top:1px solid #eee;font-size:11px;color:#999">${BRAND.dominio} · ${BRAND.nombre}</div></div></body></html>`
+      const texto=`${saludoN},\n\nEspero que estén muy bien. Revisando la liquidación, encontramos las siguientes OT que no logramos reconocer como trabajos de nuestra oficina. ¿Nos podrían dar más detalle para identificarlas?\n\n`+selRows.map(r=>`• ${otDe(r)} · ${(r.materia||r.concepto||'—')}${r.nombre||r.requirente?` · ${r.nombre||r.requirente}`:''} · $${(r.monto||0).toLocaleString('es-CL')}`).join('\n')+'\n\nQuedamos atentos.\nSaludos cordiales,\n'+BRAND.nombre
       const subject=`Consulta sobre OT no reconocidas — ${BRAND.nombre} — ${new Date().toLocaleDateString('es-CL')}`
       const via=await enviarComoUsuario({to:dest,cc:ccEstudio,subject,html,text:texto,que:'La consulta a la notaría'})
       if(via===null){ setConsultando(false); return }   // no salió: enviarComoUsuario ya avisó qué hacer
@@ -1319,7 +1320,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
       const o=normOt(r.ot); if(o&&byOt[o]){ const c=byOt[o].find(e=>!used.has(e.id)); if(c) return {g:c,via:'ot'} }
       if(r.fecha){ let cands = live.filter(e=>!used.has(e.id) && (e.amount||0)===(r.monto||0) && String(e.date||'')===String(r.fecha||''))
         // Fecha+monto solo calza dentro del MISMO cliente, nunca cruzado: el 25-06-2026 la caja chica de Martina
-        // (Hugo Figueroa, CBR $8.000 del 10-04) se pegó a la OT 448251 de Juan Pablo Mir (misma fecha y monto) y el
+        // ([cliente], CBR $8.000 del 10-04) se pegó a la OT 448251 de [cliente] (misma fecha y monto) y el
         // gasto de Hugo nunca se creó. Tampoco calza una fila sin OT con un gasto que sí tiene OT, ni una caja chica
         // con un gasto ya pagado a la notaría (ese lo pagó la oficina, no la caja).
         if(r.client_id){ cands=cands.filter(e=>!e.client_id||String(e.client_id)===String(r.client_id)); const sc=cands.filter(e=>e.client_id); if(sc.length) cands=sc }   // un gasto aún sin cliente sí puede ser el mismo
@@ -1612,7 +1613,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                     <div style={{marginTop:7}}>
                       <div style={{...SEC_LBL,marginBottom:5}}>¿De quién es? <span style={{textTransform:'none',letterSpacing:0,fontWeight:400}}>· o déjalo para la oficina</span></div>
                       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const pc=personChip(m);return <button key={m} type='button' onClick={()=>asignarPersonal(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{m}</button>})}
+                        {equipoNombres().map(m=>{const pc=personChip(m);return <button key={m} type='button' onClick={()=>asignarPersonal(r.id,m)} style={{fontSize:11,borderRadius:20,padding:'3px 11px',fontWeight:600,cursor:'pointer',background:pc.bg,color:pc.color,border:`0.5px solid ${pc.color}33`}}>{m}</button>})}
                       </div>
                     </div>
                   )}
@@ -1674,7 +1675,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                         {ocasPick===r.id&&(
                           <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:6}}>
                             <span style={{fontSize:10,color:C.muted,fontWeight:600}}>Ocasional «{r.nombre}» · responsable:</span>
-                            {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
+                            {equipoNombres().map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
                             <button onClick={()=>crearOcasional(r,null)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin responsable</button>
                           </div>
                         )}
@@ -1728,7 +1729,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
                   </div>}
                   {kind==='sin'&&ocasPick===r.id&&<div onClick={ev=>ev.stopPropagation()} style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginTop:6}}>
                     <span style={{fontSize:10,color:C.muted,fontWeight:600}}>«{r.nombre}» · responsable:</span>
-                    {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
+                    {equipoNombres().map(m=>{const p=personChip(m);return <button key={m} onClick={()=>crearOcasional(r,m)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:p.bg,color:p.color,border:'none'}}>{m}</button>})}
                     <button onClick={()=>crearOcasional(r,null)} style={{fontSize:11,borderRadius:20,padding:'3px 10px',fontWeight:600,cursor:'pointer',background:C.bgWarm,color:C.grisText,border:'none'}}>Sin responsable</button>
                   </div>}
                   </div>
@@ -1773,7 +1774,7 @@ Responde SOLO con un array JSON sin markdown ni texto adicional:
               {tipo!=='fondo'&&<div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:10}}>
                 <span style={{fontSize:10,fontWeight:700,color:C.textSoft,textTransform:'uppercase',letterSpacing:'.4px'}}>Caja chica de</span>
                 <button onClick={()=>{setCajaOwner('');setCajaElegida(true)}} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:cajaOwner===''?`1px solid ${C.accent}`:`1px solid ${C.border}`,background:cajaOwner===''?C.bgSoft:'#fff',color:cajaOwner===''?C.accent:C.muted}}>— Ninguno</button>
-                {['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(m=>{ const pc=personChip(m); const on=cajaOwner===m; return <button key={m} onClick={()=>{setCajaOwner(on?'':m);setCajaElegida(true)}} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
+                {equipoNombres().map(m=>{ const pc=personChip(m); const on=cajaOwner===m; return <button key={m} onClick={()=>{setCajaOwner(on?'':m);setCajaElegida(true)}} style={{fontSize:11,fontWeight:600,padding:'4px 11px',borderRadius:20,cursor:'pointer',border:on?`1px solid ${pc.color}`:`1px solid ${C.border}`,background:on?pc.bg:'#fff',color:on?pc.color:C.muted}}>{m}</button> })}
                 {cajaOwner&&<span style={{fontSize:10,color:C.greenText,fontWeight:600,flexBasis:'100%'}}>Los gastos nuevos quedan a su nombre → entran a su caja chica.</span>}
               </div>}
               {/* Tiles: el resultado de la carga */}

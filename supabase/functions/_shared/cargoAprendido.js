@@ -47,7 +47,7 @@ const SOCIEDAD = new Set(['spa', 'ltda', 'limitada', 'sociedad', 'inversiones', 
 const claves = (/** @type {any} */ nombre) => norm(nombre).split(' ').filter(w => w.length >= 4 && !SOCIEDAD.has(w))
 
 /**
- * Cliente nombrado en el mensaje de la transferencia («Inscripción a nombre de Sirka SpA»): el nombre de un cliente o de una de sus
+ * Cliente nombrado en el mensaje de la transferencia («Inscripción a nombre de [cliente] SpA»): el nombre de un cliente o de una de sus
  * razones sociales, sin las palabras de sociedad, aparece completo en el texto. Solo si es UN cliente; con dos o más, no adivina.
  * @param {any} texto
  * @param {{ id: any, nombres: any[] }[]} candidatos un cliente con su nombre y los de sus razones sociales

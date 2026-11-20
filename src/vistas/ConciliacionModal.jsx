@@ -7,7 +7,7 @@ import { NOMBRE_CLI, Sparkle, chipBtn, learnPut, logEvent, normRut, simTexto } f
 
 // ─── CONCILIACIÓN DE FACTURAS (v1: barrido de auditoría de dobles conteos) ──
 // Detecta cuotas marcadas Pagado SIN N° de factura (una factura pagada real lleva folio): suelen ser
-// "fantasma" que duplican una factura real (caso BM Soluciones). Agrupa por cliente, muestra la evidencia
+// "fantasma" que duplican una factura real (caso real de un cliente). Agrupa por cliente, muestra la evidencia
 // y deja darlas de baja (soft-delete, reversible) o marcarlas legítimas (la app aprende y no las re-muestra).
 export function ConciliacionModal({billing=[], setBilling, clients=[], clientEntities=[], sales=[], currentUserName, onClose}){
   const [ignorados,setIgnorados] = useState(null)   // ids marcados "no es duplicado" (learnings)

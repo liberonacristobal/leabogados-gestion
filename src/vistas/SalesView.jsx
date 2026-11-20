@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { C, Gl, SEC_LBL, SIcon, Spin, _normTxt, appAlert, fmt, fmtFechaDMY, fmtRutCL, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
-import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError } from '../lib/compartido.jsx'
+import { ActBtn, Buscador, DriveIcon, TH_BAND, UF_FALLBACK, abrirDocumento, cargarPdfjs, claudeCall, cobradoBill, comisionesVenta, currentYear, driveGet, driveToken, esRecurrente, esSubarriendo, estadoCobro, fmtShort, fmtUF, fmtUFk, montoFactura, rsDisplay, rsLabel, useUF, ventaCLP, ventaCuentaEnAnio, ventaUF, viewMemGuardar, viewMemLeer, registrarError , equipoNombres} from '../lib/compartido.jsx'
 import { VistasLista } from '../lib/vistasGuardadas.jsx'
 import { BarraSeleccion, BtnSeleccionar, Casilla, copiarTexto, useSeleccion } from '../lib/seleccionLote.jsx'
 import { guardarLibro, cargarXlsx } from '../lib/archivos.js'
@@ -129,7 +129,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const [drvFiles,setDrvFiles]=useState(null)   // null = aún no buscado
   const [drvErr,setDrvErr]=useState('')
   const [drvDone,setDrvDone]=useState({})        // file_id → sale_id ya registrados
-  const [drvAlias,setDrvAlias]=useState({})      // token normalizado del archivo → client_id (aprendido: learnings propuesta_alias). Ej: "vkh" → Luis Silva.
+  const [drvAlias,setDrvAlias]=useState({})      // token normalizado del archivo → client_id (aprendido: learnings propuesta_alias). Ej: "abc" → Cliente Ejemplo.
   const [drvBusy,setDrvBusy]=useState(null)
   // Match del PDF a cliente: primero por nombre/razón social (matchClientePropuesta); si no, por alias aprendido (un token del archivo → cliente).
   const matchCli = (fileName)=>{ const direct=matchClientePropuesta(fileName, clients, clientEntities); if(direct) return direct; for(const t of _propTokens(fileName)){ const cid=drvAlias[t]; if(cid&&clients.some(c=>String(c.id)===String(cid))) return {client_id:cid, entity_id:null, via:t} } return null }
@@ -185,7 +185,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
     const m0 = info || matchClientePropuesta(file.name, clients, clientEntities)
     const saved=await onIngestPropuesta?.(file, m0)
     if(saved){ setDrvDone(d=>({...d,[file.id]:saved.id}))
-      // Aprende alias: si el PDF se resolvió a un cliente que el NOMBRE DEL ARCHIVO solo no reconocía, guarda sus tokens cortos → cliente (ej. "vkh" → Luis Silva), para no volver a mostrarlo ni pedir confirmar.
+      // Aprende alias: si el PDF se resolvió a un cliente que el NOMBRE DEL ARCHIVO solo no reconocía, guarda sus tokens cortos → cliente (ej. "abc" → Cliente Ejemplo), para no volver a mostrarlo ni pedir confirmar.
       const cid = m0?.client_id || saved?.client_id
       if(cid){ const direct=matchClientePropuesta(file.name, clients, clientEntities)
         if(!direct || String(direct.client_id)!==String(cid)){ const toks=_propTokens(file.name).filter(t=>t.length<=6)
@@ -270,7 +270,7 @@ export function SalesView({sales,clients,clientEntities=[],billing=[],anticipos=
   const barraV = <BarraSeleccion s={selV} n={selVentas.length} unidad={['venta seleccionada','ventas seleccionadas']} total={(()=>{ const u=selVentas.reduce((a,s)=>a+ventaUF(s,ufRef),0), c=selVentas.reduce((a,s)=>a+ventaCLP(s,ufRef),0); return `Vendido ${fmtMonto(u,c)}` })()} acciones={[
     {ic:'download',label:'Descargar Excel',corto:'Excel',onClick:()=>exportarVentas(ordenarVentas(selVentas)).then(()=>'Excel descargado')},
     {ic:'file',label:'Copiar',corto:'Copiar',onClick:()=>copiarTexto(selVentas.map(s=>`${s.title||'—'} · ${clients.find(c=>String(c.id)===String(s.client_id))?.name||'—'}`).join('\n'),'Ventas copiadas')},
-    ...(onCambiarResponsable?[{ic:'users',label:'Cambiar responsable',corto:'Responsable',opciones:['Cristóbal','Erasmo','Martín','Martina','Rodrigo'].map(q=>({label:q,value:q})),
+    ...(onCambiarResponsable?[{ic:'users',label:'Cambiar responsable',corto:'Responsable',opciones:equipoNombres().map(q=>({label:q,value:q})),
       confirmar:v=>({titulo:`Cambiar el responsable a ${v} en ${selVentas.length} venta${selVentas.length!==1?'s':''}`,detalle:`${selVentas.slice(0,2).map(s=>s.title).join(', ')}${selVentas.length>2?` y ${selVentas.length-2} más`:''}. Su vendido pasa a ${v} en Por socio e Inteligencia.`}),
       onClick:async v=>{ const ids=selVentas.map(s=>s.id); await onCambiarResponsable(ids,v); selV.limpiar(); return `${ids.length} venta${ids.length!==1?'s actualizadas':' actualizada'}` }}]:[]),
   ]}/>

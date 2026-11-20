@@ -26,7 +26,7 @@ export function candidatosFactura(mov, pool, amount) {
 
 // La factura que paga el abono, o null. Folio en la glosa o en el mensaje del aviso → esa. Una sola → esa (si no es de más
 // de 2 meses después del pago). Varias del mismo monto → la del RUT del pagador; si siguen varias, depende del cliente: unos
-// pagan la factura del mes y dejan atrasada una antigua (Vaisman), otros pagan la más antigua primero (Bustos). El saldo
+// pagan la factura del mes y dejan atrasada una antigua ([cliente]), otros pagan la más antigua primero ([cliente]). El saldo
 // total baja igual, pero cambia cuál queda vencida y se cobra. Sin opciones (app) → la más antigua. Con opts.estricto
 // (servidor, sin supervisión) → solo si la más antigua y la del mes son la misma, o si el cliente tiene costumbre
 // (opts.habito 'fifo' | 'mes', aprendida de sus pagos anteriores); si no, null.
@@ -40,7 +40,7 @@ export function elegirFactura(mov, pool, texto, opts = {}) {
   if (p.length === 1 || !opts.estricto) return p[0]
   const viejo = p[0], mes = delMes(mov, p)
   if (viejo === mes) return viejo
-  // Con una igual atrasada más de 60 días, el pago puede ser para ponerse al día (Rendalo, 06-08-2026, pagó la de enero): se pregunta.
+  // Con una igual atrasada más de 60 días, el pago puede ser para ponerse al día ([cliente], 06-08-2026, pagó la de enero): se pregunta.
   if (opts.habito === 'mes' && viejo.issued_at && mov.fecha && (_t(mov.fecha) - _t(viejo.issued_at)) / 86400000 > 60) return null
   return opts.habito === 'fifo' ? viejo : opts.habito === 'mes' ? mes : null
 }

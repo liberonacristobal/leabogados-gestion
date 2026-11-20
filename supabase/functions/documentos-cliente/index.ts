@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     const vivos = new Set(clients.filter((c) => !c.is_internal && !c.is_colaborador).map((c) => c.id));
     // Dirección → cliente (solo si es de UN cliente) y dominio propio → cliente (aprendido, o el de contactos de un solo cliente).
     const porCorreo: Record<string, Set<string>> = {}; contactos.forEach((c) => { const e = String(c.email || "").trim().toLowerCase(); if (e.includes("@") && vivos.has(c.client_id) && !e.endsWith("@" + dom)) (porCorreo[e] = porCorreo[e] || new Set()).add(c.client_id); });
-    // Un dominio vale para todo el dominio SOLO si lleva el nombre del cliente o de su razón social (tarragona.cl ↔ Tarragona), o
+    // Un dominio vale para todo el dominio SOLO si lleva el nombre del cliente o de su razón social ([cliente].cl ↔ [cliente]), o
     // si ese cliente tiene dos o más contactos en él. «uc.cl» de un solo contacto no hace de la universidad un cliente.
     const nombreCli = (cid: string) => [clients.find((c) => c.id === cid)?.name, ...ents.filter((e) => e.client_id === cid).map((e) => e.name)].map((x) => norm(x || "").replace(/[^a-z0-9]/g, ""));
     const enDom: Record<string, Record<string, number>> = {};

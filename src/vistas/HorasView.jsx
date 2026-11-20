@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, DEMO } from '../supabase'
 import { demoData } from '../demoData'
 import { BRAND, C, Gl, SEC_LBL, SIcon, _normTxt, appAlert, personChip, useIsDesktop, BtnDescarga } from '../lib/base.jsx'
-import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError } from '../lib/compartido.jsx'
+import { INICIALES_RESP, MESES_ABR, MESES_LG, NOMBRE_CLI, TIT_PAG, UF_FALLBACK, claudeCall, driveGet, driveToken, enviarComoUsuario, esCorreoOficina, esRecurrente, extraerTextoGmail, fmtUF, isAssignee, margenDeSale, okDB, txtEnviado, useUF, ventaUFmesDe, registrarError , equipoNombres} from '../lib/compartido.jsx'
 import { RendicionModal } from '../lib/rendiciones.jsx'
 import { descargarTabla } from '../lib/archivos.js'
 
@@ -264,7 +264,7 @@ export function HorasView({ clients=[], sales=[], tasks=[], terceros=[], billing
     supabase.from('learnings').select('key,value').eq('kind','meta_horas').order('updated_at',{ascending:true}).then(({data})=>{ const m={}; (data||[]).forEach(r=>{ m[r.key]=Number(r.value)||0 }); setMetas(m) },()=>{})
   },[])
   async function setMeta(name,val){ const v=Number(val)||0; setMetas(m=>({...m,[name]:v})); if(DEMO) return; try{ await supabase.from('learnings').delete().eq('kind','meta_horas').eq('key',name); await supabase.from('learnings').insert({kind:'meta_horas',key:name,value:String(v)}) }catch(e){registrarError({origen:'accion',vista:'learnings',err:e})} }
-  const EQUIPO = ['Cristóbal','Erasmo','Martín','Martina','Rodrigo']
+  const EQUIPO = equipoNombres()
   const lunISO = (()=>{ const d=new Date(hoy+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d.toISOString().slice(0,10) })()
   const horasPeriodo = name => horas.filter(h=> h.user_name===name && (mView==='mes' ? String(h.fecha||'').startsWith(mesActual) : (h.fecha||'')>=lunISO)).reduce((a,h)=>a+(Number(h.horas)||0),0)
   // D3 — horas facturables del período (excluye las marcadas no facturables). Métrica de utilización que de verdad importa.

@@ -98,7 +98,7 @@ function cuentaEn(t: string) {
   const rut = (String(t).match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b/) || [null])[0];
   return { cuenta: m[1].replace(/\D/g, "").replace(/^0+/, ""), banco, rut };
 }
-// Distancia de edición (para nombres con una letra de diferencia: «Coquelet» ≈ «Coquelett»).
+// Distancia de edición (para nombres con una letra de diferencia: «Coquelet» ≈ «[cliente]»).
 function lev(a: string, b: string) { const m = a.length, n = b.length; if (Math.abs(m - n) > 1) return 9; const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]); for (let j = 1; j <= n; j++) d[0][j] = j; for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
 // Cliente por el nombre del remitente: todas las palabras (≥3 letras, ≥2 palabras) del nombre del cliente están en el remitente.
 function clientePorNombre(remitente: string, clientes: { id: string; name: string; is_internal?: boolean }[]) {
@@ -286,7 +286,7 @@ Deno.serve(async (req) => {
     (contactos || []).forEach((c: { email: string; client_id: string }) => addMail(c.email, c.client_id));
     (clientes || []).forEach((c: { email: string; id: string; is_internal: boolean }) => { if (!c.is_internal) String(c.email || "").split(/[,;\s]+/).forEach((e) => addMail(e, c.id)); });
     const respDe = (cid: string) => { const c = cliPorId.get(cid) as { abogado_responsable?: string } | undefined; return c?.abogado_responsable || (ventas || []).find((v: { client_id: string }) => v.client_id === cid)?.responsible || null; };
-    const dominiosNotaria = new Set<string>(["notarialascar.cl"]);
+    const dominiosNotaria = new Set<string>();   // los dominios salen del correo de la notaría que guarda el equipo (learnings notaria_email) y de su configuración de pedidos
     (notaEm || []).forEach((l: { value: string }) => String(l.value || "").split(/[,;\s]+/).map(emailDe).filter(Boolean).forEach((e) => { const d = e.split("@")[1]; if (d && !GENERICOS.test(d)) dominiosNotaria.add(d); }));
     const cartolaHasta = ultCart?.[0]?.fecha || null;
     // Pedidos de liquidación a la notaría (notaria-pedir-liquidacion): la respuesta en el mismo asunto queda en la bitácora,

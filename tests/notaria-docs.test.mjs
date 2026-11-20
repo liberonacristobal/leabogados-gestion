@@ -48,10 +48,10 @@ test('OT del documento: a otra fecha solo con todas las palabras (dos o más), d
 })
 
 test('nombre del archivo en Drive: razón social, tipo, fecha y repertorio; sin tipo conserva el original sin duplicar la razón social', () => {
-  assert.equal(rsBonita('  GESMAQ   SPA '), 'GESMAQ SpA')
-  assert.equal(nombreArchivoNotaria({ tipo: 'CONSTITUCION DE SOCIEDAD', fecha: '2026-10-02', repertorio: '52157' }, 'pdf', 'GESMAQ SPA'), 'GESMAQ SpA - Constitucion de sociedad - 02-10-2026 - Rep 52157.pdf')
-  assert.equal(nombreArchivoNotaria({}, 'pdf', 'GESMAQ SPA', 'escaneo 12.pdf'), 'GESMAQ SpA - escaneo 12.pdf')
-  assert.equal(nombreArchivoNotaria({}, 'pdf', 'GESMAQ SPA', 'GESMAQ SPA borrador.pdf'), 'GESMAQ SPA borrador.pdf')
+  assert.equal(rsBonita('  ALFATEC   SPA '), 'ALFATEC SpA')
+  assert.equal(nombreArchivoNotaria({ tipo: 'CONSTITUCION DE SOCIEDAD', fecha: '2026-10-02', repertorio: '52157' }, 'pdf', 'ALFATEC SPA'), 'ALFATEC SpA - Constitucion de sociedad - 02-10-2026 - Rep 52157.pdf')
+  assert.equal(nombreArchivoNotaria({}, 'pdf', 'ALFATEC SPA', 'escaneo 12.pdf'), 'ALFATEC SpA - escaneo 12.pdf')
+  assert.equal(nombreArchivoNotaria({}, 'pdf', 'ALFATEC SPA', 'ALFATEC SPA borrador.pdf'), 'ALFATEC SPA borrador.pdf')
   assert.equal(nombreArchivoNotaria({ tipo: 'PODER: amplio/judicial', fecha: '2026-10-02' }, 'pdf', ''), 'Poder- amplio-judicial - 02-10-2026.pdf')
 })
 

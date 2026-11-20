@@ -16,7 +16,7 @@ export const nombreTercero = p => {
 
 /**
  * Nombre corto de un contacto, como lo dice el estudio: inicial y apellido («Andrés Mery» → «A. Mery»; «Pedro Isla Reyes» → «P. Isla»;
- * «María Paz Zarzar Encina» → «M. Zarzar»). Una sociedad con «y» o una sola palabra queda tal cual.
+ * «María Paz Zarzar [cliente]» → «M. Zarzar»). Una sociedad con «y» o una sola palabra queda tal cual.
  * @param {any} nombre
  */
 export const nombreCortoContacto = nombre => {

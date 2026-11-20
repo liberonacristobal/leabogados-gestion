@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     const esHabil = await feriados([...new Set(docs.map((d) => Number(String(d.fecha_emision).slice(0, 4))).concat(docs.map((d) => Number(String(d.fecha_emision).slice(0, 4)) + 1)))]);
     const esSub = (s: { cobro_config?: { subarriendo?: boolean }; area?: string }) => s?.cobro_config?.subarriendo === true || (s?.area || "") === "Subarriendo";
     const cliDe = (rut: string) => { const k = nRut(rut); if (!k) return null; const e = ents.find((x) => nRut(x.rut) === k); if (e) return { cid: e.client_id, ent: e.id }; const c = clients.find((x) => nRut(x.rut) === k); return c ? { cid: c.id, ent: null } : null; };
-    // RUT con el formato de la app (78.457.999-9): el SII lo trae sin puntos y el UNIQUE de client_entities compara el texto tal cual.
+    // RUT con el formato de la app (76.123.456-0): el SII lo trae sin puntos y el UNIQUE de client_entities compara el texto tal cual.
     const rutApp = (r: string) => { const c = nRut(r); return c.length < 2 ? r : c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "-" + c.slice(-1); };
     const usadas = new Set<string>();
     // UF de los días de emisión (para la propuesta del día: lo que el Excel «Facturar» proponía = UF de la cuota × UF del día).

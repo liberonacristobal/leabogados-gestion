@@ -12,7 +12,7 @@ import { trabajosDetenidos } from '../supabase/functions/_shared/ventasReglas.js
 import { montoFactura } from '../supabase/functions/_shared/saludDatos.js'
 
 test('texto del XML: se imprime como lo lee el cliente', () => {
-  assert.equal(desescaparXml('BARRA &amp; STROBEL SPA'), 'BARRA & STROBEL SPA')      // factura N° 490: el PDF decía «&amp;»
+  assert.equal(desescaparXml('ALFA &amp; BETA SPA'), 'ALFA & BETA SPA')      // factura N° 490: el PDF decía «&amp;»
   assert.equal(desescaparXml('PE&#209;A &lt;2&gt; &quot;X&quot;'), 'PEÑA <2> "X"')
   assert.equal(desescaparXml('A &amp;lt; B'), 'A &lt; B')                              // doble escape: una sola pasada
   assert.equal(desescaparXml(null), '')
