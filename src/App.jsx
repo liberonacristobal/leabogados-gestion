@@ -794,7 +794,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], a
   const [tab,setTab]=useState((ymInicial||socInicial)?'todas':(seg==='porcobrar'?'porcobrar':'pagadas'))   // desde un socio o un mes del Panel se abre «Emitido» (todas las del mes)
   const [filtroSoc,setFiltroSoc]=useState(socInicial)
   const [abreCom,setAbreCom]=useState(false)   // abre «Comisiones devengadas» en pagadas, por pagar y con factura por cobrar
-  const [abre,setAbre]=useState({})   // bloques de la tabla desplegados (h = honorarios emitidos, i = ingreso, c = cobrado); por defecto todos replegados
+  const [abre,setAbre]=useState({i:true})   // bloques de la tabla desplegados (h = honorarios emitidos, i = ingreso, c = cobrado); por defecto solo el ingreso de la oficina
   const [anchoW,setAnchoW]=useState(()=>window.innerWidth)
   useEffect(()=>{ const f=()=>setAnchoW(window.innerWidth); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f) },[])
   const ancho=isDesk&&anchoW>=1240   // dos columnas solo si cabe la lista y la cascada lado a lado
@@ -864,37 +864,45 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], a
   // Pagadas + Por cobrar = Facturado (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
   const [pagV,pcV]=redondearPartes([pagTot,pcTot],emTot>=1e6?1e5:1e4,[0]), fSeg=emTot>=1e6?fmtMillLR:fmtShort
   const segBtn=(k,lbl,val,n,t)=>(
-    <button onClick={()=>setTab(k)} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`1px solid ${tab===k?t.bd:C.border}`,background:tab===k?t.bg:'#fff'}}>
-      <div style={{fontSize:12,fontWeight:700,color:tab===k?t.fg:C.muted}}>{lbl}</div>
-      <div style={{fontSize:16,fontWeight:800,color:C.text,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fSeg(val)}</div>
+    <button onClick={()=>setTab(k)} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`${tab===k?1.5:1}px solid ${tab===k?t.fg:t.bd}`,background:t.bg}}>
+      <div style={{fontSize:12,fontWeight:700,color:t.fg}}>{lbl}</div>
+      <div style={{fontSize:16,fontWeight:800,color:t.fg,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fSeg(val)}</div>
       <div style={{fontSize:10,color:C.muted}}>{n} factura{n!==1?'s':''}</div>
     </button>)
   const opS={alignSelf:'center',fontSize:16,fontWeight:800,color:C.muted,flexShrink:0}
-  const th={fontSize:10,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:'8px 7px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,color:C.muted,cursor:'pointer'}
-  const td={padding:isDesk?'0 7px':'0 4px',height:40,boxSizing:'border-box',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12.5:12,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
-  const sg={display:'inline-block',width:12,textAlign:'center',fontWeight:800,color:C.muted}
+  // Tabla compacta: en móvil (375 px) el texto baja a 10,5 px para que quepan cuatro columnas con margen; en escritorio, 12,5 px.
+  const fs=isDesk?12.5:10.5, edge=isDesk?14:8
+  const th={fontSize:isDesk?10.5:9,fontWeight:800,paddingTop:isDesk?9:8,paddingBottom:isDesk?9:8,paddingLeft:isDesk?6:1,paddingRight:isDesk?6:1,textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,color:C.muted,cursor:'pointer'}
+  const td={paddingTop:0,paddingBottom:0,paddingLeft:isDesk?6:1,paddingRight:isDesk?6:1,height:isDesk?40:38,boxSizing:'border-box',borderTop:`1px solid ${C.border}`,fontSize:fs,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums',fontWeight:600,color:C.text}
+  const sg={display:'inline-block',width:isDesk?12:7,marginRight:isDesk?0:1,textAlign:'center',fontWeight:800,fontSize:isDesk?12:10,color:C.done}
   const suma=v=>v.reduce((a,x)=>a+x,0)
-  // Bloque replegable: cerrado muestra su cifra clave por socio; abierto, la apertura. Toda la banda se toca.
-  const banda=(k,txt,bg,fg,clave)=>{ const on=!!abre[k]; return <tr onClick={()=>setAbre(a=>({...a,[k]:!a[k]}))} style={{cursor:'pointer',background:bg,color:fg}}>
-    <td style={{...td,textAlign:'left',whiteSpace:'normal',lineHeight:1.2,width:isDesk?undefined:'32%',background:bg,color:fg,fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',borderTop:`1px solid ${C.border}`}}><span style={{...sg,width:14}}>{on?'⌄':'›'}</span>{txt}</td>
-    {clave.map((v,i)=><td key={colsSoc[i]} style={{...td,background:bg,color:fg,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{on?'':(Math.abs(v)>=1?FM(v):'—')}</td>)}
-    <td style={{...td,background:bg,color:fg,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{on?'':(Math.abs(suma(clave))>=1?FM(suma(clave)):'—')}</td></tr> }
-  const fl=(sig,label,vals,o={})=>{ const st={fontWeight:o.total?800:(o.color?700:undefined),color:o.color||(o.total?C.accent:undefined),background:o.total?C.bgSoft:undefined}
+  const nCols=colsSoc.length+2
+  // Tonos suaves de la cascada: los mismos de las tarjetas de arriba (Pagadas verde, Por cobrar ámbar, Honorarios gris azulado; Ingreso real verde).
+  const TONO={p:{bg:C.greenSoft,fg:C.greenText},c:{bg:C.soonSoft,fg:C.soonText},h:{bg:C.hoSoft,fg:C.accent},r:{bg:C.greenSoft,fg:C.greenText}}
+  // Bloque replegable: banda a todo el ancho con el título a la izquierda; cerrado muestra a la derecha la cifra de la oficina. Toda la banda se toca.
+  const banda=(k,txt,clave)=>{ const on=!!abre[k]; return <tr onClick={()=>setAbre(a=>({...a,[k]:!a[k]}))} style={{cursor:'pointer'}}>
+    <td colSpan={nCols} style={{...td,height:44,paddingLeft:edge,paddingRight:edge,background:C.bgSoft,textAlign:'left',borderTop:`1px solid ${C.border}`}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+      <b style={{fontSize:isDesk?13:12,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}><span style={{display:'inline-block',width:14,color:C.done}}>{on?'⌄':'›'}</span>{txt}</b>
+      {!on&&<span style={{fontSize:isDesk?15:14,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums'}}>{Math.abs(suma(clave))>=1?FM(suma(clave)):'—'}</span>}
+    </div></td></tr> }
+  const fl=(sig,label,vals,o={})=>{ const t=o.tono?TONO[o.tono]:null, tot=!!o.total
+    const rowBg=t?t.bg:(tot?C.bgSoft:undefined), rowFg=t?t.fg:(tot?C.accent:(o.sub?C.muted:undefined)), w=(t||tot)?800:(o.sub?500:600)
+    const celda=(extra)=>({...td,background:rowBg,color:rowFg,fontWeight:w,...extra})
     return <tr key={label} onClick={o.onClick} style={{cursor:o.onClick?'pointer':'default'}}>
-      <td style={{...td,textAlign:'left',whiteSpace:'normal',lineHeight:1.2,width:isDesk?undefined:'32%',fontWeight:o.sub?500:600,paddingLeft:o.sub?(isDesk?24:14):7,...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}><span style={sg}>{sig}</span>{label}{o.onClick&&<span style={{color:C.azulInfo,fontWeight:800,marginLeft:4}}>›</span>}</td>
-      {vals.map((v,i)=><td key={colsSoc[i]} onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(f=>f===colsSoc[i]?null:colsSoc[i]) } }} style={{...td,cursor:'pointer',...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}>{Math.abs(v)>=1?FM(v):'—'}</td>)}
-      <td onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(null) } }} style={{...td,...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}>{Math.abs(suma(vals))>=1?FM(suma(vals)):'—'}</td></tr> }
+      <td style={{...celda(),textAlign:'left',paddingLeft:edge,paddingRight:0,letterSpacing:isDesk?undefined:-.1}}><span style={sg}>{sig}</span><span style={o.onClick?{textDecoration:'underline dotted',textUnderlineOffset:3}:undefined}>{label}</span></td>
+      {vals.map((v,i)=><td key={colsSoc[i]} onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(f=>f===colsSoc[i]?null:colsSoc[i]) } }} style={celda({cursor:'pointer'})}>{Math.abs(v)>=1?FM(v):'—'}</td>)}
+      <td onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(null) } }} style={celda({paddingRight:edge,fontWeight:800,color:t?t.fg:(o.sub?C.muted:C.accent),background:t?t.bg:(tot?C.border:C.bgSoft),borderLeft:`1px solid ${C.border}`})}>{Math.abs(suma(vals))>=1?FM(suma(vals)):'—'}</td></tr> }
   const cascadaEl=<div style={{background:C.tileBg,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
     <div style={{...SEC_LBL,padding:'11px 13px 9px'}}>Emitido y cobrado del mes</div>
     <table style={{borderCollapse:'collapse',width:'100%'}}>
-      <thead><tr><th style={{...th,textAlign:'left',cursor:'default'}}></th>{colsSoc.map(x=><th key={x} onClick={()=>setFiltroSoc(f=>f===x?null:x)} style={th}>{x}</th>)}<th onClick={()=>setFiltroSoc(null)} style={th}>Oficina</th></tr></thead>
+      <thead><tr><th style={{...th,textAlign:'left',cursor:'default',paddingLeft:edge}}></th>{colsSoc.map(x=><th key={x} onClick={()=>setFiltroSoc(f=>f===x?null:x)} style={th}>{x}</th>)}<th onClick={()=>setFiltroSoc(null)} style={{...th,paddingRight:edge}}>Oficina</th></tr></thead>
       <tbody>
-        {banda('h','Honorarios emitidos',C.soonBg,C.soonText,rHon)}
-        {abre.h&&[fl('','Pagadas',rPag,{color:C.greenText,onClick:()=>setTab('pagadas')}),fl('+','Por cobrar',rPc,{color:C.soonText,onClick:()=>setTab('porcobrar')}),fl('=','Honorarios',rHon,{total:true,onClick:()=>setTab('todas')})]}
-        {banda('i','Ingreso de la oficina',C.bgSoft,C.accent,rIng)}
-        {abre.i&&[fl('','Honorarios',rHon,{onClick:()=>setTab('todas')}),rExt.some(v=>v>=1)&&fl('+','Comisión de externos',rExt),fl('−','Comisiones devengadas',rCom,{onClick:()=>setAbreCom(v=>!v)}),abreCom&&fl('','Pagadas',rCPag,{sub:true}),abreCom&&fl('','Por pagar',rCPP,{sub:true}),abreCom&&fl('','Con factura por cobrar',rCPC,{sub:true}),fl('=','Ingreso',rIng,{total:true})]}
-        {banda('c','Cobrado en el mes',C.greenBg,C.greenText,rIR)}
-        {abre.c&&[fl('','Cobrado',rCob),fl('−','Comisiones pagadas',rComP),rPerc.some(v=>v>=1)&&fl('+','Comisiones percibidas',rPerc),fl('=','Ingreso real',rIR,{total:true})]}
+        {banda('h','Honorarios emitidos',rHon)}
+        {abre.h&&[fl('','Pagadas',rPag,{tono:'p',onClick:()=>setTab('pagadas')}),fl('+','Por cobrar',rPc,{tono:'c',onClick:()=>setTab('porcobrar')}),fl('=','Honorarios',rHon,{tono:'h',onClick:()=>setTab('todas')})]}
+        {banda('i','Ingreso de la oficina',rIng)}
+        {abre.i&&[fl('','Honorarios',rHon,{sub:true,onClick:()=>setTab('todas')}),rExt.some(v=>v>=1)&&fl('+','Comisión de externos',rExt),fl('−','Comisiones devengadas',rCom,{onClick:()=>setAbreCom(v=>!v)}),abreCom&&fl('','Pagadas',rCPag,{sub:true}),abreCom&&fl('','Por pagar',rCPP,{sub:true}),abreCom&&fl('','Con factura por cobrar',rCPC,{sub:true}),fl('=','Ingreso',rIng,{total:true})]}
+        {banda('c','Cobrado en el mes',rIR)}
+        {abre.c&&[fl('','Cobrado',rCob),fl('−','Comisiones pagadas',rComP),rPerc.some(v=>v>=1)&&fl('+','Comisiones percibidas',rPerc),fl('=','Ingreso real',rIR,{tono:'r'})]}
       </tbody>
     </table>
     {Math.abs(subM)>=1&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.muted,padding:'8px 13px',borderTop:`1px dashed ${C.border}`}}><span>Subarriendo, aparte (sin socio)</span><b style={{fontVariantNumeric:'tabular-nums'}}>{FM(subM)}</b></div>}
@@ -913,11 +921,11 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], a
       </div>
       <div style={{maxWidth:ancho?1180:760,margin:'0 auto',padding:'14px 16px 24px'}}>
         <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'stretch'}}>
-          {segBtn('pagadas','Pagadas',pagV,pagadas.length,{fg:C.greenText,bg:C.greenBg,bd:'#BFE0CF'})}
+          {segBtn('pagadas','Pagadas',pagV,pagadas.length,{fg:C.greenText,bg:C.greenSoft,bd:C.greenSoftBd})}
           <span style={opS}>+</span>
-          {segBtn('porcobrar','Por cobrar',pcV,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
+          {segBtn('porcobrar','Por cobrar',pcV,porCobrar.length,{fg:C.soonText,bg:C.soonSoft,bd:C.soonSoftBd})}
           <span style={opS}>=</span>
-          <div onClick={()=>setTab('todas')} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`${tab==='todas'?1.5:1}px solid ${tab==='todas'?C.accent:C.border}`,background:tab==='todas'?'#EDF1F4':'#fff'}}>
+          <div onClick={()=>setTab('todas')} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`${tab==='todas'?1.5:1}px solid ${tab==='todas'?C.accent:C.hoSoftBd}`,background:C.hoSoft}}>
             <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Honorarios</div>
             <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(emTot)}</div>
             <div style={{fontSize:10,color:C.muted}}>{emFac.length} factura{emFac.length!==1?'s':''}</div>

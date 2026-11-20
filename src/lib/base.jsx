@@ -15,6 +15,8 @@ export const C = {
   toggleOff:'#CBD5DB',
   // tints canónicos de estado (consolidados): fondo + texto para ámbar/rojo/verde
   soonBg:'#FFF8E1', soonText:'#854F0B', overdueBg:'#FCEBEB', overdueText:'#A32D2D', greenBg:'#E1F5EE', greenSoft:'#EFF9F5', greenDeep:'#C9EEDF',
+  // tonos muy suaves de la cascada de honorarios (Pagadas, Por cobrar, Honorarios): fondo y borde
+  greenSoftBd:'#CFE2DD', soonSoft:'#F6F3EE', soonSoftBd:'#E7DCCE', hoSoft:'#F0F3F4', hoSoftBd:'#D1DCDF',
   azulInfo:'#185FA5', azulBg:'#E6F1FB', azulBd:'#D5E6F6', overdueBd:'#F3D2D0', tealBg:'#DFF1F2', tealText:'#155E6B', ambarBg:'#FAEEDA', coralText:'#993C1D', grisText:'#5F5E5A',
   // grises de fondo (antes hex sueltos repetidos): bgSoft = filas/hover/chips suaves; bgPanel = paneles internos; bgWarm = chips neutros cálidos. Migrar los literales a estos al tocar cada vista.
   bgSoft:'#F5F7F9', bgPanel:'#FAFBFC', bgWarm:'#F1EFE8',
