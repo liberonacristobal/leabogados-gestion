@@ -788,11 +788,13 @@ function UFStamp({uf,isToday,asOf,loading}){
 // PÁGINA navegable "Facturas del mes" (NO modal): segmento Pagadas / Por cobrar + lista real de facturas del mes.
 // Cada fila: cliente (protagonista → su ficha) · razón social · RUT del receptor (casi nunca = nombre del cliente) · Factura N° · vence/cobrada.
 // La fila (y la ›) abren la factura. Fuente única: mismas facturas/cifras que la foto del Inicio (emitidas del mes por DTE; pagado=cobradoBill, por cobrar=saldoBill).
-function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], terceros=[], expenses=[], seg='pagadas', ymInicial=null, socInicial=null, origen='Volver', userName=null, setBilling=null, onOpenFactura, onOpenClientFicha, onBack}){
+function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], anticipos=[], terceros=[], expenses=[], seg='pagadas', ymInicial=null, socInicial=null, origen='Volver', userName=null, setBilling=null, onOpenFactura, onOpenClientFicha, onBack}){
   const isDesk=useIsDesktop()
   const selF=useSeleccion('facturasmes')
   const [tab,setTab]=useState((ymInicial||socInicial)?'todas':(seg==='porcobrar'?'porcobrar':'pagadas'))   // desde un socio o un mes del Panel se abre «Emitido» (todas las del mes)
   const [filtroSoc,setFiltroSoc]=useState(socInicial)
+  const [abreCom,setAbreCom]=useState(false)   // abre «Comisiones devengadas» en pagadas, por pagar y con factura por cobrar
+  const [abre,setAbre]=useState({})   // bloques de la tabla desplegados (h = honorarios emitidos, i = ingreso, c = cobrado); por defecto todos replegados
   const [anchoW,setAnchoW]=useState(()=>window.innerWidth)
   useEffect(()=>{ const f=()=>setAnchoW(window.innerWidth); window.addEventListener('resize',f); return ()=>window.removeEventListener('resize',f) },[])
   const ancho=isDesk&&anchoW>=1240   // dos columnas solo si cabe la lista y la cascada lado a lado
@@ -818,16 +820,28 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
   const cliById=useMemo(()=>{const m={};(clients||[]).forEach(x=>{ if(x) m[String(x.id)]=x });return m},[clients])
   const socDe=b=>socioDe(b,{saleById,cliById,ov:fu.ov})
   const comDe=b=>(terceros||[]).filter(t=>t&&t.comision_pct==null&&String(t.billing_id||'')===String(b.id))
-  const PS=useMemo(()=>partidasPorSocio({billing,sales,clients,terceros,expenses,ic:[],ia:[],ov:fu.ov}),[billing,sales,clients,terceros,expenses,fu.ov])
-  const {sumP,emitido}=useMemo(()=>kpisPorSocio({P:PS,V:[],ym}),[PS,ym])
+  const PS=useMemo(()=>partidasPorSocio({billing,sales,clients,anticipos,terceros,expenses,ic:fu.ic,ia:fu.ia,ov:fu.ov}),[billing,sales,clients,anticipos,terceros,expenses,fu])
+  const {sumP,emitido,card6}=useMemo(()=>kpisPorSocio({P:PS,V:[],ym}),[PS,ym])
   const sinSocHon=emFac.some(b=>b.billing_type!=='subarriendo'&&socDe(b)===SIN_SOCIO)
   const colsSoc=ADMIN_NAMES.concat(sinSocHon?[SIN_SOCIO]:[])
   const subM=sumP('f','sub',null,'mes')
-  const casc=colsSoc.map(soc=>({soc,...emitido(soc,'mes')}))
-  const tFac=casc.reduce((a,x)=>a+x.f,0), tCom=casc.reduce((a,x)=>a+x.c,0)
-  // Celular en $M con cada columna cuadrada (ingreso y comisión redondean juntos; el facturado es su suma; Oficina = suma de columnas).
-  const rcasc=casc.map(x=>{ const [i,c]=redondearPartes([x.i,x.c],1e5); return {...x,f:i+c,c,i} })
-  const rTot={f:rcasc.reduce((a,x)=>a+x.f,0),c:rcasc.reduce((a,x)=>a+x.c,0),i:rcasc.reduce((a,x)=>a+x.i,0)}
+  // Tabla única en tres bloques. Cada fila se redondea de lado a lado (partes = total, paso 1 en escritorio, 1e5 = $M en celular) y las derivadas se suman,
+  // así cuadra por filas y por columnas: Pagadas + Por cobrar = Honorarios (la tarjeta), Honorarios + Comisión de externos − Comisiones = Ingreso.
+  const paso=ancho?1:1e5
+  const fila=vals=>redondearPartes(vals,paso)
+  const sumPor=(fn)=>colsSoc.map(soc=>emFac.filter(b=>socDe(b)===soc).reduce((a,b)=>a+fn(b),0))
+  const rPag=fila(sumPor(cobradoBill)), rPc=fila(sumPor(saldoBill))
+  const rHon=rPag.map((v,i)=>v+rPc[i])
+  const rExt=fila(colsSoc.map(soc=>sumP('f','cext',soc,'mes')))
+  const comTot=colsSoc.map(soc=>emitido(soc,'mes').c)
+  const comEst=est=>colsSoc.map(soc=>emFac.filter(b=>socDe(b)===soc).reduce((a,b)=>a+comDe(b).filter(t=>t.estado===est).reduce((x,t)=>x+(Number(t.monto)||0),0),0))
+  const cPagV=comEst('pagado'), cPPV=comEst('por_pagar')
+  const rCPag=fila(cPagV), rCPP=fila(cPPV), rCPC=fila(comTot.map((v,i)=>v-cPagV[i]-cPPV[i]))
+  const rCom=rCPag.map((v,i)=>v+rCPP[i]+rCPC[i])
+  const rIng=rHon.map((v,i)=>v+rExt[i]-rCom[i])
+  const k6=colsSoc.map(soc=>card6(soc,'mes'))
+  const rCob=fila(k6.map(x=>x[2])), rComP=fila(k6.map(x=>x[3])), rPerc=fila(k6.map(x=>x[4]))
+  const rIR=rCob.map((v,i)=>v-rComP[i]+rPerc[i])
   const cn = id => clients.find(c=>String(c.id)===String(id))?.name || 'Sin cliente'
   const rsDe = b => { const rl=rsLabel(b.client_id,clients,clientEntities,b.entity_id); const name=b.receptor_name||rl.name||''; const rut=b.receptor_rut||rl.rut||''; return {name,rut} }
   const conSoc=l=>filtroSoc?l.filter(b=>socDe(b)===filtroSoc):l
@@ -846,7 +860,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
       onClick:async()=>{ const lote=sinEnviar.slice(); for(const b of lote){ const at=await marcarEnviadaManual(b,userName,null); setBilling(p=>p.map(x=>x.id===b.id?{...x,email_sent_at:at,sent_by:userName||null}:x)); logActividad('facturacion.envio_marcado',{tabla:'billing',id:b.id,detalle:{fecha:String(at).slice(0,10),por:userName||null,modo:'lote'}}) } selF.limpiar(); return `${lote.length} factura${lote.length!==1?'s marcadas':' marcada'}` }}]:[]),
   ]}/>
   const chipsSoc=[[null,'Todos',emFac.length]].concat(colsSoc.concat([SIN_SOCIO]).filter((x,i,a)=>a.indexOf(x)===i).map(x=>[x,x,nSoc(x)]).filter(x=>x[2]>0))
-  const FM=ancho?fmt:fmtMillLR, rows=ancho?casc:rcasc, tt=ancho?{f:tFac,c:tCom,i:tFac-tCom}:rTot
+  const FM=ancho?fmt:fmtMillLR
   // Pagadas + Por cobrar = Facturado (cobrado + saldo = monto de cada factura). Redondeo que cuadra; Pagadas fija (también se ve en el Inicio).
   const [pagV,pcV]=redondearPartes([pagTot,pcTot],emTot>=1e6?1e5:1e4,[0]), fSeg=emTot>=1e6?fmtMillLR:fmtShort
   const segBtn=(k,lbl,val,n,t)=>(
@@ -857,17 +871,30 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
     </button>)
   const opS={alignSelf:'center',fontSize:16,fontWeight:800,color:C.muted,flexShrink:0}
   const th={fontSize:10,fontWeight:800,letterSpacing:.3,textTransform:'uppercase',padding:'8px 7px',textAlign:'right',whiteSpace:'nowrap',background:C.bgSoft,borderBottom:`1px solid ${C.border}`,color:C.muted,cursor:'pointer'}
-  const td={padding:'9px 7px',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12.5:12,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
+  const td={padding:isDesk?'0 7px':'0 4px',height:40,boxSizing:'border-box',borderTop:`1px solid ${C.border}`,fontSize:isDesk?12.5:12,whiteSpace:'nowrap',textAlign:'right',fontVariantNumeric:'tabular-nums'}
   const sg={display:'inline-block',width:12,textAlign:'center',fontWeight:800,color:C.muted}
-  const celda=(soc,v,extra)=><td key={soc||'oficina'} onClick={()=>soc&&setFiltroSoc(f=>f===soc?null:soc)} style={{...td,cursor:soc?'pointer':'default',...extra}}>{Math.abs(v)>=1?FM(v):'—'}</td>
+  const suma=v=>v.reduce((a,x)=>a+x,0)
+  // Bloque replegable: cerrado muestra su cifra clave por socio; abierto, la apertura. Toda la banda se toca.
+  const banda=(k,txt,bg,fg,clave)=>{ const on=!!abre[k]; return <tr onClick={()=>setAbre(a=>({...a,[k]:!a[k]}))} style={{cursor:'pointer',background:bg,color:fg}}>
+    <td style={{...td,textAlign:'left',whiteSpace:'normal',lineHeight:1.2,width:isDesk?undefined:'32%',background:bg,color:fg,fontSize:11,fontWeight:800,letterSpacing:.4,textTransform:'uppercase',borderTop:`1px solid ${C.border}`}}><span style={{...sg,width:14}}>{on?'⌄':'›'}</span>{txt}</td>
+    {clave.map((v,i)=><td key={colsSoc[i]} style={{...td,background:bg,color:fg,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{on?'':(Math.abs(v)>=1?FM(v):'—')}</td>)}
+    <td style={{...td,background:bg,color:fg,fontWeight:800,borderTop:`1px solid ${C.border}`}}>{on?'':(Math.abs(suma(clave))>=1?FM(suma(clave)):'—')}</td></tr> }
+  const fl=(sig,label,vals,o={})=>{ const st={fontWeight:o.total?800:(o.color?700:undefined),color:o.color||(o.total?C.accent:undefined),background:o.total?C.bgSoft:undefined}
+    return <tr key={label} onClick={o.onClick} style={{cursor:o.onClick?'pointer':'default'}}>
+      <td style={{...td,textAlign:'left',whiteSpace:'normal',lineHeight:1.2,width:isDesk?undefined:'32%',fontWeight:o.sub?500:600,paddingLeft:o.sub?(isDesk?24:14):7,...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}><span style={sg}>{sig}</span>{label}{o.onClick&&<span style={{color:C.azulInfo,fontWeight:800,marginLeft:4}}>›</span>}</td>
+      {vals.map((v,i)=><td key={colsSoc[i]} onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(f=>f===colsSoc[i]?null:colsSoc[i]) } }} style={{...td,cursor:'pointer',...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}>{Math.abs(v)>=1?FM(v):'—'}</td>)}
+      <td onClick={e=>{ if(!o.onClick){ e.stopPropagation(); setFiltroSoc(null) } }} style={{...td,...st,...(o.sub?{color:C.muted,fontWeight:500}:null)}}>{Math.abs(suma(vals))>=1?FM(suma(vals)):'—'}</td></tr> }
   const cascadaEl=<div style={{background:C.tileBg,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}>
-    <div style={{...SEC_LBL,padding:'11px 13px 9px'}}>Ingreso de la oficina · emitido del mes</div>
+    <div style={{...SEC_LBL,padding:'11px 13px 9px'}}>Emitido y cobrado del mes</div>
     <table style={{borderCollapse:'collapse',width:'100%'}}>
-      <thead><tr><th style={{...th,textAlign:'left',cursor:'default'}}></th>{rows.map(x=><th key={x.soc} onClick={()=>setFiltroSoc(f=>f===x.soc?null:x.soc)} style={th}>{x.soc}</th>)}<th style={{...th,cursor:'default'}}>Oficina</th></tr></thead>
+      <thead><tr><th style={{...th,textAlign:'left',cursor:'default'}}></th>{colsSoc.map(x=><th key={x} onClick={()=>setFiltroSoc(f=>f===x?null:x)} style={th}>{x}</th>)}<th onClick={()=>setFiltroSoc(null)} style={th}>Oficina</th></tr></thead>
       <tbody>
-        <tr><td style={{...td,textAlign:'left',fontWeight:600}}>Facturado</td>{rows.map(x=>celda(x.soc,x.f))}{celda(null,tt.f)}</tr>
-        <tr><td style={{...td,textAlign:'left',fontWeight:600}}><span style={sg}>−</span>Comisiones</td>{rows.map(x=>celda(x.soc,x.c))}{celda(null,tt.c)}</tr>
-        <tr><td style={{...td,textAlign:'left',fontWeight:800,color:C.accent,background:C.bgSoft}}><span style={sg}>=</span>Ingreso</td>{rows.map(x=>celda(x.soc,x.i,{fontWeight:800,color:C.accent,background:C.bgSoft}))}{celda(null,tt.i,{fontWeight:800,color:C.accent,background:C.bgSoft})}</tr>
+        {banda('h','Honorarios emitidos',C.soonBg,C.soonText,rHon)}
+        {abre.h&&[fl('','Pagadas',rPag,{color:C.greenText,onClick:()=>setTab('pagadas')}),fl('+','Por cobrar',rPc,{color:C.soonText,onClick:()=>setTab('porcobrar')}),fl('=','Honorarios',rHon,{total:true,onClick:()=>setTab('todas')})]}
+        {banda('i','Ingreso de la oficina',C.bgSoft,C.accent,rIng)}
+        {abre.i&&[fl('','Honorarios',rHon,{onClick:()=>setTab('todas')}),rExt.some(v=>v>=1)&&fl('+','Comisión de externos',rExt),fl('−','Comisiones devengadas',rCom,{onClick:()=>setAbreCom(v=>!v)}),abreCom&&fl('','Pagadas',rCPag,{sub:true}),abreCom&&fl('','Por pagar',rCPP,{sub:true}),abreCom&&fl('','Con factura por cobrar',rCPC,{sub:true}),fl('=','Ingreso',rIng,{total:true})]}
+        {banda('c','Cobrado en el mes',C.greenBg,C.greenText,rIR)}
+        {abre.c&&[fl('','Cobrado',rCob),fl('−','Comisiones pagadas',rComP),rPerc.some(v=>v>=1)&&fl('+','Comisiones percibidas',rPerc),fl('=','Ingreso real',rIR,{total:true})]}
       </tbody>
     </table>
     {Math.abs(subM)>=1&&<div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:C.muted,padding:'8px 13px',borderTop:`1px dashed ${C.border}`}}><span>Subarriendo, aparte (sin socio)</span><b style={{fontVariantNumeric:'tabular-nums'}}>{FM(subM)}</b></div>}
@@ -877,7 +904,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
       <div style={{padding:'16px 20px 10px',position:'sticky',top:0,background:C.bg,zIndex:10,borderBottom:`1px solid ${C.border}`}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <span onClick={onBack} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:13,fontWeight:700,color:C.accent,cursor:'pointer'}}><span style={{fontSize:17}}><Gl n='chevL'/></span> {origen}</span>
-          <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>Facturas de {mesLbl}</span>{(isDesk||esActual)&&<span style={{fontSize:11,color:C.muted,fontWeight:600}}> · emitidas {esActual?'este mes':'en el mes'}</span>}</div>
+          <div style={{minWidth:0}}><span style={{fontSize:16,fontWeight:800,color:C.accent,whiteSpace:'nowrap'}}>Facturas de {mesLbl}</span>{(isDesk||esActual)&&<span style={{fontSize:11,color:C.muted,fontWeight:600}}> emitidas {esActual?'este mes':'en el mes'}</span>}</div>
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
             {!esActual&&<span onClick={()=>setYm(ymHoy)} style={{fontSize:11,fontWeight:700,color:C.azulInfo,cursor:'pointer',marginRight:4,whiteSpace:'nowrap'}}>{isDesk?'Mes actual':'Actual'}</span>}
             {[[-1,'chevL',ym<=ymMin],[1,'chevron',esActual]].map(([d,ic,off])=><span key={d} onClick={off?undefined:()=>moverMes(d)} title={d<0?'Mes anterior':'Mes siguiente'} style={{width:32,height:32,display:'inline-flex',alignItems:'center',justifyContent:'center',border:`1px solid ${C.border}`,borderRadius:8,background:C.surface,color:C.accent,opacity:off?.35:1,cursor:off?'default':'pointer'}}><Gl n={ic}/></span>)}
@@ -891,7 +918,7 @@ function FacturasMesPage({billing=[], clients=[], clientEntities=[], sales=[], t
           {segBtn('porcobrar','Por cobrar',pcV,porCobrar.length,{fg:C.soonText,bg:C.soonBg,bd:'#EAD9A8'})}
           <span style={opS}>=</span>
           <div onClick={()=>setTab('todas')} style={{flex:1,minWidth:0,borderRadius:10,padding:'10px 6px',textAlign:'center',cursor:'pointer',border:`${tab==='todas'?1.5:1}px solid ${tab==='todas'?C.accent:C.border}`,background:tab==='todas'?'#EDF1F4':'#fff'}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Facturado</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.accent}}>Honorarios</div>
             <div style={{fontSize:16,fontWeight:800,color:C.accent,fontVariantNumeric:'tabular-nums',marginTop:1,whiteSpace:'nowrap'}}>{fmtShort(emTot)}</div>
             <div style={{fontSize:10,color:C.muted}}>{emFac.length} factura{emFac.length!==1?'s':''}</div>
           </div>
@@ -8657,7 +8684,7 @@ export default function App() {
             {tab==='dashboard'&&userRole==='admin'&&dashboardEl}
             {tab==='porFacturar'&&userRole==='admin'&&<PorFacturarView key={(pfAnio||'todos')+(pfPartida||'')} anio={pfAnio} partidaInicial={pfPartida} onOpenAdelantos={()=>navTo({tab:'billing',billingIntent:'checklist'})} billing={billing} fantasmaIds={fantasmaAltaIds} sales={sales} clients={clients} clientEntities={clientEntities} anticipos={anticipos} origen={origenNav('Facturación')} onBack={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenVenta={id=>{ const v=sales.find(x=>String(x.id)===String(id)); if(v) setModal({type:'sale',data:v}) }} onOpenFactura={b=>setModal({type:'billing',data:b})} setBilling={setBilling}/>}
             {tab==='cobradoMes'&&userRole==='admin'&&<CobradoMesView key={cobMesYm||'pasado'} ymInicial={cobMesYm} sales={sales} billing={billing} clients={clients} terceros={terceros} costosOfiRows={costosOfiRows} expenses={expenses} anticipos={anticipos} origen={origenNav('Inicio')} onBack={goBack} onOpenClientFicha={handleOpenClientFicha} onOpenMovimiento={id=>navTo({tab:'conciliacion',conc:id})}/>}
-            {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage key={JSON.stringify(facMes)} ymInicial={facMes?.ym||null} socInicial={facMes?.soc||null} origen={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]||'Volver':'Volver'} billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} terceros={terceros} expenses={expenses} seg={emitidoSeg} userName={user?.name} setBilling={setBilling} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
+            {tab==='facturasDelMes'&&userRole==='admin'&&<FacturasMesPage anticipos={anticipos} key={JSON.stringify(facMes)} ymInicial={facMes?.ym||null} socInicial={facMes?.soc||null} origen={navStack.length?TAB_LABELS[navStack[navStack.length-1].tab]||'Volver':'Volver'} billing={billing} clients={clients} clientEntities={clientEntities} sales={sales} terceros={terceros} expenses={expenses} seg={emitidoSeg} userName={user?.name} setBilling={setBilling} onOpenFactura={b=>setModal({type:'billing',data:b})} onOpenClientFicha={handleOpenClientFicha} onBack={goBack}/>}
         {tab==='flujo'&&pagina?.type==='cargaMasiva'&&(()=>{ const cerrar=async()=>{ if(cargaDirtyRef.current && !(await appConfirm('Tienes asignaciones sin cargar en esta revisión. Si sales, se pierden (lo que la app ya aprendió —RUT y clientes— se conserva). ¿Salir igual?'))) return; cargaDirtyRef.current=false; setModal(null) }; return (
         <FlujoPagina origen={origenNav('Gastos')} titulo={pagina.data?.notaria?'Carga masiva · Notaría':'Carga masiva'} onBack={cerrar} maxW={1240}><CargaMasivaModal clients={clients} clientEntities={clientEntities} expenses={expenses} sales={sales} billing={billing} onSave={handleSaveExpense} onBulkImport={handleBulkImport} onConciliar={handleConciliarCarga} onAjustarNotaria={handleAjustarNotaria} onUndoConciliar={handleUndoConciliar} bulkImports={bulkImports} onUndoImport={handleUndoImport} importAliases={importAliases} onLearnAlias={handleLearnAlias} onClose={cerrar} dirtyRef={cargaDirtyRef} notaria={!!pagina.data?.notaria} onCreateOccasional={userRole==='admin'?handleCreateOccasional:undefined} cajaPorDefecto={userRole==='limited'?(user?.name||''):''} archivoCorreo={pagina.data?.archivoCorreo||null} onNavigate={(t)=>{ cargaDirtyRef.current=false; setModal(null); setTab('expenses'); setExpNav(t) }} onClientsUpdate={async()=>{const c=await getClients();setClients(c);const {data:ce}=await supabase.from('client_entities').select('*');if(ce)setClientEntities(ce)}}/></FlujoPagina>
         )})()}
