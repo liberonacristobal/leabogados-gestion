@@ -23,9 +23,9 @@ const pad = n => String(n).padStart(2, '0')
 const margenPct = (res, ing) => ing > 0 ? res / ing * 100 : null
 const pct1 = v => v == null ? null : v.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
-// Tarjeta chica (la misma forma para todas las hermanas): etiqueta, cifra y una línea de apoyo. `er` = gris suave (Estado de resultados).
-const Tl = ({ label, value, sub, vcol, er, onClick, ic, tint, col }) => (
-  <div onClick={onClick} className='pv-c' style={{ background: er ? C.border : C.card, border: `1px solid ${er ? C.border : C.border}`, borderRadius: 12, padding: '10px 12px', minWidth: 0, boxSizing: 'border-box', cursor: onClick ? 'pointer' : 'default', display: ic ? 'flex' : 'block', alignItems: 'center', gap: 10 }}>
+// Tarjeta chica (la misma forma para todas las hermanas): etiqueta, cifra y una línea de apoyo. `er` = gris suave (Estado de resultados); `dest` = azul suave (la que se mira primero).
+const Tl = ({ label, value, sub, vcol, er, dest, onClick, ic, tint, col }) => (
+  <div onClick={onClick} className='pv-c' style={{ background: er ? C.border : dest ? C.azulBg : C.card, border: `1px solid ${dest ? C.azulBd : C.border}`, borderRadius: 12, padding: '10px 12px', minWidth: 0, boxSizing: 'border-box', cursor: onClick ? 'pointer' : 'default', display: ic ? 'flex' : 'block', alignItems: 'center', gap: 10 }}>
     {ic && <span style={{ width: 32, height: 32, borderRadius: 8, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SIcon n={ic} s={16} c={col} /></span>}
     <div style={{ minWidth: 0, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...SEC_LBL, fontSize: 10, letterSpacing: .5, ...(ic ? { whiteSpace: 'normal', lineHeight: 1.2 } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>{label}</div>
@@ -244,10 +244,10 @@ export function OficinaView({ backRef, sales = [], billing = [], clients = [], t
       </div>
       <Lbl t='Caja' foto='foto de hoy' />
       <div style={grid}>
+        <Tl dest label='Mes en marcha' value={memTxt} vcol={memCol} sub={`al ${fmtFechaDMY(hoy).slice(0, 5)}`} onClick={() => go('mesEnMarcha')} />
         <Tl label='Flujo de caja' value={(fin > 0 ? '+' : fin < 0 ? '−' : '') + fmtMill(Math.abs(fin))} vcol={fin >= 0 ? C.greenText : C.overdueText} sub={`8 semanas, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
         <Tl label='Proyección' value={fmtMill(proy)} sub={`cobranza al ${fmtFechaDMY(`${year}-12-31`)}, ${flujo.conMorosos ? 'con' : 'sin'} morosos`} onClick={() => go('flujoCaja')} />
         <Tl label='Comisiones por pagar' value={sc.porPagar > 0 ? fmtMill(sc.porPagar) : 'al día'} vcol={sc.porPagar > 0 ? C.accent : C.greenText} sub={diasCom != null && sc.porPagar > 0 ? `la más antigua, hace ${diasCom} días` : ''} onClick={() => go('proveedores')} />
-        <Tl label='Mes en marcha' value={memTxt} vcol={memCol} sub={`al ${fmtFechaDMY(hoy).slice(0, 5)}`} onClick={() => go('mesEnMarcha')} />
       </div></>),
     ges: (<><Lbl t='Cobranza' foto='foto de hoy' xl={xlGestion} /><div style={grid}>
       <Tl label='Por cobrar' value={fmtMill(totPorCobrar)} sub={totPorCobrar > 0 ? `${Math.round(venc / totPorCobrar * 100)} % vencido` : ''} onClick={() => go('cobranza')} />
