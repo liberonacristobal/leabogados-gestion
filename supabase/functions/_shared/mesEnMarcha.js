@@ -100,6 +100,31 @@ export function gastosPorPagar(gastos, ym, hoy, esHabil) {
   return out.sort((a, b) => a.fecha.localeCompare(b.fecha))
 }
 
+const mesSig = (/** @type {string} */ ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
+/**
+ * Gastos que se pagan en los primeros días del mes siguiente (hasta el día `diaTope`, por defecto el 5): por cada grupo fijo cuyo día habitual
+ * (mediana de los últimos tres meses con pago) cae dentro del tope, se proyecta el monto del último pago. Misma regla que `gastosPorPagar`.
+ * Los sueldos no se proyectan aquí: su ciclo de fin de mes ya viene completo en `gastosPorPagar` (se paga entre el último día del mes y los primeros del siguiente).
+ * @param {Gasto[]} gastos gastos de la oficina @param {string} hoy ISO @param {number} [diaTope]
+ * @returns {{k:string, l:string, fecha:string, monto:number}[]}
+ */
+export function gastosProximoMes(gastos, hoy, diaTope = 5) {
+  const ym = ymDe(hoy), sig = mesSig(ym), prev = mesAnt(ym), prev2 = mesAnt(prev)
+  /** @type {{k:string, l:string, fecha:string, monto:number}[]} */ const out = []
+  for (const g of Object.keys(GRUPOS)) {
+    if (!GRUPOS[g].proy || g === 'sueldos') continue
+    const previos = (gastos || []).filter(e => grupoDeGasto(e) === g && [ym, prev, prev2].includes(ymDe(e.date)))
+    /** @type {Record<string, {monto:number, dias:number[]}>} */ const porMes = {}
+    previos.forEach(e => { const k = ymDe(e.date); (porMes[k] = porMes[k] || { monto: 0, dias: [] }); porMes[k].monto += num(e.amount); porMes[k].dias.push(dia(e.date)) })
+    const ms = Object.keys(porMes).sort(); if (!ms.length) continue
+    const ultimo = porMes[ms[ms.length - 1]], d = Math.round(mediana(ms.flatMap(k => porMes[k].dias)))
+    if (d < 1 || d > diaTope || !(ultimo.monto > 0)) continue
+    out.push({ k: g, l: GRUPOS[g].l, fecha: iso(Number(sig.slice(0, 4)), Number(sig.slice(5, 7)), d), monto: ultimo.monto })
+  }
+  return out.sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
 /**
  * Cascada de cobertura. Cobrado neto − pagados (− por pagar). Todo se redondea a `paso` y cuadra: cada saldo es la resta de las cifras mostradas.
  * @param {{cobrado:number, pagado:number, porPagar:number, paso?:number}} o

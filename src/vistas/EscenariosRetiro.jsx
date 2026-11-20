@@ -7,7 +7,7 @@ import { escenarioRetiro, facturasVencidasPorTramo, resumenPorTramo } from '../.
 
 const ETQ = ['30–59', '60–89', '90 y más']
 
-export function EscenariosRetiro({ billing = [], terceros = [], clients = [], disponible = 0, nSocios = 2, isDesktop = true, onOpenClientFicha, onOpenFlujoCaja, onOpenProveedores }) {
+export function EscenariosRetiro({ billing = [], terceros = [], clients = [], disponible = 0, etiquetaDisp = 'Disponible hoy', nSocios = 2, isDesktop = true, onOpenClientFicha, onOpenFlujoCaja, onOpenProveedores }) {
   const [el, setEl] = useState([false, false, true])   // tramos elegidos; empieza en «90 y más»
   const [ver, setVer] = useState(false)
   const items = useMemo(() => facturasVencidasPorTramo({ billing, terceros, saldo: saldoBill, hoyT: new Date(isoLocal(Date.now()) + 'T12:00:00').getTime() }), [billing, terceros])
@@ -37,7 +37,7 @@ export function EscenariosRetiro({ billing = [], terceros = [], clients = [], di
       {ln('', 'Facturas vencidas elegidas', f(e.bruto), { on: sin ? undefined : () => setVer(v => !v) })}
       {ln('−', 'Comisiones a terceros que se pagarían', f(e.com), { rojo: true, on: onOpenProveedores })}
       {ln('=', 'Se sumaría a la caja', f(e.neto))}
-      {ln('+', 'Disponible hoy', f(e.disponible))}
+      {ln('+', etiquetaDisp, f(e.disponible))}
     </div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderTop: `1.5px solid ${C.accent}`, background: C.greenBg, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: C.greenText }}>Retirable hoy en este escenario{nSocios > 1 && !sin && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, textTransform: 'none', letterSpacing: 0, opacity: .9 }}>{f(e.porSocio)} por socio</span>}</span>

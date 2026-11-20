@@ -8,7 +8,7 @@ import { C, Gl, SIcon, BtnDescarga, diaGrande, isoLocal, fmtFechaDMY } from '../
 import { descargarTabla } from '../lib/archivos.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, PageHeader, _esDiaHabil, fmtMillLR, resultadoMes, useFuentesResultado } from '../lib/compartido.jsx'
-import { cascadaCobertura, gastosPagados, gastosPorPagar } from '../../supabase/functions/_shared/mesEnMarcha.js'
+import { cascadaCobertura, gastosPagados, gastosPorPagar, gastosProximoMes } from '../../supabase/functions/_shared/mesEnMarcha.js'
 import { finDeMes } from '../../supabase/functions/_shared/calendarioReglas.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -48,7 +48,9 @@ export function useMesEnMarcha({ ym, expenses = [], clients = [], billing = [], 
     const porPagarFilas = actual ? gastosPorPagar(gastos, ym, hoy, f => _esDiaHabil(new Date(f + 'T12:00:00'))) : []
     const pagado = pagadosFilas.reduce((a, x) => a + x.monto, 0), porPagar = porPagarFilas.reduce((a, x) => a + x.monto, 0)
     const cas = cascadaCobertura({ cobrado: cobrado - com, pagado, porPagar })
-    return { ym, actual, hoy, cobrado, com, pagadosFilas, porPagarFilas, pagado, porPagar, cas, gastos }
+    // Lo que se paga en los primeros días del mes siguiente (hasta el 5), para «¿Cuánto se puede retirar?»
+    const proximoFilas = actual ? gastosProximoMes(gastos, hoy) : [], proximo = proximoFilas.reduce((a, x) => a + x.monto, 0)
+    return { ym, actual, hoy, cobrado, com, pagadosFilas, porPagarFilas, pagado, porPagar, proximoFilas, proximo, cas, gastos }
   }, [ym, R, fu, sinClas, expenses, clients, billing, terceros, costosOfiRows])
 }
 

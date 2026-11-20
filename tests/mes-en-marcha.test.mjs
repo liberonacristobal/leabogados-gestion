@@ -1,7 +1,7 @@
 // «Mes en marcha»: grupos de gasto, pagos del mes por fecha de pago, proyección de lo que falta y cascada de cobertura. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { grupoDeGasto, gastosPagados, gastosPorPagar, cascadaCobertura, ultimoDiaHabil } from './../supabase/functions/_shared/mesEnMarcha.js'
+import { grupoDeGasto, gastosPagados, gastosPorPagar, gastosProximoMes, cascadaCobertura, ultimoDiaHabil } from './../supabase/functions/_shared/mesEnMarcha.js'
 
 const G = (id, date, category, amount, concept = '') => ({ id, date, category, amount, concept, type: 'gasto' })
 const habil = iso => { const d = new Date(iso + 'T12:00:00').getDay(); return d !== 0 && d !== 6 }   // sin feriados: lunes a viernes
@@ -36,4 +36,13 @@ test('cascada: cuadra y dice cuánto falta', () => {
   assert.equal(c.cobrado - c.pagado, c.trasPagados); assert.equal(c.trasPagados - c.porPagar, c.saldo)
   assert.equal(c.falta, 4_300_000); assert.equal(c.cubrePagados, true)
   assert.equal(cascadaCobertura({ cobrado: 5e6, pagado: 6e6, porPagar: 0 }).cubrePagados, false)
+})
+
+test('primeros días del mes siguiente: el arriendo (día habitual 1 a 3) entra hasta el 5; los gastos de mitad de mes y los sueldos no', () => {
+  const gs = [G('1', '2026-11-02', 'Arriendo', 2558), G('2', '2026-10-01', 'Arriendo', 2546), G('3', '2026-09-03', 'Arriendo', 2534),
+    G('4', '2026-11-12', 'Impuestos y patentes', 1833, 'IVA/PPM 10-2026'), G('5', '2026-11-20', 'Gastos comunes', 727), G('6', '2026-11-02', 'Sueldos', 3120)]
+  const r = gastosProximoMes(gs, '2026-11-20')
+  assert.equal(r.length, 1); assert.equal(r[0].k, 'arriendo'); assert.equal(r[0].monto, 2558); assert.equal(r[0].fecha, '2026-12-02')
+  assert.deepEqual(gastosProximoMes(gs, '2026-11-20', 1), [])       // tope del día 1: el arriendo se paga el 2
+  assert.equal(gastosProximoMes(gs, '2026-12-20')[0].fecha, '2027-01-02')   // cruza el año
 })
