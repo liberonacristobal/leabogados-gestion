@@ -8,6 +8,7 @@ Revisión detallada al 2026-07-03. Fuente: memoria del proyecto + código. Marca
 ## A00. Anotados 2026-11-20
 
 - 🔨 **Oficina › Caja: «Mes en marcha» pasa a ser la primera tarjeta de la fila Caja y con un color que la destaque** (hoy es la cuarta, después de Flujo de caja, Proyección y Comisiones por pagar). Con tokens de `C`, en escritorio y móvil.
+- 📄 **Pago de la tarjeta VISA del 11-11-2026 ($367.332): faltan $352.937 por detallar en gastos por categoría** (como los pagos anteriores, «split»; hay $14.395 ya repartidos). Necesita el estado de cuenta de la tarjeta; el usuario lo dejó pendiente por ahora. Costos de noviembre subestimados en ese monto hasta cargarlo. Las facturas de Google Workspace son USD 84 al mes (30-09 y 31-10).
 
 ## A0. Anotados 2026-09-08
 
