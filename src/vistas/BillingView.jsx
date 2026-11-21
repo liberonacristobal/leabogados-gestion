@@ -4,6 +4,7 @@ import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Menu, Flecha } from '../lib/presupuestoUI.jsx'
 import { supabase, selectAll, connectDrive, upsertBilling, DEMO, sincMov } from '../supabase'
+import { leerFoto } from '../../supabase/functions/_shared/fotoMes.js'
 import { demoData } from '../demoData'
 import { normRut as crNormRut } from '../cartola.js'
 import { tercerosPorFactura } from '../../supabase/functions/_shared/comisionesReglas.js'
@@ -1403,8 +1404,7 @@ export const CIERRE_EST = {
 
 export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={}, abonos=[], pagosDe, onConciliarPago, onRecordar, onRecordarTanda, recordadoMap={}, diasDesde, onOpenClientFicha, onOpenFactura, onOpenConciliacion, mesInicial }) {
   const MESNOM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-  const hoyKey = new Date().toISOString().slice(0,7)
-  const hoyISO = new Date().toISOString().slice(0,10)
+  const hoyISO = isoLocal(Date.now()), hoyKey = hoyISO.slice(0,7)   // fecha local (Chile), no UTC: de noche el último día del mes no salta al siguiente
   // El cierre por defecto es el MES ANTERIOR: es el que ya cerramos (facturas emitidas) y donde deben reflejarse los pagos. En agosto → julio.
   const prevKey = (()=>{ const n=new Date(); const p=new Date(n.getFullYear(),n.getMonth()-1,1); return `${p.getFullYear()}-${String(p.getMonth()+1).padStart(2,'0')}` })()
   const [mes,setMes] = useState(mesInicial && /^\d{4}-\d{2}$/.test(mesInicial) ? mesInicial : prevKey)
@@ -1417,6 +1417,11 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
   const [grpOpen,setGrpOpen] = useState({})   // acordeón por cliente en la lista (key = client_id)
   const isDesktop = useIsDesktop()   // escritorio: 2 columnas (resumen + tendencia) y la lista como tabla ancha
 
+  // Foto del cierre (la que guarda `foto-mes` el día 1 del mes siguiente): lo emitido del mes y lo que quedaba por cobrar entonces, frente a hoy.
+  const [fotoCierre,setFotoCierre] = useState(null)
+  useEffect(()=>{ setFotoCierre(null); if(DEMO||modo!=='mes') return; let vivo=true
+    supabase.from('learnings').select('value').eq('kind','foto_mes').eq('key',mes).maybeSingle().then(({data})=>{ if(vivo) setFotoCierre(leerFoto(data?.value)) },()=>{})
+    return ()=>{ vivo=false } },[mes,modo])
   const respBySale = useMemo(()=>Object.fromEntries((sales||[]).map(s=>[String(s.id),s.responsible||null])),[sales])
   const respByClient = useMemo(()=>Object.fromEntries((clients||[]).map(c=>[String(c.id),c.abogado_responsable||null])),[clients])
   const respDe = b => (b.sale_id&&respBySale[String(b.sale_id)])||respByClient[String(b.client_id)]||null
@@ -1515,6 +1520,9 @@ export function CierreMesModal({ billing=[], clients=[], sales=[], respaldoMap={
         {card('sinid','exchange',C.soonText,C.ambarBg,'Sin identificar',fmtShort(totSinId),C.soonText,`${sinIdentificar.length} pago${sinIdentificar.length!==1?'s':''} del banco`)}
         {card('vencido','alert',C.overdueText,C.overdueBg,'Vencidas',String(tot.nV),C.overdueText,`${fmtShort(tot.mV)} · recordar`)}
       </div>
+      {(()=>{ const fm=fotoCierre?.mes; if(!fm||modo!=='mes'||resp||mes>=hoyKey) return null   // solo meses ya cerrados, sin filtrar por responsable (la foto es del mes completo)
+        const despues=Math.max(0,fm.porCobrar-tot.pen)
+        return <div style={{fontSize:11,color:C.textSoft,marginBottom:tot.sub>0?4:9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{`Al cierre quedaban ${fmtShort(fm.porCobrar)} por cobrar de ${fmtShort(fm.emitido)} emitidos${despues>0?`; desde entonces se cobraron ${fmtShort(despues)}`:''}`}</div> })()}
       {tot.sub>0&&<div style={{fontSize:11,color:C.textSoft,marginBottom:9,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title='Facturas de subarriendo: figuran como menor costo de la oficina, no como ingreso'>{`Incluye subarriendo ${fmtShort(tot.sub)} · menor costo de la oficina`}</div>}
       </>)
     })()}

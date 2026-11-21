@@ -1,7 +1,7 @@
 // Foto mensual de cartera y por pagar: mismas reglas que la app. Casos sin nombres de clientes.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { respaldoPorFactura, saldoFactura, venceFactura, diasMora, fotoCartera, fotoComisiones, fotoFondos, construirFoto, leerFoto, filasFoto, resumenFoto } from '../supabase/functions/_shared/fotoMes.js'
+import { respaldoPorFactura, saldoFactura, venceFactura, diasMora, fotoCartera, fotoComisiones, fotoFondos, construirFoto, fotoEmitidoMes, leerFoto, filasFoto, resumenFoto } from '../supabase/functions/_shared/fotoMes.js'
 
 const F = (id, o = {}) => ({ id, client_id: 'c1', invoice_no: String(id), status: 'Pendiente', amount: 1000000, issued_at: '2026-08-01', billing_type: 'honorarios', ...o })
 
@@ -59,4 +59,21 @@ test('foto completa, lectura y comparación', () => {
   assert.equal(v.abs, -400000); assert.ok(Math.abs(v.pct + 0.4) < 1e-9); assert.equal(v.tono, 'up'); assert.deepEqual(filasFoto(null, a), [])
   const sola = filasFoto(b, null).find(x => x.k === 'porCobrar'); assert.equal(sola.p, null); assert.equal(sola.tono, 'nt')
   const r = resumenFoto(b, a, n => `$${n}`); assert.equal(r.fechaFoto, '01-11-2026'); assert.equal(r.filas[0].variacion, '−40%'); assert.equal(resumenFoto(null, a, String), null)
+})
+
+// Auditoría 2026-11-21: el cierre de mes compara lo emitido en el mes y su saldo al cierre con el de hoy.
+test('foto del mes: lo emitido en el mes y lo que quedaba por cobrar al día de la foto', () => {
+  const billing = [
+    F(1, { issued_at: '2026-10-05', amount: 1000, status: 'Pagado' }),
+    F(2, { issued_at: '2026-10-20', amount: 2000 }),
+    F(3, { issued_at: '2026-10-25', amount: 3000, paid_amount: 500 }),
+    F(4, { issued_at: '2026-09-30', amount: 9000 }),                       // otro mes
+    F(5, { issued_at: '2026-10-10', amount: 7000, status: 'Anulada' }),    // anulada
+    F(6, { issued_at: '2026-10-11', amount: 4000, billing_type: 'reembolso' }), // reembolso de gastos
+    F(7, { issued_at: '2026-10-12', amount: 4000, invoice_no: '' }),        // sin folio
+  ]
+  const r = fotoEmitidoMes({ per: '2026-10', billing, conciliacion: [{ tipo_destino: 'factura', factura_id: 2, monto_aplicado: 500 }], anticipos: [] })
+  assert.equal(r.nFacturas, 3); assert.equal(r.emitido, 6000); assert.equal(r.porCobrar, 1500 + 2500)
+  const foto = construirFoto({ per: '2026-10', capturada: '2026-11-01', billing, conciliacion: [], anticipos: [], terceros: [], expenses: [], clients: [] })
+  assert.equal(foto.mes.emitido, 6000); assert.ok(leerFoto(foto))
 })

@@ -15,7 +15,7 @@ export function cicloFacturacionMes(p) {
   const emi = bb.filter(b => !b.deleted_at && (b.invoice_no || b.folio) && b.status !== 'Anulada' && b.billing_type !== 'reembolso' && String(b.issued_at || b.date || '').slice(0, 7) === cmK)
   const mo = b => montoFactura(b); const ab = b => Math.max(Number(b.paid_amount) || 0, Number(respaldoMap[b.id]) || 0); const sa = b => b.status === 'Pagado' ? 0 : Math.max(0, mo(b) - ab(b))
   const tEmi = emi.reduce((a, b) => a + mo(b), 0), tCob = emi.reduce((a, b) => a + Math.max(0, mo(b) - sa(b)), 0), tasa = tEmi > 0 ? Math.round(tCob / tEmi * 100) : 0
-  const mesAct = now.toISOString().slice(0, 7)
+  const mesAct = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`   // mes local, como cmK: en UTC, de noche el último día ya contaba el mes siguiente
   // Mismas cuotas que el checklist (ventasReglas): las del mes, sin lo atrasado (eso es el paso «Vencidas»).
   const pemMes = cuotasPorEmitirMes({ billing, sales, anticipos, fantasmaIds, noEmitir: noEmitir || new Set(), mesKey: mesAct, uf: uf || {} }).filter(b => String(b.due || b.issued_at || '').slice(0, 10) >= `${mesAct}-01`)
   const pemN = pemMes.length, pemTot = pemMes.reduce((a, b) => a + (b.amount || 0), 0)

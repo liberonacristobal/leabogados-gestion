@@ -82,6 +82,15 @@ export function fotoFondos({ expenses, clients }) {
   return { porReponer, nDeben }
 }
 
+/** Lo emitido en el mes `per` (AAAA-MM) y lo que quedaba por cobrar de eso al día de la foto: la base del «Cierre de mes» frente a hoy.
+ * Mismo universo que la vista Cierre de mes (facturas con folio emitidas en el mes, sin anuladas ni reembolsos de gastos).
+ * @param {{per:string, billing:any[], conciliacion:any[], anticipos:any[]}} p */
+export function fotoEmitidoMes({ per, billing, conciliacion, anticipos }) {
+  const resp = respaldoPorFactura(conciliacion, anticipos)
+  const emi = (billing || []).filter(b => b && !b.deleted_at && b.invoice_no && b.status !== 'Anulada' && b.billing_type !== 'reembolso' && String(b.issued_at || '').slice(0, 7) === per)
+  return { emitido: emi.reduce((a, b) => a + montoFactura(b), 0), porCobrar: emi.reduce((a, b) => a + saldoFactura(b, resp), 0), nFacturas: emi.length }
+}
+
 /**
  * Foto completa. `per` = mes que cierra (AAAA-MM); `capturada` = fecha real de la captura (la cartera es la de ese día).
  * @param {{per:string, capturada:string, billing:any[], conciliacion:any[], anticipos:any[], terceros:any[], expenses:any[], clients:any[]}} p
@@ -92,6 +101,7 @@ export function construirFoto({ per, capturada, billing, conciliacion, anticipos
     cartera: fotoCartera({ billing, conciliacion, anticipos, asOf: capturada }),
     comisiones: fotoComisiones({ terceros, billing }),
     fondos: fotoFondos({ expenses, clients }),
+    mes: fotoEmitidoMes({ per, billing, conciliacion, anticipos }),
   }
 }
 

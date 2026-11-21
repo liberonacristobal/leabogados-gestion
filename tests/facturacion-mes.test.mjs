@@ -38,3 +38,10 @@ test('listas vacías: todo en cero, sin errores ni NaN', () => {
   const r = cicloFacturacionMes({ now })
   assert.equal(r.tEmi, 0); assert.equal(r.tasa, 0); assert.equal(r.pemN, 0); assert.equal(r.sinEmitirN, 0); assert.equal(r.porEnvTot, 0)
 })
+
+// Auditoría 2026-11-21: de noche del último día del mes (hora de Chile) el mes actual seguía siendo el mismo.
+test('mes actual: es el mes local, no el UTC (la noche del último día no salta al mes siguiente)', () => {
+  const noche = new Date(2026, 10, 30, 22, 30)          // 30-11-2026 22:30 hora local
+  const r = cicloFacturacionMes({ billing: [], now: noche })
+  assert.equal(r.mesAct, '2026-11'); assert.equal(r.cmK, '2026-10')
+})
