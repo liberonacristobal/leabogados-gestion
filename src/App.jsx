@@ -12,6 +12,7 @@ import { normRut } from './lib/compartido.jsx'
 import { META_UF, costoOperacionReal, useFlujoCaja, comisPorPagarAnteriores, _resultadoInicio } from './lib/compartido.jsx'
 import { CostoEmpresaBloque, calcularAumento } from './lib/costoEmpresaBloque.jsx'
 import { mismaPersona } from '../supabase/functions/_shared/liquidacionesReglas.js'
+import { cuotasLibres } from '../supabase/functions/_shared/repartoCuotas.js'
 import { fetchUFFechas, iuPresupuestoMes, costosOficinaMes, costoOficinaNeto, ChevAb, ventaHistoricaUF, useUFFechas, FLUJO_DUDA_DIAS, flujoCajaProyectado, SIN_SOCIO, socioNorm, socioDe, socioDeVenta, _psSelTodo, usePorSocioFuentes, partidasPorSocio, vendidoPorSocio, _lsGet, _lsSet, PS_RX_GASTO } from './lib/compartido.jsx'
 import { fmtUFk, inicioVentaYM, ventaCuentaEnAnio } from './lib/compartido.jsx'
 import { gastosPorLiquidarCaja } from './lib/compartido.jsx'
@@ -6786,14 +6787,16 @@ export default function App() {
                 estado:'pendiente', created_by:user?.name||null})
               continue
             }
-            const libres = cuotasVenta.filter(cuota=>!pagadas.has(`${row.proveedor_id}|${cuota.id}`)
-              && !(row.desde && String(cuota.due||'').slice(0,7) < String(row.desde)))   // comisión "desde X en adelante": no aplica a cuotas anteriores
+            const libres = cuotasLibres(row, cuotasVenta, pagadas)   // todas, «desde X en adelante» o solo las cuotas elegidas (_shared/repartoCuotas.js)
             const totLibres = libres.reduce((a,b)=>a+(b.amount||0),0)
+            // Comisión de un ítem (cuotas elegidas): el monto fijo ($ o UF) es el TOTAL del ítem y se reparte entre ESAS cuotas, no entre todas las de la venta.
+            const totalSolo = (restanteFijo===null && row.solo?.length && row.tipo!=='pct') ? (row.tipo==='uf' ? Math.round((parseFloat(row.valor)||0)*sUfVal) : (parseFloat(row.valor)||0)) : null
+            const totalRepartir = restanteFijo ?? totalSolo
             let asignado = 0
             for(const [i,cuota] of libres.entries()){
-              const m = restanteFijo===null ? montoCuota(row,cuota)
-                : i===libres.length-1 ? Math.round(restanteFijo-asignado)   // la última absorbe el redondeo → suma exacta
-                : Math.round(restanteFijo*(totLibres>0?(cuota.amount||0)/totLibres:1/libres.length))
+              const m = totalRepartir===null ? montoCuota(row,cuota)
+                : i===libres.length-1 ? Math.round(totalRepartir-asignado)   // la última absorbe el redondeo → suma exacta
+                : Math.round(totalRepartir*(totLibres>0?(cuota.amount||0)/totLibres:1/libres.length))
               asignado += m
               if(m<=0) continue
               nuevos.push({sale_id:data.id, billing_id:cuota.id, proveedor_id:row.proveedor_id,

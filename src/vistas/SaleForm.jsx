@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { supabase, DEMO } from '../supabase'
 import { estadoPagoVenta, mensualMayorQueVenta } from '../../supabase/functions/_shared/ventasReglas.js'
 import { avisoTarifa } from '../../supabase/functions/_shared/textosAvisos.js'
+import { inferirAlcance } from '../../supabase/functions/_shared/repartoCuotas.js'
 import { C, Gl, SEC_LBL, Spin, _normTxt, appAlert, appConfirm, fmt, fmtFechaDMY, fmtRutCL, isoLocal, useIsDesktop } from '../lib/base.jsx'
 import { fetchUFFechas, fmtMill, cifrasCobroVenta, setLearningKV, CubrirCuotasModal, DriveIcon, EQUIPO_RESPALDO, FacturarBloqueModal, Fld, Inp, Lbl, NOMBRE_CLI, PaginaSobre, Sel, Switch, Txt, WHO_LIST, _equipo, _tipoDupLbl, anio4ISO, cargarMammoth, cargarPdfjs, chipBtn, claudeCall, clientesParecidos, comisionesVenta, currentMonth, currentYear, driveGet, driveToken, esSubarriendo, fmtUF, planDeVenta, useUF, registrarError , equipoNombres} from '../lib/compartido.jsx'
 
@@ -63,7 +64,7 @@ export function MiniClientForm({onSave,onCancel,defaultStatus='Activo',defaultNa
 // Reparto del costo a proveedores. Cada fila: proveedor + tipo (% / UF / $) + valor.
 // El costo se reparte en las MISMAS cuotas que el cobro (se distribuye al guardar).
 // Por defecto el tipo = la unidad de la venta. La reconciliación y los montos se muestran en esa unidad.
-export function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0,hideHeader=false}) {
+export function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVal=0,saleTotal=0,costTotal=0,hideHeader=false,cuotas=[]}) {
   const titulo = p => (p?.nombre?.trim()||p?.razon_social?.trim()||'Proveedor')
   const provs = [...proveedores].sort((a,b)=>titulo(a).localeCompare(titulo(b),'es'))
   const esUF = moneda!=='CLP'
@@ -121,6 +122,13 @@ export function RepartoTerceros({proveedores=[],rows=[],setRows,moneda='UF',ufVa
               <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>Comisión desde</span>
               <input type='month' value={r.desde||''} onChange={e=>up(i,'desde',e.target.value)} style={{...inp,height:30,fontSize:11,flex:1,minWidth:0}}/>
               <span style={{fontSize:10,color:C.textSoft,whiteSpace:'nowrap'}}>{r.desde?'en adelante':'todas'}</span>
+            </div>}
+            {r.proveedor_id&&cuotas.length>1&&<div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:5,marginTop:6}}>
+              <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>Solo en</span>
+              {cuotas.map(c=>{ const on=(r.solo||[]).map(String).includes(String(c.id)); return (
+                <button key={c.id} type='button' onClick={()=>{ const cur=(r.solo||[]).map(String); const nx=on?cur.filter(x=>x!==String(c.id)):[...cur,String(c.id)]; setRows(rows.map((x,j)=>j===i?{...x,solo:nx,desde:nx.length?'':x.desde}:x)) }}
+                  style={{height:24,padding:'0 8px',borderRadius:12,border:`1px solid ${on?C.accent:C.border}`,background:on?C.accent:'#fff',color:on?'#fff':C.muted,fontSize:11,fontWeight:600,cursor:'pointer'}}>{c.label}</button>)})}
+              {!(r.solo||[]).length&&<span style={{fontSize:10,color:C.textSoft}}>todas</span>}
             </div>}
             {(r._edit || !((parseFloat(r.valor)||0)>0))?(
               <div style={{display:'flex',height:36,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:'#fff',marginTop:6}}>
@@ -229,15 +237,18 @@ export function SaleForm({asPage=false,afterHero=null,heroEl=undefined,sale,clie
   // (cada fila se reparte en N cuotas, así que varios registros = una fila del formulario).
   const [reparto,setReparto] = useState(()=>{
     const mine=(terceros||[]).filter(t=>String(t.sale_id)===String(sale?.id)&&t.tipo_costo)   // las comisiones por factura (tipo_costo null) no son del reparto
-    const dueById={}; (billing||[]).forEach(b=>{ dueById[String(b.id)]=(b.due||b.issued_at||'').slice(0,7) })
     const g={}
     // "desde" (mes) inferido = cuota MÁS ANTIGUA con comisión de ese proveedor → conserva el efecto "desde X" al reabrir/re-guardar sin columna nueva.
-    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??'',_dues:[]}; const dm=t.billing_id?dueById[String(t.billing_id)]:''; if(dm) g[k]._dues.push(dm) })
-    const cuotasN=(billing||[]).filter(b=>String(b.sale_id)===String(sale?.id)&&b.billing_type!=='reembolso').length
-    return Object.values(g).map(x=>{ const dues=(x._dues||[]).filter(Boolean).sort(); const {_dues,...rest}=x
-      // Solo marca "desde" si la comisión NO cubre todas las cuotas (si cubre todas, es "todas", sin fecha).
-      return {...rest, desde:(dues.length && dues.length<cuotasN)?dues[0]:''} })
+    mine.forEach(t=>{ const k=`${t.proveedor_id}|${t.tipo_costo||''}|${t.valor??''}`; if(!g[k]) g[k]={proveedor_id:t.proveedor_id,tipo:t.tipo_costo||'clp',valor:t.valor??'',_ids:[]}; if(t.billing_id) g[k]._ids.push(String(t.billing_id)) })
+    const cuotasVenta=(billing||[]).filter(b=>String(b.sale_id)===String(sale?.id)&&b.billing_type!=='reembolso'&&!b.deleted_at)
+    return Object.values(g).map(x=>{ const {_ids,...rest}=x
+      // Alcance inferido de las cuotas con comisión: todas, «desde» un mes (sin saltos) o «solo» las cuotas exactas (_shared/repartoCuotas.js).
+      return {...rest, ...inferirAlcance(_ids, cuotasVenta)} })
   })
+  // Cuotas (cobros) de la venta para elegir en cuáles se aplica una comisión.
+  const cuotasReparto = useMemo(()=>(billing||[]).filter(b=>sale?.id&&String(b.sale_id)===String(sale.id)&&b.billing_type!=='reembolso'&&!b.deleted_at&&b.status!=='Anulada')
+    .sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))||String(a.id).localeCompare(String(b.id)))
+    .map(b=>{ const n=String(b.concept||'').match(/Cobro\s+(\d+)\s*$/i); return {id:String(b.id), label:n?`Cobro ${n[1]}`:fmtFechaDMY(b.due||b.issued_at)} }),[billing,sale?.id])
   const [tariffs,setTariffs] = useState([])
   const [histAbierto,setHistAbierto] = useState(false)   // Historial de honorarios colapsado por defecto (form más corto al reabrir)
   useEffect(()=>{ if(!sale?.id) return; supabase.from('sale_tariff_history').select('*').eq('sale_id',sale.id).order('vigente_desde',{ascending:true}).then(({data})=>setTariffs(data||[])) },[sale?.id])
@@ -1066,7 +1077,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
             {costMode==='pct'&&costVal>0&&<div style={{fontSize:10,color:C.textSoft,marginTop:5}}>= {moneda==='UF'?fmtUF(costVal):fmt(Math.round(costVal))}</div>}
           </div>
         </div>
-        {costVal>0&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal}/>}
+        {costVal>0&&<RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal} cuotas={cuotasReparto}/>}
         <div onClick={()=>setCobroType('hora')} style={{fontSize:11,fontWeight:600,color:C.accent,cursor:'pointer',marginTop:2,marginBottom:8}}>¿Cobro por hora? Sin monto fijo →</div>
       </>)}
 
@@ -1250,7 +1261,7 @@ Devuelve: { cliente_nombre, cliente_rut, razon_social, contactos, area, proyecto
               </div>
               {openCondicion==='costos'&&(
                 <div style={{padding:'10px 12px 12px',borderTop:`1px solid ${C.border}`}}>
-                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal} hideHeader/>
+                  <RepartoTerceros proveedores={proveedores} rows={reparto} setRows={setReparto} moneda={moneda} ufVal={ufVal} saleTotal={moneda==='UF'?amountUF:montoCLP} costTotal={costVal} hideHeader cuotas={cuotasReparto}/>
                 </div>
               )}
               {row('Forma de cobro',curCobro,'cobro',false)}
