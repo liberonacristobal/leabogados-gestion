@@ -52,6 +52,20 @@ export function pagosTarjetaComoGastos(movs, gastos) {
     .map(m => ({ id: 'mov:' + m.id, date: String(m.fecha).slice(0, 10), category: 'Tarjeta de crédito', concept: 'Pago tarjeta de crédito', amount: Number(m.monto) || 0, type: 'gasto' }))
 }
 
+/**
+ * Gastos de la oficina con la tarjeta por su pago en el banco. En un mes con pago de tarjeta, ese pago es la cifra completa: los gastos del grupo
+ * «Tarjeta de crédito» (categoría Tarjeta de crédito, Software o Servicios) cargados ese mismo mes ya están dentro de él y no se suman otra vez
+ * (por ejemplo, al detallar el pago por categoría). En un mes sin pago en el banco quedan los gastos cargados, como antes.
+ * @param {MovTarjeta[]} movs cargos del banco @param {Gasto[]} gastos gastos de la oficina
+ * @returns {Gasto[]}
+ */
+export function gastosConTarjeta(movs, gastos) {
+  const pagos = (movs || []).filter(esPagoTarjeta)
+  const mesesConPago = new Set(pagos.map(m => String(m.fecha).slice(0, 7)))
+  const propios = (gastos || []).filter(e => !(grupoDeGasto(e) === 'tarjeta' && mesesConPago.has(String(e.date).slice(0, 7))))
+  return [...propios, ...pagosTarjetaComoGastos(pagos, [])]
+}
+
 const ymDe = (/** @type {any} */ iso) => String(iso || '').slice(0, 7)
 const dia = (/** @type {any} */ iso) => Number(String(iso || '').slice(8, 10)) || 0
 const num = (/** @type {any} */ n) => Number(n) || 0

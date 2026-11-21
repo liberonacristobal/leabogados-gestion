@@ -281,6 +281,10 @@ export const cuotaNeDte = billing => (billing || []).filter(b => !b.deleted_at &
   return { b, app: { n: +c[1], tot: +c[2] }, dte: dte[0] }
 }).filter(Boolean)
 
+/** Facturas que salieron al SII en producción (tienen su trackId) y siguen como «Programada»: el motor guardó el folio, pero el estado, la fecha de emisión y el vencimiento no se actualizaron (falló o se cerró la app a mitad de la emisión).
+ * @param {any[]} billing */
+export const emitidaSinEstado = billing => (billing || []).filter(b => b && !b.deleted_at && b.status === 'Programada' && b.dte_track_id && b.dte_ambiente === 'prod' && String(b.invoice_no || '').trim() !== '')
+
 export function honorarioDescuadrado(saludRows, billing, sales) {
   const ult = {}; (billing || []).forEach(b => { if (!b.sale_id || b.deleted_at) return; const k = String(b.sale_id), f = String(b.issued_at || b.due || ''); if (!ult[k] || f > ult[k]) ult[k] = f })
   const st = {}; (sales || []).forEach(s => { st[String(s.id)] = s.status })
@@ -310,6 +314,7 @@ export function hallazgos(d) {
   cuotaTramo(d.billing, d.sales, d.cuotaTramoNo || new Set(), d.cuotaTramoExceso || null).forEach(x => add('cuota_tramo', x.s.id, `Cuotas programadas que superan la venta · ${nom(x.s.client_id)}`, x.exceso, { venta: x.s.id, venta_monto: x.venta, programado: x.prog, emitido: x.emit }))
   glosaConflict(d.coRows).forEach(x => add('glosa_conflicto', x.key, `Glosa con más de una categoría aprendida · ${x.key}`, null, { votos: x.votos }))
   huerfanas(d.billing).forEach(b => add('factura_sin_cliente', b.id, `Factura N° ${folioN(b.invoice_no)} sin cliente · ${b.receptor_name || ''}`.trim(), b.amount, { factura: b.id }))
+  emitidaSinEstado(d.billing).forEach(b => add('emitida_sin_estado', b.id, `Factura N° ${folioN(b.invoice_no) || b.invoice_no} emitida al SII que sigue como Programada, ${nom(b.client_id)}`, b.amount, { factura: b.id, folio: b.invoice_no, trackId: b.dte_track_id }))
   vencIncoh(d.billing).forEach(b => add('vencimiento_incoherente', b.id, `Factura N° ${folioN(b.invoice_no)} con vencimiento anterior a su emisión · ${nom(b.client_id)}`, b.amount, { factura: b.id, emision: b.issued_at, vence: b.due }))
   antDup(d.anticipos, d.conciliacion).forEach(x => add('anticipo_duplicado', x.manual.id, `Saldo a favor cargado a mano que calza con depósitos del banco · ${nom(x.manual.client_id)}`, x.manual.monto, { anticipo: x.manual.id, banco: x.banks.map(b => b.id) }))
   // Trabajos detenidos (regla única ventasReglas.trabajosDetenidos, calculada por quien llama para no importar en círculo).
@@ -337,6 +342,7 @@ export function hallazgos(d) {
 }
 
 export const DETECTOR_LBL = {
+  emitida_sin_estado: 'Facturas emitidas al SII que siguen Programadas',
   anticipo_sin_imputar: 'Pagos sin factura de más de 60 días',
   gasto_sin_fecha: 'Gastos sin fecha',
   plantilla_con_numeros: 'Plantillas de correo con números escritos a mano',

@@ -1,7 +1,7 @@
 // «Mes en marcha»: grupos de gasto, pagos del mes por fecha de pago, proyección de lo que falta y cascada de cobertura. Datos anonimizados.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { grupoDeGasto, gastosPagados, gastosPorPagar, gastosProximoMes, cascadaCobertura, ultimoDiaHabil, esPagoTarjeta, pagosTarjetaComoGastos } from './../supabase/functions/_shared/mesEnMarcha.js'
+import { grupoDeGasto, gastosPagados, gastosPorPagar, gastosProximoMes, cascadaCobertura, ultimoDiaHabil, esPagoTarjeta, pagosTarjetaComoGastos, gastosConTarjeta } from './../supabase/functions/_shared/mesEnMarcha.js'
 
 const G = (id, date, category, amount, concept = '') => ({ id, date, category, amount, concept, type: 'gasto' })
 const habil = iso => { const d = new Date(iso + 'T12:00:00').getDay(); return d !== 0 && d !== 6 }   // sin feriados: lunes a viernes
@@ -67,4 +67,22 @@ test('tarjeta: el pago del banco cuenta como gasto del grupo, esté o no reparti
   assert.equal(pp.monto, 367332); assert.ok(pp.fecha > '2026-12-01')
   // no repite un pago que ya existe como gasto de la categoría (misma fecha y monto)
   assert.equal(pagosTarjetaComoGastos(movs, [G('g1', '2026-11-11', 'Tarjeta de crédito', 367332)]).length, 1)
+})
+
+// Auditoría 2026-11-21: si el pago de la tarjeta se detalla en gastos de Software o Servicios, el pago del banco no debe sumarse además de ellos.
+test('tarjeta: el pago del banco no se suma con los gastos de su mismo mes repartidos en Software o Servicios', () => {
+  const pago = { id: 'm2', fecha: '2026-11-11', tipo: 'cargo', monto: 367332, descripcion: 'Cargo por Pago Tarjeta VISA Nro. XXXX XXXX XXXX 0000.' }
+  const detalle = [G('g1', '2026-11-11', 'Software', 100000), G('g2', '2026-11-11', 'Servicios', 50000), G('g3', '2026-11-11', 'Tarjeta de crédito', 20000)]
+  const otros = [G('g4', '2026-11-05', 'Arriendo', 900000)]
+  const r = gastosConTarjeta([pago], [...detalle, ...otros])
+  const pag = gastosPagados(r, '2026-11')
+  assert.equal(pag.find(x => x.k === 'tarjeta').monto, 367332)          // solo el pago, no el pago más el detalle
+  assert.equal(pag.find(x => x.k === 'arriendo').monto, 900000)         // lo que no es tarjeta no se toca
+})
+
+test('tarjeta: un mes sin pago en el banco conserva los gastos cargados', () => {
+  const pago = { id: 'm1', fecha: '2026-10-06', tipo: 'cargo', monto: 153619, descripcion: 'Cargo por Pago Tarjeta VISA Nro. XXXX XXXX XXXX 0000.' }
+  const nov = [G('g1', '2026-11-11', 'Software', 100000)]
+  const pag = gastosPagados(gastosConTarjeta([pago], nov), '2026-11')
+  assert.equal(pag.find(x => x.k === 'tarjeta').monto, 100000)
 })

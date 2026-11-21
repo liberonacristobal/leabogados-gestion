@@ -6622,6 +6622,7 @@ export default function App() {
     }catch(_){ /* Drive es best-effort: nunca bloquea el guardado del cliente */ }
   },[])
 
+  const anulandoRef=useRef(new Set())   // una baja de factura a la vez por factura: el segundo clic no emite otra nota de crédito
   const guardandoVentaRef=useRef(false)   // un solo guardado de venta a la vez: el segundo clic no crea otra
   const handleSaveSale=useCallback(async(f)=>{
     if(guardandoVentaRef.current) return
@@ -8379,7 +8380,14 @@ export default function App() {
       guardarFechaProgramada((billing||[]).find(x=>String(x.id)===String(ep.billId)))   // la fecha programada se pierde al emitir: queda guardada para medir el atraso de emisión
       const dueEmi=ep.fecha?dueFromIssued(ep.fecha):null   // el plazo corre desde la emisión (no dejar el due planificado viejo)
       const patch={ invoice_no:String(r.folio), sii_tipo_dte:34, status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), dte_estado:r.estado||'enviado', dte_track_id:r.trackId||null, dte_ambiente:r.ambiente, dte_emitido_at:new Date().toISOString(), dte_xml:r.dteXml||null, ...(dteTot!=null?{amount:dteTot}:{}) }
-      await supabase.from('billing').update({invoice_no:String(r.folio), sii_tipo_dte:34, status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
+      const {error:ueEmi}=await supabase.from('billing').update({invoice_no:String(r.folio), sii_tipo_dte:34, status:'Pendiente', issued_at:ep.fecha, ...(dueEmi?{due:dueEmi}:{}), ...(dteTot!=null?{amount:dteTot}:{})}).eq('id',ep.billId)
+      if(ueEmi){
+        // La factura ya salió al SII y el motor guardó su folio, pero el estado no se pudo actualizar: se avisa y se recarga lo guardado (nunca se muestra como emitida lo que no quedó).
+        setEmitirPreview(null); setEmitirBusy(false)
+        getBilling().then(b=>{ if(b) setBilling(b) }).catch(()=>{})
+        appAlert(`La factura se emitió al SII (folio ${r.folio}), pero no se pudo actualizar su estado en la app: ${ueEmi.message}\nNo la emitas de nuevo: el folio ya quedó guardado. Revisa que figure como Pendiente y, si sigue Programada, avisa para corregirla.`)
+        return
+      }
       setBilling(p=>p.map(x=>x.id===ep.billId?{...x,...patch}:x))
       setEmitirPreview(null)
       // Guarda el PDF (logo+timbre) y el XML en Drive (carpeta de facturación) y los adjunta a la factura. No bloquea.
@@ -8438,6 +8446,9 @@ export default function App() {
 
   // Dar de baja (anular) una factura: registra motivo, quién y cuándo.
   const handleAnularFactura=useCallback(async(bill,motivo,obs)=>{
+    if(anulandoRef.current.has(bill.id)) return
+    if(bill.status==='Anulada'||/nota de cr[eé]dito/i.test(bill.motivo_baja||'')){ appAlert('Esta factura ya está dada de baja.'); return }
+    anulandoRef.current.add(bill.id)
     try{
       const razon = obs?.trim()?`${motivo} — ${obs.trim()}`:motivo
       let ncRef=''
@@ -8456,17 +8467,21 @@ export default function App() {
         ncRef=` · Nota de crédito N° ${r.folio} (SII ${r.estado||'enviado'})`
       }
       const patch={status:'Anulada', motivo_baja:razon+ncRef, anulada_por:user?.name||user?.email||null, anulada_at:new Date().toISOString(), updated_at:new Date().toISOString()}
-      const {error}=await supabase.from('billing').update(patch).eq('id',bill.id)
-      if(error) throw error
+      // Con la nota de crédito ya emitida, el guardado se reintenta: si no queda, se avisa el folio para no emitir otra.
+      let error=null
+      for(let i=0;i<3;i++){ ({error}=await supabase.from('billing').update(patch).eq('id',bill.id)); if(!error) break; await new Promise(r=>setTimeout(r,600)) }
+      if(error) throw new Error(ncRef?`La nota de crédito${ncRef.replace(' · Nota de crédito','')} ya se emitió al SII, pero no se pudo marcar la factura como dada de baja (${error.message}). No emitas otra: avisa para corregirla.`:error.message)
       setBilling(p=>p.map(x=>x.id===bill.id?{...x,...patch}:x))
       // Liberar anticipos consumidos contra esta factura (no dejar plata atada a una factura anulada). Los terceros se mantienen (el proveedor igual trabajó).
       const antLig=(anticipos||[]).filter(a=>String(a.billing_id)===String(bill.id))
       if(antLig.length){ const ids=antLig.map(a=>a.id); const {error:ae}=await supabase.from('anticipos').update({estado:'disponible',billing_id:null}).in('id',ids); if(!ae) setAnticipos(p=>p.map(a=>ids.includes(a.id)?{...a,estado:'disponible',billing_id:null}:a)) }
     }catch(e){appAlert('No se pudo dar de baja: '+e.message)}
+    finally{ anulandoRef.current.delete(bill.id) }
   },[user,anticipos,clientEntities])
 
   // Reactivar una factura anulada por error: vuelve a Pendiente y borra el registro de baja.
   const handleReactivarFactura=useCallback(async(bill)=>{
+    if(/nota de cr[eé]dito/i.test(bill.motivo_baja||'')){ appAlert('No se puede reactivar: la factura se anuló con una nota de crédito emitida al SII, que sigue vigente. Si fue un error, se emite una factura nueva.'); return }
     try{
       // Inferir el estado real previo en vez de forzar Pendiente.
       const nuevo = (bill.paid_at && (bill.paid_amount||0)>=(bill.amount||0)) ? 'Pagado'

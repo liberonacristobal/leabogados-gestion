@@ -8,7 +8,7 @@ import { C, Gl, SIcon, BtnDescarga, diaGrande, isoLocal, fmtFechaDMY } from '../
 import { descargarTabla } from '../lib/archivos.js'
 import { useResultadoAnio } from '../lib/resultadoAnio.js'
 import { ChevAb, PageHeader, _esDiaHabil, fmtMillLR, resultadoMes, useFuentesResultado } from '../lib/compartido.jsx'
-import { cascadaCobertura, gastosPagados, gastosPorPagar, gastosProximoMes, esPagoTarjeta, pagosTarjetaComoGastos } from '../../supabase/functions/_shared/mesEnMarcha.js'
+import { cascadaCobertura, gastosPagados, gastosPorPagar, gastosProximoMes, esPagoTarjeta, gastosConTarjeta } from '../../supabase/functions/_shared/mesEnMarcha.js'
 import { finDeMes } from '../../supabase/functions/_shared/calendarioReglas.js'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -56,7 +56,7 @@ export function useMesEnMarcha({ ym, expenses = [], clients = [], billing = [], 
     const hoy = isoLocal(Date.now()), actual = ym === hoy.slice(0, 7)
     const ofi = (clients || []).find(c => c && (c.is_internal || /liberona\s+escala/i.test(c.name || '')))
     const gastosOfi = ofi ? (expenses || []).filter(e => e && String(e.client_id) === String(ofi.id)) : []
-    const gastos = [...gastosOfi, ...pagosTarjetaComoGastos(tarjeta, gastosOfi)]   // la tarjeta, por su pago en el banco; proyectada como los demás grupos
+    const gastos = gastosConTarjeta(tarjeta, gastosOfi)   // la tarjeta, por su pago en el banco; proyectada como los demás grupos
     const cobrado = Number(R.ingresosPorAnioVenta.byMonth?.[ym]) || 0
     const com = Number(resultadoMes(fu, { billing, terceros, costosOfiRows, expenses, clients }, ym).comPag) || 0
     const pag = gastosPagados(gastos, ym)

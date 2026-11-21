@@ -2,7 +2,7 @@
 // Casos de situaciones reales, sin nombres de clientes. Correr: npm test.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { folioDup, facDup, montoNeDte, cuotaNeDte, rutMulti, comprasEnPlazoReclamo, comprasObservadasSII } from '../supabase/functions/_shared/saludDatos.js'
+import { emitidaSinEstado, folioDup, facDup, montoNeDte, cuotaNeDte, rutMulti, comprasEnPlazoReclamo, comprasObservadasSII } from '../supabase/functions/_shared/saludDatos.js'
 import { calcesCompraPago } from '../supabase/functions/_shared/comprasReglas.js'
 import { liqParaCargo, notariaPendientes, disponibleNotaria, tipoActoNotaria } from '../supabase/functions/_shared/notariaReglas.js'
 import { nombreGenerico } from '../supabase/functions/_shared/contrapartes.js'
@@ -773,4 +773,14 @@ test('cuota saltada marcada «Queda para el final» no entra al radar hasta que 
   assert.equal(cuotasSinEmitir({ billing, sales: [venta], noEmitir: marcada, hasta: '2026-11-01' }).length, 0)
   assert.equal(marcada.has('c2'), false)   // no es «No corresponde»: no se esconde de «Por emitir» cuando llegue su mes
   assert.equal(cuotasSinEmitir({ billing, sales: [venta], noEmitir: marcada, hasta: '2027-06-01' }).map((x) => x.id).join(), 'c2')
+})
+
+// Auditoría 2026-11-21: la emisión podía dejar folio y trackId guardados con el estado sin actualizar.
+test('emitidaSinEstado: con folio y trackId de producción pero todavía Programada', () => {
+  const b = (extra) => ({ id: 'b', status: 'Programada', invoice_no: '400', dte_track_id: 'T1', dte_ambiente: 'prod', ...extra })
+  assert.equal(emitidaSinEstado([b({})]).length, 1)
+  assert.equal(emitidaSinEstado([b({ status: 'Pendiente' })]).length, 0)       // ya actualizada
+  assert.equal(emitidaSinEstado([b({ dte_ambiente: 'cert' })]).length, 0)       // prueba de certificación: no es una factura real
+  assert.equal(emitidaSinEstado([b({ dte_track_id: null })]).length, 0)         // nunca salió al SII
+  assert.equal(emitidaSinEstado([b({ deleted_at: '2026-11-01' })]).length, 0)
 })
