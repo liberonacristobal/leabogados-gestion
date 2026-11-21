@@ -4910,7 +4910,7 @@ function RepricingView({ sales=[], clients=[], onOpenClientFicha, onClose, orige
   const fh = n => (Math.round((Number(n)||0)*10)/10).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' h'
   useEffect(()=>{
     if(DEMO){ setHoras(demoData.horas||[]); setTarifaUF(3); setUfAnio(UF_FALLBACK); setDecid({}); return }
-    supabase.from('horas').select('client_id,fecha,horas,billable').gte('fecha',anio+'-01-01').then(({data})=>{ if(data) setHoras(data) },()=>{})
+    selectAll(()=>supabase.from('horas').select('client_id,fecha,horas,billable').gte('fecha',anio+'-01-01').order('id')).then(({data})=>{ if(data) setHoras(data) },()=>{})
     supabase.from('learnings').select('kind,key,value').in('kind',['config','repricing_decision']).then(({data})=>{ if(!data) return; const t=data.find(r=>r.kind==='config'&&r.key==='tarifa_hora_permanente_uf'); const u=data.find(r=>r.kind==='config'&&r.key==='uf_anio_'+anio); if(t&&parseFloat(t.value)>0) setTarifaUF(parseFloat(t.value)); if(u&&parseFloat(u.value)>0) setUfAnio(parseFloat(u.value)); const d={}; data.forEach(r=>{ if(r.kind==='repricing_decision') d[r.key]=r.value }); setDecid(d) },()=>{})
   },[])
   const ufAnioEff = ufAnio>0?ufAnio:ufHoy
@@ -5765,11 +5765,11 @@ export function PortalApp(){
 
 // Consultas de la carga inicial, compartidas con el tiempo real (src/lib/tiempoReal.js): un cambio en el servidor vuelve a leer la tabla con la misma consulta.
 const CARGA_TABLA = {
-  petty_cash: () => supabase.from('petty_cash').select('*').order('created_at',{ascending:false}),
-  sales: () => supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}),
+  petty_cash: () => selectAll(()=>supabase.from('petty_cash').select('*').order('created_at',{ascending:false}).order('id')),
+  sales: () => selectAll(()=>supabase.from('sales').select('*').is('deleted_at',null).order('created_at',{ascending:false}).order('id')),
   expenses: () => selectAll(()=>supabase.from('expenses').select('*').is('deleted_at',null).order('date',{ascending:false}).order('id')),
-  tasks: () => supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}),
-  anticipos: () => supabase.from('anticipos').select('*').order('fecha',{ascending:false}),
+  tasks: () => selectAll(()=>supabase.from('tasks').select('*').order('due',{ascending:true,nullsFirst:false}).order('id')),
+  anticipos: () => selectAll(()=>supabase.from('anticipos').select('*').order('fecha',{ascending:false}).order('id')),
   terceros_pagos: () => selectAll(()=>supabase.from('terceros_pagos').select('*').order('created_at',{ascending:false}).order('id')),
   conciliacion: () => selectAll(()=>supabase.from('conciliacion').select('factura_id,monto_aplicado,tipo_destino,anticipo_id').order('id')),
 }
@@ -6442,8 +6442,8 @@ export default function App() {
       q('gastos', CARGA_TABLA.expenses()),
       q('tareas', CARGA_TABLA.tasks()),
       q('razones sociales', supabase.from('client_entities').select('*')),
-      q('adjuntos gastos', supabase.from('expense_attachments').select('id,expense_id')),
-      q('adjuntos cobros', supabase.from('billing_attachments').select('id,billing_id')),
+      q('adjuntos gastos', selectAll(()=>supabase.from('expense_attachments').select('id,expense_id').order('id'))),
+      q('adjuntos cobros', selectAll(()=>supabase.from('billing_attachments').select('id,billing_id').order('id'))),
       q('anticipos', CARGA_TABLA.anticipos()),
       q('proveedores', supabase.from('proveedores').select('*').order('nombre')),
       q('cuentas por pagar', CARGA_TABLA.terceros_pagos()),

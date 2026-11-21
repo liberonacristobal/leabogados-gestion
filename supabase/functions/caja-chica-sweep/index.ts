@@ -18,7 +18,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const GMAIL_USER = Deno.env.get("GMAIL_USER") || "";
 const GMAIL_PASS = Deno.env.get("GMAIL_PASS") || "";
 const APP_URL = Deno.env.get("APP_URL") || "https://gestion.leabogados.cl";
-const EQUIPO_FALLBACK = [{ nombre: "Martín", rut: "19.889.733-7", email: "mc@leabogados.cl" }, { nombre: "Martina", rut: "21.138.928-1", email: "mp@leabogados.cl" }];
+const EQUIPO_FALLBACK: { nombre: string; rut: string; email: string }[] = [];   // el equipo sale de `miembros`; sin literales de personas
 
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
 const normRut = (s: string) => String(s || "").toUpperCase().replace(/[^0-9K]/g, "");

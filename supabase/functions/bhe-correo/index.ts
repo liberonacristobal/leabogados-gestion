@@ -1,4 +1,4 @@
-// bhe-correo — registra SOLAS las boletas de honorarios que llegan por correo (p. ej. "bhe_19889733-43.pdf"
+// bhe-correo — registra SOLAS las boletas de honorarios que llegan por correo (p. ej. "bhe_12000003-43.pdf"
 // adjunta al cobro de comisiones). Lee el PDF del SII (pdfjs), guarda la boleta (boletas_honorarios + PDF en el bucket
 // privado `documentos`) y, si su líquido calza EXACTO y ÚNICO con comisiones ya cobradas al cliente de ese proveedor,
 // se las asigna (costo = bruto; retención y líquido repartidos). Lo que no calza queda sin asignar para revisar.

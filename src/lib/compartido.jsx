@@ -500,7 +500,7 @@ export const saldoCliente = (expenses, clientId) => fgCliente(expenses, clientId
 export const FIRMA_RESPALDO = {
   'cl@leabogados.cl':{nombre:'Cristóbal Liberona',cargo:'Socio',telefono:''},
   'ee@leabogados.cl':{nombre:'Erasmo Escala',cargo:'Socio',telefono:''},
-  'mc@leabogados.cl':{nombre:'Martín Campero Mantelli',cargo:'Abogado',telefono:''},
+  'mc@leabogados.cl':{nombre:'Persona Demo Dos',cargo:'Abogado',telefono:''},
   'mp@leabogados.cl':{nombre:'Martina Pérez Giuras',cargo:'Procuradora',telefono:''}
 }
 
@@ -684,16 +684,16 @@ export function AsignarClienteInline({bill,clients,onAssign,label='Asignar clien
 }
 
 // ── Retiros a socios: distribución de utilidades (cliente interno, categoría 'Retiros'). Identifica al socio por `subcategory` (la clasificación manual, puesta al conciliar "Retiros › X") y, si no hay, por el RUT/nombre en la glosa. NO es costo de oficina; vive en la página Socios. ──
-// Config de socios TENANT-AWARE: se llena de `miembros` (es_socio=true) del estudio al cargar; fallback = LEA, para no romper nada antes de que llegue la query. Vendible: ningún socio/RUT cableado en la lógica.
+// Config de socios TENANT-AWARE: se llena de `miembros` (es_socio=true) del estudio al cargar; el fallback trae solo nombres (sin RUT) para no romper nada antes de que llegue la query. Vendible: ningún socio/RUT cableado en la lógica.
 export let SOCIOS_CFG = [
-  {nombre:'Cristóbal', rut:'15.621.320-9'},
-  {nombre:'Erasmo',    rut:'15.371.733-8'},
+  {nombre:'Cristóbal', rut:''},
+  {nombre:'Erasmo',    rut:''},
 ]
 
 // Equipo (no-socios con RUT) — también tenant-aware desde `miembros`; fallback LEA. Alimenta el tagger de conciliación (EQUIPO_RUT).
 export let EQUIPO_CFG = [
-  {nombre:'Martín',  rut:'19.889.733-7'},
-  {nombre:'Martina', rut:'21.138.928-1'},
+  {nombre:'Martín',  rut:''},
+  {nombre:'Martina', rut:''},
 ]
 
 export const _norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim()
@@ -2961,7 +2961,7 @@ export function margenDeSale(sale, horas, costoHora={}, overheadHora=0, mesesYTD
 export function useTrabajosDetenidos({sales=[],billing=[],expenses=[],tasks=[]}){
   const [horasAct,setHorasAct]=useState([]), [activosOk,setActivosOk]=useState({}), [pagosCli,setPagosCli]=useState([])
   useEffect(()=>{ if(DEMO) return; let v=true
-    Promise.all([supabase.from('horas').select('client_id,fecha'),supabase.from('learnings').select('key,value').eq('kind','trabajo_activo_ok'),
+    Promise.all([selectAll(()=>supabase.from('horas').select('client_id,fecha').order('id')),supabase.from('learnings').select('key,value').eq('kind','trabajo_activo_ok'),
       selectAll(()=>supabase.from('cartola_movimientos').select('cliente_id,fecha').eq('tipo','abono').not('cliente_id','is',null).order('id'))])
       .then(([h,l,p])=>{ if(!v) return; setHorasAct(h.data||[]); setActivosOk(Object.fromEntries((l.data||[]).map(r=>[String(r.key),String(r.value||'')]))); setPagosCli((p.data||[]).map(m=>({client_id:m.cliente_id,fecha:m.fecha}))) },()=>{})
     return ()=>{v=false} },[])
@@ -4061,7 +4061,7 @@ export function usePorSocioFuentes(){
     Promise.all([
       _psSelTodo(()=>supabase.from('conciliacion').select('id,movimiento_id,factura_id,anticipo_id,tipo_destino,monto_aplicado').in('tipo_destino',['factura','anticipo']).order('id')),
       _psSelTodo(()=>supabase.from('cartola_movimientos').select('id,fecha,monto,cliente_id,categoria').eq('tipo','abono').neq('es_interno',true).order('id')),
-      supabase.from('learnings').select('kind,key,value').in('kind',['socio_factura','honorario_sin_gasto']).order('updated_at',{ascending:true}),
+      selectAll(()=>supabase.from('learnings').select('kind,key,value').in('kind',['socio_factura','honorario_sin_gasto']).order('updated_at',{ascending:true}).order('id')),
       _psSelTodo(()=>supabase.from('conciliacion').select('id,gasto_id').not('gasto_id','is',null).order('id')),
     ]).then(([ic,ia,l,gcs])=>{ if(!v) return; const ov={}, hok=new Set(); (l.data||[]).forEach(r=>{ if(r.kind==='socio_factura'&&r.value) ov[String(r.key)]=r.value; if(r.kind==='honorario_sin_gasto') hok.add(String(r.key)) }); setF({ic,ia,ov,hok,gc:new Set((gcs||[]).map(c=>String(c.gasto_id))),ok:true}) }).catch(()=>{ if(v) setF(p=>({...p,ok:true})) })
     return ()=>{v=false}

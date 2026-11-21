@@ -2019,7 +2019,7 @@ export function useBillingModel({billing,clients,sales,clientEntities,user,setBi
   const backfillRespaldos = async()=>{
     if(backfillBusy) return
     let att=[]
-    try{ const {data}=await supabase.from('billing_attachments').select('billing_id,drive_file_id'); att=data||[] }catch(_){}
+    try{ const {data}=await selectAll(()=>supabase.from('billing_attachments').select('billing_id,drive_file_id').order('id')); att=data||[] }catch(_){}
     const conResp=new Set(att.map(a=>String(a.billing_id)))
     const attByBill={}; att.forEach(a=>{ if(a.drive_file_id){ (attByBill[String(a.billing_id)]||(attByBill[String(a.billing_id)]=[])).push(a.drive_file_id) } })
     const emitidas=(billing||[]).filter(b=>b&&!b.deleted_at&&b.dte_xml&&b.invoice_no)

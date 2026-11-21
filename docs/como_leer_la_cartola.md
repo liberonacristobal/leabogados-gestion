@@ -51,7 +51,7 @@ Abono por transferencia de Servicios Profesionales de Salud B Rut [RUT] desde B.
 ### Formato B — CARGO / transferencia a un tercero (la firma le paga a alguien)
 
 ```
-Transf. a terceros vía internet a cuenta 1944894 B.BICE, CRISTOBAL LIBERONA, Rut 15.621.320-9, el 04-05-2026 alas 08:16:07
+Transf. a terceros vía internet a cuenta 1944894 B.BICE, PERSONA EJEMPLO, Rut 12.000.001-2, el 04-05-2026 alas 08:16:07
                                           └─cuenta─┘ └banco┘  └──── NOMBRE ───┘     └─── RUT ───┘
 ```
 

@@ -322,10 +322,10 @@ test('notaría, regla 4: solo los trámites de tarifa fija se marcan por monto s
 
 test('notaría, regla 1: el RUT de una persona del estudio nunca identifica al cliente', async () => {
   const { clienteDeLectura } = await import('../supabase/functions/_shared/notariaDocsReglas.js')
-  const lec = { comparecientes: [{ nombre: 'Persona Del Estudio', rut: '15.621.320-9', calidad: 'compareciente' }], sociedades: [{ razon_social: 'Sociedad Demo SpA', rut: '76.111.222-3' }] }
-  const porRut = { '156213209': 'c-abogado', '761112223': 'c-sociedad' }
+  const lec = { comparecientes: [{ nombre: 'Persona Del Estudio', rut: '12.000.001-2', calidad: 'compareciente' }], sociedades: [{ razon_social: 'Sociedad Demo SpA', rut: '76.111.222-3' }] }
+  const porRut = { '120000012': 'c-abogado', '761112223': 'c-sociedad' }
   assert.equal(clienteDeLectura(lec, { porRut })?.client_id, undefined, 'sin la exclusión, dos clientes distintos por RUT no se resuelven')
-  assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['156213209']) })?.client_id, 'c-sociedad')
+  assert.equal(clienteDeLectura(lec, { porRut, rutsExcluir: new Set(['120000012']) })?.client_id, 'c-sociedad')
 })
 
 import { planCarga } from '../supabase/functions/_shared/cartolaDedupe.js'
@@ -355,10 +355,10 @@ test('carga de cartola: un código repetido con otro monto no confunde pagos dis
 })
 test('carga de cartola: mismo monto y día a otra contraparte es otro pago y entra', () => {
   const huella = () => null
-  const e = [{ id: 1, hash: 'a', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '21.138.928-1' }]
-  const otro = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '19.889.733-7' }], e, huella)
+  const e = [{ id: 1, hash: 'a', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '12.000.004-7' }]
+  const otro = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '12.000.003-9' }], e, huella)
   assert.equal(otro.nuevos.length, 1)
-  const igual = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '21138928-1' }], e, huella)
+  const igual = planCarga([{ hash: 'z', cuenta: 'A', tipo: 'cargo', monto: 250000, fecha: '2026-09-03', rut_contraparte: '12000004-7' }], e, huella)
   assert.equal(igual.nuevos.length, 0)
 })
 
@@ -381,10 +381,10 @@ test('Banco: abono de un cliente con rendición enviada y saldo por cubrir propo
 
 import { extraerContraparte } from '../src/cartola.js'
 test('cartola: «Transferencia de X Rut … desde Banco … a Y Rut …» toma al destino en un cargo y al origen en un abono', () => {
-  const g = 'Transferencia de LIBERONA ESCALA ABOGADOS LIMITADA Rut 77.700.387-9 desde Banco BICE a Martina De Los Angeles Perez Giuras Rut 21.138.928-1 a Cuenta Corriente de Banco Santander-Chile, el 2026-10-27 a las 09:33 hrs.'
-  assert.deepEqual(extraerContraparte(g, 'cargo'), { nombre: 'Martina De Los Angeles Perez Giuras', rut: '21.138.928-1' })
-  const a = 'Transferencia de Persona De Prueba Rut 15.621.320-9 desde Banco BICE a Liberona Escala Abogados Limitada Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-10-19 a las 10:00 hrs.'
-  assert.deepEqual(extraerContraparte(a, 'abono'), { nombre: 'Persona De Prueba', rut: '15.621.320-9' })
+  const g = 'Transferencia de LIBERONA ESCALA ABOGADOS LIMITADA Rut 77.700.387-9 desde Banco BICE a Persona Ejemplo Dos Rut 12.000.004-7 a Cuenta Corriente de Banco Santander-Chile, el 2026-10-27 a las 09:33 hrs.'
+  assert.deepEqual(extraerContraparte(g, 'cargo'), { nombre: 'Persona Ejemplo Dos', rut: '12.000.004-7' })
+  const a = 'Transferencia de Persona De Prueba Rut 12.000.001-2 desde Banco BICE a Liberona Escala Abogados Limitada Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-10-19 a las 10:00 hrs.'
+  assert.deepEqual(extraerContraparte(a, 'abono'), { nombre: 'Persona De Prueba', rut: '12.000.001-2' })
   const i = 'Transferencia de CLIENTE Rut 77.700.387-9 desde Banco BICE a BENEFICIARIO Rut 77.700.387-9 a Cuenta Corriente de BICE, el 2026-09-09 a las 18:48:00.'
   assert.deepEqual(extraerContraparte(i, 'cargo'), { nombre: null, rut: null })
 })
